@@ -56,13 +56,31 @@ describe('engines deployments routes', () => {
   });
 
   it.skip('lists deployments for an engine', async () => {
-    // Skipped: requires mocking full engine resolution chain and Camunda upstream
+    // TODO: Convert to E2E test with Prism mock server (see local-docs/ING/api-specs)
+    (global.fetch as any).mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      text: () => Promise.resolve(JSON.stringify([])),
+    });
+
     const response = await request(app).get('/engines-api/engines/e1/deployments');
     expect(response.status).toBe(200);
   });
 
   it.skip('gets deployment by id', async () => {
-    // Skipped: requires mocking full engine resolution chain and Camunda upstream
+    // TODO: Convert to E2E test with Prism mock server (see local-docs/ING/api-specs)
+    (global.fetch as any).mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      text: () => Promise.resolve(JSON.stringify({
+        id: 'd1',
+        name: 'invoice-deployment',
+        deploymentTime: '2026-01-20T02:00:00.000+0000',
+        source: 'process application',
+        tenantId: null
+      })),
+    });
+
     const response = await request(app).get('/engines-api/engines/e1/deployments/d1');
     expect(response.status).toBe(200);
   });
