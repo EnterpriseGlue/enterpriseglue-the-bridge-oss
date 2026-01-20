@@ -11,19 +11,40 @@ const repoRootConfigPath = path.resolve(
   'local-docs/ING/api-specs/Mission-Control-Mock-Server-Config.json'
 );
 
-const mockConfigPath = existsSync(cwdConfigPath) ? cwdConfigPath : repoRootConfigPath;
-
-const mockConfig = JSON.parse(readFileSync(mockConfigPath, 'utf8')) as {
+const fallbackMockConfig = {
   mock: {
     examples: {
-      processDefinitions: Record<string, { key: string; name: string; version: number }>;
+      processDefinitions: {
+        example: { key: 'process', name: 'Example Process', version: 1 },
+      },
       processInstances: {
-        active: Array<{ id: string; businessKey: string; processDefinitionKey: string; state: string }>;
-      };
-      decisions: Array<{ id: string; key: string; name: string; version: number }>;
-    };
-  };
+        active: [
+          {
+            id: 'instance-1',
+            businessKey: 'business-key-1',
+            processDefinitionKey: 'process',
+            state: 'ACTIVE',
+          },
+        ],
+      },
+      decisions: [
+        { id: 'decision-1', key: 'decision', name: 'Example Decision', version: 1 },
+      ],
+    },
+  },
 };
+
+const mockConfig = ((): typeof fallbackMockConfig => {
+  if (existsSync(cwdConfigPath)) {
+    return JSON.parse(readFileSync(cwdConfigPath, 'utf8')) as typeof fallbackMockConfig;
+  }
+
+  if (existsSync(repoRootConfigPath)) {
+    return JSON.parse(readFileSync(repoRootConfigPath, 'utf8')) as typeof fallbackMockConfig;
+  }
+
+  return fallbackMockConfig;
+})();
 
 const processDefinitions = Object.values(mockConfig.mock.examples.processDefinitions).map((def) => ({
   id: `${def.key}:${def.version}:mock`,

@@ -25,11 +25,11 @@ describe('Platform authz checks (authz storage required)', () => {
     const dataSource = await getDataSource();
     const schema = getAdapter().getSchemaName() || 'public';
     const tables = await dataSource.query(
-      `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name IN ('authz_policies', 'authz_audit_log')`,
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name IN ('authz_policies', 'authz_audit_log', 'permission_grants')`,
       [schema]
     );
     const tableNames = new Set(tables.map((row: any) => String(row.table_name)));
-    skipAuthz = !tableNames.has('authz_policies');
+    skipAuthz = !tableNames.has('authz_policies') || !tableNames.has('permission_grants');
 
     const user = await seedUser(prefix);
     userId = user.id;
