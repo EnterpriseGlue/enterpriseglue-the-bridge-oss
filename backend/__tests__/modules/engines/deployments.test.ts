@@ -48,22 +48,22 @@ describe('engines deployments routes', () => {
     };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
-      getRepository: (entity: any) => ({
-        find: vi.fn().mockResolvedValue(entity.name === 'Engine' ? [mockEngine] : []),
-        findOne: vi.fn().mockResolvedValue(entity.name === 'Engine' ? mockEngine : null),
+      getRepository: () => ({
+        find: vi.fn().mockResolvedValue([mockEngine]),
+        findOne: vi.fn().mockResolvedValue(mockEngine),
       }),
     });
   });
 
   it.skip('lists deployments for an engine', async () => {
+    // Skipped: requires mocking full engine resolution chain and Camunda upstream
     const response = await request(app).get('/engines-api/engines/e1/deployments');
-
     expect(response.status).toBe(200);
   });
 
   it.skip('gets deployment by id', async () => {
+    // Skipped: requires mocking full engine resolution chain and Camunda upstream
     const response = await request(app).get('/engines-api/engines/e1/deployments/d1');
-
     expect(response.status).toBe(200);
   });
 });
