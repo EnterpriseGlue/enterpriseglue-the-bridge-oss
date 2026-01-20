@@ -5,6 +5,7 @@ import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js'
 import { validateBody } from '@shared/middleware/validate.js'
 import { requireAuth } from '@shared/middleware/auth.js'
 import { requireDeployPermission } from '@shared/middleware/deployAuth.js'
+import { apiLimiter } from '@shared/middleware/rateLimiter.js'
 import { getDataSource } from '@shared/db/data-source.js'
 import { Engine } from '@shared/db/entities/Engine.js'
 import { EngineDeploymentArtifact } from '@shared/db/entities/EngineDeploymentArtifact.js'
@@ -291,7 +292,7 @@ async function inferDeployAuthIds(req: Request, res: Response, next: NextFunctio
   }
 }
 
-r.post('/engines-api/engines/:engineId/deployments/preview', requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireDeployPermission(), asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines/:engineId/deployments/preview', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireDeployPermission(), asyncHandler(async (req: Request, res: Response) => {
   try {
     const files = await resolveFilesFromRequest(req)
     const resources: string[] = []
@@ -412,7 +413,7 @@ r.post('/engines-api/engines/:engineId/deployments/preview', requireAuth, valida
   }
 }))
 
-r.post('/engines-api/engines/:engineId/deployments', requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireDeployPermission(), asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireDeployPermission(), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engine = await getEngineById(String(req.params.engineId))
     const files = await resolveFilesFromRequest(req)
@@ -685,7 +686,7 @@ r.post('/engines-api/engines/:engineId/deployments', requireAuth, validateBody(d
 }))
 
 // Passthroughs to engine for listing/reading/deleting deployments
-r.get('/engines-api/engines/:engineId/deployments', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
 const userId = req.user!.userId
 const engineId = String(req.params.engineId)
 
@@ -705,7 +706,7 @@ try {
 }
 }))
 
-r.get('/engines-api/engines/:engineId/deployments/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
 const userId = req.user!.userId
 const engineId = String(req.params.engineId)
 
@@ -724,7 +725,7 @@ try {
 }
 }))
 
-r.delete('/engines-api/engines/:engineId/deployments/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.delete('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
 const userId = req.user!.userId
 const engineId = String(req.params.engineId)
 

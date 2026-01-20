@@ -10,6 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { validateBody, validateParams } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { apiLimiter } from '@shared/middleware/rateLimiter.js';
 import { engineService, engineAccessService, projectMemberService } from '@shared/services/platform-admin/index.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
@@ -76,6 +77,7 @@ const setLockedSchema = z.object({
  */
 router.get(
   '/engines-api/engines/:engineId/members',
+  apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
   asyncHandler(async (req, res) => {
@@ -104,6 +106,7 @@ router.get(
  */
 router.post(
   '/engines-api/engines/:engineId/members',
+  apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(addMemberSchema),
@@ -237,6 +240,7 @@ router.post(
  */
 router.patch(
   '/engines-api/engines/:engineId/members/:userId',
+  apiLimiter,
   requireAuth,
   validateParams(userIdSchema),
   validateBody(updateMemberRoleSchema),
@@ -277,6 +281,7 @@ router.patch(
  */
 router.delete(
   '/engines-api/engines/:engineId/members/:userId',
+  apiLimiter,
   requireAuth,
   validateParams(userIdSchema),
   asyncHandler(async (req, res) => {
@@ -318,6 +323,7 @@ router.delete(
  */
 router.post(
   '/engines-api/engines/:engineId/delegate',
+  apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(assignDelegateSchema),
@@ -366,6 +372,7 @@ router.post(
  */
 router.post(
   '/engines-api/engines/:engineId/transfer-ownership',
+  apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(z.object({ newOwnerEmail: z.string().email() })),
@@ -408,6 +415,7 @@ router.post(
  */
 router.post(
   '/engines-api/engines/:engineId/environment',
+  apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(setEnvironmentSchema),
@@ -438,6 +446,7 @@ router.post(
  */
 router.post(
   '/engines-api/engines/:engineId/lock',
+  apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(setLockedSchema),
@@ -468,6 +477,7 @@ router.post(
  */
 router.get(
   '/engines-api/environment-tags',
+  apiLimiter,
   requireAuth,
   asyncHandler(async (req, res) => {
     try {
@@ -486,6 +496,7 @@ router.get(
  */
 router.get(
   '/engines-api/engines/:engineId/my-role',
+  apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
   asyncHandler(async (req, res) => {
@@ -513,6 +524,7 @@ router.get(
  */
 router.get(
   '/engines-api/my-engines',
+  apiLimiter,
   requireAuth,
   asyncHandler(async (req, res) => {
     try {
@@ -534,6 +546,7 @@ router.get(
  */
 router.post(
   '/engines-api/engines/:engineId/request-access',
+  apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(z.object({ projectId: z.string().uuid() })),
@@ -566,6 +579,7 @@ router.post(
  */
 router.get(
   '/engines-api/engines/:engineId/access-requests',
+  apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
   asyncHandler(async (req, res) => {
@@ -593,6 +607,7 @@ router.get(
  */
 router.post(
   '/engines-api/engines/:engineId/access-requests/:requestId/approve',
+  apiLimiter,
   requireAuth,
   asyncHandler(async (req, res) => {
     try {
@@ -620,6 +635,7 @@ router.post(
  */
 router.post(
   '/engines-api/engines/:engineId/access-requests/:requestId/deny',
+  apiLimiter,
   requireAuth,
   asyncHandler(async (req, res) => {
     try {
@@ -647,6 +663,7 @@ router.post(
  */
 router.delete(
   '/engines-api/engines/:engineId/projects/:projectId',
+  apiLimiter,
   requireAuth,
   asyncHandler(async (req, res) => {
     try {

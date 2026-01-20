@@ -8,6 +8,7 @@ import { In, Not } from 'typeorm'
 import { fetch } from 'undici'
 import { requireAuth } from '@shared/middleware/auth.js'
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js'
+import { apiLimiter } from '@shared/middleware/rateLimiter.js'
 import { engineService } from '@shared/services/platform-admin/index.js'
 import { isPlatformAdmin } from '@shared/middleware/platformAuth.js'
 import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES } from '@shared/constants/roles.js'
@@ -33,7 +34,7 @@ function redactEngineSecrets<T extends { username?: string | null; passwordEnc?:
   }
 }
 
-r.get('/engines-api/engines', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/engines', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   if (isPlatformAdmin(req)) {
@@ -50,7 +51,7 @@ r.get('/engines-api/engines', requireAuth, asyncHandler(async (req: Request, res
   }))
 }))
 
-r.get('/engines-api/engines/active', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/engines/active', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const rows = await engineRepo.find({ where: { active: true } })
@@ -118,7 +119,7 @@ r.get('/engines-api/engines/active', requireAuth, asyncHandler(async (req: Reque
   res.json(fromEnv)
 }))
 
-r.post('/engines-api/engines', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   if (!isPlatformAdmin(req)) throw Errors.adminRequired()
 
   const dataSource = await getDataSource()
@@ -147,7 +148,7 @@ r.post('/engines-api/engines', requireAuth, asyncHandler(async (req: Request, re
   res.status(201).json(payload)
 }))
 
-r.get('/engines-api/engines/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/engines/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const rows = await engineRepo.find({ where: { id: req.params.id } })
@@ -164,7 +165,7 @@ r.get('/engines-api/engines/:id', requireAuth, asyncHandler(async (req: Request,
   res.json(rows[0])
 }))
 
-r.put('/engines-api/engines/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.put('/engines-api/engines/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const existing = await engineRepo.find({ where: { id: req.params.id }, take: 1 })
@@ -193,7 +194,7 @@ r.put('/engines-api/engines/:id', requireAuth, asyncHandler(async (req: Request,
   res.json(rows[0])
 }))
 
-r.delete('/engines-api/engines/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.delete('/engines-api/engines/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const existing = await engineRepo.find({ where: { id: req.params.id }, take: 1 })
@@ -205,7 +206,7 @@ r.delete('/engines-api/engines/:id', requireAuth, asyncHandler(async (req: Reque
 
 // Get active engine
 // Set engine active (single-active semantics)
-r.post('/engines-api/engines/:id/activate', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines/:id/activate', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const rows0 = await engineRepo.find({ where: { id: req.params.id } })
@@ -225,7 +226,7 @@ r.post('/engines-api/engines/:id/activate', requireAuth, asyncHandler(async (req
 }))
 
 // Test connection and record health
-r.post('/engines-api/engines/:id/test', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines/:id/test', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const healthRepo = dataSource.getRepository(EngineHealth)
@@ -273,7 +274,7 @@ r.post('/engines-api/engines/:id/test', requireAuth, asyncHandler(async (req: Re
 }))
 
 // Get last health entry
-r.get('/engines-api/engines/:id/health', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/engines/:id/health', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const healthRepo = dataSource.getRepository(EngineHealth)
@@ -340,7 +341,7 @@ r.get('/engines-api/engines/:id/health', requireAuth, asyncHandler(async (req: R
   res.json(last || null)
 }))
 
-r.get('/engines-api/saved-filters', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/saved-filters', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
   let rows: any[] = []
@@ -362,7 +363,7 @@ r.get('/engines-api/saved-filters', requireAuth, asyncHandler(async (req: Reques
   })))
 }))
 
-r.post('/engines-api/saved-filters', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/saved-filters', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
   const now = Date.now()
@@ -388,7 +389,7 @@ r.post('/engines-api/saved-filters', requireAuth, asyncHandler(async (req: Reque
   res.status(201).json({ ...payload, defKeys: JSON.parse(payload.defKeys) })
 }))
 
-r.get('/engines-api/saved-filters/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
   const rows = await filterRepo.find({ where: { id: req.params.id } })
@@ -400,7 +401,7 @@ r.get('/engines-api/saved-filters/:id', requireAuth, asyncHandler(async (req: Re
   res.json({ ...row, defKeys: JSON.parse(row.defKeys || '[]') })
 }))
 
-r.put('/engines-api/saved-filters/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
   const existing = await filterRepo.find({ where: { id: req.params.id }, take: 1 })
@@ -427,7 +428,7 @@ r.put('/engines-api/saved-filters/:id', requireAuth, asyncHandler(async (req: Re
   res.json({ ...row, defKeys: JSON.parse(row.defKeys || '[]') })
 }))
 
-r.delete('/engines-api/saved-filters/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.delete('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
   const existing = await filterRepo.find({ where: { id: req.params.id }, take: 1 })
