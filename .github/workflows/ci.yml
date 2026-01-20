@@ -37,8 +37,6 @@ jobs:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DATABASE: postgres
       POSTGRES_SCHEMA: main
-      LEIA_POSTGRES_SCHEMA: leia
-      VCS_POSTGRES_SCHEMA: vcs
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,6 +58,10 @@ jobs:
 
       - name: Build backend
         run: npm --prefix backend run build:skip-generate
+
+      - name: Create PostgreSQL schema
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
 
       - name: Run backend migrations
         run: npm --prefix backend run db:migration:run
