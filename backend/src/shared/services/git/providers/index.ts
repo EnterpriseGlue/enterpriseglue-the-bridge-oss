@@ -41,20 +41,26 @@ export function createGitProviderClient(
  * Detect provider type from URL
  */
 export function detectProviderFromUrl(url: string): ProviderType | null {
-  const lowerUrl = url.toLowerCase();
-  
-  if (lowerUrl.includes('github.com') || lowerUrl.includes('github.')) {
-    return 'github';
+  try {
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname.toLowerCase();
+    
+    if (hostname === 'github.com' || hostname.endsWith('.github.com')) {
+      return 'github';
+    }
+    if (hostname === 'gitlab.com' || hostname.endsWith('.gitlab.com')) {
+      return 'gitlab';
+    }
+    if (hostname === 'bitbucket.org' || hostname.endsWith('.bitbucket.org')) {
+      return 'bitbucket';
+    }
+    if (hostname === 'dev.azure.com' || hostname.endsWith('.visualstudio.com')) {
+      return 'azure-devops';
+    }
+    
+    return null;
+  } catch {
+    // Invalid URL, return null
+    return null;
   }
-  if (lowerUrl.includes('gitlab.com') || lowerUrl.includes('gitlab.')) {
-    return 'gitlab';
-  }
-  if (lowerUrl.includes('bitbucket.org') || lowerUrl.includes('bitbucket.')) {
-    return 'bitbucket';
-  }
-  if (lowerUrl.includes('dev.azure.com') || lowerUrl.includes('visualstudio.com')) {
-    return 'azure-devops';
-  }
-  
-  return null;
 }

@@ -316,12 +316,10 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
             // Fall back to content-based detection
             const content = fileContent.content || '';
             if (content.includes('bpmn:definitions') || 
-                content.includes('xmlns:bpmn') || 
-                content.includes('http://www.omg.org/spec/BPMN')) {
+                content.includes('xmlns:bpmn')) {
               fileType = 'bpmn';
             } else if (content.includes('xmlns="https://www.omg.org/spec/DMN') || 
-                       content.includes('xmlns:dmn') ||
-                       content.includes('http://www.omg.org/spec/DMN')) {
+                       content.includes('xmlns:dmn')) {
               fileType = 'dmn';
             }
           }

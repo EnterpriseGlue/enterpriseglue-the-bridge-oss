@@ -50,7 +50,7 @@ export async function bootstrapAdmin() {
     await userRepo.save(admin);
 
     console.log(`✅ Admin account created: ${config.adminEmail}`);
-    console.log(`   Password: ${config.adminPassword}`);
+    console.log(`   Password: [REDACTED - check ADMIN_PASSWORD environment variable]`);
     console.log(`   Platform Role: admin`);
     console.log(`⚠️  IMPORTANT: Change the admin password in production!`);
   } catch (error) {

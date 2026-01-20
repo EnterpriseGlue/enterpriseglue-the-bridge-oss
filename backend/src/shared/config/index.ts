@@ -229,7 +229,7 @@ if (config.nodeEnv === 'development') {
     console.warn('⚠️  JWT_SECRET not set. Using a generated secret (tokens will be invalid after restart).');
   }
   if (!process.env.ADMIN_PASSWORD) {
-    console.warn(`⚠️  ADMIN_PASSWORD not set. Using generated admin password: ${config.adminPassword}`);
+    console.warn(`⚠️  ADMIN_PASSWORD not set. A random password has been generated. Check application logs for access.`);
   }
 }
 if (config.camundaBaseUrl) {
