@@ -88,6 +88,7 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   if (includeRateLimiting) {
     app.use('/api', apiLimiter);
     app.use('/starbase-api', apiLimiter);
+    app.use('/vcs-api', apiLimiter);
   }
 
   app.get('/health', (_req, res) => {

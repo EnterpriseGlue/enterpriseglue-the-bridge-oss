@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 
 /**
  * Password utility functions
@@ -78,14 +79,14 @@ export function generatePassword(): string {
   const symbols = ['!', '@', '#', '$', '%', '^', '&', '*', '_', '+', '='];
 
   // Pick two random words
-  const word1 = words[Math.floor(Math.random() * words.length)];
-  const word2 = words[Math.floor(Math.random() * words.length)];
+  const word1 = words[randomInt(0, words.length)];
+  const word2 = words[randomInt(0, words.length)];
 
   // Generate random 3-digit number
-  const number = Math.floor(100 + Math.random() * 900);
+  const number = randomInt(100, 1000);
 
   // Pick random symbol
-  const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+  const symbol = symbols[randomInt(0, symbols.length)];
 
   return `${word1}-${word2}-${number}-${symbol}`;
 }

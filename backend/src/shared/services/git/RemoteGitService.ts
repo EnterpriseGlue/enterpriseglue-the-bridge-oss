@@ -764,6 +764,7 @@ class RemoteGitService {
   private matchesPattern(path: string, pattern: string): boolean {
     const regex = new RegExp(
       '^' + pattern
+        .replace(/\\/g, '\\\\')
         .replace(/\./g, '\\.')
         .replace(/\*\*/g, '.*')
         .replace(/\*/g, '[^/]*') + '$'

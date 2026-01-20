@@ -117,7 +117,7 @@ function normalizeDmnDecisionHistoryTtl(xml: string): string {
       if (v === '30') return m.replace(ttlMatch[0], 'camunda:historyTimeToLive="60"')
       return m
     }
-    return m.replace(/\s*>$/, ' camunda:historyTimeToLive="60">').replace(/\s*\/>$/, ' camunda:historyTimeToLive="60"/>')
+    return m.replace(/\s?>$/, ' camunda:historyTimeToLive="60">').replace(/\s?\/?>$/, ' camunda:historyTimeToLive="60"/>')
   })
 }
 
@@ -133,7 +133,7 @@ function normalizeBpmnProcessHistoryTtl(xml: string): string {
       if (v === '180') return m.replace(ttlMatch[0], 'camunda:historyTimeToLive="60"')
       return m
     }
-    return m.replace(/\s*>$/, ' camunda:historyTimeToLive="60">').replace(/\s*\/>$/, ' camunda:historyTimeToLive="60"/>')
+    return m.replace(/\s?>$/, ' camunda:historyTimeToLive="60">').replace(/\s?\/?>$/, ' camunda:historyTimeToLive="60"/>')
   })
 }
 
@@ -158,14 +158,14 @@ function normalizeDmnDiIds(xml: string): string {
   out = out.replace(/<\s*(?:[a-zA-Z0-9_-]+:)?DMNDiagram\b[^>]*>/gi, (m: string) => {
     if (/\bid\s*=\s*["']/i.test(m)) return m
     const id = `DMNDiagram_${diagramIdx++}`
-    return m.replace(/\s*>$/, ` id="${id}">`).replace(/\s*\/>$/, ` id="${id}"/>`)
+    return m.replace(/\s?>$/, ` id="${id}">`).replace(/\s?\/?>$/, ` id="${id}"/>`)
   })
 
   let shapeIdx = 1
   out = out.replace(/<\s*(?:[a-zA-Z0-9_-]+:)?DMNShape\b[^>]*>/gi, (m: string) => {
     if (/\bid\s*=\s*["']/i.test(m)) return m
     const id = `DMNShape_${shapeIdx++}`
-    return m.replace(/\s*>$/, ` id="${id}">`).replace(/\s*\/>$/, ` id="${id}"/>`)
+    return m.replace(/\s?>$/, ` id="${id}">`).replace(/\s?\/?>$/, ` id="${id}"/>`)
   })
 
   return out

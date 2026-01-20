@@ -143,7 +143,7 @@ async function main() {
   lines.push('| License | Count |');
   lines.push('|---|---:|');
   for (const [license, count] of Array.from(licenseCounts.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-    lines.push(`| ${license.replace(/\|/g, '\\|')} | ${count} |`);
+    lines.push(`| ${license.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} | ${count} |`);
   }
   lines.push('');
 
@@ -156,7 +156,7 @@ async function main() {
     lines.push('| Package | Version | License expression | Repository | Source(s) |');
     lines.push('|---|---|---|---|---|');
     for (const r of dualCopyleftOption.sort((a, b) => (a.name + a.version + a.license).localeCompare(b.name + b.version + b.license))) {
-      lines.push(`| ${r.name} | ${r.version} | ${r.license.replace(/\|/g, '\\|')} | ${String(r.repository || '').replace(/\|/g, '\\|')} | ${r.sources} |`);
+      lines.push(`| ${r.name} | ${r.version} | ${r.license.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} | ${String(r.repository || '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} | ${r.sources} |`);
     }
     lines.push('');
   }
@@ -169,7 +169,7 @@ async function main() {
     lines.push('| Package | Version | License | Repository | Source(s) |');
     lines.push('|---|---|---|---|---|');
     for (const r of copyleft.sort((a, b) => (a.name + a.version + a.license).localeCompare(b.name + b.version + b.license))) {
-      lines.push(`| ${r.name} | ${r.version} | ${r.license.replace(/\|/g, '\\|')} | ${String(r.repository || '').replace(/\|/g, '\\|')} | ${r.sources} |`);
+      lines.push(`| ${r.name} | ${r.version} | ${r.license.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} | ${String(r.repository || '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} | ${r.sources} |`);
     }
     lines.push('');
   }
@@ -180,7 +180,7 @@ async function main() {
     lines.push('| Package | Version | License | Repository | Source(s) |');
     lines.push('|---|---|---|---|---|');
     for (const r of unknown.sort((a, b) => (a.name + a.version).localeCompare(b.name + b.version))) {
-      lines.push(`| ${r.name} | ${r.version} | ${r.licenses.replace(/\|/g, '\\|')} | ${String(r.repository || '').replace(/\|/g, '\\|')} | ${r.sources} |`);
+      lines.push(`| ${r.name} | ${r.version} | ${r.licenses.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} | ${String(r.repository || '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} | ${r.sources} |`);
     }
     lines.push('');
   }
@@ -190,7 +190,7 @@ async function main() {
   lines.push('| Package | Version | License | Repository | Source(s) |');
   lines.push('|---|---|---|---|---|');
   for (const r of rows) {
-    lines.push(`| ${r.name} | ${r.version} | ${String(r.licenses).replace(/\|/g, '\\|')} | ${String(r.repository || '').replace(/\|/g, '\\|')} | ${r.sources} |`);
+    lines.push(`| ${r.name} | ${r.version} | ${String(r.licenses).replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} | ${String(r.repository || '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} | ${r.sources} |`);
   }
   lines.push('');
   lines.push('---');

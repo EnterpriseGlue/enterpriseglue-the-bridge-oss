@@ -436,6 +436,7 @@ export class AzureDevOpsClient implements GitProviderClient {
     for (const pattern of patterns) {
       const regex = new RegExp(
         '^' + pattern
+          .replace(/\\/g, '\\\\')
           .replace(/\./g, '\\.')
           .replace(/\*\*/g, '.*')
           .replace(/\*/g, '[^/]*') + '$'

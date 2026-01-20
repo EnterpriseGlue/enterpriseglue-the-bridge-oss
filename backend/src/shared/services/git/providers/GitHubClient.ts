@@ -474,6 +474,7 @@ export class GitHubClient implements GitProviderClient {
         const suffix = pattern.slice(3); // Remove **/
         const suffixRegex = new RegExp(
           suffix
+            .replace(/\\/g, '\\\\')
             .replace(/\./g, '\\.')
             .replace(/\*/g, '[^/]*') + '$'
         );
@@ -485,6 +486,7 @@ export class GitHubClient implements GitProviderClient {
         // Standard pattern matching
         const regex = new RegExp(
           '^' + pattern
+            .replace(/\\/g, '\\\\')
             .replace(/\./g, '\\.')
             .replace(/\*\*/g, '<<<DOUBLESTAR>>>')
             .replace(/\*/g, '[^/]*')

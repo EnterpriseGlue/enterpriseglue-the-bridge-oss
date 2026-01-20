@@ -123,7 +123,11 @@ export class EnvironmentTagService {
     const tagRepo = dataSource.getRepository(EnvironmentTag);
     const now = Date.now();
 
-    for (let i = 0; i < orderedIds.length; i++) {
+    // Limit to reasonable maximum to prevent DoS
+    const MAX_TAGS = 1000;
+    const length = Math.min(orderedIds.length, MAX_TAGS);
+    
+    for (let i = 0; i < length; i++) {
       await tagRepo.update({ id: orderedIds[i] }, { sortOrder: i, updatedAt: now });
     }
   }
