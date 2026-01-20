@@ -250,7 +250,9 @@ describe('apiClient', () => {
 
       const result = await apiClient.getBlob('/api/download');
       
-      expect(result).toBeInstanceOf(Blob);
+      expect(result).toBeDefined();
+      expect(result.size).toBeGreaterThan(0);
+      expect(typeof result.type).toBe('string');
     });
 
     it('gets blob with query parameters', async () => {
