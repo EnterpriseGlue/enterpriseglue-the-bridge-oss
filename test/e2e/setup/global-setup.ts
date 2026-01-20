@@ -143,6 +143,34 @@ export default async function globalSetup() {
     ]
   );
 
+  const engineId = randomUUID();
+  const engineBaseUrl = process.env.CAMUNDA_BASE_URL || 'http://localhost:9080/engine-rest';
+  await pool.query(
+    `INSERT INTO ${schema}.engines
+      (id, name, base_url, type, auth_type, username, password_enc, active, version,
+       owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
+       created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+    [
+      engineId,
+      `${prefix}-engine`,
+      engineBaseUrl,
+      'camunda7',
+      null,
+      null,
+      null,
+      true,
+      null,
+      userId,
+      null,
+      null,
+      false,
+      null,
+      now,
+      now,
+    ]
+  );
+
   await pool.end();
 
   await mkdir(SEED_DIR, { recursive: true });
@@ -155,6 +183,7 @@ export default async function globalSetup() {
       adminUserId,
       adminEmail,
       adminPassword,
+      engineId,
       cleanupAdmin: Boolean(adminUserId),
     })
   );

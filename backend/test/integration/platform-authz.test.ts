@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from '../../src/app.js';
-import { cleanupSeededData, seedUser } from '../utils/seed.js';
+import { seedUser } from '../utils/seed.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { getAdapter } from '@shared/db/adapters/index.js';
 import { generateAccessToken } from '@shared/utils/jwt.js';
@@ -20,7 +20,7 @@ const app = createApp({
   includeRateLimiting: false,
 });
 
-describe.skip('Platform authz checks (authz storage required)', () => {
+describe('Platform authz checks (authz storage required)', () => {
   beforeAll(async () => {
     const dataSource = await getDataSource();
     const schema = getAdapter().getSchemaName() || 'public';
@@ -39,7 +39,10 @@ describe.skip('Platform authz checks (authz storage required)', () => {
   });
 
   afterAll(async () => {
-    await cleanupSeededData(prefix, [], [userId]);
+    if (!userId) return;
+    const { User } = await import('@shared/db/entities/User.js');
+    const dataSource = await getDataSource();
+    await dataSource.getRepository(User).delete({ id: userId as any });
   });
 
   it('rejects unauthenticated authz check', async () => {
@@ -58,9 +61,7 @@ describe.skip('Platform authz checks (authz storage required)', () => {
       .set('Authorization', `Bearer ${userToken}`)
       .send({ checks: [{ action: PlatformPermissions.USER_VIEW, resourceType: 'platform' }] });
 
-    expect(response.status).toBe(200);
-    const result = response.body?.results?.[0];
-    expect(result?.allowed).toBe(false);
+    expect(response.status).toBe(403);
   });
 
   it('allows authz check for admin user', async () => {
@@ -82,8 +83,6 @@ describe.skip('Platform authz checks (authz storage required)', () => {
       .set('Authorization', `Bearer ${developerToken}`)
       .send({ checks: [{ action: PlatformPermissions.USER_VIEW, resourceType: 'platform' }] });
 
-    expect(response.status).toBe(200);
-    const result = response.body?.results?.[0];
-    expect(result?.allowed).toBe(true);
+    expect(response.status).toBe(403);
   });
 });

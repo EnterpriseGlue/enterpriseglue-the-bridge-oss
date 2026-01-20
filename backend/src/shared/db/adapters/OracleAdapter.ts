@@ -135,7 +135,7 @@ export class OracleAdapter implements DatabaseAdapter {
   }
 
   getMigrationsPath(): string {
-    const distPath = 'dist/shared/db/migrations';
+    const distPath = 'dist/src/shared/db/migrations';
     if (fs.existsSync(distPath)) return distPath;
     return 'src/shared/db/migrations';
   }

@@ -3,10 +3,10 @@ import { getE2ECredentials, hasE2ECredentials } from '../utils/credentials';
 
 const shouldSkip = !hasE2ECredentials();
 
-test.describe('Smoke: Mission Control processes', () => {
+test.describe('Smoke: Mission Control decisions', () => {
   test.skip(shouldSkip, 'E2E_USER/E2E_PASSWORD not set');
 
-  test('processes list loads @smoke', async ({ page }) => {
+  test('decisions list loads @smoke', async ({ page }) => {
     const { email, password } = getE2ECredentials();
     if (!email || !password) throw new Error('Missing E2E credentials');
 
@@ -16,8 +16,7 @@ test.describe('Smoke: Mission Control processes', () => {
     await page.getByRole('button', { name: /sign in/i }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
-    await page.goto('/mission-control/processes');
-    await expect(page.getByText(/To view a Diagram/i)).toBeVisible();
-    await expect(page.locator('text=/^\\d+ Process Instances$/')).toBeVisible();
+    await page.goto('/mission-control/decisions');
+    await expect(page.getByText('Decisions')).toBeVisible();
   });
 });

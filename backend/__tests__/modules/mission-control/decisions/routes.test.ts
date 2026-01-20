@@ -16,9 +16,10 @@ vi.mock('@shared/middleware/activeEngineAuth.js', () => ({
 
 vi.mock('../../../../src/modules/mission-control/decisions/service.js', () => ({
   listDecisionDefinitions: vi.fn().mockResolvedValue([]),
-  getDecisionDefinitionById: vi.fn().mockResolvedValue({ id: 'd1', key: 'decision1' }),
-  listHistoricDecisionInstances: vi.fn().mockResolvedValue([]),
-  evaluateDecision: vi.fn().mockResolvedValue([{ result: 'approved' }]),
+  fetchDecisionDefinition: vi.fn().mockResolvedValue({ id: 'd1', key: 'decision1' }),
+  fetchDecisionDefinitionXml: vi.fn().mockResolvedValue({ id: 'd1', dmnXml: '<definitions />' }),
+  evaluateDecisionById: vi.fn().mockResolvedValue([{ result: 'approved' }]),
+  evaluateDecisionByKey: vi.fn().mockResolvedValue([{ result: 'approved' }]),
 }));
 
 describe('mission-control decisions routes', () => {
@@ -31,17 +32,17 @@ describe('mission-control decisions routes', () => {
     vi.clearAllMocks();
   });
 
-  it.skip('lists decision definitions', async () => {
-    const response = await request(app).get('/mission-control-api/decisions/definitions');
+  it('lists decision definitions', async () => {
+    const response = await request(app).get('/mission-control-api/decision-definitions');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([]);
   });
 
-  it.skip('evaluates decision', async () => {
+  it('evaluates decision', async () => {
     const response = await request(app)
-      .post('/mission-control-api/decisions/evaluate')
-      .send({ decisionDefinitionKey: 'decision1', variables: { amount: 10 } });
+      .post('/mission-control-api/decision-definitions/d1/evaluate')
+      .send({ variables: { amount: { value: 10, type: 'Integer' } } });
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([{ result: 'approved' }]);

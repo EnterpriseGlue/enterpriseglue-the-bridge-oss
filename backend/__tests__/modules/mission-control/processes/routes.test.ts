@@ -16,8 +16,9 @@ vi.mock('@shared/middleware/activeEngineAuth.js', () => ({
 
 vi.mock('../../../../src/modules/mission-control/processes/service.js', () => ({
   listProcessDefinitions: vi.fn().mockResolvedValue([]),
-  getProcessDefinitionById: vi.fn().mockResolvedValue({ id: 'pd1', key: 'process1' }),
-  getProcessDefinitionXml: vi.fn().mockResolvedValue({ xml: '<bpmn/>' }),
+  getProcessDefinition: vi.fn().mockResolvedValue({ id: 'pd1', key: 'process1' }),
+  getProcessDefinitionXml: vi.fn().mockResolvedValue({ id: 'pd1', bpmn20Xml: '<bpmn/>' }),
+  getProcessDefinitionStatistics: vi.fn().mockResolvedValue({}),
   startProcessInstance: vi.fn().mockResolvedValue({ id: 'pi1' }),
 }));
 
@@ -31,15 +32,15 @@ describe('mission-control processes routes', () => {
     vi.clearAllMocks();
   });
 
-  it.skip('lists process definitions', async () => {
-    const response = await request(app).get('/mission-control-api/processes/definitions');
+  it('lists process definitions', async () => {
+    const response = await request(app).get('/mission-control-api/process-definitions');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([]);
   });
 
-  it.skip('returns process definition details', async () => {
-    const response = await request(app).get('/mission-control-api/processes/definitions/pd1');
+  it('returns process definition details', async () => {
+    const response = await request(app).get('/mission-control-api/process-definitions/pd1');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ id: 'pd1', key: 'process1' });

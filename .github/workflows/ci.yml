@@ -31,6 +31,7 @@ jobs:
     env:
       NODE_ENV: test
       JWT_SECRET: test-secret-please-change-00000000000000
+      CAMUNDA_BASE_URL: http://localhost:9080/engine-rest
       POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
       POSTGRES_USER: postgres
@@ -71,6 +72,10 @@ jobs:
 
       - name: Run integration tests
         run: npm run test:integration
+
+      - name: Start Camunda mock server
+        run: |
+          npx --yes @stoplight/prism-cli mock local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json -p 9080 &
 
       - name: Start backend
         run: npm --prefix backend run start &

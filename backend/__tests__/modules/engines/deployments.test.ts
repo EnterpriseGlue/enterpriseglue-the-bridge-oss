@@ -8,11 +8,24 @@ vi.mock('@shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
+vi.mock('../../../src/shared/db/data-source.js', () => ({
+  getDataSource: vi.fn(),
+}));
+
 vi.mock('@shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
+}));
+
+vi.mock('undici', () => ({
+  fetch: vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    text: () => Promise.resolve('[]'),
+  }),
+  FormData: class {},
 }));
 
 vi.mock('@shared/services/platform-admin/index.js', () => ({
@@ -26,11 +39,6 @@ vi.mock('@shared/services/platform-admin/index.js', () => ({
   },
 }));
 
-global.fetch = vi.fn().mockResolvedValue({
-  ok: true,
-  json: () => Promise.resolve([]),
-  text: () => Promise.resolve(''),
-}) as any;
 
 describe('engines deployments routes', () => {
   let app: express.Application;
@@ -55,9 +63,10 @@ describe('engines deployments routes', () => {
     });
   });
 
-  it.skip('lists deployments for an engine', async () => {
+  it('lists deployments for an engine', async () => {
     // TODO: Convert to E2E test with Prism mock server (see local-docs/ING/api-specs)
-    (global.fetch as any).mockResolvedValueOnce({
+    const { fetch } = await import('undici');
+    (fetch as any).mockResolvedValueOnce({
       status: 200,
       ok: true,
       text: () => Promise.resolve(JSON.stringify([])),
@@ -67,9 +76,10 @@ describe('engines deployments routes', () => {
     expect(response.status).toBe(200);
   });
 
-  it.skip('gets deployment by id', async () => {
+  it('gets deployment by id', async () => {
     // TODO: Convert to E2E test with Prism mock server (see local-docs/ING/api-specs)
-    (global.fetch as any).mockResolvedValueOnce({
+    const { fetch } = await import('undici');
+    (fetch as any).mockResolvedValueOnce({
       status: 200,
       ok: true,
       text: () => Promise.resolve(JSON.stringify({

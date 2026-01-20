@@ -17,11 +17,11 @@ vi.mock('@shared/middleware/activeEngineAuth.js', () => ({
 
 vi.mock('../../../../src/modules/mission-control/process-instances/service.js', () => ({
   listProcessInstances: vi.fn().mockResolvedValue([]),
-  getProcessInstanceById: vi.fn().mockResolvedValue({ id: 'pi1', processDefinitionId: 'pd1' }),
+  getProcessInstance: vi.fn().mockResolvedValue({ id: 'pi1', processDefinitionId: 'pd1' }),
   deleteProcessInstance: vi.fn().mockResolvedValue(undefined),
   getProcessInstanceVariables: vi.fn().mockResolvedValue({}),
-  updateProcessInstanceVariables: vi.fn().mockResolvedValue(undefined),
-  getProcessInstanceActivityInstances: vi.fn().mockResolvedValue([]),
+  modifyProcessInstanceVariables: vi.fn().mockResolvedValue(undefined),
+  getActivityInstances: vi.fn().mockResolvedValue([]),
 }));
 
 describe('mission-control process-instances routes', () => {
@@ -41,7 +41,7 @@ describe('mission-control process-instances routes', () => {
     expect(response.body).toEqual([]);
   });
 
-  it.skip('returns process instance detail', async () => {
+  it('returns process instance detail', async () => {
     const response = await request(app).get('/mission-control-api/process-instances/pi1');
 
     expect(response.status).toBe(200);

@@ -23,7 +23,7 @@ test.describe('Smoke: download project', () => {
 
     const projectName = `Smoke Download ${Date.now()}`;
 
-    await page.getByRole('button', { name: /create project/i }).first().click();
+    await page.getByRole('button', { name: /new project/i }).click();
     await page.getByLabel(/project name/i).fill(projectName);
     await page.getByRole('dialog').getByRole('button', { name: /create project/i }).click();
 

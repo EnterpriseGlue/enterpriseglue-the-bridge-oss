@@ -36,7 +36,14 @@ export default async function globalTeardown() {
   }
 
   const raw = await readFile(SEED_FILE, 'utf8');
-  const data = JSON.parse(raw) as { userId?: string; adminUserId?: string; cleanupAdmin?: boolean; adminEmail?: string; adminPassword?: string };
+  const data = JSON.parse(raw) as {
+    userId?: string;
+    adminUserId?: string;
+    cleanupAdmin?: boolean;
+    adminEmail?: string;
+    adminPassword?: string;
+    engineId?: string;
+  };
 
   if (!data.userId) {
     await rm(SEED_FILE, { force: true });
@@ -60,6 +67,13 @@ export default async function globalTeardown() {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${adminLogin.accessToken}` },
   });
+
+  if (data.engineId) {
+    await fetchJson(`/engines-api/engines/${data.engineId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${adminLogin.accessToken}` },
+    });
+  }
 
   if (data.cleanupAdmin && data.adminUserId) {
     await fetchJson(`/api/users/${data.adminUserId}`, {
