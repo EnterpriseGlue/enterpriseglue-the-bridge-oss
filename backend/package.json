@@ -12,10 +12,10 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest --run --dir __tests__ --config vitest.config.ts",
     "test:integration": "vitest --run --dir test/integration --config vitest.config.ts",
-    "db:migration:generate": "npx typeorm migration:generate -d dist/shared/db/data-source.js",
-    "db:migration:run": "npx typeorm migration:run -d dist/shared/db/data-source.js",
-    "db:migration:revert": "npx typeorm migration:revert -d dist/shared/db/data-source.js",
-    "db:schema:sync": "npx typeorm schema:sync -d dist/shared/db/data-source.js"
+    "db:migration:generate": "npx typeorm migration:generate -d dist/src/shared/db/data-source.js",
+    "db:migration:run": "npx typeorm migration:run -d dist/src/shared/db/data-source.js",
+    "db:migration:revert": "npx typeorm migration:revert -d dist/src/shared/db/data-source.js",
+    "db:schema:sync": "npx typeorm schema:sync -d dist/src/shared/db/data-source.js"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.1.0",
