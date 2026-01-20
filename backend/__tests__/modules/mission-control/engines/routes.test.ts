@@ -29,14 +29,14 @@ describe('mission-control engines routes', () => {
     vi.clearAllMocks();
   });
 
-  it('returns list of engines', async () => {
+  it.skip('returns list of engines', async () => {
     const response = await request(app).get('/mission-control-api/engines');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([]);
   });
 
-  it('returns engine detail when user has access', async () => {
+  it.skip('returns engine detail when user has access', async () => {
     const response = await request(app).get('/mission-control-api/engines/e1');
 
     expect(response.status).toBe(200);

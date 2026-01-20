@@ -9,5 +9,6 @@ vi.mock('@shared/middleware/rateLimiter.js', () => ({
   passwordResetLimiter: (_req: any, _res: any, next: any) => next(),
   fileOperationsLimiter: (_req: any, _res: any, next: any) => next(),
   projectCreateLimiter: (_req: any, _res: any, next: any) => next(),
+  createUserLimiter: (_req: any, _res: any, next: any) => next(),
   getClientIdentifier: vi.fn().mockReturnValue('test-client-id'),
 }));
