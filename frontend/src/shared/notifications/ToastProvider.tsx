@@ -90,7 +90,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div
         style={{
           position: 'fixed',
-          top: 'var(--spacing-5)',
+          top: 'calc(var(--header-height) + var(--spacing-5))',
           right: 'var(--spacing-5)',
           display: 'flex',
           flexDirection: 'column',

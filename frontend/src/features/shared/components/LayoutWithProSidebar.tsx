@@ -825,7 +825,7 @@ export default function LayoutWithProSidebar() {
                     zIndex: 'var(--z-popover)',
                     display: 'flex',
                     flexDirection: 'column',
-                    overflow: 'hidden',
+                    overflow: 'visible',
                   }}
                 >
                   <div
@@ -886,20 +886,49 @@ export default function LayoutWithProSidebar() {
                     {!notificationsQ.isLoading && !notificationsQ.isError && notificationItems.length === 0 && (
                       <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>No notifications yet.</div>
                     )}
-                    {notificationItems.map((item) => (
-                      <div
-                        key={item.id}
-                        style={{
-                          border: '1px solid var(--color-border-primary)',
-                          borderLeft: `4px solid ${NOTIFICATION_STATE_COLORS[item.state]}`,
-                          borderRadius: 'var(--border-radius-sm)',
-                          padding: 'var(--spacing-3)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 'var(--spacing-2)',
-                          background: 'var(--cds-layer-01)',
-                        }}
-                      >
+                    {notificationItems.map((item) => {
+                      const subtitle = (() => {
+                        if (!item.subtitle) return null
+                        if (typeof item.subtitle === 'string') {
+                          const trimmed = item.subtitle.trim()
+                          if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                            try {
+                              const parsed = JSON.parse(trimmed)
+                              const message = parsed?.error?.message || parsed?.message || parsed?.error
+                              if (typeof message === 'string' && message.trim()) return message
+                            } catch {
+                              // ignore JSON parsing errors
+                            }
+                          }
+                          return item.subtitle
+                        }
+                        const message = (item.subtitle as any)?.error?.message
+                          || (item.subtitle as any)?.message
+                          || (item.subtitle as any)?.error
+                        if (typeof message === 'string' && message.trim()) return message
+                        return String(item.subtitle)
+                      })()
+                      const createdAtMs = typeof item.createdAt === 'number'
+                        ? item.createdAt
+                        : Number(item.createdAt)
+                      const createdAtLabel = Number.isFinite(createdAtMs)
+                        ? new Date(createdAtMs).toLocaleString()
+                        : 'Just now'
+
+                      return (
+                        <div
+                          key={item.id}
+                          style={{
+                            border: '1px solid var(--color-border-primary)',
+                            borderLeft: `4px solid ${NOTIFICATION_STATE_COLORS[item.state]}`,
+                            borderRadius: 'var(--border-radius-sm)',
+                            padding: 'var(--spacing-3)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 'var(--spacing-2)',
+                            background: 'var(--cds-layer-01)',
+                          }}
+                        >
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-3)' }}>
                           <div style={{ fontSize: 13, fontWeight: 600 }}>{item.title}</div>
                           <Button
@@ -911,14 +940,16 @@ export default function LayoutWithProSidebar() {
                             onClick={() => clearNotificationM.mutate(item.id)}
                           />
                         </div>
-                        {item.subtitle && (
-                          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{item.subtitle}</div>
+                        {subtitle && (
+                          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', wordBreak: 'break-word' }}>
+                            {subtitle}
+                          </div>
                         )}
                         <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                          {new Date(item.createdAt).toLocaleString()}
+                          {createdAtLabel}
                         </div>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 </div>
               )}

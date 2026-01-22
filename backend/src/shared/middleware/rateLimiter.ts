@@ -35,6 +35,22 @@ export const apiLimiter = rateLimit({
 });
 
 /**
+ * Engine API rate limiter
+ * Production: 2000 requests per 15 minutes per user
+ * Development: 10000 requests per 15 minutes per user
+ */
+export const engineLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.NODE_ENV === 'production' ? 2000 : 10000,
+  message: { error: 'Too many engine requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return getClientIdentifier(req);
+  },
+});
+
+/**
  * Strict rate limiter for authentication endpoints
  * Development: 50 requests per 15 minutes (for testing)
  * Production: 5 requests per 15 minutes per IP
