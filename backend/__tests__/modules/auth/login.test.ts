@@ -30,6 +30,7 @@ vi.mock('@shared/services/audit.js', () => ({
 vi.mock('@shared/middleware/rateLimiter.js', () => ({
   authLimiter: (_req: any, _res: any, next: any) => next(),
   apiLimiter: (_req: any, _res: any, next: any) => next(),
+  engineLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 describe('auth login module', () => {

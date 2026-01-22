@@ -12,6 +12,7 @@ vi.mock('@shared/db/data-source.js', () => ({
 
 vi.mock('@shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
+  engineLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('@shared/services/email/index.js', () => ({

@@ -21,6 +21,7 @@ vi.mock('@shared/middleware/auth.js', () => ({
 vi.mock('@shared/middleware/rateLimiter.js', () => ({
   passwordResetLimiter: (_req: any, _res: any, next: any) => next(),
   apiLimiter: (_req: any, _res: any, next: any) => next(),
+  engineLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('@shared/utils/password.js', () => ({
