@@ -7,7 +7,7 @@ If you believe you have found a security vulnerability, please **do not** open a
 Preferred reporting methods:
 
 1. **GitHub Security Advisories** (Private Vulnerability Reporting) for this repository
-2. Email: **hary@enterpriseglue.ai**
+2. Email: **security@enterpriseglue.ai**
 
 Please include as much information as possible:
 
