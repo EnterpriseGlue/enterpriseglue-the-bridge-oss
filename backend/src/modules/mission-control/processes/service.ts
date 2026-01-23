@@ -15,29 +15,29 @@ export interface ProcessDefinitionListParams {
   latestVersion?: boolean
 }
 
-export async function listProcessDefinitions(params: ProcessDefinitionListParams = {}): Promise<ProcessDefinition[]> {
+export async function listProcessDefinitions(engineId: string, params: ProcessDefinitionListParams = {}): Promise<ProcessDefinition[]> {
   const queryParams: Record<string, any> = {}
   if (params.key) queryParams.key = params.key
   if (params.nameLike) queryParams.nameLike = params.nameLike
   if (params.latestVersion !== undefined) queryParams.latestVersion = params.latestVersion
-  return camundaGet<ProcessDefinition[]>('/process-definition', queryParams)
+  return camundaGet<ProcessDefinition[]>(engineId, '/process-definition', queryParams)
 }
 
-export async function getProcessDefinition(id: string): Promise<ProcessDefinition> {
-  return camundaGet<ProcessDefinition>(`/process-definition/${encodeURIComponent(id)}`)
+export async function getProcessDefinition(engineId: string, id: string): Promise<ProcessDefinition> {
+  return camundaGet<ProcessDefinition>(engineId, `/process-definition/${encodeURIComponent(id)}`)
 }
 
-export async function getProcessDefinitionXml(id: string): Promise<{ id: string; bpmn20Xml: string }> {
-  return camundaGet<{ id: string; bpmn20Xml: string }>(`/process-definition/${encodeURIComponent(id)}/xml`)
+export async function getProcessDefinitionXml(engineId: string, id: string): Promise<{ id: string; bpmn20Xml: string }> {
+  return camundaGet<{ id: string; bpmn20Xml: string }>(engineId, `/process-definition/${encodeURIComponent(id)}/xml`)
 }
 
-export async function getProcessDefinitionStatistics(key: string): Promise<Record<string, number>> {
-  const instances = await camundaGet<any[]>('/process-instance', { processDefinitionKey: key, active: true })
+export async function getProcessDefinitionStatistics(engineId: string, key: string): Promise<Record<string, number>> {
+  const instances = await camundaGet<any[]>(engineId, '/process-instance', { processDefinitionKey: key, active: true })
   const counts: Record<string, number> = {}
   
   for (const inst of instances) {
     try {
-      const activityInstances = await camundaGet<any>(`/process-instance/${inst.id}/activity-instances`)
+      const activityInstances = await camundaGet<any>(engineId, `/process-instance/${inst.id}/activity-instances`)
       const flatten = (node: any) => {
         if (node.activityId) {
           counts[node.activityId] = (counts[node.activityId] || 0) + 1
@@ -58,9 +58,9 @@ export interface StartProcessParams {
   businessKey?: string
 }
 
-export async function startProcessInstance(key: string, params: StartProcessParams = {}): Promise<any> {
+export async function startProcessInstance(engineId: string, key: string, params: StartProcessParams = {}): Promise<any> {
   const payload: any = {}
   if (params.variables) payload.variables = params.variables
   if (params.businessKey) payload.businessKey = params.businessKey
-  return camundaPost<any>(`/process-definition/key/${encodeURIComponent(key)}/start`, payload)
+  return camundaPost<any>(engineId, `/process-definition/key/${encodeURIComponent(key)}/start`, payload)
 }

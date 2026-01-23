@@ -1,8 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
-import TenantPicker from '@src/components/TenantPicker';
+import { ExtensionSlot } from '@src/enterprise/ExtensionSlot';
 
 vi.mock('@src/shared/api/client', () => ({
   apiClient: {
@@ -17,12 +16,8 @@ vi.mock('@src/config', () => ({
 }));
 
 describe('TenantPicker', () => {
-  it('renders nothing when multi-tenant disabled', () => {
-    const { container } = render(
-      <BrowserRouter>
-        <TenantPicker />
-      </BrowserRouter>
-    );
+  it('renders nothing when tenant-picker slot is not registered', () => {
+    const { container } = render(<ExtensionSlot name="tenant-picker" />);
 
     expect(container.firstChild).toBeNull();
   });

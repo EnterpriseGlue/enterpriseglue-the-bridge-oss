@@ -3,7 +3,7 @@ import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js'
 import { logger } from '@shared/utils/logger.js';
 import { randomUUID } from 'node:crypto'
 import { requireAuth } from '@shared/middleware/auth.js'
-import { requireActiveEngineReadOrWrite } from '@shared/middleware/activeEngineAuth.js'
+import { requireEngineReadOrWrite } from '@shared/middleware/engineAuth.js'
 import {
   processRetries,
   fetchBatchInfo,
@@ -20,9 +20,9 @@ import { Batch } from '@shared/db/entities/Batch.js'
 
 const r = Router()
 
-r.use(requireAuth, requireActiveEngineReadOrWrite())
+r.use(requireAuth)
 
-async function insertLocalBatch(type: string, camundaBatchId: string, payload: any, engineDto: any) {
+async function insertLocalBatch(type: string, camundaBatchId: string, payload: any, engineDto: any, engineId: string) {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const now = Date.now()
@@ -43,6 +43,7 @@ async function insertLocalBatch(type: string, camundaBatchId: string, payload: a
   const batchJobDefinitionId = engineDto?.batchJobDefinitionId || null
   await batchRepo.insert({
     id,
+    engineId,
     camundaBatchId,
     type,
     payload: JSON.stringify(payload ?? {}),
@@ -63,7 +64,7 @@ async function insertLocalBatch(type: string, camundaBatchId: string, payload: a
   return { id }
 }
 
-r.post('/mission-control-api/batches/process-instances/delete', asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/delete', requireEngineReadOrWrite({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const body = { ...(req.body || {}) }
     if (typeof body.deleteReason !== 'string' || !body.deleteReason.trim()) {
@@ -75,21 +76,23 @@ r.post('/mission-control-api/batches/process-instances/delete', asyncHandler(asy
     if (typeof body.skipIoMappings !== 'boolean') {
       body.skipIoMappings = true
     }
-    const engineDto: any = await deleteProcessInstancesBatch(body)
-    const { id } = await insertLocalBatch('DELETE_INSTANCES', engineDto?.id, body, engineDto)
+    const engineId = (req as any).engineId as string
+    const engineDto: any = await deleteProcessInstancesBatch(engineId, body)
+    const { id } = await insertLocalBatch('DELETE_INSTANCES', engineDto?.id, body, engineDto, engineId)
     res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'DELETE_INSTANCES' })
   } catch (e: any) {
     res.status(500).json({ message: e?.message || 'Failed to create delete batch' })
   }
 }))
 
-r.post('/mission-control-api/batches/process-instances/suspend', asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/suspend', requireEngineReadOrWrite({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const body = { ...req.body, suspended: true }
     logger.info('[BATCH SUSPEND] Sending to Camunda:', JSON.stringify(body, null, 2))
-    const engineDto: any = await suspendProcessInstancesBatch(body)
+    const engineId = (req as any).engineId as string
+    const engineDto: any = await suspendProcessInstancesBatch(engineId, body)
     logger.info('[BATCH SUSPEND] Camunda response:', JSON.stringify(engineDto, null, 2))
-    const { id } = await insertLocalBatch('SUSPEND_INSTANCES', engineDto?.id, body, engineDto)
+    const { id } = await insertLocalBatch('SUSPEND_INSTANCES', engineDto?.id, body, engineDto, engineId)
     res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'SUSPEND_INSTANCES' })
   } catch (e: any) {
     logger.error('[BATCH SUSPEND] Error:', e)
@@ -97,18 +100,19 @@ r.post('/mission-control-api/batches/process-instances/suspend', asyncHandler(as
   }
 }))
 
-r.post('/mission-control-api/batches/process-instances/activate', asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/activate', requireEngineReadOrWrite({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const body = { ...req.body, suspended: false }
-    const engineDto: any = await suspendProcessInstancesBatch(body)
-    const { id } = await insertLocalBatch('ACTIVATE_INSTANCES', engineDto?.id, body, engineDto)
+    const engineId = (req as any).engineId as string
+    const engineDto: any = await suspendProcessInstancesBatch(engineId, body)
+    const { id } = await insertLocalBatch('ACTIVATE_INSTANCES', engineDto?.id, body, engineDto, engineId)
     res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'ACTIVATE_INSTANCES' })
   } catch (e: any) {
     res.status(500).json({ message: e?.message || 'Failed to create activate batch' })
   }
 }))
 
-r.post('/mission-control-api/batches/jobs/retries', asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/jobs/retries', requireEngineReadOrWrite({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { processInstanceIds } = req.body
     
@@ -117,13 +121,14 @@ r.post('/mission-control-api/batches/jobs/retries', asyncHandler(async (req: Req
     }
 
     // Create a local batch for tracking (no Camunda batch - we'll handle retries directly)
+    const engineId = (req as any).engineId as string
     const { id } = await insertLocalBatch('SET_JOB_RETRIES', 'local-retry-' + Date.now(), req.body, {
       totalJobs: processInstanceIds.length,
       jobsCreated: processInstanceIds.length
-    })
+    }, engineId)
 
     // Start async processing in background
-    processRetries(id, processInstanceIds).catch((err: any) => {
+    processRetries(engineId, id, processInstanceIds).catch((err: any) => {
       logger.error('[BATCH RETRY] Background processing failed:', err)
     })
 
@@ -133,11 +138,12 @@ r.post('/mission-control-api/batches/jobs/retries', asyncHandler(async (req: Req
   }
 }))
 
-r.get('/mission-control-api/batches', asyncHandler(async (_req: Request, res: Response) => {
+r.get('/mission-control-api/batches', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const dataSource = await getDataSource()
     const batchRepo = dataSource.getRepository(Batch)
-    const rows = await batchRepo.find()
+    const engineId = (req as any).engineId as string
+    const rows = await batchRepo.find({ where: { engineId } })
     const sorted = rows.sort((a: any, b: any) => b.createdAt - a.createdAt)
     const withSuspended = sorted.map((row: any) => {
       let suspended: boolean | undefined
@@ -155,7 +161,7 @@ r.get('/mission-control-api/batches', asyncHandler(async (_req: Request, res: Re
   }
 }))
 
-r.put('/mission-control-api/batches/:id/suspended', asyncHandler(async (req: Request, res: Response) => {
+r.put('/mission-control-api/batches/:id/suspended', requireEngineReadOrWrite({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const suspended = (req.body as { suspended?: boolean })?.suspended
     if (typeof suspended !== 'boolean') {
@@ -164,14 +170,15 @@ r.put('/mission-control-api/batches/:id/suspended', asyncHandler(async (req: Req
 
     const dataSource = await getDataSource()
     const batchRepo = dataSource.getRepository(Batch)
-    const row = await batchRepo.findOne({ where: { id: req.params.id } })
+    const engineId = (req as any).engineId as string
+    const row = await batchRepo.findOne({ where: { id: req.params.id, engineId } })
     if (!row) return res.status(404).json({ message: 'Not found' })
     if (!row.camundaBatchId) return res.status(400).json({ message: 'Batch has no camundaBatchId' })
     if (String(row.camundaBatchId).startsWith('local-')) {
       return res.status(400).json({ message: 'Batch does not support suspension control' })
     }
 
-    await setBatchSuspended(row.camundaBatchId, suspended)
+    await setBatchSuspended(engineId, row.camundaBatchId, suspended)
 
     // Persist for list rendering without calling Camunda per-row.
     let meta: any = {}
@@ -200,19 +207,20 @@ r.put('/mission-control-api/batches/:id/suspended', asyncHandler(async (req: Req
   }
 }))
 
-r.get('/mission-control-api/batches/:id', asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const dataSource = await getDataSource()
     const batchRepo = dataSource.getRepository(Batch)
-    let row = await batchRepo.findOne({ where: { id: req.params.id } })
+    const engineId = (req as any).engineId as string
+    let row = await batchRepo.findOne({ where: { id: req.params.id, engineId } })
     if (!row) return res.status(404).json({ message: 'Not found' })
     let engine: any = null
     let stats: any = null
     let failedJobs: any[] = []
     if (row.camundaBatchId) {
-      try { engine = await fetchBatchInfo(row.camundaBatchId) } catch {}
+      try { engine = await fetchBatchInfo(engineId, row.camundaBatchId) } catch {}
       try {
-        stats = await fetchBatchStatistics(row.camundaBatchId)
+        stats = await fetchBatchStatistics(engineId, row.camundaBatchId)
       } catch {}
 
       const seedDefId = (engine?.seedJobDefinitionId ?? row.seedJobDefinitionId) as string | undefined
@@ -221,7 +229,7 @@ r.get('/mission-control-api/batches/:id', asyncHandler(async (req: Request, res:
       const batchJobDefIds = new Set([seedDefId, monitorDefId, batchDefId].filter(Boolean) as string[])
 
       const fetchFailedBatchJobs = async () => {
-        const all = await fetchJobsByDefinitionIds(Array.from(batchJobDefIds))
+        const all = await fetchJobsByDefinitionIds(engineId, Array.from(batchJobDefIds))
         // De-dupe by id
         const byId = new Map<string, any>()
         for (const j of all) {
@@ -343,7 +351,7 @@ r.get('/mission-control-api/batches/:id', asyncHandler(async (req: Request, res:
         let stacktrace: string | undefined
         try {
           if (j?.id) {
-            const trace = await fetchJobStacktrace(j.id)
+            const trace = await fetchJobStacktrace(engineId, j.id)
             if (typeof trace === 'string') stacktrace = trace
           }
         } catch {}
@@ -378,14 +386,15 @@ r.get('/mission-control-api/batches/:id', asyncHandler(async (req: Request, res:
   }
 }))
 
-r.delete('/mission-control-api/batches/:id', asyncHandler(async (req: Request, res: Response) => {
+r.delete('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const dataSource = await getDataSource()
     const batchRepo = dataSource.getRepository(Batch)
-    const row = await batchRepo.findOne({ where: { id: req.params.id } })
+    const engineId = (req as any).engineId as string
+    const row = await batchRepo.findOne({ where: { id: req.params.id, engineId } })
     if (!row) return res.status(404).json({ message: 'Not found' })
     if (row.camundaBatchId) {
-      try { await deleteBatch(row.camundaBatchId) } catch {}
+      try { await deleteBatch(engineId, row.camundaBatchId) } catch {}
     }
     const now = Date.now()
     await batchRepo.update({ id: req.params.id }, { status: 'CANCELED', updatedAt: now })
@@ -398,11 +407,12 @@ r.delete('/mission-control-api/batches/:id', asyncHandler(async (req: Request, r
 /**
  * Delete batch record from database (for completed/failed/canceled batches only)
  */
-r.delete('/mission-control-api/batches/:id/record', asyncHandler(async (req: Request, res: Response) => {
+r.delete('/mission-control-api/batches/:id/record', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const dataSource = await getDataSource()
     const batchRepo = dataSource.getRepository(Batch)
-    const row = await batchRepo.findOne({ where: { id: req.params.id } })
+    const engineId = (req as any).engineId as string
+    const row = await batchRepo.findOne({ where: { id: req.params.id, engineId } })
     if (!row) return res.status(404).json({ message: 'Not found' })
     
     const st = String(row.status || '').toUpperCase()

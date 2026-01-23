@@ -22,7 +22,6 @@ import { useAuth } from '../shared/hooks/useAuth';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../shared/components/PageLayout';
 import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
-import { config } from '../config';
 
 interface AuditLog {
   id: string;
@@ -39,18 +38,6 @@ interface AuditLog {
   createdAt: number;
 }
 
-interface TenantOption {
-  id: string;
-  slug: string;
-  name: string;
-}
-
-interface TenantMembership {
-  tenantId: string;
-  tenantName: string;
-  tenantSlug: string;
-  role: string;
-}
 
 interface AuditStats {
   total: number;
@@ -66,28 +53,18 @@ interface AuditStats {
  */
 export default function AuditLogViewer() {
   const { user } = useAuth();
-  const { pathname } = useLocation();
+  const location = useLocation();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [stats, setStats] = useState<AuditStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const isAdmin = user?.platformRole === 'admin';
-
-  const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
-  const currentTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
-
+  const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
+  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
   const [isTenantAdmin, setIsTenantAdmin] = useState(false);
   const [tenantAdminChecked, setTenantAdminChecked] = useState(false);
-
-  const [tenants, setTenants] = useState<TenantOption[]>([]);
-  const [tenantFilter, setTenantFilter] = useState<string>(() => {
-    try {
-      return localStorage.getItem('audit.tenantFilter') || '';
-    } catch {
-      return '';
-    }
-  });
+  const canView = isAdmin || (tenantSlug && isTenantAdmin);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -100,7 +77,47 @@ export default function AuditLogViewer() {
   const [resourceTypeFilter, setResourceTypeFilter] = useState('');
   const [availableActions, setAvailableActions] = useState<string[]>([]);
 
-  if (!config.multiTenant && !isAdmin) {
+  useEffect(() => {
+    if (!tenantSlug || isAdmin) {
+      setIsTenantAdmin(false);
+      setTenantAdminChecked(true);
+      return;
+    }
+
+    let cancelled = false;
+    const loadTenantRole = async () => {
+      try {
+        const data = await apiClient.get<any[]>('/api/auth/my-tenants');
+        const m = Array.isArray(data)
+          ? data.find((t: any) => String(t?.tenantSlug || '') === String(tenantSlug))
+          : undefined;
+        const ok = String(m?.role || '').toLowerCase() === 'tenant_admin';
+        if (!cancelled) setIsTenantAdmin(ok);
+      } catch {
+        if (!cancelled) setIsTenantAdmin(false);
+      }
+    };
+
+    setTenantAdminChecked(false);
+    loadTenantRole().finally(() => {
+      if (!cancelled) setTenantAdminChecked(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug, isAdmin]);
+
+  if (!isAdmin && tenantSlug && !tenantAdminChecked) {
+    return (
+      <PageLayout>
+        <h1>Checking permissions</h1>
+        <p>Loading audit log access…</p>
+      </PageLayout>
+    );
+  }
+
+  if (!canView) {
     return (
       <PageLayout>
         <h1>Unauthorized</h1>
@@ -109,70 +126,12 @@ export default function AuditLogViewer() {
     );
   }
 
-  if (config.multiTenant && !isAdmin && tenantAdminChecked && !isTenantAdmin) {
-    return (
-      <PageLayout>
-        <h1>Unauthorized</h1>
-        <p>You must be a tenant administrator to view audit logs.</p>
-      </PageLayout>
-    );
-  }
-
   useEffect(() => {
-    if (!config.multiTenant) return;
-
-    if (!isAdmin) {
-      const checkTenantRole = async () => {
-        try {
-          if (!currentTenantSlug) {
-            setIsTenantAdmin(false);
-            return;
-          }
-          const data = await apiClient.get<TenantMembership[]>('/api/auth/my-tenants');
-          const m = Array.isArray(data) ? data.find((t) => t.tenantSlug === currentTenantSlug) : undefined;
-          setIsTenantAdmin(String(m?.role || '').toLowerCase() === 'tenant_admin');
-        } catch {
-          setIsTenantAdmin(false);
-        }
-      };
-
-      checkTenantRole().finally(() => setTenantAdminChecked(true));
-      return;
-    }
-
-    const loadTenants = async () => {
-      try {
-        const data = await apiClient.get<any[]>('/api/admin/tenants').catch(() => []);
-        const items = Array.isArray(data)
-          ? data
-              .map((t: any) => ({ id: String(t.id), slug: String(t.slug), name: String(t.name) }))
-              .filter((t: any) => t.slug && t.name)
-          : [];
-        setTenants(items);
-      } catch {
-        // ignore
-      }
-    };
-
-    loadTenants();
-  }, [isAdmin, currentTenantSlug]);
-
-  useEffect(() => {
-    if (config.multiTenant && !isAdmin && !tenantAdminChecked) return;
-    if (config.multiTenant && !isAdmin && !isTenantAdmin) return;
-
+    if (!canView) return;
     loadLogs();
     loadStats();
     loadAvailableActions();
-  }, [page, pageSize, actionFilter, userIdFilter, resourceTypeFilter, tenantFilter, isAdmin, isTenantAdmin, tenantAdminChecked, currentTenantSlug]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('audit.tenantFilter', tenantFilter);
-    } catch {
-      // ignore
-    }
-  }, [tenantFilter]);
+  }, [page, pageSize, actionFilter, userIdFilter, resourceTypeFilter, canView]);
 
   const loadLogs = async () => {
     try {
@@ -187,17 +146,10 @@ export default function AuditLogViewer() {
       if (actionFilter) params.action = actionFilter;
       if (userIdFilter) params.userId = userIdFilter;
       if (resourceTypeFilter) params.resourceType = resourceTypeFilter;
-
-      let url = '/api/audit/logs';
-      if (config.multiTenant && isAdmin) {
-        if (tenantFilter) params.tenantSlug = tenantFilter;
-      }
-      if (config.multiTenant && !isAdmin) {
-        const slug = currentTenantSlug || 'default';
-        url = `/api/t/${encodeURIComponent(slug)}/audit/logs`;
-      }
-
-      const data = await apiClient.get<{ logs: AuditLog[]; pagination: { total: number } }>(url, params);
+      const data = await apiClient.get<{ logs: AuditLog[]; pagination: { total: number } }>(
+        '/api/audit/logs',
+        params
+      );
       setLogs(data.logs);
       setTotal(data.pagination.total);
     } catch (err) {
@@ -210,17 +162,7 @@ export default function AuditLogViewer() {
 
   const loadStats = async () => {
     try {
-      let url = '/api/audit/stats';
-      const params: Record<string, any> = {};
-      if (config.multiTenant && isAdmin) {
-        if (tenantFilter) params.tenantSlug = tenantFilter;
-      }
-      if (config.multiTenant && !isAdmin) {
-        const slug = currentTenantSlug || 'default';
-        url = `/api/t/${encodeURIComponent(slug)}/audit/stats`;
-      }
-
-      const data = await apiClient.get<AuditStats>(url, Object.keys(params).length ? params : undefined);
+      const data = await apiClient.get<AuditStats>('/api/audit/stats');
       setStats(data);
     } catch (err) {
       console.error('Failed to load stats:', err);
@@ -229,17 +171,7 @@ export default function AuditLogViewer() {
 
   const loadAvailableActions = async () => {
     try {
-      let url = '/api/audit/actions';
-      const params: Record<string, any> = {};
-      if (config.multiTenant && isAdmin) {
-        if (tenantFilter) params.tenantSlug = tenantFilter;
-      }
-      if (config.multiTenant && !isAdmin) {
-        const slug = currentTenantSlug || 'default';
-        url = `/api/t/${encodeURIComponent(slug)}/audit/actions`;
-      }
-
-      const data = await apiClient.get<{ actions: string[] }>(url, Object.keys(params).length ? params : undefined);
+      const data = await apiClient.get<{ actions: string[] }>('/api/audit/actions');
       setAvailableActions(data.actions);
     } catch (err) {
       console.error('Failed to load actions:', err);
@@ -267,7 +199,6 @@ export default function AuditLogViewer() {
   };
 
   const headers = [
-    ...(config.multiTenant ? [{ key: 'tenant', header: 'Tenant' }] : []),
     { key: 'createdAt', header: 'Timestamp' },
     { key: 'action', header: 'Action' },
     { key: 'userId', header: 'User ID' },
@@ -278,7 +209,6 @@ export default function AuditLogViewer() {
 
   const rows = logs.map((log) => ({
     id: log.id,
-    tenant: log.tenantName || log.tenantSlug || '-',
     createdAt: formatDate(log.createdAt),
     action: log.action,
     userId: log.userId || '-',
@@ -355,24 +285,6 @@ export default function AuditLogViewer() {
         marginBottom: 'var(--spacing-6)',
         flexWrap: 'wrap',
       }}>
-        {config.multiTenant && isAdmin && (
-          <div style={{ flex: '1 1 250px' }}>
-            <Select
-              id="tenant-filter"
-              labelText="Tenant"
-              value={tenantFilter}
-              onChange={(e) => {
-                setTenantFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              <SelectItem value="" text="All Tenants" />
-              {tenants.map((t) => (
-                <SelectItem key={t.id} value={t.slug} text={t.name} />
-              ))}
-            </Select>
-          </div>
-        )}
         <div style={{ flex: '1 1 250px' }}>
           <Select
             id="action-filter"

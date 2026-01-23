@@ -12,7 +12,6 @@ let otherId = '';
 let projectId = '';
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -36,7 +35,7 @@ describe('Starbase project delete', () => {
 
   it('allows owner to delete project', async () => {
     const response = await request(app)
-      .delete(`/starbase-api/projects/${projectId}`)
+      .delete(`/t/default/starbase-api/projects/${projectId}`)
       .set('Authorization', `Bearer ${ownerToken}`);
 
     expect(response.status).toBe(204);
@@ -44,7 +43,7 @@ describe('Starbase project delete', () => {
 
   it('rejects non-owner project delete', async () => {
     const response = await request(app)
-      .delete(`/starbase-api/projects/${projectId}`)
+      .delete(`/t/default/starbase-api/projects/${projectId}`)
       .set('Authorization', `Bearer ${otherToken}`);
 
     expect(response.status).toBe(403);

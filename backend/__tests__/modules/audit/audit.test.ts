@@ -4,7 +4,6 @@ import express from 'express';
 import auditRouter from '../../../src/modules/audit/audit.js';
 import { getDataSource } from '../../../src/shared/db/data-source.js';
 import { AuditLog } from '../../../src/shared/db/entities/AuditLog.js';
-import { Tenant } from '../../../src/shared/db/entities/Tenant.js';
 
 vi.mock('@shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -54,12 +53,9 @@ describe('GET /api/audit/logs', () => {
         ]),
       })),
     };
-    const tenantRepo = { find: vi.fn().mockResolvedValue([]) };
-
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === AuditLog) return auditRepo;
-        if (entity === Tenant) return tenantRepo;
         throw new Error('Unexpected repository');
       },
     });
@@ -81,12 +77,10 @@ describe('GET /api/audit/logs', () => {
         getManyAndCount: vi.fn().mockResolvedValue([[], 0]),
       })),
     };
-    const tenantRepo = { find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === AuditLog) return auditRepo;
-        if (entity === Tenant) return tenantRepo;
         throw new Error('Unexpected repository');
       },
     });

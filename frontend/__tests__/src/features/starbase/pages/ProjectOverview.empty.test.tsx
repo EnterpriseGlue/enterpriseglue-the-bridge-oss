@@ -13,6 +13,18 @@ vi.mock('@src/features/git/components', () => ({
     open ? <h2>Create Project</h2> : null,
 }));
 
+vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
+  usePlatformSyncSettings: () => ({
+    data: {
+      syncPushEnabled: true,
+      syncPullEnabled: false,
+      syncBothEnabled: false,
+      gitProjectTokenSharingEnabled: true,
+      defaultDeployRoles: [],
+    },
+  }),
+}));
+
 vi.mock('@src/features/starbase/components/project-detail/EngineAccessModal', () => ({
   EngineAccessModal: () => null,
 }));
@@ -34,7 +46,8 @@ function renderWithProviders() {
 describe('ProjectOverview empty state', () => {
   it('shows empty state when no projects exist', async () => {
     server.use(
-      http.get('/starbase-api/projects', () => HttpResponse.json([]))
+      http.get('/starbase-api/projects', () => HttpResponse.json([])),
+      http.get('/t/default/starbase-api/projects', () => HttpResponse.json([]))
     );
 
     renderWithProviders();

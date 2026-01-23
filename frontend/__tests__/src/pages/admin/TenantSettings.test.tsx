@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import TenantSettings from '@src/pages/admin/TenantSettings';
+import { render, screen } from '@testing-library/react';
+import { ExtensionPage } from '@src/enterprise/ExtensionSlot';
 
 describe('TenantSettings', () => {
-  it('exports TenantSettings admin page component', () => {
-    expect(TenantSettings).toBeDefined();
-    expect(typeof TenantSettings).toBe('function');
+  it('renders fallback when tenant settings page is not registered', () => {
+    render(<ExtensionPage name="tenant-settings-page" fallback={<div>EE required</div>} />);
+
+    expect(screen.getByText('EE required')).toBeInTheDocument();
   });
 });

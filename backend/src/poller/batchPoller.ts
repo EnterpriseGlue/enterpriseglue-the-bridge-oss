@@ -18,12 +18,14 @@ export function startBatchPoller(intervalMs = Number(process.env.BATCH_POLL_INTE
       const now = Date.now()
       for (const row of active) {
         try {
+          // Skip batches without engineId (legacy data)
+          if (!row.engineId) continue
           let engine: any = null
           let stats: any = null
           let engineErr: any = null
           let statsErr: any = null
-          try { engine = await getBatchInfo<any>(row.camundaBatchId!) } catch (e) { engineErr = e }
-          try { stats = await getBatchStatistics<any>(row.camundaBatchId!) } catch (e) { statsErr = e }
+          try { engine = await getBatchInfo<any>(row.engineId, row.camundaBatchId!) } catch (e) { engineErr = e }
+          try { stats = await getBatchStatistics<any>(row.engineId, row.camundaBatchId!) } catch (e) { statsErr = e }
           let status = row.status
           let progress = row.progress || 0
           // Prefer engine totals but derive a fallback from stats; never downgrade to 0 if stats missing

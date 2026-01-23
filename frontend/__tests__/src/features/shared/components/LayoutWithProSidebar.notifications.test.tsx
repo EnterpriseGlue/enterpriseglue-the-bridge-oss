@@ -83,7 +83,7 @@ function renderWithProviders() {
 describe('LayoutWithProSidebar notifications', () => {
   it('opens notifications panel and shows empty state', async () => {
     server.use(
-      http.get('/api/notifications', () =>
+      http.get('/t/default/api/notifications', () =>
         HttpResponse.json({ notifications: [], unreadCount: 0 })
       )
     )
@@ -102,7 +102,7 @@ describe('LayoutWithProSidebar notifications', () => {
     let readCalled = false
 
     server.use(
-      http.get('/api/notifications', () =>
+      http.get('/t/default/api/notifications', () =>
         HttpResponse.json({
           notifications: [
             {
@@ -117,7 +117,7 @@ describe('LayoutWithProSidebar notifications', () => {
           unreadCount: 2,
         })
       ),
-      http.patch('/api/notifications/read', () => {
+      http.patch('/t/default/api/notifications/read', () => {
         readCalled = true
         return HttpResponse.json({ success: true })
       })

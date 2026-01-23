@@ -23,8 +23,8 @@ describe('bpmn-engine-client', () => {
     vi.clearAllMocks();
     const engineRepo = {
       findOneBy: vi.fn().mockResolvedValue({
+        id: 'engine-1',
         baseUrl: 'http://localhost:8080/engine-rest',
-        active: true,
         authType: 'none',
       }),
     };

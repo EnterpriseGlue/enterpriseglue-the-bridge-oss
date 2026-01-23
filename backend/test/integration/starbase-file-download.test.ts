@@ -11,7 +11,6 @@ let projectId = '';
 let fileId = '';
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -34,7 +33,7 @@ describe('Starbase file download', () => {
 
   it('returns XML download for file', async () => {
     const response = await request(app)
-      .get(`/starbase-api/files/${fileId}/download`)
+      .get(`/t/default/starbase-api/files/${fileId}/download`)
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(response.status).toBe(200);
@@ -43,7 +42,7 @@ describe('Starbase file download', () => {
 
   it('rejects unauthenticated file download', async () => {
     const response = await request(app)
-      .get(`/starbase-api/files/${fileId}/download`);
+      .get(`/t/default/starbase-api/files/${fileId}/download`);
 
     expect(response.status).toBe(401);
   });

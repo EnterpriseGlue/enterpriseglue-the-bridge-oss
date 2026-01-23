@@ -32,12 +32,11 @@ describe('Starbase projects', () => {
 
   it('creates and lists projects for the owner', async () => {
     const app = createApp({
-      includeTenantContext: false,
       includeRateLimiting: false,
     });
 
     const createResponse = await request(app)
-      .post('/starbase-api/projects')
+      .post('/t/default/starbase-api/projects')
       .set('Authorization', `Bearer ${authToken}`)
       .send({ name: `${prefix}-project` });
 
@@ -48,7 +47,7 @@ describe('Starbase projects', () => {
     createdProjectIds.push(createdId);
 
     const listResponse = await request(app)
-      .get('/starbase-api/projects')
+      .get('/t/default/starbase-api/projects')
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(listResponse.status).toBe(200);
@@ -58,12 +57,11 @@ describe('Starbase projects', () => {
 
   it('renames a project', async () => {
     const app = createApp({
-      includeTenantContext: false,
       includeRateLimiting: false,
     });
 
     const createResponse = await request(app)
-      .post('/starbase-api/projects')
+      .post('/t/default/starbase-api/projects')
       .set('Authorization', `Bearer ${authToken}`)
       .send({ name: `${prefix}-rename-project` });
 
@@ -72,7 +70,7 @@ describe('Starbase projects', () => {
     createdProjectIds.push(renameId);
 
     const renameResponse = await request(app)
-      .patch(`/starbase-api/projects/${renameId}`)
+      .patch(`/t/default/starbase-api/projects/${renameId}`)
       .set('Authorization', `Bearer ${authToken}`)
       .send({ name: `${prefix}-renamed-project` });
 
@@ -82,12 +80,11 @@ describe('Starbase projects', () => {
 
   it('rejects unauthenticated rename', async () => {
     const app = createApp({
-      includeTenantContext: false,
       includeRateLimiting: false,
     });
 
     const response = await request(app)
-      .patch('/starbase-api/projects/00000000-0000-0000-0000-000000000000')
+      .patch('/t/default/starbase-api/projects/00000000-0000-0000-0000-000000000000')
       .send({ name: `${prefix}-fail` });
 
     expect(response.status).toBe(401);
@@ -95,24 +92,22 @@ describe('Starbase projects', () => {
 
   it('rejects unauthenticated delete', async () => {
     const app = createApp({
-      includeTenantContext: false,
       includeRateLimiting: false,
     });
 
     const response = await request(app)
-      .delete('/starbase-api/projects/00000000-0000-0000-0000-000000000000');
+      .delete('/t/default/starbase-api/projects/00000000-0000-0000-0000-000000000000');
 
     expect(response.status).toBe(401);
   });
 
   it('rejects non-member engine access lookup', async () => {
     const app = createApp({
-      includeTenantContext: false,
       includeRateLimiting: false,
     });
 
     const response = await request(app)
-      .get(`/starbase-api/projects/${seededProjectId}/engine-access`)
+      .get(`/t/default/starbase-api/projects/${seededProjectId}/engine-access`)
       .set('Authorization', `Bearer ${otherToken}`);
 
     expect(response.status).toBe(403);
@@ -120,12 +115,11 @@ describe('Starbase projects', () => {
 
   it('rejects non-member project rename', async () => {
     const app = createApp({
-      includeTenantContext: false,
       includeRateLimiting: false,
     });
 
     const response = await request(app)
-      .patch(`/starbase-api/projects/${seededProjectId}`)
+      .patch(`/t/default/starbase-api/projects/${seededProjectId}`)
       .set('Authorization', `Bearer ${otherToken}`)
       .send({ name: `${prefix}-rename-deny` });
 
@@ -134,12 +128,11 @@ describe('Starbase projects', () => {
 
   it('rejects non-member project delete', async () => {
     const app = createApp({
-      includeTenantContext: false,
       includeRateLimiting: false,
     });
 
     const response = await request(app)
-      .delete(`/starbase-api/projects/${seededProjectId}`)
+      .delete(`/t/default/starbase-api/projects/${seededProjectId}`)
       .set('Authorization', `Bearer ${otherToken}`);
 
     expect(response.status).toBe(403);

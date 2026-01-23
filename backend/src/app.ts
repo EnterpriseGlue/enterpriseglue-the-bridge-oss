@@ -8,24 +8,44 @@ import { config } from '@shared/config/index.js';
 import { generateOpenApi } from '@shared/schemas/openapi.js';
 import { errorHandler } from '@shared/middleware/errorHandler.js';
 import { apiLimiter } from '@shared/middleware/rateLimiter.js';
-import { resolveTenantContext } from '@shared/middleware/tenant.js';
 import { registerRoutes } from './routes/index.js';
 
 interface CreateAppOptions {
+  registerBaseRoutes?: boolean;
   registerRoutes?: boolean;
-  includeTenantContext?: boolean;
   includeRateLimiting?: boolean;
   includeDocs?: boolean;
+  registerFinalMiddleware?: boolean;
+}
+
+export function registerBaseRoutes(app: express.Express): void {
+  registerRoutes(app);
+}
+
+export function registerFinalMiddleware(
+  app: express.Express,
+  options: { includeDocs?: boolean } = {}
+): void {
+  const { includeDocs = true } = options;
+
+  if (includeDocs) {
+    app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(generateOpenApi()));
+  }
+
+  // Error handling middleware (must be last)
+  app.use(errorHandler);
 }
 
 export function createApp(options: CreateAppOptions = {}): express.Express {
   const app = express();
   const {
-    registerRoutes: shouldRegisterRoutes = true,
-    includeTenantContext = true,
+    registerBaseRoutes: registerBaseRoutesOption,
+    registerRoutes: registerRoutesOption,
     includeRateLimiting = true,
     includeDocs = true,
+    registerFinalMiddleware: shouldRegisterFinalMiddleware = true,
   } = options;
+  const shouldRegisterBaseRoutes = registerBaseRoutesOption ?? registerRoutesOption ?? true;
 
   app.disable('x-powered-by');
 
@@ -80,10 +100,6 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     });
   });
 
-  if (includeTenantContext) {
-    app.use(resolveTenantContext({ required: false }));
-  }
-
   // Apply global rate limiting (100 requests per 15 minutes per IP)
   if (includeRateLimiting) {
     app.use('/api', apiLimiter);
@@ -96,16 +112,13 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   });
 
   // Register all application routes
-  if (shouldRegisterRoutes) {
-    registerRoutes(app);
+  if (shouldRegisterBaseRoutes) {
+    registerBaseRoutes(app);
   }
 
-  if (includeDocs) {
-    app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(generateOpenApi()));
+  if (shouldRegisterFinalMiddleware) {
+    registerFinalMiddleware(app, { includeDocs });
   }
-
-  // Error handling middleware (must be last)
-  app.use(errorHandler);
 
   return app;
 }

@@ -1,4 +1,5 @@
-import { Express } from 'express';
+import { Express, Router } from 'express';
+import { resolveTenantContext } from '@shared/middleware/tenant.js';
 
 // Feature Modules
 import {
@@ -57,7 +58,6 @@ import {
   meRoute,
   verifyEmailRoute,
   microsoftRoute,
-  signupRoute,
   forgotPasswordRoute,
   googleRoute,
   googleStartRoute,
@@ -69,7 +69,6 @@ import {
   emailConfigsRoute,
   emailTemplatesRoute,
   setupStatusRoute,
-  tenantAdminRoute,
 } from '@modules/admin/index.js';
 
 import {
@@ -80,13 +79,83 @@ import {
 import { usersRoute } from '@modules/users/index.js';
 import { auditRoute } from '@modules/audit/index.js';
 import { notificationsRoute } from '@modules/notifications/index.js';
-import invitationsRoute from '@modules/invitations/index.js';
 import vcsRoute from '@modules/versioning/index.js';
 
 /**
+ * Create a router for tenant-scoped routes
+ * All routes mounted here will be accessible under /t/:tenantSlug/*
+ */
+function createTenantScopedRouter(options: { includeAuditRoute?: boolean } = {}): Router {
+  const router = Router({ mergeParams: true });
+  const { includeAuditRoute = true } = options;
+
+  // Apply tenant context middleware to all tenant-scoped routes
+  router.use(resolveTenantContext({ required: true }));
+
+  // Starbase routes (projects, files, folders, etc.)
+  router.use(projectsRoute);
+  router.use(filesRoute);
+  router.use(foldersRoute);
+  router.use(versionsRoute);
+  router.use(commentsRoute);
+  router.use(deploymentsRoute);
+  router.use(membersRoute);
+  router.use(engineDeploymentsRoute);
+
+  // Mission Control routes (engines, batches, processes, etc.)
+  router.use(missionControlRoute);
+  router.use(enginesAndFiltersRoute);
+  router.use(batchesRoute);
+  router.use(migrationRoute);
+  router.use(directRoute);
+  router.use(processDefinitionsRoute);
+  router.use(processInstancesRoute);
+  router.use(tasksRoute);
+  router.use(externalTasksRoute);
+  router.use(messagesRoute);
+  router.use(decisionsRoute);
+  router.use(jobsRoute);
+  router.use(historyExtendedRoute);
+  router.use(metricsRoute);
+  router.use(modifyRoute);
+
+  // Engines API
+  router.use(enginesDeploymentsRoute);
+  router.use(engineManagementRoute);
+
+  // Git versioning routes
+  router.use(gitRoute);
+  router.use(gitCredentialsRoute);
+  router.use(gitCreateOnlineRoute);
+  router.use(gitSyncRoute);
+  router.use(gitCloneRoute);
+
+  // VCS routes
+  router.use(vcsRoute);
+
+  // Tenant-scoped API routes
+  router.use(usersRoute);
+  if (includeAuditRoute) {
+    router.use(auditRoute);
+  }
+  router.use(notificationsRoute);
+  router.use(dashboardStatsRoute);
+  router.use(dashboardContextRoute);
+
+  return router;
+}
+
+/**
  * Register all application routes
+ * 
+ * Routes are organized into:
+ * 1. Platform-level routes (auth, admin) - no tenant prefix
+ * 2. Tenant-scoped routes - mounted under /t/:tenantSlug
  */
 export function registerRoutes(app: Express): void {
+  const enterprisePluginLoaded = Boolean(app.locals?.enterprisePluginLoaded);
+  // ============ Platform-Level Routes (no tenant prefix) ============
+  
   // Authentication routes
   app.use(loginRoute);
   app.use(logoutRoute);
@@ -99,78 +168,32 @@ export function registerRoutes(app: Express): void {
   app.use(googleRoute);
   app.use(microsoftStartRoute);
   app.use(googleStartRoute);
-  app.use(signupRoute);
-  app.use(invitationsRoute);
-  app.use('/api/t/:tenantSlug/admin', tenantAdminRoute);
+
+  // Admin routes (platform-level)
   app.use(emailConfigsRoute);
-  app.use(emailTemplatesRoute);
+  if (!enterprisePluginLoaded) {
+    app.use(emailTemplatesRoute);
+  }
   app.use(setupStatusRoute);
-
-  // User management routes
-  app.use(usersRoute);
-
-  // Audit logging routes
-  app.use(auditRoute);
-
-  // Notification routes
-  app.use(notificationsRoute);
-
-  // Dashboard routes
-  app.use(dashboardStatsRoute);
-  app.use(dashboardContextRoute);
 
   // Contact admin route (public, no auth required)
   app.use('/api/contact-admin', contactAdminRoute);
 
-  // Starbase routes
-  app.use(projectsRoute);
-  app.use(filesRoute);
-  app.use(foldersRoute);
-  app.use(versionsRoute);
-  app.use(commentsRoute);
-  app.use(deploymentsRoute);
-  app.use(membersRoute);
-  app.use(engineDeploymentsRoute);
-
-  // Mission Control routes
-  app.use(missionControlRoute);
-  app.use(enginesAndFiltersRoute);
-  app.use(batchesRoute);
-  app.use(migrationRoute);
-  app.use(directRoute);
-  app.use(processDefinitionsRoute);
-  app.use(processInstancesRoute);
-  app.use(tasksRoute);
-  app.use(externalTasksRoute);
-  app.use(messagesRoute);
-  app.use(decisionsRoute);
-  app.use(jobsRoute);
-  app.use(historyExtendedRoute);
-  app.use(metricsRoute);
-  app.use(modifyRoute);
-
-  // Engines API - deployments
-  app.use(enginesDeploymentsRoute);
-
-  // Engine Management API
-  app.use(engineManagementRoute);
-
-  // Git versioning routes
-  app.use(gitRoute);
-  app.use(gitCredentialsRoute);
-  app.use(gitCreateOnlineRoute);
-  app.use(gitSyncRoute);
-  app.use(gitCloneRoute);
-
-  // VCS routes
-  app.use(vcsRoute);
-
   // Platform Admin API
   app.use('/api/admin', platformAdminRoute);
 
-  // SSO Provider Management API
+  // SSO Provider Management API (platform-level)
   app.use(ssoProvidersRoute);
 
-  // Authorization API
+  // Authorization API (platform-level)
   app.use(authzRoute);
+
+  // Platform-level user management (for admin access without tenant prefix)
+  app.use(usersRoute);
+
+  // ============ Tenant-Scoped Routes ============
+  // All routes below are accessible under /t/:tenantSlug/*
+  // Example: /t/default/starbase-api/projects
+  
+  app.use('/t/:tenantSlug', createTenantScopedRouter({ includeAuditRoute: !enterprisePluginLoaded }));
 }

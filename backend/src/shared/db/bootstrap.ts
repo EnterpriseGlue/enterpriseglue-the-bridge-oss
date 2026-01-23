@@ -8,7 +8,8 @@ import { hashPassword } from '@shared/utils/password.js';
  * Bootstrap admin account on first run
  * Creates the initial admin user if no users exist
  */
-export async function bootstrapAdmin() {
+export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } = {}) {
+  const { allowPlatformAdmin = true } = options;
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
 
@@ -35,7 +36,7 @@ export async function bootstrapAdmin() {
       passwordHash: passwordHash,
       firstName: 'Admin',
       lastName: 'User',
-      platformRole: 'admin',
+      platformRole: allowPlatformAdmin ? 'admin' : 'user',
       isActive: true,
       mustResetPassword: false,
       failedLoginAttempts: 0,
@@ -51,7 +52,7 @@ export async function bootstrapAdmin() {
 
     console.log(`✅ Admin account created: ${config.adminEmail}`);
     console.log(`   Password: [REDACTED - check ADMIN_PASSWORD environment variable]`);
-    console.log(`   Platform Role: admin`);
+    console.log(`   Platform Role: ${allowPlatformAdmin ? 'admin' : 'user'}`);
     console.log(`⚠️  IMPORTANT: Change the admin password in production!`);
   } catch (error) {
     console.error('❌ Failed to bootstrap admin account:', error);
@@ -67,7 +68,8 @@ export async function backfillMissingPlatformRoles() {
   // This function is kept for backward compatibility but does nothing
 }
 
-export async function backfillKnownUserProfiles() {
+export async function backfillKnownUserProfiles(options: { allowPlatformAdmin?: boolean } = {}) {
+  const { allowPlatformAdmin = true } = options;
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
 
@@ -89,14 +91,14 @@ export async function backfillKnownUserProfiles() {
     const isPlaceholderAdminUser = currentFirstName === 'Admin' && currentLastName === 'User';
     const shouldSetFirstName = !currentFirstName || isPlaceholderAdminUser;
     const shouldSetLastName = !currentLastName || isPlaceholderAdminUser;
-    const shouldSetAdmin = user.platformRole !== 'admin';
+    const shouldSetAdmin = allowPlatformAdmin && user.platformRole !== 'admin';
     if (!shouldSetFirstName && !shouldSetLastName && !shouldSetAdmin) return;
 
     const now = Date.now();
     await userRepo.update(user.id, {
       firstName: shouldSetFirstName ? firstName : user.firstName,
       lastName: shouldSetLastName ? lastName : user.lastName,
-      platformRole: 'admin',
+      platformRole: shouldSetAdmin ? 'admin' : user.platformRole,
       updatedAt: now,
     });
 

@@ -20,14 +20,6 @@ import { config } from '@shared/config/index.js';
 
 const router = Router();
 
-function parseTenantSlug(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const v = value.trim().toLowerCase();
-  if (v.length < 2 || v.length > 60) return null;
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v)) return null;
-  return v;
-}
-
 /**
  * Check if Google auth is enabled
  * GET /api/auth/google/status
@@ -54,16 +46,6 @@ router.get('/api/auth/google', apiLimiter, asyncHandler(async (req: Request, res
     });
   }
 
-  const tenantSlug = parseTenantSlug(req.query.tenantSlug);
-  if (tenantSlug) {
-    res.cookie('oauth_tenant_slug', tenantSlug, {
-      httpOnly: true,
-      secure: config.nodeEnv === 'production',
-      sameSite: 'lax',
-      maxAge: 10 * 60 * 1000,
-    });
-  }
-
   return res.redirect('/api/auth/google/start');
 }));
 
@@ -75,13 +57,10 @@ router.get('/api/auth/google', apiLimiter, asyncHandler(async (req: Request, res
 router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { code, state, error, error_description } = req.query;
 
-    const tenantSlug = parseTenantSlug(req.cookies?.oauth_tenant_slug);
-
     // Handle Google errors
     if (error) {
       logger.error('[Google Auth] OAuth error:', error, error_description);
-      const loginPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/login` : '/login';
-      const errorUrl = `${config.frontendUrl}${loginPath}?error=google_auth_failed&message=${encodeURIComponent(error_description as string || error as string)}`;
+      const errorUrl = `${config.frontendUrl}/login?error=google_auth_failed&message=${encodeURIComponent(error_description as string || error as string)}`;
       return res.redirect(errorUrl);
     }
 
@@ -99,7 +78,6 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
 
     // Clear state cookie
     res.clearCookie('oauth_state');
-    res.clearCookie('oauth_tenant_slug');
 
     logger.info('[Google Auth] Exchanging code for tokens...');
 
@@ -177,9 +155,7 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
       maxAge: config.jwtRefreshTokenExpires * 1000,
     });
 
-    const successPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : '/';
-    const successUrl = `${config.frontendUrl}${successPath}`;
-    res.redirect(successUrl);
+    res.redirect(`${config.frontendUrl}/`);
 }));
 
 export default router;

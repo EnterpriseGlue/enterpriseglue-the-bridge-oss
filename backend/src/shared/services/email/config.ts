@@ -3,7 +3,7 @@ import { logger } from '@shared/utils/logger.js';
 import { config } from '@shared/config/index.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { EmailSendConfig } from '@shared/db/entities/EmailSendConfig.js';
-import { TenantSettings } from '@shared/db/entities/TenantSettings.js';
+// TenantSettings removed - multi-tenancy is EE-only
 import { decrypt } from '@shared/utils/crypto.js';
 import { sendEmail as sendWithProvider, type EmailProvider } from '../email-providers.js';
 
@@ -31,35 +31,15 @@ export interface EmailConfig {
 }
 
 /**
- * Get email config for a tenant, falling back to default config or env config
+ * Get email config, falling back to default config or env config
+ * Note: Tenant-specific email config is an EE-only feature
  */
-export async function getEmailConfigForTenant(tenantId?: string): Promise<EmailConfig | null> {
+export async function getEmailConfigForTenant(_tenantId?: string): Promise<EmailConfig | null> {
   const dataSource = await getDataSource();
 
   try {
-    // If tenantId provided, check tenant settings for specific config
-    if (tenantId) {
-      const tenantSettingsRepo = dataSource.getRepository(TenantSettings);
-      const tenantSetting = await tenantSettingsRepo.findOneBy({ tenantId });
-
-      if (tenantSetting?.emailSendConfigId) {
-        const configRepo = dataSource.getRepository(EmailSendConfig);
-        const emailConfig = await configRepo.findOneBy({
-          id: tenantSetting.emailSendConfigId,
-          enabled: true,
-        });
-
-        if (emailConfig) {
-          return {
-            provider: emailConfig.provider as EmailProvider,
-            apiKey: decrypt(emailConfig.apiKeyEncrypted),
-            fromName: emailConfig.fromName,
-            fromEmail: emailConfig.fromEmail,
-            replyTo: emailConfig.replyTo,
-          };
-        }
-      }
-    }
+    // OSS single-tenant mode: tenant-specific config lookup removed (EE-only feature)
+    // Always use default config
 
     // Fallback to default config
     const configRepo = dataSource.getRepository(EmailSendConfig);

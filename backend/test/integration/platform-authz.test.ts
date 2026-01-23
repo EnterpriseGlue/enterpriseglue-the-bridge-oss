@@ -16,7 +16,6 @@ let developerToken = '';
 let skipAuthz = false;
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -54,14 +53,16 @@ describe('Platform authz checks (authz storage required)', () => {
     expect(response.status).toBe(401);
   });
 
-  it('denies authz check for non-admin user', async () => {
+  it('allows authz check for non-admin user but returns denied', async () => {
     if (skipAuthz) return;
     const response = await request(app)
       .post('/api/authz/check-batch')
       .set('Authorization', `Bearer ${userToken}`)
       .send({ checks: [{ action: PlatformPermissions.USER_VIEW, resourceType: 'platform' }] });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
+    // Non-admin gets denied in the response body
+    expect(response.body?.results?.[0]?.allowed).toBe(false);
   });
 
   it('allows authz check for admin user', async () => {
@@ -76,13 +77,15 @@ describe('Platform authz checks (authz storage required)', () => {
     expect(result?.allowed).toBe(true);
   });
 
-  it('allows authz check for developer role with view permission', async () => {
+  it('allows authz check for developer role with view permission granted', async () => {
     if (skipAuthz) return;
     const response = await request(app)
       .post('/api/authz/check-batch')
       .set('Authorization', `Bearer ${developerToken}`)
       .send({ checks: [{ action: PlatformPermissions.USER_VIEW, resourceType: 'platform' }] });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
+    // Developer role has view permission granted by default policy
+    expect(response.body?.results?.[0]?.allowed).toBe(true);
   });
 });

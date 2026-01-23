@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import deploymentsRouter from '../../../src/modules/engines/deployments.js';
 import { getDataSource } from '../../../src/shared/db/data-source.js';
 
 vi.mock('@shared/db/data-source.js', () => ({
@@ -43,9 +42,10 @@ vi.mock('@shared/services/platform-admin/index.js', () => ({
 describe('engines deployments routes', () => {
   let app: express.Application;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     app = express();
     app.use(express.json());
+    const { default: deploymentsRouter } = await import('../../../src/modules/engines/deployments.js');
     app.use(deploymentsRouter);
     vi.clearAllMocks();
 

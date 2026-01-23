@@ -37,86 +37,24 @@ function redactEngineSecrets<T extends { username?: string | null; passwordEnc?:
 r.get('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
+  const tenantId = req.tenant?.tenantId
+
   if (isPlatformAdmin(req)) {
-    const rows = await engineRepo.find()
+    // Platform admins see all engines in current tenant (or all if no tenant context)
+    const rows = tenantId 
+      ? await engineRepo.find({ where: { tenantId } })
+      : await engineRepo.find()
     // Platform admins can manage all engines - add myRole: 'admin' for UI consistency
     return res.json(rows.map(engine => ({ ...engine, myRole: 'admin' })))
   }
 
-  const userEngines = await engineService.getUserEngines(req.user!.userId)
+  // Filter engines by tenant context
+  const userEngines = await engineService.getUserEngines(req.user!.userId, tenantId)
   res.json(userEngines.map(({ engine, role }) => {
     const out = { ...engine, myRole: role }
     if (role !== 'owner' && role !== 'delegate') return redactEngineSecrets(out)
     return out
   }))
-}))
-
-r.get('/engines-api/engines/active', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const dataSource = await getDataSource()
-  const engineRepo = dataSource.getRepository(Engine)
-  const rows = await engineRepo.find({ where: { active: true } })
-  if (rows[0]) {
-    const eng = rows[0]
-
-    if (!(await canViewEngine(req, String(eng.id)))) {
-      return res.json(null)
-    }
-
-    if (!isPlatformAdmin(req)) {
-      const role = await engineService.getEngineRole(req.user!.userId, String(eng.id))
-      if (role !== 'owner' && role !== 'delegate') {
-        eng.username = null
-        eng.passwordEnc = null
-      }
-    }
-
-    if (!eng.version) {
-      try {
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-        if (eng.username) {
-          const token = Buffer.from(`${eng.username}:${eng.passwordEnc || ''}`).toString('base64')
-          headers['Authorization'] = `Basic ${token}`
-        }
-
-        const r = await fetch(String(eng.baseUrl || '').replace(/\/$/, '') + '/version', { headers })
-        if (r.ok) {
-          const data: any = await r.json().catch(() => null)
-          if (data && typeof data.version === 'string') {
-            await engineRepo.update({ id: eng.id }, { version: data.version, updatedAt: Date.now() })
-            eng.version = data.version
-          }
-        }
-      } catch {}
-    }
-    return res.json(eng)
-  }
-  // Fallback to env-configured engine (used by camunda service when no active engine exists)
-  const baseUrl = process.env.CAMUNDA_BASE_URL || 'http://localhost:8080/engine-rest'
-  const username = process.env.CAMUNDA_USERNAME || ''
-  const fromEnv = {
-    id: '__env__',
-    name: 'Environment',
-    baseUrl,
-    type: 'camunda7',
-    authType: username ? 'basic' : 'none',
-    username: username || null,
-    passwordEnc: null,
-    active: true,
-    version: null as string | null,
-    createdAt: 0,
-    updatedAt: 0,
-    fromEnv: true,
-  }
-  // Try to get version live
-  try {
-    const started = Date.now()
-    const r = await fetch(baseUrl.replace(/\/$/, '') + '/version', { headers: { 'Content-Type': 'application/json' } })
-    if (r.ok) {
-      const data: any = await r.json().catch(() => null)
-      if (data && typeof data.version === 'string') fromEnv.version = data.version
-    }
-  } catch {}
-  res.json(fromEnv)
 }))
 
 r.post('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
@@ -126,6 +64,8 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (r
   const engineRepo = dataSource.getRepository(Engine)
   const now = Date.now()
   const id = randomUUID()
+  // Set tenantId from request context (OSS: default-tenant-id, EE: actual tenant)
+  const tenantId = req.tenant?.tenantId || null
   const payload = {
     id,
     name: String(req.body?.name || ''),
@@ -136,13 +76,10 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (r
     passwordEnc: req.body?.passwordEnc ?? null,
     ownerId: req.user!.userId,
     delegateId: null,
-    active: !!req.body?.active,
     version: req.body?.version ?? null,
+    tenantId,
     createdAt: now,
     updatedAt: now,
-  }
-  if (payload.active) {
-    await engineRepo.update({ id: Not(id) }, { active: false })
   }
   await engineRepo.insert(payload)
   res.status(201).json(payload)
@@ -180,13 +117,9 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async
     authType: req.body?.authType,
     username: req.body?.username,
     passwordEnc: req.body?.passwordEnc,
-    active: req.body?.active,
     version: req.body?.version,
     environmentTagId: req.body?.environmentTagId || null,
     updatedAt: now,
-  }
-  if (updates.active === true) {
-    await engineRepo.update({ id: Not(req.params.id) }, { active: false })
   }
   await engineRepo.update({ id: req.params.id }, updates)
   const rows = await engineRepo.find({ where: { id: req.params.id } })
@@ -202,27 +135,6 @@ r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(as
   if (!(await canManageEngine(req, String(existing[0].id)))) throw Errors.forbidden()
   await engineRepo.delete({ id: req.params.id })
   res.status(204).end()
-}))
-
-// Get active engine
-// Set engine active (single-active semantics)
-r.post('/engines-api/engines/:id/activate', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const dataSource = await getDataSource()
-  const engineRepo = dataSource.getRepository(Engine)
-  const rows0 = await engineRepo.find({ where: { id: req.params.id } })
-  if (!rows0.length) throw Errors.notFound('Engine')
-
-  if (!(await canManageEngine(req, String(rows0[0].id)))) throw Errors.forbidden()
-
-  const current = rows0[0]
-  if (!current.ownerId) {
-    await engineRepo.update({ id: req.params.id }, { ownerId: req.user!.userId, updatedAt: Date.now() })
-  }
-  await engineRepo.update({ id: Not(req.params.id) }, { active: false })
-  await engineRepo.update({ id: req.params.id }, { active: true, updatedAt: Date.now() })
-  const rows = await engineRepo.find({ where: { id: req.params.id } })
-  if (!rows.length) throw Errors.notFound('Engine')
-  res.json(rows[0])
 }))
 
 // Test connection and record health

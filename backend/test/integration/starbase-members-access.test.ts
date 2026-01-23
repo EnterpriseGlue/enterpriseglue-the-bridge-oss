@@ -12,7 +12,6 @@ let otherId = '';
 let projectId = '';
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -36,7 +35,7 @@ describe('Starbase members access', () => {
 
   it('returns 403 for non-member access', async () => {
     const response = await request(app)
-      .get(`/starbase-api/projects/${projectId}/members`)
+      .get(`/t/default/starbase-api/projects/${projectId}/members`)
       .set('Authorization', `Bearer ${otherToken}`);
 
     expect(response.status).toBeGreaterThanOrEqual(403);
@@ -44,7 +43,7 @@ describe('Starbase members access', () => {
 
   it('allows owner to list members', async () => {
     const response = await request(app)
-      .get(`/starbase-api/projects/${projectId}/members`)
+      .get(`/t/default/starbase-api/projects/${projectId}/members`)
       .set('Authorization', `Bearer ${ownerToken}`);
 
     expect(response.status).toBe(200);
@@ -52,7 +51,7 @@ describe('Starbase members access', () => {
 
   it('returns 403 for non-member user search', async () => {
     const response = await request(app)
-      .get(`/starbase-api/projects/${projectId}/members/user-search?q=te`)
+      .get(`/t/default/starbase-api/projects/${projectId}/members/user-search?q=te`)
       .set('Authorization', `Bearer ${otherToken}`);
 
     expect(response.status).toBe(403);
@@ -60,7 +59,7 @@ describe('Starbase members access', () => {
 
   it('allows owner to search users', async () => {
     const response = await request(app)
-      .get(`/starbase-api/projects/${projectId}/members/user-search?q=te`)
+      .get(`/t/default/starbase-api/projects/${projectId}/members/user-search?q=te`)
       .set('Authorization', `Bearer ${ownerToken}`);
 
     expect(response.status).toBe(200);

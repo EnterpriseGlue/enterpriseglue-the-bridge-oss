@@ -18,6 +18,7 @@ describe('platform-admin settings routes', () => {
 
   beforeEach(() => {
     app = express();
+    app.locals.enterprisePluginLoaded = false;
     app.use(express.json());
     app.use(settingsRouter);
     vi.clearAllMocks();
@@ -40,5 +41,13 @@ describe('platform-admin settings routes', () => {
 
   it('placeholder test for settings routes', () => {
     expect(true).toBe(true);
+  });
+
+  it('returns not found when enterprise plugin is loaded', async () => {
+    app.locals.enterprisePluginLoaded = true;
+
+    const response = await request(app).get('/');
+
+    expect(response.status).toBe(404);
   });
 });

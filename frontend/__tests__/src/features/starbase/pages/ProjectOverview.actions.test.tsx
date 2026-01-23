@@ -15,7 +15,7 @@ vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
       syncPushEnabled: true,
       syncPullEnabled: false,
       syncBothEnabled: false,
-      gitProjectTokenSharingEnabled: false,
+      gitProjectTokenSharingEnabled: true,
       defaultDeployRoles: [],
     },
   }),
@@ -53,6 +53,21 @@ describe('ProjectOverview actions', () => {
     projectName = 'Alpha Project';
     server.use(
       http.get('/starbase-api/projects', () => {
+        return HttpResponse.json([
+          {
+            id: 'project-1',
+            name: projectName,
+            createdAt: Date.now(),
+            foldersCount: 0,
+            filesCount: 0,
+            gitUrl: null,
+            gitProviderType: null,
+            gitSyncStatus: null,
+            members: [],
+          },
+        ]);
+      }),
+      http.get('/t/default/starbase-api/projects', () => {
         return HttpResponse.json([
           {
             id: 'project-1',

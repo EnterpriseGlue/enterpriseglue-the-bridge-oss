@@ -26,10 +26,11 @@ export { EnvironmentTag } from './EnvironmentTag.js';
 export { PlatformSettings } from './PlatformSettings.js';
 export { EmailTemplate } from './EmailTemplate.js';
 export { EmailSendConfig } from './EmailSendConfig.js';
-export { Tenant } from './Tenant.js';
-export { TenantSettings } from './TenantSettings.js';
-export { TenantMembership } from './TenantMembership.js';
-export { Invitation } from './Invitation.js';
+// Tenant entities removed - multi-tenancy is EE-only
+// export { Tenant } from './Tenant.js';
+// export { TenantSettings } from './TenantSettings.js';
+// export { TenantMembership } from './TenantMembership.js';
+// export { Invitation } from './Invitation.js';
 export { EngineMember } from './EngineMember.js';
 export { EngineProjectAccess } from './EngineProjectAccess.js';
 export { EngineAccessRequest } from './EngineAccessRequest.js';

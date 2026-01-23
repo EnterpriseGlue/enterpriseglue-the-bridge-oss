@@ -14,8 +14,7 @@ import { apiLimiter } from '@shared/middleware/rateLimiter.js';
 import { engineService, engineAccessService, projectMemberService } from '@shared/services/platform-admin/index.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
-import { Invitation } from '@shared/db/entities/Invitation.js';
-import { Tenant } from '@shared/db/entities/Tenant.js';
+// Invitation and Tenant entities removed - multi-tenancy is EE-only
 import { IsNull } from 'typeorm';
 import { isPlatformAdmin } from '@shared/middleware/platformAuth.js';
 import { generateId } from '@shared/utils/id.js';
@@ -130,8 +129,6 @@ router.post(
       // Find user by email
       const dataSource = await getDataSource();
       const userRepo = dataSource.getRepository(User);
-      const tenantRepo = dataSource.getRepository(Tenant);
-      const invitationRepo = dataSource.getRepository(Invitation);
 
       const targetUser = await userRepo.createQueryBuilder('u')
         .where('LOWER(u.email) = :email', { email: emailLower })
@@ -157,76 +154,9 @@ router.post(
         });
       }
 
-      // User doesn't exist - create an invitation instead
-      // Use default tenant for engine invitations
-      const tenantId = 'tenant-default';
-
-      // Get tenant info for the invitation
-      const tenant = await tenantRepo.findOne({
-        where: { id: tenantId },
-        select: ['slug', 'name'],
-      }) || { slug: 'default', name: 'Default' };
-
-      // Check for existing pending invitation
-      const existingInvite = await invitationRepo.createQueryBuilder('i')
-        .where('i.tenantId = :tenantId', { tenantId })
-        .andWhere('LOWER(i.email) = :email', { email: emailLower })
-        .andWhere('i.resourceType = :resourceType', { resourceType: 'engine' })
-        .andWhere('i.resourceId = :resourceId', { resourceId: engineId })
-        .andWhere('i.acceptedAt IS NULL')
-        .andWhere('i.revokedAt IS NULL')
-        .getOne();
-
-      if (existingInvite) {
-        throw Errors.conflict('An invitation is already pending for this email');
-      }
-
-      // Create the invitation
-      const token = randomBytes(32).toString('hex');
-      const now = Date.now();
-      const expiresAt = now + 7 * 24 * 60 * 60 * 1000; // 7 days
-      const invitationId = generateId();
-
-      await invitationRepo.insert({
-        id: invitationId,
-        token,
-        email: emailLower,
-        tenantId,
-        resourceType: 'engine',
-        resourceId: engineId,
-        role,
-        invitedByUserId: granterId,
-        expiresAt,
-        createdAt: now,
-      });
-
-      // Send invitation email
-      const inviteUrl = `${config.frontendUrl}/t/${tenant.slug}/invite/${token}`;
-      let emailSent = false;
-      let emailError: string | undefined;
-
-      try {
-        const result = await sendInvitationEmail({
-          to: emailLower,
-          tenantName: tenant.name,
-          inviteUrl,
-          resourceType: 'engine',
-          invitedByName: req.user!.email,
-        });
-        emailSent = result.success;
-        emailError = result.error;
-      } catch (err) {
-        emailError = err instanceof Error ? err.message : 'Failed to send email';
-      }
-
-      res.status(201).json({
-        id: invitationId,
-        email: emailLower,
-        role,
-        invited: true,
-        emailSent,
-        emailError,
-      });
+      // User doesn't exist - OSS doesn't support invitations (EE-only feature)
+      // User must already be registered in the system
+      throw Errors.notFound('User not found. The user must be registered before they can be added to an engine. Invitations are available in the Enterprise Edition.');
     } catch (error) {
       logger.error('Add engine member error:', error);
       throw Errors.internal('Failed to add engine member');
@@ -529,7 +459,9 @@ router.get(
   asyncHandler(async (req, res) => {
     try {
       const userId = req.user!.userId;
-      const engines = await engineService.getUserEngines(userId);
+      // Filter engines by current tenant context
+      const tenantId = req.tenant?.tenantId;
+      const engines = await engineService.getUserEngines(userId, tenantId);
       res.json(engines);
     } catch (error) {
       logger.error('Get my engines error:', error);

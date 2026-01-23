@@ -12,7 +12,6 @@ let developerToken = '';
 let adminToken = '';
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 

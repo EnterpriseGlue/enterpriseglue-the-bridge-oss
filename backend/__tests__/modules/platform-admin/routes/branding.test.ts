@@ -18,6 +18,7 @@ describe('platform-admin branding routes', () => {
 
   beforeEach(() => {
     app = express();
+    app.locals.enterprisePluginLoaded = false;
     app.use(express.json());
     app.use(brandingRouter);
     vi.clearAllMocks();
@@ -44,5 +45,13 @@ describe('platform-admin branding routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.logoUrl).toBeDefined();
+  });
+
+  it('returns not found when enterprise plugin is loaded', async () => {
+    app.locals.enterprisePluginLoaded = true;
+
+    const response = await request(app).get('/');
+
+    expect(response.status).toBe(404);
   });
 });

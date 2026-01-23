@@ -14,7 +14,6 @@ let folderId = '';
 let fileIds: string[] = [];
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -44,7 +43,7 @@ describe('Starbase project contents', () => {
 
   it('lists root contents with folders', async () => {
     const response = await request(app)
-      .get(`/starbase-api/projects/${projectId}/contents`)
+      .get(`/t/default/starbase-api/projects/${projectId}/contents`)
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(response.status).toBe(200);
@@ -54,7 +53,7 @@ describe('Starbase project contents', () => {
 
   it('lists folder contents with files', async () => {
     const response = await request(app)
-      .get(`/starbase-api/projects/${projectId}/contents?folderId=${folderId}`)
+      .get(`/t/default/starbase-api/projects/${projectId}/contents?folderId=${folderId}`)
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(response.status).toBe(200);
@@ -64,14 +63,14 @@ describe('Starbase project contents', () => {
 
   it('rejects unauthenticated contents requests', async () => {
     const response = await request(app)
-      .get(`/starbase-api/projects/${projectId}/contents`);
+      .get(`/t/default/starbase-api/projects/${projectId}/contents`);
 
     expect(response.status).toBe(401);
   });
 
   it('rejects non-member contents requests', async () => {
     const response = await request(app)
-      .get(`/starbase-api/projects/${projectId}/contents`)
+      .get(`/t/default/starbase-api/projects/${projectId}/contents`)
       .set('Authorization', `Bearer ${otherToken}`);
 
     expect(response.status).toBe(404);

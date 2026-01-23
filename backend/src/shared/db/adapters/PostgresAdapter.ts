@@ -7,7 +7,7 @@ import {
   Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
-  Tenant, TenantSettings, TenantMembership, Invitation,
+  // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
   GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
@@ -21,7 +21,7 @@ const entities = [
   Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
-  Tenant, TenantSettings, TenantMembership, Invitation,
+  // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
   GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,

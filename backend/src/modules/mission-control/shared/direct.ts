@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js'
 import { validateBody } from '@shared/middleware/validate.js'
 import { requireAuth } from '@shared/middleware/auth.js'
-import { requireActiveEngineDeployer } from '@shared/middleware/activeEngineAuth.js'
+import { requireEngineDeployer } from '@shared/middleware/engineAuth.js'
 import {
   deleteProcessInstancesDirect,
   suspendActivateProcessInstancesDirect,
@@ -13,10 +13,10 @@ import {
 
 const r = Router()
 
-r.use(requireAuth, requireActiveEngineDeployer())
+r.use(requireAuth)
 
 // Delete instances directly (no batch)
-r.post('/mission-control-api/direct/process-instances/delete', asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/process-instances/delete', requireEngineDeployer({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const {
       processInstanceIds = [],
@@ -26,7 +26,8 @@ r.post('/mission-control-api/direct/process-instances/delete', asyncHandler(asyn
       skipSubprocesses,
       deleteReason,
     } = req.body || {}
-    const results = await deleteProcessInstancesDirect({
+    const engineId = (req as any).engineId as string
+    const results = await deleteProcessInstancesDirect(engineId, {
       processInstanceIds,
       skipCustomListeners,
       skipIoMappings,
@@ -41,20 +42,22 @@ r.post('/mission-control-api/direct/process-instances/delete', asyncHandler(asyn
 }))
 
 // Suspend/Activate directly
-r.post('/mission-control-api/direct/process-instances/suspend', asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/process-instances/suspend', requireEngineDeployer({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const ids: string[] = (req.body?.processInstanceIds || []) as string[]
-    const results = await suspendActivateProcessInstancesDirect(ids, true)
+    const engineId = (req as any).engineId as string
+    const results = await suspendActivateProcessInstancesDirect(engineId, ids, true)
     res.json({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) })
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Direct suspend failed')
   }
 }))
 
-r.post('/mission-control-api/direct/process-instances/activate', asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/process-instances/activate', requireEngineDeployer({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const ids: string[] = (req.body?.processInstanceIds || []) as string[]
-    const results = await suspendActivateProcessInstancesDirect(ids, false)
+    const engineId = (req as any).engineId as string
+    const results = await suspendActivateProcessInstancesDirect(engineId, ids, false)
     res.json({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) })
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Direct activate failed')
@@ -62,10 +65,11 @@ r.post('/mission-control-api/direct/process-instances/activate', asyncHandler(as
 }))
 
 // Set retries directly
-r.post('/mission-control-api/direct/jobs/retries', asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/jobs/retries', requireEngineDeployer({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { processInstanceIds = [], retries = 1, onlyFailed = true } = req.body || {}
-    const results = await setJobRetriesDirect({ processInstanceIds, retries, onlyFailed })
+    const engineId = (req as any).engineId as string
+    const results = await setJobRetriesDirect(engineId, { processInstanceIds, retries, onlyFailed })
     res.json({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) })
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Direct retries failed')
@@ -73,10 +77,11 @@ r.post('/mission-control-api/direct/jobs/retries', asyncHandler(async (req: Requ
 }))
 
 // Migration execute (sync)
-r.post('/mission-control-api/migration/execute-direct', asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/execute-direct', requireEngineDeployer({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { plan, processInstanceIds, skipCustomListeners, skipIoMappings } = req.body || {}
-    const result = await executeMigrationDirect({
+    const engineId = (req as any).engineId as string
+    const result = await executeMigrationDirect(engineId, {
       plan,
       processInstanceIds,
       skipCustomListeners,

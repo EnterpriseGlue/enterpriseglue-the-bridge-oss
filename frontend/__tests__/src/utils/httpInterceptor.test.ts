@@ -156,7 +156,7 @@ describe('httpInterceptor', () => {
         expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
         expect(localStorage.getItem(REFRESH_TOKEN_KEY)).toBeNull();
         expect(localStorage.getItem(USER_KEY)).toBeNull();
-        expect(window.location.href).toBe('/login');
+        expect(window.location.href).toBe('/t/default/login');
       });
 
       it('redirects to tenant login when on tenant route', async () => {
@@ -182,7 +182,7 @@ describe('httpInterceptor', () => {
         await interceptedFetch('/api/data');
         
         expect(localStorage.getItem(REFRESH_TOKEN_KEY)).toBeNull();
-        expect(window.location.href).toBe('/login');
+        expect(window.location.href).toBe('/t/default/login');
       });
 
       it('handles refresh network error', async () => {
@@ -197,7 +197,7 @@ describe('httpInterceptor', () => {
         await interceptedFetch('/api/data');
         
         expect(localStorage.getItem(REFRESH_TOKEN_KEY)).toBeNull();
-        expect(window.location.href).toBe('/login');
+        expect(window.location.href).toBe('/t/default/login');
       });
 
       it('does not redirect if already on login page', async () => {

@@ -10,8 +10,11 @@ vi.mock('@shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@shared/middleware/activeEngineAuth.js', () => ({
-  requireActiveEngineDeployer: () => (_req: any, _res: any, next: any) => next(),
+vi.mock('@shared/middleware/engineAuth.js', () => ({
+  requireEngineDeployer: () => (req: any, _res: any, next: any) => {
+    req.engineId = 'engine-1';
+    next();
+  },
 }));
 
 vi.mock('../../../../src/modules/mission-control/shared/modify-service.js', () => ({

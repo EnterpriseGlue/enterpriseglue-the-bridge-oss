@@ -10,7 +10,6 @@ let userId = '';
 let projectId = '';
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -30,7 +29,7 @@ describe('Starbase file validation', () => {
 
   it('rejects file creation with missing name', async () => {
     const response = await request(app)
-      .post(`/starbase-api/projects/${projectId}/files`)
+      .post(`/t/default/starbase-api/projects/${projectId}/files`)
       .set('Authorization', `Bearer ${token}`)
       .send({ type: 'bpmn' });
 
@@ -39,7 +38,7 @@ describe('Starbase file validation', () => {
 
   it('rejects file creation with empty name', async () => {
     const response = await request(app)
-      .post(`/starbase-api/projects/${projectId}/files`)
+      .post(`/t/default/starbase-api/projects/${projectId}/files`)
       .set('Authorization', `Bearer ${token}`)
       .send({ name: '', type: 'bpmn' });
 
@@ -48,7 +47,7 @@ describe('Starbase file validation', () => {
 
   it('defaults file type to bpmn when missing', async () => {
     const response = await request(app)
-      .post(`/starbase-api/projects/${projectId}/files`)
+      .post(`/t/default/starbase-api/projects/${projectId}/files`)
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'test.bpmn' });
 

@@ -79,7 +79,7 @@ export function normalizeBatchStatistics(raw: BatchStatisticsEntry | BatchStatis
  * - Uses Camunda batch API for jobs (fast, native)
  * - Uses parallel processing for external tasks (fast, resilient)
  */
-export async function processRetries(batchId: string, processInstanceIds: string[]) {
+export async function processRetries(engineId: string, batchId: string, processInstanceIds: string[]) {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
 
@@ -88,7 +88,7 @@ export async function processRetries(batchId: string, processInstanceIds: string
 
     // PHASE 1: Collect all job IDs and external task IDs in parallel
     logger.info(`[BATCH RETRY] Collecting failures for ${processInstanceIds.length} instances...`)
-    const { jobIds, externalTaskIds } = await collectAllFailures(processInstanceIds)
+    const { jobIds, externalTaskIds } = await collectAllFailures(engineId, processInstanceIds)
     logger.info(`[BATCH RETRY] Found ${jobIds.length} failed jobs, ${externalTaskIds.length} failed external tasks`)
 
     const totalItems = jobIds.length + externalTaskIds.length
@@ -120,7 +120,7 @@ export async function processRetries(batchId: string, processInstanceIds: string
     // PHASE 2: Create Camunda batch for jobs (if any)
     if (jobIds.length > 0) {
       logger.info(`[BATCH RETRY] Creating Camunda batch for ${jobIds.length} jobs...`)
-      const engineDto: any = await postJobRetriesAsync({ jobIds, retries: 1 })
+      const engineDto: any = await postJobRetriesAsync(engineId, { jobIds, retries: 1 })
       camundaBatchId = engineDto?.id || null
       logger.info(`[BATCH RETRY] Camunda batch created: ${camundaBatchId}`)
 
@@ -136,12 +136,12 @@ export async function processRetries(batchId: string, processInstanceIds: string
     // PHASE 3: Process external tasks in parallel (if any)
     if (externalTaskIds.length > 0) {
       logger.info(`[BATCH RETRY] Processing ${externalTaskIds.length} external tasks in parallel...`)
-      await retryExternalTasksInParallel(batchId, externalTaskIds, metadata)
+      await retryExternalTasksInParallel(engineId, batchId, externalTaskIds, metadata)
     }
 
     // PHASE 4: Monitor Camunda batch completion (if exists)
     if (camundaBatchId) {
-      await monitorCamundaBatch(batchId, camundaBatchId, metadata)
+      await monitorCamundaBatch(engineId, batchId, camundaBatchId, metadata)
     }
 
     // Final status update
@@ -178,7 +178,7 @@ export async function processRetries(batchId: string, processInstanceIds: string
 /**
  * Collect all failed job IDs and external task IDs from process instances
  */
-export async function collectAllFailures(processInstanceIds: string[]) {
+export async function collectAllFailures(engineId: string, processInstanceIds: string[]) {
   const jobIds: string[] = []
   const externalTaskIds: string[] = []
 
@@ -186,9 +186,9 @@ export async function collectAllFailures(processInstanceIds: string[]) {
   const results = await Promise.allSettled(
     processInstanceIds.map(async (id) => {
       const [incidents, jobs, extTasks] = await Promise.all([
-        camundaGet<any[]>('/incident', { processInstanceId: id }),
-        camundaGet<any[]>('/job', { processInstanceId: id, withException: true }),
-        camundaGet<any[]>('/external-task', { processInstanceId: id }),
+        camundaGet<any[]>(engineId, '/incident', { processInstanceId: id }),
+        camundaGet<any[]>(engineId, '/job', { processInstanceId: id, withException: true }),
+        camundaGet<any[]>(engineId, '/external-task', { processInstanceId: id }),
       ])
 
       return { incidents, jobs, extTasks }
@@ -219,7 +219,7 @@ export async function collectAllFailures(processInstanceIds: string[]) {
 /**
  * Retry external tasks in parallel with chunking for performance
  */
-export async function retryExternalTasksInParallel(batchId: string, externalTaskIds: string[], metadata: any) {
+export async function retryExternalTasksInParallel(engineId: string, batchId: string, externalTaskIds: string[], metadata: any) {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const CONCURRENCY = 10 // Process 10 at a time
@@ -233,7 +233,7 @@ export async function retryExternalTasksInParallel(batchId: string, externalTask
   let failed = 0
 
   for (const chunk of chunks) {
-    const results = await Promise.allSettled(chunk.map(id => setExternalTaskRetries(id, { retries: 1 })))
+    const results = await Promise.allSettled(chunk.map(id => setExternalTaskRetries(engineId, id, { retries: 1 })))
 
     results.forEach(r => {
       if (r.status === 'fulfilled') completed++
@@ -264,14 +264,14 @@ export async function retryExternalTasksInParallel(batchId: string, externalTask
   logger.info(`[BATCH RETRY] External tasks completed: ${completed}, failed: ${failed}`)
 }
 
-export async function monitorCamundaBatch(batchId: string, camundaBatchId: string, metadata: any) {
+export async function monitorCamundaBatch(engineId: string, batchId: string, camundaBatchId: string, metadata: any) {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
 
   let done = false
   while (!done) {
     await new Promise((r) => setTimeout(r, 2000))
-    const statsRaw = await getBatchStatistics<any>(camundaBatchId)
+    const statsRaw = await getBatchStatistics<any>(engineId, camundaBatchId)
     const stats = normalizeBatchStatistics(statsRaw)
 
     const completedJobs = stats.completedJobs ?? 0
@@ -316,15 +316,15 @@ export async function getFinalMetadata(batchId: string) {
   }
 }
 
-export async function listCamundaBatches(query: any) {
-  return camundaGet<any[]>('/batch', query)
+export async function listCamundaBatches(engineId: string, query: any) {
+  return camundaGet<any[]>(engineId, '/batch', query)
 }
 
-export async function fetchJobsByDefinitionIds(definitionIds: string[]) {
+export async function fetchJobsByDefinitionIds(engineId: string, definitionIds: string[]) {
   const defIds = Array.from(new Set(definitionIds.filter(Boolean)))
   if (defIds.length === 0) return []
   const results = await Promise.allSettled(
-    defIds.map((jobDefinitionId) => camundaGet<any[]>('/job', { jobDefinitionId, withException: true }))
+    defIds.map((jobDefinitionId) => camundaGet<any[]>(engineId, '/job', { jobDefinitionId, withException: true }))
   )
   const all: any[] = []
   for (const r of results) {
@@ -335,34 +335,34 @@ export async function fetchJobsByDefinitionIds(definitionIds: string[]) {
   return all
 }
 
-export async function fetchJobStacktrace(jobId: string) {
-  return camundaGet<any>(`/job/${encodeURIComponent(jobId)}/stacktrace`)
+export async function fetchJobStacktrace(engineId: string, jobId: string) {
+  return camundaGet<any>(engineId, `/job/${encodeURIComponent(jobId)}/stacktrace`)
 }
 
-export async function fetchBatchInfo(id: string) {
-  return getBatchInfo<any>(id)
+export async function fetchBatchInfo(engineId: string, id: string) {
+  return getBatchInfo<any>(engineId, id)
 }
 
-export async function fetchBatchStatistics(id: string) {
-  return normalizeBatchStatistics(await getBatchStatistics<any>(id))
+export async function fetchBatchStatistics(engineId: string, id: string) {
+  return normalizeBatchStatistics(await getBatchStatistics<any>(engineId, id))
 }
 
-export async function deleteBatch(id: string) {
-  await deleteBatchById(id)
+export async function deleteBatch(engineId: string, id: string) {
+  await deleteBatchById(engineId, id)
 }
 
-export async function suspendProcessInstancesBatch(body: any) {
-  return postProcessInstanceSuspendedAsync<any>(body)
+export async function suspendProcessInstancesBatch(engineId: string, body: any) {
+  return postProcessInstanceSuspendedAsync<any>(engineId, body)
 }
 
-export async function deleteProcessInstancesBatch(body: any) {
-  return postProcessInstanceDeleteAsync<any>(body)
+export async function deleteProcessInstancesBatch(engineId: string, body: any) {
+  return postProcessInstanceDeleteAsync<any>(engineId, body)
 }
 
-export async function setBatchSuspended(id: string, suspended: boolean) {
-  return setBatchSuspensionState(id, { suspended })
+export async function setBatchSuspended(engineId: string, id: string, suspended: boolean) {
+  return setBatchSuspensionState(engineId, id, { suspended })
 }
 
-export async function setJobRetries(body: any) {
-  return postJobRetriesAsync<any>(body)
+export async function setJobRetries(engineId: string, body: any) {
+  return postJobRetriesAsync<any>(engineId, body)
 }

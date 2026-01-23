@@ -7,6 +7,5 @@ describe('admin module index', () => {
     expect(adminModule).toHaveProperty('emailConfigsRoute');
     expect(adminModule).toHaveProperty('emailTemplatesRoute');
     expect(adminModule).toHaveProperty('setupStatusRoute');
-    expect(adminModule).toHaveProperty('tenantAdminRoute');
   });
 });

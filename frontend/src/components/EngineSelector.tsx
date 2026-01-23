@@ -8,7 +8,6 @@ type Engine = {
   id: string
   name: string
   baseUrl: string
-  active: boolean
 }
 
 type EngineWithAccess = Engine & {
@@ -37,28 +36,31 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
 
   const engines = enginesQuery.data || []
 
-  // Auto-select single engine
+  // Auto-select engine: single engine or first alphabetically
   React.useEffect(() => {
-    if (engines.length === 1 && !selectedEngineId) {
-      setSelectedEngineId(engines[0].id)
+    if (engines.length > 0 && !selectedEngineId) {
+      if (engines.length === 1) {
+        setSelectedEngineId(engines[0].id)
+      } else {
+        // Select first engine alphabetically by name
+        const sorted = [...engines].sort((a, b) => 
+          (a.name || a.baseUrl).localeCompare(b.name || b.baseUrl)
+        )
+        setSelectedEngineId(sorted[0].id)
+      }
     }
   }, [engines, selectedEngineId, setSelectedEngineId])
 
-  // Build items list with "All Engines" option
+  // Build items list (no "All Engines" option)
   const items = React.useMemo(() => {
     if (engines.length === 0) return []
-    return [
-      { id: '__all__', label: 'All Engines' },
-      ...engines.map(e => ({ id: e.id, label: e.name || e.baseUrl })),
-    ]
+    return engines.map(e => ({ id: e.id, label: e.name || e.baseUrl }))
   }, [engines])
 
   // Find current selection
   const currentItem = React.useMemo(() => {
     if (items.length === 0) return null
-    return selectedEngineId
-      ? items.find(i => i.id === selectedEngineId) || items[0]
-      : items[0]
+    return items.find(i => i.id === selectedEngineId) || items[0]
   }, [items, selectedEngineId])
 
   // Don't render if loading or no engines - but keep hook count stable
@@ -76,8 +78,9 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
       itemToString={(item: any) => item?.label || ''}
       selectedItem={currentItem}
       onChange={({ selectedItem }: any) => {
-        const id = selectedItem?.id === '__all__' ? null : selectedItem?.id
-        setSelectedEngineId(id)
+        if (selectedItem?.id) {
+          setSelectedEngineId(selectedItem.id)
+        }
       }}
       style={{ minWidth: '180px', ...style }}
     />

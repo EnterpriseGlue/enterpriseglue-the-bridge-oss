@@ -7,8 +7,6 @@ import { requireAuth } from '@shared/middleware/auth.js';
 import { validateBody } from '@shared/middleware/validate.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
-import { Tenant } from '@shared/db/entities/Tenant.js';
-import { TenantMembership } from '@shared/db/entities/TenantMembership.js';
 import { PlatformSettings } from '@shared/db/entities/PlatformSettings.js';
 import { logAudit, AuditActions } from '@shared/services/audit.js';
 
@@ -92,19 +90,6 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
   });
-}));
-
-router.get('/api/auth/my-tenants', apiLimiter, requireAuth, asyncHandler(async (req, res) => {
-  const dataSource = await getDataSource();
-  const membershipRepo = dataSource.getRepository(TenantMembership);
-
-  const result = await membershipRepo.createQueryBuilder('m')
-    .innerJoin(Tenant, 't', 't.id = m.tenantId')
-    .select(['m.tenantId as "tenantId"', 't.name as "tenantName"', 't.slug as "tenantSlug"', 'm.role as role'])
-    .where('m.userId = :userId', { userId: req.user!.userId })
-    .getRawMany();
-
-  res.json(result);
 }));
 
 /**

@@ -1,6 +1,9 @@
 import React from 'react'
 import { Navigate, RouteObject } from 'react-router-dom'
 
+// Extension registry for EE plugin integration
+import { extensions, isMultiTenantEnabled } from '../enterprise/extensionRegistry'
+
 // Shared components
 import LayoutWithProSidebar from '../features/shared/components/LayoutWithProSidebar'
 
@@ -30,8 +33,9 @@ import PlatformSettingsPage from '../features/platform-admin/pages/PlatformSetti
 import SsoMappings from '../features/platform-admin/pages/SsoMappings'
 import AuthzPolicies from '../features/platform-admin/pages/AuthzPolicies'
 import AuthzAuditLog from '../features/platform-admin/pages/AuthzAuditLog'
-import TenantManagement from '../features/platform-admin/pages/TenantManagement'
-import TenantSetupWizard from '../features/platform-admin/pages/TenantSetupWizard'
+
+// EE-only pages (rendered via ExtensionPage)
+import { ExtensionPage } from '../enterprise/ExtensionSlot'
 
 // Guards
 import { FeatureFlagGuard } from '../shared/components/FeatureFlagGuard'
@@ -48,8 +52,6 @@ import AcceptInvite from '../pages/AcceptInvite'
 // Admin pages
 import AuditLogViewer from '../pages/AuditLogViewer'
 import UserManagement from '../pages/admin/UserManagement'
-import TenantUsers from '../pages/admin/TenantUsers'
-import TenantSettings from '../pages/admin/TenantSettings'
 import EmailConfigurations from '../pages/admin/EmailConfigurations'
 import EmailTemplates from '../pages/admin/EmailTemplates'
 import Branding from '../pages/admin/Branding'
@@ -75,14 +77,14 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
     { index: true, element: <Dashboard /> },
     
     // Admin routes
-    { 
+    ...(!isMultiTenantEnabled() ? [{ 
       path: `${pathPrefix}admin/settings`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          {isRootLevel ? <PlatformSettingsPage /> : <TenantSettings />}
+          {isRootLevel ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-settings-page" />}
         </ProtectedRoute>
       )
-    },
+    }] : []),
     { 
       path: `${pathPrefix}admin/sso-mappings`, 
       element: (
@@ -107,64 +109,108 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         </ProtectedRoute>
       )
     },
-    { 
+    // TenantManagement is EE-only (multi-tenant mode)
+    // Uses ExtensionPage - shows fallback in OSS, actual page in EE
+    ...(isMultiTenantEnabled() ? [{ 
       path: `${pathPrefix}admin/tenants`, 
       element: (
         <ProtectedRoute requireAdmin>
-          <TenantManagement />
+          <ExtensionPage name="tenant-management-page" />
         </ProtectedRoute>
       )
-    },
-    { 
-      path: `${pathPrefix}admin/audit-logs`, 
+    }] : []),
+    ...((isMultiTenantEnabled() && !isRootLevel) ? [{
+      path: `${pathPrefix}admin/audit-logs`,
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
           <AuditLogViewer />
         </ProtectedRoute>
       )
+    }] : []),
+    { 
+      path: `${pathPrefix}admin/domains`, 
+      element: (
+        <ProtectedRoute requireAdmin={isRootLevel}>
+          {isRootLevel ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-domains-page" />}
+        </ProtectedRoute>
+      )
     },
     { 
+      path: `${pathPrefix}admin/sso`, 
+      element: (
+        <ProtectedRoute requireAdmin={isRootLevel}>
+          {isRootLevel ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-sso-page" />}
+        </ProtectedRoute>
+      )
+    },
+    { 
+      path: `${pathPrefix}admin/invite-policies`, 
+      element: (
+        <ProtectedRoute requireAdmin={isRootLevel}>
+          {isRootLevel ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-invite-policies-page" />}
+        </ProtectedRoute>
+      )
+    },
+    ...(!isMultiTenantEnabled() ? [{
       path: `${pathPrefix}admin/email`, 
       element: (
         <ProtectedRoute requireAdmin>
           <EmailConfigurations />
         </ProtectedRoute>
       )
-    },
+    }] : []),
+    ...(isMultiTenantEnabled() ? [{
+      path: `${pathPrefix}admin/email-settings`,
+      element: (
+        <ProtectedRoute requireAdmin>
+          <ExtensionPage name="platform-email-settings-page" />
+        </ProtectedRoute>
+      )
+    }] : []),
     { 
       path: `${pathPrefix}admin/email-templates`, 
       element: (
-        <ProtectedRoute requireAdmin>
-          <EmailTemplates />
+        <ProtectedRoute requireAdmin={isRootLevel}>
+          {isRootLevel
+            ? (isMultiTenantEnabled() ? <ExtensionPage name="platform-email-templates-page" /> : <EmailTemplates />)
+            : <ExtensionPage name="tenant-email-templates-page" />}
         </ProtectedRoute>
       )
     },
-    { 
+    ...(!isMultiTenantEnabled() ? [{
       path: `${pathPrefix}admin/branding`, 
       element: (
-        <ProtectedRoute requireAdmin>
+        <ProtectedRoute requireAdmin={isRootLevel}>
           <Branding />
         </ProtectedRoute>
       )
-    },
+    }] : []),
+    ...(isMultiTenantEnabled() && !isRootLevel ? [{
+      path: `${pathPrefix}admin/branding`, 
+      element: (
+        <ProtectedRoute requireAdmin={isRootLevel}>
+          <ExtensionPage name="tenant-branding-page" />
+        </ProtectedRoute>
+      )
+    }] : []),
     { 
       path: `${pathPrefix}admin/users`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          {isRootLevel ? <UserManagement /> : <TenantUsers />}
+          {isRootLevel ? <UserManagement /> : <ExtensionPage name="tenant-users-page" />}
         </ProtectedRoute>
       )
     },
 
-    // Setup
-    { 
+    // TenantSetupWizard is EE-only (multi-tenant mode)
+    ...(isMultiTenantEnabled() ? [{ 
       path: `${pathPrefix}setup`, 
       element: (
         <ProtectedRoute>
-          <TenantSetupWizard />
+          <ExtensionPage name="tenant-setup-wizard-page" />
         </ProtectedRoute>
       )
-    },
+    }] : []),
 
     // Starbase routes
     { 
@@ -364,7 +410,14 @@ export function getPublicRoutes(): RouteObject[] {
 }
 
 /**
- * Creates the root protected layout route
+ * Default tenant slug for OSS single-tenant mode
+ * In OSS, all users are redirected to /t/default/* paths for unified routing (Option A)
+ */
+const DEFAULT_TENANT_SLUG = 'default';
+
+/**
+ * Creates the root redirect route (OSS: redirects to /t/default/)
+ * For unified tenant routing, we redirect root to the default tenant path
  */
 export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): RouteObject {
   return {
@@ -376,7 +429,12 @@ export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): R
         </RequirePasswordReset>
       </ProtectedRoute>
     ),
-    children: [...createProtectedChildRoutes(true), ...enterpriseChildren],
+    children: [
+      // Redirect root to default tenant for unified routing
+      { index: true, element: <Navigate to={`/t/${DEFAULT_TENANT_SLUG}`} replace /> },
+      ...createProtectedChildRoutes(true),
+      ...enterpriseChildren,
+    ],
   }
 }
 
@@ -403,14 +461,31 @@ export function createTenantLayoutRoute(enterpriseChildren: RouteObject[] = []):
 
 /**
  * Creates all application routes
+ * 
+ * Routes are merged from:
+ * 1. OSS base routes (defined in this file)
+ * 2. Enterprise plugin routes (passed as parameters)
+ * 3. Extension registry routes (from extensionRegistry.ts)
  */
 export function createAppRoutes(
   enterpriseRootChildren: RouteObject[] = [],
   enterpriseTenantChildren: RouteObject[] = []
 ): RouteObject[] {
+  // Merge all root routes: plugin interface + extension registry
+  const allRootChildren = [
+    ...enterpriseRootChildren,
+    ...(extensions?.rootRoutes || []),
+  ];
+  
+  // Merge all tenant routes: plugin interface + extension registry
+  const allTenantChildren = [
+    ...enterpriseTenantChildren,
+    ...(extensions?.tenantRoutes || []),
+  ];
+  
   return [
     ...getPublicRoutes(),
-    createRootLayoutRoute(enterpriseRootChildren),
-    createTenantLayoutRoute(enterpriseTenantChildren),
+    createRootLayoutRoute(allRootChildren),
+    createTenantLayoutRoute(allTenantChildren),
   ]
 }

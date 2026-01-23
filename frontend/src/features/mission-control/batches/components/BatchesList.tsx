@@ -34,12 +34,6 @@ export default function BatchesList() {
     },
   })
 
-  // Auto-refresh when active engine changes (other tab/window)
-  React.useEffect(() => {
-    const onStorage = (e: StorageEvent) => { if (e.key === 'vt_active_engine_changed') { try { listQ.refetch() } catch {} } }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
 
   const rows = React.useMemo(() => {
     const d = listQ.data || []

@@ -10,6 +10,7 @@ import { parseApiError } from '../shared/api/apiErrorUtils';
 import { useToast } from '../shared/notifications/ToastProvider';
 import logoPng from '../assets/logo.png';
 import { toSafeInternalPath } from '../utils/safeNavigation';
+import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
 
 // SSO Provider type from backend
 interface SsoProviderButton {
@@ -491,12 +492,14 @@ export default function Login() {
           borderTop: '1px solid var(--color-border-primary)',
           textAlign: 'center'
         }}>
-          <p style={{ fontSize: 'var(--text-14)', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-3)' }}>
-            Don't have an account?{' '}
-            <Link to="/signup" style={{ color: 'var(--cds-link-01)' }}>
-              Sign up
-            </Link>
-          </p>
+          {isMultiTenantEnabled() && (
+            <p style={{ fontSize: 'var(--text-14)', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-3)' }}>
+              Don't have an account?{' '}
+              <Link to="/signup" style={{ color: 'var(--cds-link-01)' }}>
+                Sign up
+              </Link>
+            </p>
+          )}
           <p style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
             Need help?{' '}
             <button

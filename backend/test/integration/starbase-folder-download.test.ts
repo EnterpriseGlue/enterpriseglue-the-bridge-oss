@@ -11,7 +11,6 @@ let projectId = '';
 let folderId = '';
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -34,7 +33,7 @@ describe('Starbase folder download', () => {
 
   it('returns 204 when folder has no files', async () => {
     const response = await request(app)
-      .get(`/starbase-api/folders/${folderId}/download`)
+      .get(`/t/default/starbase-api/folders/${folderId}/download`)
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(response.status).toBe(204);
@@ -42,7 +41,7 @@ describe('Starbase folder download', () => {
 
   it('rejects unauthenticated folder download', async () => {
     const response = await request(app)
-      .get(`/starbase-api/folders/${folderId}/download`);
+      .get(`/t/default/starbase-api/folders/${folderId}/download`);
 
     expect(response.status).toBe(401);
   });

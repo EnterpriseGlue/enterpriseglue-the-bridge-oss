@@ -5,11 +5,10 @@ import { createApp } from '../../src/app.js';
 describe('Starbase auth guard', () => {
   it('rejects unauthenticated project listing', async () => {
     const app = createApp({
-      includeTenantContext: false,
       includeRateLimiting: false,
     });
 
-    const response = await request(app).get('/starbase-api/projects');
+    const response = await request(app).get('/t/default/starbase-api/projects');
 
     expect(response.status).toBe(401);
   });

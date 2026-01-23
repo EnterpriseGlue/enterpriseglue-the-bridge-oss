@@ -1,10 +1,13 @@
+/**
+ * Tenant Middleware for OSS (Single-Tenant Mode)
+ * 
+ * OSS uses unified tenant-slug routing (/t/:tenantSlug/*) for compatibility with EE.
+ * The middleware extracts the tenant slug from URL params but always uses the default tenant.
+ * Full multi-tenancy support (real tenant resolution) is available in the Enterprise Edition.
+ */
+
 import { Request, Response, NextFunction } from 'express';
 import { Errors } from './errorHandler.js';
-import { config } from '@shared/config/index.js';
-import { getDataSource } from '@shared/db/data-source.js';
-import { Tenant } from '@shared/db/entities/Tenant.js';
-import { TenantMembership } from '@shared/db/entities/TenantMembership.js';
-import { logger } from '@shared/utils/logger.js';
 
 export type TenantRole = 'tenant_admin' | 'member';
 
@@ -12,6 +15,10 @@ export interface TenantContext {
   tenantId: string;
   tenantSlug: string;
 }
+
+// Default tenant for OSS single-tenant mode
+export const DEFAULT_TENANT_ID = 'default-tenant-id';
+export const DEFAULT_TENANT_SLUG = 'default';
 
 declare global {
   namespace Express {
@@ -22,119 +29,71 @@ declare global {
   }
 }
 
+/**
+ * Extract tenant slug from request (URL params, header, or path)
+ */
 function extractTenantSlug(req: Request): string | null {
-  const fromParams = (req.params as any)?.tenantSlug;
-  if (typeof fromParams === 'string' && fromParams.trim()) return fromParams.trim();
+  // From URL params (e.g., /t/:tenantSlug/...)
+  const fromParams = (req.params as Record<string, string>)?.tenantSlug;
+  if (typeof fromParams === 'string' && fromParams.trim()) {
+    return fromParams.trim();
+  }
 
+  // From header (for API clients)
   const header = req.headers['x-tenant-slug'];
-  if (typeof header === 'string' && header.trim()) return header.trim();
-
-  const url = String(req.originalUrl || req.url || '');
-  const match = url.match(/^\/t\/([^/?#]+)(?:[/?#]|$)/);
-  if (match?.[1]) return decodeURIComponent(match[1]);
+  if (typeof header === 'string' && header.trim()) {
+    return header.trim();
+  }
 
   return null;
 }
 
-export function resolveTenantContext(options?: { required?: boolean }) {
-  const required = options?.required ?? true;
-
-  return async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const tenantSlug = extractTenantSlug(req) || (!config.multiTenant ? 'default' : null);
-      if (!tenantSlug) {
-        if (!required) return next();
-        throw Errors.validation('Tenant context missing (expected tenantSlug)');
-      }
-
-      const dataSource = await getDataSource();
-      const tenantRepo = dataSource.getRepository(Tenant);
-      const t = await tenantRepo.findOneBy({ slug: tenantSlug });
-
-      if (!t) {
-        throw Errors.tenantNotFound();
-      }
-
-      req.tenant = { tenantId: t.id, tenantSlug: t.slug };
-      next();
-    } catch (error) {
-      logger.error('Tenant context resolution error', { error });
-      throw Errors.internal('Failed to resolve tenant context');
-    }
+/**
+ * OSS stub: Extracts tenant slug from URL but always uses default tenant context.
+ * In OSS single-tenant mode, any tenant slug is accepted but ignored.
+ * EE plugin overrides this with real tenant resolution.
+ */
+export function resolveTenantContext(_options?: { required?: boolean }) {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    // Extract slug from URL (for logging/debugging) but use default tenant
+    const slug = extractTenantSlug(req) || DEFAULT_TENANT_SLUG;
+    
+    // In OSS single-tenant mode, always use default tenant regardless of slug
+    req.tenant = { tenantId: DEFAULT_TENANT_ID, tenantSlug: slug };
+    next();
   };
 }
 
-export function requireTenantRole(...allowedRoles: TenantRole[]) {
-  return async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      if (!req.user) {
-        throw Errors.unauthorized('Authentication required');
-      }
-
-      if (req.user.platformRole === 'admin') {
-        return next();
-      }
-
-      if (!req.tenant) {
-        throw Errors.validation('Tenant context missing');
-      }
-
-      const dataSource = await getDataSource();
-      const membershipRepo = dataSource.getRepository(TenantMembership);
-      const membership = await membershipRepo.findOneBy({
-        tenantId: req.tenant.tenantId,
-        userId: req.user.userId,
-      });
-
-      const role = membership?.role as TenantRole | undefined;
-      if (!role) {
-        throw Errors.forbidden('Tenant membership required');
-      }
-
-      req.tenantRole = role;
-
-      if (!allowedRoles.includes(role)) {
-        throw Errors.forbidden('Insufficient tenant permissions');
-      }
-
-      next();
-    } catch (error) {
-      logger.error('Tenant role authorization error', { error });
-      throw Errors.internal('Tenant authorization check failed');
+/**
+ * OSS stub: Platform admins pass through, others get tenant_admin role by default.
+ * Multi-tenancy roles are an EE-only feature.
+ */
+export function requireTenantRole(..._allowedRoles: TenantRole[]) {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user) {
+      throw Errors.unauthorized('Authentication required');
     }
+
+    // In OSS single-tenant mode, all authenticated users have tenant_admin role
+    req.tenantRole = 'tenant_admin';
+    next();
   };
 }
 
 /**
  * Convenience middleware: require tenant admin or platform admin
- * Combines resolveTenantContext + requireTenantRole('tenant_admin')
  */
 export const requireTenantAdmin = requireTenantRole('tenant_admin');
 
 /**
- * Helper function to check tenant admin authorization (for use inside route handlers)
- * Returns true if authorized, throws if not
+ * OSS stub: All authenticated users are considered tenant admins.
+ * Multi-tenancy authorization is an EE-only feature.
  */
-export async function checkTenantAdmin(req: Request, tenantId: string): Promise<boolean> {
+export async function checkTenantAdmin(req: Request, _tenantId: string): Promise<boolean> {
   if (!req.user) {
     throw Errors.unauthorized('Authentication required');
   }
 
-  // Platform admins can access any tenant
-  if (req.user.platformRole === 'admin') {
-    return true;
-  }
-
-  const dataSource = await getDataSource();
-  const membershipRepo = dataSource.getRepository(TenantMembership);
-  const membership = await membershipRepo.findOne({
-    where: { tenantId, userId: req.user.userId },
-    select: ['role']
-  });
-
-  if (!membership || membership.role !== 'tenant_admin') {
-    throw Errors.forbidden('Only tenant admins can perform this action');
-  }
-
+  // In OSS single-tenant mode, all authenticated users are tenant admins
   return true;
 }

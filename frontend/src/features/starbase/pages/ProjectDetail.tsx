@@ -36,6 +36,7 @@ import { useInlineRename } from '../hooks/useInlineRename'
 import { SyncModal } from '../../git/components'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
+import { useSelectedEngine } from '../../../components/EngineSelector'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { useToast } from '../../../shared/notifications/ToastProvider'
 import { StarbaseTableShell } from '../components/StarbaseTableShell'
@@ -97,7 +98,8 @@ export default function ProjectDetail() {
   const [moveTarget, setMoveTarget] = React.useState<string | 'ROOT'>('ROOT')
   const [allFolders, setAllFolders] = React.useState<FolderSummary[] | null>(null)
   // deployModal hook defined above
-  const [deployEngineId, setDeployEngineId] = React.useState<string>('active')
+  const selectedEngineId = useSelectedEngine()
+  const [deployEngineId, setDeployEngineId] = React.useState<string | undefined>(undefined)
   const [deployScope, setDeployScope] = React.useState<'project'|'folder'|'files'>('project')
   const [deployRecursive, setDeployRecursive] = React.useState(true)
   const [deployName, setDeployName] = React.useState('')
@@ -158,11 +160,23 @@ export default function ProjectDetail() {
     queryFn: () => apiClient.get<any[]>('/engines-api/engines'),
     enabled: deployModal.isOpen,
   })
-  const activeEngineQ = useQuery({
-    queryKey: ['engines','active'],
-    queryFn: () => apiClient.get<any | null>('/engines-api/engines/active'),
-    enabled: deployModal.isOpen,
-  })
+  // Set default deploy engine when engines load or selected engine changes
+  React.useEffect(() => {
+    if (deployModal.isOpen && !deployEngineId) {
+      const engines = enginesQ.data || []
+      if (selectedEngineId && engines.some((e: any) => e.id === selectedEngineId)) {
+        setDeployEngineId(selectedEngineId)
+      } else if (engines.length === 1) {
+        setDeployEngineId(engines[0].id)
+      } else if (engines.length > 0) {
+        // Select first engine alphabetically
+        const sorted = [...engines].sort((a: any, b: any) => 
+          (a.name || a.baseUrl).localeCompare(b.name || b.baseUrl)
+        )
+        setDeployEngineId(sorted[0].id)
+      }
+    }
+  }, [deployModal.isOpen, enginesQ.data, selectedEngineId, deployEngineId])
 
   const contentsQ = useQuery({
     queryKey: ['contents', projectId, folderId],

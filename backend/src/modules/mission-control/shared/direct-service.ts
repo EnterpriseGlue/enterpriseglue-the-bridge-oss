@@ -4,7 +4,7 @@
 
 import { camundaDelete, camundaGet, camundaPost, camundaPut } from '@shared/services/bpmn-engine-client.js'
 
-export async function deleteProcessInstancesDirect(params: {
+export async function deleteProcessInstancesDirect(engineId: string, params: {
   processInstanceIds: string[]
   skipCustomListeners?: boolean
   skipIoMappings?: boolean
@@ -32,7 +32,7 @@ export async function deleteProcessInstancesDirect(params: {
   const results: Array<{ id: string; ok: boolean; error?: string }> = []
   for (const id of processInstanceIds) {
     try {
-      await camundaDelete(`/process-instance/${encodeURIComponent(id)}${qs.toString() ? `?${qs.toString()}` : ''}`)
+      await camundaDelete(engineId, `/process-instance/${encodeURIComponent(id)}${qs.toString() ? `?${qs.toString()}` : ''}`)
       results.push({ id, ok: true })
     } catch (e: any) {
       results.push({ id, ok: false, error: e?.message })
@@ -41,11 +41,11 @@ export async function deleteProcessInstancesDirect(params: {
   return results
 }
 
-export async function suspendActivateProcessInstancesDirect(ids: string[], suspended: boolean) {
+export async function suspendActivateProcessInstancesDirect(engineId: string, ids: string[], suspended: boolean) {
   const results: Array<{ id: string; ok: boolean; error?: string }> = []
   for (const id of ids) {
     try {
-      await camundaPut(`/process-instance/${encodeURIComponent(id)}/suspended`, { suspended })
+      await camundaPut(engineId, `/process-instance/${encodeURIComponent(id)}/suspended`, { suspended })
       results.push({ id, ok: true })
     } catch (e: any) {
       results.push({ id, ok: false, error: e?.message })
@@ -54,7 +54,7 @@ export async function suspendActivateProcessInstancesDirect(ids: string[], suspe
   return results
 }
 
-export async function setJobRetriesDirect(params: {
+export async function setJobRetriesDirect(engineId: string, params: {
   processInstanceIds: string[]
   retries: number
   onlyFailed?: boolean
@@ -63,12 +63,12 @@ export async function setJobRetriesDirect(params: {
   const results: Array<{ id: string; ok: boolean; error?: string }> = []
   for (const pid of processInstanceIds) {
     try {
-      const jobs: any[] = await camundaGet<any[]>('/job', {
+      const jobs: any[] = await camundaGet<any[]>(engineId, '/job', {
         processInstanceId: pid,
         withException: onlyFailed ? true : undefined,
       })
       for (const j of jobs) {
-        await camundaPut(`/job/${encodeURIComponent(j.id)}/retries`, { retries })
+        await camundaPut(engineId, `/job/${encodeURIComponent(j.id)}/retries`, { retries })
       }
       results.push({ id: pid, ok: true })
     } catch (e: any) {
@@ -78,7 +78,7 @@ export async function setJobRetriesDirect(params: {
   return results
 }
 
-export async function executeMigrationDirect(params: {
+export async function executeMigrationDirect(engineId: string, params: {
   plan: any
   processInstanceIds?: string[]
   skipCustomListeners?: boolean
@@ -91,5 +91,5 @@ export async function executeMigrationDirect(params: {
   }
   if (typeof skipCustomListeners === 'boolean') engineReq.skipCustomListeners = skipCustomListeners
   if (typeof skipIoMappings === 'boolean') engineReq.skipIoMappings = skipIoMappings
-  return camundaPost<any>('/migration/execute', engineReq)
+  return camundaPost<any>(engineId, '/migration/execute', engineReq)
 }

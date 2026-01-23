@@ -12,7 +12,6 @@ let folderId = '';
 let fileIds: string[] = [];
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -38,7 +37,7 @@ describe('Starbase folder delete preview', () => {
 
   it('returns counts and sample paths', async () => {
     const response = await request(app)
-      .get(`/starbase-api/folders/${folderId}/delete-preview`)
+      .get(`/t/default/starbase-api/folders/${folderId}/delete-preview`)
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(response.status).toBe(200);
@@ -48,7 +47,7 @@ describe('Starbase folder delete preview', () => {
 
   it('rejects unauthenticated delete preview', async () => {
     const response = await request(app)
-      .get(`/starbase-api/folders/${folderId}/delete-preview`);
+      .get(`/t/default/starbase-api/folders/${folderId}/delete-preview`);
 
     expect(response.status).toBe(401);
   });

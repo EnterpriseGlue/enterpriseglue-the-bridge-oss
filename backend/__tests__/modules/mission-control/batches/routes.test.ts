@@ -12,9 +12,15 @@ vi.mock('@shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@shared/middleware/activeEngineAuth.js', () => ({
-  requireActiveEngineReadOrWrite: () => (_req: any, _res: any, next: any) => next(),
-  requireActiveEngineDeployer: () => (_req: any, _res: any, next: any) => next(),
+vi.mock('@shared/middleware/engineAuth.js', () => ({
+  requireEngineReadOrWrite: () => (req: any, _res: any, next: any) => {
+    req.engineId = 'engine-1';
+    next();
+  },
+  requireEngineDeployer: () => (req: any, _res: any, next: any) => {
+    req.engineId = 'engine-1';
+    next();
+  },
 }));
 
 vi.mock('@shared/db/data-source.js', () => ({

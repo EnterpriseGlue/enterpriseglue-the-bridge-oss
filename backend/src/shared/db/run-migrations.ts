@@ -2,8 +2,7 @@ import { getDataSource, adapter } from './data-source.js';
 import { getConnectionPool } from './db-pool.js';
 import { EnvironmentTag } from './entities/EnvironmentTag.js';
 import { PlatformSettings } from './entities/PlatformSettings.js';
-import { Tenant } from './entities/Tenant.js';
-import { TenantSettings } from './entities/TenantSettings.js';
+// Tenant entities removed - multi-tenancy is EE-only
 import { EmailTemplate } from './entities/EmailTemplate.js';
 import { SsoClaimsMapping } from './entities/SsoClaimsMapping.js';
 
@@ -89,33 +88,9 @@ export async function seedInitialData() {
     console.log('  Note: platform_settings:', error.message);
   }
   
-  // Seed default tenant
-  try {
-    const tenantRepo = dataSource.getRepository(Tenant);
-    const existingTenant = await tenantRepo.findOne({ where: [{ id: 'tenant-default' }, { slug: 'default' }] });
-    if (!existingTenant) {
-      await tenantRepo.insert({
-        id: 'tenant-default',
-        name: 'Default Tenant',
-        slug: 'default',
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-    
-    const tenantSettingsRepo = dataSource.getRepository(TenantSettings);
-    const existingSettings = await tenantSettingsRepo.findOne({ where: { tenantId: 'tenant-default' } });
-    if (!existingSettings) {
-      await tenantSettingsRepo.insert({
-        tenantId: 'tenant-default',
-        updatedAt: now,
-      });
-    }
-    console.log('  ✅ default tenant seeded');
-  } catch (error: any) {
-    console.log('  Note: default tenant:', error.message);
-  }
+  // Tenant seeding removed - multi-tenancy is EE-only
+  // OSS runs in single-tenant mode without tenant tables
+  console.log('  ℹ️  OSS single-tenant mode (no tenant tables)');
   
   // Seed default email templates
   try {

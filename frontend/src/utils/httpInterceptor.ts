@@ -1,21 +1,72 @@
 /**
  * HTTP Interceptor
  * Intercepts fetch requests to handle authentication and token refresh
+ * 
+ * Unified Tenant Routing (Option A):
+ * - All tenant-scoped API calls are automatically prefixed with /t/:tenantSlug
+ * - OSS uses /t/default/* paths
+ * - EE uses /t/:actualTenantSlug/* paths
  */
 
 import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../constants/storageKeys';
 import { getErrorMessageFromResponse } from '../shared/api/apiErrorUtils';
 
 const API_BASE_URL = '/api';
+const DEFAULT_TENANT_SLUG = 'default';
 
-function getTenantSlugFromPathname(pathname: string): string | null {
+// API prefixes that are tenant-scoped (need /t/:tenantSlug prefix)
+const TENANT_SCOPED_API_PREFIXES = [
+  '/starbase-api/',
+  '/engines-api/',
+  '/vcs-api/',
+  '/api/users',
+  '/api/audit',
+  '/api/notifications',
+  '/api/dashboard',
+];
+
+// API prefixes that are platform-level (no tenant prefix needed)
+const PLATFORM_API_PREFIXES = [
+  '/api/auth/',
+  '/api/admin/',
+  '/api/platform-admin/',
+  '/api/contact-admin',
+  '/api/sso-providers',
+  '/api/authz/',
+];
+
+function getTenantSlugFromPathname(pathname: string): string {
   const m = pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
-  if (!m?.[1]) return null;
+  if (!m?.[1]) return DEFAULT_TENANT_SLUG;
   try {
     return decodeURIComponent(m[1]);
   } catch {
     return m[1];
   }
+}
+
+/**
+ * Check if a URL is a tenant-scoped API endpoint
+ */
+function isTenantScopedUrl(url: string): boolean {
+  // Already has tenant prefix
+  if (url.startsWith('/t/')) return false;
+  
+  // Check if it's a platform-level API (no prefix needed)
+  if (PLATFORM_API_PREFIXES.some(prefix => url.startsWith(prefix))) return false;
+  
+  // Check if it's a tenant-scoped API
+  return TENANT_SCOPED_API_PREFIXES.some(prefix => url.startsWith(prefix));
+}
+
+/**
+ * Add tenant slug prefix to tenant-scoped URLs
+ */
+function addTenantPrefix(url: string): string {
+  if (!isTenantScopedUrl(url)) return url;
+  
+  const tenantSlug = getTenantSlugFromPathname(window.location.pathname);
+  return `/t/${encodeURIComponent(tenantSlug)}${url}`;
 }
 
 function getTenantLoginPath(pathname: string): string {
@@ -141,21 +192,25 @@ function isPublicRoute(): boolean {
 
 /**
  * Intercepted fetch function with automatic token refresh on 401
+ * Also handles automatic tenant URL prefixing for unified routing (Option A)
  */
 export async function interceptedFetch(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
+  // Add tenant prefix to tenant-scoped URLs
+  const prefixedUrl = addTenantPrefix(url);
+  
   // Don't intercept auth endpoints (login, refresh, logout)
-  const isAuthEndpoint = url.includes('/auth/login') || 
-                         url.includes('/auth/refresh') || 
-                         url.includes('/auth/logout');
+  const isAuthEndpoint = prefixedUrl.includes('/auth/login') || 
+                         prefixedUrl.includes('/auth/refresh') || 
+                         prefixedUrl.includes('/auth/logout');
 
   // Don't intercept on public routes - let them handle 401s naturally
   const onPublicRoute = isPublicRoute();
 
-  // Make the original request
-  let response = await fetch(url, options);
+  // Make the original request with prefixed URL
+  let response = await fetch(prefixedUrl, options);
 
   // Extract CSRF token from response headers
   updateCsrfToken(response);
@@ -182,7 +237,7 @@ export async function interceptedFetch(
           headers: newHeaders,
         };
         
-        response = await fetch(url, newOptions);
+        response = await fetch(prefixedUrl, newOptions);
         updateCsrfToken(response);
       } else {
         // Refresh failed, user will be redirected to login
@@ -206,7 +261,7 @@ export async function interceptedFetch(
           headers: newHeaders,
         };
         
-        response = await fetch(url, newOptions);
+        response = await fetch(prefixedUrl, newOptions);
         updateCsrfToken(response);
       }
     }

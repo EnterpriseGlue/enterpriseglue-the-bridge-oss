@@ -25,9 +25,6 @@ export class Engine extends AppBaseEntity {
   @Column({ name: 'password_enc', type: 'text', nullable: true })
   passwordEnc!: string | null;
 
-  @Column({ type: 'boolean', default: false })
-  active!: boolean;
-
   @Column({ type: 'text', nullable: true })
   version!: string | null;
 

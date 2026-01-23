@@ -182,19 +182,6 @@ export default function Decisions() {
     enabled: true,
   })
 
-  React.useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'vt_active_engine_changed') {
-        try {
-          defsQ.refetch()
-          xmlQ.refetch()
-          historyQ.refetch()
-        } catch {}
-      }
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [defsQ, xmlQ, historyQ])
 
   function fmt(ts?: string | null) {
     if (!ts) return '--'

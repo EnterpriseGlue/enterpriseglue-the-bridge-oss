@@ -16,8 +16,7 @@ import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
 import { ProjectMember } from '@shared/db/entities/ProjectMember.js';
 import { PermissionGrant } from '@shared/db/entities/PermissionGrant.js';
-import { Invitation } from '@shared/db/entities/Invitation.js';
-import { Tenant } from '@shared/db/entities/Tenant.js';
+// Invitation and Tenant entities removed - multi-tenancy is EE-only
 import { Project } from '@shared/db/entities/Project.js';
 import { generateId } from '@shared/utils/id.js';
 import { In, IsNull, Not, Raw } from 'typeorm';
@@ -295,86 +294,9 @@ router.post(
         });
       }
 
-      // User doesn't exist - create an invitation instead
-      // Get the tenant for this project (use default tenant if not multi-tenant)
-      const projectRepo = dataSource.getRepository(Project);
-      const projectResult = await projectRepo.findOne({
-        where: { id: projectId },
-        select: ['tenantId']
-      });
-      
-      const tenantId = String(projectResult?.tenantId || 'tenant-default');
-
-      // Get tenant info for the invitation
-      const tenantRepo = dataSource.getRepository(Tenant);
-      const tenantResult = await tenantRepo.findOne({
-        where: { id: tenantId },
-        select: ['slug', 'name']
-      });
-      
-      const tenant = tenantResult || { slug: 'default', name: 'Default' };
-
-      // Check for existing pending invitation
-      const inviteRepo = dataSource.getRepository(Invitation);
-      const existingInvite = await inviteRepo.createQueryBuilder('i')
-        .where('i.tenantId = :tenantId', { tenantId })
-        .andWhere('LOWER(i.email) = :email', { email: emailLower })
-        .andWhere('i.resourceType = :resourceType', { resourceType: 'project' })
-        .andWhere('i.resourceId = :resourceId', { resourceId: projectId })
-        .andWhere('i.acceptedAt IS NULL')
-        .andWhere('i.revokedAt IS NULL')
-        .getOne();
-
-      if (existingInvite) {
-        throw Errors.conflict('An invitation is already pending for this email');
-      }
-
-      // Create the invitation
-      const token = randomBytes(32).toString('hex');
-      const now = Date.now();
-      const expiresAt = now + 7 * 24 * 60 * 60 * 1000; // 7 days
-      const invitationId = generateId();
-
-      await inviteRepo.insert({
-        id: invitationId,
-        token,
-        email: emailLower,
-        tenantId,
-        resourceType: 'project',
-        resourceId: projectId,
-        role: requestedRoles[0] || 'viewer',
-        invitedByUserId: inviterId,
-        expiresAt,
-        createdAt: now,
-      });
-
-      // Send invitation email
-      const inviteUrl = `${config.frontendUrl}/t/${tenant.slug}/invite/${token}`;
-      let emailSent = false;
-      let emailError: string | undefined;
-
-      try {
-        const result = await sendInvitationEmail({
-          to: emailLower,
-          tenantName: tenant.name,
-          inviteUrl,
-          resourceType: 'project',
-          invitedByName: req.user!.email,
-        });
-        emailSent = result.success;
-        emailError = result.error;
-      } catch (err) {
-        emailError = err instanceof Error ? err.message : 'Failed to send email';
-      }
-
-      res.status(201).json({
-        id: invitationId,
-        email: emailLower,
-        role: requestedRoles[0] || 'viewer',
-        invited: true,
-        emailSent,
-        emailError,
-      });
+      // User doesn't exist - OSS doesn't support invitations (EE-only feature)
+      // User must already be registered in the system
+      throw Errors.notFound('User not found. The user must be registered before they can be added to a project. Invitations are available in the Enterprise Edition.');
     } catch (error) {
       logger.error('Add project member error:', error);
       throw Errors.internal('Failed to add project member');

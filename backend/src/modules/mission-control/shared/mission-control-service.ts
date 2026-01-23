@@ -4,29 +4,29 @@
 
 import { camundaDelete, camundaGet, camundaPost, camundaPut, setJobDuedate, getExternalTasks, setExternalTaskRetries } from '@shared/services/bpmn-engine-client.js'
 
-export async function listProcessDefinitions(params: { key?: string; nameLike?: string; latest?: string }) {
+export async function listProcessDefinitions(engineId: string, params: { key?: string; nameLike?: string; latest?: string }) {
   const { key, nameLike, latest } = params
   const query: Record<string, any> = {}
   if (key) query.key = key
   if (nameLike) query.nameLike = nameLike
   if (latest) query.latestVersion = latest === 'true' || latest === '1'
-  return camundaGet<any[]>('/process-definition', query)
+  return camundaGet<any[]>(engineId, '/process-definition', query)
 }
 
-export async function getProcessDefinitionById(id: string) {
-  return camundaGet<any>(`/process-definition/${encodeURIComponent(id)}`)
+export async function getProcessDefinitionById(engineId: string, id: string) {
+  return camundaGet<any>(engineId, `/process-definition/${encodeURIComponent(id)}`)
 }
 
-export async function getProcessDefinitionXmlById(id: string) {
-  return camundaGet<any>(`/process-definition/${encodeURIComponent(id)}/xml`)
+export async function getProcessDefinitionXmlById(engineId: string, id: string) {
+  return camundaGet<any>(engineId, `/process-definition/${encodeURIComponent(id)}/xml`)
 }
 
-export async function resolveProcessDefinition(params: { key?: string; version?: string }) {
+export async function resolveProcessDefinition(engineId: string, params: { key?: string; version?: string }) {
   const { key, version } = params
   if (!key || !version) {
     throw new Error('key and version are required')
   }
-  const defs = await camundaGet<any[]>('/process-definition', {
+  const defs = await camundaGet<any[]>(engineId, '/process-definition', {
     key,
     version: Number(version),
   })
@@ -38,8 +38,8 @@ export async function resolveProcessDefinition(params: { key?: string; version?:
   return defs[0]
 }
 
-export async function getActiveActivityCounts(definitionId: string) {
-  const items = await camundaGet<any[]>(`/history/activity-instance`, { processDefinitionId: definitionId, unfinished: true })
+export async function getActiveActivityCounts(engineId: string, definitionId: string) {
+  const items = await camundaGet<any[]>(engineId, `/history/activity-instance`, { processDefinitionId: definitionId, unfinished: true })
   const counts: Record<string, number> = {}
   for (const a of items) {
     const id = a.activityId
@@ -49,12 +49,12 @@ export async function getActiveActivityCounts(definitionId: string) {
   return counts
 }
 
-export async function getActivityCountsByState(definitionId: string) {
+export async function getActivityCountsByState(engineId: string, definitionId: string) {
   const [stats, suspendedInstances, canceledItems, completedItems] = await Promise.all([
-    camundaGet<any[]>(`/process-definition/${encodeURIComponent(definitionId)}/statistics`, { incidents: true }),
-    camundaGet<any[]>(`/process-instance`, { processDefinitionId: definitionId, suspended: true }),
-    camundaGet<any[]>(`/history/activity-instance`, { processDefinitionId: definitionId, canceled: true }),
-    camundaGet<any[]>(`/history/activity-instance`, { processDefinitionId: definitionId, finished: true, canceled: false }),
+    camundaGet<any[]>(engineId, `/process-definition/${encodeURIComponent(definitionId)}/statistics`, { incidents: true }),
+    camundaGet<any[]>(engineId, `/process-instance`, { processDefinitionId: definitionId, suspended: true }),
+    camundaGet<any[]>(engineId, `/history/activity-instance`, { processDefinitionId: definitionId, canceled: true }),
+    camundaGet<any[]>(engineId, `/history/activity-instance`, { processDefinitionId: definitionId, finished: true, canceled: false }),
   ])
 
   const result: Record<string, Record<string, number>> = {
@@ -78,7 +78,7 @@ export async function getActivityCountsByState(definitionId: string) {
 
   for (const pid of suspendedIds) {
     try {
-      const tree = await camundaGet<any>(`/process-instance/${encodeURIComponent(pid)}/activity-instances`)
+      const tree = await camundaGet<any>(engineId, `/process-instance/${encodeURIComponent(pid)}/activity-instances`)
       const ids: string[] = []
       collectActivityIds(tree, ids)
       for (const id of ids) {
@@ -132,12 +132,12 @@ export async function getActivityCountsByState(definitionId: string) {
   return result
 }
 
-export async function previewProcessInstanceCount(body: any) {
-  const data = await camundaPost<any>('/process-instance/count', body)
+export async function previewProcessInstanceCount(engineId: string, body: any) {
+  const data = await camundaPost<any>(engineId, '/process-instance/count', body)
   return { count: typeof data?.count === 'number' ? data.count : 0 }
 }
 
-export async function listProcessInstancesDetailed(query: any) {
+export async function listProcessInstancesDetailed(engineId: string, query: any) {
   const {
     processDefinitionKey,
     processDefinitionId,
@@ -184,7 +184,7 @@ export async function listProcessInstancesDetailed(query: any) {
   const seen = new Set<string>()
 
   async function pushRuntime(params: Record<string, any>) {
-    const runtime = await camundaGet<any[]>('/process-instance', params)
+    const runtime = await camundaGet<any[]>(engineId, '/process-instance', params)
     for (const r of runtime) {
       if (seen.has(r.id)) continue
       seen.add(r.id)
@@ -232,14 +232,14 @@ export async function listProcessInstancesDetailed(query: any) {
   const runtimeIds = out.filter(o => o.state === 'ACTIVE' || o.state === 'SUSPENDED').map(o => o.id)
   if (runtimeIds.length > 0) {
     try {
-      const incidents = await camundaGet<any[]>('/incident', { processInstanceIdIn: runtimeIds.join(',') })
+      const incidents = await camundaGet<any[]>(engineId, '/incident', { processInstanceIdIn: runtimeIds.join(',') })
       const set = new Set<string>((incidents || []).map((i: any) => i.processInstanceId))
       for (const o of out) {
         if (set.has(o.id)) o.hasIncident = true
       }
     } catch {}
     try {
-      const hist = await camundaGet<any[]>('/history/process-instance', { processInstanceIdIn: runtimeIds.join(',') })
+      const hist = await camundaGet<any[]>(engineId, '/history/process-instance', { processInstanceIdIn: runtimeIds.join(',') })
       const starts = new Map<string, string>()
       const parents = new Map<string, string>()
       for (const h of hist) {
@@ -279,7 +279,7 @@ export async function listProcessInstancesDetailed(query: any) {
           const activityParams: Record<string, any> = { activityId, finished: true }
           if (processDefinitionKey) activityParams.processDefinitionKey = processDefinitionKey
           if (processDefinitionId) activityParams.processDefinitionId = processDefinitionId
-          const histActs = await camundaGet<any[]>('/history/activity-instance', activityParams)
+          const histActs = await camundaGet<any[]>(engineId, '/history/activity-instance', activityParams)
 
           const isEndEvent = (histActs || []).some((a: any) => {
             const t = String(a?.activityType || '').toLowerCase()
@@ -307,7 +307,7 @@ export async function listProcessInstancesDetailed(query: any) {
           const activityParams: Record<string, any> = { activityId, canceled: true }
           if (processDefinitionKey) activityParams.processDefinitionKey = processDefinitionKey
           if (processDefinitionId) activityParams.processDefinitionId = processDefinitionId
-          const canceledActs = await camundaGet<any[]>('/history/activity-instance', activityParams)
+          const canceledActs = await camundaGet<any[]>(engineId, '/history/activity-instance', activityParams)
           canceledAtNodeProcIds = new Set<string>((canceledActs || []).map((a: any) => a?.processInstanceId).filter(Boolean))
         } catch {
           // ignore
@@ -315,7 +315,7 @@ export async function listProcessInstancesDetailed(query: any) {
       }
     }
 
-    const hist = await camundaGet<any[]>('/history/process-instance', histParams)
+    const hist = await camundaGet<any[]>(engineId, '/history/process-instance', histParams)
     for (const h of hist) {
       const isCanceled = !!h.deleteReason || h.state === 'EXTERNALLY_TERMINATED' || h.state === 'INTERNALLY_TERMINATED'
 
@@ -378,12 +378,12 @@ export async function listProcessInstancesDetailed(query: any) {
   return out
 }
 
-export async function getProcessInstanceById(id: string) {
-  return camundaGet<any>(`/process-instance/${encodeURIComponent(id)}`)
+export async function getProcessInstanceById(engineId: string, id: string) {
+  return camundaGet<any>(engineId, `/process-instance/${encodeURIComponent(id)}`)
 }
 
-export async function getProcessInstanceVariables(id: string) {
-  const histVars = await camundaGet<any[]>('/history/variable-instance', { processInstanceId: id })
+export async function getProcessInstanceVariables(engineId: string, id: string) {
+  const histVars = await camundaGet<any[]>(engineId, '/history/variable-instance', { processInstanceId: id })
   const out: Record<string, { value: any; type: string }> = {}
   for (const v of histVars || []) {
     if (!v || !v.name) continue
@@ -395,44 +395,44 @@ export async function getProcessInstanceVariables(id: string) {
   return out
 }
 
-export async function listProcessInstanceActivityHistory(id: string) {
-  return camundaGet<any[]>('/history/activity-instance', { processInstanceId: id })
+export async function listProcessInstanceActivityHistory(engineId: string, id: string) {
+  return camundaGet<any[]>(engineId, '/history/activity-instance', { processInstanceId: id })
 }
 
-export async function listProcessInstanceJobs(id: string) {
-  return camundaGet<any[]>('/job', { processInstanceId: id, withException: true })
+export async function listProcessInstanceJobs(engineId: string, id: string) {
+  return camundaGet<any[]>(engineId, '/job', { processInstanceId: id, withException: true })
 }
 
-export async function getHistoricProcessInstanceById(id: string) {
-  return camundaGet<any>(`/history/process-instance/${encodeURIComponent(id)}`)
+export async function getHistoricProcessInstanceById(engineId: string, id: string) {
+  return camundaGet<any>(engineId, `/history/process-instance/${encodeURIComponent(id)}`)
 }
 
-export async function listHistoricProcessInstances(params: any) {
-  return camundaGet<any[]>('/history/process-instance', params)
+export async function listHistoricProcessInstances(engineId: string, params: any) {
+  return camundaGet<any[]>(engineId, '/history/process-instance', params)
 }
 
-export async function listHistoricVariableInstances(params: any) {
-  return camundaGet<any[]>('/history/variable-instance', params)
+export async function listHistoricVariableInstances(engineId: string, params: any) {
+  return camundaGet<any[]>(engineId, '/history/variable-instance', params)
 }
 
-export async function listProcessInstanceIncidents(id: string) {
-  return camundaGet<any[]>('/incident', { processInstanceId: id })
+export async function listProcessInstanceIncidents(engineId: string, id: string) {
+  return camundaGet<any[]>(engineId, '/incident', { processInstanceId: id })
 }
 
-export async function suspendProcessInstanceById(id: string) {
-  return camundaPut(`/process-instance/${encodeURIComponent(id)}/suspended`, { suspended: true })
+export async function suspendProcessInstanceById(engineId: string, id: string) {
+  return camundaPut(engineId, `/process-instance/${encodeURIComponent(id)}/suspended`, { suspended: true })
 }
 
-export async function activateProcessInstanceById(id: string) {
-  return camundaPut(`/process-instance/${encodeURIComponent(id)}/suspended`, { suspended: false })
+export async function activateProcessInstanceById(engineId: string, id: string) {
+  return camundaPut(engineId, `/process-instance/${encodeURIComponent(id)}/suspended`, { suspended: false })
 }
 
-export async function deleteProcessInstanceById(id: string) {
-  return camundaDelete(`/process-instance/${encodeURIComponent(id)}`)
+export async function deleteProcessInstanceById(engineId: string, id: string) {
+  return camundaDelete(engineId, `/process-instance/${encodeURIComponent(id)}`)
 }
 
-export async function listFailedExternalTasks(processInstanceId: string) {
-  const allExtTasks = await getExternalTasks<any[]>({ processInstanceId })
+export async function listFailedExternalTasks(engineId: string, processInstanceId: string) {
+  const allExtTasks = await getExternalTasks<any[]>(engineId, { processInstanceId })
   return (allExtTasks || []).filter((et: any) => {
     const hasNoRetries = et.retries === 0 || et.retries === null
     const hasError = et.errorMessage || et.errorDetails
@@ -440,49 +440,49 @@ export async function listFailedExternalTasks(processInstanceId: string) {
   })
 }
 
-export async function retryProcessInstanceFailures(processInstanceId: string, body: { jobIds?: string[]; externalTaskIds?: string[]; dueDate?: string; retries?: number }) {
+export async function retryProcessInstanceFailures(engineId: string, processInstanceId: string, body: { jobIds?: string[]; externalTaskIds?: string[]; dueDate?: string; retries?: number }) {
   const { jobIds, externalTaskIds, dueDate, retries } = body || {}
 
   const newRetries = typeof retries === 'number' && retries >= 0 ? retries : 1
 
   if (Array.isArray(jobIds) && jobIds.length > 0) {
     for (const jid of jobIds) {
-      await camundaPut(`/job/${encodeURIComponent(jid)}/retries`, { retries: newRetries })
+      await camundaPut(engineId, `/job/${encodeURIComponent(jid)}/retries`, { retries: newRetries })
       if (dueDate) {
-        await setJobDuedate(jid, { duedate: dueDate, cascade: false })
+        await setJobDuedate(engineId, jid, { duedate: dueDate, cascade: false })
       }
     }
   }
 
   if (Array.isArray(externalTaskIds) && externalTaskIds.length > 0) {
     for (const etid of externalTaskIds) {
-      await setExternalTaskRetries(etid, { retries: newRetries })
+      await setExternalTaskRetries(engineId, etid, { retries: newRetries })
     }
   }
 
   if ((!jobIds || jobIds.length === 0) && (!externalTaskIds || externalTaskIds.length === 0)) {
-    const incidents = await camundaGet<any[]>('/incident', { processInstanceId })
+    const incidents = await camundaGet<any[]>(engineId, '/incident', { processInstanceId })
 
     const hasJobIncidents = incidents.some((inc: any) => inc.incidentType === 'failedJob')
     const hasExtTaskIncidents = incidents.some((inc: any) => inc.incidentType === 'failedExternalTask')
 
     if (hasJobIncidents) {
-      const jobs = await camundaGet<any[]>('/job', { processInstanceId, withException: true })
+      const jobs = await camundaGet<any[]>(engineId, '/job', { processInstanceId, withException: true })
       for (const job of jobs || []) {
-        await camundaPut(`/job/${encodeURIComponent(job.id)}/retries`, { retries: newRetries })
+        await camundaPut(engineId, `/job/${encodeURIComponent(job.id)}/retries`, { retries: newRetries })
         if (dueDate) {
-          await setJobDuedate(job.id, { duedate: dueDate, cascade: false })
+          await setJobDuedate(engineId, job.id, { duedate: dueDate, cascade: false })
         }
       }
     }
 
     if (hasExtTaskIncidents) {
-      const extTasks = await getExternalTasks<any[]>({ processInstanceId })
+      const extTasks = await getExternalTasks<any[]>(engineId, { processInstanceId })
       const failedExtTasks = (extTasks || []).filter((et: any) => {
         return (et.retries === 0 || et.retries === null) && (et.errorMessage || et.errorDetails)
       })
       for (const et of failedExtTasks) {
-        await setExternalTaskRetries(et.id, { retries: newRetries })
+        await setExternalTaskRetries(engineId, et.id, { retries: newRetries })
       }
     }
   }

@@ -11,7 +11,6 @@ let projectId = '';
 let fileId = '';
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -34,7 +33,7 @@ describe('Starbase file auth', () => {
 
   it('rejects unauthenticated file update', async () => {
     const response = await request(app)
-      .patch(`/starbase-api/projects/${projectId}/files/${fileId}`)
+      .patch(`/t/default/starbase-api/projects/${projectId}/files/${fileId}`)
       .send({ name: 'renamed.bpmn' });
 
     expect(response.status).toBe(401);
@@ -42,7 +41,7 @@ describe('Starbase file auth', () => {
 
   it('rejects unauthenticated file delete', async () => {
     const response = await request(app)
-      .delete(`/starbase-api/projects/${projectId}/files/${fileId}`);
+      .delete(`/t/default/starbase-api/projects/${projectId}/files/${fileId}`);
 
     expect(response.status).toBe(401);
   });

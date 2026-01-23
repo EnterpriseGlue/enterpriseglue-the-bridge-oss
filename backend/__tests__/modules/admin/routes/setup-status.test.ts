@@ -3,7 +3,6 @@ import request from 'supertest';
 import express from 'express';
 import setupStatusRouter from '../../../../src/modules/admin/routes/setup-status.js';
 import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { Tenant } from '../../../../src/shared/db/entities/Tenant.js';
 import { User } from '../../../../src/shared/db/entities/User.js';
 import { EmailSendConfig } from '../../../../src/shared/db/entities/EmailSendConfig.js';
 
@@ -29,13 +28,11 @@ describe('GET /api/admin/setup-status', () => {
   });
 
   it('returns configured status when all checks pass', async () => {
-    const tenantRepo = { count: vi.fn().mockResolvedValue(1) };
     const userRepo = { count: vi.fn().mockResolvedValue(1) };
     const emailConfigRepo = { count: vi.fn().mockResolvedValue(1) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === Tenant) return tenantRepo;
         if (entity === User) return userRepo;
         if (entity === EmailSendConfig) return emailConfigRepo;
         throw new Error('Unexpected repository');
@@ -51,14 +48,12 @@ describe('GET /api/admin/setup-status', () => {
     expect(response.body.requiredActions).toHaveLength(0);
   });
 
-  it('returns not configured when missing tenant', async () => {
-    const tenantRepo = { count: vi.fn().mockResolvedValue(0) };
-    const userRepo = { count: vi.fn().mockResolvedValue(1) };
+  it('returns not configured when missing admin user', async () => {
+    const userRepo = { count: vi.fn().mockResolvedValue(0) };
     const emailConfigRepo = { count: vi.fn().mockResolvedValue(0) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === Tenant) return tenantRepo;
         if (entity === User) return userRepo;
         if (entity === EmailSendConfig) return emailConfigRepo;
         throw new Error('Unexpected repository');
@@ -69,7 +64,7 @@ describe('GET /api/admin/setup-status', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.isConfigured).toBe(false);
-    expect(response.body.requiredActions).toContain('Create a tenant');
+    expect(response.body.requiredActions).toContain('Configure admin user');
   });
 });
 

@@ -4,10 +4,10 @@
 
 import { getMetrics, getMetricByName } from '@shared/services/bpmn-engine-client.js'
 
-export async function listMetrics(params: any) {
-  return getMetrics<any>(params)
+export async function listMetrics(engineId: string, params: any) {
+  return getMetrics<any>(engineId, params)
 }
 
-export async function getMetric(name: string, params: any) {
-  return getMetricByName<any>(name, params)
+export async function getMetric(engineId: string, name: string, params: any) {
+  return getMetricByName<any>(engineId, name, params)
 }

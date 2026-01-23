@@ -27,7 +27,7 @@ import {
   ComboBox,
   Loading,
 } from '@carbon/react'
-import { Power, Add, Chip, UserMultiple, Close, Checkmark } from '@carbon/icons-react'
+import { Add, Chip, UserMultiple, Close, Checkmark } from '@carbon/icons-react'
 import FormModal from '../../../components/FormModal'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout'
 import { useModal } from '../../../shared/hooks/useModal'
@@ -111,7 +111,6 @@ export default function Engines() {
   const hasMultipleTags = Array.isArray(envTags) && envTags.length > 1
 
   const listQ = useQuery({ queryKey: ['engines'], queryFn: () => apiClient.get<any[]>('/engines-api/engines', undefined, { credentials: 'include' }) })
-  const activeQ = useQuery({ queryKey: ['engines','active'], queryFn: () => apiClient.get<any | null>('/engines-api/engines/active', undefined, { credentials: 'include' }) })
 
   const createM = useMutation({
     mutationFn: (payload: any) => apiClient.post<any>('/engines-api/engines', payload, { credentials: 'include' }),
@@ -141,21 +140,6 @@ export default function Engines() {
       notify({ kind: 'success', title: 'Engine deleted' })
     },
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to delete engine', subtitle: getUiErrorMessage(e, 'Failed to delete') })
-  })
-  const activateM = useMutation({
-    mutationFn: (id: string) => apiClient.post<any>(`/engines-api/engines/${encodeURIComponent(id)}/activate`, {}, { credentials: 'include' }),
-    onSuccess: (_data, id) => {
-      qc.invalidateQueries({ queryKey: ['engines','active'] })
-      qc.invalidateQueries({ queryKey: ['engines'] })
-      // Invalidate all Mission Control queries so open views refetch
-      qc.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && (q.queryKey as any[])[0] === 'mission-control' })
-      // Broadcast to other tabs
-      try { localStorage.setItem('vt_active_engine_changed', String(Date.now())) } catch {}
-      // Show success message
-      const engineName = rows.find(e => e.id === id)?.name || 'Engine'
-      notify({ kind: 'success', title: `${engineName} has been activated successfully` })
-    },
-    onError: (e: any) => notify({ kind: 'error', title: 'Failed to activate engine', subtitle: getUiErrorMessage(e, 'Failed to activate') })
   })
   const testM = useMutation({
     mutationFn: (id: string) => apiClient.post<any>(`/engines-api/engines/${encodeURIComponent(id)}/test`, {}, { credentials: 'include' }),
@@ -189,8 +173,6 @@ export default function Engines() {
   }
 
   const rows = listQ.data || []
-  const activeId = activeQ.data?.id
-  const envActive = rows.length === 0 && !!activeQ.data && !!activeQ.data.baseUrl
   const [isAddFirstEngineHover, setIsAddFirstEngineHover] = React.useState(false)
 
   function canManageEngine(engine: any): boolean {
@@ -300,7 +282,6 @@ export default function Engines() {
       { key: 'baseUrl', header: 'Base URL' },
       { key: 'type', header: 'Type' },
       { key: 'environment', header: 'Environment' },
-      { key: 'active', header: 'Active' },
       { key: 'health', header: 'Health' },
       { key: 'version', header: 'Version' },
       { key: 'actions', header: '' },
@@ -381,7 +362,7 @@ export default function Engines() {
       )}
 
       {/* Empty State */}
-      {!listQ.isLoading && rows.length === 0 && !envActive && (
+      {!listQ.isLoading && rows.length === 0 && (
         <div style={{ 
           background: 'var(--color-bg-secondary)', 
           border: '2px dashed var(--color-border-primary)', 
@@ -415,40 +396,22 @@ export default function Engines() {
       )}
 
       {/* Engines List */}
-      {!listQ.isLoading && (envActive || rows.length > 0) && (
+      {!listQ.isLoading && rows.length > 0 && (
         <TableContainer>
           <DataTable
-            rows={[
-              ...(envActive
-                ? [
-                    {
-                      id: '__env__',
-                      name: 'Environment (read-only)',
-                      baseUrl: activeQ.data?.baseUrl || '—',
-                      type: activeQ.data?.type || 'camunda7',
-                      environment: '—',
-                      active: 'Active',
-                      health: '',
-                      version: '',
-                      actions: '',
-                    },
-                  ]
-                : []),
-              ...visibleEngines.map((e: any) => {
-                const envTag = Array.isArray(envTags) ? envTags.find((t) => t.id === e.environmentTagId) : null
-                return {
-                  id: e.id,
-                  name: e.name || '—',
-                  baseUrl: e.baseUrl || '—',
-                  type: e.type || 'camunda7',
-                  environment: envTag?.name || '—',
-                  active: e.id === activeId ? 'Active' : 'Inactive',
-                  health: '',
-                  version: '',
-                  actions: '',
-                }
-              }),
-            ]}
+            rows={visibleEngines.map((e: any) => {
+              const envTag = Array.isArray(envTags) ? envTags.find((t) => t.id === e.environmentTagId) : null
+              return {
+                id: e.id,
+                name: e.name || '—',
+                baseUrl: e.baseUrl || '—',
+                type: e.type || 'camunda7',
+                environment: envTag?.name || '—',
+                health: '',
+                version: '',
+                actions: '',
+              }
+            })}
             headers={tableHeaders}
           >
             {({ rows: tableRows, headers, getHeaderProps, getRowProps, getTableProps, getToolbarProps }) => (
@@ -492,12 +455,8 @@ export default function Engines() {
                       </TableRow>
                     )}
                     {tableRows.map((row) => {
-                      const isEnvRow = row.id === '__env__'
-                      const engine = isEnvRow
-                        ? (activeQ.data as any)
-                        : rows.find((e: any) => e.id === row.id)
-                      const isActive = isEnvRow || row.id === activeId
-                      const canManage = !isEnvRow && !!engine && canManageEngine(engine)
+                      const engine = rows.find((e: any) => e.id === row.id)
+                      const canManage = !!engine && canManageEngine(engine)
 
                       return (
                         <TableRow {...getRowProps({ row })}>
@@ -505,7 +464,7 @@ export default function Engines() {
                             const key = cell.info.header
 
                             if (key === 'baseUrl') {
-                              const url = isEnvRow ? activeQ.data?.baseUrl : engine?.baseUrl
+                              const url = engine?.baseUrl
                               const safeHref = (() => {
                                 if (typeof url !== 'string') return null
                                 const raw = url.trim()
@@ -540,7 +499,6 @@ export default function Engines() {
                             }
 
                             if (key === 'environment') {
-                              if (isEnvRow) return <TableCell key={cell.id}>—</TableCell>
                               const envTag = Array.isArray(envTags)
                                 ? envTags.find((t) => t.id === engine?.environmentTagId)
                                 : null
@@ -565,28 +523,8 @@ export default function Engines() {
                               )
                             }
 
-                            if (key === 'active') {
-                              return (
-                                <TableCell key={cell.id}>
-                                  {isActive ? (
-                                    <Tag type="green">Active</Tag>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      kind="ghost"
-                                      renderIcon={Power}
-                                      onClick={() => activateM.mutate(row.id)}
-                                      disabled={activateM.isPending || !canManage}
-                                    >
-                                      Set active
-                                    </Button>
-                                  )}
-                                </TableCell>
-                              )
-                            }
-
                             if (key === 'health') {
-                              const id = isEnvRow ? (activeQ.data?.id || '__env__') : row.id
+                              const id = row.id
                               return (
                                 <TableCell key={cell.id}>
                                   <EngineHealthBadge engineId={id} version={engine?.version} />
@@ -595,7 +533,7 @@ export default function Engines() {
                             }
 
                             if (key === 'version') {
-                              const id = isEnvRow ? (activeQ.data?.id || '__env__') : row.id
+                              const id = row.id
                               return (
                                 <TableCell key={cell.id}>
                                   <EngineVersionCell engineId={id} initialVersion={engine?.version} />
@@ -607,43 +545,20 @@ export default function Engines() {
                               return (
                                 <TableCell key={cell.id} onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
                                   <OverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
-                                    {((isEnvRow && isAdmin) || (!isEnvRow && canManage)) && (
+                                    {canManage && (
                                       <OverflowMenuItem
                                         itemText="Edit"
-                                        onClick={() => {
-                                          if (isEnvRow) {
-                                            setEditing(null)
-                                            setForm({
-                                              name: 'Environment',
-                                              baseUrl: activeQ.data?.baseUrl || '',
-                                              type: activeQ.data?.type || 'camunda7',
-                                              authType:
-                                                activeQ.data?.authType ||
-                                                (activeQ.data?.username ? 'basic' : 'none'),
-                                              username: activeQ.data?.username || '',
-                                              passwordEnc: '',
-                                              environmentTagId: '',
-                                            })
-                                            engineModal.openModal()
-                                            return
-                                          }
-                                          openEdit(engine)
-                                        }}
+                                        onClick={() => openEdit(engine)}
                                       />
                                     )}
-                                    {!isEnvRow && !isActive && canManage && (
-                                      <OverflowMenuItem itemText="Set active" onClick={() => activateM.mutate(row.id)} />
-                                    )}
-                                    {!isEnvRow && canManage && (
+                                    {canManage && (
                                       <OverflowMenuItem itemText="Test connection" onClick={() => testM.mutate(row.id)} />
                                     )}
-                                    {!isEnvRow && (
-                                      <OverflowMenuItem
-                                        itemText="Manage members"
-                                        onClick={() => openMembersPanel(engine)}
-                                      />
-                                    )}
-                                    {!isEnvRow && canManage && (
+                                    <OverflowMenuItem
+                                      itemText="Manage members"
+                                      onClick={() => openMembersPanel(engine)}
+                                    />
+                                    {canManage && (
                                       <OverflowMenuItem
                                         itemText="Delete"
                                         isDelete

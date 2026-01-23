@@ -13,7 +13,6 @@ let projectId = '';
 let folderIds: string[] = [];
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -37,7 +36,7 @@ describe('Starbase folders', () => {
 
   it('creates and lists folders', async () => {
     const createResponse = await request(app)
-      .post(`/starbase-api/projects/${projectId}/folders`)
+      .post(`/t/default/starbase-api/projects/${projectId}/folders`)
       .set('Authorization', `Bearer ${authToken}`)
       .send({ name: `${prefix}-folder` });
 
@@ -45,7 +44,7 @@ describe('Starbase folders', () => {
     folderIds.push(String(createResponse.body?.id));
 
     const listResponse = await request(app)
-      .get(`/starbase-api/projects/${projectId}/folders`)
+      .get(`/t/default/starbase-api/projects/${projectId}/folders`)
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(listResponse.status).toBe(200);
@@ -55,7 +54,7 @@ describe('Starbase folders', () => {
 
   it('rejects duplicate folder names in the same parent', async () => {
     const firstResponse = await request(app)
-      .post(`/starbase-api/projects/${projectId}/folders`)
+      .post(`/t/default/starbase-api/projects/${projectId}/folders`)
       .set('Authorization', `Bearer ${authToken}`)
       .send({ name: `${prefix}-dup-folder` });
 
@@ -63,7 +62,7 @@ describe('Starbase folders', () => {
     folderIds.push(String(firstResponse.body?.id));
 
     const dupResponse = await request(app)
-      .post(`/starbase-api/projects/${projectId}/folders`)
+      .post(`/t/default/starbase-api/projects/${projectId}/folders`)
       .set('Authorization', `Bearer ${authToken}`)
       .send({ name: `${prefix}-dup-folder` });
 
@@ -72,7 +71,7 @@ describe('Starbase folders', () => {
 
   it('renames a folder', async () => {
     const createResponse = await request(app)
-      .post(`/starbase-api/projects/${projectId}/folders`)
+      .post(`/t/default/starbase-api/projects/${projectId}/folders`)
       .set('Authorization', `Bearer ${authToken}`)
       .send({ name: `${prefix}-rename-folder` });
 
@@ -81,7 +80,7 @@ describe('Starbase folders', () => {
     folderIds.push(renameId);
 
     const renameResponse = await request(app)
-      .patch(`/starbase-api/folders/${renameId}`)
+      .patch(`/t/default/starbase-api/folders/${renameId}`)
       .set('Authorization', `Bearer ${authToken}`)
       .send({ name: `${prefix}-renamed-folder` });
 
@@ -91,7 +90,7 @@ describe('Starbase folders', () => {
 
   it('rejects unauthenticated folder rename', async () => {
     const response = await request(app)
-      .patch(`/starbase-api/folders/00000000-0000-0000-0000-000000000000`)
+      .patch(`/t/default/starbase-api/folders/00000000-0000-0000-0000-000000000000`)
       .send({ name: `${prefix}-fail` });
 
     expect(response.status).toBe(401);
@@ -99,7 +98,7 @@ describe('Starbase folders', () => {
 
   it('rejects non-member folder creation', async () => {
     const response = await request(app)
-      .post(`/starbase-api/projects/${projectId}/folders`)
+      .post(`/t/default/starbase-api/projects/${projectId}/folders`)
       .set('Authorization', `Bearer ${otherToken}`)
       .send({ name: `${prefix}-other-folder` });
 
@@ -108,7 +107,7 @@ describe('Starbase folders', () => {
 
   it('validates missing folder name', async () => {
     const response = await request(app)
-      .post(`/starbase-api/projects/${projectId}/folders`)
+      .post(`/t/default/starbase-api/projects/${projectId}/folders`)
       .set('Authorization', `Bearer ${authToken}`)
       .send({});
 

@@ -61,7 +61,7 @@ export function toEnginePlan(body: any) {
   }
 }
 
-async function insertLocalBatch(type: string, camundaBatchId: string, payload: any, engineDto: any) {
+async function insertLocalBatch(type: string, camundaBatchId: string, payload: any, engineDto: any, engineId: string) {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const now = Date.now()
@@ -74,6 +74,7 @@ async function insertLocalBatch(type: string, camundaBatchId: string, payload: a
   const batchJobDefinitionId = engineDto?.batchJobDefinitionId || null
   await batchRepo.insert({
     id,
+    engineId,
     camundaBatchId,
     type,
     payload: JSON.stringify(payload ?? {}),
@@ -94,29 +95,29 @@ async function insertLocalBatch(type: string, camundaBatchId: string, payload: a
   return { id }
 }
 
-export async function previewMigrationCount(plan: any, processInstanceIds?: string[]) {
+export async function previewMigrationCount(engineId: string, plan: any, processInstanceIds?: string[]) {
   if (Array.isArray(processInstanceIds) && processInstanceIds.length > 0) {
     return processInstanceIds.length
   }
   const enginePlan = toEnginePlan(plan)
   const srcDefId = enginePlan?.sourceProcessDefinitionId
   if (!srcDefId) throw new Error('sourceProcessDefinitionId required')
-  const dto: any = await getProcessInstanceCount<any>({ processDefinitionId: srcDefId })
+  const dto: any = await getProcessInstanceCount<any>(engineId, { processDefinitionId: srcDefId })
   return typeof dto?.count === 'number' ? dto.count : 0
 }
 
-export async function generateMigrationPlan(planBody: any) {
+export async function generateMigrationPlan(engineId: string, planBody: any) {
   const plan = toEnginePlan(planBody)
-  return postMigrationGenerate<any>(plan)
+  return postMigrationGenerate<any>(engineId, plan)
 }
 
-export async function validateMigrationPlan(body: any) {
+export async function validateMigrationPlan(engineId: string, body: any) {
   const incoming = body?.plan ?? body
   const plan = toEnginePlan(incoming)
-  return postMigrationValidate<any>(plan)
+  return postMigrationValidate<any>(engineId, plan)
 }
 
-export async function executeMigrationAsync(body: any) {
+export async function executeMigrationAsync(engineId: string, body: any) {
   const { plan, processInstanceIds, skipCustomListeners, skipIoMappings, variables } = body || {}
   const enginePlan = toEnginePlan(plan)
   const engineReq: any = { migrationPlan: enginePlan }
@@ -129,12 +130,12 @@ export async function executeMigrationAsync(body: any) {
   if (typeof skipCustomListeners === 'boolean') engineReq.skipCustomListeners = skipCustomListeners
   if (typeof skipIoMappings === 'boolean') engineReq.skipIoMappings = skipIoMappings
   if (variables && typeof variables === 'object') engineReq.variables = variables
-  const engineDto: any = await postMigrationExecuteAsync<any>(engineReq)
-  const { id } = await insertLocalBatch('MIGRATE_INSTANCES', engineDto?.id, body, engineDto)
+  const engineDto: any = await postMigrationExecuteAsync<any>(engineId, engineReq)
+  const { id } = await insertLocalBatch('MIGRATE_INSTANCES', engineDto?.id, body, engineDto, engineId)
   return { id, camundaBatchId: engineDto?.id, type: 'MIGRATE_INSTANCES' }
 }
 
-export async function executeMigrationDirect(body: any) {
+export async function executeMigrationDirect(engineId: string, body: any) {
   const { plan, processInstanceIds, skipCustomListeners, skipIoMappings, variables } = body || {}
   const enginePlan = toEnginePlan(plan)
   const engineReq: any = { migrationPlan: enginePlan }
@@ -147,16 +148,16 @@ export async function executeMigrationDirect(body: any) {
   if (typeof skipCustomListeners === 'boolean') engineReq.skipCustomListeners = skipCustomListeners
   if (typeof skipIoMappings === 'boolean') engineReq.skipIoMappings = skipIoMappings
   if (variables && typeof variables === 'object') engineReq.variables = variables
-  await postMigrationExecute<any>(engineReq)
+  await postMigrationExecute<any>(engineId, engineReq)
 }
 
-export async function aggregateActiveSources(processInstanceIds: string[]) {
+export async function aggregateActiveSources(engineId: string, processInstanceIds: string[]) {
   if (!Array.isArray(processInstanceIds) || processInstanceIds.length === 0) {
     throw new Error('processInstanceIds required')
   }
   const counts: Record<string, number> = {}
   for (const pid of processInstanceIds) {
-    const root: any = await getProcessInstanceActivityTree<any>(pid)
+    const root: any = await getProcessInstanceActivityTree<any>(engineId, pid)
     const stack: any[] = root ? [root] : []
     while (stack.length) {
       const node = stack.pop()

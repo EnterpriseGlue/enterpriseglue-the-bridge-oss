@@ -1,8 +1,5 @@
-// Export all Camunda services
+// Export Camunda types
 export * from './types.js';
-export * from './client.js';
-export * from './process-definitions.js';
 
-// Re-export legacy functions for backward compatibility
-// These can be gradually replaced with the new service classes
+// Re-export engine client functions that require explicit engineId
 export { camundaGet, camundaPost, camundaDelete } from '../bpmn-engine-client.js';

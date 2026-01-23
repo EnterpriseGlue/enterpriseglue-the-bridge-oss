@@ -9,18 +9,18 @@ import {
   getProcessDefinitionDiagram,
 } from '@shared/services/bpmn-engine-client.js'
 
-export async function listDeployments(params: any) {
-  return getDeployments<any[]>(params)
+export async function listDeployments(engineId: string, params: any) {
+  return getDeployments<any[]>(engineId, params)
 }
 
-export async function fetchDeploymentById(id: string) {
-  return getDeployment<any>(id)
+export async function fetchDeploymentById(engineId: string, id: string) {
+  return getDeployment<any>(engineId, id)
 }
 
-export async function removeDeployment(id: string, cascade: boolean) {
-  return deleteDeployment(id, cascade)
+export async function removeDeployment(engineId: string, id: string, cascade: boolean) {
+  return deleteDeployment(engineId, id, cascade)
 }
 
-export async function fetchProcessDefinitionDiagram(id: string) {
-  return getProcessDefinitionDiagram<any>(id)
+export async function fetchProcessDefinitionDiagram(engineId: string, id: string) {
+  return getProcessDefinitionDiagram<any>(engineId, id)
 }

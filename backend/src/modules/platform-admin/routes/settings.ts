@@ -13,6 +13,15 @@ import { logAudit } from '@shared/services/audit.js';
 
 const router = Router();
 
+// Disable OSS platform settings endpoints when EE plugin is active
+router.use((req, _res, next) => {
+  if (req.app?.locals?.enterprisePluginLoaded) {
+    const err = Errors.notFound('Settings endpoint');
+    return next(err);
+  }
+  return next();
+});
+
 const updateSettingsSchema = z.object({
   defaultEnvironmentTagId: z.string().nullable().optional(),
   syncPushEnabled: z.boolean().optional(),

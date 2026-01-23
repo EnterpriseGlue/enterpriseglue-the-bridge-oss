@@ -123,7 +123,6 @@ export async function seedEngine(ownerId: string, baseUrl: string, name: string)
     authType: null,
     username: null,
     passwordEnc: null,
-    active: true,
     version: null,
     ownerId,
     delegateId: null,

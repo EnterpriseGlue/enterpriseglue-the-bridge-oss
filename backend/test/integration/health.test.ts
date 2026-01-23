@@ -6,7 +6,6 @@ describe('GET /health', () => {
   it('returns ok status', async () => {
     const app = createApp({
       registerRoutes: false,
-      includeTenantContext: false,
       includeRateLimiting: false,
       includeDocs: false,
     });

@@ -5,7 +5,6 @@ import { createApp } from '../../src/app.js';
 describe('POST /api/auth/login', () => {
   it('returns validation error for missing body fields', async () => {
     const app = createApp({
-      includeTenantContext: false,
       includeRateLimiting: false,
     });
 

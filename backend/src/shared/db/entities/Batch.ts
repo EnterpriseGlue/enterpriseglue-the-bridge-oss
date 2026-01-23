@@ -3,6 +3,9 @@ import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'batches', schema: 'main' })
 export class Batch extends AppBaseEntity {
+  @Column({ name: 'engine_id', type: 'text', nullable: true })
+  engineId!: string | null;
+
   @Column({ name: 'camunda_batch_id', type: 'text', nullable: true })
   camundaBatchId!: string | null;
 

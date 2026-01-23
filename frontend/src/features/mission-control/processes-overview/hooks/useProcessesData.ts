@@ -228,20 +228,6 @@ export function useProcessesData({
     enabled: !selectedVersion || !!defIdForVersion,
   })
 
-  // Auto-refresh when engine changes
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'vt_active_engine_changed') {
-        try {
-          xmlQ.refetch()
-          countsQ.refetch()
-          defIdQ.refetch()
-        } catch {}
-      }
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [xmlQ, countsQ, defIdQ])
 
   return {
     defsQ,

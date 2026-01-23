@@ -39,7 +39,7 @@ describe('EngineSelector', () => {
 
     expect(screen.getByTestId('engine-dropdown')).toBeInTheDocument();
     const props = dropdownSpy.mock.calls[0][0];
-    expect(props.items[0]).toMatchObject({ id: '__all__', label: 'All Engines' });
+    expect(props.items[0]).toMatchObject({ id: 'e1', label: 'Engine 1' });
   });
 
   it('auto-selects single engine', async () => {

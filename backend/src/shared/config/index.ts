@@ -92,8 +92,6 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   
   // Environment
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
-
-  multiTenant: z.boolean().default(false),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -160,8 +158,6 @@ function loadConfig(): Config {
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
     nodeEnv: inferredNodeEnv,
-
-    multiTenant: process.env.MULTI_TENANT === 'true',
   };
 
   try {

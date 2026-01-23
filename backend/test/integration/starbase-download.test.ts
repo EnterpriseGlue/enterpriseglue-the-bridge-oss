@@ -12,7 +12,6 @@ let projectIds: string[] = [];
 let fileIds: string[] = [];
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -36,7 +35,7 @@ describe('Starbase project download', () => {
 
   it('returns a zip for project download', async () => {
     const response = await request(app)
-      .get(`/starbase-api/projects/${projectId}/download`)
+      .get(`/t/default/starbase-api/projects/${projectId}/download`)
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(response.status).toBe(200);
@@ -48,7 +47,7 @@ describe('Starbase project download', () => {
     projectIds.push(emptyProject.id);
 
     const response = await request(app)
-      .get(`/starbase-api/projects/${emptyProject.id}/download`)
+      .get(`/t/default/starbase-api/projects/${emptyProject.id}/download`)
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(response.status).toBe(204);
@@ -56,7 +55,7 @@ describe('Starbase project download', () => {
 
   it('rejects unauthenticated project download', async () => {
     const response = await request(app)
-      .get(`/starbase-api/projects/${projectId}/download`);
+      .get(`/t/default/starbase-api/projects/${projectId}/download`);
 
     expect(response.status).toBe(401);
   });

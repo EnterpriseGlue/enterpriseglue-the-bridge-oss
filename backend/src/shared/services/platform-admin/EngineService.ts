@@ -72,17 +72,20 @@ export class EngineService {
   }
 
   /**
-   * Get all engines a user has access to
+   * Get all engines a user has access to, optionally filtered by tenant
    */
-  async getUserEngines(userId: string): Promise<EngineWithDetails[]> {
+  async getUserEngines(userId: string, tenantId?: string): Promise<EngineWithDetails[]> {
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
     const memberRepo = dataSource.getRepository(EngineMember);
     const tagRepo = dataSource.getRepository(EnvironmentTag);
     const results: EngineWithDetails[] = [];
 
+    // Build base query condition with optional tenant filter
+    const tenantCondition = tenantId ? { tenantId } : {};
+
     // Get engines where user is owner
-    const ownedEngines = await engineRepo.find({ where: { ownerId: userId } });
+    const ownedEngines = await engineRepo.find({ where: { ownerId: userId, ...tenantCondition } });
     const tagIds = new Set<string>();
     ownedEngines.forEach(e => e.environmentTagId && tagIds.add(e.environmentTagId));
     
@@ -95,7 +98,7 @@ export class EngineService {
     }
 
     // Get engines where user is delegate
-    const delegatedEngines = await engineRepo.find({ where: { delegateId: userId } });
+    const delegatedEngines = await engineRepo.find({ where: { delegateId: userId, ...tenantCondition } });
     delegatedEngines.forEach(e => e.environmentTagId && tagIds.add(e.environmentTagId));
     
     for (const engine of delegatedEngines) {
@@ -114,7 +117,10 @@ export class EngineService {
 
     if (memberships.length > 0) {
       const memberEngineIds = memberships.map(m => m.engineId);
-      const memberEngines = await engineRepo.find({ where: { id: In(memberEngineIds) } });
+      // Filter member engines by tenant if specified
+      const memberEngines = tenantId 
+        ? await engineRepo.find({ where: { id: In(memberEngineIds), tenantId } })
+        : await engineRepo.find({ where: { id: In(memberEngineIds) } });
       memberEngines.forEach(e => e.environmentTagId && tagIds.add(e.environmentTagId));
 
       for (const engine of memberEngines) {

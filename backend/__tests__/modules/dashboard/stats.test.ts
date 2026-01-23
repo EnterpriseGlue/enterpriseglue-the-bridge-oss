@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import statsRouter from '../../../src/modules/dashboard/stats.js';
 import { getDataSource } from '../../../src/shared/db/data-source.js';
 import { ProjectMember } from '../../../src/shared/db/entities/ProjectMember.js';
 import { File } from '../../../src/shared/db/entities/File.js';
@@ -20,9 +19,10 @@ vi.mock('@shared/middleware/auth.js', () => ({
 describe('GET /api/dashboard/stats', () => {
   let app: express.Application;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     app = express();
     app.use(express.json());
+    const { default: statsRouter } = await import('../../../src/modules/dashboard/stats.js');
     app.use(statsRouter);
     vi.clearAllMocks();
   });

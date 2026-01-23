@@ -1,14 +1,12 @@
 import { Router } from 'express';
-import { MoreThan, IsNull, Not } from 'typeorm';
+import { MoreThan } from 'typeorm';
 import { logger } from '@shared/utils/logger.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { requirePlatformAdmin } from '@shared/middleware/platformAuth.js';
-import { resolveTenantContext, requireTenantRole } from '@shared/middleware/tenant.js';
 import { getUserAuditLogs, getResourceAuditLogs } from '@shared/services/audit.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { AuditLog } from '@shared/db/entities/AuditLog.js';
-import { Tenant } from '@shared/db/entities/Tenant.js';
 
 const router = Router();
 
@@ -25,28 +23,8 @@ router.get('/api/audit/logs', requireAuth, requirePlatformAdmin, asyncHandler(as
     const userId = req.query.userId as string;
     const resourceType = req.query.resourceType as string;
     const resourceId = req.query.resourceId as string;
-    const tenantIdParam = req.query.tenantId as string;
-    const tenantSlugParam = req.query.tenantSlug as string;
     const dataSource = await getDataSource();
     const auditRepo = dataSource.getRepository(AuditLog);
-    const tenantRepo = dataSource.getRepository(Tenant);
-
-    let resolvedTenantId: string | null = null;
-    if (tenantIdParam) {
-      resolvedTenantId = tenantIdParam;
-    } else if (tenantSlugParam) {
-      const t = await tenantRepo.findOneBy({ slug: tenantSlugParam });
-      if (!t) throw Errors.validation('Tenant not found');
-      resolvedTenantId = t.id;
-    }
-
-    // Build WHERE conditions
-    const where: any = {};
-    if (action) where.action = action;
-    if (userId) where.userId = userId;
-    if (resourceType) where.resourceType = resourceType;
-    if (resourceId) where.resourceId = resourceId;
-    if (resolvedTenantId) where.tenantId = resolvedTenantId;
 
     // Get logs (no tenant join since relation was removed)
     const qb = auditRepo.createQueryBuilder('audit')
@@ -58,23 +36,15 @@ router.get('/api/audit/logs', requireAuth, requirePlatformAdmin, asyncHandler(as
     if (userId) qb.andWhere('audit.userId = :userId', { userId });
     if (resourceType) qb.andWhere('audit.resourceType = :resourceType', { resourceType });
     if (resourceId) qb.andWhere('audit.resourceId = :resourceId', { resourceId });
-    if (resolvedTenantId) qb.andWhere('audit.tenantId = :tenantId', { tenantId: resolvedTenantId });
 
     const [result, total] = await qb.getManyAndCount();
 
     // Get tenant info for logs that have tenantId
-    const tenantIds = [...new Set(result.filter(r => r.tenantId).map(r => r.tenantId!))];
-    const tenantMap = new Map<string, { slug: string; name: string }>();
-    if (tenantIds.length > 0) {
-      const tenants = await tenantRepo.find({ where: tenantIds.map(id => ({ id })) });
-      tenants.forEach(t => tenantMap.set(t.id, { slug: t.slug, name: t.name }));
-    }
-
     const logs = result.map((row) => ({
       id: row.id,
       tenantId: row.tenantId || null,
-      tenantSlug: row.tenantId ? tenantMap.get(row.tenantId)?.slug || null : null,
-      tenantName: row.tenantId ? tenantMap.get(row.tenantId)?.name || null : null,
+      tenantSlug: null,
+      tenantName: null,
       userId: row.userId,
       action: row.action,
       resourceType: row.resourceType,
@@ -100,108 +70,6 @@ router.get('/api/audit/logs', requireAuth, requirePlatformAdmin, asyncHandler(as
   }
 }));
 
-router.get(
-  '/api/t/:tenantSlug/audit/stats',
-  requireAuth,
-  resolveTenantContext({ required: true }),
-  requireTenantRole('tenant_admin'),
-  asyncHandler(async (req, res) => {
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-    const dataSource = await getDataSource();
-    const auditRepo = dataSource.getRepository(AuditLog);
-    const tenantId = req.tenant!.tenantId;
-
-    const total = await auditRepo.count({ where: { tenantId } });
-
-    const byAction = await auditRepo.createQueryBuilder('audit')
-      .select('audit.action', 'action')
-      .addSelect('COUNT(*)', 'count')
-      .where('audit.tenantId = :tenantId', { tenantId })
-      .groupBy('audit.action')
-      .orderBy('count', 'DESC')
-      .limit(10)
-      .getRawMany();
-
-    const byUser = await auditRepo.createQueryBuilder('audit')
-      .select('audit.userId', 'user_id')
-      .addSelect('COUNT(*)', 'count')
-      .where('audit.tenantId = :tenantId AND audit.userId IS NOT NULL', { tenantId })
-      .groupBy('audit.userId')
-      .orderBy('count', 'DESC')
-      .limit(10)
-      .getRawMany();
-
-    const last24Hours = await auditRepo.count({
-      where: { tenantId, createdAt: MoreThan(oneDayAgo) },
-    });
-
-    const failedLogins = await auditRepo.count({
-      where: { tenantId, action: 'auth.login.failed', createdAt: MoreThan(oneDayAgo) },
-    });
-
-    res.json({ total, last24Hours, failedLogins, byAction, byUser });
-  })
-);
-
-router.get(
-  '/api/t/:tenantSlug/audit/logs',
-  requireAuth,
-  resolveTenantContext({ required: true }),
-  requireTenantRole('tenant_admin'),
-  asyncHandler(async (req, res) => {
-    const limitNum = parseInt(req.query.limit as string) || 100;
-    const offsetNum = parseInt(req.query.offset as string) || 0;
-    const action = req.query.action as string;
-    const userId = req.query.userId as string;
-    const resourceType = req.query.resourceType as string;
-    const resourceId = req.query.resourceId as string;
-    const dataSource = await getDataSource();
-    const auditRepo = dataSource.getRepository(AuditLog);
-
-    const tenantId = req.tenant!.tenantId;
-
-    const qb = auditRepo.createQueryBuilder('audit')
-      .where('audit.tenantId = :tenantId', { tenantId })
-      .orderBy('audit.createdAt', 'DESC')
-      .skip(offsetNum)
-      .take(limitNum);
-
-    if (action) qb.andWhere('audit.action = :action', { action });
-    if (userId) qb.andWhere('audit.userId = :userId', { userId });
-    if (resourceType) qb.andWhere('audit.resourceType = :resourceType', { resourceType });
-    if (resourceId) qb.andWhere('audit.resourceId = :resourceId', { resourceId });
-
-    const [result, total] = await qb.getManyAndCount();
-
-    // Get tenant info from route params
-    const tenantSlug = req.params.tenantSlug;
-
-    const logs = result.map((row) => ({
-      id: row.id,
-      tenantId: row.tenantId || null,
-      tenantSlug,
-      tenantName: null,
-      userId: row.userId,
-      action: row.action,
-      resourceType: row.resourceType,
-      resourceId: row.resourceId,
-      ipAddress: row.ipAddress,
-      userAgent: row.userAgent,
-      details: row.details ? JSON.parse(row.details) : null,
-      createdAt: row.createdAt,
-    }));
-
-    res.json({
-      logs,
-      pagination: {
-        limit: limitNum,
-        offset: offsetNum,
-        total,
-        hasMore: offsetNum + limitNum < total,
-      },
-    });
-  })
-);
 
 /**
  * GET /api/audit/logs/user/:userId
@@ -243,26 +111,12 @@ router.get('/api/audit/logs/resource/:resourceType/:resourceId', requireAuth, re
  */
 router.get('/api/audit/stats', requireAuth, requirePlatformAdmin, asyncHandler(async (req, res) => {
   try {
-    const tenantIdParam = req.query.tenantId as string;
-    const tenantSlugParam = req.query.tenantSlug as string;
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const dataSource = await getDataSource();
     const auditRepo = dataSource.getRepository(AuditLog);
-    const tenantRepo = dataSource.getRepository(Tenant);
-
-    let resolvedTenantId: string | null = null;
-    if (tenantIdParam) {
-      resolvedTenantId = tenantIdParam;
-    } else if (tenantSlugParam) {
-      const t = await tenantRepo.findOneBy({ slug: tenantSlugParam });
-      if (!t) throw Errors.validation('Tenant not found');
-      resolvedTenantId = t.id;
-    }
-
-    const whereBase: any = resolvedTenantId ? { tenantId: resolvedTenantId } : {};
 
     // Total logs count
-    const total = await auditRepo.count({ where: whereBase });
+    const total = await auditRepo.count();
 
     // Logs by action (top 10)
     const byActionQb = auditRepo.createQueryBuilder('audit')
@@ -271,7 +125,6 @@ router.get('/api/audit/stats', requireAuth, requirePlatformAdmin, asyncHandler(a
       .groupBy('audit.action')
       .orderBy('count', 'DESC')
       .limit(10);
-    if (resolvedTenantId) byActionQb.where('audit.tenantId = :tenantId', { tenantId: resolvedTenantId });
     const byAction = await byActionQb.getRawMany();
 
     // Logs by user (top 10 most active)
@@ -282,17 +135,16 @@ router.get('/api/audit/stats', requireAuth, requirePlatformAdmin, asyncHandler(a
       .groupBy('audit.userId')
       .orderBy('count', 'DESC')
       .limit(10);
-    if (resolvedTenantId) byUserQb.andWhere('audit.tenantId = :tenantId', { tenantId: resolvedTenantId });
     const byUser = await byUserQb.getRawMany();
 
     // Recent activity (last 24 hours)
     const last24Hours = await auditRepo.count({
-      where: { ...whereBase, createdAt: MoreThan(oneDayAgo) },
+      where: { createdAt: MoreThan(oneDayAgo) },
     });
 
     // Failed login attempts (last 24 hours)
     const failedLogins = await auditRepo.count({
-      where: { ...whereBase, action: 'auth.login.failed', createdAt: MoreThan(oneDayAgo) },
+      where: { action: 'auth.login.failed', createdAt: MoreThan(oneDayAgo) },
     });
 
     res.json({
@@ -316,23 +168,10 @@ router.get('/api/audit/actions', requireAuth, requirePlatformAdmin, asyncHandler
   try {
     const dataSource = await getDataSource();
     const auditRepo = dataSource.getRepository(AuditLog);
-    const tenantRepo = dataSource.getRepository(Tenant);
-    const tenantIdParam = req.query.tenantId as string;
-    const tenantSlugParam = req.query.tenantSlug as string;
-
-    let resolvedTenantId: string | null = null;
-    if (tenantIdParam) {
-      resolvedTenantId = tenantIdParam;
-    } else if (tenantSlugParam) {
-      const t = await tenantRepo.findOneBy({ slug: tenantSlugParam });
-      if (!t) throw Errors.validation('Tenant not found');
-      resolvedTenantId = t.id;
-    }
 
     const qb = auditRepo.createQueryBuilder('audit')
       .select('DISTINCT audit.action', 'action')
       .orderBy('audit.action', 'ASC');
-    if (resolvedTenantId) qb.where('audit.tenantId = :tenantId', { tenantId: resolvedTenantId });
 
     const result = await qb.getRawMany();
     const actions = result.map((row: any) => row.action);
@@ -343,26 +182,5 @@ router.get('/api/audit/actions', requireAuth, requirePlatformAdmin, asyncHandler
     throw Errors.internal('Failed to retrieve audit actions');
   }
 }));
-
-router.get(
-  '/api/t/:tenantSlug/audit/actions',
-  requireAuth,
-  resolveTenantContext({ required: true }),
-  requireTenantRole('tenant_admin'),
-  asyncHandler(async (req, res) => {
-    const dataSource = await getDataSource();
-    const auditRepo = dataSource.getRepository(AuditLog);
-    const tenantId = req.tenant!.tenantId;
-
-    const result = await auditRepo.createQueryBuilder('audit')
-      .select('DISTINCT audit.action', 'action')
-      .where('audit.tenantId = :tenantId', { tenantId })
-      .orderBy('audit.action', 'ASC')
-      .getRawMany();
-
-    const actions = result.map((row: any) => row.action);
-    res.json({ actions });
-  })
-);
 
 export default router;

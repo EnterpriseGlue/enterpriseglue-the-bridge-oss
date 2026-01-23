@@ -1,15 +1,16 @@
 /**
  * Setup Status API Routes
  * Check if the platform has been configured (first-run detection)
+ * 
+ * Note: In OSS single-tenant mode, tenant checks are skipped.
+ * Multi-tenancy is an EE-only feature.
  */
 
 import { Router } from 'express';
 import { apiLimiter } from '@shared/middleware/rateLimiter.js';
-import { logger } from '@shared/utils/logger.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { getDataSource } from '@shared/db/data-source.js';
-import { Tenant } from '@shared/db/entities/Tenant.js';
 import { User } from '@shared/db/entities/User.js';
 import { EmailSendConfig } from '@shared/db/entities/EmailSendConfig.js';
 
@@ -32,12 +33,11 @@ interface SetupStatus {
  */
 router.get('/api/admin/setup-status', apiLimiter, requireAuth, asyncHandler(async (req, res) => {
   const dataSource = await getDataSource();
-  const tenantRepo = dataSource.getRepository(Tenant);
   const userRepo = dataSource.getRepository(User);
   const emailConfigRepo = dataSource.getRepository(EmailSendConfig);
 
-  // Check if default tenant exists
-  const hasDefaultTenant = await tenantRepo.count() > 0;
+  // OSS single-tenant mode: tenant is always considered present
+  const hasDefaultTenant = true;
 
   // Check if at least one admin user exists
   const hasAdminUser = await userRepo.count({ where: { platformRole: 'admin' } }) > 0;
@@ -47,15 +47,12 @@ router.get('/api/admin/setup-status', apiLimiter, requireAuth, asyncHandler(asyn
 
   // Build required actions list
   const requiredActions: string[] = [];
-  if (!hasDefaultTenant) {
-    requiredActions.push('Create a tenant');
-  }
   if (!hasAdminUser) {
     requiredActions.push('Configure admin user');
   }
 
-  // Platform is configured if we have at least a tenant and admin
-  const isConfigured = hasDefaultTenant && hasAdminUser;
+  // Platform is configured if we have an admin user
+  const isConfigured = hasAdminUser;
 
   const status: SetupStatus = {
     isConfigured,

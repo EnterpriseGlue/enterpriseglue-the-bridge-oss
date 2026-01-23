@@ -10,10 +10,19 @@ import { validateBody, validateParams } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { logAudit } from '@shared/services/audit.js';
 import { getDataSource } from '@shared/db/data-source.js';
-import { TenantSettings } from '@shared/db/entities/TenantSettings.js';
+// TenantSettings removed - multi-tenancy is EE-only
 import { PlatformSettings } from '@shared/db/entities/PlatformSettings.js';
 
 const router = Router();
+
+// Disable OSS platform branding endpoints when EE plugin is active
+router.use((req, _res, next) => {
+  if (req.app?.locals?.enterprisePluginLoaded) {
+    const err = Errors.notFound('Branding endpoint');
+    return next(err);
+  }
+  return next();
+});
 
 const tenantIdParamsSchema = z.object({ tenantId: z.string().min(1) });
 
@@ -177,127 +186,7 @@ router.delete('/', apiLimiter, asyncHandler(async (req, res) => {
   }
 }));
 
-// ============ Tenant Branding ============
-
-router.get('/tenants/:tenantId', apiLimiter, validateParams(tenantIdParamsSchema), asyncHandler(async (req, res) => {
-  try {
-    const dataSource = await getDataSource();
-    const tenantSettingsRepo = dataSource.getRepository(TenantSettings);
-    const row = await tenantSettingsRepo.findOne({ where: { tenantId: req.params.tenantId } });
-
-    if (!row) {
-      throw Errors.notFound('Tenant');
-    }
-
-    res.json({
-      logoUrl: row.logoUrl || null,
-      logoTitle: row.logoTitle || null,
-      logoScale: row.logoScale ?? 100,
-      titleFontUrl: row.titleFontUrl || null,
-      titleFontWeight: row.titleFontWeight ?? '600',
-      titleFontSize: row.titleFontSize ?? 14,
-      titleVerticalOffset: row.titleVerticalOffset ?? 0,
-      menuAccentColor: row.menuAccentColor || null,
-    });
-  } catch (error) {
-    logger.error('Get tenant branding error:', error);
-    throw Errors.internal('Failed to get tenant branding');
-  }
-}));
-
-router.put(
-  '/tenants/:tenantId',
-  validateParams(tenantIdParamsSchema),
-  validateBody(updateTenantBrandingSchema),
-  asyncHandler(async (req, res) => {
-    try {
-      const dataSource = await getDataSource();
-      const tenantSettingsRepo = dataSource.getRepository(TenantSettings);
-      const now = Date.now();
-
-      const existing = await tenantSettingsRepo.findOne({
-        where: { tenantId: req.params.tenantId },
-        select: ['tenantId']
-      });
-
-      if (!existing) {
-        // Create tenant settings row if it doesn't exist
-        await tenantSettingsRepo.insert({
-          tenantId: req.params.tenantId,
-          inviteAllowAllDomains: true,
-          inviteAllowedDomains: '[]',
-          logoUrl: req.body.logoUrl,
-          logoTitle: req.body.logoTitle,
-          logoScale: req.body.logoScale ?? 100,
-          titleFontUrl: req.body.titleFontUrl,
-          titleFontWeight: req.body.titleFontWeight ?? '600',
-          titleFontSize: req.body.titleFontSize ?? 14,
-          titleVerticalOffset: req.body.titleVerticalOffset ?? 0,
-          menuAccentColor: req.body.menuAccentColor,
-          updatedAt: now,
-          updatedByUserId: req.user!.userId,
-        });
-      } else {
-        await tenantSettingsRepo.update({ tenantId: req.params.tenantId }, {
-          logoUrl: req.body.logoUrl,
-          logoTitle: req.body.logoTitle,
-          logoScale: req.body.logoScale ?? 100,
-          titleFontUrl: req.body.titleFontUrl,
-          titleFontWeight: req.body.titleFontWeight ?? '600',
-          titleFontSize: req.body.titleFontSize ?? 14,
-          titleVerticalOffset: req.body.titleVerticalOffset ?? 0,
-          menuAccentColor: req.body.menuAccentColor,
-          updatedAt: now,
-          updatedByUserId: req.user!.userId,
-        });
-      }
-
-      await logAudit({
-        action: 'admin.tenant.branding.update',
-        userId: req.user!.userId,
-        resourceType: 'tenant_settings',
-        resourceId: req.params.tenantId,
-        details: { logoTitle: req.body.logoTitle, hasLogo: !!req.body.logoUrl },
-        ipAddress: req.headers['x-forwarded-for'] as string || req.socket?.remoteAddress,
-        userAgent: req.headers['user-agent'],
-      });
-
-      res.json({ success: true });
-    } catch (error) {
-      logger.error('Update tenant branding error:', error);
-      throw Errors.internal('Failed to update tenant branding');
-    }
-  })
-);
-
-router.delete('/tenants/:tenantId', apiLimiter, validateParams(tenantIdParamsSchema), asyncHandler(async (req, res) => {
-  try {
-    const dataSource = await getDataSource();
-    const tenantSettingsRepo = dataSource.getRepository(TenantSettings);
-    const now = Date.now();
-
-    await tenantSettingsRepo.update({ tenantId: req.params.tenantId }, {
-      logoUrl: null,
-      logoTitle: null,
-      updatedAt: now,
-      updatedByUserId: req.user!.userId,
-    });
-
-    await logAudit({
-      action: 'admin.tenant.branding.reset',
-      userId: req.user!.userId,
-      resourceType: 'tenant_settings',
-      resourceId: req.params.tenantId,
-      details: {},
-      ipAddress: req.headers['x-forwarded-for'] as string || req.socket?.remoteAddress,
-      userAgent: req.headers['user-agent'],
-    });
-
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('Reset tenant branding error:', error);
-    throw Errors.internal('Failed to reset tenant branding');
-  }
-}));
+// Tenant branding routes removed - multi-tenancy is EE-only
+// Tenant branding is available in the Enterprise Edition
 
 export default router;

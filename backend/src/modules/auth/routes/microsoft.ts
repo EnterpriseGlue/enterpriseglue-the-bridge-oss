@@ -20,14 +20,6 @@ import { config } from '@shared/config/index.js';
 
 const router = Router();
 
-function parseTenantSlug(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const v = value.trim().toLowerCase();
-  if (v.length < 2 || v.length > 60) return null;
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v)) return null;
-  return v;
-}
-
 /**
  * Check if Microsoft Entra ID is enabled
  * GET /api/auth/microsoft/status
@@ -53,16 +45,6 @@ router.get('/api/auth/microsoft', apiLimiter, asyncHandler(async (req: Request, 
       });
     }
 
-    const tenantSlug = parseTenantSlug(req.query.tenantSlug);
-    if (tenantSlug) {
-      res.cookie('oauth_tenant_slug', tenantSlug, {
-        httpOnly: true,
-        secure: config.nodeEnv === 'production',
-        sameSite: 'lax',
-        maxAge: 10 * 60 * 1000,
-      });
-    }
-
     // Do not redirect to external providers from a handler that reads HTTP params.
     // Redirect internally to a dedicated start route.
     return res.redirect('/api/auth/microsoft/start');
@@ -76,15 +58,12 @@ router.get('/api/auth/microsoft', apiLimiter, asyncHandler(async (req: Request, 
 router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { code, state, error, error_description } = req.query;
 
-    const tenantSlug = parseTenantSlug(req.cookies?.oauth_tenant_slug);
-
     // Handle Microsoft errors
     if (error) {
       logger.error('[Microsoft Auth] OAuth error:', error, error_description);
       
       // Redirect to frontend with error
-      const loginPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/login` : '/login';
-      const errorUrl = `${config.frontendUrl}${loginPath}?error=microsoft_auth_failed&message=${encodeURIComponent(error_description as string || error as string)}`;
+      const errorUrl = `${config.frontendUrl}/login?error=microsoft_auth_failed&message=${encodeURIComponent(error_description as string || error as string)}`;
       return res.redirect(errorUrl);
     }
 
@@ -102,7 +81,6 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
 
     // Clear state cookie
     res.clearCookie('oauth_state');
-    res.clearCookie('oauth_tenant_slug');
 
     logger.info('[Microsoft Auth] Exchanging code for tokens...');
 
@@ -146,8 +124,7 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
         userAgent: req.headers['user-agent'],
       });
 
-      const loginPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/login` : '/login';
-      const errorUrl = `${config.frontendUrl}${loginPath}?error=account_deactivated&message=Your account has been deactivated`;
+      const errorUrl = `${config.frontendUrl}/login?error=account_deactivated&message=Your account has been deactivated`;
       return res.redirect(errorUrl);
     }
 
@@ -183,9 +160,7 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
 
     // Redirect directly to frontend root
     // Cookies are set, so AuthContext will automatically load the user
-    const successPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : '/';
-    const successUrl = `${config.frontendUrl}${successPath}`;
-    res.redirect(successUrl);
+    res.redirect(`${config.frontendUrl}/`);
 }));
 
 export default router;

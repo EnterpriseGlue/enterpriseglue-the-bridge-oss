@@ -11,26 +11,26 @@ import {
   getUserOperationLog,
 } from '@shared/services/bpmn-engine-client.js'
 
-export async function listHistoricTasks(params: any) {
-  return getHistoricTaskInstances<any[]>(params)
+export async function listHistoricTasks(engineId: string, params: any) {
+  return getHistoricTaskInstances<any[]>(engineId, params)
 }
 
-export async function listHistoricVariables(params: any) {
-  return getHistoricVariableInstances<any[]>(params)
+export async function listHistoricVariables(engineId: string, params: any) {
+  return getHistoricVariableInstances<any[]>(engineId, params)
 }
 
-export async function listHistoricDecisions(params: any) {
-  return getHistoricDecisionInstances<any[]>(params)
+export async function listHistoricDecisions(engineId: string, params: any) {
+  return getHistoricDecisionInstances<any[]>(engineId, params)
 }
 
-export async function listHistoricDecisionInputs(id: string) {
-  return getHistoricDecisionInstanceInputs<any[]>(id)
+export async function listHistoricDecisionInputs(engineId: string, id: string) {
+  return getHistoricDecisionInstanceInputs<any[]>(engineId, id)
 }
 
-export async function listHistoricDecisionOutputs(id: string) {
-  return getHistoricDecisionInstanceOutputs<any[]>(id)
+export async function listHistoricDecisionOutputs(engineId: string, id: string) {
+  return getHistoricDecisionInstanceOutputs<any[]>(engineId, id)
 }
 
-export async function listUserOperations(params: any) {
-  return getUserOperationLog<any[]>(params)
+export async function listUserOperations(engineId: string, params: any) {
+  return getUserOperationLog<any[]>(engineId, params)
 }

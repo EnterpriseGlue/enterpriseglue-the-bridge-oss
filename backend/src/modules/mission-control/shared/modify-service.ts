@@ -11,13 +11,14 @@ import {
   postProcessDefinitionRestartAsync,
 } from '@shared/services/bpmn-engine-client.js'
 
-async function insertLocalBatch(type: string, engineDto: any, payload: any) {
+async function insertLocalBatch(type: string, engineDto: any, payload: any, engineId: string) {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const now = Date.now()
   const id = randomUUID()
   await batchRepo.insert({
     id,
+    engineId,
     camundaBatchId: engineDto?.id ?? null,
     type,
     payload: JSON.stringify(payload ?? {}),
@@ -38,18 +39,18 @@ async function insertLocalBatch(type: string, engineDto: any, payload: any) {
   return { id }
 }
 
-export async function modifyProcessInstance(id: string, body: any) {
-  await postProcessInstanceModification(id, body)
+export async function modifyProcessInstance(engineId: string, id: string, body: any) {
+  await postProcessInstanceModification(engineId, id, body)
 }
 
-export async function modifyProcessDefinitionAsync(id: string, body: any) {
-  const engineDto: any = await postProcessDefinitionModificationAsync<any>(id, body)
-  const { id: batchId } = await insertLocalBatch('MODIFY_INSTANCES', engineDto, body)
+export async function modifyProcessDefinitionAsync(engineId: string, id: string, body: any) {
+  const engineDto: any = await postProcessDefinitionModificationAsync<any>(engineId, id, body)
+  const { id: batchId } = await insertLocalBatch('MODIFY_INSTANCES', engineDto, body, engineId)
   return { batchId, camundaBatchId: engineDto?.id }
 }
 
-export async function restartProcessDefinitionAsync(id: string, body: any) {
-  const engineDto: any = await postProcessDefinitionRestartAsync<any>(id, body)
-  const { id: batchId } = await insertLocalBatch('RESTART_INSTANCES', engineDto, body)
+export async function restartProcessDefinitionAsync(engineId: string, id: string, body: any) {
+  const engineDto: any = await postProcessDefinitionRestartAsync<any>(engineId, id, body)
+  const { id: batchId } = await insertLocalBatch('RESTART_INSTANCES', engineDto, body, engineId)
   return { batchId, camundaBatchId: engineDto?.id }
 }

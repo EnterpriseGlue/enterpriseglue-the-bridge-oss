@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   const proxyTarget = (globalThis as any).process?.env?.DEV_PROXY_TARGET || 'http://localhost:8787'
 
+  // Expose feature flags to frontend via import.meta.env
+  const multiTenant = (globalThis as any).process?.env?.MULTI_TENANT
+
   return {
     plugins: [react()],
     esbuild: {
@@ -11,6 +14,10 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       'process.env.NODE_ENV': JSON.stringify(mode === 'production' ? 'production' : 'development'),
+      // Expose MULTI_TENANT to frontend (same name as backend for consistency)
+      ...(multiTenant !== undefined && {
+        'import.meta.env.MULTI_TENANT': JSON.stringify(multiTenant),
+      }),
     },
     server: {
       port: 5173,

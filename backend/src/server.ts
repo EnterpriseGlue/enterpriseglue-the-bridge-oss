@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { createApp } from './app.js';
+import { createApp, registerBaseRoutes, registerFinalMiddleware } from './app.js';
 import { config } from '@shared/config/index.js';
 import { initializeDatabase } from '@shared/db/run-migrations.js';
 import { bootstrapAdmin, backfillKnownUserProfiles, backfillMissingPlatformRoles } from '@shared/db/bootstrap.js';
@@ -7,9 +7,12 @@ import { startBatchPoller } from './poller/batchPoller.js';
 import { getConnectionPool, ConnectionPool } from '@shared/db/db-pool.js';
 import { getAdapter } from '@shared/db/adapters/index.js';
 import { loadEnterpriseBackendPlugin } from './enterprise/loadEnterpriseBackendPlugin.js';
-const app = createApp();
+const app = createApp({ registerBaseRoutes: false, registerFinalMiddleware: false });
 
 const enterprisePlugin = await loadEnterpriseBackendPlugin();
+app.locals.enterprisePluginLoaded = Boolean(
+  enterprisePlugin && (enterprisePlugin.registerRoutes || enterprisePlugin.migrateEnterpriseDatabase)
+);
 
 try {
   // Pass database-agnostic connection pool to enterprise plugin
@@ -21,6 +24,9 @@ try {
   console.error('Failed to register enterprise routes:', error);
   throw error;
 }
+
+registerBaseRoutes(app);
+registerFinalMiddleware(app);
 
 // Initialize database schema before starting server
 await initializeDatabase();
@@ -49,10 +55,10 @@ if (enterprisePlugin.migrateEnterpriseDatabase) {
 }
 
 // Bootstrap admin account on first run
-await bootstrapAdmin();
+await bootstrapAdmin({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded });
 await backfillMissingPlatformRoles();
 
-await backfillKnownUserProfiles();
+await backfillKnownUserProfiles({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded });
 
 // Seed Git providers on first run
 try {

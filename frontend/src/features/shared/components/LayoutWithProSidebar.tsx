@@ -25,12 +25,12 @@ import { useAuth } from '../../../shared/hooks/useAuth'
 import logoPng from '../../../assets/logo.png'
 import { useLayoutStore } from '../stores/layoutStore'
 import { useFeatureFlag } from '../../../shared/hooks/useFeatureFlag'
-import TenantPicker from '../../../components/TenantPicker'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
-import { config as appConfig } from '../../../config'
 import { getEnterpriseFrontendPlugin } from '../../../enterprise/loadEnterpriseFrontendPlugin'
+import { ExtensionSlot } from '../../../enterprise/ExtensionSlot'
+import { isMultiTenantEnabled, getNavItemsBySection, type NavExtension } from '../../../enterprise/extensionRegistry'
 
 interface TenantBranding {
   logoUrl: string | null;
@@ -71,6 +71,10 @@ const NOTIFICATION_FILTER_ITEMS: NotificationFilterItem[] = [
   { id: 'warning', label: 'Warning' },
   { id: 'error', label: 'Error' },
 ]
+
+// Multi-tenant mode is controlled by EE plugin via extension registry
+// In OSS: always false. In EE: set via registerFeatureOverride('multiTenant', true)
+const isMultiTenant = isMultiTenantEnabled()
 
 const NOTIFICATION_STATE_COLORS: Record<NotificationItem['state'], string> = {
   success: 'var(--color-success)',
@@ -200,7 +204,7 @@ export default function LayoutWithProSidebar() {
   const [tenantAdminChecked, setTenantAdminChecked] = useState(false)
 
   useEffect(() => {
-    if (!appConfig.multiTenant || isPlatformAdmin) {
+    if (!isMultiTenant || isPlatformAdmin) {
       setIsTenantAdmin(false)
       setTenantAdminChecked(true)
       return
@@ -647,7 +651,8 @@ export default function LayoutWithProSidebar() {
                   )}
                 </span>
               </HeaderName>
-              {appConfig.multiTenant && <TenantPicker />}
+              {/* TenantPicker is an extension slot - empty in OSS, filled by EE plugin */}
+              <ExtensionSlot name="tenant-picker" />
               <HeaderNavigation aria-label="Main navigation">
                 {isVoyagerEnabled && (
                   <HeaderMenu menuLinkName="Voyager">
@@ -694,42 +699,34 @@ export default function LayoutWithProSidebar() {
                     ))}
                   </HeaderMenu>
                 )}
-                {appConfig.multiTenant && !isPlatformAdmin && tenantAdminChecked && isTenantAdmin && (
+                {/* Tenant Admin menu - only shows if EE plugin registers tenant-admin nav items */}
+                {!isPlatformAdmin && tenantAdminChecked && isTenantAdmin && getNavItemsBySection('tenant-admin').length > 0 && (
                   <HeaderMenu menuLinkName="Admin">
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/users')}
-                      isCurrentPage={effectivePathname === '/admin/users'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/users')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Users
-                    </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/audit-logs')}
-                      isCurrentPage={effectivePathname === '/admin/audit-logs'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/audit-logs')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Audit Logs
-                    </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/settings')}
-                      isCurrentPage={effectivePathname === '/admin/settings'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/settings')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Settings
-                    </HeaderMenuItem>
+                    {getNavItemsBySection('tenant-admin').map((item: NavExtension) => (
+                      <HeaderMenuItem
+                        key={item.id}
+                        href={toTenantPath(item.path)}
+                        isCurrentPage={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
+                        onClick={(e) => { e.preventDefault(); navigate(toTenantPath(item.path)); (document.activeElement as HTMLElement)?.blur() }}
+                      >
+                        {item.label}
+                      </HeaderMenuItem>
+                    ))}
                   </HeaderMenu>
                 )}
                 {isPlatformAdmin && (
                   <HeaderMenu menuLinkName="Admin">
-                    {appConfig.multiTenant && (
+                    {/* EE-only admin nav items (e.g., Tenants) - rendered from extension registry */}
+                    {getNavItemsBySection('admin').map((item: NavExtension) => (
                       <HeaderMenuItem
-                        href={'/admin/tenants'}
-                        isCurrentPage={effectivePathname === '/admin/tenants'}
-                        onClick={(e) => { e.preventDefault(); navigate('/admin/tenants'); (document.activeElement as HTMLElement)?.blur() }}
+                        key={item.id}
+                        href={item.path}
+                        isCurrentPage={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
+                        onClick={(e) => { e.preventDefault(); navigate(item.path); (document.activeElement as HTMLElement)?.blur() }}
                       >
-                        Tenants
+                        {item.label}
                       </HeaderMenuItem>
-                    )}
+                    ))}
                     <HeaderMenuItem
                       href={'/admin/users'}
                       isCurrentPage={effectivePathname === '/admin/users'}
@@ -737,41 +734,42 @@ export default function LayoutWithProSidebar() {
                     >
                       User Management
                     </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={'/admin/audit-logs'}
-                      isCurrentPage={effectivePathname === '/admin/audit-logs'}
-                      onClick={(e) => { e.preventDefault(); navigate('/admin/audit-logs'); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Audit Logs
-                    </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={'/admin/settings'}
-                      isCurrentPage={effectivePathname === '/admin/settings'}
-                      onClick={(e) => { e.preventDefault(); navigate('/admin/settings'); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Platform Settings
-                    </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/email')}
-                      isCurrentPage={effectivePathname === '/admin/email'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/email')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Email Settings
-                    </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/email-templates')}
-                      isCurrentPage={effectivePathname === '/admin/email-templates'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/email-templates')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Email Templates
-                    </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/branding')}
-                      isCurrentPage={effectivePathname === '/admin/branding'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/branding')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Branding
-                    </HeaderMenuItem>
+                    {!isMultiTenant && (
+                      <HeaderMenuItem
+                        href={'/admin/settings'}
+                        isCurrentPage={effectivePathname === '/admin/settings'}
+                        onClick={(e) => { e.preventDefault(); navigate('/admin/settings'); (document.activeElement as HTMLElement)?.blur() }}
+                      >
+                        Platform Settings
+                      </HeaderMenuItem>
+                    )}
+                    {!isMultiTenant && (
+                      <HeaderMenuItem
+                        href={toTenantPath('/admin/email')}
+                        isCurrentPage={effectivePathname === '/admin/email'}
+                        onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/email')); (document.activeElement as HTMLElement)?.blur() }}
+                      >
+                        Email Settings
+                      </HeaderMenuItem>
+                    )}
+                    {!isMultiTenant && (
+                      <HeaderMenuItem
+                        href={toTenantPath('/admin/email-templates')}
+                        isCurrentPage={effectivePathname === '/admin/email-templates'}
+                        onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/email-templates')); (document.activeElement as HTMLElement)?.blur() }}
+                      >
+                        Email Templates
+                      </HeaderMenuItem>
+                    )}
+                    {!isMultiTenant && (
+                      <HeaderMenuItem
+                        href={toTenantPath('/admin/branding')}
+                        isCurrentPage={effectivePathname === '/admin/branding'}
+                        onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/branding')); (document.activeElement as HTMLElement)?.blur() }}
+                      >
+                        Branding
+                      </HeaderMenuItem>
+                    )}
                   </HeaderMenu>
                 )}
               </HeaderNavigation>

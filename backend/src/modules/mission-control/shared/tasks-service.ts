@@ -15,42 +15,42 @@ import {
   getTaskForm,
 } from '@shared/services/bpmn-engine-client.js'
 
-export async function listTasks(params: any) {
-  return getTasks<any[]>(params)
+export async function listTasks(engineId: string, params: any) {
+  return getTasks<any[]>(engineId, params)
 }
 
-export async function getTaskCountByQuery(params: any) {
-  return getTaskCount<any>(params)
+export async function getTaskCountByQuery(engineId: string, params: any) {
+  return getTaskCount<any>(engineId, params)
 }
 
-export async function getTaskById(id: string) {
-  return getTask<any>(id)
+export async function getTaskById(engineId: string, id: string) {
+  return getTask<any>(engineId, id)
 }
 
-export async function getTaskVariablesById(id: string) {
-  return getTaskVariables<any>(id)
+export async function getTaskVariablesById(engineId: string, id: string) {
+  return getTaskVariables<any>(engineId, id)
 }
 
-export async function updateTaskVariablesById(id: string, body: any) {
-  return updateTaskVariables<any>(id, body)
+export async function updateTaskVariablesById(engineId: string, id: string, body: any) {
+  return updateTaskVariables<any>(engineId, id, body)
 }
 
-export async function getTaskFormById(id: string) {
-  return getTaskForm<any>(id)
+export async function getTaskFormById(engineId: string, id: string) {
+  return getTaskForm<any>(engineId, id)
 }
 
-export async function claimTaskById(id: string, body: any) {
-  return claimTask(id, body)
+export async function claimTaskById(engineId: string, id: string, body: any) {
+  return claimTask(engineId, id, body)
 }
 
-export async function unclaimTaskById(id: string) {
-  return unclaimTask(id)
+export async function unclaimTaskById(engineId: string, id: string) {
+  return unclaimTask(engineId, id)
 }
 
-export async function setTaskAssigneeById(id: string, body: any) {
-  return setTaskAssignee(id, body)
+export async function setTaskAssigneeById(engineId: string, id: string, body: any) {
+  return setTaskAssignee(engineId, id, body)
 }
 
-export async function completeTaskById(id: string, body: any) {
-  return completeTask<any>(id, body)
+export async function completeTaskById(engineId: string, id: string, body: any) {
+  return completeTask<any>(engineId, id, body)
 }

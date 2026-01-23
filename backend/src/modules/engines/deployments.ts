@@ -78,14 +78,6 @@ const r = Router()
 async function getEngineById(engineId: string): Promise<EngineConnectionInfo> {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
-  if (engineId === 'active') {
-    const row = await engineRepo.findOne({ where: { active: true } })
-    if (row) return { id: row.id, baseUrl: row.baseUrl, username: row.username ?? null, passwordEnc: row.passwordEnc ?? null }
-    // Fallback to env-configured engine
-    const baseUrl = process.env.CAMUNDA_BASE_URL || 'http://localhost:8080/engine-rest'
-    const username = process.env.CAMUNDA_USERNAME || ''
-    return { id: '__env__', baseUrl, username, passwordEnc: process.env.CAMUNDA_PASSWORD || '' }
-  }
   const row = await engineRepo.findOne({ where: { id: engineId } })
   if (!row) throw Object.assign(new Error('Engine not found'), { status: 404 })
   return { id: row.id, baseUrl: row.baseUrl, username: row.username ?? null, passwordEnc: row.passwordEnc ?? null }
@@ -186,63 +178,11 @@ async function buildResourceName(f: { name: string; type: 'bpmn'|'dmn'; folderId
   return parts.filter(Boolean).join('/')
 }
 
-async function getActiveEngineId(): Promise<string | null> {
-  const dataSource = await getDataSource()
-  const engineRepo = dataSource.getRepository(Engine)
-  const row = await engineRepo.findOne({ where: { active: true } })
-  return row ? String(row.id) : null
-}
-
 async function inferDeployAuthIds(req: Request, res: Response, next: NextFunction) {
   try {
-    const rawEngineId = String(req.params.engineId)
-    let actualEngineId = rawEngineId === 'active' ? await getActiveEngineId() : rawEngineId
-    if (!actualEngineId) {
-      const baseUrl = process.env.CAMUNDA_BASE_URL || 'http://localhost:8080/engine-rest'
-      const envUsername = process.env.CAMUNDA_USERNAME || ''
-      const envPassword = process.env.CAMUNDA_PASSWORD || ''
-      const envAuthType = envUsername ? 'basic' : 'none'
-      const now = Date.now()
-
-      const dataSource = await getDataSource()
-      const engineRepo = dataSource.getRepository(Engine)
-      const existing = await engineRepo.findOne({ where: { id: '__env__' } })
-
-      if (!existing) {
-        await engineRepo.insert({
-          id: '__env__',
-          name: 'Environment',
-          baseUrl,
-          type: 'camunda7',
-          authType: envAuthType,
-          username: envUsername || null,
-          passwordEnc: envPassword || null,
-          active: true,
-          version: null,
-          ownerId: req.user!.userId,
-          delegateId: null,
-          environmentTagId: null,
-          environmentLocked: false,
-          createdAt: now,
-          updatedAt: now,
-        } as any)
-      } else {
-        const cur: any = existing
-        await engineRepo.update({ id: '__env__' }, {
-          name: cur.name || 'Environment',
-          baseUrl,
-          type: cur.type || 'camunda7',
-          authType: envAuthType,
-          username: envUsername || null,
-          passwordEnc: envPassword || null,
-          active: true,
-          ownerId: cur.ownerId || req.user!.userId,
-          environmentTagId: null,
-          updatedAt: now,
-        })
-      }
-
-      actualEngineId = '__env__'
+    const engineId = String(req.params.engineId)
+    if (!engineId) {
+      throw Errors.validation('engineId is required')
     }
 
     const resources = (req.body || {}).resources || {}
@@ -285,7 +225,7 @@ async function inferDeployAuthIds(req: Request, res: Response, next: NextFunctio
       throw Errors.validation('resources with fileIds, folderId, or projectId required')
     }
 
-    req.body = { ...(req.body || {}), projectId, engineId: actualEngineId }
+    req.body = { ...(req.body || {}), projectId, engineId }
     return next()
   } catch (e) {
     throw Errors.internal('Failed to validate deployment request')
@@ -690,12 +630,11 @@ r.get('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, asy
 const userId = req.user!.userId
 const engineId = String(req.params.engineId)
 
-const actualEngineId = engineId === 'active' ? await getActiveEngineId() : engineId
-if (!actualEngineId || !(await engineService.hasEngineAccess(userId, actualEngineId, ENGINE_VIEW_ROLES))) {
+if (!engineId || !(await engineService.hasEngineAccess(userId, engineId, ENGINE_VIEW_ROLES))) {
   throw Errors.engineNotFound();
 }
 try {
-  const engine = await getEngineById(String(req.params.engineId))
+  const engine = await getEngineById(engineId)
   const url = new URL(String(engine.baseUrl || '').replace(/\/$/, '') + '/deployment')
   for (const [k,v] of Object.entries(req.query)) url.searchParams.set(k, String(v))
   const r2 = await fetch(url.toString(), { headers: { 'Content-Type': 'application/json', ...authHeaders(engine) } })
@@ -710,12 +649,11 @@ r.get('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth,
 const userId = req.user!.userId
 const engineId = String(req.params.engineId)
 
-const actualEngineId = engineId === 'active' ? await getActiveEngineId() : engineId
-if (!actualEngineId || !(await engineService.hasEngineAccess(userId, actualEngineId, ENGINE_VIEW_ROLES))) {
+if (!engineId || !(await engineService.hasEngineAccess(userId, engineId, ENGINE_VIEW_ROLES))) {
   throw Errors.engineNotFound();
 }
 try {
-  const engine = await getEngineById(String(req.params.engineId))
+  const engine = await getEngineById(engineId)
   const url = String(engine.baseUrl || '').replace(/\/$/, '') + `/deployment/${encodeURIComponent(String(req.params.id))}`
   const r2 = await fetch(url, { headers: { 'Content-Type': 'application/json', ...authHeaders(engine) } })
   const text = await r2.text()
@@ -729,12 +667,11 @@ r.delete('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAu
 const userId = req.user!.userId
 const engineId = String(req.params.engineId)
 
-const actualEngineId = engineId === 'active' ? await getActiveEngineId() : engineId
-if (!actualEngineId || !(await engineService.hasEngineAccess(userId, actualEngineId, ENGINE_MANAGE_ROLES))) {
+if (!engineId || !(await engineService.hasEngineAccess(userId, engineId, ENGINE_MANAGE_ROLES))) {
   throw Errors.engineNotFound();
 }
 try {
-  const engine = await getEngineById(String(req.params.engineId))
+  const engine = await getEngineById(engineId)
   const cascade = req.query.cascade === 'true'
   const url = String(engine.baseUrl || '').replace(/\/$/, '') + `/deployment/${encodeURIComponent(String(req.params.id))}` + (cascade ? '?cascade=true' : '')
   const r2 = await fetch(url, { method: 'DELETE', headers: { ...authHeaders(engine) } })

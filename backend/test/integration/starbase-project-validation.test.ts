@@ -10,7 +10,6 @@ let userId = '';
 let projectId = '';
 
 const app = createApp({
-  includeTenantContext: false,
   includeRateLimiting: false,
 });
 
@@ -30,7 +29,7 @@ describe('Starbase project validation', () => {
 
   it('rejects project update with empty name', async () => {
     const response = await request(app)
-      .patch(`/starbase-api/projects/${projectId}`)
+      .patch(`/t/default/starbase-api/projects/${projectId}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ name: '' });
 
@@ -39,7 +38,7 @@ describe('Starbase project validation', () => {
 
   it('rejects project update with missing name', async () => {
     const response = await request(app)
-      .patch(`/starbase-api/projects/${projectId}`)
+      .patch(`/t/default/starbase-api/projects/${projectId}`)
       .set('Authorization', `Bearer ${token}`)
       .send({});
 
