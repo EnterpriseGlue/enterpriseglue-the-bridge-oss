@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-01-10T18:09:32.566Z
+Generated at: 2026-01-23T07:45:23.457Z
 
 Generated from:
 - backend/third_party_licenses.json
@@ -12,15 +12,16 @@ Generated from:
 
 | License | Count |
 |---|---:|
+| (MIT AND BSD-3-Clause) | 1 |
 | (MPL-2.0 OR Apache-2.0) | 1 |
 | 0BSD | 1 |
-| Apache-2.0 | 36 |
+| Apache-2.0 | 35 |
 | BlueOak-1.0.0 | 3 |
-| BSD-2-Clause | 2 |
-| BSD-3-Clause | 14 |
+| BSD-2-Clause | 3 |
+| BSD-3-Clause | 15 |
 | BSD* | 1 |
 | ISC | 66 |
-| MIT | 504 |
+| MIT | 533 |
 | MIT-0 | 1 |
 | MIT* | 14 |
 | OFL-1.1 | 9 |
@@ -167,6 +168,7 @@ Generated from:
 | @pkgjs/parseargs | 0.11.0 | MIT | https://github.com/pkgjs/parseargs | backend |
 | @popperjs/core | 2.11.8 | MIT | https://github.com/popperjs/popper-core | frontend |
 | @scarf/scarf | 1.4.0 | Apache-2.0 | https://github.com/scarf-sh/scarf-js | backend |
+| @sqltools/formatter | 1.2.5 | MIT | https://github.com/mtxr/vscode-sqltools | backend |
 | @stablelib/base64 | 1.0.1 | MIT | https://github.com/StableLib/stablelib | backend |
 | @swc/helpers | 0.5.17 | Apache-2.0 | https://github.com/swc-project/swc | frontend |
 | @tanstack/query-core | 5.90.5 | MIT | https://github.com/TanStack/query | frontend |
@@ -206,16 +208,15 @@ Generated from:
 | @types/d3-zoom | 3.0.8 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/d3 | 7.4.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/geojson | 7946.0.16 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
-| @types/node | 20.19.22 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | backend |
 | @types/node | 22.19.1 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | backend |
 | @types/parse-json | 4.0.2 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
-| @types/pg | 8.15.6 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | backend |
 | @types/react | 19.2.2 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/topojson-client | 3.1.5 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/topojson-server | 3.0.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/topojson-simplify | 3.0.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/topojson-specification | 1.0.5 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/topojson | 3.2.6 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
+| abort-controller | 3.0.0 | MIT | https://github.com/mysticatea/abort-controller | backend |
 | accepts | 1.3.8 | MIT | https://github.com/jshttp/accepts | backend |
 | agent-base | 7.1.4 | MIT | https://github.com/TooTallNate/proxy-agents | backend |
 | ansi-colors | 4.1.3 | MIT | https://github.com/doowb/ansi-colors | frontend |
@@ -223,12 +224,15 @@ Generated from:
 | ansi-regex | 6.2.2 | MIT | https://github.com/chalk/ansi-regex | backend |
 | ansi-styles | 4.3.0 | MIT | https://github.com/chalk/ansi-styles | backend |
 | ansi-styles | 6.2.3 | MIT | https://github.com/chalk/ansi-styles | backend |
-| archiver-utils | 4.0.1 | MIT | https://github.com/archiverjs/archiver-utils | backend |
-| archiver | 6.0.2 | MIT | https://github.com/archiverjs/node-archiver | backend |
+| ansis | 4.2.0 | ISC | https://github.com/webdiscus/ansis | backend |
+| app-root-path | 3.1.0 | MIT | https://github.com/inxilpro/node-app-root-path | backend |
+| archiver-utils | 5.0.2 | MIT | https://github.com/archiverjs/archiver-utils | backend |
+| archiver | 7.0.1 | MIT | https://github.com/archiverjs/node-archiver | backend |
 | array-flatten | 1.1.1 | MIT | https://github.com/blakeembrey/array-flatten | backend |
 | array-move | 4.0.0 | MIT | https://github.com/sindresorhus/array-move | frontend |
 | async | 3.2.6 | MIT | https://github.com/caolan/async | backend |
 | atoa | 1.0.0 | MIT | https://github.com/bevacqua/atoa | frontend |
+| available-typed-arrays | 1.0.7 | MIT | https://github.com/inspect-js/available-typed-arrays | backend |
 | azure-devops-node-api | 15.1.1 | MIT | https://github.com/Microsoft/azure-devops-node-api | backend |
 | b4a | 1.7.3 | Apache-2.0 | https://github.com/holepunchto/b4a | backend |
 | babel-plugin-macros | 3.1.0 | MIT | https://github.com/kentcdodds/babel-plugin-macros | frontend |
@@ -256,10 +260,12 @@ Generated from:
 | bpmnlint-utils | 1.1.1 | MIT | https://github.com/bpmn-io/bpmnlint-utils | frontend |
 | bpmnlint | 11.6.1 | MIT | https://github.com/bpmn-io/bpmnlint | frontend |
 | brace-expansion | 2.0.2 | MIT | https://github.com/juliangruber/brace-expansion | backend |
-| buffer-crc32 | 0.2.13 | MIT | https://github.com/brianloveswords/buffer-crc32 | backend |
+| buffer-crc32 | 1.0.0 | MIT | https://github.com/brianloveswords/buffer-crc32 | backend |
 | buffer-equal-constant-time | 1.0.1 | BSD-3-Clause | https://github.com/goinstant/buffer-equal-constant-time | backend |
+| buffer | 6.0.3 | MIT | https://github.com/feross/buffer | backend |
 | bytes | 3.1.2 | MIT | https://github.com/visionmedia/bytes.js | backend |
 | call-bind-apply-helpers | 1.0.2 | MIT | https://github.com/ljharb/call-bind-apply-helpers | backend |
+| call-bind | 1.0.8 | MIT | https://github.com/ljharb/call-bind | backend |
 | call-bound | 1.0.4 | MIT | https://github.com/ljharb/call-bound | backend |
 | callsites | 3.1.0 | MIT | https://github.com/sindresorhus/callsites | frontend |
 | camunda-bpmn-js-behaviors | 1.11.2 | MIT | https://github.com/camunda/camunda-bpmn-js-behaviors | frontend |
@@ -271,6 +277,7 @@ Generated from:
 | class-variance-authority | 0.7.1 | Apache-2.0 | https://github.com/joe-bell/cva | frontend |
 | classnames | 2.5.1 | MIT | https://github.com/JedWatson/classnames | frontend |
 | cli-table | 0.3.11 | MIT* | https://github.com/Automattic/cli-table | frontend |
+| cliui | 8.0.1 | ISC | https://github.com/yargs/cliui | backend |
 | clsx | 2.1.1 | MIT | https://github.com/lukeed/clsx | frontend |
 | codemirror | 6.0.2 | MIT | https://github.com/codemirror/basic-setup | frontend |
 | color-convert | 2.0.1 | MIT | https://github.com/Qix-/color-convert | backend, frontend |
@@ -284,7 +291,7 @@ Generated from:
 | component-event | 0.2.1 | MIT | https://github.com/component/event | frontend |
 | component-props | 1.1.1 | MIT* | https://github.com/component/props | frontend |
 | component-xor | 0.0.4 | MIT | https://github.com/component/xor | frontend |
-| compress-commons | 5.0.3 | MIT | https://github.com/archiverjs/node-compress-commons | backend |
+| compress-commons | 6.0.2 | MIT | https://github.com/archiverjs/node-compress-commons | backend |
 | compute-scroll-into-view | 3.1.1 | MIT | https://github.com/scroll-into-view/compute-scroll-into-view | frontend |
 | content-disposition | 0.5.4 | MIT | https://github.com/jshttp/content-disposition | backend |
 | content-type | 1.0.5 | MIT | https://github.com/jshttp/content-type | backend |
@@ -293,13 +300,13 @@ Generated from:
 | cookie-parser | 1.4.7 | MIT | https://github.com/expressjs/cookie-parser | backend |
 | cookie-signature | 1.0.6 | MIT | https://github.com/visionmedia/node-cookie-signature | backend |
 | cookie | 0.7.2 | MIT | https://github.com/jshttp/cookie | backend |
-| cookie | 1.0.2 | MIT | https://github.com/jshttp/cookie | frontend |
+| cookie | 1.1.1 | MIT | https://github.com/jshttp/cookie | frontend |
 | copy-to-clipboard | 3.3.3 | MIT | https://github.com/sudodoki/copy-to-clipboard | frontend |
 | core-util-is | 1.0.3 | MIT | https://github.com/isaacs/core-util-is | backend |
 | cors | 2.8.5 | MIT | https://github.com/expressjs/cors | backend |
 | cosmiconfig | 7.1.0 | MIT | https://github.com/davidtheclark/cosmiconfig | frontend |
 | crc-32 | 1.2.2 | Apache-2.0 | https://github.com/SheetJS/js-crc32 | backend |
-| crc32-stream | 5.0.1 | MIT | https://github.com/archiverjs/node-crc32-stream | backend |
+| crc32-stream | 6.0.0 | MIT | https://github.com/archiverjs/node-crc32-stream | backend |
 | crelt | 1.0.6 | MIT | https://github.com/marijnh/crelt | frontend |
 | cross-spawn | 7.0.6 | MIT | https://github.com/moxystudio/node-cross-spawn | backend |
 | csrf | 3.1.0 | MIT | https://github.com/pillarjs/csrf | backend |
@@ -345,9 +352,12 @@ Generated from:
 | d3 | 7.9.0 | ISC | https://github.com/d3/d3 | frontend |
 | data-uri-to-buffer | 4.0.1 | MIT | https://github.com/TooTallNate/node-data-uri-to-buffer | backend |
 | date-fns | 4.1.0 | MIT | https://github.com/date-fns/date-fns | frontend |
+| dayjs | 1.11.19 | MIT | https://github.com/iamkun/dayjs | backend |
 | debug | 2.6.9 | MIT | https://github.com/visionmedia/debug | backend |
 | debug | 4.4.3 | MIT | https://github.com/debug-js/debug | backend, frontend |
+| dedent | 1.7.1 | MIT | https://github.com/dmnd/dedent | backend |
 | deepmerge | 4.3.1 | MIT | https://github.com/TehShrike/deepmerge | backend |
+| define-data-property | 1.1.4 | MIT | https://github.com/ljharb/define-data-property | backend |
 | delaunator | 5.0.1 | ISC | https://github.com/mapbox/delaunator | frontend |
 | depd | 1.1.2 | MIT | https://github.com/dougwilson/nodejs-depd | backend |
 | depd | 2.0.0 | MIT | https://github.com/dougwilson/nodejs-depd | backend |
@@ -371,11 +381,10 @@ Generated from:
 | domify | 1.4.2 | MIT | https://github.com/sindresorhus/domify | frontend |
 | domify | 2.0.0 | MIT | https://github.com/sindresorhus/domify | frontend |
 | dompurify | 3.3.0 | (MPL-2.0 OR Apache-2.0) | https://github.com/cure53/DOMPurify | frontend |
+| dotenv | 16.6.1 | BSD-2-Clause | https://github.com/motdotla/dotenv | backend |
 | dotenv | 17.2.3 | BSD-2-Clause | https://github.com/motdotla/dotenv | backend |
 | downloadjs | 1.4.7 | MIT | https://github.com/rndme/download | frontend |
 | downshift | 9.0.10 | MIT | https://github.com/downshift-js/downshift | frontend |
-| drizzle-orm | 0.40.1 | Apache-2.0 | https://github.com/drizzle-team/drizzle-orm | backend |
-| drizzle-zod | 0.7.1 | Apache-2.0 | https://github.com/drizzle-team/drizzle-orm | backend |
 | dunder-proto | 1.0.1 | MIT | https://github.com/es-shims/dunder-proto | backend |
 | eastasianwidth | 0.2.0 | MIT | https://github.com/komagata/eastasianwidth | backend |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 | https://github.com/Brightspace/node-ecdsa-sig-formatter | backend |
@@ -390,10 +399,13 @@ Generated from:
 | es-object-atoms | 1.1.1 | MIT | https://github.com/ljharb/es-object-atoms | backend |
 | es-toolkit | 1.40.0 | MIT | https://github.com/toss/es-toolkit | frontend |
 | es6-promise | 4.2.8 | MIT | https://github.com/stefanpenner/es6-promise | backend |
+| escalade | 3.2.0 | MIT | https://github.com/lukeed/escalade | backend |
 | escape-html | 1.0.3 | MIT | https://github.com/component/escape-html | backend, frontend |
 | escape-string-regexp | 4.0.0 | MIT | https://github.com/sindresorhus/escape-string-regexp | frontend |
 | etag | 1.8.1 | MIT | https://github.com/jshttp/etag | backend |
+| event-target-shim | 5.0.1 | MIT | https://github.com/mysticatea/event-target-shim | backend |
 | events-universal | 1.0.1 | Apache-2.0 | https://github.com/holepunchto/events-universal | backend |
+| events | 3.3.0 | MIT | https://github.com/Gozala/events | backend |
 | express-rate-limit | 8.2.1 | MIT | https://github.com/express-rate-limit/express-rate-limit | backend |
 | express | 4.22.1 | MIT | https://github.com/expressjs/express | backend |
 | extend | 3.0.2 | MIT | https://github.com/justmoon/node-extend | backend |
@@ -409,18 +421,18 @@ Generated from:
 | find-root | 1.1.0 | MIT | https://github.com/js-n/find-root | frontend |
 | flatpickr | 4.6.13 | MIT | https://github.com/chmln/flatpickr | frontend |
 | focus-trap | 7.6.5 | MIT | https://github.com/focus-trap/focus-trap | frontend |
+| for-each | 0.3.5 | MIT | https://github.com/Raynos/for-each | backend |
 | foreground-child | 3.3.1 | ISC | https://github.com/tapjs/foreground-child | backend |
 | formdata-polyfill | 4.0.10 | MIT | git+https://jimmywarting@github.com/jimmywarting/FormData | backend |
 | forwarded | 0.2.0 | MIT | https://github.com/jshttp/forwarded | backend |
 | fresh | 0.5.2 | MIT | https://github.com/jshttp/fresh | backend |
-| fs.realpath | 1.0.0 | ISC | https://github.com/isaacs/fs.realpath | backend |
 | function-bind | 1.1.2 | MIT | https://github.com/Raynos/function-bind | backend, frontend |
 | gaxios | 7.1.3 | Apache-2.0 | https://github.com/googleapis/google-cloud-node-core | backend |
 | gcp-metadata | 8.1.2 | Apache-2.0 | https://github.com/googleapis/google-cloud-node-core | backend |
+| get-caller-file | 2.0.5 | ISC | https://github.com/stefanpenner/get-caller-file | backend |
 | get-intrinsic | 1.3.0 | MIT | https://github.com/ljharb/get-intrinsic | backend |
 | get-proto | 1.0.1 | MIT | https://github.com/ljharb/get-proto | backend |
 | glob | 10.5.0 | ISC | https://github.com/isaacs/node-glob | backend |
-| glob | 8.1.0 | ISC | https://github.com/isaacs/node-glob | backend |
 | globalyzer | 0.1.0 | MIT | https://github.com/terkelg/globalyzer | frontend |
 | globrex | 0.1.2 | MIT | https://github.com/terkelg/globrex | frontend |
 | google-auth-library | 10.5.0 | Apache-2.0 | https://github.com/googleapis/google-auth-library-nodejs | backend |
@@ -428,7 +440,9 @@ Generated from:
 | gopd | 1.2.0 | MIT | https://github.com/ljharb/gopd | backend |
 | graceful-fs | 4.2.11 | ISC | https://github.com/isaacs/node-graceful-fs | backend |
 | gtoken | 8.0.0 | MIT | https://github.com/google/node-gtoken | backend |
+| has-property-descriptors | 1.0.2 | MIT | https://github.com/inspect-js/has-property-descriptors | backend |
 | has-symbols | 1.1.0 | MIT | https://github.com/inspect-js/has-symbols | backend |
+| has-tostringtag | 1.0.2 | MIT | https://github.com/inspect-js/has-tostringtag | backend |
 | hasown | 2.0.2 | MIT | https://github.com/inspect-js/hasOwn | backend, frontend |
 | hoist-non-react-statics | 3.3.2 | BSD-3-Clause | https://github.com/mridgway/hoist-non-react-statics | frontend |
 | htm | 3.1.1 | Apache-2.0 | https://github.com/developit/htm | frontend |
@@ -440,12 +454,12 @@ Generated from:
 | iconv-lite | 0.4.24 | MIT | https://github.com/ashtuchkin/iconv-lite | backend |
 | iconv-lite | 0.6.3 | MIT | https://github.com/ashtuchkin/iconv-lite | frontend |
 | ids | 1.0.5 | MIT | https://github.com/bpmn-io/ids | frontend |
+| ieee754 | 1.2.1 | BSD-3-Clause | https://github.com/feross/ieee754 | backend |
 | immutable | 5.1.4 | MIT | https://github.com/immutable-js/immutable-js | frontend |
 | import-fresh | 3.3.1 | MIT | https://github.com/sindresorhus/import-fresh | frontend |
 | inferno-shared | 5.6.3 | MIT | https://github.com/infernojs/inferno | frontend |
 | inferno-vnode-flags | 5.6.3 | MIT | https://github.com/infernojs/inferno | frontend |
 | inferno | 5.6.3 | MIT | https://github.com/infernojs/inferno | frontend |
-| inflight | 1.0.6 | ISC | https://github.com/npm/inflight | backend |
 | inherits-browser | 0.1.0 | ISC | https://github.com/nikku/inherits-browser | frontend |
 | inherits | 2.0.4 | ISC | https://github.com/isaacs/inherits | backend |
 | internmap | 1.0.1 | ISC | https://github.com/mbostock/internmap | frontend |
@@ -455,10 +469,14 @@ Generated from:
 | ipaddr.js | 1.9.1 | MIT | https://github.com/whitequark/ipaddr.js | backend |
 | is-arrayish | 0.2.1 | MIT | https://github.com/qix-/node-is-arrayish | frontend |
 | is-arrayish | 0.3.4 | MIT | https://github.com/qix-/node-is-arrayish | frontend |
+| is-callable | 1.2.7 | MIT | https://github.com/inspect-js/is-callable | backend |
 | is-core-module | 2.16.1 | MIT | https://github.com/inspect-js/is-core-module | frontend |
 | is-fullwidth-code-point | 3.0.0 | MIT | https://github.com/sindresorhus/is-fullwidth-code-point | backend |
 | is-plain-object | 3.0.1 | MIT | https://github.com/jonschlinkert/is-plain-object | backend |
+| is-stream | 2.0.1 | MIT | https://github.com/sindresorhus/is-stream | backend |
+| is-typed-array | 1.1.15 | MIT | https://github.com/inspect-js/is-typed-array | backend |
 | isarray | 1.0.0 | MIT | https://github.com/juliangruber/isarray | backend |
+| isarray | 2.0.5 | MIT | https://github.com/juliangruber/isarray | backend |
 | isexe | 2.0.0 | ISC | https://github.com/isaacs/isexe | backend |
 | jackspeak | 3.4.3 | BlueOak-1.0.0 | https://github.com/isaacs/jackspeak | backend |
 | js-md4 | 0.3.2 | MIT | https://github.com/emn178/js-md4 | backend |
@@ -483,7 +501,8 @@ Generated from:
 | lodash.isplainobject | 4.0.6 | MIT | https://github.com/lodash/lodash | backend |
 | lodash.isstring | 4.0.1 | MIT | https://github.com/lodash/lodash | backend |
 | lodash.once | 4.1.1 | MIT | https://github.com/lodash/lodash | backend |
-| lodash | 4.17.21 | MIT | https://github.com/lodash/lodash | backend, frontend |
+| lodash | 4.17.21 | MIT | https://github.com/lodash/lodash | frontend |
+| lodash | 4.17.23 | MIT | https://github.com/lodash/lodash | backend |
 | loose-envify | 1.4.0 | MIT | https://github.com/zertosh/loose-envify | frontend |
 | lru-cache | 10.4.3 | ISC | https://github.com/isaacs/node-lru-cache | backend |
 | lucide-react | 0.554.0 | ISC | https://github.com/lucide-icons/lucide | frontend |
@@ -523,7 +542,6 @@ Generated from:
 | on-finished | 2.3.0 | MIT | https://github.com/jshttp/on-finished | backend |
 | on-finished | 2.4.1 | MIT | https://github.com/jshttp/on-finished | backend |
 | on-headers | 1.1.0 | MIT | https://github.com/jshttp/on-headers | backend |
-| once | 1.4.0 | ISC | https://github.com/isaacs/once | backend |
 | openapi3-ts | 4.5.0 | MIT | https://github.com/metadevpro/openapi3-ts | backend |
 | opencollective-postinstall | 2.0.3 | MIT | https://github.com/opencollective/opencollective-postinstall | frontend |
 | package-json-from-dist | 1.0.1 | BlueOak-1.0.0 | https://github.com/isaacs/package-json-from-dist | backend |
@@ -547,6 +565,7 @@ Generated from:
 | picocolors | 1.1.1 | ISC | https://github.com/alexeyraspopov/picocolors | frontend |
 | picomatch-browser | 2.2.6 | MIT | https://github.com/micromatch/picomatch | backend |
 | pluralize | 7.0.0 | MIT | https://github.com/blakeembrey/pluralize | frontend |
+| possible-typed-array-names | 1.1.0 | MIT | https://github.com/ljharb/possible-typed-array-names | backend |
 | postgres-array | 2.0.0 | MIT | https://github.com/bendrucker/postgres-array | backend |
 | postgres-bytea | 1.0.0 | MIT | https://github.com/bendrucker/postgres-bytea | backend |
 | postgres-date | 1.0.7 | MIT | https://github.com/bendrucker/postgres-date | backend |
@@ -554,6 +573,7 @@ Generated from:
 | preact-markup | 2.1.1 | MIT | https://github.com/developit/preact-markup | frontend |
 | preact | 10.28.2 | MIT | https://github.com/preactjs/preact | frontend |
 | process-nextick-args | 2.0.1 | MIT | https://github.com/calvinmetcalf/process-nextick-args | backend |
+| process | 0.11.10 | MIT | https://github.com/shtylman/node-process | backend |
 | prop-types | 15.8.1 | MIT | https://github.com/facebook/prop-types | frontend |
 | proxy-addr | 2.0.7 | MIT | https://github.com/jshttp/proxy-addr | backend |
 | qs | 6.14.1 | BSD-3-Clause | https://github.com/ljharb/qs | backend |
@@ -571,15 +591,17 @@ Generated from:
 | react-lifecycles-compat | 3.0.4 | MIT | https://github.com/reactjs/react-lifecycles-compat | frontend |
 | react-loading-skeleton | 3.5.0 | MIT | https://github.com/dvtng/react-loading-skeleton | frontend |
 | react-pro-sidebar | 1.1.0 | MIT | https://github.com/azouaoui-med/react-pro-sidebar | frontend |
-| react-router-dom | 7.9.4 | MIT | https://github.com/remix-run/react-router | frontend |
-| react-router | 7.9.4 | MIT | https://github.com/remix-run/react-router | frontend |
+| react-router-dom | 7.12.0 | MIT | https://github.com/remix-run/react-router | frontend |
+| react-router | 7.12.0 | MIT | https://github.com/remix-run/react-router | frontend |
 | react-split-pane | 0.1.92 | MIT | https://github.com/tomkp/react-split-pane | frontend |
 | react-style-proptype | 3.2.2 | MIT | https://github.com/brigand/react-style-proptype | frontend |
 | react | 19.2.0 | MIT | https://github.com/facebook/react | frontend |
 | readable-stream | 2.3.8 | MIT | https://github.com/nodejs/readable-stream | backend |
-| readable-stream | 3.6.2 | MIT | https://github.com/nodejs/readable-stream | backend |
+| readable-stream | 4.7.0 | MIT | https://github.com/nodejs/readable-stream | backend |
 | readdir-glob | 1.1.3 | Apache-2.0 | https://github.com/Yqnn/node-readdir-glob | backend |
 | readdirp | 4.1.2 | MIT | https://github.com/paulmillr/readdirp | frontend |
+| reflect-metadata | 0.2.2 | Apache-2.0 | https://github.com/rbuckton/reflect-metadata | backend |
+| require-directory | 2.1.1 | MIT | https://github.com/troygoode/node-require-directory | backend |
 | requires-port | 1.0.0 | MIT | https://github.com/unshiftio/requires-port | backend |
 | resend | 6.4.2 | MIT | https://github.com/resend/resend-node | backend |
 | resolve-from | 4.0.0 | MIT | https://github.com/sindresorhus/resolve-from | frontend |
@@ -601,9 +623,11 @@ Generated from:
 | semver | 7.7.3 | ISC | https://github.com/npm/node-semver | backend, frontend |
 | send | 0.19.0 | MIT | https://github.com/pillarjs/send | backend |
 | serve-static | 1.16.2 | MIT | https://github.com/expressjs/serve-static | backend |
-| set-cookie-parser | 2.7.1 | MIT | https://github.com/nfriedly/set-cookie-parser | frontend |
+| set-cookie-parser | 2.7.2 | MIT | https://github.com/nfriedly/set-cookie-parser | frontend |
+| set-function-length | 1.2.2 | MIT | https://github.com/ljharb/set-function-length | backend |
 | setprototypeof | 1.1.1 | ISC | https://github.com/wesleytodd/setprototypeof | backend |
 | setprototypeof | 1.2.0 | ISC | https://github.com/wesleytodd/setprototypeof | backend |
+| sha.js | 2.4.12 | (MIT AND BSD-3-Clause) | https://github.com/crypto-browserify/sha.js | backend |
 | shebang-command | 2.0.0 | MIT | https://github.com/kevva/shebang-command | backend |
 | shebang-regex | 3.0.0 | MIT | https://github.com/sindresorhus/shebang-regex | backend |
 | side-channel-list | 1.0.0 | MIT | https://github.com/ljharb/side-channel-list | backend |
@@ -616,12 +640,14 @@ Generated from:
 | source-map-js | 1.2.1 | BSD-3-Clause | https://github.com/7rulnik/source-map-js | frontend |
 | source-map | 0.5.7 | BSD-3-Clause | https://github.com/mozilla/source-map | frontend |
 | split2 | 4.2.0 | ISC | https://github.com/mcollina/split2 | backend |
+| sql-highlight | 6.1.0 | MIT | https://github.com/scriptcoded/sql-highlight | backend |
 | sql.js | 1.13.0 | MIT | https://github.com/sql-js/sql.js | backend |
 | statuses | 1.5.0 | MIT | https://github.com/jshttp/statuses | backend |
 | statuses | 2.0.1 | MIT | https://github.com/jshttp/statuses | backend |
 | statuses | 2.0.2 | MIT | https://github.com/jshttp/statuses | backend |
 | streamx | 2.23.0 | MIT | https://github.com/mafintosh/streamx | backend |
 | string_decoder | 1.1.1 | MIT | https://github.com/nodejs/string_decoder | backend |
+| string_decoder | 1.3.0 | MIT | https://github.com/nodejs/string_decoder | backend |
 | string-width | 4.2.3 | MIT | https://github.com/sindresorhus/string-width | backend |
 | string-width | 5.1.2 | MIT | https://github.com/sindresorhus/string-width | backend |
 | strip-ansi | 6.0.1 | MIT | https://github.com/chalk/strip-ansi | backend |
@@ -640,21 +666,24 @@ Generated from:
 | ticky | 1.0.1 | MIT | https://github.com/bevacqua/ticky | frontend |
 | tiny-glob | 0.2.9 | MIT | https://github.com/terkelg/tiny-glob | frontend |
 | tiny-svg | 3.1.3 | MIT | https://github.com/bpmn-io/tiny-svg | frontend |
+| to-buffer | 1.2.2 | MIT | https://github.com/browserify/to-buffer | backend |
 | toad-cache | 3.7.0 | MIT | https://github.com/kibertoad/toad-cache | backend |
 | toggle-selection | 1.0.6 | MIT | https://github.com/sudodoki/toggle-selection | frontend |
 | toidentifier | 1.0.0 | MIT | https://github.com/component/toidentifier | backend |
 | toidentifier | 1.0.1 | MIT | https://github.com/component/toidentifier | backend |
 | topojson-client | 3.1.0 | ISC | https://github.com/topojson/topojson-client | frontend |
 | tr46 | 0.0.3 | MIT | https://github.com/Sebmaster/tr46.js | backend |
-| tslib | 2.8.1 | 0BSD | https://github.com/Microsoft/tslib | frontend |
+| tslib | 2.8.1 | 0BSD | https://github.com/Microsoft/tslib | backend, frontend |
 | tsscmp | 1.0.6 | MIT | https://github.com/suryagh/tsscmp | backend |
 | tunnel | 0.0.6 | MIT | https://github.com/koichik/node-tunnel | backend |
 | type-is | 1.6.18 | MIT | https://github.com/jshttp/type-is | backend |
+| typed-array-buffer | 1.0.3 | MIT | https://github.com/inspect-js/typed-array-buffer | backend |
 | typed-rest-client | 2.1.0 | MIT | https://github.com/Microsoft/typed-rest-client | backend |
+| typeorm | 0.3.28 | MIT | https://github.com/typeorm/typeorm | backend |
 | uid-safe | 2.1.5 | MIT | https://github.com/crypto-utils/uid-safe | backend |
 | underscore | 1.13.7 | MIT | https://github.com/jashkenas/underscore | backend |
 | undici-types | 6.21.0 | MIT | https://github.com/nodejs/undici | backend |
-| undici | 6.22.0 | MIT | https://github.com/nodejs/undici | backend |
+| undici | 7.18.2 | MIT | https://github.com/nodejs/undici | backend |
 | universal-github-app-jwt | 2.2.2 | MIT | https://github.com/gr2m/universal-github-app-jwt | backend |
 | universal-user-agent | 7.0.3 | ISC | https://github.com/gr2m/universal-user-agent | backend |
 | unpipe | 1.0.0 | MIT | https://github.com/stream-utils/unpipe | backend |
@@ -663,25 +692,28 @@ Generated from:
 | util-deprecate | 1.0.2 | MIT | https://github.com/TooTallNate/util-deprecate | backend |
 | utils-merge | 1.0.1 | MIT | https://github.com/jaredhanson/utils-merge | backend |
 | uuid | 10.0.0 | MIT | https://github.com/uuidjs/uuid | backend |
-| uuid | 11.1.0 | MIT | https://github.com/uuidjs/uuid | frontend |
+| uuid | 11.1.0 | MIT | https://github.com/uuidjs/uuid | backend, frontend |
 | uuid | 8.3.2 | MIT | https://github.com/uuidjs/uuid | backend |
 | vary | 1.1.2 | MIT | https://github.com/jshttp/vary | backend |
 | w3c-keyname | 2.2.8 | MIT | https://github.com/marijnh/w3c-keyname | frontend |
 | web-streams-polyfill | 3.3.3 | MIT | https://github.com/MattiasBuelens/web-streams-polyfill | backend |
 | webidl-conversions | 3.0.1 | BSD-2-Clause | https://github.com/jsdom/webidl-conversions | backend |
 | whatwg-url | 5.0.0 | MIT | https://github.com/jsdom/whatwg-url | backend |
+| which-typed-array | 1.1.19 | MIT | https://github.com/inspect-js/which-typed-array | backend |
 | which | 2.0.2 | ISC | https://github.com/isaacs/node-which | backend |
 | window-or-global | 1.0.1 | MIT | https://github.com/purposeindustries/window-or-global | frontend |
 | wrap-ansi | 7.0.0 | MIT | https://github.com/chalk/wrap-ansi | backend |
 | wrap-ansi | 8.1.0 | MIT | https://github.com/chalk/wrap-ansi | backend |
-| wrappy | 1.0.2 | ISC | https://github.com/npm/wrappy | backend |
 | xcase | 2.0.1 | MIT | https://github.com/encharm/xcase | backend |
 | xtend | 4.0.2 | MIT | https://github.com/Raynos/xtend | backend |
+| y18n | 5.0.8 | ISC | https://github.com/yargs/y18n | backend |
 | yaml | 1.10.2 | ISC | https://github.com/eemeli/yaml | frontend |
 | yaml | 2.8.1 | ISC | https://github.com/eemeli/yaml | backend |
+| yargs-parser | 21.1.1 | ISC | https://github.com/yargs/yargs-parser | backend |
+| yargs | 17.7.2 | MIT | https://github.com/yargs/yargs | backend |
 | zeebe-bpmn-moddle | 1.11.0 | MIT | https://github.com/camunda/zeebe-bpmn-moddle | frontend |
 | zeebe-dmn-moddle | 1.0.0 | MIT | https://github.com/camunda/zeebe-dmn-moddle | frontend |
-| zip-stream | 5.0.2 | MIT | https://github.com/archiverjs/node-zip-stream | backend |
+| zip-stream | 6.0.1 | MIT | https://github.com/archiverjs/node-zip-stream | backend |
 | zod | 3.25.76 | MIT | https://github.com/colinhacks/zod | backend |
 | zustand | 5.0.8 | MIT | https://github.com/pmndrs/zustand | frontend |
 
