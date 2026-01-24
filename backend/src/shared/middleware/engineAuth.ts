@@ -48,6 +48,17 @@ function requireEngineRole(allowedRoles: EngineRole[], options: EngineAuthOption
     try {
       if (!req.user) throw Errors.unauthorized('Authentication required');
 
+      const existingEngineId = (req as EngineRequest).engineId;
+      const existingEngineRole = (req as EngineRequest).engineRole;
+      if (typeof existingEngineId === 'string' && existingEngineId && existingEngineRole !== undefined) {
+        // Engine access already resolved by an earlier middleware in the chain.
+        // This is important because the earlier middleware may have stripped engineId from req.query/req.body.
+        if (existingEngineRole && !allowedRoles.includes(existingEngineRole)) {
+          throw Errors.forbidden('Access denied');
+        }
+        return next();
+      }
+
       const engineIdKey = options.engineIdKey || 'engineId';
       const engineId = extractEngineId(req, options);
       if (!engineId) {

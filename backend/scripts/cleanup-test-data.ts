@@ -21,6 +21,7 @@ async function cleanupTestData() {
   const engineCountResult = await dataSource.query(`
     SELECT COUNT(*) as count FROM main.engines 
     WHERE name LIKE 'test_camunda_%' OR name LIKE 'test_%engine%' OR name LIKE 'test_%'
+       OR name LIKE 'e2e-%-engine'
   `);
   const userCountResult = await dataSource.query(`
     SELECT COUNT(*) as count FROM main.users 
@@ -35,6 +36,7 @@ async function cleanupTestData() {
     WHERE name LIKE 'test_camunda_%' 
        OR name LIKE 'test_%engine%'
        OR name LIKE 'test_%'
+       OR name LIKE 'e2e-%-engine'
     RETURNING id
   `);
   // TypeORM returns [rows, affectedCount] for some drivers
@@ -77,19 +79,48 @@ async function cleanupTestData() {
     DELETE FROM main.project_member_roles 
     WHERE project_id IN (
       SELECT id FROM main.projects 
-      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%'
+      WHERE name LIKE 'test_%'
+         OR name LIKE 'e2e-%'
+         OR name LIKE 'Smoke %'
+         OR name LIKE 'New Project to test Git%'
     )
   `);
   await dataSource.query(`
     DELETE FROM main.project_members 
     WHERE project_id IN (
       SELECT id FROM main.projects 
-      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%'
+      WHERE name LIKE 'test_%'
+         OR name LIKE 'e2e-%'
+         OR name LIKE 'Smoke %'
+         OR name LIKE 'New Project to test Git%'
+    )
+  `);
+  await dataSource.query(`
+    DELETE FROM main.files
+    WHERE project_id IN (
+      SELECT id FROM main.projects
+      WHERE name LIKE 'test_%'
+         OR name LIKE 'e2e-%'
+         OR name LIKE 'Smoke %'
+         OR name LIKE 'New Project to test Git%'
+    )
+  `);
+  await dataSource.query(`
+    DELETE FROM main.folders
+    WHERE project_id IN (
+      SELECT id FROM main.projects
+      WHERE name LIKE 'test_%'
+         OR name LIKE 'e2e-%'
+         OR name LIKE 'Smoke %'
+         OR name LIKE 'New Project to test Git%'
     )
   `);
   const projectResult = await dataSource.query(`
     DELETE FROM main.projects 
-    WHERE name LIKE 'test_%' OR name LIKE 'e2e-%'
+    WHERE name LIKE 'test_%'
+       OR name LIKE 'e2e-%'
+       OR name LIKE 'Smoke %'
+       OR name LIKE 'New Project to test Git%'
     RETURNING id
   `);
   const projectCount = Array.isArray(projectResult) ? (projectResult[1] ?? projectResult.length) : 0;
@@ -108,6 +139,39 @@ async function cleanupTestData() {
   await dataSource.query(`
     DELETE FROM main.engine_members 
     WHERE engine_id NOT IN (SELECT id FROM main.engines)
+  `);
+
+  console.log('Cleaning up test refresh tokens and audit logs...');
+  await dataSource.query(`
+    DELETE FROM main.refresh_tokens
+    WHERE user_id IN (
+      SELECT id FROM main.users
+      WHERE email LIKE 'e2e-%@example.com'
+         OR email LIKE 'test_%@example.com'
+         OR email LIKE 'test_%'
+    )
+  `);
+  await dataSource.query(`
+    DELETE FROM main.audit_logs
+    WHERE user_id IN (
+      SELECT id FROM main.users
+      WHERE email LIKE 'e2e-%@example.com'
+         OR email LIKE 'test_%@example.com'
+         OR email LIKE 'test_%'
+    )
+       OR resource_id IN (
+      SELECT id FROM main.projects
+      WHERE name LIKE 'test_%'
+         OR name LIKE 'e2e-%'
+         OR name LIKE 'Smoke %'
+         OR name LIKE 'New Project to test Git%'
+    )
+       OR resource_id IN (
+      SELECT id FROM main.engines
+      WHERE name LIKE 'test_%' OR name LIKE 'test_camunda_%' OR name LIKE 'e2e-%-engine'
+    )
+       OR details LIKE '%e2e-%@example.com%'
+       OR details LIKE '%test_%@example.com%'
   `);
   
   console.log(`\n✅ Cleanup complete! Removed ${totalDeleted} test records.`);

@@ -147,10 +147,10 @@ export default async function globalSetup() {
   const engineBaseUrl = process.env.CAMUNDA_BASE_URL || 'http://localhost:9080/engine-rest';
   await pool.query(
     `INSERT INTO ${schema}.engines
-      (id, name, base_url, type, auth_type, username, password_enc, active, version,
+      (id, name, base_url, type, auth_type, username, password_enc, version,
        owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
        created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
     [
       engineId,
       `${prefix}-engine`,
@@ -159,7 +159,6 @@ export default async function globalSetup() {
       null,
       null,
       null,
-      true,
       null,
       userId,
       null,

@@ -2,6 +2,7 @@ import React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ComposedModal, ModalHeader, ModalBody, ModalFooter, Button, InlineNotification, InlineLoading, ProgressBar } from '@carbon/react'
 import { apiClient } from '../../../../shared/api/client'
+import { useSelectedEngine } from '../../../../components/EngineSelector'
 
 interface Props {
   open: boolean
@@ -11,11 +12,16 @@ interface Props {
 
 export default function BatchDetailModal({ open, batchId, onClose }: Props) {
   const qc = useQueryClient()
+  const selectedEngineId = useSelectedEngine()
 
   const q = useQuery({
-    queryKey: ['batches', 'detail', batchId],
-    queryFn: () => apiClient.get<any>(`/mission-control-api/batches/${batchId}`, undefined, { credentials: 'include' }),
-    enabled: open && !!batchId,
+    queryKey: ['batches', 'detail', batchId, selectedEngineId],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (selectedEngineId) params.set('engineId', selectedEngineId)
+      return apiClient.get<any>(`/mission-control-api/batches/${batchId}?${params}`, undefined, { credentials: 'include' })
+    },
+    enabled: open && !!batchId && !!selectedEngineId,
     refetchInterval: open ? 5000 : false,
   })
 
@@ -50,7 +56,11 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
 
   const suspendMutation = useMutation({
     mutationFn: async ({ id, suspended }: { id: string; suspended: boolean }) => {
-      await apiClient.put(`/mission-control-api/batches/${encodeURIComponent(id)}/suspended`, { suspended }, { credentials: 'include' })
+      await apiClient.put(
+        `/mission-control-api/batches/${encodeURIComponent(id)}/suspended`,
+        { suspended, engineId: selectedEngineId },
+        { credentials: 'include' },
+      )
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['batches', 'list'] })
@@ -60,7 +70,9 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
 
   async function cancelBatch() {
     if (!batchId) return
-    await apiClient.delete(`/mission-control-api/batches/${batchId}`, { credentials: 'include' })
+    const params = new URLSearchParams()
+    if (selectedEngineId) params.set('engineId', selectedEngineId)
+    await apiClient.delete(`/mission-control-api/batches/${batchId}?${params}`, { credentials: 'include' })
     await qc.invalidateQueries({ queryKey: ['batches', 'list'] })
     await qc.invalidateQueries({ queryKey: ['batches', 'detail', batchId] })
     onClose()

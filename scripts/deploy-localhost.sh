@@ -243,7 +243,9 @@ check_database() {
 
 run_migrations() {
   if [[ "$RUN_MIGRATIONS" == "true" ]]; then
-    log "Running database migrations (first-time install)"
+    log "Running database schema sync + migrations (first-time install)"
+    (cd "$BACKEND_DIR" && npm run db:schema:sync)
+    log "✅ Database schema synced"
     (cd "$BACKEND_DIR" && npm run db:migration:run)
     log "✅ Database migrations completed"
   else
@@ -278,9 +280,15 @@ kill_port() {
 }
 
 build_backend() {
+  local MSAL_DIST="$BACKEND_DIR/node_modules/@azure/msal-node/dist/index.d.ts"
   if [[ ! -d "$BACKEND_DIR/node_modules" ]]; then
     log "Installing backend deps (including devDependencies for build)"
     (cd "$BACKEND_DIR" && npm install --include=dev --no-audit --no-fund)
+  elif [[ ! -f "$MSAL_DIST" ]]; then
+    warn "Backend deps appear incomplete (missing @azure/msal-node dist). Cleaning cache and reinstalling..."
+    rm -rf "$BACKEND_DIR/node_modules"
+    (cd "$BACKEND_DIR" && npm cache clean --force)
+    (cd "$BACKEND_DIR" && npm install --include=dev --no-audit --no-fund --prefer-online)
   else
     log "Backend dependencies already installed (offline mode)"
   fi
@@ -309,7 +317,7 @@ build_frontend() {
 
 start_backend() {
   log "Starting backend on :$BACKEND_PORT"
-  (cd "$BACKEND_DIR" && nohup node dist/src/server.js > server.log 2>&1 &)
+  (cd "$BACKEND_DIR" && nohup node dist/server.js > server.log 2>&1 &)
 }
 
 start_frontend() {

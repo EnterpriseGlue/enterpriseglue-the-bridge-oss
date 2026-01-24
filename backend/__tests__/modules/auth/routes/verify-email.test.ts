@@ -10,6 +10,10 @@ vi.mock('@shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
+vi.mock('@shared/middleware/rateLimiter.js', () => ({
+  apiLimiter: (_req: any, _res: any, next: any) => next(),
+}));
+
 vi.mock('typeorm', async () => {
   const actual = await vi.importActual('typeorm');
   return {

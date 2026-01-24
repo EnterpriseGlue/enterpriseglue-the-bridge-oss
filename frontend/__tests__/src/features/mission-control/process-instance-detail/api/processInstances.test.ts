@@ -276,7 +276,7 @@ describe('processInstances API', () => {
       const result = await listProcessDefinitions();
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/mission-control-api/process-definitions',
+        '/mission-control-api/process-definitions?',
         undefined,
         { credentials: 'include' }
       );

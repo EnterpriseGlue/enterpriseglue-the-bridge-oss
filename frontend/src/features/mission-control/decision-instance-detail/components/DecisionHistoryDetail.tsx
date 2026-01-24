@@ -22,6 +22,7 @@ import { Copy } from '@carbon/icons-react'
 import { PageLoader } from '../../../../shared/components/PageLoader'
 import { BreadcrumbBar } from '../../../shared/components/BreadcrumbBar'
 import { apiClient } from '../../../../shared/api/client'
+import { useSelectedEngine } from '../../../../components/EngineSelector'
 import styles from '../../process-instance-detail/styles/InstanceDetail.module.css'
 import SplitPane from 'react-split-pane'
 
@@ -56,14 +57,16 @@ export default function DecisionHistoryDetail() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const location = useLocation() as any
+  const selectedEngineId = useSelectedEngine()
   const searchParams = new URLSearchParams(location.search)
   const fromInstanceId = searchParams.get('fromInstance') || (location?.state?.fromInstanceId as string | undefined)
   const processLabel = searchParams.get('processLabel') || null
 
   const histQ = useQuery({
-    queryKey: ['mission-control', 'decision-hist', id],
+    queryKey: ['mission-control', 'decision-hist', id, selectedEngineId],
     queryFn: async () => {
       const params = new URLSearchParams()
+      if (selectedEngineId) params.set('engineId', selectedEngineId)
       params.set('decisionInstanceId', id)
       const data = await apiClient.get<HistoricDecisionInstance[]>(
         `/mission-control-api/history/decisions?${params.toString()}`,
@@ -72,7 +75,7 @@ export default function DecisionHistoryDetail() {
       )
       return data[0] || null
     },
-    enabled: !!id,
+    enabled: !!id && !!selectedEngineId,
   })
 
   const decision = histQ.data as HistoricDecisionInstance | null
@@ -82,10 +85,11 @@ export default function DecisionHistoryDetail() {
     (decision as any)?.rootDecisionInstanceId || decision?.id || null
 
   const relatedQ = useQuery({
-    queryKey: ['mission-control', 'decision-related', rootDecisionInstanceId],
+    queryKey: ['mission-control', 'decision-related', rootDecisionInstanceId, selectedEngineId],
     queryFn: async () => {
       if (!rootDecisionInstanceId) return [] as HistoricDecisionInstance[]
       const params = new URLSearchParams()
+      if (selectedEngineId) params.set('engineId', selectedEngineId)
       params.set('rootDecisionInstanceId', rootDecisionInstanceId)
       const data = await apiClient.get<HistoricDecisionInstance[]>(
         `/mission-control-api/history/decisions?${params.toString()}`,
@@ -94,7 +98,7 @@ export default function DecisionHistoryDetail() {
       )
       return data
     },
-    enabled: !!rootDecisionInstanceId,
+    enabled: !!rootDecisionInstanceId && !!selectedEngineId,
   })
 
   const versionLabel = React.useMemo(() => {
@@ -106,39 +110,48 @@ export default function DecisionHistoryDetail() {
   }, [decision?.decisionDefinitionId])
 
   const xmlQ = useQuery({
-    queryKey: ['mission-control', 'decision-xml', decision?.decisionDefinitionId],
+    queryKey: ['mission-control', 'decision-xml', decision?.decisionDefinitionId, selectedEngineId],
     queryFn: async () => {
       if (!decision?.decisionDefinitionId) return ''
+      const params = selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''
       const data = await apiClient.get<{ dmnXml: string }>(
         `/mission-control-api/decision-definitions/${encodeURIComponent(
           decision.decisionDefinitionId,
-        )}/xml`,
+        )}/xml${params}`,
         undefined,
         { credentials: 'include' },
       )
       return data.dmnXml
     },
-    enabled: !!decision?.decisionDefinitionId,
+    enabled: !!decision?.decisionDefinitionId && !!selectedEngineId,
   })
 
   const inputsQ = useQuery({
-    queryKey: ['mission-control', 'decision-inputs', id],
-    queryFn: () => apiClient.get<DecisionIo[]>(
-      `/mission-control-api/history/decisions/${id}/inputs`,
-      undefined,
-      { credentials: 'include' },
-    ),
-    enabled: !!id,
+    queryKey: ['mission-control', 'decision-inputs', id, selectedEngineId],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (selectedEngineId) params.set('engineId', selectedEngineId)
+      return apiClient.get<DecisionIo[]>(
+        `/mission-control-api/history/decisions/${id}/inputs?${params.toString()}`,
+        undefined,
+        { credentials: 'include' },
+      )
+    },
+    enabled: !!id && !!selectedEngineId,
   })
 
   const outputsQ = useQuery<DecisionIo[]>({
-    queryKey: ['mission-control', 'decision-outputs', id],
-    queryFn: () => apiClient.get<DecisionIo[]>(
-      `/mission-control-api/history/decisions/${id}/outputs`,
-      undefined,
-      { credentials: 'include' },
-    ),
-    enabled: !!id,
+    queryKey: ['mission-control', 'decision-outputs', id, selectedEngineId],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (selectedEngineId) params.set('engineId', selectedEngineId)
+      return apiClient.get<DecisionIo[]>(
+        `/mission-control-api/history/decisions/${id}/outputs?${params.toString()}`,
+        undefined,
+        { credentials: 'include' },
+      )
+    },
+    enabled: !!id && !!selectedEngineId,
   })
 
   const title = decision?.decisionDefinitionName || decision?.decisionDefinitionKey || 'Decision'

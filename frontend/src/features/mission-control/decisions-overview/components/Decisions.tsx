@@ -12,6 +12,7 @@ import { DecisionsDataTable } from './DecisionsDataTable'
 import { PageLoader } from '../../../../shared/components/PageLoader'
 import { useDecisionsFilterStore } from '../../shared/stores/decisionsFilterStore'
 import { EngineAccessError, isEngineAccessError } from '../../shared/components/EngineAccessError'
+import { useSelectedEngine } from '../../../../components/EngineSelector'
 import styles from './Decisions.module.css'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
@@ -81,10 +82,12 @@ export default function Decisions() {
   } = useDecisionsFilterStore()
   
   const [maxResults] = React.useState(50)
+  const selectedEngineId = useSelectedEngine()
 
   const defsQ = useQuery({
-    queryKey: ['mission-control', 'decision-defs'],
-    queryFn: () => listDecisionDefinitions(),
+    queryKey: ['mission-control', 'decision-defs', selectedEngineId],
+    queryFn: () => listDecisionDefinitions(selectedEngineId),
+    enabled: !!selectedEngineId,
   })
 
   const defItems = React.useMemo(() => {
@@ -150,12 +153,12 @@ export default function Decisions() {
   }, [defsQ.data, currentKey, selectedVersion])
 
   const xmlQ = useQuery({
-    queryKey: ['mission-control', 'decision-xml', currentDef?.id],
+    queryKey: ['mission-control', 'decision-xml', currentDef?.id, selectedEngineId],
     queryFn: async () => {
       if (!currentDef) return ''
-      return fetchDecisionDefinitionDmnXml(currentDef.id)
+      return fetchDecisionDefinitionDmnXml(currentDef.id, selectedEngineId)
     },
-    enabled: !!currentDef?.id,
+    enabled: !!currentDef?.id && !!selectedEngineId,
   })
 
   // Derived boolean flags from selectedStates
@@ -163,9 +166,10 @@ export default function Decisions() {
   const failedOnly = selectedStates.some(s => s.id === 'failed')
 
   const historyQ = useQuery({
-    queryKey: ['mission-control', 'decision-history', currentDef?.id, evaluatedOnly, failedOnly, maxResults, dateFrom, dateTo, timeFrom, timeTo],
+    queryKey: ['mission-control', 'decision-history', currentDef?.id, evaluatedOnly, failedOnly, maxResults, dateFrom, dateTo, timeFrom, timeTo, selectedEngineId],
     queryFn: async () => {
       const params = new URLSearchParams()
+      if (selectedEngineId) params.set('engineId', selectedEngineId)
       if (currentDef?.id) params.set('decisionDefinitionId', currentDef.id)
       params.set('rootDecisionInstancesOnly', 'true')
       params.set('sortBy', 'evaluationTime')
@@ -179,7 +183,7 @@ export default function Decisions() {
 
       return listDecisionHistory(params)
     },
-    enabled: true,
+    enabled: !!selectedEngineId,
   })
 
 

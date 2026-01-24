@@ -108,6 +108,7 @@ export default function BatchOperationForm({ operationType }: Props) {
     try {
       const payload: any = {
         processDefinitionKey: formData.processDefinitionKey,
+        engineId: selectedEngineId,
       };
 
       if (config.fields.deleteReason) payload.deleteReason = formData.deleteReason;

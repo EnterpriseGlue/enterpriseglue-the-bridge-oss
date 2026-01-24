@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["./src/shared/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@enterpriseglue/contracts": ["../packages/contracts/src/index.d.ts"],
+      "@enterpriseglue/contracts/auth": ["../packages/contracts/src/auth.d.ts"],
+      "@enterpriseglue/contracts/roles": ["../packages/contracts/src/roles.d.ts"],
+      "@enterpriseglue/contracts/members": ["../packages/contracts/src/members.d.ts"],
+      "@enterpriseglue/contracts/*": ["../packages/contracts/src/*"],
+      "@enterpriseglue/enterprise-plugin-api": ["../packages/enterprise-plugin-api/src/index.d.ts"],
+      "@enterpriseglue/enterprise-plugin-api/backend": ["../packages/enterprise-plugin-api/src/backend.d.ts"],
+      "@enterpriseglue/enterprise-plugin-api/frontend": ["../packages/enterprise-plugin-api/src/frontend.d.ts"],
+      "@azure/msal-node": ["node_modules/@azure/msal-node/lib/types/index.d.ts"],
+      "@azure/msal-node/*": ["node_modules/@azure/msal-node/lib/types/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["test", "__tests__", "node_modules"]
+}

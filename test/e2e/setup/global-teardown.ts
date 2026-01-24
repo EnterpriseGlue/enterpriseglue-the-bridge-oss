@@ -79,30 +79,30 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
 
   if (projectIds.length > 0) {
     await pool.query(
-      `DELETE FROM ${schema}.project_member_roles WHERE project_id = ANY($1::uuid[])`,
+      `DELETE FROM ${schema}.project_member_roles WHERE project_id = ANY($1::text[])`,
       [projectIds]
     );
     await pool.query(
-      `DELETE FROM ${schema}.project_members WHERE project_id = ANY($1::uuid[])`,
+      `DELETE FROM ${schema}.project_members WHERE project_id = ANY($1::text[])`,
       [projectIds]
     );
     await pool.query(
-      `DELETE FROM ${schema}.files WHERE project_id = ANY($1::uuid[])`,
+      `DELETE FROM ${schema}.files WHERE project_id = ANY($1::text[])`,
       [projectIds]
     );
     await pool.query(
-      `DELETE FROM ${schema}.folders WHERE project_id = ANY($1::uuid[])`,
+      `DELETE FROM ${schema}.folders WHERE project_id = ANY($1::text[])`,
       [projectIds]
     );
     await pool.query(
-      `DELETE FROM ${schema}.projects WHERE id = ANY($1::uuid[])`,
+      `DELETE FROM ${schema}.projects WHERE id = ANY($1::text[])`,
       [projectIds]
     );
   }
 
   await pool.query(`DELETE FROM ${schema}.refresh_tokens WHERE user_id = $1`, [userId]);
   await pool.query(
-    `DELETE FROM ${schema}.audit_logs WHERE user_id = $1 OR resource_id = ANY($2::uuid[])`,
+    `DELETE FROM ${schema}.audit_logs WHERE user_id = $1 OR resource_id::text = ANY($2::text[])`,
     [userId, projectIds]
   );
 
@@ -161,10 +161,14 @@ export default async function globalTeardown() {
     );
 
     if (data.engineId) {
-      await fetchJson(`/engines-api/engines/${data.engineId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${adminLogin.accessToken}` },
-      });
+      await fetchJson(
+        `/engines-api/engines/${data.engineId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${adminLogin.accessToken}` },
+        },
+        { allowStatuses: [404] }
+      );
     }
 
     if (data.cleanupAdmin && data.adminUserId) {

@@ -7,6 +7,7 @@ import { apiClient } from '../../../../shared/api/client'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../../shared/components/PageLayout'
 import BatchDetailModal from './BatchDetailModal'
 import { EngineAccessError, isEngineAccessError } from '../../shared/components/EngineAccessError'
+import { useSelectedEngine } from '../../../../components/EngineSelector'
 
 type Batch = {
   id: string
@@ -23,11 +24,25 @@ type Batch = {
 export default function BatchesList() {
   const navigate = useNavigate()
   const { batchId } = useParams()
-  const listQ = useQuery({ queryKey: ['batches','list'], queryFn: () => apiClient.get<Batch[]>('/mission-control-api/batches', undefined, { credentials: 'include' }), refetchInterval: 5000 })
+  const selectedEngineId = useSelectedEngine()
+  const listQ = useQuery({ 
+    queryKey: ['batches', 'list', selectedEngineId], 
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (selectedEngineId) params.set('engineId', selectedEngineId)
+      return apiClient.get<Batch[]>(`/mission-control-api/batches?${params}`, undefined, { credentials: 'include' })
+    }, 
+    refetchInterval: 5000,
+    enabled: !!selectedEngineId,
+  })
 
   const suspendMutation = useMutation({
     mutationFn: async ({ id, suspended }: { id: string; suspended: boolean }) => {
-      await apiClient.put(`/mission-control-api/batches/${encodeURIComponent(id)}/suspended`, { suspended }, { credentials: 'include' })
+      await apiClient.put(
+        `/mission-control-api/batches/${encodeURIComponent(id)}/suspended`,
+        { suspended, engineId: selectedEngineId },
+        { credentials: 'include' },
+      )
     },
     onSuccess: async () => {
       await listQ.refetch()
@@ -64,20 +79,24 @@ export default function BatchesList() {
   }, [navigate])
 
   const cancelBatch = React.useCallback(async (id: string) => {
-    await apiClient.delete(`/mission-control-api/batches/${encodeURIComponent(id)}`, { credentials: 'include' })
+    const params = new URLSearchParams()
+    if (selectedEngineId) params.set('engineId', selectedEngineId)
+    await apiClient.delete(`/mission-control-api/batches/${encodeURIComponent(id)}?${params}`, { credentials: 'include' })
     await listQ.refetch()
     if (batchId === id) {
       closeModal()
     }
-  }, [batchId, closeModal, listQ])
+  }, [batchId, closeModal, listQ, selectedEngineId])
 
   const deleteBatch = React.useCallback(async (id: string) => {
-    await apiClient.delete(`/mission-control-api/batches/${encodeURIComponent(id)}/record`, { credentials: 'include' })
+    const params = new URLSearchParams()
+    if (selectedEngineId) params.set('engineId', selectedEngineId)
+    await apiClient.delete(`/mission-control-api/batches/${encodeURIComponent(id)}/record?${params}`, { credentials: 'include' })
     await listQ.refetch()
     if (batchId === id) {
       closeModal()
     }
-  }, [batchId, closeModal, listQ])
+  }, [batchId, closeModal, listQ, selectedEngineId])
 
   // Check for engine access errors (403/503)
   const engineAccessError = isEngineAccessError(listQ.error)

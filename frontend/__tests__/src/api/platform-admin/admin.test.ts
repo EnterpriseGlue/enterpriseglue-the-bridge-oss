@@ -46,7 +46,7 @@ describe('platformAdminApi', () => {
   it('calls getUsers endpoint', async () => {
     (apiClient.get as any).mockResolvedValue([]);
     await platformAdminApi.getUsers({ limit: 10 });
-    expect(apiClient.get).toHaveBeenCalledWith('/api/admin/users', { limit: 10 });
+    expect(apiClient.get).toHaveBeenCalledWith('/api/users', { limit: 10 });
   });
 
   it('calls searchUsers endpoint', async () => {

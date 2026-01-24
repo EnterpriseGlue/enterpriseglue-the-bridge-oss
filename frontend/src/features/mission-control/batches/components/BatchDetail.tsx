@@ -3,11 +3,22 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Button, InlineNotification } from '@carbon/react'
 import { apiClient } from '../../../../shared/api/client'
+import { useSelectedEngine } from '../../../../components/EngineSelector'
 
 export default function BatchDetail() {
   const { batchId } = useParams()
   const navigate = useNavigate()
-  const q = useQuery({ queryKey: ['batches','detail', batchId], queryFn: () => apiClient.get<any>(`/mission-control-api/batches/${batchId}`, undefined, { credentials: 'include' }), refetchInterval: 5000 })
+  const selectedEngineId = useSelectedEngine()
+  const q = useQuery({ 
+    queryKey: ['batches','detail', batchId, selectedEngineId], 
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (selectedEngineId) params.set('engineId', selectedEngineId)
+      return apiClient.get<any>(`/mission-control-api/batches/${batchId}?${params}`, undefined, { credentials: 'include' })
+    }, 
+    refetchInterval: 5000,
+    enabled: !!batchId && !!selectedEngineId,
+  })
 
   const status = (q.data?.batch?.status || '').toUpperCase()
   const progress = Number(q.data?.batch?.progress || 0)
@@ -36,7 +47,9 @@ export default function BatchDetail() {
 
   async function cancel() {
     if (!batchId) return
-    await apiClient.delete(`/mission-control-api/batches/${batchId}`, { credentials: 'include' })
+    const params = new URLSearchParams()
+    if (selectedEngineId) params.set('engineId', selectedEngineId)
+    await apiClient.delete(`/mission-control-api/batches/${batchId}?${params}`, { credentials: 'include' })
     navigate('/mission-control/batches')
   }
 

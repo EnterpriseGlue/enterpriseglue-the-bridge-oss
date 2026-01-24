@@ -100,8 +100,12 @@ export class PostgresAdapter implements DatabaseAdapter {
   }
 
   getMigrationsPath(): string {
-    const distPath = 'dist/src/shared/db/migrations';
+    const distPath = 'dist/shared/db/migrations';
     if (fs.existsSync(distPath)) return distPath;
+
+    const legacyDistPath = 'dist/src/shared/db/migrations';
+    if (fs.existsSync(legacyDistPath)) return legacyDistPath;
+
     return 'src/shared/db/migrations';
   }
 }

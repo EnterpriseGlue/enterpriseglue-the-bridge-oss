@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-01-23T07:45:23.457Z
+Generated at: 2026-01-24T12:36:11.342Z
 
 Generated from:
 - backend/third_party_licenses.json
@@ -21,7 +21,7 @@ Generated from:
 | BSD-3-Clause | 15 |
 | BSD* | 1 |
 | ISC | 66 |
-| MIT | 533 |
+| MIT | 532 |
 | MIT-0 | 1 |
 | MIT* | 14 |
 | OFL-1.1 | 9 |
@@ -493,7 +493,7 @@ Generated from:
 | lazystream | 1.0.1 | MIT | https://github.com/jpommerening/node-lazystream | backend |
 | lezer-feel | 1.9.0 | MIT | https://github.com/nikku/lezer-feel | frontend |
 | lines-and-columns | 1.2.4 | MIT | https://github.com/eventualbuddha/lines-and-columns | frontend |
-| lodash-es | 4.17.21 | MIT | https://github.com/lodash/lodash | frontend |
+| lodash-es | 4.17.23 | MIT | https://github.com/lodash/lodash | frontend |
 | lodash.includes | 4.3.0 | MIT | https://github.com/lodash/lodash | backend |
 | lodash.isboolean | 3.0.3 | MIT | https://github.com/lodash/lodash | backend |
 | lodash.isinteger | 4.0.4 | MIT | https://github.com/lodash/lodash | backend |
@@ -501,8 +501,7 @@ Generated from:
 | lodash.isplainobject | 4.0.6 | MIT | https://github.com/lodash/lodash | backend |
 | lodash.isstring | 4.0.1 | MIT | https://github.com/lodash/lodash | backend |
 | lodash.once | 4.1.1 | MIT | https://github.com/lodash/lodash | backend |
-| lodash | 4.17.21 | MIT | https://github.com/lodash/lodash | frontend |
-| lodash | 4.17.23 | MIT | https://github.com/lodash/lodash | backend |
+| lodash | 4.17.23 | MIT | https://github.com/lodash/lodash | backend, frontend |
 | loose-envify | 1.4.0 | MIT | https://github.com/zertosh/loose-envify | frontend |
 | lru-cache | 10.4.3 | ISC | https://github.com/isaacs/node-lru-cache | backend |
 | lucide-react | 0.554.0 | ISC | https://github.com/lucide-icons/lucide | frontend |

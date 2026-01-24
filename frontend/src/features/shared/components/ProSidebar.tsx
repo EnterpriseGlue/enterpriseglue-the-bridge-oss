@@ -198,17 +198,18 @@ export default function ProSidebar() {
 
   // Fetch decision definitions for the Decisions sidebar filters
   const decisionDefsQ = useQuery({
-    queryKey: ['mission-control', 'decision-defs'],
+    queryKey: ['mission-control', 'decision-defs', selectedEngineId],
     queryFn: async () => {
+      const params = selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''
       return apiClient.get<Array<{ id: string; key: string; name?: string | null; version: number }>>(
-        '/mission-control-api/decision-definitions',
+        `/mission-control-api/decision-definitions${params}`,
         undefined,
         {
           credentials: 'include',
         }
       )
     },
-    enabled: onDecisionsPage,
+    enabled: onDecisionsPage && !!selectedEngineId,
   })
 
   // Build list of unique decisions for dropdown

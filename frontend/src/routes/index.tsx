@@ -81,7 +81,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/settings`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          {isRootLevel ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-settings-page" />}
+          <PlatformSettingsPage />
         </ProtectedRoute>
       )
     }] : []),
@@ -131,7 +131,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/domains`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          {isRootLevel ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-domains-page" />}
+          {(isRootLevel || !isMultiTenantEnabled()) ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-domains-page" />}
         </ProtectedRoute>
       )
     },
@@ -139,7 +139,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/sso`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          {isRootLevel ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-sso-page" />}
+          {(isRootLevel || !isMultiTenantEnabled()) ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-sso-page" />}
         </ProtectedRoute>
       )
     },
@@ -147,7 +147,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/invite-policies`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          {isRootLevel ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-invite-policies-page" />}
+          {(isRootLevel || !isMultiTenantEnabled()) ? <PlatformSettingsPage /> : <ExtensionPage name="tenant-invite-policies-page" />}
         </ProtectedRoute>
       )
     },
@@ -171,7 +171,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/email-templates`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          {isRootLevel
+          {(isRootLevel || !isMultiTenantEnabled())
             ? (isMultiTenantEnabled() ? <ExtensionPage name="platform-email-templates-page" /> : <EmailTemplates />)
             : <ExtensionPage name="tenant-email-templates-page" />}
         </ProtectedRoute>
@@ -197,7 +197,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/users`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          {isRootLevel ? <UserManagement /> : <ExtensionPage name="tenant-users-page" />}
+          {(isRootLevel || !isMultiTenantEnabled()) ? <UserManagement /> : <ExtensionPage name="tenant-users-page" />}
         </ProtectedRoute>
       )
     },
