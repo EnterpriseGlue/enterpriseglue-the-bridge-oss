@@ -6,9 +6,11 @@ import { useNavigate } from 'react-router-dom'
 interface EngineAccessErrorProps {
   status: 403 | 503 | number
   message?: string
+  actionPath?: string
+  actionLabel?: string
 }
 
-export function EngineAccessError({ status, message }: EngineAccessErrorProps) {
+export function EngineAccessError({ status, message, actionPath = '/mission-control', actionLabel = 'Back to Mission Control' }: EngineAccessErrorProps) {
   const navigate = useNavigate()
 
   const is503 = status === 503
@@ -39,8 +41,8 @@ export function EngineAccessError({ status, message }: EngineAccessErrorProps) {
       <p style={{ fontSize: 'var(--text-14)', maxWidth: '400px', marginBottom: 'var(--spacing-5)' }}>
         {description}
       </p>
-      <Button kind="tertiary" size="sm" onClick={() => navigate('/mission-control')}>
-        Back to Mission Control
+      <Button kind="tertiary" size="sm" onClick={() => navigate(actionPath)}>
+        {actionLabel}
       </Button>
     </div>
   )

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { UserSummarySchema } from './project-member.js';
 
 // Engine roles
-export const EngineRoleSchema = z.enum(['owner', 'delegate', 'deployer', 'viewer']);
+export const EngineRoleSchema = z.enum(['owner', 'delegate', 'operator', 'deployer']);
 
 // Engine member schema (read responses)
 export const EngineMemberSchema = z.object({
@@ -43,11 +43,11 @@ export const EngineWithDetailsSchema = z.object({
 // Request schemas
 export const AddEngineMemberRequest = z.object({
   email: z.string().email(),
-  role: z.enum(['deployer', 'viewer']),
+  role: z.enum(['operator', 'deployer']),
 });
 
 export const UpdateEngineMemberRoleRequest = z.object({
-  role: z.enum(['deployer', 'viewer']),
+  role: z.enum(['operator', 'deployer']),
 });
 
 export const AssignDelegateRequest = z.object({

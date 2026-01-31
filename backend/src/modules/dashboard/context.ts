@@ -1,8 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { logger } from '@shared/utils/logger.js';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { dashboardLimiter } from '@shared/middleware/rateLimiter.js';
-import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { asyncHandler } from '@shared/middleware/errorHandler.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { Project } from '@shared/db/entities/Project.js';
 import { ProjectMember } from '@shared/db/entities/ProjectMember.js';
@@ -54,18 +53,21 @@ r.get('/api/dashboard/context', requireAuth, dashboardLimiter, asyncHandler(asyn
   });
   const ownedEngineIds = ownedEngines.map((e) => e.id);
 
+  // Get engines where user is delegate
+  const delegatedEngines = await engineRepo.find({
+    where: { delegateId: userId },
+    select: ['id'],
+  });
+  const delegatedEngineIds = delegatedEngines.map((e) => e.id);
+
   // Get engines where user is delegate or member
   const engineMemberRows = await engineMemberRepo.find({
     where: { userId },
     select: ['engineId', 'role'],
   });
-  
-  const delegatedEngineIds = engineMemberRows
-    .filter((m) => m.role === 'delegate')
-    .map((m) => m.engineId);
-  
+
   const memberEngineIds = engineMemberRows.map((m) => m.engineId);
-  const accessibleEngineIds = [...new Set([...ownedEngineIds, ...memberEngineIds])];
+  const accessibleEngineIds = [...new Set([...ownedEngineIds, ...delegatedEngineIds, ...memberEngineIds])];
 
   // Get project memberships
   const projectMemberRows = await projectMemberRepo.find({
@@ -93,9 +95,8 @@ r.get('/api/dashboard/context', requireAuth, dashboardLimiter, asyncHandler(asyn
   }));
 
   // Compute visibility flags based on roles
-  const isEngineOwnerOrDelegate = ownedEngineIds.length > 0 || delegatedEngineIds.length > 0;
-  const isProjectOwnerOrDelegate = projectMemberships.some(p => p.role === 'owner' || p.role === 'delegate');
-  const isProjectContributor = projectMemberships.some(p => p.role === 'contributor');
+  const isEngineOperator = engineMemberRows.some((m) => m.role === 'operator');
+  const isEngineOwnerOrDelegateOrOperator = ownedEngineIds.length > 0 || delegatedEngineIds.length > 0 || isEngineOperator;
 
   const context: DashboardContext = {
     isPlatformAdmin: isAdmin,
@@ -106,10 +107,10 @@ r.get('/api/dashboard/context', requireAuth, dashboardLimiter, asyncHandler(asyn
     // Visibility flags
     canViewActiveUsers: isAdmin,
     canViewAllProjects: isAdmin,
-    canViewEngines: isAdmin || isEngineOwnerOrDelegate,
-    canViewProcessData: isAdmin || isEngineOwnerOrDelegate || isProjectOwnerOrDelegate || isProjectContributor,
-    canViewDeployments: isAdmin || isEngineOwnerOrDelegate || isProjectOwnerOrDelegate || isProjectContributor,
-    canViewMetrics: isAdmin || isEngineOwnerOrDelegate || isProjectOwnerOrDelegate,
+    canViewEngines: isEngineOwnerOrDelegateOrOperator,
+    canViewProcessData: isEngineOwnerOrDelegateOrOperator,
+    canViewDeployments: isEngineOwnerOrDelegateOrOperator,
+    canViewMetrics: isEngineOwnerOrDelegateOrOperator,
   };
 
   res.json(context);

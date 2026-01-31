@@ -22,14 +22,14 @@ export function useInstanceData(instanceId: string) {
   // Historical instance data
   const histQ = useQuery({
     queryKey: ['mission-control', 'hist-inst', instanceId],
-    queryFn: () => getHistoricalProcessInstance(instanceId),
+    queryFn: () => getHistoricalProcessInstance(instanceId, selectedEngineId),
     retry: false,
   })
 
   // Runtime instance data (only if not completed)
   const runtimeQ = useQuery({
     queryKey: ['mission-control', 'instance', instanceId],
-    queryFn: () => getProcessInstance(instanceId),
+    queryFn: () => getProcessInstance(instanceId, selectedEngineId),
     enabled: !!instanceId && histQ.isFetched && !(histQ.data as any)?.endTime,
     retry: false,
   })
@@ -59,13 +59,13 @@ export function useInstanceData(instanceId: string) {
   // Variables
   const varsQ = useQuery({
     queryKey: ['mission-control', 'vars', instanceId],
-    queryFn: () => getProcessInstanceVariables(instanceId),
+    queryFn: () => getProcessInstanceVariables(instanceId, selectedEngineId),
   })
 
   // Historical variables
   const histVarsQ = useQuery({
     queryKey: ['mission-control', 'hist-vars', instanceId],
-    queryFn: () => getHistoricalVariableInstances(instanceId),
+    queryFn: () => getHistoricalVariableInstances(instanceId, selectedEngineId),
   })
 
   // Variable type map
@@ -96,7 +96,7 @@ export function useInstanceData(instanceId: string) {
   // Activity instances
   const actQ = useQuery({
     queryKey: ['mission-control', 'act', instanceId],
-    queryFn: () => getProcessInstanceActivityHistory(instanceId),
+    queryFn: () => getProcessInstanceActivityHistory(instanceId, selectedEngineId),
   })
 
   // Sorted activities
@@ -121,20 +121,20 @@ export function useInstanceData(instanceId: string) {
   // Incidents
   const incidentsQ = useQuery({
     queryKey: ['mission-control', 'inc', instanceId],
-    queryFn: () => getProcessInstanceIncidents(instanceId),
+    queryFn: () => getProcessInstanceIncidents(instanceId, selectedEngineId),
   })
 
   // Retry jobs
   const retryJobsQ = useQuery({
     queryKey: ['mission-control', 'jobs', instanceId],
-    queryFn: () => getProcessInstanceJobs(instanceId),
+    queryFn: () => getProcessInstanceJobs(instanceId, selectedEngineId),
     enabled: !!instanceId,
   })
 
   // Retry external tasks
   const retryExtTasksQ = useQuery({
     queryKey: ['mission-control', 'external-tasks', instanceId],
-    queryFn: () => getProcessInstanceExternalTasks(instanceId),
+    queryFn: () => getProcessInstanceExternalTasks(instanceId, selectedEngineId),
     enabled: !!instanceId,
   })
 
@@ -182,7 +182,7 @@ export function useInstanceData(instanceId: string) {
   // Called process instances - disabled as endpoint doesn't exist yet
   const calledQ = useQuery({
     queryKey: ['mission-control', 'called', instanceId],
-    queryFn: () => getCalledProcessInstances(instanceId),
+    queryFn: () => getCalledProcessInstances(instanceId, selectedEngineId),
     enabled: false,
   })
 

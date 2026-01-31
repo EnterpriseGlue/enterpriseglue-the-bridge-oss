@@ -59,12 +59,12 @@ export default function AuditLogViewer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const isAdmin = user?.platformRole === 'admin';
+  const canViewAuditLogs = Boolean(user?.capabilities?.canViewAuditLogs);
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
   const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
   const [isTenantAdmin, setIsTenantAdmin] = useState(false);
   const [tenantAdminChecked, setTenantAdminChecked] = useState(false);
-  const canView = isAdmin || (tenantSlug && isTenantAdmin);
+  const canView = canViewAuditLogs || (tenantSlug && isTenantAdmin);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -78,7 +78,7 @@ export default function AuditLogViewer() {
   const [availableActions, setAvailableActions] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!tenantSlug || isAdmin) {
+    if (!tenantSlug || canViewAuditLogs) {
       setIsTenantAdmin(false);
       setTenantAdminChecked(true);
       return;
@@ -91,7 +91,7 @@ export default function AuditLogViewer() {
         const m = Array.isArray(data)
           ? data.find((t: any) => String(t?.tenantSlug || '') === String(tenantSlug))
           : undefined;
-        const ok = String(m?.role || '').toLowerCase() === 'tenant_admin';
+        const ok = Boolean(m?.isTenantAdmin);
         if (!cancelled) setIsTenantAdmin(ok);
       } catch {
         if (!cancelled) setIsTenantAdmin(false);
@@ -106,9 +106,9 @@ export default function AuditLogViewer() {
     return () => {
       cancelled = true;
     };
-  }, [tenantSlug, isAdmin]);
+  }, [tenantSlug, canViewAuditLogs]);
 
-  if (!isAdmin && tenantSlug && !tenantAdminChecked) {
+  if (!canViewAuditLogs && tenantSlug && !tenantAdminChecked) {
     return (
       <PageLayout>
         <h1>Checking permissions</h1>

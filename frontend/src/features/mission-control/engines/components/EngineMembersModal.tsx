@@ -22,7 +22,7 @@ import InviteMemberModal from '../../../../components/InviteMemberModal'
 import { apiClient } from '../../../../shared/api/client'
 
 // Types
-type EngineRole = 'owner' | 'delegate' | 'deployer' | 'viewer'
+type EngineRole = 'owner' | 'delegate' | 'operator' | 'deployer'
 
 type EngineMember = {
   id: string
@@ -333,10 +333,10 @@ export default function EngineMembersModal({ open, engine, canManage, onClose }:
         resourceId={engine?.id}
         resourceName={engine?.name}
         availableRoles={[
+          { id: 'operator', label: 'Operator' },
           { id: 'deployer', label: 'Deployer' },
-          { id: 'viewer', label: 'Viewer' },
         ]}
-        defaultRole="viewer"
+        defaultRole="operator"
       />
     </>
   )

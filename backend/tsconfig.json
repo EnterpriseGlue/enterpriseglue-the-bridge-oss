@@ -3,6 +3,7 @@
     "target": "ES2020",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "types": ["node", "vitest/globals"],
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "strict": true,
@@ -14,6 +15,11 @@
     "paths": {
       "@shared/*": ["./src/shared/*"],
       "@modules/*": ["./src/modules/*"],
+      "@vitest/expect": ["./node_modules/@vitest/expect/dist/index.d.ts"],
+      "@azure/msal-node": ["./node_modules/@azure/msal-node/lib/types/index.d.ts"],
+      "@azure/msal-node/*": ["./node_modules/@azure/msal-node/lib/types/*"],
+      "@azure/msal-common": ["./node_modules/@azure/msal-common/lib/types/index.d.ts"],
+      "@azure/msal-common/*": ["./node_modules/@azure/msal-common/lib/types/*"],
       "@enterpriseglue/contracts": ["../packages/contracts/src/index.d.ts"],
       "@enterpriseglue/contracts/auth": ["../packages/contracts/src/auth.d.ts"],
       "@enterpriseglue/contracts/roles": ["../packages/contracts/src/roles.d.ts"],
@@ -25,6 +31,6 @@
     },
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts", "__tests__/**/*.ts"],
   "exclude": ["src/db/schema/drizzle-kit-schema.ts"]
 }

@@ -25,7 +25,8 @@ import styles from './ProjectOverview.module.css'
 
 export default function ProjectOverview() {
   const nav = useNavigate()
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const { pathname } = location
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
@@ -99,6 +100,18 @@ export default function ProjectOverview() {
   const [engineAccessOpen, setEngineAccessOpen] = React.useState(false)
   const [engineAccessProject, setEngineAccessProject] = React.useState<{ id: string; name: string } | null>(null)
   const [selectedEngineForRequest, setSelectedEngineForRequest] = React.useState<string | null>(null)
+
+  const didHandleOpenCreateProject = React.useRef(false)
+  React.useEffect(() => {
+    if (didHandleOpenCreateProject.current) return
+    const state = (location as any).state as any
+    if (!state?.openCreateProject) return
+
+    didHandleOpenCreateProject.current = true
+    setOnlineProjectContext(null)
+    createOnlineModal.openModal()
+    nav(toTenantPath('/starbase'), { replace: true, state: {} })
+  }, [location, nav, toTenantPath, createOnlineModal])
 
   React.useEffect(() => {
     if (!isBulkSyncOpen) return

@@ -17,7 +17,14 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
     user: {
       id: 'user-1',
       email: 'admin@example.com',
-      platformRole: 'admin',
+      capabilities: {
+        canViewAdminMenu: true,
+        canAccessAdminRoutes: true,
+        canManageUsers: true,
+        canViewAuditLogs: true,
+        canManagePlatformSettings: true,
+        canViewMissionControl: true,
+      },
       firstName: 'Ada',
       lastName: 'Lovelace',
     },
@@ -45,7 +52,7 @@ vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
       syncPullEnabled: false,
       syncBothEnabled: false,
       gitProjectTokenSharingEnabled: false,
-      defaultDeployRoles: [],
+      defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
     },
   }),
 }))

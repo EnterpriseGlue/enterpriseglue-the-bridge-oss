@@ -230,13 +230,28 @@ export default function LayoutWithProSidebar() {
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
 
   const inMissionControl = effectivePathname.startsWith('/mission-control')
-  const isPlatformAdmin = user?.platformRole === 'admin'
+  const canViewAdminMenu = Boolean(user?.capabilities?.canViewAdminMenu)
+  const canViewMissionControl = Boolean(user?.capabilities?.canViewMissionControl)
+  const canManagePlatformSettings = Boolean(user?.capabilities?.canManagePlatformSettings)
 
   const [isTenantAdmin, setIsTenantAdmin] = useState(false)
   const [tenantAdminChecked, setTenantAdminChecked] = useState(false)
 
+  // Feature flags for top-level sections
+  const isVoyagerEnabled = useFeatureFlag('voyager')
+  const isStarbaseEnabled = useFeatureFlag('starbase')
+  const isMissionControlEnabled = useFeatureFlag('missionControl')
+  const isEnginesEnabled = useFeatureFlag('engines')
+
+  const hideVoyagerForPlatformAdmin = isMultiTenant && canManagePlatformSettings
+
+  const showVoyagerMenu = isVoyagerEnabled && !hideVoyagerForPlatformAdmin
+  const showStarbaseMenu = showVoyagerMenu && isStarbaseEnabled
+  const showEnginesMenu = showVoyagerMenu && isEnginesEnabled
+  const showMissionControlMenu = showVoyagerMenu && isMissionControlEnabled && canViewMissionControl
+
   useEffect(() => {
-    if (!isMultiTenant || isPlatformAdmin) {
+    if (!isMultiTenant || canManagePlatformSettings) {
       setIsTenantAdmin(false)
       setTenantAdminChecked(true)
       return
@@ -254,7 +269,7 @@ export default function LayoutWithProSidebar() {
         const m = Array.isArray(data)
           ? data.find((t: any) => String(t?.tenantSlug || '') === String(tenantSlug))
           : undefined
-        const ok = String(m?.role || '').toLowerCase() === 'tenant_admin'
+        const ok = Boolean(m?.isTenantAdmin)
         if (!cancelled) setIsTenantAdmin(ok)
       } catch {
         if (!cancelled) setIsTenantAdmin(false)
@@ -269,7 +284,7 @@ export default function LayoutWithProSidebar() {
     return () => {
       cancelled = true
     }
-  }, [tenantSlug, isPlatformAdmin])
+  }, [tenantSlug, canManagePlatformSettings])
 
   useEffect(() => {
     if (!isProfileModalOpen) return
@@ -529,12 +544,6 @@ export default function LayoutWithProSidebar() {
     }
   }, [menuAccentColor])
   
-  // Feature flags for top-level sections
-  const isVoyagerEnabled = useFeatureFlag('voyager')
-  const isStarbaseEnabled = useFeatureFlag('starbase')
-  const isMissionControlEnabled = useFeatureFlag('missionControl')
-  const isEnginesEnabled = useFeatureFlag('engines')
-  
   const handleLogout = async () => {
     try {
       await logout()
@@ -611,8 +620,8 @@ export default function LayoutWithProSidebar() {
 
           <div>
             <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-2)' }}>Role</div>
-            <Tag type={user?.platformRole === 'admin' ? 'purple' : 'gray'} size="sm">
-              {user?.platformRole === 'admin' ? 'Platform Admin' : 'User'}
+            <Tag type={user?.capabilities?.canAccessAdminRoutes ? 'purple' : 'gray'} size="sm">
+              {user?.capabilities?.canAccessAdminRoutes ? 'Platform Admin' : 'User'}
             </Tag>
           </div>
 
@@ -686,9 +695,9 @@ export default function LayoutWithProSidebar() {
               {/* TenantPicker is an extension slot - empty in OSS, filled by EE plugin */}
               <ExtensionSlot name="tenant-picker" />
               <HeaderNavigation aria-label="Main navigation">
-                {isVoyagerEnabled && (
+                {showVoyagerMenu && (
                   <HeaderMenu menuLinkName="Voyager">
-                    {isStarbaseEnabled && (
+                    {showStarbaseMenu && (
                       <HeaderMenuItem
                         href={toTenantPath('/starbase')}
                         isCurrentPage={effectivePathname.startsWith('/starbase')}
@@ -697,7 +706,7 @@ export default function LayoutWithProSidebar() {
                         Starbase
                       </HeaderMenuItem>
                     )}
-                    {isMissionControlEnabled && (
+                    {showMissionControlMenu && (
                       <HeaderMenuItem
                         href={toTenantPath('/mission-control/processes')}
                         isCurrentPage={effectivePathname.startsWith('/mission-control')}
@@ -706,7 +715,7 @@ export default function LayoutWithProSidebar() {
                         Mission Control
                       </HeaderMenuItem>
                     )}
-                    {isEnginesEnabled && (
+                    {showEnginesMenu && (
                       <HeaderMenuItem
                         href={toTenantPath('/engines')}
                         isCurrentPage={effectivePathname.startsWith('/engines')}
@@ -731,7 +740,7 @@ export default function LayoutWithProSidebar() {
                     ))}
                   </HeaderMenu>
                 )}
-                {!isMultiTenant && isPlatformAdmin && (
+                {!isMultiTenant && canViewAdminMenu && (
                   <HeaderMenu menuLinkName="Admin">
                     <HeaderMenuItem
                       href={'/admin/users'}
@@ -771,7 +780,7 @@ export default function LayoutWithProSidebar() {
                   </HeaderMenu>
                 )}
                 {/* Tenant Admin menu - only shows if EE plugin registers tenant-admin nav items */}
-                {isMultiTenant && !isPlatformAdmin && tenantAdminChecked && isTenantAdmin && getNavItemsBySection('tenant-admin').length > 0 && (
+                {isMultiTenant && !canViewAdminMenu && tenantAdminChecked && isTenantAdmin && getNavItemsBySection('tenant-admin').length > 0 && (
                   <HeaderMenu menuLinkName="Admin">
                     {getNavItemsBySection('tenant-admin').map((item: NavExtension) => (
                       <HeaderMenuItem
@@ -785,7 +794,7 @@ export default function LayoutWithProSidebar() {
                     ))}
                   </HeaderMenu>
                 )}
-                {isMultiTenant && isPlatformAdmin && (
+                {isMultiTenant && canViewAdminMenu && (
                   <HeaderMenu menuLinkName="Admin">
                     {/* EE-only admin nav items (e.g., Tenants) - rendered from extension registry */}
                     {getNavItemsBySection('admin').map((item: NavExtension) => (

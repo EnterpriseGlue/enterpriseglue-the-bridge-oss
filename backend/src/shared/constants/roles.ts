@@ -26,10 +26,13 @@ export const OWNER_ROLES: ProjectRole[] = ['owner'];
 // ============ Engine Roles ============
 
 /** Engine role type */
-export type EngineRole = 'owner' | 'delegate' | 'deployer' | 'viewer';
+export type EngineRole = 'owner' | 'delegate' | 'operator' | 'deployer';
 
-/** Roles that can view engine content */
-export const ENGINE_VIEW_ROLES: EngineRole[] = ['owner', 'delegate', 'deployer', 'viewer'];
+/** Roles that can view Mission Control engine content */
+export const ENGINE_VIEW_ROLES: EngineRole[] = ['owner', 'delegate', 'operator'];
+
+/** Roles that can view engine membership/content (non-secrets) */
+export const ENGINE_MEMBER_ROLES: EngineRole[] = ['owner', 'delegate', 'operator', 'deployer'];
 
 /** Roles that can manage engine settings */
 export const ENGINE_MANAGE_ROLES: EngineRole[] = ['owner', 'delegate'];

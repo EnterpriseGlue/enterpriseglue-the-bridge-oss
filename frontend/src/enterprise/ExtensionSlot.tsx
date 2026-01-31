@@ -15,6 +15,7 @@ import {
   type NavExtension,
   type HeaderSlot,
 } from './extensionRegistry';
+import type { User } from '../shared/types/auth';
 
 // =============================================================================
 // ExtensionSlot - Renders a named component slot
@@ -100,8 +101,10 @@ interface ExtensionNavItemsProps {
   section: NavExtension['section'];
   /** Render function for each nav item */
   renderItem: (item: NavExtension) => React.ReactNode;
-  /** Current user role for filtering */
-  userRole?: 'admin' | 'tenant_admin' | 'member';
+  /** Current user capabilities for filtering */
+  capabilities?: User['capabilities'];
+  /** Tenant-admin status for tenant-scoped items */
+  isTenantAdmin?: boolean;
   /** Whether multi-tenant is enabled (for filtering tenantOnly items) */
   multiTenantEnabled?: boolean;
 }
@@ -125,10 +128,15 @@ interface ExtensionNavItemsProps {
 export function ExtensionNavItems({ 
   section, 
   renderItem,
-  userRole,
+  capabilities,
+  isTenantAdmin,
   multiTenantEnabled = false,
 }: ExtensionNavItemsProps): React.ReactElement | null {
   const items = getNavItemsBySection(section);
+  const canAccessAdminRoutes = Boolean(capabilities?.canAccessAdminRoutes);
+  const hasTenantAdminAccess = Boolean(isTenantAdmin);
+  const hasCapability = (capability?: NavExtension['requiredCapability']) =>
+    !capability || Boolean(capabilities?.[capability]);
   
   // Filter items based on role and tenant requirements
   const filteredItems = items.filter(item => {
@@ -137,18 +145,20 @@ export function ExtensionNavItems({
       return false;
     }
     
-    // Check role requirements
-    if (item.requiredRole) {
-      if (!userRole) return false;
-      
-      // Role hierarchy: admin > tenant_admin > member
-      const roleHierarchy = { admin: 3, tenant_admin: 2, member: 1 };
-      const userLevel = roleHierarchy[userRole] ?? 0;
-      const requiredLevel = roleHierarchy[item.requiredRole] ?? 0;
-      
-      if (userLevel < requiredLevel) {
-        return false;
-      }
+    // Check capability requirements
+    if (item.requiredCapability && !hasCapability(item.requiredCapability)) {
+      return false;
+    }
+    if (item.requiresTenantAdmin && !hasTenantAdminAccess && !canAccessAdminRoutes) {
+      return false;
+    }
+
+    // Check role requirements (deprecated)
+    if (item.requiredRole === 'admin' && !canAccessAdminRoutes) {
+      return false;
+    }
+    if (item.requiredRole === 'tenant_admin' && !hasTenantAdminAccess && !canAccessAdminRoutes) {
+      return false;
     }
     
     return true;
@@ -176,8 +186,10 @@ export function ExtensionNavItems({
 interface ExtensionMenuItemsProps {
   /** Render function for each menu item */
   renderItem: (item: typeof extensions.menuItems[0]) => React.ReactNode;
-  /** Current user role for filtering */
-  userRole?: 'admin' | 'tenant_admin' | 'member';
+  /** Current user capabilities for filtering */
+  capabilities?: User['capabilities'];
+  /** Tenant-admin status for tenant-scoped items */
+  isTenantAdmin?: boolean;
 }
 
 /**
@@ -185,22 +197,30 @@ interface ExtensionMenuItemsProps {
  */
 export function ExtensionMenuItems({ 
   renderItem,
-  userRole,
+  capabilities,
+  isTenantAdmin,
 }: ExtensionMenuItemsProps): React.ReactElement | null {
   const items = extensions.menuItems;
+  const canAccessAdminRoutes = Boolean(capabilities?.canAccessAdminRoutes);
+  const hasTenantAdminAccess = Boolean(isTenantAdmin);
+  const hasCapability = (capability?: (typeof extensions.menuItems)[number]['requiredCapability']) =>
+    !capability || Boolean(capabilities?.[capability]);
   
-  // Filter items based on role
+  // Filter items based on capability
   const filteredItems = items.filter(item => {
-    if (item.requiredRole) {
-      if (!userRole) return false;
-      
-      const roleHierarchy = { admin: 3, tenant_admin: 2, member: 1 };
-      const userLevel = roleHierarchy[userRole] ?? 0;
-      const requiredLevel = roleHierarchy[item.requiredRole] ?? 0;
-      
-      if (userLevel < requiredLevel) {
-        return false;
-      }
+    if (item.requiredCapability && !hasCapability(item.requiredCapability)) {
+      return false;
+    }
+    if (item.requiresTenantAdmin && !hasTenantAdminAccess && !canAccessAdminRoutes) {
+      return false;
+    }
+
+    // Role requirements (deprecated)
+    if (item.requiredRole === 'admin' && !canAccessAdminRoutes) {
+      return false;
+    }
+    if (item.requiredRole === 'tenant_admin' && !hasTenantAdminAccess && !canAccessAdminRoutes) {
+      return false;
     }
     return true;
   });

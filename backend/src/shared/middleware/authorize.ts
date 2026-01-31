@@ -29,7 +29,7 @@ export interface AuthorizeOptions {
   /**
    * Engine level roles to check
    * Requires engineId in params or body
-   * e.g., ['owner', 'delegate'] or ['deployer', 'viewer']
+   * e.g., ['owner', 'delegate'] or ['operator', 'deployer']
    */
   engineRoles?: EngineRole[];
 
@@ -211,10 +211,10 @@ export const auth = {
   /**
    * Require engine access (any role)
    */
-  engineAccess: () => authorize({ engineRoles: ['owner', 'delegate', 'deployer', 'viewer'] }),
+  engineAccess: () => authorize({ engineRoles: ['owner', 'delegate', 'operator'] }),
 
   /**
    * Require deploy permission on engine
    */
-  engineDeployer: () => authorize({ engineRoles: ['owner', 'delegate', 'deployer'] }),
+  engineDeployer: () => authorize({ engineRoles: ['owner', 'delegate', 'operator', 'deployer'] }),
 };

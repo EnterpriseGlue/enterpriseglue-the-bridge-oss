@@ -16,7 +16,6 @@ import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
 // Invitation and Tenant entities removed - multi-tenancy is EE-only
 import { IsNull } from 'typeorm';
-import { isPlatformAdmin } from '@shared/middleware/platformAuth.js';
 import { generateId } from '@shared/utils/id.js';
 import { sendInvitationEmail } from '@shared/services/email/index.js';
 import { config } from '@shared/config/index.js';
@@ -25,17 +24,14 @@ import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES, MANAGE_ROLES } from '@shared/co
 const router = Router();
 
 async function canViewEngine(req: Request, engineId: string): Promise<boolean> {
-  if (isPlatformAdmin(req)) return true;
   return engineService.hasEngineAccess(req.user!.userId, engineId, ENGINE_VIEW_ROLES);
 }
 
 async function canManageEngine(req: Request, engineId: string): Promise<boolean> {
-  if (isPlatformAdmin(req)) return true;
   return engineService.hasEngineAccess(req.user!.userId, engineId, ENGINE_MANAGE_ROLES);
 }
 
 async function isEngineOwner(req: Request, engineId: string): Promise<boolean> {
-  if (isPlatformAdmin(req)) return true;
   return engineService.hasEngineAccess(req.user!.userId, engineId, ['owner']);
 }
 
@@ -51,11 +47,11 @@ const userIdSchema = z.object({
 
 const addMemberSchema = z.object({
   email: z.string().email(),
-  role: z.enum(['delegate', 'deployer', 'viewer']),
+  role: z.enum(['delegate', 'operator', 'deployer']),
 });
 
 const updateMemberRoleSchema = z.object({
-  role: z.enum(['deployer', 'viewer']),
+  role: z.enum(['operator', 'deployer']),
 });
 
 const assignDelegateSchema = z.object({
@@ -72,7 +68,7 @@ const setLockedSchema = z.object({
 
 /**
  * GET /engines-api/engines/:engineId/members
- * List all members of an engine (owner, delegate, deployers, viewers)
+ * List all members of an engine (owner, delegate, operators, deployers)
  */
 router.get(
   '/engines-api/engines/:engineId/members',
@@ -101,7 +97,7 @@ router.get(
 
 /**
  * POST /engines-api/engines/:engineId/members
- * Add a deployer or viewer to an engine (owner or delegate only)
+ * Add an operator or deployer to an engine (owner or delegate only)
  */
 router.post(
   '/engines-api/engines/:engineId/members',
@@ -488,11 +484,9 @@ router.post(
       const { projectId } = req.body;
       const userId = req.user!.userId;
 
-      if (!isPlatformAdmin(req)) {
-        const canRequest = await projectMemberService.hasRole(projectId, userId, MANAGE_ROLES);
-        if (!canRequest) {
-          throw Errors.forbidden('Only project owners and delegates can request engine access');
-        }
+      const canRequest = await projectMemberService.hasRole(projectId, userId, MANAGE_ROLES);
+      if (!canRequest) {
+        throw Errors.forbidden('Only project owners and delegates can request engine access');
       }
 
       const result = await engineAccessService.requestAccess(projectId, engineId, userId);

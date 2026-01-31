@@ -12,8 +12,7 @@ import { EnvironmentTag } from '@shared/db/entities/EnvironmentTag.js';
 import { User } from '@shared/db/entities/User.js';
 import { In, IsNull } from 'typeorm';
 import { generateId } from '@shared/utils/id.js';
-
-type EngineRole = 'owner' | 'delegate' | 'deployer' | 'viewer';
+import type { EngineRole } from '@shared/constants/roles.js';
 
 export interface EngineWithDetails {
   engine: Engine;
@@ -113,7 +112,7 @@ export class EngineService {
       }
     }
 
-    // Get engines where user is a member (deployer/viewer)
+    // Get engines where user is a member (operator/deployer)
     const memberships = await memberRepo.find({ where: { userId } });
 
     if (memberships.length > 0) {
@@ -127,9 +126,11 @@ export class EngineService {
       for (const engine of memberEngines) {
         if (!results.find(r => r.engine.id === engine.id)) {
           const membership = memberships.find(m => m.engineId === engine.id);
+          const role = (membership?.role as EngineRole) || null;
+          if (!role) continue;
           results.push({
             engine,
-            role: (membership?.role as EngineRole) || 'viewer',
+            role,
             environmentTag: null,
           });
         }
@@ -151,7 +152,7 @@ export class EngineService {
   }
 
   /**
-   * Get engine members (owner, delegate, deployers, viewers)
+   * Get engine members (owner, delegate, operators, deployers)
    * Includes owner and delegate from engines table plus members from engine_members table
    */
   async getEngineMembers(engineId: string): Promise<EngineMemberWithUser[]> {
@@ -215,7 +216,7 @@ export class EngineService {
       });
     }
 
-    // Add deployers and viewers
+    // Add operators and deployers
     for (const member of members) {
       result.push({
         id: member.id,
@@ -254,12 +255,12 @@ export class EngineService {
   }
 
   /**
-   * Add a deployer or viewer to an engine
+   * Add an operator or deployer to an engine
    */
   async addEngineMember(
     engineId: string,
     userId: string,
-    role: 'deployer' | 'viewer',
+    role: 'operator' | 'deployer',
     grantedById: string
   ): Promise<{ id: string }> {
     const dataSource = await getDataSource();
@@ -285,7 +286,7 @@ export class EngineService {
   async updateEngineMemberRole(
     engineId: string,
     userId: string,
-    newRole: 'deployer' | 'viewer'
+    newRole: 'operator' | 'deployer'
   ): Promise<void> {
     const dataSource = await getDataSource();
     const memberRepo = dataSource.getRepository(EngineMember);

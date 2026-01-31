@@ -13,7 +13,10 @@ type Engine = {
 type EngineWithAccess = Engine & {
   isOwner?: boolean
   isDelegate?: boolean
+  myRole?: string
 }
+
+const MISSION_CONTROL_ROLES = new Set(['owner', 'delegate', 'operator'])
 
 async function fetchAccessibleEngines(): Promise<EngineWithAccess[]> {
   return apiClient.get<EngineWithAccess[]>('/engines-api/engines', undefined, { credentials: 'include' }).catch(() => [])
@@ -34,7 +37,13 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
     staleTime: 60000,
   })
 
-  const engines = enginesQuery.data || []
+  const engines = React.useMemo(() => {
+    const data = enginesQuery.data || []
+    return data.filter((engine) => {
+      const role = String(engine.myRole || '')
+      return MISSION_CONTROL_ROLES.has(role)
+    })
+  }, [enginesQuery.data])
 
   // Auto-select engine: single engine or first alphabetically
   React.useEffect(() => {

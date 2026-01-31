@@ -330,14 +330,14 @@ describe('engines API', () => {
       );
     });
 
-    it('adds member with viewer role', async () => {
+    it('adds member with operator role', async () => {
       vi.mocked(apiClient.post).mockResolvedValue({} as EngineMember);
 
-      await addEngineMember('e1', 'u1', 'viewer');
+      await addEngineMember('e1', 'u1', 'operator');
 
       expect(apiClient.post).toHaveBeenCalledWith(
         '/api/engines/e1/members',
-        { userId: 'u1', role: 'viewer' },
+        { userId: 'u1', role: 'operator' },
         { credentials: 'include' }
       );
     });
@@ -349,21 +349,21 @@ describe('engines API', () => {
         id: 'm1',
         engineId: 'e1',
         userId: 'u1',
-        role: 'viewer',
+        role: 'operator',
       };
       vi.mocked(apiClient.put).mockResolvedValue(mockMember);
 
-      const result = await updateEngineMemberRole('e1', 'm1', 'viewer');
+      const result = await updateEngineMemberRole('e1', 'm1', 'operator');
 
       expect(apiClient.put).toHaveBeenCalledWith(
         '/api/engines/e1/members/m1',
-        { role: 'viewer' },
+        { role: 'operator' },
         { credentials: 'include' }
       );
       expect(result).toEqual(mockMember);
     });
 
-    it('updates role from viewer to deployer', async () => {
+    it('updates role from operator to deployer', async () => {
       vi.mocked(apiClient.put).mockResolvedValue({} as EngineMember);
 
       await updateEngineMemberRole('e1', 'm1', 'deployer');

@@ -14,6 +14,15 @@ import type { ComponentType, ReactNode } from 'react';
 // Extension Types
 // =============================================================================
 
+export type CapabilityRequirement =
+  | 'canViewAdminMenu'
+  | 'canAccessAdminRoutes'
+  | 'canManageUsers'
+  | 'canViewAuditLogs'
+  | 'canManagePlatformSettings'
+  | 'canViewMissionControl'
+  | 'canManageTenants';
+
 /**
  * Sidebar navigation item extension
  */
@@ -23,6 +32,11 @@ export interface NavExtension {
   icon?: ComponentType<{ size?: number }>;
   path: string;
   order?: number;
+  /** Capability required to show this item. */
+  requiredCapability?: CapabilityRequirement;
+  /** Whether tenant admin access is required (platform admins also allowed). */
+  requiresTenantAdmin?: boolean;
+  /** @deprecated Use requiredCapability/requiresTenantAdmin instead. */
   requiredRole?: 'admin' | 'tenant_admin' | 'member';
   /** Section determines where the nav item appears:
    * - 'main': Main navigation area
@@ -57,6 +71,11 @@ export interface MenuExtension {
   href?: string;
   divider?: boolean;
   order?: number;
+  /** Capability required to show this item. */
+  requiredCapability?: CapabilityRequirement;
+  /** Whether tenant admin access is required (platform admins also allowed). */
+  requiresTenantAdmin?: boolean;
+  /** @deprecated Use requiredCapability/requiresTenantAdmin instead. */
   requiredRole?: 'admin' | 'tenant_admin' | 'member';
 }
 

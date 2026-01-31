@@ -47,7 +47,10 @@ describe('ProtectedRoute', () => {
   });
 
   it('redirects non-admin users when requireAdmin', async () => {
-    await mockUseAuth({ user: { platformRole: 'user' }, isAuthenticated: true });
+    await mockUseAuth({
+      user: { capabilities: { canAccessAdminRoutes: false, canManagePlatformSettings: false } },
+      isAuthenticated: true,
+    });
 
     render(
       <MemoryRouter initialEntries={['/admin']}>
@@ -61,7 +64,10 @@ describe('ProtectedRoute', () => {
   });
 
   it('renders children when authenticated', async () => {
-    await mockUseAuth({ user: { platformRole: 'user' }, isAuthenticated: true });
+    await mockUseAuth({
+      user: { capabilities: { canAccessAdminRoutes: false, canManagePlatformSettings: false } },
+      isAuthenticated: true,
+    });
 
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
@@ -75,7 +81,10 @@ describe('ProtectedRoute', () => {
   });
 
   it('redirects admin to setup when not configured', async () => {
-    await mockUseAuth({ user: { platformRole: 'admin' }, isAuthenticated: true });
+    await mockUseAuth({
+      user: { capabilities: { canAccessAdminRoutes: true, canManagePlatformSettings: true } },
+      isAuthenticated: true,
+    });
     const { apiClient } = await import('@src/shared/api/client');
     (apiClient.get as any).mockResolvedValue({ isConfigured: false });
 
@@ -93,7 +102,10 @@ describe('ProtectedRoute', () => {
   });
 
   it('skips setup check when skipSetupCheck is true', async () => {
-    await mockUseAuth({ user: { platformRole: 'admin' }, isAuthenticated: true });
+    await mockUseAuth({
+      user: { capabilities: { canAccessAdminRoutes: true, canManagePlatformSettings: true } },
+      isAuthenticated: true,
+    });
 
     render(
       <MemoryRouter initialEntries={['/admin']}>

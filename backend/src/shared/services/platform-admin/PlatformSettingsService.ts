@@ -36,7 +36,7 @@ export class PlatformSettingsService {
         syncPullEnabled: false,
         syncBothEnabled: false,
         gitProjectTokenSharingEnabled: false,
-        defaultDeployRoles: ['owner', 'delegate', 'developer'],
+        defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
         inviteAllowAllDomains: true,
         inviteAllowedDomains: [],
       };
@@ -123,7 +123,7 @@ export class PlatformSettingsService {
         syncPullEnabled: data.syncPullEnabled ?? false,
         syncBothEnabled: data.syncBothEnabled ?? false,
         gitProjectTokenSharingEnabled: data.gitProjectTokenSharingEnabled ?? false,
-        defaultDeployRoles: JSON.stringify(data.defaultDeployRoles ?? ['owner', 'delegate', 'developer']),
+        defaultDeployRoles: JSON.stringify(data.defaultDeployRoles ?? ['owner', 'delegate', 'operator', 'deployer']),
         inviteAllowAllDomains: data.inviteAllowAllDomains ?? true,
         inviteAllowedDomains: JSON.stringify(data.inviteAllowedDomains ?? []),
         updatedAt: now,

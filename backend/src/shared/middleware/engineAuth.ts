@@ -2,7 +2,6 @@ import type { Request, Response, NextFunction } from 'express';
 import { Errors } from './errorHandler.js';
 import { engineService } from '../services/platform-admin/index.js';
 import type { EngineRole } from '@shared/constants/roles.js';
-import { isPlatformAdmin } from './platformAuth.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { Engine } from '@shared/db/entities/Engine.js';
 
@@ -76,13 +75,6 @@ function requireEngineRole(allowedRoles: EngineRole[], options: EngineAuthOption
         throw Errors.notFound('Engine not found');
       }
 
-      // Platform admins can access any engine (cross-tenant support)
-      if (isPlatformAdmin(req)) {
-        (req as EngineRequest).engineId = engineId;
-        (req as EngineRequest).engineRole = null;
-        return next();
-      }
-
       // Verify engine belongs to current tenant context
       const requestTenantId = req.tenant?.tenantId;
       if (requestTenantId && engine.tenantId && engine.tenantId !== requestTenantId) {
@@ -90,12 +82,12 @@ function requireEngineRole(allowedRoles: EngineRole[], options: EngineAuthOption
       }
 
       const role = await engineService.getEngineRole(req.user.userId, engineId);
-      if (!role || !allowedRoles.includes(role)) {
+      if (!role || !allowedRoles.includes(role as EngineRole)) {
         throw Errors.forbidden('Access denied');
       }
 
       (req as EngineRequest).engineId = engineId;
-      (req as EngineRequest).engineRole = role;
+      (req as EngineRequest).engineRole = role as EngineRole;
 
       next();
     } catch (e: any) {
@@ -108,11 +100,11 @@ function requireEngineRole(allowedRoles: EngineRole[], options: EngineAuthOption
 }
 
 export function requireEngineAccess(options?: EngineAuthOptions) {
-  return requireEngineRole(['owner', 'delegate', 'deployer', 'viewer'], options);
+  return requireEngineRole(['owner', 'delegate', 'operator'], options);
 }
 
 export function requireEngineDeployer(options?: EngineAuthOptions) {
-  return requireEngineRole(['owner', 'delegate', 'deployer'], options);
+  return requireEngineRole(['owner', 'delegate', 'operator'], options);
 }
 
 export function requireEngineReadOrWrite(options?: EngineAuthOptions) {

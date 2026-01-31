@@ -5,6 +5,7 @@ export interface User {
   lastName?: string;
   role: 'admin' | 'user';
   platformRole?: 'admin' | 'developer' | 'user';
+  capabilities?: UserCapabilities;
   isActive: boolean;
   mustResetPassword: boolean;
   createdAt: number;
@@ -69,4 +70,14 @@ export interface UpdateUserRequest {
 export interface ApiError {
   error: string;
   details?: any;
+}
+
+export interface UserCapabilities {
+  canViewAdminMenu: boolean;
+  canAccessAdminRoutes: boolean;
+  canManageUsers: boolean;
+  canViewAuditLogs: boolean;
+  canManagePlatformSettings: boolean;
+  canViewMissionControl: boolean;
+  canManageTenants: boolean;
 }

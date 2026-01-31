@@ -32,6 +32,7 @@ import { authService } from '../../services/auth';
 import { parseApiError } from '../../shared/api/apiErrorUtils';
 import type { User, CreateUserRequest, UpdateUserRequest } from '../../shared/types/auth';
 import { useToast } from '../../shared/notifications/ToastProvider';
+import { getPlatformRoleLabel, getPlatformRoleTagType } from '../../shared/utils/platformRole';
 
 /**
  * User Management Page
@@ -44,7 +45,7 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const isPlatformAdmin = currentUser?.platformRole === 'admin';
+  const canManageUsers = Boolean(currentUser?.capabilities?.canManageUsers);
 
   // Create user modal
   const createModal = useModal();
@@ -69,7 +70,7 @@ export default function UserManagement() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Redirect if not admin
-  if (!isPlatformAdmin) {
+  if (!canManageUsers) {
     return (
       <div style={{ padding: 'var(--spacing-7)' }}>
         <h1>Unauthorized</h1>
@@ -316,15 +317,12 @@ export default function UserManagement() {
                           // Custom rendering for specific columns
                           if (cell.info.header === 'platformRole') {
                             const platformRole = user.platformRole || 'user';
-                            const tagType = platformRole === 'admin'
-                              ? 'purple'
-                              : platformRole === 'developer'
-                                ? 'blue'
-                                : 'gray';
+                            const tagType = getPlatformRoleTagType(platformRole);
+                            const label = getPlatformRoleLabel(platformRole);
                             return (
                               <TableCell key={cell.id}>
                                 <Tag type={tagType}>
-                                  {platformRole}
+                                  {label}
                                 </Tag>
                               </TableCell>
                             );

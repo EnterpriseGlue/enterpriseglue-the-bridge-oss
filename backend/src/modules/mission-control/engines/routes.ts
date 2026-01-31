@@ -10,18 +10,15 @@ import { requireAuth } from '@shared/middleware/auth.js'
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js'
 import { apiLimiter, engineLimiter } from '@shared/middleware/rateLimiter.js'
 import { engineService } from '@shared/services/platform-admin/index.js'
-import { isPlatformAdmin } from '@shared/middleware/platformAuth.js'
 import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES } from '@shared/constants/roles.js'
 
 const r = Router()
 
 async function canViewEngine(req: Request, engineId: string): Promise<boolean> {
-  if (isPlatformAdmin(req)) return true
   return engineService.hasEngineAccess(req.user!.userId, engineId, ENGINE_VIEW_ROLES)
 }
 
 async function canManageEngine(req: Request, engineId: string): Promise<boolean> {
-  if (isPlatformAdmin(req)) return true
   return engineService.hasEngineAccess(req.user!.userId, engineId, ENGINE_MANAGE_ROLES)
 }
 
@@ -39,15 +36,6 @@ r.get('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (re
   const engineRepo = dataSource.getRepository(Engine)
   const tenantId = req.tenant?.tenantId
 
-  if (isPlatformAdmin(req)) {
-    // Platform admins see all engines in current tenant (or null tenantId for legacy data)
-    const rows = tenantId 
-      ? await engineRepo.find({ where: [{ tenantId }, { tenantId: IsNull() }] })
-      : await engineRepo.find()
-    // Platform admins can manage all engines - add myRole: 'admin' for UI consistency
-    return res.json(rows.map(engine => ({ ...engine, myRole: 'admin' })))
-  }
-
   // Filter engines by tenant context (including null tenantId for legacy data)
   const userEngines = await engineService.getUserEngines(req.user!.userId, tenantId)
   res.json(userEngines.map(({ engine, role }) => {
@@ -58,8 +46,6 @@ r.get('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (re
 }))
 
 r.post('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  if (!isPlatformAdmin(req)) throw Errors.adminRequired()
-
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const now = Date.now()
@@ -94,11 +80,9 @@ r.get('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async
   if (!rows.length) throw Errors.notFound('Engine')
   if (!(await canViewEngine(req, String(rows[0].id)))) throw Errors.forbidden()
 
-  if (!isPlatformAdmin(req)) {
-    const role = await engineService.getEngineRole(req.user!.userId, String(rows[0].id))
-    if (role !== 'owner' && role !== 'delegate') {
-      return res.json(redactEngineSecrets(rows[0]))
-    }
+  const role = await engineService.getEngineRole(req.user!.userId, String(rows[0].id))
+  if (role !== 'owner' && role !== 'delegate') {
+    return res.json(redactEngineSecrets(rows[0]))
   }
 
   res.json(rows[0])
@@ -258,18 +242,13 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, asyncHandle
 r.get('/engines-api/saved-filters', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
-  let rows: any[] = []
-
-  if (isPlatformAdmin(req)) {
-    rows = await filterRepo.find()
-  } else {
-    const userEngines = await engineService.getUserEngines(req.user!.userId)
-    const engineIds = userEngines.map((e) => String(e.engine.id))
-    if (engineIds.length === 0) {
-      return res.json([])
-    }
-    rows = await filterRepo.find({ where: { engineId: In(engineIds) } })
+  const tenantId = req.tenant?.tenantId
+  const userEngines = await engineService.getUserEngines(req.user!.userId, tenantId)
+  const engineIds = userEngines.map((e) => String(e.engine.id))
+  if (engineIds.length === 0) {
+    return res.json([])
   }
+  const rows = await filterRepo.find({ where: { engineId: In(engineIds) } })
 
   res.json(rows.map((row: any) => ({
     ...row,

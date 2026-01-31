@@ -15,7 +15,7 @@ export const handlers = [
       syncPullEnabled: false,
       syncBothEnabled: false,
       gitProjectTokenSharingEnabled: false,
-      defaultDeployRoles: [],
+      defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
     });
   }),
   http.get('/starbase-api/projects', () => {

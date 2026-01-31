@@ -224,7 +224,7 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
     EnginePermissions.INSTANCE_RETRY,
     EnginePermissions.VARIABLES_EDIT,
   ],
-  deployer: [
+  operator: [
     EnginePermissions.MEMBERS_VIEW,
     EnginePermissions.DEPLOY,
     EnginePermissions.DEPLOY_VIEW,
@@ -236,10 +236,9 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
     EnginePermissions.INSTANCE_RETRY,
     EnginePermissions.VARIABLES_EDIT,
   ],
-  viewer: [
-    EnginePermissions.MEMBERS_VIEW,
+  deployer: [
+    EnginePermissions.DEPLOY,
     EnginePermissions.DEPLOY_VIEW,
-    EnginePermissions.INSTANCE_VIEW,
   ],
 };
 

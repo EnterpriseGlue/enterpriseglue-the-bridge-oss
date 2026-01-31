@@ -303,8 +303,6 @@ export default function PlatformSettingsPage() {
     );
   }
 
-  const allRoles = ['owner', 'delegate', 'developer', 'editor', 'viewer'];
-
   return (
     <PageLayout
       style={{

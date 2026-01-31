@@ -42,8 +42,8 @@ export const ProjectRoles = {
 export const EngineRoles = {
   OWNER: 'owner',
   DELEGATE: 'delegate',
+  OPERATOR: 'operator',
   DEPLOYER: 'deployer',
-  VIEWER: 'viewer',
 } as const;
 
 /**
@@ -54,7 +54,7 @@ export const ALL_PROJECT_ROLES = ['owner', 'delegate', 'developer', 'editor', 'v
 /**
  * All engine roles in order of decreasing permission
  */
-export const ALL_ENGINE_ROLES = ['owner', 'delegate', 'deployer', 'viewer'] as const;
+export const ALL_ENGINE_ROLES = ['owner', 'delegate', 'operator', 'deployer'] as const;
 
 /**
  * Type guards for role validation

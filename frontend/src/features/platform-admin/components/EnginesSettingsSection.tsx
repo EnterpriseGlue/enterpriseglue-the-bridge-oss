@@ -29,7 +29,7 @@ interface EnginesSettingsSectionProps {
   onDragEnd: () => void
 }
 
-const ALL_ROLES = ['owner', 'delegate', 'developer', 'editor', 'viewer']
+const ALL_ROLES = ['owner', 'delegate', 'operator', 'deployer']
 
 export function EnginesSettingsSection({
   settings,

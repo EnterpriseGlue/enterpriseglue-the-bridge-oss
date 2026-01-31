@@ -84,8 +84,8 @@ export default function MyProfile() {
               <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginBottom: 'var(--spacing-2)' }}>
                 Role
               </label>
-              <Tag type={user?.platformRole === 'admin' ? 'purple' : 'gray'} size="sm">
-                {user?.platformRole === 'admin' ? 'Platform Admin' : 'User'}
+              <Tag type={user?.capabilities?.canAccessAdminRoutes ? 'purple' : 'gray'} size="sm">
+                {user?.capabilities?.canAccessAdminRoutes ? 'Platform Admin' : 'User'}
               </Tag>
             </div>
 

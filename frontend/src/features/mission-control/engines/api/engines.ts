@@ -23,7 +23,7 @@ export type EngineMember = {
   id: string
   engineId: string
   userId: string
-  role: 'owner' | 'delegate' | 'deployer' | 'viewer'
+  role: 'owner' | 'delegate' | 'operator' | 'deployer'
   grantedById?: string
   grantedAt?: string
   user?: {

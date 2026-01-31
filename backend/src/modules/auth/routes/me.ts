@@ -9,6 +9,7 @@ import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
 import { PlatformSettings } from '@shared/db/entities/PlatformSettings.js';
 import { logAudit, AuditActions } from '@shared/services/audit.js';
+import { buildUserCapabilities } from '@shared/services/capabilities.js';
 
 const router = Router();
 
@@ -26,12 +27,18 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
     return res.status(404).json({ error: 'User not found' });
   }
 
+  const capabilities = await buildUserCapabilities({
+    userId: user.id,
+    platformRole: user.platformRole,
+  });
+
   res.json({
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
     platformRole: user.platformRole || 'user',
+    capabilities,
     isActive: Boolean(user.isActive),
     mustResetPassword: Boolean(user.mustResetPassword),
     createdAt: user.createdAt,
@@ -79,12 +86,18 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
     userAgent: req.headers['user-agent'],
   });
 
+  const capabilities = await buildUserCapabilities({
+    userId: user.id,
+    platformRole: user.platformRole,
+  });
+
   res.json({
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
     platformRole: user.platformRole || 'user',
+    capabilities,
     isActive: Boolean(user.isActive),
     mustResetPassword: Boolean(user.mustResetPassword),
     createdAt: user.createdAt,
@@ -158,7 +171,7 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
         syncPullEnabled: false,
         syncBothEnabled: false,
         gitProjectTokenSharingEnabled: false,
-        defaultDeployRoles: ['owner', 'delegate', 'developer'],
+        defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
       });
     }
 
@@ -167,7 +180,7 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
         const raw = settings.defaultDeployRoles;
         return JSON.parse(String(raw || '[]'));
       } catch {
-        return ['owner', 'delegate', 'developer'];
+        return ['owner', 'delegate', 'operator', 'deployer'];
       }
     })();
 

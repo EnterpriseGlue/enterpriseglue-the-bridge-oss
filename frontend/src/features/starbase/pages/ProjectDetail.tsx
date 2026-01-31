@@ -447,7 +447,7 @@ export default function ProjectDetail() {
   
   // Check if user can deploy based on their role and defaultDeployRoles setting
   const canDeployByRole = React.useMemo(() => {
-    const defaultDeployRoles = platformSettings?.defaultDeployRoles ?? ['owner', 'delegate', 'developer']
+    const defaultDeployRoles = platformSettings?.defaultDeployRoles ?? ['owner', 'delegate', 'operator', 'deployer']
     const membership = myMembershipQ.data
     if (!membership) return false
     

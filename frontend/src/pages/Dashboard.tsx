@@ -1,9 +1,8 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ClickableTile, Tile, Dropdown, SkeletonPlaceholder } from '@carbon/react'
-import { UserAvatar, FolderOpen, Chip, Activity, Checkmark, Time, Deploy, WarningAlt } from '@carbon/icons-react'
-import { useProcessesFilterStore } from '../features/mission-control/shared/stores/processesFilterStore'
+import { Button, ClickableTile, Tile, Dropdown, SkeletonPlaceholder } from '@carbon/react'
+import { UserAvatar, FolderOpen, Chip, Activity, Checkmark, Time, WarningAlt } from '@carbon/icons-react'
 import { useDashboardFilterStore } from '../stores/dashboardFilterStore'
 import { apiClient } from '../shared/api/client'
 import { EngineSelector, useSelectedEngine } from '../components/EngineSelector'
@@ -48,10 +47,15 @@ function SimpleBar({ label, value, max, color }: { label: string; value: number;
 }
 
 export default function Dashboard() {
+  const location = useLocation()
   const navigate = useNavigate()
-  const { setSelectedStates } = useProcessesFilterStore()
   const { timePeriod, setTimePeriod } = useDashboardFilterStore()
   const selectedEngineId = useSelectedEngine()
+
+  const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
+  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
+  const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
+  const toTenantPath = React.useCallback((p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p), [tenantSlug, tenantPrefix])
 
   const startedAfter = React.useMemo(() => {
     const d = new Date()
@@ -104,6 +108,9 @@ export default function Dashboard() {
   const connectedEngines = enginesQuery.data?.length || 0
   const totalUsers = usersQuery.data?.length || 0
   const instances = instancesQuery.data || []
+
+  const totalProjects = statsQuery.data?.totalProjects || 0
+  const showGettingStarted = !statsQuery.isLoading && !enginesQuery.isLoading && (totalProjects === 0 || connectedEngines === 0)
 
   const instanceStates = React.useMemo(() => ({
     active: instances.filter(i => i.state === 'ACTIVE' && !i.hasIncident).length,
@@ -185,29 +192,65 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {showGettingStarted && (
+        <Tile style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 600 }}>Get started</div>
+              <div style={{ fontSize: '12px', color: 'var(--cds-text-secondary)', marginTop: '0.25rem' }}>
+                Create a project and connect an engine to start deploying and monitoring processes.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {totalProjects === 0 && (
+                <Button
+                  kind="primary"
+                  size="sm"
+                  onClick={() => navigate(toTenantPath('/starbase'), { state: { openCreateProject: true } })}
+                >
+                  Create project
+                </Button>
+              )}
+              {connectedEngines === 0 && (
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  onClick={() => navigate(toTenantPath('/engines'), { state: { openNewEngine: true } })}
+                >
+                  Add engine
+                </Button>
+              )}
+              {connectedEngines > 0 && !ctx?.canViewProcessData && (
+                <Button kind="tertiary" size="sm" onClick={() => navigate(toTenantPath('/engines'))}>
+                  Request access
+                </Button>
+              )}
+            </div>
+          </div>
+        </Tile>
+      )}
+
       {/* KPI Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
         {ctx?.canViewActiveUsers && (
-          <ClickableTile style={tileStyle} onClick={() => navigate('/admin/users')}>
+          <ClickableTile style={tileStyle} onClick={() => navigate(toTenantPath('/admin/users'))}>
             <UserAvatar size={24} style={{ color: 'var(--cds-link-primary)', marginBottom: '0.5rem' }} />
             <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Active Users</span>
             <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{totalUsers}</span>
           </ClickableTile>
         )}
-        <ClickableTile style={tileStyle} onClick={() => navigate('/starbase')}>
+        <ClickableTile style={tileStyle} onClick={() => navigate(toTenantPath('/starbase'))}>
           <FolderOpen size={24} style={{ color: '#8a3ffc', marginBottom: '0.5rem' }} />
           <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Projects</span>
           <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{statsQuery.data?.totalProjects || 0}</span>
         </ClickableTile>
-        {ctx?.canViewEngines && (
-          <ClickableTile style={tileStyle} onClick={() => navigate('/engines')}>
-            <Chip size={24} style={{ color: '#0f62fe', marginBottom: '0.5rem' }} />
-            <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Engines</span>
-            <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{connectedEngines}</span>
-          </ClickableTile>
-        )}
+        <ClickableTile style={tileStyle} onClick={() => navigate(toTenantPath('/engines'))}>
+          <Chip size={24} style={{ color: '#0f62fe', marginBottom: '0.5rem' }} />
+          <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Engines</span>
+          <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{connectedEngines}</span>
+        </ClickableTile>
         {ctx?.canViewProcessData && (
-          <ClickableTile style={tileStyle} onClick={() => navigate('/mission-control/processes')}>
+          <ClickableTile style={tileStyle} onClick={() => navigate(toTenantPath('/mission-control/processes'))}>
             <Activity size={24} style={{ color: '#24a148', marginBottom: '0.5rem' }} />
             <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Instances</span>
             <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{instances.length}</span>

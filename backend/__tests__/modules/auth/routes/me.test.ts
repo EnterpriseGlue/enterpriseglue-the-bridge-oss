@@ -22,6 +22,18 @@ vi.mock('@shared/services/audit.js', () => ({
   AuditActions: { USER_UPDATE: 'USER_UPDATE' },
 }));
 
+vi.mock('@shared/services/capabilities.js', () => ({
+  buildUserCapabilities: vi.fn().mockResolvedValue({
+    canViewAdminMenu: false,
+    canAccessAdminRoutes: false,
+    canManageUsers: false,
+    canViewAuditLogs: false,
+    canManagePlatformSettings: false,
+    canViewMissionControl: false,
+    canManageTenants: false,
+  }),
+}));
+
 describe('GET /api/auth/me', () => {
   let app: express.Application;
 

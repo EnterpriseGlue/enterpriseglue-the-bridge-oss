@@ -20,6 +20,8 @@ import { EngineSelector, useSelectedEngine } from '../../../components/EngineSel
 import { useDashboardThemeStore } from '../../../stores/dashboardThemeStore'
 import { useProcessesFilterStore } from '../../mission-control/shared/stores/processesFilterStore'
 import { useDecisionsFilterStore } from '../../mission-control/shared/stores/decisionsFilterStore'
+import { useAuth } from '../../../shared/hooks/useAuth'
+import { isMultiTenantEnabled } from '../../../enterprise/extensionRegistry'
 import { apiClient } from '../../../shared/api/client'
 import { STATE_COLORS } from './viewer/viewerConstants'
 
@@ -45,6 +47,12 @@ export default function ProSidebar() {
   const { pathname } = useLocation()
   const { sidebarOpen, sidebarCollapsed, setSidebarOpen, setSidebarCollapsed } = useLayoutStore()
   const { futuristicMode } = useDashboardThemeStore()
+  const { user } = useAuth()
+
+  const canViewMissionControl = Boolean(user?.capabilities?.canViewMissionControl)
+  const canManagePlatformSettings = Boolean(user?.capabilities?.canManagePlatformSettings)
+  const isMultiTenant = isMultiTenantEnabled()
+  const hideVoyagerForPlatformAdmin = isMultiTenant && canManagePlatformSettings
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
@@ -301,7 +309,7 @@ export default function ProSidebar() {
     }
   }
 
-  if (!inMissionControl || !isMissionControlEnabled) {
+  if (!inMissionControl || !isMissionControlEnabled || hideVoyagerForPlatformAdmin || !canViewMissionControl) {
     return null
   }
 

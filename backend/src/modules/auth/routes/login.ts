@@ -12,6 +12,7 @@ import { User } from '@shared/db/entities/User.js';
 import { RefreshToken } from '@shared/db/entities/RefreshToken.js';
 import { validateBody } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { buildUserCapabilities } from '@shared/services/capabilities.js';
 
 const router = Router();
 
@@ -145,6 +146,11 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
 
   // Check email verification status
   const isEmailVerified = Boolean(user.isEmailVerified);
+
+  const capabilities = await buildUserCapabilities({
+    userId: user.id,
+    platformRole: user.platformRole,
+  });
   
   // Return user info and tokens
   res.json({
@@ -155,6 +161,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
       lastName: user.lastName,
       platformRole: user.platformRole || 'user',
       mustResetPassword: Boolean(user.mustResetPassword),
+      capabilities,
       isEmailVerified,
     },
     accessToken,

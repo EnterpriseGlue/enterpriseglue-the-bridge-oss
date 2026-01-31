@@ -40,7 +40,7 @@ describe('EngineService', () => {
       findOne: vi.fn().mockResolvedValue({ id: 'engine-1', ownerId: 'owner-1', delegateId: null }),
     };
     const memberRepo = {
-      findOne: vi.fn().mockResolvedValue({ role: 'viewer' }),
+      findOne: vi.fn().mockResolvedValue({ role: 'operator' }),
     };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -52,7 +52,7 @@ describe('EngineService', () => {
     });
 
     const role = await service.getEngineRole('user-1', 'engine-1');
-    expect(role).toBe('viewer');
+    expect(role).toBe('operator');
   });
 
   it('checks access for required roles', async () => {

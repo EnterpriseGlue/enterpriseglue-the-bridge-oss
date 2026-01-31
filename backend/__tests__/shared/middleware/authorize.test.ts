@@ -75,7 +75,7 @@ describe('authorize middleware', () => {
   });
 
   it('logs denial when roles do not match', async () => {
-    (engineService.getEngineRole as any).mockResolvedValue('viewer');
+    (engineService.getEngineRole as any).mockResolvedValue('operator');
     req.params = { engineId: 'engine-1' } as any;
 
     const middleware = authorize({ engineRoles: ['owner'], auditDenials: true });

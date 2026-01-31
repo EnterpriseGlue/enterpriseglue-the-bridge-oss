@@ -17,6 +17,7 @@ import { Engine } from '@shared/db/entities/Engine.js';
 import { PlatformSettings } from '@shared/db/entities/PlatformSettings.js';
 import { EnvironmentTag } from '@shared/db/entities/EnvironmentTag.js';
 import { PermissionGrant } from '@shared/db/entities/PermissionGrant.js';
+import { ENGINE_MEMBER_ROLES } from '@shared/constants/roles.js';
 
 export interface DeployContext {
   projectId: string;
@@ -70,13 +71,10 @@ export function requireDeployPermission() {
       const platformRepo = dataSource.getRepository(PlatformSettings);
       const settings = await platformRepo.findOneBy({ id: 'default' });
 
-      // Per platform spec: owner, delegate, developer can deploy by default
-      // Editors can be granted deploy permission by project owner/delegate
-      const defaultDeployRoles = JSON.parse(
-        settings?.defaultDeployRoles || '["owner","delegate","developer"]'
-      );
+      // Project deploy roles (configurable via membership grants)
+      const defaultProjectDeployRoles = ['owner', 'delegate', 'developer'];
 
-      let hasDeployRole = defaultDeployRoles.includes(membership.role);
+      let hasDeployRole = defaultProjectDeployRoles.includes(membership.role);
       if (!hasDeployRole && membership.role === 'editor') {
         hasDeployRole = await hasProjectDeployGrant(userId, projectId);
       }
@@ -85,11 +83,13 @@ export function requireDeployPermission() {
         throw Errors.forbidden('User does not have deploy permission in this project');
       }
 
-      // Check 2b: User has engine deployer role
-      // Per platform spec: must have owner, delegate, or deployer role on the engine
-      const hasEngineRole = await engineService.hasEngineAccess(userId, engineId, ['owner', 'delegate', 'deployer']);
+      // Check 2b: User has engine deploy role (platform-configured)
+      const engineDeployRoles = JSON.parse(
+        settings?.defaultDeployRoles || '["owner","delegate","operator","deployer"]'
+      );
+      const hasEngineRole = await engineService.hasEngineAccess(userId, engineId, engineDeployRoles);
       if (!hasEngineRole) {
-        const canViewEngine = await engineService.hasEngineAccess(userId, engineId, ['owner', 'delegate', 'deployer', 'viewer']);
+        const canViewEngine = await engineService.hasEngineAccess(userId, engineId, ENGINE_MEMBER_ROLES);
         if (!canViewEngine) {
           throw Errors.engineNotFound();
         }
@@ -188,11 +188,9 @@ export function checkDeployPermission() {
       const platformRepo = dataSource.getRepository(PlatformSettings);
       const settings = await platformRepo.findOneBy({ id: 'default' });
 
-      const defaultDeployRoles = JSON.parse(
-        settings?.defaultDeployRoles || '["owner","delegate","developer"]'
-      );
+      const defaultProjectDeployRoles = ['owner', 'delegate', 'developer'];
 
-      let hasDeployRole = defaultDeployRoles.includes(membership.role);
+      let hasDeployRole = defaultProjectDeployRoles.includes(membership.role);
       if (!hasDeployRole && membership.role === 'editor') {
         hasDeployRole = await hasProjectDeployGrant(userId, projectId);
       }
@@ -203,7 +201,10 @@ export function checkDeployPermission() {
         return next();
       }
 
-      const hasEngineRole = await engineService.hasEngineAccess(userId, engineId, ['owner', 'delegate', 'deployer']);
+      const engineDeployRoles = JSON.parse(
+        settings?.defaultDeployRoles || '["owner","delegate","operator","deployer"]'
+      );
+      const hasEngineRole = await engineService.hasEngineAccess(userId, engineId, engineDeployRoles);
       if (!hasEngineRole) {
         (req as any).canDeploy = false;
         return next();

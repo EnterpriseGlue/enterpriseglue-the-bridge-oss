@@ -1,4 +1,5 @@
 import React from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -31,17 +32,15 @@ import { Add, Chip, UserMultiple, Close, Checkmark } from '@carbon/icons-react'
 import FormModal from '../../../components/FormModal'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout'
 import { useModal } from '../../../shared/hooks/useModal'
-import { useAuth } from '../../../shared/hooks/useAuth'
 import { useToast } from '../../../shared/notifications/ToastProvider'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
-import InviteMemberModal from '../../../components/InviteMemberModal'
 import { apiClient } from '../../../shared/api/client'
 import EngineMembersModal from './components/EngineMembersModal'
  
 
 // Types for engine members
-type EngineRole = 'owner' | 'delegate' | 'deployer' | 'viewer'
+type EngineRole = 'owner' | 'delegate' | 'operator' | 'deployer'
 type EngineMember = {
   id: string
   engineId: string
@@ -64,8 +63,6 @@ type AccessRequest = {
 }
 type UserSearchItem = { id: string; email: string; firstName?: string | null; lastName?: string | null }
 
-const MEMBER_ROLE_OPTIONS: EngineRole[] = ['delegate']
-
 function roleLabel(role: EngineRole): string {
   return role.charAt(0).toUpperCase() + role.slice(1)
 }
@@ -74,19 +71,19 @@ function tagTypeForRole(role: EngineRole): any {
   switch (role) {
     case 'owner': return 'red'
     case 'delegate': return 'magenta'
+    case 'operator': return 'teal'
     case 'deployer': return 'blue'
-    case 'viewer': return 'teal'
     default: return 'gray'
   }
 }
 
 
 export default function Engines() {
+  const location = useLocation() as any
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const engineModal = useModal<any>()
-  const { user } = useAuth()
   const { notify } = useToast()
-  const isAdmin = user?.platformRole === 'admin'
   const [editing, setEditing] = React.useState<any | null>(null)
   const [form, setForm] = React.useState<any>({ name: '', baseUrl: '', type: 'camunda7', authType: 'basic', username: '', passwordEnc: '', environmentTagId: '' })
   const [searchQuery, setSearchQuery] = React.useState('')
@@ -95,9 +92,8 @@ export default function Engines() {
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [selectedEngine, setSelectedEngine] = React.useState<any | null>(null)
   const addMemberModal = useModal()
-  const inviteMemberModal = useModal()
   const [memberEmail, setMemberEmail] = React.useState('')
-  const [memberRole, setMemberRole] = React.useState<EngineRole>('viewer')
+  const [memberRole, setMemberRole] = React.useState<EngineRole>('operator')
   const [memberUserSearch, setMemberUserSearch] = React.useState('')
   const [selectedMemberUser, setSelectedMemberUser] = React.useState<UserSearchItem | null>(null)
 
@@ -147,17 +143,22 @@ export default function Engines() {
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to test connection', subtitle: getUiErrorMessage(e, 'Failed to test connection') })
   })
 
-  function openNew() {
-    if (!isAdmin) {
-      notify({ kind: 'error', title: 'Only platform admins can create engines' })
-      return
-    }
+  const openNew = React.useCallback(() => {
     setEditing(null)
     // Auto-assign environment tag if there's only one
     const autoTagId = hasSingleTag ? envTags![0].id : ''
     setForm({ name: '', baseUrl: '', type: 'camunda7', authType: 'basic', username: '', passwordEnc: '', environmentTagId: autoTagId })
     engineModal.openModal()
-  }
+  }, [hasSingleTag, envTags, engineModal])
+
+  const didHandleOpenNewEngine = React.useRef(false)
+  React.useEffect(() => {
+    if (didHandleOpenNewEngine.current) return
+    if (!location?.state?.openNewEngine) return
+    didHandleOpenNewEngine.current = true
+    openNew()
+    navigate(`${location.pathname || ''}${location.search || ''}`, { replace: true, state: {} })
+  }, [location, navigate, openNew])
   function openEdit(row: any) {
     setEditing(row)
     setForm({
@@ -176,7 +177,6 @@ export default function Engines() {
   const [isAddFirstEngineHover, setIsAddFirstEngineHover] = React.useState(false)
 
   function canManageEngine(engine: any): boolean {
-    if (isAdmin) return true
     const r = String(engine?.myRole || '')
     return r === 'owner' || r === 'delegate' || r === 'admin'
   }
@@ -212,7 +212,7 @@ export default function Engines() {
       qc.invalidateQueries({ queryKey: ['engine-members', selectedEngine?.id] })
       addMemberModal.closeModal()
       setMemberEmail('')
-      setMemberRole('viewer')
+      setMemberRole('operator')
       setMemberUserSearch('')
       setSelectedMemberUser(null)
       notify({ kind: 'success', title: 'Member added successfully' })
@@ -344,11 +344,9 @@ export default function Engines() {
                 value={searchQuery}
                 placeholder="Search engines"
               />
-              {isAdmin && (
-                <Button kind="primary" renderIcon={Add} onClick={openNew}>
-                  Add engine
-                </Button>
-              )}
+              <Button kind="primary" renderIcon={Add} onClick={openNew}>
+                Add engine
+              </Button>
             </TableToolbarContent>
           </TableToolbar>
           <DataTableSkeleton
@@ -390,7 +388,7 @@ export default function Engines() {
             renderIcon={Add} 
             onClick={openNew}
           >
-            {isAdmin ? 'Add your first engine' : 'No engines configured'}
+            Add your first engine
           </Button>
         </div>
       )}
@@ -424,11 +422,9 @@ export default function Engines() {
                       value={searchQuery}
                       placeholder="Search engines"
                     />
-                    {isAdmin && (
-                      <Button kind="primary" renderIcon={Add} onClick={openNew}>
-                        Add engine
-                      </Button>
-                    )}
+                    <Button kind="primary" renderIcon={Add} onClick={openNew}>
+                      Add engine
+                    </Button>
                   </TableToolbarContent>
                 </TableToolbar>
                 <Table {...getTableProps()} size="md" useZebraStyles>

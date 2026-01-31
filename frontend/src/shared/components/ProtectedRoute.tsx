@@ -21,7 +21,8 @@ export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck 
   const [setupChecked, setSetupChecked] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
 
-  const isAdmin = user?.platformRole === 'admin';
+  const canAccessAdminRoutes = Boolean(user?.capabilities?.canAccessAdminRoutes);
+  const canManagePlatformSettings = Boolean(user?.capabilities?.canManagePlatformSettings);
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
   const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
@@ -35,7 +36,7 @@ export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck 
   const isExemptPath = setupExemptPaths.some(p => effectivePathname.includes(p));
 
   useEffect(() => {
-    if (!isAuthenticated || !isAdmin || skipSetupCheck || isExemptPath) {
+    if (!isAuthenticated || !canManagePlatformSettings || skipSetupCheck || isExemptPath) {
       setSetupChecked(true);
       return;
     }
@@ -54,7 +55,7 @@ export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck 
     };
 
     checkSetup();
-  }, [isAuthenticated, isAdmin, skipSetupCheck, isExemptPath]);
+  }, [isAuthenticated, canManagePlatformSettings, skipSetupCheck, isExemptPath]);
 
   // Not authenticated - redirect to login
   if (!isAuthenticated) {
@@ -62,12 +63,12 @@ export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck 
   }
 
   // Requires admin but user is not admin - redirect to home
-  if (requireAdmin && !isAdmin) {
+  if (requireAdmin && !canAccessAdminRoutes) {
     return <Navigate to={homePath} replace />;
   }
 
   // Still checking setup status for admins
-  if (isAdmin && !setupChecked && !skipSetupCheck && !isExemptPath) {
+  if (canManagePlatformSettings && !setupChecked && !skipSetupCheck && !isExemptPath) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
         <InlineLoading description="Loading..." />

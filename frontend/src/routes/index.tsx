@@ -1,5 +1,5 @@
 import React from 'react'
-import { Navigate, RouteObject } from 'react-router-dom'
+import { Navigate, RouteObject, useLocation } from 'react-router-dom'
 
 // Extension registry for EE plugin integration
 import { extensions, isMultiTenantEnabled } from '../enterprise/extensionRegistry'
@@ -64,6 +64,37 @@ import OAuthCallback from '../features/git/pages/OAuthCallback'
 
 // Settings
 import GitConnections from '../pages/settings/GitConnections'
+
+import { useAuth } from '../shared/hooks/useAuth'
+import { useFeatureFlag } from '../shared/hooks/useFeatureFlag'
+import { EngineAccessError } from '../features/mission-control/shared'
+
+function MissionControlRoleGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const location = useLocation()
+
+  const isMissionControlEnabled = useFeatureFlag('missionControl')
+  const canViewMissionControl = Boolean(user?.capabilities?.canViewMissionControl)
+  const canManagePlatformSettings = Boolean(user?.capabilities?.canManagePlatformSettings)
+  const isMultiTenant = isMultiTenantEnabled()
+  const hideVoyagerForPlatformAdmin = isMultiTenant && canManagePlatformSettings
+
+  const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
+  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
+  const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
+  const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
+
+  if (hideVoyagerForPlatformAdmin) {
+    return <Navigate to="/admin/tenants" replace />
+  }
+
+  if (isMissionControlEnabled && !canViewMissionControl) {
+    const message = 'You need an engine role of owner, delegate, or operator on at least one engine to access Mission Control. Create an engine or ask an engine owner to grant you access.'
+    return <EngineAccessError status={403} message={message} actionPath={toTenantPath('/engines')} actionLabel="Go to Engines" />
+  }
+
+  return <>{children}</>
+}
 
 /**
  * Creates protected child routes that are shared between root (/) and tenant (/t/:tenantSlug) layouts
@@ -263,7 +294,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control`, 
       element: (
         <FeatureFlagGuard flag="missionControl" fallback={<Navigate to={fallbackPath} replace />}>
-          <MissionControlBridge />
+          <MissionControlRoleGuard>
+            <MissionControlBridge />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -271,7 +304,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/processes`, 
       element: (
         <FeatureFlagGuard flag="missionControl.processes" fallback={<Navigate to={fallbackPath} replace />}>
-          <ProcessesOverviewPage />
+          <MissionControlRoleGuard>
+            <ProcessesOverviewPage />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -279,7 +314,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/processes/instances/:instanceId`, 
       element: (
         <FeatureFlagGuard flag="missionControl.processes" fallback={<Navigate to={fallbackPath} replace />}>
-          <ProcessInstanceDetailPage />
+          <MissionControlRoleGuard>
+            <ProcessInstanceDetailPage />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -287,7 +324,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/batches`, 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
-          <BatchesPage />
+          <MissionControlRoleGuard>
+            <BatchesPage />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -295,7 +334,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/batches/:batchId`, 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
-          <BatchesPage />
+          <MissionControlRoleGuard>
+            <BatchesPage />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -303,7 +344,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/batches/new/delete`, 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
-          <NewDeleteBatch />
+          <MissionControlRoleGuard>
+            <NewDeleteBatch />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -311,7 +354,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/batches/new/suspend`, 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
-          <NewSuspendBatch />
+          <MissionControlRoleGuard>
+            <NewSuspendBatch />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -319,7 +364,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/batches/new/activate`, 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
-          <NewActivateBatch />
+          <MissionControlRoleGuard>
+            <NewActivateBatch />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -327,7 +374,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/batches/new/retries`, 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
-          <NewRetriesBatch />
+          <MissionControlRoleGuard>
+            <NewRetriesBatch />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -335,7 +384,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/migration/new`, 
       element: (
         <FeatureFlagGuard flag="missionControl" fallback={<Navigate to={fallbackPath} replace />}>
-          <MigrationWizardPage />
+          <MissionControlRoleGuard>
+            <MigrationWizardPage />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -343,7 +394,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/decisions`, 
       element: (
         <FeatureFlagGuard flag="missionControl.decisions" fallback={<Navigate to={fallbackPath} replace />}>
-          <Decisions />
+          <MissionControlRoleGuard>
+            <Decisions />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -351,7 +404,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/decisions/instances/:id`, 
       element: (
         <FeatureFlagGuard flag="missionControl.decisions" fallback={<Navigate to={fallbackPath} replace />}>
-          <DecisionHistoryDetail />
+          <MissionControlRoleGuard>
+            <DecisionHistoryDetail />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },
@@ -359,7 +414,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}mission-control/*`, 
       element: (
         <FeatureFlagGuard flag="missionControl" fallback={<Navigate to={fallbackPath} replace />}>
-          <MissionControlBridge />
+          <MissionControlRoleGuard>
+            <MissionControlBridge />
+          </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
     },

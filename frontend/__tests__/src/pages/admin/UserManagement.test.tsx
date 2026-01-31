@@ -6,7 +6,7 @@ import UserManagement from '../../../../src/pages/admin/UserManagement';
 import { authService } from '../../../../src/services/auth';
 
 vi.mock('@src/shared/hooks/useAuth', () => ({
-  useAuth: () => ({ user: { id: 'admin-1', platformRole: 'admin' } }),
+  useAuth: () => ({ user: { id: 'admin-1', capabilities: { canManageUsers: true } } }),
 }));
 
 const notifyMock = vi.fn();
