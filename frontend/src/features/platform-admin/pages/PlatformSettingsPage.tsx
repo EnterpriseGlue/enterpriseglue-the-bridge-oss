@@ -426,9 +426,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
           <TabList aria-label="Platform settings tabs">
             <Tab>Git</Tab>
             <Tab>Projects</Tab>
-            <Tab>Invite Domains</Tab>
             <Tab>Engines</Tab>
             <Tab>SSO</Tab>
+            <Tab>Invite Domains</Tab>
           </TabList>
           <TabPanels>
             {/* Tab 1: Git */}
@@ -451,17 +451,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               {renderProjects()}
             </TabPanel>
 
-            {/* Tab 3: Invite Domains */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderInviteDomains()}
-            </TabPanel>
-
-            {/* Tab 4: Engines */}
+            {/* Tab 3: Engines */}
             <TabPanel
               style={{
                 paddingInline: 0,
@@ -471,7 +461,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               {renderEngines()}
             </TabPanel>
 
-            {/* Tab 5: SSO */}
+            {/* Tab 4: SSO */}
             <TabPanel
               style={{
                 paddingInline: 0,
@@ -479,6 +469,16 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               }}
             >
               {renderSso()}
+            </TabPanel>
+
+            {/* Tab 5: Invite Domains */}
+            <TabPanel
+              style={{
+                paddingInline: 0,
+                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
+              }}
+            >
+              {renderInviteDomains()}
             </TabPanel>
           </TabPanels>
         </Tabs>
