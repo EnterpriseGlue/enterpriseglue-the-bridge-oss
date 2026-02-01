@@ -19,6 +19,7 @@ Audience: Developers and architects.
    - Backend: http://localhost:8787
 
 Admin credentials come from `.env.docker` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`).
+Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
 
 ## Stop
 ```bash

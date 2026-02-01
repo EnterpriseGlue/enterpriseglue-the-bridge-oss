@@ -252,7 +252,7 @@ export default function Login() {
 
       if (response?.emailVerificationRequired || response?.user?.isEmailVerified === false) {
         const resendPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/resend-verification` : '/resend-verification';
-        navigate(resendPath, { replace: true });
+        navigate(resendPath, { replace: true, state: { email } });
         return;
       }
 
@@ -394,11 +394,6 @@ export default function Login() {
               required
               disabled={isLoading}
             />
-            <div style={{ textAlign: 'right', marginTop: 'var(--spacing-3)' }}>
-              <Link to={forgotPasswordPath} style={{ color: 'var(--cds-link-01)', fontSize: 'var(--text-14)' }}>
-                Forgot your password?
-              </Link>
-            </div>
           </div>
 
           <Button
@@ -419,6 +414,11 @@ export default function Login() {
           >
             {isLoading ? 'Signing in...' : 'Sign in'}
           </Button>
+          <div style={{ textAlign: 'right', marginTop: 'var(--spacing-3)' }}>
+            <Link to={forgotPasswordPath} style={{ color: 'var(--cds-link-01)', fontSize: 'var(--text-14)' }}>
+              Forgot your password?
+            </Link>
+          </div>
         </form>
 
         {/* SSO Providers */}

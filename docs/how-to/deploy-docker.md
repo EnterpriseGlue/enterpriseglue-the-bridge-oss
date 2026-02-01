@@ -13,6 +13,7 @@ The default `docker-compose.yml` defines:
 ## Configuration
 1. Copy `.env.docker.example` to `.env.docker`.
 2. Update database and admin credentials if needed.
+3. Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
 
 Key defaults:
 - Backend: `http://localhost:8787`
@@ -39,3 +40,4 @@ Docker creates persistent volumes for:
 ## Notes
 - This is a **Docker-first** deployment for now (per MVP focus).
 - For a host-based production-style run, see `scripts/deploy-localhost.sh`.
+- If email verification is enabled, configure `RESEND_API_KEY` to receive verification links.

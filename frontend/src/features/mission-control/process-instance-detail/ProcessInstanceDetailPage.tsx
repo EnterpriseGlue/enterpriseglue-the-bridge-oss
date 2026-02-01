@@ -9,6 +9,7 @@ import SplitPane from 'react-split-pane'
 import { useAlert } from '../../../shared/hooks/useAlert'
 import { PageLoader } from '../../../shared/components/PageLoader'
 import { useInstanceData } from './components/hooks/useInstanceData'
+import { useSelectedEngine } from '../../../components/EngineSelector'
 import { useDiagramOverlays } from './components/hooks/useDiagramOverlays'
 import { useVariableEditor } from './components/hooks/useVariableEditor'
 import { useInstanceRetry } from './components/hooks/useInstanceRetry'
@@ -37,6 +38,12 @@ export default function ProcessInstanceDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { alertState, showAlert, closeAlert } = useAlert()
+  const selectedEngineId = useSelectedEngine()
+
+  const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
+  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
+  const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
+  const toTenantPath = (path: string) => (tenantPrefix ? `${tenantPrefix}${path}` : path)
 
   const showModifyAction = false
   
@@ -358,17 +365,22 @@ export default function ProcessInstanceDetailPage() {
     return (histVarsQ.data || []).filter((v: any) => v?.activityInstanceId && ids.has(v.activityInstanceId))
   }, [selectedActivityId, histVarsQ.data, activityIdToInstances])
 
+  const withEngineId = (path: string) => {
+    if (!selectedEngineId) return path
+    const joiner = path.includes('?') ? '&' : '?'
+    return `${path}${joiner}engineId=${encodeURIComponent(selectedEngineId)}`
+  }
+
   const selectedDecisionInstanceQ = useQuery<HistoricDecisionInstanceLite | null>({
     queryKey: ['mission-control', 'selected-decision', instanceId, selectedActivityId, selectedNodeMeta?.decisionRef || ''],
     queryFn: async () => {
       if (!instanceId || (!selectedActivityId && !selectedNodeMeta?.decisionRef)) return null
       const params = new URLSearchParams()
       params.set('processInstanceId', instanceId)
-      params.set('rootDecisionInstancesOnly', 'true')
       params.set('sortBy', 'evaluationTime')
       params.set('sortOrder', 'desc')
       params.set('maxResults', '50')
-      const all = await apiClient.get<HistoricDecisionInstanceLite[]>(`/mission-control-api/history/decisions?${params.toString()}`, undefined, { credentials: 'include' })
+      const all = await apiClient.get<HistoricDecisionInstanceLite[]>(withEngineId(`/mission-control-api/history/decisions?${params.toString()}`), undefined, { credentials: 'include' })
       if (!all || all.length === 0) return null
 
       let candidates: HistoricDecisionInstanceLite[] = []
@@ -392,13 +404,13 @@ export default function ProcessInstanceDetailPage() {
 
   const decisionInputsQ = useQuery<DecisionIo[]>({
     queryKey: ['mission-control', 'selected-decision-inputs', selectedDecisionInstance?.id],
-    queryFn: () => apiClient.get<DecisionIo[]>(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/inputs`, undefined, { credentials: 'include' }),
+    queryFn: () => apiClient.get<DecisionIo[]>(withEngineId(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/inputs`), undefined, { credentials: 'include' }),
     enabled: !!selectedDecisionInstance?.id,
   })
 
   const decisionOutputsQ = useQuery<DecisionIo[]>({
     queryKey: ['mission-control', 'selected-decision-outputs', selectedDecisionInstance?.id],
-    queryFn: () => apiClient.get<DecisionIo[]>(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/outputs`, undefined, { credentials: 'include' }),
+    queryFn: () => apiClient.get<DecisionIo[]>(withEngineId(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/outputs`), undefined, { credentials: 'include' }),
     enabled: !!selectedDecisionInstance?.id,
   })
 
@@ -520,12 +532,18 @@ export default function ProcessInstanceDetailPage() {
 
         // If Camunda provides the called subprocess instance id, navigate directly to it.
         if (calledPid) {
-          window.location.href = `/mission-control/processes/instances/${encodeURIComponent(calledPid)}?fromInstance=${encodeURIComponent(instanceId)}`
+          const params = new URLSearchParams()
+          params.set('fromInstance', instanceId)
+          navigate(toTenantPath(`/mission-control/processes/instances/${encodeURIComponent(calledPid)}?${params.toString()}`))
           break
         }
 
         // Fallback: Navigate to the current process overview page with node selection
-        window.location.href = `/mission-control/processes?process=${encodeURIComponent(defKey)}&node=${encodeURIComponent(linkInfo.elementId)}&fromInstance=${encodeURIComponent(instanceId)}`
+        const params = new URLSearchParams()
+        params.set('process', defKey)
+        params.set('node', linkInfo.elementId)
+        params.set('fromInstance', instanceId)
+        navigate(toTenantPath(`/mission-control/processes?${params.toString()}`))
         break
         }
         
@@ -540,41 +558,29 @@ export default function ProcessInstanceDetailPage() {
           const params = new URLSearchParams()
           params.set('fromInstance', instanceId)
           if (processLabel) params.set('processLabel', processLabel)
-          window.location.href = `/mission-control/decisions/instances/${encodeURIComponent(decisionId)}?${params.toString()}`
+          navigate(toTenantPath(`/mission-control/decisions/instances/${encodeURIComponent(decisionId)}?${params.toString()}`))
           break
         }
         
         // Fallback: Navigate to the decisions page with decision key filter
         {
-          const params = new URLSearchParams()
-          params.set('decision', linkInfo.targetKey)
-          params.set('node', linkInfo.elementId)
-          params.set('fromInstance', instanceId)
-          if (processLabel) params.set('processLabel', processLabel)
-          window.location.href = `/mission-control/decisions?${params.toString()}`
+          const formKey = linkInfo.targetKey
+          if (formKey.startsWith('embedded:app:')) {
+            // Extract form path: embedded:app:forms/approve-invoice.html -> forms/approve-invoice.html
+            const formPath = formKey.replace('embedded:app:', '')
+            // Open in Starbase forms viewer (if exists) or show alert
+            window.open(`/starbase/forms?form=${encodeURIComponent(formPath)}`, '_blank')
+          } else if (formKey.startsWith('embedded:deployment:')) {
+            // Deployment-based form
+            const formPath = formKey.replace('embedded:deployment:', '')
+            window.open(`/starbase/forms?form=${encodeURIComponent(formPath)}`, '_blank')
+          } else {
+            // External form URL - open directly
+            window.open(formKey, '_blank')
+          }
         }
         break
-        }
-        
-      case 'form':
-        // Navigate to form - extract form path from formKey
-        // Format: embedded:app:forms/approve-invoice.html or external:http://...
-        const formKey = linkInfo.targetKey
-        if (formKey.startsWith('embedded:app:')) {
-          // Extract form path: embedded:app:forms/approve-invoice.html -> forms/approve-invoice.html
-          const formPath = formKey.replace('embedded:app:', '')
-          // Open in Starbase forms viewer (if exists) or show alert
-          window.open(`/starbase/forms?form=${encodeURIComponent(formPath)}`, '_blank')
-        } else if (formKey.startsWith('embedded:deployment:')) {
-          // Deployment-based form
-          const formPath = formKey.replace('embedded:deployment:', '')
-          window.open(`/starbase/forms?form=${encodeURIComponent(formPath)}`, '_blank')
-        } else {
-          // External form URL - open directly
-          window.open(formKey, '_blank')
-        }
-        break
-        
+      }
       case 'externalTopic':
         // Navigate to external tasks filtered by topic
         // TODO: Add external tasks page with topic filter when available

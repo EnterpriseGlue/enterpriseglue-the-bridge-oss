@@ -16,8 +16,6 @@
       "@shared/*": ["./src/shared/*"],
       "@modules/*": ["./src/modules/*"],
       "@vitest/expect": ["./node_modules/@vitest/expect/dist/index.d.ts"],
-      "@azure/msal-node": ["./node_modules/@azure/msal-node/lib/types/index.d.ts"],
-      "@azure/msal-node/*": ["./node_modules/@azure/msal-node/lib/types/*"],
       "@azure/msal-common": ["./node_modules/@azure/msal-common/lib/types/index.d.ts"],
       "@azure/msal-common/*": ["./node_modules/@azure/msal-common/lib/types/*"],
       "@enterpriseglue/contracts": ["../packages/contracts/src/index.d.ts"],

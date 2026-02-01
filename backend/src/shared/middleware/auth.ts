@@ -3,6 +3,7 @@ import { verifyToken, type JwtPayload } from '@shared/utils/jwt.js';
 import { Errors, AppError } from './errorHandler.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
+import { config } from '@shared/config/index.js';
 
 /**
  * Authentication middleware
@@ -69,7 +70,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       '/api/auth/logout',
     ];
 
-    if (!user.isEmailVerified && !allowUnverifiedPaths.includes(requestPath)) {
+    const isAdminVerificationExempt =
+      config.adminEmailVerificationExempt &&
+      user.email.toLowerCase() === config.adminEmail.toLowerCase() &&
+      user.createdByUserId === null;
+
+    if (!user.isEmailVerified && !isAdminVerificationExempt && !allowUnverifiedPaths.includes(requestPath)) {
       throw Errors.forbidden('Email verification required');
     }
 

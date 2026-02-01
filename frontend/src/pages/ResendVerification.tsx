@@ -14,13 +14,47 @@ export default function ResendVerification() {
   const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : '';
   const loginPath = tenantSlug ? `${tenantPrefix}/login` : '/login';
+  const verifyPath = tenantSlug ? `${tenantPrefix}/verify-email` : '/verify-email';
 
-  const [email, setEmail] = useState('');
+  const locationState = location.state as { email?: string } | null;
+  const queryEmail = new URLSearchParams(location.search).get('email') || '';
+  const initialEmail = (locationState?.email || queryEmail).trim();
+
+  const [email, setEmail] = useState(initialEmail);
+  const [showEmailInput, setShowEmailInput] = useState(!initialEmail);
+  const [token, setToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [status, setStatus] = useState<'idle' | 'sent' | 'verified'>('idle');
+  const [showResendForm, setShowResendForm] = useState(false);
+
+  const canResend = Boolean(email);
+
+  const handleVerifyToken = (e: FormEvent) => {
+    e.preventDefault();
+    const trimmedToken = token.trim();
+    if (!trimmedToken) {
+      notify({
+        kind: 'error',
+        title: 'Verification token required',
+        subtitle: 'Paste the verification token from your email to continue.',
+      });
+      return;
+    }
+    setIsVerifying(true);
+    navigate(`${verifyPath}?token=${encodeURIComponent(trimmedToken)}`, { replace: true });
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!email) {
+      notify({
+        kind: 'error',
+        title: 'Email required',
+        subtitle: 'Enter the email address for the verification link.',
+      });
+      return;
+    }
     setIsLoading(true);
 
     try {
@@ -72,36 +106,101 @@ export default function ResendVerification() {
             marginBottom: 'var(--spacing-2)',
             color: 'var(--color-text-primary)',
           }}>
-            Resend verification email
+            Verify your email
           </h1>
           <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-14)' }}>
-            Enter the email address associated with your account. We will send a new verification link.
+            Paste the verification token from the email to complete verification.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleVerifyToken}>
           <div style={{ marginBottom: 'var(--spacing-5)' }}>
             <TextInput
-              id="email"
-              labelText="Email"
-              placeholder="name@company.com"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="verification-token"
+              labelText="Verification token"
+              placeholder="Paste token from your email"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              disabled={isVerifying}
               required
-              disabled={isLoading}
             />
           </div>
 
           <Button
             type="submit"
             kind="primary"
-            disabled={isLoading || !email}
+            disabled={isVerifying || !token.trim()}
             style={{ width: '100%' }}
           >
-            {isLoading ? 'Sending...' : 'Send verification email'}
+            {isVerifying ? 'Verifying...' : 'Verify token'}
           </Button>
         </form>
+
+        <div style={{
+          marginTop: 'var(--spacing-6)',
+          paddingTop: 'var(--spacing-4)',
+          borderTop: '1px solid var(--color-border-primary)',
+        }}>
+          {!showResendForm ? (
+            <Button
+              kind="ghost"
+              size="sm"
+              onClick={() => setShowResendForm(true)}
+              style={{ width: '100%' }}
+            >
+              Need a new link? Resend verification email
+            </Button>
+          ) : (
+            <>
+              <p style={{
+                color: 'var(--color-text-secondary)',
+                fontSize: 'var(--text-14)',
+                marginBottom: 'var(--spacing-4)',
+              }}>
+                We can resend the verification email.
+              </p>
+
+              <form onSubmit={handleSubmit}>
+                {showEmailInput && (
+                  <div style={{ marginBottom: 'var(--spacing-5)' }}>
+                    <TextInput
+                      id="email"
+                      labelText="Email"
+                      placeholder="name@company.com"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      disabled={isLoading}
+                    />
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+                  {!showEmailInput && (
+                    <Button
+                      type="button"
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => setShowEmailInput(true)}
+                      disabled={isLoading}
+                    >
+                      Use a different email
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    kind="secondary"
+                    disabled={isLoading || !canResend}
+                    style={{ flex: showEmailInput ? undefined : 1 }}
+                  >
+                    {isLoading ? 'Sending...' : 'Resend verification email'}
+                  </Button>
+                </div>
+              </form>
+            </>
+          )}
+        </div>
 
         <div style={{
           marginTop: 'var(--spacing-6)',

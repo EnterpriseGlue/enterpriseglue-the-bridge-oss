@@ -43,12 +43,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const storedUser = localStorage.getItem(USER_KEY);
 
         if (storedToken && storedUser) {
+          let storedUserData: User | null = null;
+          try {
+            storedUserData = JSON.parse(storedUser) as User;
+          } catch {
+            storedUserData = null;
+          }
+
+          if (storedUserData?.isEmailVerified === false || !storedUserData) {
+            clearAuth();
+            return;
+          }
+
           // Set token for API calls
           authService.setAccessToken(storedToken);
 
           // Verify token is still valid by fetching user
           try {
             const user = await authService.getMe();
+            if (user?.isEmailVerified === false) {
+              clearAuth();
+              return;
+            }
             setUser(user);
             localStorage.setItem(USER_KEY, JSON.stringify(user));
           } catch (error) {
@@ -62,6 +78,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
                 // Fetch user again
                 const user = await authService.getMe();
+                if (user?.isEmailVerified === false) {
+                  clearAuth();
+                  return;
+                }
                 setUser(user);
                 localStorage.setItem(USER_KEY, JSON.stringify(user));
               } catch {
@@ -77,6 +97,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
           // Try to fetch user - cookies will be sent automatically
           try {
             const user = await authService.getMe();
+            if (user?.isEmailVerified === false) {
+              clearAuth();
+              return;
+            }
             setUser(user);
             localStorage.setItem(USER_KEY, JSON.stringify(user));
           } catch (error) {
@@ -112,6 +136,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
    */
   const login = useCallback(async (credentials: LoginRequest) => {
     const response = await authService.login(credentials);
+    const requiresVerification =
+      response?.emailVerificationRequired || response?.user?.isEmailVerified === false;
+
+    if (requiresVerification) {
+      clearAuth();
+      return response;
+    }
 
     // Store tokens and user
     authService.setAccessToken(response.accessToken);
@@ -122,7 +153,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(response.user);
 
     return response;
-  }, []);
+  }, [clearAuth]);
 
   /**
    * Logout and clear session
@@ -167,6 +198,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const refreshUser = useCallback(async () => {
     try {
       const user = await authService.getMe();
+      if (user?.isEmailVerified === false) {
+        clearAuth();
+        return;
+      }
       setUser(user);
       localStorage.setItem(USER_KEY, JSON.stringify(user));
     } catch (error) {

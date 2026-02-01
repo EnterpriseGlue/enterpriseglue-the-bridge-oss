@@ -36,6 +36,7 @@ import type { EnvironmentTag, ProjectGovernanceItem, EngineGovernanceItem, UserL
 import SsoSettingsTab from '../components/SsoSettingsTab';
 import { GitSettingsSection } from '../components/GitSettingsSection';
 import { ProjectsSettingsSection } from '../components/ProjectsSettingsSection';
+import { InviteDomainsSettingsSection } from '../components/InviteDomainsSettingsSection';
 import { EnginesSettingsSection } from '../components/EnginesSettingsSection';
 
 // Predefined colors for environment tags
@@ -50,7 +51,7 @@ const TAG_COLORS = [
   '#a2191f', // Dark Red
 ];
 
-type PlatformSettingsSection = 'git' | 'projects' | 'engines' | 'sso';
+type PlatformSettingsSection = 'git' | 'projects' | 'invite-domains' | 'engines' | 'sso';
 
 interface PlatformSettingsPageProps {
   section?: PlatformSettingsSection;
@@ -268,6 +269,11 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       setProjectComboKey={setProjectComboKey}
       onAssignOwner={(target) => openAssignModal('projectOwner', target)}
       onAssignDelegate={(target) => openAssignModal('projectDelegate', target)}
+    />
+  );
+
+  const renderInviteDomains = () => (
+    <InviteDomainsSettingsSection
       inviteAllowAll={inviteAllowAll}
       normalizedInviteDomains={normalizedInviteDomains}
       inviteDomainInput={inviteDomainInput}
@@ -313,6 +319,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         return renderGit();
       case 'projects':
         return renderProjects();
+      case 'invite-domains':
+        return renderInviteDomains();
       case 'engines':
         return renderEngines();
       case 'sso':
@@ -418,6 +426,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
           <TabList aria-label="Platform settings tabs">
             <Tab>Git</Tab>
             <Tab>Projects</Tab>
+            <Tab>Invite Domains</Tab>
             <Tab>Engines</Tab>
             <Tab>SSO</Tab>
           </TabList>
@@ -442,7 +451,17 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               {renderProjects()}
             </TabPanel>
 
-            {/* Tab 3: Engines */}
+            {/* Tab 3: Invite Domains */}
+            <TabPanel
+              style={{
+                paddingInline: 0,
+                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
+              }}
+            >
+              {renderInviteDomains()}
+            </TabPanel>
+
+            {/* Tab 4: Engines */}
             <TabPanel
               style={{
                 paddingInline: 0,
@@ -452,7 +471,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               {renderEngines()}
             </TabPanel>
 
-            {/* Tab 4: SSO */}
+            {/* Tab 5: SSO */}
             <TabPanel
               style={{
                 paddingInline: 0,

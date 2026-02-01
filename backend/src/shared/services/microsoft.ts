@@ -3,7 +3,7 @@
  * Handles OAuth flow, token validation, and user provisioning
  */
 
-import { ConfidentialClientApplication, AuthorizationUrlRequest, AuthorizationCodeRequest } from '@azure/msal-node';
+import { createRequire } from 'node:module';
 import { logger } from '@shared/utils/logger.js';
 import { config } from '@shared/config/index.js';
 import { getDataSource } from '@shared/db/data-source.js';
@@ -26,6 +26,13 @@ export interface MicrosoftUserInfo {
   roles?: string[];         // App roles (if configured)
 }
 
+type AuthorizationUrlRequest = Record<string, any>;
+type AuthorizationCodeRequest = Record<string, any>;
+type ConfidentialClientApplication = any;
+
+const require = createRequire(import.meta.url);
+const msalNode = require('@azure/msal-node');
+
 /**
  * Check if Microsoft Entra ID is configured
  */
@@ -46,7 +53,7 @@ function getMsalClient(): ConfidentialClientApplication {
     throw new Error('Microsoft Entra ID is not configured');
   }
 
-  return new ConfidentialClientApplication({
+  return new msalNode.ConfidentialClientApplication({
     auth: {
       clientId: config.microsoftClientId!,
       authority: `https://login.microsoftonline.com/${config.microsoftTenantId}`,
@@ -54,7 +61,7 @@ function getMsalClient(): ConfidentialClientApplication {
     },
     system: {
       loggerOptions: {
-        loggerCallback: (level, message, containsPii) => {
+        loggerCallback: (level: number, message: string, containsPii: boolean) => {
           if (containsPii) return;
           if (config.nodeEnv === 'development') {
             logger.info(`[MSAL] ${message}`);

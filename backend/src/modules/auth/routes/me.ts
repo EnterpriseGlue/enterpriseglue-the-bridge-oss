@@ -10,6 +10,7 @@ import { User } from '@shared/db/entities/User.js';
 import { PlatformSettings } from '@shared/db/entities/PlatformSettings.js';
 import { logAudit, AuditActions } from '@shared/services/audit.js';
 import { buildUserCapabilities } from '@shared/services/capabilities.js';
+import { config } from '@shared/config/index.js';
 
 const router = Router();
 
@@ -32,6 +33,12 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
     platformRole: user.platformRole,
   });
 
+  const isAdminVerificationExempt =
+    config.adminEmailVerificationExempt &&
+    user.email.toLowerCase() === config.adminEmail.toLowerCase() &&
+    user.createdByUserId === null;
+  const isEmailVerified = Boolean(user.isEmailVerified) || isAdminVerificationExempt;
+
   res.json({
     id: user.id,
     email: user.email,
@@ -40,7 +47,7 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
     platformRole: user.platformRole || 'user',
     capabilities,
     isActive: Boolean(user.isActive),
-    isEmailVerified: Boolean(user.isEmailVerified),
+    isEmailVerified,
     mustResetPassword: Boolean(user.mustResetPassword),
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,

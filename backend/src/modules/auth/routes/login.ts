@@ -13,6 +13,7 @@ import { RefreshToken } from '@shared/db/entities/RefreshToken.js';
 import { validateBody } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { buildUserCapabilities } from '@shared/services/capabilities.js';
+import { config } from '@shared/config/index.js';
 
 const router = Router();
 
@@ -145,7 +146,11 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   });
 
   // Check email verification status
-  const isEmailVerified = Boolean(user.isEmailVerified);
+  const isAdminVerificationExempt =
+    config.adminEmailVerificationExempt &&
+    user.email.toLowerCase() === config.adminEmail.toLowerCase() &&
+    user.createdByUserId === null;
+  const isEmailVerified = Boolean(user.isEmailVerified) || isAdminVerificationExempt;
 
   const capabilities = await buildUserCapabilities({
     userId: user.id,

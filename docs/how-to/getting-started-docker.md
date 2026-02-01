@@ -23,6 +23,7 @@ Audience: Developers and architects.
 4. Log in with the admin credentials from `.env.docker`:
    - `ADMIN_EMAIL`
    - `ADMIN_PASSWORD`
+   - Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification
 
 ## Stop the stack
 ```bash
@@ -33,6 +34,7 @@ npm run down
 - Docker uses a PostgreSQL container by default (see `.env.docker`).
 - Git repositories are stored at `./data/repos` inside the backend container.
 - To change ports or database settings, update `.env.docker`.
+- If email verification is enabled, configure `RESEND_API_KEY` to receive verification links.
 
 ## Non-Docker local deployment
 For a localhost deployment (build + preview) using the production-style script, see:

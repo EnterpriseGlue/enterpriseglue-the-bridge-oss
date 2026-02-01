@@ -306,25 +306,45 @@ export async function cleanupEngines(engineIds: string[]) {
 export async function cleanupStaleTestData() {
   const dataSource = await getDataSource();
   
-  // Clean old test engines (older than 1 hour based on timestamp in name)
-  const oneHourAgo = Date.now() - 3600000;
+  // Clean old test engines created by test users or test name prefixes
   await dataSource.query(`
     DELETE FROM main.engine_members 
     WHERE engine_id IN (
       SELECT id FROM main.engines 
-      WHERE name LIKE 'test_%' OR name LIKE 'test_camunda_%'
+      WHERE name LIKE 'test_%'
+         OR name LIKE 'test_camunda_%'
+         OR name LIKE 'e2e-%'
+         OR owner_id IN (
+           SELECT id FROM main.users
+           WHERE email LIKE 'e2e-%@example.com'
+              OR email LIKE 'test_%@example.com'
+         )
     )
   `);
   await dataSource.query(`
     DELETE FROM main.engine_health 
     WHERE engine_id IN (
       SELECT id FROM main.engines 
-      WHERE name LIKE 'test_%' OR name LIKE 'test_camunda_%'
+      WHERE name LIKE 'test_%'
+         OR name LIKE 'test_camunda_%'
+         OR name LIKE 'e2e-%'
+         OR owner_id IN (
+           SELECT id FROM main.users
+           WHERE email LIKE 'e2e-%@example.com'
+              OR email LIKE 'test_%@example.com'
+         )
     )
   `);
   await dataSource.query(`
     DELETE FROM main.engines 
-    WHERE name LIKE 'test_%' OR name LIKE 'test_camunda_%'
+    WHERE name LIKE 'test_%'
+       OR name LIKE 'test_camunda_%'
+       OR name LIKE 'e2e-%'
+       OR owner_id IN (
+         SELECT id FROM main.users
+         WHERE email LIKE 'e2e-%@example.com'
+            OR email LIKE 'test_%@example.com'
+       )
   `);
   
   await dataSource.query(`

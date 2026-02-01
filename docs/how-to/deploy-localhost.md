@@ -21,6 +21,7 @@ Create `backend/.env` from `backend/.env.example` and configure at least:
 - `JWT_SECRET`
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
+- Optional: `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin (created from `ADMIN_EMAIL` on first run) to bypass email verification
 - `NODE_ENV`
 - `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DATABASE`, `POSTGRES_SCHEMA`
 
@@ -43,6 +44,8 @@ This will:
 - Build frontend (`frontend/dist`)
 - Start backend and frontend preview services
 - Apply database migrations automatically on backend startup (using your `backend/.env` settings)
+
+If email verification is enabled, configure `RESEND_API_KEY` to receive verification links or set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` for the seeded admin account.
 
 ## Incremental deploy (after first install)
 
