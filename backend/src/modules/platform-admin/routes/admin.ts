@@ -1,12 +1,11 @@
 /**
  * Platform Admin API Routes
  * Aggregator that mounts domain-specific routers
- * Requires Platform Admin role for all endpoints
+ * Requires authentication; per-route permissions enforce access
  */
 
 import { Router } from 'express';
 import { requireAuth } from '@shared/middleware/auth.js';
-import { requirePlatformAdmin } from '@shared/middleware/platformAuth.js';
 
 import settingsRouter from './settings.js';
 import brandingRouter from './branding.js';
@@ -15,8 +14,8 @@ import governanceRouter from './governance.js';
 
 const router = Router();
 
-// All routes require Platform Admin
-router.use(requireAuth, requirePlatformAdmin);
+// All routes require authentication; permissions are enforced per route
+router.use(requireAuth);
 
 // Mount domain-specific routers
 router.use('/settings', settingsRouter);

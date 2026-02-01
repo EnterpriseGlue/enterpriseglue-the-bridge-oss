@@ -20,6 +20,7 @@ import { generateId } from '@shared/utils/id.js';
 import { sendInvitationEmail } from '@shared/services/email/index.js';
 import { config } from '@shared/config/index.js';
 import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES, MANAGE_ROLES } from '@shared/constants/roles.js';
+import { logAudit } from '@shared/services/audit.js';
 
 const router = Router();
 
@@ -140,6 +141,16 @@ router.post(
 
         // Add the member
         const result = await engineService.addEngineMember(engineId, targetUser.id, role, granterId);
+
+        await logAudit({
+          userId: granterId,
+          action: 'engine.member.added',
+          resourceType: 'engine',
+          resourceId: engineId,
+          ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+          userAgent: req.headers['user-agent'],
+          details: { targetUserId: targetUser.id, email: targetUser.email, role },
+        });
 
         return res.status(201).json({
           ...result,

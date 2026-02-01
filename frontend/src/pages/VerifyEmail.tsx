@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button, SkeletonIcon, SkeletonText } from '@carbon/react';
 import { apiClient } from '../shared/api/client';
 import { CheckmarkFilled, WarningFilled } from '@carbon/icons-react';
@@ -16,6 +16,7 @@ export default function VerifyEmail() {
   const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : '';
   const loginPath = tenantSlug ? `${tenantPrefix}/login` : '/login';
+  const resendPath = tenantSlug ? `${tenantPrefix}/resend-verification` : '/resend-verification';
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -162,7 +163,7 @@ export default function VerifyEmail() {
           <Button kind="secondary" onClick={() => navigate(loginPath)}>
             Go to Login
           </Button>
-          <Button onClick={() => navigate('/resend-verification')}>
+          <Button onClick={() => navigate(resendPath)}>
             Request New Link
           </Button>
         </div>
@@ -206,7 +207,7 @@ export default function VerifyEmail() {
         <Button kind="secondary" onClick={() => navigate(loginPath)}>
           Go to Login
         </Button>
-        <Button onClick={() => navigate('/resend-verification')}>
+        <Button onClick={() => navigate(resendPath)}>
           Request New Link
         </Button>
       </div>

@@ -21,7 +21,20 @@ export type CapabilityRequirement =
   | 'canViewAuditLogs'
   | 'canManagePlatformSettings'
   | 'canViewMissionControl'
-  | 'canManageTenants';
+  | 'canManageTenants'
+  | 'canManagePlatformEmail'
+  | 'canManageSsoProviders'
+  | 'canManagePlatformBranding'
+  | 'canManageTenantDomains'
+  | 'canManageTenantUsers'
+  | 'canManageTenantBranding'
+  | 'canManageTenantEmailTemplates'
+  | 'canViewTenantAudit'
+  | 'canManageTenantSso'
+  | 'canManageProject'
+  | 'canManageEngine'
+  | 'canInviteProjectMembers'
+  | 'canInviteEngineMembers';
 
 /**
  * Sidebar navigation item extension

@@ -10,10 +10,6 @@ vi.mock('@shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@shared/middleware/platformAuth.js', () => ({
-  requirePlatformAdmin: (_req: any, _res: any, next: any) => next(),
-}));
-
 vi.mock('../../../../src/modules/platform-admin/routes/settings.js', () => ({
   default: express.Router(),
 }));

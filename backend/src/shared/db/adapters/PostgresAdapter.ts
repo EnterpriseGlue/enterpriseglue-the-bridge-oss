@@ -3,7 +3,7 @@ import fs from 'fs';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@shared/config/index.js';
 import {
-  User, RefreshToken, AuditLog, Notification,
+  User, RefreshToken, PasswordResetToken, AuditLog, Notification,
   Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
@@ -17,7 +17,7 @@ import {
 } from '../entities/index.js';
 
 const entities = [
-  User, RefreshToken, AuditLog, Notification,
+  User, RefreshToken, PasswordResetToken, AuditLog, Notification,
   Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,

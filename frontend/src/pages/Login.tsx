@@ -132,6 +132,7 @@ export default function Login() {
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
   const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
+  const forgotPasswordPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/forgot-password` : '/forgot-password';
 
   const initialBranding = readCachedBranding();
   const [email, setEmail] = useState('');
@@ -247,7 +248,13 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await login({ email, password });
+      const response = await login({ email, password });
+
+      if (response?.emailVerificationRequired || response?.user?.isEmailVerified === false) {
+        const resendPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/resend-verification` : '/resend-verification';
+        navigate(resendPath, { replace: true });
+        return;
+      }
 
       // Redirect to the page they tried to visit or home
       const fallback = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : '/';
@@ -387,6 +394,11 @@ export default function Login() {
               required
               disabled={isLoading}
             />
+            <div style={{ textAlign: 'right', marginTop: 'var(--spacing-3)' }}>
+              <Link to={forgotPasswordPath} style={{ color: 'var(--cds-link-01)', fontSize: 'var(--text-14)' }}>
+                Forgot your password?
+              </Link>
+            </div>
           </div>
 
           <Button

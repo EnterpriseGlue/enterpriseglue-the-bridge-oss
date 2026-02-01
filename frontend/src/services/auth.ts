@@ -13,6 +13,9 @@ import type {
   RefreshTokenRequest,
   RefreshTokenResponse,
   ResetPasswordRequest,
+  ForgotPasswordRequest,
+  ResetPasswordWithTokenRequest,
+  VerifyResetTokenResponse,
   ChangePasswordRequest,
   CreateUserRequest,
   CreateUserResponse,
@@ -96,6 +99,27 @@ class AuthService {
    */
   async resetPassword(request: ResetPasswordRequest): Promise<void> {
     await apiClient.post(`${API_BASE_URL}/auth/reset-password`, request);
+  }
+
+  /**
+   * Request a password reset email
+   */
+  async forgotPassword(request: ForgotPasswordRequest): Promise<void> {
+    await apiClient.post(`${API_BASE_URL}/auth/forgot-password`, request);
+  }
+
+  /**
+   * Verify a reset token before showing reset form
+   */
+  async verifyResetToken(token: string): Promise<VerifyResetTokenResponse> {
+    return apiClient.get<VerifyResetTokenResponse>(`${API_BASE_URL}/auth/verify-reset-token`, { token });
+  }
+
+  /**
+   * Reset password with token
+   */
+  async resetPasswordWithToken(request: ResetPasswordWithTokenRequest): Promise<void> {
+    await apiClient.post(`${API_BASE_URL}/auth/reset-password-with-token`, request);
   }
 
   /**

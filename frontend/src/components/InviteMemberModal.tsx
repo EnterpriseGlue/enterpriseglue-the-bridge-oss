@@ -142,6 +142,9 @@ export default function InviteMemberModal({
         <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
           An email will be sent with a link to accept the invitation. The invitation expires in 7 days.
         </p>
+        <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', marginTop: 'var(--spacing-2)' }}>
+          <em>Note: Invitations are available in the Enterprise Edition. In OSS, users must register before being added.</em>
+        </p>
       </div>
     </Modal>
   );

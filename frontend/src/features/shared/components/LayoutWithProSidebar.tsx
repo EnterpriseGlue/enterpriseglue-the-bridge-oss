@@ -950,12 +950,14 @@ export default function LayoutWithProSidebar() {
                         ? new Date(createdAtMs).toLocaleString()
                         : 'Just now'
 
+                      const stateColor = NOTIFICATION_STATE_COLORS[item.state as NotificationItem['state']]
+
                       return (
                         <div
                           key={item.id}
                           style={{
                             border: '1px solid var(--color-border-primary)',
-                            borderLeft: `4px solid ${NOTIFICATION_STATE_COLORS[item.state]}`,
+                            borderLeft: `4px solid ${stateColor}`,
                             borderRadius: 'var(--border-radius-sm)',
                             padding: 'var(--spacing-3)',
                             display: 'flex',

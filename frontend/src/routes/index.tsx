@@ -40,11 +40,15 @@ import { ExtensionPage } from '../enterprise/ExtensionSlot'
 // Guards
 import { FeatureFlagGuard } from '../shared/components/FeatureFlagGuard'
 import { ProtectedRoute } from '../shared/components/ProtectedRoute'
+import { RequireEmailVerification } from '../shared/components/RequireEmailVerification'
 import { RequirePasswordReset } from '../shared/components/RequirePasswordReset'
 
 // Auth pages
 import Login from '../pages/Login'
+import ForgotPassword from '../pages/ForgotPassword'
+import PasswordResetWithToken from '../pages/PasswordResetWithToken'
 import ResetPassword from '../pages/ResetPassword'
+import ResendVerification from '../pages/ResendVerification'
 import VerifyEmail from '../pages/VerifyEmail'
 import Signup from '../pages/Signup'
 import AcceptInvite from '../pages/AcceptInvite'
@@ -448,8 +452,14 @@ export function getPublicRoutes(): RouteObject[] {
   return [
     { path: '/login', element: <Login /> },
     { path: '/t/:tenantSlug/login', element: <Login /> },
+    { path: '/forgot-password', element: <ForgotPassword /> },
+    { path: '/t/:tenantSlug/forgot-password', element: <ForgotPassword /> },
+    { path: '/password-reset', element: <PasswordResetWithToken /> },
+    { path: '/t/:tenantSlug/password-reset', element: <PasswordResetWithToken /> },
     { path: '/verify-email', element: <VerifyEmail /> },
     { path: '/t/:tenantSlug/verify-email', element: <VerifyEmail /> },
+    { path: '/resend-verification', element: <ResendVerification /> },
+    { path: '/t/:tenantSlug/resend-verification', element: <ResendVerification /> },
     { path: '/signup', element: <Signup /> },
     { 
       path: '/git/oauth/callback', 
@@ -493,9 +503,11 @@ export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): R
     path: '/',
     element: (
       <ProtectedRoute>
-        <RequirePasswordReset>
-          <LayoutWithProSidebar />
-        </RequirePasswordReset>
+        <RequireEmailVerification>
+          <RequirePasswordReset>
+            <LayoutWithProSidebar />
+          </RequirePasswordReset>
+        </RequireEmailVerification>
       </ProtectedRoute>
     ),
     children: [
@@ -515,9 +527,11 @@ export function createTenantLayoutRoute(enterpriseChildren: RouteObject[] = []):
     path: '/t/:tenantSlug',
     element: (
       <ProtectedRoute>
-        <RequirePasswordReset>
-          <LayoutWithProSidebar />
-        </RequirePasswordReset>
+        <RequireEmailVerification>
+          <RequirePasswordReset>
+            <LayoutWithProSidebar />
+          </RequirePasswordReset>
+        </RequireEmailVerification>
       </ProtectedRoute>
     ),
     children: [

@@ -21,7 +21,7 @@ export async function sendPasswordResetEmail(params: PasswordResetEmailParams): 
   
   // Build reset URL
   const frontendUrl = config.frontendUrl || 'http://localhost:5173';
-  const fullResetUrl = resetUrl || `${frontendUrl}/reset-password?token=${resetToken}`;
+  const fullResetUrl = resetUrl || `${frontendUrl}/password-reset?token=${resetToken}`;
   
   // Get platform name from settings
   const dataSource = await getDataSource();

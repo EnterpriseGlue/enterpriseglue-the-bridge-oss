@@ -16,8 +16,8 @@ vi.mock('@shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@shared/middleware/platformAuth.js', () => ({
-  requirePlatformAdmin: (_req: any, _res: any, next: any) => next(),
+vi.mock('@shared/middleware/requirePermission.js', () => ({
+  requirePermission: () => (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('@shared/utils/crypto.js', () => ({

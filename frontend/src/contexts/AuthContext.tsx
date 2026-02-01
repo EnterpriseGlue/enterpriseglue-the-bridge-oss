@@ -2,7 +2,7 @@ import React, { createContext, useState, useEffect, useCallback, ReactNode } fro
 import { authService } from '../services/auth';
 import { shouldRefreshToken } from '../utils/jwtHelper';
 import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
-import type { User, LoginRequest, ResetPasswordRequest, ChangePasswordRequest } from '../shared/types/auth';
+import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest } from '../shared/types/auth';
 import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../constants/storageKeys';
 
 /**
@@ -14,7 +14,7 @@ interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (credentials: LoginRequest) => Promise<void>;
+  login: (credentials: LoginRequest) => Promise<LoginResponse>;
   logout: () => Promise<void>;
   resetPassword: (request: ResetPasswordRequest) => Promise<void>;
   changePassword: (request: ChangePasswordRequest) => Promise<void>;
@@ -120,6 +120,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     localStorage.setItem(USER_KEY, JSON.stringify(response.user));
 
     setUser(response.user);
+
+    return response;
   }, []);
 
   /**

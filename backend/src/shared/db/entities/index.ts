@@ -4,6 +4,7 @@ export { AppBaseEntity } from './BaseEntity.js';
 // Auth entities
 export { User } from './User.js';
 export { RefreshToken } from './RefreshToken.js';
+export { PasswordResetToken } from './PasswordResetToken.js';
 
 // Audit entities
 export { AuditLog } from './AuditLog.js';

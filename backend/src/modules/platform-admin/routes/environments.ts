@@ -8,8 +8,10 @@ import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { validateBody, validateParams } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { environmentTagService } from '@shared/services/platform-admin/index.js';
 import { logAudit } from '@shared/services/audit.js';
+import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -34,7 +36,7 @@ const reorderSchema = z.object({
  * GET /api/platform-admin/admin/environments
  * Get all environment tags
  */
-router.get('/', apiLimiter, asyncHandler(async (req, res) => {
+router.get('/', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req, res) => {
   try {
     const tags = await environmentTagService.getAll();
     res.json(tags);
@@ -50,6 +52,7 @@ router.get('/', apiLimiter, asyncHandler(async (req, res) => {
  */
 router.post(
   '/',
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateBody(createEnvTagSchema),
   asyncHandler(async (req, res) => {
     try {
@@ -79,6 +82,7 @@ router.post(
  */
 router.put(
   '/:id',
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateParams(z.object({ id: z.string() })),
   validateBody(updateEnvTagSchema),
   asyncHandler(async (req, res) => {
@@ -109,6 +113,7 @@ router.put(
  */
 router.delete(
   '/:id',
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateParams(z.object({ id: z.string() })),
   asyncHandler(async (req, res) => {
     try {

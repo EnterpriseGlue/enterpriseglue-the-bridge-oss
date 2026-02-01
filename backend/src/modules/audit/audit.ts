@@ -3,11 +3,12 @@ import { MoreThan } from 'typeorm';
 import { logger } from '@shared/utils/logger.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { requireAuth } from '@shared/middleware/auth.js';
-import { requirePlatformAdmin } from '@shared/middleware/platformAuth.js';
+import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { auditLimiter } from '@shared/middleware/rateLimiter.js';
 import { getUserAuditLogs, getResourceAuditLogs } from '@shared/services/audit.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { AuditLog } from '@shared/db/entities/AuditLog.js';
+import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ const router = Router();
  * Get all audit logs (admin only)
  * Query params: limit, offset, action, userId, resourceType
  */
-router.get('/api/audit/logs', requireAuth, requirePlatformAdmin, auditLimiter, asyncHandler(async (req, res) => {
+router.get('/api/audit/logs', requireAuth, requirePermission({ permission: PlatformPermissions.AUDIT_VIEW }), auditLimiter, asyncHandler(async (req, res) => {
   try {
     const limitNum = parseInt(req.query.limit as string) || 100;
     const offsetNum = parseInt(req.query.offset as string) || 0;
@@ -76,7 +77,7 @@ router.get('/api/audit/logs', requireAuth, requirePlatformAdmin, auditLimiter, a
  * GET /api/audit/logs/user/:userId
  * Get audit logs for specific user
  */
-router.get('/api/audit/logs/user/:userId', requireAuth, requirePlatformAdmin, auditLimiter, asyncHandler(async (req, res) => {
+router.get('/api/audit/logs/user/:userId', requireAuth, requirePermission({ permission: PlatformPermissions.AUDIT_VIEW }), auditLimiter, asyncHandler(async (req, res) => {
   try {
     const { userId } = req.params;
     const limit = parseInt(req.query.limit as string) || 100;
@@ -93,7 +94,7 @@ router.get('/api/audit/logs/user/:userId', requireAuth, requirePlatformAdmin, au
  * GET /api/audit/logs/resource/:resourceType/:resourceId
  * Get audit logs for specific resource
  */
-router.get('/api/audit/logs/resource/:resourceType/:resourceId', requireAuth, requirePlatformAdmin, auditLimiter, asyncHandler(async (req, res) => {
+router.get('/api/audit/logs/resource/:resourceType/:resourceId', requireAuth, requirePermission({ permission: PlatformPermissions.AUDIT_VIEW }), auditLimiter, asyncHandler(async (req, res) => {
   try {
     const { resourceType, resourceId } = req.params;
     const limit = parseInt(req.query.limit as string) || 50;
@@ -110,7 +111,7 @@ router.get('/api/audit/logs/resource/:resourceType/:resourceId', requireAuth, re
  * GET /api/audit/stats
  * Get audit log statistics (admin only)
  */
-router.get('/api/audit/stats', requireAuth, requirePlatformAdmin, auditLimiter, asyncHandler(async (req, res) => {
+router.get('/api/audit/stats', requireAuth, requirePermission({ permission: PlatformPermissions.AUDIT_VIEW }), auditLimiter, asyncHandler(async (req, res) => {
   try {
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const dataSource = await getDataSource();
@@ -165,7 +166,7 @@ router.get('/api/audit/stats', requireAuth, requirePlatformAdmin, auditLimiter, 
  * GET /api/audit/actions
  * Get list of all available audit actions
  */
-router.get('/api/audit/actions', requireAuth, requirePlatformAdmin, auditLimiter, asyncHandler(async (req, res) => {
+router.get('/api/audit/actions', requireAuth, requirePermission({ permission: PlatformPermissions.AUDIT_VIEW }), auditLimiter, asyncHandler(async (req, res) => {
   try {
     const dataSource = await getDataSource();
     const auditRepo = dataSource.getRepository(AuditLog);

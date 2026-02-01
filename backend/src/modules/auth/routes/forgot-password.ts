@@ -9,12 +9,13 @@ import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
+import { PasswordResetToken } from '@shared/db/entities/PasswordResetToken.js';
 import { validateBody } from '@shared/middleware/validate.js';
 import { passwordResetLimiter, passwordResetVerifyLimiter, apiLimiter } from '@shared/middleware/rateLimiter.js';
 import { sendPasswordResetEmail } from '@shared/services/email/index.js';
-import { hashPassword, verifyPassword } from '@shared/utils/password.js';
-import { generateId } from '@shared/utils/id.js';
+import { hashPassword } from '@shared/utils/password.js';
 import { logAudit } from '@shared/services/audit.js';
+import { IsNull } from 'typeorm';
 
 const router = Router();
 
@@ -37,6 +38,7 @@ router.post('/api/auth/forgot-password', apiLimiter, passwordResetLimiter, valid
   const { email } = req.body;
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
+  const resetTokenRepo = dataSource.getRepository(PasswordResetToken);
 
   // Find user by email
   const user = await userRepo.findOneBy({ email: email.toLowerCase() });
@@ -44,18 +46,21 @@ router.post('/api/auth/forgot-password', apiLimiter, passwordResetLimiter, valid
   // Always return success to prevent email enumeration
   // But only actually send email if user exists and uses local auth
   if (user && user.isActive && user.authProvider === 'local') {
-    // Generate reset token (use same format as email verification)
-    const resetToken = generateId() + '-' + generateId();
+    const { randomBytes, createHash } = await import('crypto');
+    const resetToken = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(resetToken).digest('hex');
     const tokenExpiry = Date.now() + 60 * 60 * 1000; // 1 hour
 
-    // Store token in user record (reuse emailVerificationToken fields)
-    await userRepo.update({ id: user.id }, {
-      emailVerificationToken: resetToken,
-      emailVerificationTokenExpiry: tokenExpiry,
-      updatedAt: Date.now(),
+    await resetTokenRepo.update({ userId: user.id, consumedAt: IsNull() }, { consumedAt: Date.now() });
+
+    await resetTokenRepo.insert({
+      userId: user.id,
+      tokenHash,
+      expiresAt: tokenExpiry,
+      createdAt: Date.now(),
+      consumedAt: null,
     });
 
-    // Send password reset email
     await sendPasswordResetEmail({
       to: user.email,
       firstName: user.firstName ?? undefined,
@@ -88,13 +93,31 @@ router.post('/api/auth/reset-password-with-token', apiLimiter, passwordResetVeri
   const { token, newPassword } = req.body;
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
+  const resetTokenRepo = dataSource.getRepository(PasswordResetToken);
   const now = Date.now();
 
-  // Find user with this token
-  const user = await userRepo.findOneBy({ emailVerificationToken: token });
+  const { createHash } = await import('crypto');
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+  const resetToken = await resetTokenRepo.findOneBy({ tokenHash, consumedAt: IsNull() });
+
+  if (!resetToken) {
+    return res.status(400).json({
+      error: 'InvalidToken',
+      message: 'Invalid or expired reset token',
+    });
+  }
+
+  if (resetToken.expiresAt < now) {
+    return res.status(400).json({
+      error: 'TokenExpired',
+      message: 'Reset token has expired. Please request a new password reset.',
+    });
+  }
+
+  const user = await userRepo.findOneBy({ id: resetToken.userId });
 
   if (!user) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       error: 'InvalidToken',
       message: 'Invalid or expired reset token',
     });
@@ -107,28 +130,19 @@ router.post('/api/auth/reset-password-with-token', apiLimiter, passwordResetVeri
     });
   }
 
-  // Check token expiry
-  const expiry = user.emailVerificationTokenExpiry ? Number(user.emailVerificationTokenExpiry) : 0;
-  if (expiry < now) {
-    return res.status(400).json({ 
-      error: 'TokenExpired',
-      message: 'Reset token has expired. Please request a new password reset.',
-    });
-  }
-
   // Hash new password
   const newPasswordHash = await hashPassword(newPassword);
 
-  // Update password and clear reset token
+  // Update password
   await userRepo.update({ id: user.id }, {
     passwordHash: newPasswordHash,
-    emailVerificationToken: null,
-    emailVerificationTokenExpiry: null,
     mustResetPassword: false,
     failedLoginAttempts: 0,
     lockedUntil: null,
     updatedAt: now,
   });
+
+  await resetTokenRepo.update({ id: resetToken.id }, { consumedAt: now });
 
   // Audit log
   await logAudit({
@@ -161,17 +175,21 @@ router.get('/api/auth/verify-reset-token', apiLimiter, passwordResetVerifyLimite
 
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
+  const resetTokenRepo = dataSource.getRepository(PasswordResetToken);
   const now = Date.now();
 
-  const user = await userRepo.findOneBy({ emailVerificationToken: token });
+  const { createHash } = await import('crypto');
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+  const resetToken = await resetTokenRepo.findOneBy({ tokenHash, consumedAt: IsNull() });
 
-  if (!user || !user.isActive) {
+  if (!resetToken || resetToken.expiresAt < now) {
     return res.json({ valid: false, error: 'Invalid token' });
   }
 
-  const expiry = user.emailVerificationTokenExpiry ? Number(user.emailVerificationTokenExpiry) : 0;
-  if (expiry < now) {
-    return res.json({ valid: false, error: 'Token expired' });
+  const user = await userRepo.findOneBy({ id: resetToken.userId });
+
+  if (!user || !user.isActive) {
+    return res.json({ valid: false, error: 'Invalid token' });
   }
 
   res.json({ valid: true });

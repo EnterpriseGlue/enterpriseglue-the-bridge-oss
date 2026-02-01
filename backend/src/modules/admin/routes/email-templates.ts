@@ -8,7 +8,7 @@ import { apiLimiter } from '@shared/middleware/rateLimiter.js';
 import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { requireAuth } from '@shared/middleware/auth.js';
-import { requirePlatformAdmin } from '@shared/middleware/platformAuth.js';
+import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { validateBody, validateParams } from '@shared/middleware/validate.js';
 import { getDataSource } from '@shared/db/data-source.js';
@@ -16,6 +16,7 @@ import { EmailTemplate } from '@shared/db/entities/EmailTemplate.js';
 import { PlatformSettings } from '@shared/db/entities/PlatformSettings.js';
 import { generateId } from '@shared/utils/id.js';
 import { logAudit, AuditActions } from '@shared/services/audit.js';
+import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -35,7 +36,7 @@ const updateEmailPlatformNameSchema = z.object({
   emailPlatformName: z.string().min(1).max(120),
 });
 
-router.get('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePlatformAdmin, async (_req: Request, res: Response) => {
+router.get('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), async (_req: Request, res: Response) => {
   try {
     const dataSource = await getDataSource();
     const settingsRepo = dataSource.getRepository(PlatformSettings);
@@ -51,7 +52,7 @@ router.get('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePla
   }
 });
 
-router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePlatformAdmin, validateBody(updateEmailPlatformNameSchema), asyncHandler(async (req: Request, res: Response) => {
+router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateBody(updateEmailPlatformNameSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const body = req.body;
     const dataSource = await getDataSource();
@@ -88,7 +89,7 @@ router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePla
  * GET /api/admin/email-templates
  * List all email templates (platform admin only)
  */
-router.get('/api/admin/email-templates', apiLimiter, requireAuth, requirePlatformAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.get('/api/admin/email-templates', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const dataSource = await getDataSource();
     const templateRepo = dataSource.getRepository(EmailTemplate);
@@ -114,7 +115,7 @@ router.get('/api/admin/email-templates', apiLimiter, requireAuth, requirePlatfor
  * GET /api/admin/email-templates/:id
  * Get a single email template (platform admin only)
  */
-router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePlatformAdmin, validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
+router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const dataSource = await getDataSource();
@@ -140,7 +141,7 @@ router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePla
  * PATCH /api/admin/email-templates/:id
  * Update an email template (platform admin only)
  */
-router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePlatformAdmin, validateParams(idParamSchema), validateBody(updateTemplateSchema), asyncHandler(async (req: Request, res: Response) => {
+router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), validateBody(updateTemplateSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const body = req.body;
@@ -191,7 +192,7 @@ router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireP
  * POST /api/admin/email-templates/:id/reset
  * Reset an email template to default (platform admin only)
  */
-router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, requirePlatformAdmin, validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const dataSource = await getDataSource();
@@ -474,7 +475,7 @@ router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, req
  * POST /api/admin/email-templates/:id/preview
  * Preview an email template with sample data (platform admin only)
  */
-router.post('/api/admin/email-templates/:id/preview', apiLimiter, requireAuth, requirePlatformAdmin, validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/admin/email-templates/:id/preview', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { variables } = req.body as { variables?: Record<string, string> };

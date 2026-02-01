@@ -8,10 +8,12 @@ import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { validateBody, validateParams } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { logAudit } from '@shared/services/audit.js';
 import { getDataSource } from '@shared/db/data-source.js';
 // TenantSettings removed - multi-tenancy is EE-only
 import { PlatformSettings } from '@shared/db/entities/PlatformSettings.js';
+import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -59,7 +61,7 @@ const updateTenantBrandingSchema = z.object({
  * Get platform branding settings
  * ✨ Migrated to TypeORM
  */
-router.get('/', apiLimiter, asyncHandler(async (_req, res) => {
+router.get('/', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (_req, res) => {
   try {
     const dataSource = await getDataSource();
     const platformSettingsRepo = dataSource.getRepository(PlatformSettings);
@@ -109,6 +111,7 @@ router.get('/', apiLimiter, asyncHandler(async (_req, res) => {
  */
 router.put(
   '/',
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateBody(updatePlatformBrandingSchema),
   asyncHandler(async (req, res) => {
     try {

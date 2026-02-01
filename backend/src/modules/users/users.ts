@@ -3,7 +3,7 @@ import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { randomUUID, randomBytes } from 'crypto';
 import { requireAuth } from '@shared/middleware/auth.js';
-import { requirePlatformAdmin } from '@shared/middleware/platformAuth.js';
+import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { hashPassword, generatePassword, validatePassword } from '@shared/utils/password.js';
 import { sendWelcomeEmail, sendVerificationEmail } from '@shared/services/email/index.js';
@@ -14,6 +14,7 @@ import { User } from '@shared/db/entities/User.js';
 import { RefreshToken } from '@shared/db/entities/RefreshToken.js';
 import { ResourceService } from '@shared/services/resources.js';
 import { validateBody } from '@shared/middleware/validate.js';
+import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -39,7 +40,7 @@ const updateUserSchema = z.object({
  * List all users (admin only)
  * ✨ Migrated to TypeORM
  */
-router.get('/api/users', requireAuth, requirePlatformAdmin, asyncHandler(async (req, res) => {
+router.get('/api/users', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
   try {
     const dataSource = await getDataSource();
     const userRepo = dataSource.getRepository(User);
@@ -74,7 +75,7 @@ router.get('/api/users', requireAuth, requirePlatformAdmin, asyncHandler(async (
  * Rate limited: 20 user creations per hour
  * ✨ Uses validation middleware
  */
-router.post('/api/users', requireAuth, requirePlatformAdmin, createUserLimiter, validateBody(createUserSchema), asyncHandler(async (req, res) => {
+router.post('/api/users', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), createUserLimiter, validateBody(createUserSchema), asyncHandler(async (req, res) => {
   try {
     const { email, firstName, lastName, platformRole, sendEmail } = req.body;
 
@@ -182,7 +183,7 @@ router.post('/api/users', requireAuth, requirePlatformAdmin, createUserLimiter, 
  * Get user by ID (admin only)
  * ✨ Migrated to TypeORM
  */
-router.get('/api/users/:id', requireAuth, requirePlatformAdmin, asyncHandler(async (req, res) => {
+router.get('/api/users/:id', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -214,7 +215,7 @@ router.get('/api/users/:id', requireAuth, requirePlatformAdmin, asyncHandler(asy
  * ✨ Migrated to TypeORM
  * ✨ Uses validation middleware
  */
-router.put('/api/users/:id', requireAuth, requirePlatformAdmin, validateBody(updateUserSchema), asyncHandler(async (req, res) => {
+router.put('/api/users/:id', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), validateBody(updateUserSchema), asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -294,7 +295,7 @@ router.put('/api/users/:id', requireAuth, requirePlatformAdmin, validateBody(upd
  * Delete user (soft delete - deactivate) (admin only)
  * ✨ Migrated to TypeORM
  */
-router.delete('/api/users/:id', requireAuth, requirePlatformAdmin, asyncHandler(async (req, res) => {
+router.delete('/api/users/:id', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -332,7 +333,7 @@ router.delete('/api/users/:id', requireAuth, requirePlatformAdmin, asyncHandler(
  * Unlock locked user account (admin only)
  * ✨ Migrated to TypeORM
  */
-router.post('/api/users/:id/unlock', requireAuth, requirePlatformAdmin, asyncHandler(async (req, res) => {
+router.post('/api/users/:id/unlock', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     const dataSource = await getDataSource();

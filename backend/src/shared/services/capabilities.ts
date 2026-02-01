@@ -2,7 +2,7 @@ import { getDataSource } from '@shared/db/data-source.js';
 import { Engine } from '@shared/db/entities/Engine.js';
 import { EngineMember } from '@shared/db/entities/EngineMember.js';
 import { ENGINE_VIEW_ROLES } from '@shared/constants/roles.js';
-import { permissionService, PlatformPermissions } from './platform-admin/permissions.js';
+import { permissionService, PlatformPermissions, ProjectPermissions, EnginePermissions } from './platform-admin/permissions.js';
 import type { UserCapabilities } from '@enterpriseglue/contracts/auth';
 import type { EngineRole } from '@shared/constants/roles.js';
 
@@ -21,10 +21,18 @@ export async function buildUserCapabilities({
     canManageUsers,
     canViewAuditLogs,
     canManagePlatformSettings,
+    canManageProject,
+    canInviteProjectMembers,
+    canManageEngine,
+    canInviteEngineMembers,
   ] = await Promise.all([
     permissionService.hasPermission(PlatformPermissions.USER_MANAGE, { userId, platformRole: normalizedPlatformRole }),
     permissionService.hasPermission(PlatformPermissions.AUDIT_VIEW, { userId, platformRole: normalizedPlatformRole }),
     permissionService.hasPermission(PlatformPermissions.SETTINGS_MANAGE, { userId, platformRole: normalizedPlatformRole }),
+    permissionService.hasPermission(ProjectPermissions.PROJECT_SETTINGS, { userId, platformRole: normalizedPlatformRole }),
+    permissionService.hasPermission(ProjectPermissions.MEMBERS_MANAGE, { userId, platformRole: normalizedPlatformRole }),
+    permissionService.hasPermission(EnginePermissions.ENGINE_EDIT, { userId, platformRole: normalizedPlatformRole }),
+    permissionService.hasPermission(EnginePermissions.MEMBERS_MANAGE, { userId, platformRole: normalizedPlatformRole }),
   ]);
 
   const dataSource = await getDataSource();
@@ -55,5 +63,18 @@ export async function buildUserCapabilities({
     canManagePlatformSettings,
     canViewMissionControl,
     canManageTenants,
+    canManagePlatformEmail: canManagePlatformSettings,
+    canManageSsoProviders: canManagePlatformSettings,
+    canManagePlatformBranding: canManagePlatformSettings,
+    canManageTenantDomains: false,
+    canManageTenantUsers: false,
+    canManageTenantBranding: false,
+    canManageTenantEmailTemplates: false,
+    canViewTenantAudit: false,
+    canManageTenantSso: false,
+    canManageProject,
+    canManageEngine,
+    canInviteProjectMembers,
+    canInviteEngineMembers,
   };
 }

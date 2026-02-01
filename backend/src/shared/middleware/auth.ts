@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, type JwtPayload } from '@shared/utils/jwt.js';
-import { Errors } from './errorHandler.js';
+import { Errors, AppError } from './errorHandler.js';
+import { getDataSource } from '@shared/db/data-source.js';
+import { User } from '@shared/db/entities/User.js';
 
 /**
  * Authentication middleware
@@ -21,7 +23,7 @@ declare global {
  * Verifies JWT token from Authorization header OR cookies
  * Supports both Bearer token auth (email/password) and cookie auth (Microsoft OAuth)
  */
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
     let token: string | undefined;
 
@@ -51,8 +53,31 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     // Add user info to request
     req.user = payload;
 
+    const dataSource = await getDataSource();
+    const userRepo = dataSource.getRepository(User);
+    const user = await userRepo.findOneBy({ id: payload.userId, isActive: true });
+
+    if (!user) {
+      throw Errors.unauthorized('User not found or inactive');
+    }
+
+    const requestPath = req.path;
+    const allowUnverifiedPaths = [
+      '/api/auth/me',
+      '/api/auth/reset-password',
+      '/api/auth/change-password',
+      '/api/auth/logout',
+    ];
+
+    if (!user.isEmailVerified && !allowUnverifiedPaths.includes(requestPath)) {
+      throw Errors.forbidden('Email verification required');
+    }
+
     next();
   } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
     if (error instanceof Error) {
       throw Errors.unauthorized(error.message);
     }

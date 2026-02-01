@@ -8,8 +8,10 @@ import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { validateBody } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { platformSettingsService } from '@shared/services/platform-admin/index.js';
 import { logAudit } from '@shared/services/audit.js';
+import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -37,7 +39,7 @@ const updateSettingsSchema = z.object({
  * GET /api/platform-admin/admin/settings
  * Get platform settings
  */
-router.get('/', apiLimiter, asyncHandler(async (req, res) => {
+router.get('/', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req, res) => {
   try {
     const settings = await platformSettingsService.get();
     res.json(settings);
@@ -53,6 +55,7 @@ router.get('/', apiLimiter, asyncHandler(async (req, res) => {
  */
 router.put(
   '/',
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateBody(updateSettingsSchema),
   asyncHandler(async (req, res) => {
     try {

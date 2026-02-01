@@ -24,6 +24,7 @@ import { sendInvitationEmail } from '@shared/services/email/index.js';
 import { config } from '@shared/config/index.js';
 import { MANAGE_ROLES } from '@shared/constants/roles.js';
 import { requireProjectRole, requireProjectAccess } from '@shared/middleware/projectAuth.js';
+import { logAudit } from '@shared/services/audit.js';
 
 type ProjectRole = 'owner' | 'delegate' | 'developer' | 'editor' | 'viewer';
 
@@ -283,6 +284,16 @@ router.post(
 
         // Add the member directly
         const member = await projectMemberService.addMember(projectId, targetUser.id, requestedRoles, inviterId);
+
+        await logAudit({
+          userId: inviterId,
+          action: 'project.member.added',
+          resourceType: 'project',
+          resourceId: projectId,
+          ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+          userAgent: req.headers['user-agent'],
+          details: { targetUserId: targetUser.id, email: targetUser.email, roles: requestedRoles },
+        });
 
         return res.status(201).json({
           ...member,

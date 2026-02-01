@@ -8,11 +8,12 @@ import { apiLimiter } from '@shared/middleware/rateLimiter.js';
 import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { requireAuth } from '@shared/middleware/auth.js';
-import { requirePlatformAdmin, isPlatformAdmin } from '@shared/middleware/platformAuth.js';
+import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { validateBody, validateParams } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { ssoProviderService } from '@shared/services/platform-admin/SsoProviderService.js';
 import { logAudit } from '@shared/services/audit.js';
+import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -63,7 +64,7 @@ const providerIdSchema = z.object({
 router.get(
   '/api/sso/providers',
   requireAuth,
-  requirePlatformAdmin,
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const providers = await ssoProviderService.getAllProviders();
@@ -107,7 +108,7 @@ router.get(
 router.get(
   '/api/sso/providers/:id',
   requireAuth,
-  requirePlatformAdmin,
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateParams(providerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
@@ -130,7 +131,7 @@ router.get(
 router.post(
   '/api/sso/providers',
   requireAuth,
-  requirePlatformAdmin,
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateBody(createProviderSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
@@ -159,7 +160,7 @@ router.post(
 router.put(
   '/api/sso/providers/:id',
   requireAuth,
-  requirePlatformAdmin,
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateParams(providerIdSchema),
   validateBody(updateProviderSchema),
   asyncHandler(async (req: Request, res: Response) => {
@@ -194,7 +195,7 @@ router.put(
 router.delete(
   '/api/sso/providers/:id',
   requireAuth,
-  requirePlatformAdmin,
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateParams(providerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
@@ -228,7 +229,7 @@ router.delete(
 router.post(
   '/api/sso/providers/:id/toggle',
   requireAuth,
-  requirePlatformAdmin,
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateParams(providerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {

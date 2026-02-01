@@ -8,6 +8,7 @@ import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { validateBody, validateParams, validateQuery } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { projectMemberService, engineService } from '@shared/services/platform-admin/index.js';
 import { logAudit } from '@shared/services/audit.js';
 import { getDataSource } from '@shared/db/data-source.js';
@@ -15,6 +16,7 @@ import { User } from '@shared/db/entities/User.js';
 import { Project } from '@shared/db/entities/Project.js';
 import { Engine } from '@shared/db/entities/Engine.js';
 import { ILike } from 'typeorm';
+import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -37,7 +39,7 @@ const assignOwnerSchema = z.object({
  * GET /api/platform-admin/admin/users/search?q=email
  * Search users by email (for owner assignment)
  */
-router.get('/users/search', apiLimiter, validateQuery(userSearchQuerySchema), asyncHandler(async (req, res) => {
+router.get('/users/search', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateQuery(userSearchQuerySchema), asyncHandler(async (req, res) => {
   try {
     const qRaw = req.query?.q;
     if (typeof qRaw !== 'string') {
@@ -69,7 +71,7 @@ router.get('/users/search', apiLimiter, validateQuery(userSearchQuerySchema), as
  * GET /api/platform-admin/admin/governance/projects
  * List projects with owner info for governance
  */
-router.get('/projects', apiLimiter, validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
+router.get('/projects', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
   try {
     const searchRaw = req.query['search'];
     const search = typeof searchRaw === 'string' ? searchRaw.trim() : '';
@@ -103,7 +105,7 @@ router.get('/projects', apiLimiter, validateQuery(governanceSearchQuerySchema), 
  * GET /api/platform-admin/admin/governance/engines
  * List engines with owner info for governance
  */
-router.get('/engines', apiLimiter, validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
+router.get('/engines', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
   try {
     const searchRaw = req.query['search'];
     const search = typeof searchRaw === 'string' ? searchRaw.trim() : '';
@@ -142,6 +144,7 @@ router.get('/engines', apiLimiter, validateQuery(governanceSearchQuerySchema), a
  */
 router.post(
   '/projects/:projectId/assign-owner',
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateParams(z.object({ projectId: z.string().uuid() })),
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
@@ -175,6 +178,7 @@ router.post(
  */
 router.post(
   '/projects/:projectId/assign-delegate',
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateParams(z.object({ projectId: z.string().uuid() })),
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
@@ -208,6 +212,7 @@ router.post(
  */
 router.post(
   '/engines/:engineId/assign-owner',
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateParams(z.object({ engineId: z.string() })),
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
@@ -241,6 +246,7 @@ router.post(
  */
 router.post(
   '/engines/:engineId/assign-delegate',
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateParams(z.object({ engineId: z.string().uuid() })),
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {

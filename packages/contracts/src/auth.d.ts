@@ -8,6 +8,7 @@ export interface User {
   platformRole: PlatformRole;
   capabilities?: UserCapabilities;
   isActive: boolean;
+  isEmailVerified: boolean;
   mustResetPassword: boolean;
   createdAt: number;
   lastLoginAt?: number;
@@ -23,6 +24,7 @@ export interface LoginResponse {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
+  emailVerificationRequired?: boolean;
 }
 
 export interface RefreshTokenRequest {
@@ -37,6 +39,20 @@ export interface RefreshTokenResponse {
 export interface ResetPasswordRequest {
   currentPassword: string;
   newPassword: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordWithTokenRequest {
+  token: string;
+  newPassword: string;
+}
+
+export interface VerifyResetTokenResponse {
+  valid: boolean;
+  error?: string;
 }
 
 export interface ChangePasswordRequest {
@@ -79,4 +95,17 @@ export interface UserCapabilities {
   canManagePlatformSettings: boolean;
   canViewMissionControl: boolean;
   canManageTenants: boolean;
+  canManagePlatformEmail: boolean;
+  canManageSsoProviders: boolean;
+  canManagePlatformBranding: boolean;
+  canManageTenantDomains: boolean;
+  canManageTenantUsers: boolean;
+  canManageTenantBranding: boolean;
+  canManageTenantEmailTemplates: boolean;
+  canViewTenantAudit: boolean;
+  canManageTenantSso: boolean;
+  canManageProject: boolean;
+  canManageEngine: boolean;
+  canInviteProjectMembers: boolean;
+  canInviteEngineMembers: boolean;
 }

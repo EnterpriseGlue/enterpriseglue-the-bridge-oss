@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
-import { MoreThan } from 'typeorm';
 import { validateBody } from '@shared/middleware/validate.js';
 
 const router = Router();
@@ -22,23 +21,28 @@ router.get('/api/auth/verify-email', apiLimiter, asyncHandler(async (req, res) =
   const { token } = req.query;
 
   if (!token || typeof token !== 'string') {
-    throw Errors.validation('Verification token is required');
+    return res.status(400).json({
+      code: 'MISSING_TOKEN',
+      error: 'Verification token is required',
+    });
   }
 
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
   const now = Date.now();
 
-  // Find user with this token
+  // Find user with this token (we need to distinguish expired vs invalid)
   const user = await userRepo.findOne({
     where: {
       emailVerificationToken: token,
-      emailVerificationTokenExpiry: MoreThan(now),
     },
   });
 
   if (!user) {
-    throw Errors.validation('Invalid or expired verification token');
+    return res.json({
+      code: 'INVALID_TOKEN',
+      error: 'Invalid or expired verification token',
+    });
   }
 
   // Check if already verified
@@ -46,6 +50,13 @@ router.get('/api/auth/verify-email', apiLimiter, asyncHandler(async (req, res) =
     return res.json({ 
       message: 'Email already verified',
       alreadyVerified: true 
+    });
+  }
+
+  if (!user.emailVerificationTokenExpiry || user.emailVerificationTokenExpiry <= now) {
+    return res.json({
+      code: 'TOKEN_EXPIRED',
+      error: 'Verification token expired',
     });
   }
 
