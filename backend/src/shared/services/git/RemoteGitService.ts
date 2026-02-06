@@ -391,7 +391,7 @@ class RemoteGitService {
             mainBranch.id,
             options.userId,
             options.message || `Push to remote: ${options.repo}@${branch}`,
-            { isRemote: true }
+            { isRemote: true, source: 'sync-push' }
           );
           vcsCommitId = vcsCommit.id;
           
@@ -643,7 +643,7 @@ class RemoteGitService {
         mainBranch.id,
         userId,
         remoteCommitMessage || `Pull from remote: ${options.repo}@${branch}`,
-        { isRemote: true } // Mark as remote since it came from Git
+        { isRemote: true, source: 'sync-pull' } // Mark as remote since it came from Git
       );
       logger.info('Created checkpoint for pull', { commitId: commit.id, message: remoteCommitMessage, filesChanged: filesActuallyChanged });
       return { filesCount: filesActuallyChanged, commitId: commit.id };

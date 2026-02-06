@@ -302,12 +302,12 @@ export class GitService {
       throw new Error('No Git credentials found for this provider');
     }
 
-    if (options.createTag || options.tagName) {
-      throw new Error('Tagging not supported');
-    }
-
     const repoFullName = repo.namespace ? `${repo.namespace}/${repo.repositoryName}` : repo.repositoryName;
     const branch = repo.defaultBranch || 'main';
+
+    // Pre-flight: verify token can access the repository before doing expensive work
+    const client = await remoteGitService.getClient(repo.providerId, accessToken);
+    await client.getBranches(repoFullName);
 
     // Always create VCS checkpoint before deploy to ensure consistency
     let vcsCommitId: string | undefined;
@@ -319,7 +319,7 @@ export class GitService {
           mainBranch.id,
           options.userId,
           `Pre-deploy checkpoint: ${options.message}`,
-          { isRemote: false }
+          { isRemote: false, source: 'deploy' }
         );
         vcsCommitId = vcsCommit.id;
         logger.info('Created VCS checkpoint before deploy', { projectId: options.projectId, vcsCommitId });
@@ -343,13 +343,27 @@ export class GitService {
     const now = Date.now();
     const deploymentId = generateId();
 
+    // Create Git tag if requested
+    let createdTag: string | null = null;
+    if (options.createTag && commitSha) {
+      const tagName = options.tagName || `deploy-${Date.now()}`;
+      try {
+        const client = await remoteGitService.getClient(repo.providerId, accessToken);
+        await client.createTag(repoFullName, tagName, commitSha, options.message);
+        createdTag = tagName;
+        logger.info('Created Git tag', { projectId: options.projectId, tag: tagName, commitSha });
+      } catch (tagError) {
+        logger.warn('Failed to create Git tag', { projectId: options.projectId, tag: tagName, error: tagError });
+      }
+    }
+
     await deploymentRepo.insert({
       id: deploymentId,
       projectId: options.projectId,
       repositoryId: repo.id,
       commitSha,
       commitMessage: options.message,
-      tag: null,
+      tag: createdTag,
       deployedBy: options.userId,
       deployedAt: now,
       environment: options.environment ?? null,
@@ -390,6 +404,7 @@ export class GitService {
     return {
       deploymentId,
       commitSha,
+      tag: createdTag || undefined,
       filesChanged: pushResult.pushedFilesCount + pushResult.deletionsCount,
       vcsCommitId,
     };

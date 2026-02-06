@@ -38,7 +38,7 @@ async function autoCommitFolderChange(projectId: string, userId: string, message
     }
     
     // Create auto-commit
-    await vcsService.commit(branch.id, userId, message)
+    await vcsService.commit(branch.id, userId, message, { source: 'system' })
     logger.info('Auto-committed folder change', { projectId, userId, message })
   } catch (error) {
     // Don't fail the main operation if VCS auto-commit fails

@@ -64,7 +64,7 @@ export class VcsService {
       sourceBranchId,
       projectId,
       userId,
-      (branchId, uid, msg) => vcsCommitService.commit(branchId, uid, msg)
+      (branchId, uid, msg) => vcsCommitService.commit(branchId, uid, msg, { source: 'system' })
     );
   }
 
@@ -102,7 +102,7 @@ export class VcsService {
   }
 
   // Commit operations - delegate to VcsCommitService
-  async commit(branchId: string, userId: string, message: string, options?: { isRemote?: boolean }): Promise<CommitInfo> {
+  async commit(branchId: string, userId: string, message: string, options?: { isRemote?: boolean; source?: string }): Promise<CommitInfo> {
     return vcsCommitService.commit(branchId, userId, message, options);
   }
 
@@ -128,13 +128,14 @@ export class VcsService {
     return vcsCommitService.getLastCommitForFile(projectId, fileId);
   }
 
-  async commitCurrentState(projectId: string, userId: string, message: string): Promise<void> {
+  async commitCurrentState(projectId: string, userId: string, message: string, source: string = 'manual'): Promise<void> {
     return vcsCommitService.commitCurrentState(
       projectId,
       userId,
       message,
       (pid) => this.getMainBranch(pid),
-      (pid, uid) => this.initProject(pid, uid)
+      (pid, uid) => this.initProject(pid, uid),
+      source
     );
   }
 

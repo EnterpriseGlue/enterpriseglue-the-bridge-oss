@@ -96,15 +96,8 @@ router.get('/vcs-api/projects/uncommitted-status', apiLimiter, requireAuth, asyn
     // Process projects in parallel for better performance
     await Promise.all(projectIds.map(async (pid) => {
       try {
-        // Get user's draft branch to use as baseline
-        const draftBranch = await vcsService.getUserBranch(pid, userId);
-        const baselineCommitId = draftBranch?.headCommitId || null;
-        
-        // Use vcsSyncService to get uncommitted file count (same as ProjectDetail)
-        const result = await vcsService.getUncommittedIds(pid, {
-          baselineCommitId,
-          treatNoBaselineAsAll: false, // Don't count all files as dirty if no baseline
-        });
+        // Use main branch baseline (same as ProjectDetail's default)
+        const result = await vcsService.getUncommittedIds(pid);
         
         const count = result.fileIds.length;
         statuses[pid] = { hasUncommittedChanges: count > 0, dirtyFileCount: count };
@@ -458,6 +451,7 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
             message: commit.message,
             hash: commit.hash,
             versionNumber: commit.versionNumber,
+            source: commit.source ?? 'manual',
             isRemote: commit.isRemote,
             createdAt: commit.createdAt,
             fileVersionNumber,
@@ -654,7 +648,8 @@ router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter
     const restoreCommit = await vcsService.commit(
       branch.id,
       userId,
-      `Restored from checkpoint ${commitId.substring(0, 8)}`
+      `Restored from checkpoint ${commitId.substring(0, 8)}`,
+      { source: 'restore' }
     );
 
     logger.info('Files restored from commit', { projectId, commitId, userId, filesRestored: snapshots.length });

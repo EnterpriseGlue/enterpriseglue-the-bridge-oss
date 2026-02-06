@@ -392,14 +392,14 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
     
     // Get environment tags for all engines
     const envTagIds = engineRows.map((e: any) => e.environmentTagId).filter(Boolean) as string[];
-    let envTagMap = new Map<string, { name: string; color: string }>();
+    let envTagMap = new Map<string, { name: string; color: string; manualDeployAllowed: boolean }>();
     if (envTagIds.length > 0) {
       const envTags = await envTagRepo.find({
         where: { id: In(envTagIds) },
-        select: ['id', 'name', 'color']
+        select: ['id', 'name', 'color', 'manualDeployAllowed']
       });
       for (const t of envTags) {
-        envTagMap.set(t.id, { name: t.name, color: t.color });
+        envTagMap.set(t.id, { name: t.name, color: t.color, manualDeployAllowed: t.manualDeployAllowed });
       }
     }
     
@@ -427,6 +427,7 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
         engineName: engine?.name || 'Unnamed Engine',
         baseUrl: engine?.baseUrl || '',
         environment: envTag ? { name: envTag.name, color: envTag.color } : null,
+        manualDeployAllowed: envTag ? envTag.manualDeployAllowed : true,
         health: health ? { status: health.status, latencyMs: health.latencyMs } : null,
         grantedAt: a.createdAt,
       });

@@ -361,6 +361,16 @@ export class BitbucketClient implements GitProviderClient {
     }));
   }
 
+  async createTag(repo: string, tagName: string, commitSha: string, _message?: string): Promise<{ name: string; sha: string }> {
+    const [workspace, repoSlug] = this.parseRepo(repo);
+    const { data } = await (this.bitbucket as any).refs.tags.create({
+      workspace,
+      repo_slug: repoSlug,
+      _body: { name: tagName, target: { hash: commitSha } },
+    });
+    return { name: data.name, sha: data.target?.hash || commitSha };
+  }
+
   // Helper methods
   private parseRepo(repo: string): [string, string] {
     const parts = repo

@@ -1,5 +1,6 @@
 import React from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
+import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { useQuery } from '@tanstack/react-query'
 import {
   Button,
@@ -55,7 +56,7 @@ function fmt(ts?: string | null) {
 
 export default function DecisionHistoryDetail() {
   const { id = '' } = useParams()
-  const navigate = useNavigate()
+  const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const selectedEngineId = useSelectedEngine()
   const searchParams = new URLSearchParams(location.search)
@@ -209,20 +210,20 @@ export default function DecisionHistoryDetail() {
       {/* Breadcrumb Bar - shared component (same as InstanceDetail) */}
       <BreadcrumbBar>
         <BreadcrumbItem>
-          <a href="/mission-control" onClick={(e) => { e.preventDefault(); navigate('/mission-control'); }}>
+          <a href={toTenantPath('/mission-control')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control'); }}>
             Mission Control
           </a>
         </BreadcrumbItem>
         {fromInstanceId && (
           <BreadcrumbItem>
-            <a href="/mission-control/processes" onClick={(e) => { e.preventDefault(); navigate('/mission-control/processes'); }}>
+            <a href={toTenantPath('/mission-control/processes')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/processes'); }}>
               Processes
             </a>
           </BreadcrumbItem>
         )}
         {fromInstanceId && processLabel && (
           <BreadcrumbItem>
-            <a href="/mission-control/processes" onClick={(e) => { e.preventDefault(); navigate('/mission-control/processes'); }}>
+            <a href={toTenantPath('/mission-control/processes')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/processes'); }}>
               <span>{processLabel}</span>
             </a>
           </BreadcrumbItem>
@@ -230,10 +231,10 @@ export default function DecisionHistoryDetail() {
         {fromInstanceId && (
           <BreadcrumbItem>
             <a
-              href={`/mission-control/processes/instances/${fromInstanceId}`}
+              href={toTenantPath(`/mission-control/processes/instances/${fromInstanceId}`)}
               onClick={(e) => {
                 e.preventDefault()
-                navigate(`/mission-control/processes/instances/${fromInstanceId}`)
+                tenantNavigate(`/mission-control/processes/instances/${fromInstanceId}`)
               }}
             >
               Instance {fromInstanceId.substring(0, 8)}...
@@ -247,14 +248,14 @@ export default function DecisionHistoryDetail() {
         )}
         {!fromInstanceId && (
           <BreadcrumbItem>
-            <a href="/mission-control/decisions" onClick={(e) => { e.preventDefault(); navigate('/mission-control/decisions'); }}>
+            <a href={toTenantPath('/mission-control/decisions')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/decisions'); }}>
               Decisions
             </a>
           </BreadcrumbItem>
         )}
         {!fromInstanceId && title && title !== 'Decision' && (
           <BreadcrumbItem>
-            <a href="/mission-control/decisions" onClick={(e) => { e.preventDefault(); navigate('/mission-control/decisions'); }}>
+            <a href={toTenantPath('/mission-control/decisions')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/decisions'); }}>
               {title}{versionLabel ? ` (${versionLabel})` : ''}
             </a>
           </BreadcrumbItem>
@@ -426,7 +427,7 @@ export default function DecisionHistoryDetail() {
                   onChange={({ selectedIndex }) => {
                     const next = relatedInstances[selectedIndex]
                     if (next?.id && next.id !== decision?.id) {
-                      navigate(`/mission-control/decisions/instances/${next.id}`)
+                      tenantNavigate(`/mission-control/decisions/instances/${next.id}`)
                     }
                   }}
                 >

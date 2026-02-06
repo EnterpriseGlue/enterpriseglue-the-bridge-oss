@@ -1,5 +1,6 @@
 import React from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
+import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tabs, TabList, Tab, TabPanels, TabPanel, Button, BreadcrumbItem, InlineNotification, ComboBox, ComposedModal, ModalHeader, ModalBody, ModalFooter } from '@carbon/react'
 import { Flag, Undo, Redo, Branch } from '@carbon/icons-react'
@@ -44,7 +45,7 @@ type FileDetail = {
 
 export default function Editor() {
   const { fileId } = useParams()
-  const navigate = useNavigate()
+  const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as { state?: any }
   const queryClient = useQueryClient()
   const fileQ = useQuery({
@@ -261,7 +262,7 @@ export default function Editor() {
     if (!resolvedLink) return
     // Invalidate the target file query to ensure fresh data loads
     queryClient.invalidateQueries({ queryKey: ['file', resolvedLink.id] })
-    navigate(`/starbase/editor/${resolvedLink.id}`, {
+    tenantNavigate(`/starbase/editor/${resolvedLink.id}`, {
       state: {
         fromEditor: {
           fileId: fileId ? String(fileId) : null,
@@ -269,7 +270,7 @@ export default function Editor() {
         },
       },
     })
-  }, [navigate, resolvedLink, queryClient, fileId, fileQ.data?.name])
+  }, [tenantNavigate, resolvedLink, queryClient, fileId, fileQ.data?.name])
 
   const unlinkElement = React.useCallback(() => {
     if (!elementLinkInfo || !modelerRef.current || !selectedElement) return
@@ -773,18 +774,18 @@ export default function Editor() {
       {/* Breadcrumb Bar */}
       <BreadcrumbBar>
         <BreadcrumbItem>
-          <a href="/starbase" onClick={(e) => { e.preventDefault(); navigate('/starbase'); }}>Starbase</a>
+          <a href={toTenantPath('/starbase')} onClick={(e) => { e.preventDefault(); tenantNavigate('/starbase'); }}>Starbase</a>
         </BreadcrumbItem>
         <BreadcrumbItem>
-          <a href={`/starbase/project/${f.projectId}`} onClick={(e) => { e.preventDefault(); navigate(`/starbase/project/${f.projectId}`); }}>
+          <a href={toTenantPath(`/starbase/project/${f.projectId}`)} onClick={(e) => { e.preventDefault(); tenantNavigate(`/starbase/project/${f.projectId}`); }}>
             {f.projectName}
           </a>
         </BreadcrumbItem>
         {f.folderBreadcrumb.map((folder) => (
           <BreadcrumbItem key={folder.id}>
             <a 
-              href={`/starbase/project/${f.projectId}?folder=${folder.id}`} 
-              onClick={(e) => { e.preventDefault(); navigate(`/starbase/project/${f.projectId}?folder=${folder.id}`); }}
+              href={toTenantPath(`/starbase/project/${f.projectId}?folder=${folder.id}`)} 
+              onClick={(e) => { e.preventDefault(); tenantNavigate(`/starbase/project/${f.projectId}?folder=${folder.id}`); }}
             >
               {folder.name}
             </a>
@@ -793,10 +794,10 @@ export default function Editor() {
         {location.state?.fromEditor?.fileId && location.state.fromEditor.fileId !== f.id && (
           <BreadcrumbItem>
             <a
-              href={`/starbase/editor/${location.state.fromEditor.fileId}`}
+              href={toTenantPath(`/starbase/editor/${location.state.fromEditor.fileId}`)}
               onClick={(e) => {
                 e.preventDefault()
-                navigate(`/starbase/editor/${location.state.fromEditor.fileId}`)
+                tenantNavigate(`/starbase/editor/${location.state.fromEditor.fileId}`)
               }}
             >
               {location.state.fromEditor.fileName || 'Previous file'}

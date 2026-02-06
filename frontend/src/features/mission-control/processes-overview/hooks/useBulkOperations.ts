@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import {
@@ -22,7 +22,7 @@ export function useBulkOperations({
   instQRefetch,
   showAlert,
 }: UseBulkOperationsProps) {
-  const navigate = useNavigate()
+  const { tenantNavigate } = useTenantNavigate()
   const [bulkRetryBusy, setBulkRetryBusy] = useState(false)
   const [bulkSuspendBusy, setBulkSuspendBusy] = useState(false)
   const [bulkActivateBusy, setBulkActivateBusy] = useState(false)
@@ -50,7 +50,7 @@ export function useBulkOperations({
     setBulkRetryBusy(true)
     try {
       await createBulkRetryBatch(ids)
-      navigate('/mission-control/batches')
+      tenantNavigate('/mission-control/batches')
       setSelectedMap({})
     } catch (e: any) {
       console.error('Failed to create retry batch:', e)
@@ -60,7 +60,7 @@ export function useBulkOperations({
     } finally {
       setBulkRetryBusy(false)
     }
-  }, [selectedMap, setSelectedMap, navigate, showAlert])
+  }, [selectedMap, setSelectedMap, tenantNavigate, showAlert])
 
   const bulkDelete = useCallback(async () => {
     const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
@@ -69,7 +69,7 @@ export function useBulkOperations({
     setBulkDeleteBusy(true)
     try {
       await createBulkDeleteBatch(ids)
-      navigate('/mission-control/batches')
+      tenantNavigate('/mission-control/batches')
       setSelectedMap({})
     } catch (e: any) {
       console.error('Failed to create delete batch:', e)
@@ -79,7 +79,7 @@ export function useBulkOperations({
     } finally {
       setBulkDeleteBusy(false)
     }
-  }, [selectedMap, setSelectedMap, navigate, showAlert])
+  }, [selectedMap, setSelectedMap, tenantNavigate, showAlert])
 
   const bulkSuspend = useCallback(async () => {
     const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
@@ -88,7 +88,7 @@ export function useBulkOperations({
     setBulkSuspendBusy(true)
     try {
       await createBulkSuspendBatch(ids)
-      navigate('/mission-control/batches')
+      tenantNavigate('/mission-control/batches')
       setSelectedMap({})
     } catch (e: any) {
       console.error('Failed to create suspend batch:', e)
@@ -98,7 +98,7 @@ export function useBulkOperations({
     } finally {
       setBulkSuspendBusy(false)
     }
-  }, [selectedMap, setSelectedMap, navigate, showAlert])
+  }, [selectedMap, setSelectedMap, tenantNavigate, showAlert])
 
   const bulkActivate = useCallback(async () => {
     const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
@@ -107,7 +107,7 @@ export function useBulkOperations({
     setBulkActivateBusy(true)
     try {
       await createBulkActivateBatch(ids)
-      navigate('/mission-control/batches')
+      tenantNavigate('/mission-control/batches')
       setSelectedMap({})
     } catch (e: any) {
       console.error('Failed to create activate batch:', e)
@@ -117,7 +117,7 @@ export function useBulkOperations({
     } finally {
       setBulkActivateBusy(false)
     }
-  }, [selectedMap, setSelectedMap, navigate, showAlert])
+  }, [selectedMap, setSelectedMap, tenantNavigate, showAlert])
 
   return {
     bulkRetryBusy,

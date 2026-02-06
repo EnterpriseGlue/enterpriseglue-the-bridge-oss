@@ -7,7 +7,8 @@ import {
 import { BreadcrumbBar } from '../../../shared/components/BreadcrumbBar'
 import { listDecisionDefinitions, fetchDecisionDefinitionDmnXml, listDecisionHistory, type DecisionHistoryEntry } from '../api/decisions'
 import SplitPane from 'react-split-pane'
-import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { useSearchParams, useLocation } from 'react-router-dom'
+import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { DecisionsDataTable } from './DecisionsDataTable'
 import { PageLoader } from '../../../../shared/components/PageLoader'
 import { useDecisionsFilterStore } from '../../shared/stores/decisionsFilterStore'
@@ -29,7 +30,7 @@ type DecisionDef = {
 }
 
 export default function Decisions() {
-  const navigate = useNavigate()
+  const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const [searchParams, setSearchParams] = useSearchParams()
   const fromInstanceId = location?.state?.fromInstanceId as string | undefined
@@ -276,17 +277,17 @@ export default function Decisions() {
       {/* Breadcrumb Bar - shared component */}
       <BreadcrumbBar>
         <BreadcrumbItem>
-          <a href="/mission-control" onClick={(e) => { e.preventDefault(); navigate('/mission-control'); }}>
+          <a href={toTenantPath('/mission-control')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control'); }}>
             Mission Control
           </a>
         </BreadcrumbItem>
         {fromInstanceId && (
           <BreadcrumbItem>
             <a
-              href={`/mission-control/processes/instances/${fromInstanceId}`}
+              href={toTenantPath(`/mission-control/processes/instances/${fromInstanceId}`)}
               onClick={(e) => {
                 e.preventDefault()
-                navigate(`/mission-control/processes/instances/${fromInstanceId}`)
+                tenantNavigate(`/mission-control/processes/instances/${fromInstanceId}`)
               }}
             >
               Instance {fromInstanceId.substring(0, 8)}...
@@ -296,12 +297,12 @@ export default function Decisions() {
         <BreadcrumbItem isCurrentPage={!selectedDefinition}>
           {selectedDefinition ? (
             <a
-              href="/mission-control/decisions"
+              href={toTenantPath('/mission-control/decisions')}
               onClick={(e) => {
                 e.preventDefault()
                 // Reset all decision filters (definition, version, states, search)
                 resetStore()
-                navigate('/mission-control/decisions')
+                tenantNavigate('/mission-control/decisions')
               }}
             >
               Decisions

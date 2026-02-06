@@ -198,7 +198,7 @@ router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(syncBodySchem
           await vcsService.syncFromMainDb(projectId, userId, draftBranch.id);
           
           // Commit on draft so the draft headCommitId matches current files
-          await vcsService.commit(draftBranch.id, userId, commitMessage);
+          await vcsService.commit(draftBranch.id, userId, commitMessage, { source: 'sync-push' });
           
           // Check if main needs updating
           const hasChangesVsMain = await vcsService.hasUncommittedChanges(projectId);
@@ -212,7 +212,7 @@ router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(syncBodySchem
         } else {
           // No user branch - create a direct commit on main to capture current state
           logger.info('No user branch, creating direct VCS commit', { projectId });
-          await vcsService.commitCurrentState(projectId, userId, commitMessage);
+          await vcsService.commitCurrentState(projectId, userId, commitMessage, 'sync-push');
         }
 
         logger.info('Auto-publish timing', { projectId, ms: Date.now() - publishStart });
@@ -302,8 +302,40 @@ router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(syncBodySchem
   } catch (error: any) {
     logger.error('Sync failed', { projectId, direction, error });
     
-    // Return partial results with error
-    throw Errors.internal(error.message || 'Sync failed');
+    const msg = String(error?.message || '');
+
+    if (msg.includes('not accessible by personal access token') || msg.includes('Resource not accessible')) {
+      return res.status(403).json({
+        error: 'Your personal access token does not have sufficient permissions',
+        hint: 'Update your token permissions: for fine-grained tokens enable "Contents: Read and write", for classic tokens enable the "repo" scope. Then update the token in Settings → Git Connections.',
+      });
+    }
+
+    if (msg.includes('Bad credentials') || msg.includes('Unauthorized')) {
+      return res.status(401).json({
+        error: 'Git authentication failed — your access token may be expired or revoked',
+        hint: 'Generate a new token from your Git provider and update it in Settings → Git Connections.',
+      });
+    }
+
+    if (msg.includes('rate limit') || msg.includes('API rate limit')) {
+      return res.status(429).json({
+        error: 'Git provider API rate limit exceeded',
+        hint: 'Wait a few minutes and try again.',
+      });
+    }
+
+    if (msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT') || msg.includes('network')) {
+      return res.status(502).json({
+        error: 'Could not reach the Git provider — network or service issue',
+        hint: 'Check your internet connection and try again.',
+      });
+    }
+
+    return res.status(500).json({
+      error: msg || 'Sync failed due to an unexpected error',
+      hint: 'Check your Git connection settings and token permissions, then try again.',
+    });
   }
 }));
 

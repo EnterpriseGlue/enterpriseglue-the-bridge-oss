@@ -22,6 +22,7 @@ export interface CommitInfo {
   message: string;
   hash: string;
   versionNumber: number | null;
+  source: string;
   isRemote: boolean;
   createdAt: number;
 }
@@ -62,6 +63,7 @@ export function mapCommit(row: any): CommitInfo {
     message: row.message,
     hash: row.hash,
     versionNumber: row.versionNumber ?? null,
+    source: row.source ?? 'manual',
     isRemote: row.isRemote ?? false,
     createdAt: Number(row.createdAt),
   };

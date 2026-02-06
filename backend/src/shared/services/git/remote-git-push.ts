@@ -231,7 +231,7 @@ export async function pushToRemote(
           mainBranch.id,
           options.userId,
           options.message || `Pushed to remote: ${options.repo}`,
-          { isRemote: true }
+          { isRemote: true, source: 'sync-push' }
         );
       }
     } catch (e) {

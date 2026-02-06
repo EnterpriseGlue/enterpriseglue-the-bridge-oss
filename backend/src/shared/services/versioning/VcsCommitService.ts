@@ -18,7 +18,7 @@ export class VcsCommitService {
   /**
    * Create a commit from current working files
    */
-  async commit(branchId: string, userId: string, message: string, options?: { isRemote?: boolean }): Promise<CommitInfo> {
+  async commit(branchId: string, userId: string, message: string, options?: { isRemote?: boolean; source?: string }): Promise<CommitInfo> {
     const dataSource = await getDataSource();
     const branchRepo = dataSource.getRepository(Branch);
     const commitRepo = dataSource.getRepository(Commit);
@@ -82,6 +82,7 @@ export class VcsCommitService {
       message,
       hash: commitHash,
       versionNumber: nextVersionNumber,
+      source: options?.source ?? 'manual',
       isRemote: options?.isRemote ?? false,
       createdAt: now,
     };
@@ -328,7 +329,7 @@ export class VcsCommitService {
   /**
    * Create a VCS commit capturing the current state of all files
    */
-  async commitCurrentState(projectId: string, userId: string, message: string, getMainBranchFn: (projectId: string) => Promise<any>, initProjectFn: (projectId: string, userId: string) => Promise<any>): Promise<void> {
+  async commitCurrentState(projectId: string, userId: string, message: string, getMainBranchFn: (projectId: string) => Promise<any>, initProjectFn: (projectId: string, userId: string) => Promise<any>, source: string = 'manual'): Promise<void> {
     const dataSource = await getDataSource();
     const mainFileRepo = dataSource.getRepository(MainFile);
     const commitRepo = dataSource.getRepository(Commit);
@@ -380,6 +381,7 @@ export class VcsCommitService {
       userId,
       message,
       hash: commitHash,
+      source,
       isRemote: false,
       createdAt: now,
     });

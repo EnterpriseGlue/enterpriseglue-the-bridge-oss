@@ -1,7 +1,8 @@
 import React from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { DataTable, DataTableSkeleton, Table, TableHead, TableRow, TableHeader, TableBody, TableCell, InlineNotification, TableContainer, OverflowMenu, OverflowMenuItem } from '@carbon/react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
+import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { Package } from '@carbon/icons-react'
 import { apiClient } from '../../../../shared/api/client'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../../shared/components/PageLayout'
@@ -22,7 +23,7 @@ type Batch = {
 }
 
 export default function BatchesList() {
-  const navigate = useNavigate()
+  const { tenantNavigate } = useTenantNavigate()
   const { batchId } = useParams()
   const selectedEngineId = useSelectedEngine()
   const listQ = useQuery({ 
@@ -77,8 +78,8 @@ export default function BatchesList() {
   ]
 
   const closeModal = React.useCallback(() => {
-    navigate('/mission-control/batches')
-  }, [navigate])
+    tenantNavigate('/mission-control/batches')
+  }, [tenantNavigate])
 
   const cancelBatch = React.useCallback(async (id: string) => {
     const params = new URLSearchParams()
@@ -184,7 +185,7 @@ export default function BatchesList() {
                             <TableCell key={c.id} onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
                               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                 <OverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
-                                  <OverflowMenuItem itemText="Open" onClick={() => navigate(`/mission-control/batches/${r.id}`)} />
+                                  <OverflowMenuItem itemText="Open" onClick={() => tenantNavigate(`/mission-control/batches/${r.id}`)} />
                                   <OverflowMenuItem
                                     itemText={toggleLabel}
                                     disabled={!canToggleSuspended || toggleBusy}
@@ -210,7 +211,7 @@ export default function BatchesList() {
                           )
                         }
                         return (
-                          <TableCell key={c.id} onClick={() => navigate(`/mission-control/batches/${r.id}`)} style={{ cursor: 'pointer' }}>{c.value}</TableCell>
+                          <TableCell key={c.id} onClick={() => tenantNavigate(`/mission-control/batches/${r.id}`)} style={{ cursor: 'pointer' }}>{c.value}</TableCell>
                         )
                       })}
                     </TableRow>

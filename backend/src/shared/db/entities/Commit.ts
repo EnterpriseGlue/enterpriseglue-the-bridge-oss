@@ -27,6 +27,9 @@ export class Commit extends AppBaseEntity {
   @Column({ name: 'version_number', type: 'integer', nullable: true })
   versionNumber!: number | null;
 
+  @Column({ name: 'source', type: 'text', default: 'manual' })
+  source!: string;
+
   @Column({ name: 'is_remote', type: 'boolean', default: false })
   isRemote!: boolean;
 

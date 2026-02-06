@@ -1,5 +1,6 @@
 import React from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
+import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { useQuery } from '@tanstack/react-query'
 import { Button, InlineNotification } from '@carbon/react'
 import { apiClient } from '../../../../shared/api/client'
@@ -7,7 +8,7 @@ import { useSelectedEngine } from '../../../../components/EngineSelector'
 
 export default function BatchDetail() {
   const { batchId } = useParams()
-  const navigate = useNavigate()
+  const { tenantNavigate } = useTenantNavigate()
   const selectedEngineId = useSelectedEngine()
   const q = useQuery({ 
     queryKey: ['batches','detail', batchId, selectedEngineId], 
@@ -50,7 +51,7 @@ export default function BatchDetail() {
     const params = new URLSearchParams()
     if (selectedEngineId) params.set('engineId', selectedEngineId)
     await apiClient.delete(`/mission-control-api/batches/${batchId}?${params}`, { credentials: 'include' })
-    navigate('/mission-control/batches')
+    tenantNavigate('/mission-control/batches')
   }
 
   return (
@@ -62,7 +63,7 @@ export default function BatchDetail() {
           {(status === 'RUNNING' || status === 'PENDING') && (
             <Button size="sm" kind="danger--ghost" onClick={cancel}>Cancel</Button>
           )}
-          <Button size="sm" kind="ghost" onClick={() => navigate('/mission-control/batches')}>Back</Button>
+          <Button size="sm" kind="ghost" onClick={() => tenantNavigate('/mission-control/batches')}>Back</Button>
         </div>
       </div>
       {q.error && <InlineNotification lowContrast kind="error" title="Failed to load batch" />}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate';
 import { useQuery } from '@tanstack/react-query';
 import { useSelectedEngine } from '../../../../components/EngineSelector';
 import {
@@ -70,7 +70,7 @@ interface Props {
 }
 
 export default function BatchOperationForm({ operationType }: Props) {
-  const navigate = useNavigate();
+  const { tenantNavigate } = useTenantNavigate();
   const config = BATCH_CONFIGS[operationType];
 
   const [formData, setFormData] = useState({
@@ -119,7 +119,7 @@ export default function BatchOperationForm({ operationType }: Props) {
       if (config.fields.retries) payload.retries = formData.retries;
 
       await apiClient.post(config.endpoint, payload, { credentials: 'include' });
-      navigate('/mission-control/batches');
+      tenantNavigate('/mission-control/batches');
     } catch (err) {
       setError(getUiErrorMessage(err, 'Failed to submit batch operation'));
     } finally {
@@ -215,7 +215,7 @@ export default function BatchOperationForm({ operationType }: Props) {
           <Button type="submit" disabled={submitting || !formData.processDefinitionKey}>
             {submitting ? <InlineLoading description="Creating..." /> : `Create ${config.title}`}
           </Button>
-          <Button kind="secondary" onClick={() => navigate('/mission-control/batches')}>
+          <Button kind="secondary" onClick={() => tenantNavigate('/mission-control/batches')}>
             Cancel
           </Button>
         </div>

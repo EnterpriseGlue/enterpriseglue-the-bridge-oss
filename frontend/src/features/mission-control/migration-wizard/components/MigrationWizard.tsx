@@ -1,5 +1,6 @@
 import React from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import {
   Button,
   InlineNotification,
@@ -25,7 +26,7 @@ import { typeCategory, toHumanName, parseActivities, normalizeName } from '../ut
 const Viewer = React.lazy(() => import('../../../shared/components/Viewer'))
 
 export default function MigrationWizard() {
-  const navigate = useNavigate()
+  const { tenantNavigate } = useTenantNavigate()
   const { state }: any = useLocation()
   const instanceIds: string[] = state?.instanceIds || []
   const preselectedKey: string | undefined = state?.selectedKey || undefined
@@ -477,7 +478,7 @@ export default function MigrationWizard() {
         <div style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
           <Button size="sm" kind="primary" disabled={!plan || executeMutation.isPending} onClick={() => executeMutation.mutate()}>Create migration batch</Button>
           <Button size="sm" kind="secondary" disabled={!plan || executeDirectMutation.isPending} onClick={() => executeDirectMutation.mutate()}>Run directly (no batch)</Button>
-          <Button size="sm" kind="ghost" onClick={() => navigate('/mission-control/processes')}>Cancel</Button>
+          <Button size="sm" kind="ghost" onClick={() => tenantNavigate('/mission-control/processes')}>Cancel</Button>
         </div>
       </div>
 

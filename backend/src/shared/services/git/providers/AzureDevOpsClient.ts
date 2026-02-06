@@ -406,6 +406,22 @@ export class AzureDevOpsClient implements GitProviderClient {
     }));
   }
 
+  async createTag(repo: string, tagName: string, commitSha: string, _message?: string): Promise<{ name: string; sha: string }> {
+    const gitApi = await this.getGitApi();
+    const [project, repoName] = this.parseRepo(repo);
+    const repository = await gitApi.getRepository(repoName, project);
+    if (!repository?.id) throw new Error('Repository not found');
+
+    // Azure DevOps uses refs API to create tags
+    const refUpdate = [{
+      name: `refs/tags/${tagName}`,
+      oldObjectId: '0000000000000000000000000000000000000000',
+      newObjectId: commitSha,
+    }];
+    await gitApi.updateRefs(refUpdate, repository.id, project);
+    return { name: tagName, sha: commitSha };
+  }
+
   // Helper methods
   private parseRepo(repo: string): [string, string] {
     // Format: project/repo or just repo (uses default project)

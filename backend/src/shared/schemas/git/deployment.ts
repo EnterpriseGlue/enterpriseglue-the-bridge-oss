@@ -38,7 +38,7 @@ export const DeploymentSelectSchema = DeploymentSchemaRaw.transform((d) => ({
 export const DeploymentInsertSchema = z.object({
   id: z.string().uuid().optional(),
   commitMessage: z.string().min(1).max(500),
-  environment: z.enum(['dev', 'staging', 'production']).optional(),
+  environment: z.string().optional(),
   status: z.enum(['success', 'failed', 'pending']).default('success'),
 });
 
@@ -46,7 +46,7 @@ export const DeploymentInsertSchema = z.object({
 export const DeployRequestSchema = z.object({
   projectId: z.string().uuid(),
   message: z.string().min(1).max(500),
-  environment: z.enum(['dev', 'staging', 'production']).optional(),
+  environment: z.string().optional(),
   createTag: z.boolean().optional().default(false),
   tagName: z.string().optional(),
 });

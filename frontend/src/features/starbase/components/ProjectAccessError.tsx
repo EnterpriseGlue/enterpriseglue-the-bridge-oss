@@ -1,7 +1,7 @@
 import React from 'react'
 import { Warning, Locked } from '@carbon/icons-react'
 import { Button } from '@carbon/react'
-import { useNavigate } from 'react-router-dom'
+import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
 
 interface ProjectAccessErrorProps {
   status: 403 | 404 | number
@@ -9,7 +9,7 @@ interface ProjectAccessErrorProps {
 }
 
 export function ProjectAccessError({ status, message }: ProjectAccessErrorProps) {
-  const navigate = useNavigate()
+  const { tenantNavigate } = useTenantNavigate()
 
   const is404 = status === 404
   const title = is404 ? 'Project Not Found' : 'Access Denied'
@@ -39,7 +39,7 @@ export function ProjectAccessError({ status, message }: ProjectAccessErrorProps)
       <p style={{ fontSize: 'var(--text-14)', maxWidth: '400px', marginBottom: 'var(--spacing-5)' }}>
         {description}
       </p>
-      <Button kind="tertiary" size="sm" onClick={() => navigate('/starbase')}>
+      <Button kind="tertiary" size="sm" onClick={() => tenantNavigate('/starbase')}>
         Back to Starbase
       </Button>
     </div>

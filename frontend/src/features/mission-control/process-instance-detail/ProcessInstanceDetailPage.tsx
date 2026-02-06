@@ -1,5 +1,6 @@
 import React from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
+import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
 import { useQuery } from '@tanstack/react-query'
 import styles from './styles/InstanceDetail.module.css'
 import { Modal, Select, BreadcrumbItem, SelectItem, TextInput, TextArea, InlineNotification } from '@carbon/react'
@@ -35,15 +36,11 @@ import { EngineAccessError, isEngineAccessError } from '../shared/components/Eng
 
 export default function ProcessInstanceDetailPage() {
   const { instanceId } = useParams<{ instanceId: string }>()
-  const navigate = useNavigate()
+  const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation()
   const { alertState, showAlert, closeAlert } = useAlert()
   const selectedEngineId = useSelectedEngine()
 
-  const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
-  const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
-  const toTenantPath = (path: string) => (tenantPrefix ? `${tenantPrefix}${path}` : path)
 
   const showModifyAction = false
   
@@ -534,7 +531,7 @@ export default function ProcessInstanceDetailPage() {
         if (calledPid) {
           const params = new URLSearchParams()
           params.set('fromInstance', instanceId)
-          navigate(toTenantPath(`/mission-control/processes/instances/${encodeURIComponent(calledPid)}?${params.toString()}`))
+          tenantNavigate(`/mission-control/processes/instances/${encodeURIComponent(calledPid)}?${params.toString()}`)
           break
         }
 
@@ -543,7 +540,7 @@ export default function ProcessInstanceDetailPage() {
         params.set('process', defKey)
         params.set('node', linkInfo.elementId)
         params.set('fromInstance', instanceId)
-        navigate(toTenantPath(`/mission-control/processes?${params.toString()}`))
+        tenantNavigate(`/mission-control/processes?${params.toString()}`)
         break
         }
         
@@ -558,7 +555,7 @@ export default function ProcessInstanceDetailPage() {
           const params = new URLSearchParams()
           params.set('fromInstance', instanceId)
           if (processLabel) params.set('processLabel', processLabel)
-          navigate(toTenantPath(`/mission-control/decisions/instances/${encodeURIComponent(decisionId)}?${params.toString()}`))
+          tenantNavigate(`/mission-control/decisions/instances/${encodeURIComponent(decisionId)}?${params.toString()}`)
           break
         }
         
@@ -631,18 +628,18 @@ export default function ProcessInstanceDetailPage() {
       {/* Breadcrumb Bar - shared component */}
       <BreadcrumbBar>
         <BreadcrumbItem>
-          <a href="/mission-control" onClick={(e) => { e.preventDefault(); navigate('/mission-control'); }}>
+          <a href={toTenantPath('/mission-control')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control'); }}>
             Mission Control
           </a>
         </BreadcrumbItem>
         <BreadcrumbItem>
-          <a href="/mission-control/processes" onClick={(e) => { e.preventDefault(); navigate('/mission-control/processes'); }}>
+          <a href={toTenantPath('/mission-control/processes')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/processes'); }}>
             Processes
           </a>
         </BreadcrumbItem>
         {processLabel && (
           <BreadcrumbItem>
-            <a href="/mission-control/processes" onClick={(e) => { e.preventDefault(); navigate('/mission-control/processes'); }}>
+            <a href={toTenantPath('/mission-control/processes')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/processes'); }}>
               {processLabel}
             </a>
           </BreadcrumbItem>
@@ -653,10 +650,10 @@ export default function ProcessInstanceDetailPage() {
           return (
             <BreadcrumbItem>
               <a
-                href={`/mission-control/processes/instances/${fromInstance}`}
+                href={toTenantPath(`/mission-control/processes/instances/${fromInstance}`)}
                 onClick={(e) => {
                   e.preventDefault()
-                  navigate(`/mission-control/processes/instances/${fromInstance}`)
+                  tenantNavigate(`/mission-control/processes/instances/${fromInstance}`)
                 }}
               >
                 Instance {fromInstance.substring(0, 8)}...
@@ -701,7 +698,7 @@ export default function ProcessInstanceDetailPage() {
           status={status}
           showModifyAction={showModifyAction}
           fmt={fmt}
-          onNavigate={navigate}
+          onNavigate={tenantNavigate}
           onCopy={(value) => navigator.clipboard.writeText(value)}
           onSuspend={() => callAction('PUT', `/mission-control-api/process-instances/${instanceId}/suspend`).then(() => runtimeQ.refetch())}
           onResume={() => callAction('PUT', `/mission-control-api/process-instances/${instanceId}/activate`).then(() => runtimeQ.refetch())}

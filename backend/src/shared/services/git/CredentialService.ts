@@ -54,19 +54,16 @@ class CredentialService {
     
     try {
       const client = await remoteGitService.getClient(options.providerId, options.accessToken);
-      const isValid = await client.validateCredentials();
-      
-      if (!isValid) {
-        throw new Error('Invalid credentials - authentication failed');
-      }
+      await client.validateCredentials();
       
       const user = await client.getCurrentUser();
       providerUserId = user.id;
       providerUsername = user.username;
       logger.info('Validated credentials for user', { providerUsername, providerUserId });
-    } catch (error) {
-      logger.error('Failed to validate credentials', { providerId: options.providerId, error });
-      throw new Error('Failed to validate credentials with provider');
+    } catch (error: any) {
+      const detail = error?.message || String(error);
+      logger.error('Failed to validate credentials', { providerId: options.providerId, detail });
+      throw new Error(detail);
     }
 
     // Encrypt tokens
@@ -237,7 +234,12 @@ class CredentialService {
       return null;
     }
 
-    return decrypt(accessToken);
+    try {
+      return decrypt(accessToken);
+    } catch (decryptError) {
+      logger.error('Failed to decrypt access token – the ENCRYPTION_KEY may have changed since this credential was saved. Re-save the Git connection to fix.', { userId, providerId, error: decryptError });
+      return null;
+    }
   }
 
   /**
@@ -613,7 +615,12 @@ class CredentialService {
     }
 
     // Decrypt the token
-    const token = decrypt(credential.accessToken);
+    let token: string;
+    try {
+      token = decrypt(credential.accessToken);
+    } catch {
+      throw new Error('Failed to decrypt credential – the ENCRYPTION_KEY may have changed. Please re-save this Git connection.');
+    }
 
     // Get the client and fetch namespaces
     const client = await remoteGitService.getClient(credential.providerId, token);

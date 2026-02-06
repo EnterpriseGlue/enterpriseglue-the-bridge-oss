@@ -348,7 +348,7 @@ export default function ProjectOverview() {
           handleBlur={handleBlur}
           handleKeyDown={handleKeyDown}
           startEditing={startEditing}
-          onOpenProject={(project) => nav(`/starbase/project/${project.id}`, { state: { name: project.name } })}
+          onOpenProject={(project) => nav(toTenantPath(`/starbase/project/${project.id}`), { state: { name: project.name } })}
           onOpenNewProject={() => {
             setOnlineProjectContext(null)
             createOnlineModal.openModal()

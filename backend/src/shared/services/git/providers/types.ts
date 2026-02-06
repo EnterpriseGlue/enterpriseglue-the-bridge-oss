@@ -165,4 +165,9 @@ export interface GitProviderClient {
    * Get commit history
    */
   getCommits(repo: string, branch: string, limit?: number): Promise<CommitInfo[]>;
+
+  /**
+   * Create a lightweight tag pointing to a commit SHA
+   */
+  createTag(repo: string, tagName: string, commitSha: string, message?: string): Promise<{ name: string; sha: string }>;
 }

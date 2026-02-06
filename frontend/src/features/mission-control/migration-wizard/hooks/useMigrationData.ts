@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
@@ -12,7 +12,7 @@ export interface MigrationDataParams {
 }
 
 export function useMigrationData({ instanceIds, preselectedKey, preselectedVersion }: MigrationDataParams) {
-  const navigate = useNavigate()
+  const { tenantNavigate } = useTenantNavigate()
   const selectedEngineId = useSelectedEngine()
 
   // Process definitions query
@@ -231,7 +231,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
         },
         { credentials: 'include' }
       ),
-    onSuccess: (data) => navigate(`/mission-control/batches/${data.id}`),
+    onSuccess: (data) => tenantNavigate(`/mission-control/batches/${data.id}`),
     onError: (e: any) => setError(getUiErrorMessage(e, 'Failed to start migration')),
   })
 
@@ -251,7 +251,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       ),
     onSuccess: () => {
       setSuccessMsg('Migration completed')
-      setTimeout(() => navigate('/mission-control/processes'), 1200)
+      setTimeout(() => tenantNavigate('/mission-control/processes'), 1200)
     },
     onError: (e: any) => setError(getUiErrorMessage(e, 'Failed to execute migration directly')),
   })

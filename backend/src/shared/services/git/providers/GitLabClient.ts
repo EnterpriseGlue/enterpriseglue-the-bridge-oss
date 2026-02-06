@@ -294,6 +294,12 @@ export class GitLabClient implements GitProviderClient {
     }));
   }
 
+  async createTag(repo: string, tagName: string, commitSha: string, message?: string): Promise<{ name: string; sha: string }> {
+    const projectPath = this.normalizeProjectPath(repo);
+    const tag = await (this.gitlab as any).Tags.create(projectPath, tagName, commitSha, { message });
+    return { name: tag.name, sha: tag.commit?.id || commitSha };
+  }
+
   // Helper methods
   private normalizeProjectPath(repo: string): string {
     // Remove .git suffix and URL parts

@@ -32,9 +32,17 @@ export class GitHubClient implements GitProviderClient {
     try {
       await this.octokit.rest.users.getAuthenticated();
       return true;
-    } catch (error) {
-      logger.warn('GitHub credentials validation failed', { error });
-      return false;
+    } catch (error: any) {
+      const status = error?.status || error?.response?.status;
+      const msg = error?.response?.data?.message || error?.message || 'Unknown error';
+      if (status === 401) {
+        throw new Error(`GitHub returned 401 Unauthorized: ${msg}. Ensure your token is valid and not expired.`);
+      }
+      if (status === 403) {
+        throw new Error(`GitHub returned 403 Forbidden: ${msg}. Fine-grained tokens need Account → Read permission.`);
+      }
+      logger.warn('GitHub credentials validation failed', { status, msg, error });
+      throw new Error(`GitHub authentication failed (HTTP ${status || '?'}): ${msg}`);
     }
   }
 
@@ -464,6 +472,38 @@ export class GitHubClient implements GitProviderClient {
       defaultBranch: data.default_branch || 'main',
       private: data.private,
     };
+  }
+
+  async createTag(repo: string, tagName: string, commitSha: string, message?: string): Promise<{ name: string; sha: string }> {
+    const [owner, repoName] = this.parseRepo(repo);
+
+    if (message) {
+      // Annotated tag
+      const { data: tagObject } = await this.octokit.rest.git.createTag({
+        owner,
+        repo: repoName,
+        tag: tagName,
+        message,
+        object: commitSha,
+        type: 'commit',
+      });
+      await this.octokit.rest.git.createRef({
+        owner,
+        repo: repoName,
+        ref: `refs/tags/${tagName}`,
+        sha: tagObject.sha,
+      });
+      return { name: tagName, sha: commitSha };
+    } else {
+      // Lightweight tag
+      await this.octokit.rest.git.createRef({
+        owner,
+        repo: repoName,
+        ref: `refs/tags/${tagName}`,
+        sha: commitSha,
+      });
+      return { name: tagName, sha: commitSha };
+    }
   }
 
   private matchesPatterns(path: string, patterns: string[]): boolean {

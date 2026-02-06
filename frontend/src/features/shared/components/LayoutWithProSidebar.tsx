@@ -76,11 +76,16 @@ const NOTIFICATION_FILTER_ITEMS: NotificationFilterItem[] = [
 // In OSS: always false. In EE: set via registerFeatureOverride('multiTenant', true)
 const isMultiTenant = isMultiTenantEnabled()
 
-const NOTIFICATION_STATE_COLORS: Record<NotificationItem['state'], string> = {
-  success: 'var(--color-success)',
-  info: 'var(--color-info)',
-  warning: 'var(--color-warning)',
-  error: 'var(--color-error)',
+function formatRelativeTime(ms: number): string {
+  const seconds = Math.floor((Date.now() - ms) / 1000)
+  if (seconds < 60) return 'Just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(ms).toLocaleDateString()
 }
 
 function normalizeEnterpriseNavItems(raw: unknown): EnterpriseNavItem[] {
@@ -743,16 +748,16 @@ export default function LayoutWithProSidebar() {
                 {!isMultiTenant && canViewAdminMenu && (
                   <HeaderMenu menuLinkName="Admin">
                     <HeaderMenuItem
-                      href={'/admin/users'}
+                      href={toTenantPath('/admin/users')}
                       isCurrentPage={effectivePathname === '/admin/users'}
-                      onClick={(e) => { e.preventDefault(); navigate('/admin/users'); (document.activeElement as HTMLElement)?.blur() }}
+                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/users')); (document.activeElement as HTMLElement)?.blur() }}
                     >
                       User Management
                     </HeaderMenuItem>
                     <HeaderMenuItem
-                      href={'/admin/settings'}
+                      href={toTenantPath('/admin/settings')}
                       isCurrentPage={effectivePathname === '/admin/settings'}
-                      onClick={(e) => { e.preventDefault(); navigate('/admin/settings'); (document.activeElement as HTMLElement)?.blur() }}
+                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/settings')); (document.activeElement as HTMLElement)?.blur() }}
                     >
                       Platform Settings
                     </HeaderMenuItem>
@@ -947,46 +952,46 @@ export default function LayoutWithProSidebar() {
                         ? item.createdAt
                         : Number(item.createdAt)
                       const createdAtLabel = Number.isFinite(createdAtMs)
-                        ? new Date(createdAtMs).toLocaleString()
+                        ? formatRelativeTime(createdAtMs)
                         : 'Just now'
-
-                      const stateColor = NOTIFICATION_STATE_COLORS[item.state as NotificationItem['state']]
+                      const isUnread = !item.readAt
 
                       return (
                         <div
                           key={item.id}
                           style={{
-                            border: '1px solid var(--color-border-primary)',
-                            borderLeft: `4px solid ${stateColor}`,
-                            borderRadius: 'var(--border-radius-sm)',
-                            padding: 'var(--spacing-3)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 'var(--spacing-2)',
-                            background: 'var(--cds-layer-01)',
+                            opacity: isUnread ? 1 : 0.7,
+                            position: 'relative',
                           }}
                         >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-3)' }}>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{item.title}</div>
-                          <Button
-                            kind="ghost"
-                            size="sm"
-                            hasIconOnly
-                            renderIcon={Close}
-                            iconDescription="Dismiss"
-                            onClick={() => clearNotificationM.mutate(item.id)}
-                          />
+                          {isUnread && (
+                            <span
+                              style={{
+                                position: 'absolute',
+                                top: 12,
+                                left: 6,
+                                width: 6,
+                                height: 6,
+                                borderRadius: '50%',
+                                background: 'var(--cds-link-primary, #0f62fe)',
+                                zIndex: 1,
+                              }}
+                            />
+                          )}
+                          <InlineNotification
+                            kind={item.state}
+                            title={item.title}
+                            lowContrast
+                            hideCloseButton={false}
+                            onClose={() => { clearNotificationM.mutate(item.id); return false }}
+                            style={{ maxWidth: '100%', marginBottom: 0 }}
+                          >
+                            {subtitle && <span style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>{subtitle}</span>}
+                            <span style={{ display: 'block', fontSize: 11, color: 'var(--cds-text-helper)' }}>{createdAtLabel}</span>
+                          </InlineNotification>
                         </div>
-                        {subtitle && (
-                          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', wordBreak: 'break-word' }}>
-                            {subtitle}
-                          </div>
-                        )}
-                        <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                          {createdAtLabel}
-                        </div>
-                      </div>
-                    )})}
+                      )
+                    })}
                   </div>
                 </div>
               )}

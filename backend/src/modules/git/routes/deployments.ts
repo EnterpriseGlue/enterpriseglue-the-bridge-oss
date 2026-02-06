@@ -9,7 +9,9 @@ import { DeployRequestSchema, RollbackRequestSchema } from '@shared/schemas/git/
 import { projectMemberService } from '@shared/services/platform-admin/ProjectMemberService.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { GitDeployment } from '@shared/db/entities/GitDeployment.js';
-import { EDIT_ROLES } from '@shared/constants/roles.js';
+import { EnvironmentTag } from '@shared/db/entities/EnvironmentTag.js';
+import { PlatformSettings } from '@shared/db/entities/PlatformSettings.js';
+import { DEPLOY_ROLES, EDIT_ROLES } from '@shared/constants/roles.js';
 
 const router = Router();
 const gitService = new GitService();
@@ -18,9 +20,28 @@ const gitService = new GitService();
  * POST /git-api/deploy
  * Deploy a project (commit + push + tag)
  */
-router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployRequestSchema), requireProjectRole(EDIT_ROLES, { projectIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployRequestSchema), requireProjectRole(DEPLOY_ROLES, { projectIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const validated = req.body;
   const userId = req.user!.userId;
+
+  // Check manualDeployAllowed if an environment is specified
+  if (validated.environment) {
+    const dataSource = await getDataSource();
+    const envTagRepo = dataSource.getRepository(EnvironmentTag);
+    // Try to find by ID first, then by name (case-insensitive)
+    let envTag = await envTagRepo.findOneBy({ id: validated.environment });
+    if (!envTag) {
+      const allTags = await envTagRepo.find();
+      envTag = allTags.find(t => t.name.toLowerCase() === validated.environment.toLowerCase()) || null;
+    }
+    if (envTag && !envTag.manualDeployAllowed) {
+      return res.status(403).json({
+        error: 'Manual deployment not allowed for this environment',
+        environment: envTag.name,
+        hint: 'Use CI/CD pipeline for this environment',
+      });
+    }
+  }
 
   try {
     const result = await gitService.deployProject({
@@ -46,7 +67,7 @@ router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployReque
     if (msg.includes('No Git credentials found')) {
       return res.status(403).json({
         error: 'No Git credentials found for this provider',
-        hint: 'Open Starbase → Project Overview (⋯) → Edit Git settings and connect an account/token',
+        hint: 'Go to your Git connections and re-save your access token. The stored token may have been encrypted with a different key.',
       })
     }
 
@@ -57,14 +78,46 @@ router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployReque
       })
     }
 
-    if (msg.includes('Tagging not supported')) {
-      return res.status(501).json({
-        error: 'Git tagging is not supported yet',
-        hint: 'Try again with createTag disabled, or use your Git provider UI to create a tag for the pushed commit',
+    if (msg.includes('not accessible by personal access token') || msg.includes('Resource not accessible')) {
+      return res.status(403).json({
+        error: 'Your personal access token does not have sufficient permissions to push to this repository',
+        hint: 'Update your token permissions: for fine-grained tokens enable "Contents: Read and write", for classic tokens enable the "repo" scope. Then update the token in Settings → Git Connections.',
       })
     }
 
-    throw e;
+    if (msg.includes('Bad credentials') || msg.includes('401') || msg.includes('Unauthorized')) {
+      return res.status(401).json({
+        error: 'Git authentication failed — your access token may be expired or revoked',
+        hint: 'Generate a new token from your Git provider and update it in Settings → Git Connections.',
+      })
+    }
+
+    if (msg.includes('rate limit') || msg.includes('API rate limit')) {
+      return res.status(429).json({
+        error: 'Git provider API rate limit exceeded',
+        hint: 'Wait a few minutes and try again, or use a token with higher rate limits.',
+      })
+    }
+
+    if (msg.includes('Not Found') && (msg.includes('repository') || msg.includes('404'))) {
+      return res.status(404).json({
+        error: 'The linked Git repository was not found — it may have been deleted or renamed',
+        hint: 'Check that the repository still exists on your Git provider, then reconnect if needed.',
+      })
+    }
+
+    if (msg.includes('fetch') || msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT') || msg.includes('network')) {
+      return res.status(502).json({
+        error: 'Could not reach the Git provider — network or service issue',
+        hint: 'Check your internet connection and that the Git provider is available, then try again.',
+      })
+    }
+
+    // Fallback: return the message without stack traces
+    return res.status(500).json({
+      error: msg || 'Deployment failed due to an unexpected error',
+      hint: 'Check your Git connection settings and token permissions, then try again.',
+    })
   }
 }));
 

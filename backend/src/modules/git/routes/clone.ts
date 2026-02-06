@@ -403,7 +403,7 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
           userBranch.id,
           userId,
           `Initial import from ${repoInfo.fullName}`,
-          { isRemote: true }
+          { isRemote: true, source: 'sync-pull' }
         );
 
         // Merge to main

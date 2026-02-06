@@ -390,7 +390,7 @@ export function useOnlineProjectWizard({
       queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] })
       resetForm()
       onClose()
-      navigate(`/starbase/project/${data.project.id}`, { state: { name: data.project.name } })
+      navigate(toTenantPath(`/starbase/project/${data.project.id}`), { state: { name: data.project.name } })
     },
     onError: (error: Error) => {
       setGeneralError(error.message)
@@ -410,7 +410,7 @@ export function useOnlineProjectWizard({
       await queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
       resetForm()
       onClose()
-      navigate(`/starbase/project/${data.id}`, { state: { name: data.name } })
+      navigate(toTenantPath(`/starbase/project/${data.id}`), { state: { name: data.name } })
     },
     onError: (error: Error) => {
       setGeneralError(error.message)
@@ -474,7 +474,7 @@ export function useOnlineProjectWizard({
       resetForm()
       onClose()
       if (data?.projectId) {
-        navigate(`/starbase/project/${data.projectId}`, { state: { name: data.projectName } })
+        navigate(toTenantPath(`/starbase/project/${data.projectId}`), { state: { name: data.projectName } })
       }
     },
     onError: (error: Error) => {

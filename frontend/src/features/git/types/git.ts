@@ -96,7 +96,7 @@ export interface CloneFromGitRequest {
 export interface DeployRequest {
   projectId: string;
   message: string;
-  environment?: 'dev' | 'staging' | 'production';
+  environment?: string;
   createTag?: boolean;
   tagName?: string;
 }

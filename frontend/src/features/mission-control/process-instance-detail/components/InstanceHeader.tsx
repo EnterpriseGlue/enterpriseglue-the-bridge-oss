@@ -1,5 +1,5 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { Button } from '@carbon/react'
 import { Pause, Play, TrashCan, Copy } from '@carbon/icons-react'
 import { WrenchIcon } from './Icons'
@@ -41,7 +41,7 @@ export function InstanceHeader({
   onTerminate,
   onRetry,
 }: InstanceHeaderProps) {
-  const navigate = useNavigate()
+  const { tenantNavigate } = useTenantNavigate()
 
   const formatTimestamp = (ts: string) => {
     if (!ts) return ''
@@ -91,7 +91,7 @@ export function InstanceHeader({
             <button
               className="cds--link"
               style={{ border: 'none', background: 'transparent', padding: 0, color: 'white', fontSize: 'var(--text-14)', fontWeight: 500 }}
-              onClick={() => navigate(`/mission-control/processes/instances/${instanceId}`)}
+              onClick={() => tenantNavigate(`/mission-control/processes/instances/${instanceId}`)}
               title={instanceId}
             >
               {instanceId.length > 15 ? `${instanceId.slice(0, 6)}...${instanceId.slice(-6)}` : instanceId}
@@ -146,7 +146,7 @@ export function InstanceHeader({
                 <button
                   className="cds--link"
                   style={{ border: 'none', background: 'transparent', padding: 0, color: 'white', fontSize: 'var(--text-14)', fontWeight: 500 }}
-                  onClick={() => navigate(`/mission-control/processes/instances/${parentId}`)}
+                  onClick={() => tenantNavigate(`/mission-control/processes/instances/${parentId}`)}
                   title={parentId}
                 >
                   {parentId.length > 15 ? `${parentId.slice(0, 6)}...${parentId.slice(-6)}` : parentId}

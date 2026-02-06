@@ -5,7 +5,7 @@
 
 import React, { useState, lazy, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Modal, Button, InlineNotification, InlineLoading, ProgressIndicator, ProgressStep } from '@carbon/react';
+import { Modal, Button, InlineNotification, InlineLoading, ProgressIndicator, ProgressStep, Toggle } from '@carbon/react';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 
@@ -31,7 +31,32 @@ interface VcsCommit {
   hash: string;
   versionNumber?: number | null;
   fileVersionNumber?: number | null; // Sequential version number for this specific file
+  source?: string;
   isRemote?: boolean;
+}
+
+const MANUAL_SOURCES = new Set(['manual', 'restore']);
+
+function isManualCommit(commit: VcsCommit): boolean {
+  return MANUAL_SOURCES.has(commit.source ?? 'manual');
+}
+
+function isAutoCommitMessage(message: string): boolean {
+  const msg = message.toLowerCase();
+  return msg.startsWith('sync from starbase') ||
+    msg.startsWith('merge from draft') ||
+    msg.startsWith('pull from remote');
+}
+
+function getSourceLabel(source: string | undefined): string | null {
+  switch (source) {
+    case 'sync-push': return 'Sync';
+    case 'sync-pull': return 'Pull';
+    case 'deploy': return 'Deploy';
+    case 'system': return 'Auto';
+    case 'restore': return 'Restore';
+    default: return null;
+  }
 }
 
 interface FileSnapshot {
@@ -102,6 +127,7 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewXml, setPreviewXml] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
+  const [showSystemVersions, setShowSystemVersions] = useState(false);
 
   // Fetch VCS commit history filtered to this specific file
   const commitsQuery = useQuery({
@@ -115,14 +141,8 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
         params
       );
       
-      // Filter out auto-generated sync/merge commits
-      const filteredCommits = data.commits.filter(commit => {
-        const msg = commit.message.toLowerCase();
-        if (msg.startsWith('sync from starbase')) return false;
-        if (msg.startsWith('merge from draft')) return false;
-        if (msg.startsWith('pull from remote')) return false;
-        return true;
-      });
+      // Always filter out internal auto-generated merge/sync commits
+      const filteredCommits = data.commits.filter(commit => !isAutoCommitMessage(commit.message));
       
       return { commits: filteredCommits };
     },
@@ -254,8 +274,16 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
     );
   }
 
+  const allCommits = commitsQuery.data?.commits || [];
+  const systemCount = allCommits.filter(c => !isManualCommit(c)).length;
+
+  // Filter based on toggle
+  const displayCommits = showSystemVersions
+    ? allCommits
+    : allCommits.filter(c => isManualCommit(c));
+
   // Sort commits in descending order (newest first). Prefer file-specific version numbers when available.
-  const commits = [...(commitsQuery.data?.commits || [])].sort((a, b) => {
+  const commits = [...displayCommits].sort((a, b) => {
     const aFileVersion = typeof a.fileVersionNumber === 'number' ? a.fileVersionNumber : null;
     const bFileVersion = typeof b.fileVersionNumber === 'number' ? b.fileVersionNumber : null;
     if (aFileVersion !== null && bFileVersion !== null && aFileVersion !== bFileVersion) {
@@ -384,6 +412,9 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       {isLatest ? <InlineTag type="green">Latest</InlineTag> : null}
                       <InlineTag type={commit.isRemote ? 'blue' : 'purple'}>{origin}</InlineTag>
+                      {!isManualCommit(commit) && getSourceLabel(commit.source) && (
+                        <InlineTag type="gray">{getSourceLabel(commit.source)}</InlineTag>
+                      )}
                       <span style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>{timeText}</span>
                     </span>
                   </span>
@@ -422,7 +453,22 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
         fontSize: 'var(--text-12)',
         color: 'var(--color-text-tertiary)'
       }}>
-        Showing {visibleCommits.length} of {commits.length} version{commits.length !== 1 ? 's' : ''}
+        {systemCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Toggle
+              id="show-system-versions"
+              size="sm"
+              labelA=""
+              labelB=""
+              toggled={showSystemVersions}
+              onToggle={() => setShowSystemVersions(v => !v)}
+            />
+            <span>Show system versions ({systemCount})</span>
+          </div>
+        )}
+        {!systemCount && (
+          <>Showing {visibleCommits.length} of {commits.length} version{commits.length !== 1 ? 's' : ''}</>
+        )}
       </div>
 
       {/* Preview Modal with Diagram Viewer */}

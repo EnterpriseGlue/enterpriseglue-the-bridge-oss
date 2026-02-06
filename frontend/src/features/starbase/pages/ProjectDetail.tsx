@@ -1,5 +1,6 @@
 import React from 'react'
-import { useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, useLocation, useSearchParams } from 'react-router-dom'
+import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import {
@@ -74,7 +75,7 @@ import {
 export default function ProjectDetail() {
   const { projectId } = useParams()
   const location = useLocation() as { state?: { name?: string } }
-  const navigate = useNavigate()
+  const { tenantNavigate, toTenantPath, navigate } = useTenantNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = React.useState('')
   const queryClient = useQueryClient()
@@ -188,10 +189,9 @@ export default function ProjectDetail() {
   })
 
   const uncommittedQ = useQuery({
-    queryKey: ['uncommitted-files', projectId, 'draft'],
+    queryKey: ['uncommitted-files', projectId, 'main'],
     queryFn: () => apiClient.get<{ hasUncommittedChanges: boolean; uncommittedFileIds: string[]; uncommittedFolderIds: string[] }>(
-      `/vcs-api/projects/${projectId}/uncommitted-files`,
-      { baseline: 'draft' }
+      `/vcs-api/projects/${projectId}/uncommitted-files`
     ),
     enabled: !!projectId,
     staleTime: 30 * 1000,
@@ -286,16 +286,19 @@ export default function ProjectDetail() {
     }
   }, [projectId, location.state, projectsQ.data])
 
-  // Flatten contents into list items (folders first)
+  // Flatten contents into list items (folders first, each group sorted alphabetically)
   const items = React.useMemo<FileItem[]>(() => {
-    const list: FileItem[] = []
     const c = contentsQ.data
-    if (c) {
-      for (const f of c.folders) list.push({ id: f.id, name: f.name, type: 'folder', createdBy: f.createdBy, updatedBy: f.updatedBy, updatedAt: f.updatedAt ?? 0 })
-      for (const f of c.files) list.push({ id: f.id, name: f.name, type: f.type, createdBy: f.createdBy, updatedBy: f.updatedBy, updatedAt: f.updatedAt })
-    }
+    if (!c) return []
+    const folders: FileItem[] = c.folders
+      .map(f => ({ id: f.id, name: f.name, type: 'folder' as const, createdBy: f.createdBy, updatedBy: f.updatedBy, updatedAt: f.updatedAt ?? 0 }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    const files: FileItem[] = c.files
+      .map(f => ({ id: f.id, name: f.name, type: f.type, createdBy: f.createdBy, updatedBy: f.updatedBy, updatedAt: f.updatedAt }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    const list = [...folders, ...files]
     const needle = query.trim().toLowerCase()
-    return list.filter(f => !needle || f.name.toLowerCase().includes(needle))
+    return needle ? list.filter(f => f.name.toLowerCase().includes(needle)) : list
   }, [contentsQ.data, query])
 
   const { editingId, draftName, setDraftName, inputRef, startEditing, handleKeyDown, handleBlur } = useInlineRename({
@@ -683,7 +686,7 @@ export default function ProjectDetail() {
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       showToast({ kind: 'success', title: 'File created' })
       if (created?.id) {
-        navigate(`/starbase/editor/${created.id}`)
+        tenantNavigate(`/starbase/editor/${created.id}`)
       }
     } catch (e: any) {
       const parsed = parseApiError(e, 'Failed to create file')
@@ -708,7 +711,7 @@ export default function ProjectDetail() {
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       showToast({ kind: 'success', title: 'Folder created' })
       if (created?.id) {
-        navigate(`/starbase/project/${projectId}?folder=${created.id}`)
+        tenantNavigate(`/starbase/project/${projectId}?folder=${created.id}`)
       }
     } catch (e: any) {
       const parsed = parseApiError(e, 'Failed to create folder')
@@ -729,11 +732,11 @@ export default function ProjectDetail() {
       {/* Breadcrumb Bar - full width at top, stays fixed */}
       <BreadcrumbBar>
         <BreadcrumbItem>
-          <a href="/starbase" onClick={(e) => { e.preventDefault(); navigate('/starbase'); }}>Starbase</a>
+          <a href={toTenantPath('/starbase')} onClick={(e) => { e.preventDefault(); tenantNavigate('/starbase'); }}>Starbase</a>
         </BreadcrumbItem>
         <BreadcrumbItem isCurrentPage={!folderId && (!contentsQ.data?.breadcrumb || contentsQ.data.breadcrumb.length === 0)}>
           {folderId || (contentsQ.data?.breadcrumb && contentsQ.data.breadcrumb.length > 0) ? (
-            <a href={`/starbase/project/${projectId}`} onClick={(e) => { e.preventDefault(); searchParams.delete('folder'); setSearchParams(searchParams); }}>
+            <a href={toTenantPath(`/starbase/project/${projectId}`)} onClick={(e) => { e.preventDefault(); searchParams.delete('folder'); setSearchParams(searchParams); }}>
               {projectName}
             </a>
           ) : (
@@ -812,7 +815,7 @@ export default function ProjectDetail() {
                 searchParams.set('folder', id)
                 setSearchParams(searchParams)
               }}
-              onOpenEditor={(id) => navigate(`/starbase/editor/${id}`)}
+              onOpenEditor={(id) => tenantNavigate(`/starbase/editor/${id}`)}
               resolveUpdatedByLabel={resolveUpdatedByLabel}
               uncommittedFileIdsSet={uncommittedFileIdsSet}
               uncommittedFolderIdsSet={uncommittedFolderIdsSet}

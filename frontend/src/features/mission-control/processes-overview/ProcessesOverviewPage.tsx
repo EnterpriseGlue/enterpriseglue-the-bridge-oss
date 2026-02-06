@@ -1,5 +1,6 @@
 import React from 'react'
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
+import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
 import { Pause, Play, TrashCan, Renew, Migrate, Close } from '@carbon/icons-react'
 import { BreadcrumbItem } from '@carbon/react'
 import { BreadcrumbBar } from '../../shared/components/BreadcrumbBar'
@@ -29,7 +30,7 @@ const DEFAULT_SPLIT_SIZE = '75%'
 const Viewer = React.lazy(() => import('../../shared/components/Viewer'))
 
 export default function ProcessesOverviewPage() {
-  const navigate = useNavigate()
+  const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const [searchParams, setSearchParams] = useSearchParams()
   const { alertState, showAlert, closeAlert } = useAlert()
@@ -512,17 +513,17 @@ export default function ProcessesOverviewPage() {
       {/* Breadcrumb Bar - shared component */}
       <BreadcrumbBar>
         <BreadcrumbItem>
-          <a href="/mission-control" onClick={(e) => { e.preventDefault(); navigate('/mission-control'); }}>
+          <a href={toTenantPath('/mission-control')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control'); }}>
             Mission Control
           </a>
         </BreadcrumbItem>
         {fromInstanceId && (
           <BreadcrumbItem>
             <a
-              href={`/mission-control/processes/instances/${fromInstanceId}`}
+              href={toTenantPath(`/mission-control/processes/instances/${fromInstanceId}`)}
               onClick={(e) => {
                 e.preventDefault()
-                navigate(`/mission-control/processes/instances/${fromInstanceId}`)
+                tenantNavigate(`/mission-control/processes/instances/${fromInstanceId}`)
               }}
             >
               Instance {fromInstanceId.substring(0, 8)}...
@@ -531,7 +532,7 @@ export default function ProcessesOverviewPage() {
         )}
         <BreadcrumbItem isCurrentPage={!selectedProcess}>
           {selectedProcess ? (
-            <a href="/mission-control/processes" onClick={(e) => { e.preventDefault(); setSelectedProcess(null); }}>
+            <a href={toTenantPath('/mission-control/processes')} onClick={(e) => { e.preventDefault(); setSelectedProcess(null); }}>
               Processes
             </a>
           ) : (
@@ -719,7 +720,7 @@ export default function ProcessesOverviewPage() {
                     return
                   }
                   const selectedVersion = uniqueVers[0]
-                  navigate('/mission-control/migration/new', { state: { instanceIds: ids, selectedKey: unique[0] || currentKey, selectedVersion } })
+                  tenantNavigate('/mission-control/migration/new', { state: { instanceIds: ids, selectedKey: unique[0] || currentKey, selectedVersion } })
                 }}
                 aria-label="Migrate"
                 title="Migrate"
