@@ -1,6 +1,6 @@
 /**
  * Notifications module
  */
-import notificationsRoute from './notifications.js';
+import notificationsRoute from './routes/notifications.js';
 
 export { notificationsRoute };

@@ -297,15 +297,17 @@ export class EngineService {
       throw new Error('Member not found');
     }
 
-    await memberRepo.delete({ engineId, userId });
+    await dataSource.transaction(async (manager) => {
+      await manager.getRepository(EngineMember).delete({ engineId, userId });
 
-    await memberRepo.insert({
-      id: generateId(),
-      engineId,
-      userId,
-      role: newRole,
-      grantedById: existing.grantedById,
-      createdAt: Date.now(),
+      await manager.getRepository(EngineMember).insert({
+        id: generateId(),
+        engineId,
+        userId,
+        role: newRole,
+        grantedById: existing.grantedById,
+        createdAt: Date.now(),
+      });
     });
   }
 

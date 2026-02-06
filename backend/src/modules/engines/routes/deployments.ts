@@ -38,7 +38,7 @@ import type {
   ResourceMeta,
   DmnDebugMeta,
   FileGitCommitInfo,
-} from '../../types/deployment.js'
+} from '../../../types/deployment.js'
 import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES } from '@shared/constants/roles.js'
 
 // Validation schemas

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { apiLimiter } from '@shared/middleware/rateLimiter.js';
-import { randomUUID } from 'crypto';
+import { generateId } from '@shared/utils/id.js';
 import { z } from 'zod';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { requireFileAccess } from '@shared/middleware/projectAuth.js';
@@ -39,7 +39,7 @@ r.get('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validateP
     if (file) {
       const now = unixTimestamp();
       await versionRepo.insert({
-        id: randomUUID(),
+        id: generateId(),
         fileId,
         author: 'system',
         message: 'Initial import',

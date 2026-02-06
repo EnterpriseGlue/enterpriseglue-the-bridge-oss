@@ -3,13 +3,13 @@
  * Centralized service for folder operations
  */
 
-import { randomUUID } from 'crypto';
 import { getDataSource } from '@shared/db/data-source.js';
 import { Folder } from '@shared/db/entities/Folder.js';
 import { File } from '@shared/db/entities/File.js';
 import { IsNull, Raw } from 'typeorm';
 import { Errors } from '@shared/middleware/errorHandler.js';
-import { unixTimestamp } from '@shared/utils/id.js';
+import { generateId, unixTimestamp } from '@shared/utils/id.js';
+import { caseInsensitiveColumn } from '@shared/db/adapters/QueryHelpers.js';
 
 export interface CreateFolderInput {
   projectId: string;
@@ -73,7 +73,7 @@ class FolderServiceImpl {
     const dataSource = await getDataSource();
     const folderRepo = dataSource.getRepository(Folder);
     const now = unixTimestamp();
-    const folderId = randomUUID();
+    const folderId = generateId();
     const trimmedName = input.name.trim();
 
     // Check for duplicate names (case-insensitive)
@@ -83,7 +83,7 @@ class FolderServiceImpl {
         ? 'f.parentFolderId = :parentFolderId' 
         : 'f.parentFolderId IS NULL', 
         input.parentFolderId ? { parentFolderId: input.parentFolderId } : {})
-      .andWhere('LOWER(f.name) = LOWER(:name)', { name: trimmedName })
+      .andWhere(`${caseInsensitiveColumn('f.name')} = ${caseInsensitiveColumn(':name')}`, { name: trimmedName })
       .getMany();
 
     if (dupCheck.length > 0) {
@@ -135,7 +135,7 @@ class FolderServiceImpl {
           ? 'f.parentFolderId = :parentFolderId' 
           : 'f.parentFolderId IS NULL',
           targetParentId ? { parentFolderId: targetParentId } : {})
-        .andWhere('LOWER(f.name) = LOWER(:name)', { name: trimmedName })
+        .andWhere(`${caseInsensitiveColumn('f.name')} = ${caseInsensitiveColumn(':name')}`, { name: trimmedName })
         .andWhere('f.id != :folderId', { folderId: input.folderId });
       
       const dupCheck = await qb.getMany();

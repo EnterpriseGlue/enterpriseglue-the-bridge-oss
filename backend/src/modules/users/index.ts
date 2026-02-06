@@ -3,7 +3,7 @@
  * Admin-only CRUD operations for user accounts
  */
 
-import usersRoute from './users.js';
+import usersRoute from './routes/users.js';
 
 export {
   usersRoute,

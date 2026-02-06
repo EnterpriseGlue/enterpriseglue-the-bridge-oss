@@ -17,6 +17,7 @@ import { User } from '@shared/db/entities/User.js';
 // Invitation and Tenant entities removed - multi-tenancy is EE-only
 import { IsNull } from 'typeorm';
 import { generateId } from '@shared/utils/id.js';
+import { addCaseInsensitiveEquals } from '@shared/db/adapters/QueryHelpers.js';
 import { sendInvitationEmail } from '@shared/services/email/index.js';
 import { config } from '@shared/config/index.js';
 import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES, MANAGE_ROLES } from '@shared/constants/roles.js';
@@ -127,9 +128,9 @@ router.post(
       const dataSource = await getDataSource();
       const userRepo = dataSource.getRepository(User);
 
-      const targetUser = await userRepo.createQueryBuilder('u')
-        .where('LOWER(u.email) = :email', { email: emailLower })
-        .getOne();
+      let targetQb = userRepo.createQueryBuilder('u');
+      targetQb = addCaseInsensitiveEquals(targetQb, 'u', 'email', 'email', emailLower);
+      const targetUser = await targetQb.getOne();
 
       // If user exists, add them directly as a member
       if (targetUser) {
@@ -285,9 +286,9 @@ router.post(
         // Find user by email
         const dataSource = await getDataSource();
         const userRepo = dataSource.getRepository(User);
-        const targetUser = await userRepo.createQueryBuilder('u')
-          .where('LOWER(u.email) = LOWER(:email)', { email })
-          .getOne();
+        let delegateQb = userRepo.createQueryBuilder('u');
+        delegateQb = addCaseInsensitiveEquals(delegateQb, 'u', 'email', 'email', email);
+        const targetUser = await delegateQb.getOne();
 
         if (!targetUser) {
           throw Errors.notFound('User with this email');
@@ -331,9 +332,9 @@ router.post(
       // Find new owner
       const dataSource = await getDataSource();
       const userRepo = dataSource.getRepository(User);
-      const newOwner = await userRepo.createQueryBuilder('u')
-        .where('LOWER(u.email) = LOWER(:email)', { email: newOwnerEmail })
-        .getOne();
+      let ownerQb = userRepo.createQueryBuilder('u');
+      ownerQb = addCaseInsensitiveEquals(ownerQb, 'u', 'email', 'email', newOwnerEmail);
+      const newOwner = await ownerQb.getOne();
 
       if (!newOwner) {
         throw Errors.notFound('User with this email');

@@ -1,12 +1,16 @@
 import { Router } from 'express';
 import { asyncHandler } from '@shared/middleware/errorHandler.js';
-import { getConnectionPool } from '@shared/db/db-pool.js';
+import { getDataSource } from '@shared/db/data-source.js';
+import { SsoProvider } from '@shared/db/entities/SsoProvider.js';
 
 const router = Router();
 
 /**
  * GET /api/t/:tenantSlug/auth/sso-config
  * Returns tenant SSO enforcement configuration
+ *
+ * OSS single-tenant mode: derives ssoRequired from whether any SSO providers
+ * are enabled. Full tenant-based SSO enforcement is an EE-only feature.
  */
 router.get('/api/t/:tenantSlug/auth/sso-config', asyncHandler(async (req, res) => {
   const tenantSlug = String(req.params.tenantSlug || '').trim();
@@ -14,21 +18,12 @@ router.get('/api/t/:tenantSlug/auth/sso-config', asyncHandler(async (req, res) =
     return res.status(400).json({ error: 'Tenant slug is required' });
   }
 
-  const pool = getConnectionPool();
-  const tenantResult = await pool.query<{ id: string }>(
-    'SELECT id FROM main.tenants WHERE slug = $1',
-    [tenantSlug]
-  );
-  const tenantId = tenantResult.rows[0]?.id;
-  if (!tenantId) {
-    return res.status(404).json({ error: 'Tenant not found' });
-  }
+  const dataSource = await getDataSource();
+  const ssoProviderRepo = dataSource.getRepository(SsoProvider);
 
-  const settingsResult = await pool.query<{ sso_required: boolean }>(
-    'SELECT sso_required FROM main.tenant_settings WHERE tenant_id = $1',
-    [tenantId]
-  );
-  const ssoRequired = Boolean(settingsResult.rows[0]?.sso_required);
+  // In OSS single-tenant mode, SSO is considered required if any SSO provider is enabled
+  const enabledCount = await ssoProviderRepo.count({ where: { enabled: true } });
+  const ssoRequired = enabledCount > 0;
 
   return res.json({ ssoRequired });
 }));

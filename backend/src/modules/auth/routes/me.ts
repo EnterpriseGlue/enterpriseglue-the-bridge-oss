@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { apiLimiter } from '@shared/middleware/rateLimiter.js';
-import { asyncHandler } from '@shared/middleware/errorHandler.js';
+import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { requireAuth } from '@shared/middleware/auth.js';
@@ -25,7 +25,7 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
   const user = await userRepo.findOneBy({ id: req.user!.userId });
 
   if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+    throw Errors.notFound('User');
   }
 
   const capabilities = await buildUserCapabilities({
@@ -81,7 +81,7 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
   const user = await userRepo.findOneBy({ id: userId });
 
   if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+    throw Errors.notFound('User');
   }
 
   await logAudit({

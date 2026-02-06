@@ -8,7 +8,7 @@ import { logger } from '@shared/utils/logger.js';
 import { config } from '@shared/config/index.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
-import { randomUUID } from 'crypto';
+import { generateId } from '@shared/utils/id.js';
 import { ssoClaimsMappingService, type SsoClaims } from './platform-admin/SsoClaimsMappingService.js';
 import { ssoProviderService } from './platform-admin/SsoProviderService.js';
 
@@ -102,7 +102,7 @@ export async function getGoogleAuthorizationUrl(state?: string): Promise<string>
   return client.generateAuthUrl({
     access_type: 'offline',
     scope: scopes,
-    state: state || randomUUID(),
+    state: state || generateId(),
     prompt: 'select_account',
   });
 }
@@ -246,7 +246,7 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo) {
   }
   
   // New user - create account with SSO-resolved role
-  const userId = randomUUID();
+  const userId = generateId();
   
   await userRepo.insert({
     id: userId,

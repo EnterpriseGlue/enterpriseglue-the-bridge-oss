@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
-import { randomUUID } from 'node:crypto'
+import { generateId } from '@shared/utils/id.js'
+import { z } from 'zod'
 import { getDataSource } from '@shared/db/data-source.js'
 import { Engine } from '@shared/db/entities/Engine.js'
 import { SavedFilter } from '@shared/db/entities/SavedFilter.js'
@@ -8,9 +9,57 @@ import { In, Not, IsNull } from 'typeorm'
 import { fetch } from 'undici'
 import { requireAuth } from '@shared/middleware/auth.js'
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js'
+import { validateBody, validateParams } from '@shared/middleware/validate.js'
 import { apiLimiter, engineLimiter } from '@shared/middleware/rateLimiter.js'
 import { engineService } from '@shared/services/platform-admin/index.js'
 import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES } from '@shared/constants/roles.js'
+
+// Validation schemas
+const engineIdParamSchema = z.object({ id: z.string().min(1) })
+
+const createEngineBodySchema = z.object({
+  name: z.string().min(1).max(255),
+  baseUrl: z.string().min(1).url(),
+  type: z.string().default('camunda7'),
+  authType: z.string().optional(),
+  username: z.string().nullable().optional(),
+  passwordEnc: z.string().nullable().optional(),
+  version: z.string().nullable().optional(),
+  environmentTagId: z.string().nullable().optional(),
+})
+
+const updateEngineBodySchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  baseUrl: z.string().min(1).url().optional(),
+  type: z.string().optional(),
+  authType: z.string().optional(),
+  username: z.string().nullable().optional(),
+  passwordEnc: z.string().nullable().optional(),
+  version: z.string().nullable().optional(),
+  environmentTagId: z.string().nullable().optional(),
+})
+
+const createSavedFilterBodySchema = z.object({
+  name: z.string().min(1).max(255),
+  engineId: z.string().min(1),
+  defKeys: z.array(z.string()).default([]),
+  version: z.string().nullable().optional(),
+  active: z.boolean().default(false),
+  incidents: z.boolean().default(false),
+  completed: z.boolean().default(false),
+  canceled: z.boolean().default(false),
+})
+
+const updateSavedFilterBodySchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  engineId: z.string().min(1).optional(),
+  defKeys: z.array(z.string()).optional(),
+  version: z.string().nullable().optional(),
+  active: z.boolean().optional(),
+  incidents: z.boolean().optional(),
+  completed: z.boolean().optional(),
+  canceled: z.boolean().optional(),
+})
 
 const r = Router()
 
@@ -45,25 +94,25 @@ r.get('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (re
   }))
 }))
 
-r.post('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines', engineLimiter, requireAuth, validateBody(createEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const now = Date.now()
-  const id = randomUUID()
+  const id = generateId()
   // Set tenantId from request context (OSS: default-tenant-id, EE: actual tenant)
   const tenantId = req.tenant?.tenantId || null
   const payload = {
     id,
-    name: String(req.body?.name || ''),
-    baseUrl: String(req.body?.baseUrl || ''),
-    type: String(req.body?.type || 'camunda7'),
-    authType: String(req.body?.authType || (req.body?.username ? 'basic' : 'none')),
-    username: req.body?.username ?? null,
-    passwordEnc: req.body?.passwordEnc ?? null,
+    name: req.body.name,
+    baseUrl: req.body.baseUrl,
+    type: req.body.type,
+    authType: req.body.authType || (req.body.username ? 'basic' : 'none'),
+    username: req.body.username ?? null,
+    passwordEnc: req.body.passwordEnc ?? null,
     ownerId: req.user!.userId,
     delegateId: null,
-    version: req.body?.version ?? null,
-    environmentTagId: req.body?.environmentTagId || null,
+    version: req.body.version ?? null,
+    environmentTagId: req.body.environmentTagId || null,
     environmentLocked: false,
     tenantId,
     createdAt: now,
@@ -76,49 +125,49 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (r
 r.get('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
-  const rows = await engineRepo.find({ where: { id: req.params.id } })
-  if (!rows.length) throw Errors.notFound('Engine')
-  if (!(await canViewEngine(req, String(rows[0].id)))) throw Errors.forbidden()
+  const engine = await engineRepo.findOneBy({ id: req.params.id })
+  if (!engine) throw Errors.notFound('Engine')
+  if (!(await canViewEngine(req, String(engine.id)))) throw Errors.forbidden()
 
-  const role = await engineService.getEngineRole(req.user!.userId, String(rows[0].id))
+  const role = await engineService.getEngineRole(req.user!.userId, String(engine.id))
   if (role !== 'owner' && role !== 'delegate') {
-    return res.json(redactEngineSecrets(rows[0]))
+    return res.json(redactEngineSecrets(engine))
   }
 
-  res.json(rows[0])
+  res.json(engine)
 }))
 
-r.put('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(engineIdParamSchema), validateBody(updateEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
-  const existing = await engineRepo.find({ where: { id: req.params.id }, take: 1 })
-  if (!existing.length) throw Errors.notFound('Engine')
-  if (!(await canManageEngine(req, String(existing[0].id)))) throw Errors.forbidden()
+  const existing = await engineRepo.findOneBy({ id: req.params.id })
+  if (!existing) throw Errors.notFound('Engine')
+  if (!(await canManageEngine(req, String(existing.id)))) throw Errors.forbidden()
 
   const now = Date.now()
   const updates: any = {
-    name: req.body?.name,
-    baseUrl: req.body?.baseUrl,
-    type: req.body?.type,
-    authType: req.body?.authType,
-    username: req.body?.username,
-    passwordEnc: req.body?.passwordEnc,
-    version: req.body?.version,
-    environmentTagId: req.body?.environmentTagId || null,
+    name: req.body.name,
+    baseUrl: req.body.baseUrl,
+    type: req.body.type,
+    authType: req.body.authType,
+    username: req.body.username,
+    passwordEnc: req.body.passwordEnc,
+    version: req.body.version,
+    environmentTagId: req.body.environmentTagId || null,
     updatedAt: now,
   }
   await engineRepo.update({ id: req.params.id }, updates)
-  const rows = await engineRepo.find({ where: { id: req.params.id } })
-  if (!rows.length) throw Errors.notFound('Engine')
-  res.json(rows[0])
+  const updated = await engineRepo.findOneBy({ id: req.params.id })
+  if (!updated) throw Errors.notFound('Engine')
+  res.json(updated)
 }))
 
 r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
-  const existing = await engineRepo.find({ where: { id: req.params.id }, take: 1 })
-  if (!existing.length) throw Errors.notFound('Engine')
-  if (!(await canManageEngine(req, String(existing[0].id)))) throw Errors.forbidden()
+  const existing = await engineRepo.findOneBy({ id: req.params.id })
+  if (!existing) throw Errors.notFound('Engine')
+  if (!(await canManageEngine(req, String(existing.id)))) throw Errors.forbidden()
   await engineRepo.delete({ id: req.params.id })
   res.status(204).end()
 }))
@@ -128,11 +177,10 @@ r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, asyncHandler
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const healthRepo = dataSource.getRepository(EngineHealth)
-  const rows = await engineRepo.find({ where: { id: req.params.id } })
-  if (!rows.length) throw Errors.notFound('Engine')
+  const eng = await engineRepo.findOneBy({ id: req.params.id })
+  if (!eng) throw Errors.notFound('Engine')
 
-  if (!(await canManageEngine(req, String(rows[0].id)))) throw Errors.forbidden()
-  const eng = rows[0]
+  if (!(await canManageEngine(req, String(eng.id)))) throw Errors.forbidden()
   const base = String(eng.baseUrl || '')
   const url = base.replace(/\/$/, '') + '/version'
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -151,13 +199,13 @@ r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, asyncHandler
       status = 'connected'
       try { const data: any = await r.json(); version = data?.version || null } catch { version = null }
       await engineRepo.update({ id: req.params.id }, { version: version || null, updatedAt: Date.now() })
-      const rec = { id: randomUUID(), engineId: eng.id, status, latencyMs, message: null, checkedAt: Date.now() }
+      const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message: null, checkedAt: Date.now() }
       await healthRepo.insert(rec)
       return res.json({ status, latencyMs, version, checkedAt: rec.checkedAt })
     } else {
       status = 'disconnected'
       message = `${r.status} ${r.statusText}`
-      const rec = { id: randomUUID(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
+      const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
       await healthRepo.insert(rec)
       return res.json({ status, latencyMs, version: null, message, checkedAt: rec.checkedAt })
     }
@@ -165,7 +213,7 @@ r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, asyncHandler
     const latencyMs = Date.now() - started
     status = 'disconnected'
     message = e?.message || 'Failed to connect'
-    const rec = { id: randomUUID(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
+    const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
     await healthRepo.insert(rec)
     return res.json({ status, latencyMs, version: null, message, checkedAt: rec.checkedAt })
   }
@@ -202,8 +250,7 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, asyncHandle
   const rows = await healthRepo.find({ where: { engineId: req.params.id } })
   if (rows.length === 0) {
     // Auto-ping once if no health yet
-    const engRows = await engineRepo.find({ where: { id: req.params.id } })
-    const eng = engRows[0]
+    const eng = await engineRepo.findOneBy({ id: req.params.id })
     if (eng) {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (eng.username) {
@@ -223,13 +270,13 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, asyncHandle
         } else {
           message = `${r.status} ${r.statusText}`
         }
-        const rec = { id: randomUUID(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
+        const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
         await healthRepo.insert(rec)
         if (version && !eng.version) await engineRepo.update({ id: eng.id }, { version, updatedAt: Date.now() })
         return res.json({ ...rec, version })
       } catch (e: any) {
         const latencyMs = Date.now() - started
-        const rec = { id: randomUUID(), engineId: eng.id, status: 'disconnected' as const, latencyMs, message: e?.message || 'Failed to connect', checkedAt: Date.now() }
+        const rec = { id: generateId(), engineId: eng.id, status: 'disconnected' as const, latencyMs, message: e?.message || 'Failed to connect', checkedAt: Date.now() }
         await healthRepo.insert(rec)
         return res.json({ ...rec, version: null })
       }
@@ -256,26 +303,25 @@ r.get('/engines-api/saved-filters', apiLimiter, requireAuth, asyncHandler(async 
   })))
 }))
 
-r.post('/engines-api/saved-filters', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/saved-filters', apiLimiter, requireAuth, validateBody(createSavedFilterBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
   const now = Date.now()
-  const id = randomUUID()
-  const engineId = String(req.body?.engineId || '')
-  if (!engineId) throw Errors.validation('engineId is required');
+  const id = generateId()
+  const { engineId, name, defKeys, version, active, incidents, completed, canceled } = req.body
 
   if (!(await canViewEngine(req, engineId))) throw Errors.forbidden()
 
   const payload = {
     id,
-    name: String(req.body?.name || ''),
+    name,
     engineId,
-    defKeys: JSON.stringify(req.body?.defKeys || []),
-    version: req.body?.version ?? null,
-    active: !!req.body?.active,
-    incidents: !!req.body?.incidents,
-    completed: !!req.body?.completed,
-    canceled: !!req.body?.canceled,
+    defKeys: JSON.stringify(defKeys),
+    version: version ?? null,
+    active,
+    incidents,
+    completed,
+    canceled,
     createdAt: now,
   }
   await filterRepo.insert(payload)
@@ -285,48 +331,46 @@ r.post('/engines-api/saved-filters', apiLimiter, requireAuth, asyncHandler(async
 r.get('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
-  const rows = await filterRepo.find({ where: { id: req.params.id } })
-  if (!rows.length) throw Errors.notFound('Engine')
-  const row = rows[0]
+  const filter = await filterRepo.findOneBy({ id: req.params.id })
+  if (!filter) throw Errors.notFound('Saved filter')
 
-  if (!(await canViewEngine(req, String(row.engineId)))) throw Errors.forbidden()
+  if (!(await canViewEngine(req, String(filter.engineId)))) throw Errors.forbidden()
 
-  res.json({ ...row, defKeys: JSON.parse(row.defKeys || '[]') })
+  res.json({ ...filter, defKeys: JSON.parse(filter.defKeys || '[]') })
 }))
 
-r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, validateParams(engineIdParamSchema), validateBody(updateSavedFilterBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
-  const existing = await filterRepo.find({ where: { id: req.params.id }, take: 1 })
-  if (!existing.length) throw Errors.notFound('Engine')
-  if (!(await canViewEngine(req, String(existing[0].engineId)))) throw Errors.forbidden()
+  const existing = await filterRepo.findOneBy({ id: req.params.id })
+  if (!existing) throw Errors.notFound('Saved filter')
+  if (!(await canViewEngine(req, String(existing.engineId)))) throw Errors.forbidden()
 
-  const newEngineId = typeof req.body?.engineId === 'string' && req.body.engineId.trim() ? String(req.body.engineId) : null
+  const newEngineId = req.body.engineId || null
   if (newEngineId && !(await canViewEngine(req, newEngineId))) throw Errors.forbidden()
 
   const updates: any = {
-    name: req.body?.name,
+    name: req.body.name,
     engineId: newEngineId || undefined,
-    defKeys: req.body?.defKeys ? JSON.stringify(req.body.defKeys) : undefined,
-    version: req.body?.version,
-    active: req.body?.active,
-    incidents: req.body?.incidents,
-    completed: req.body?.completed,
-    canceled: req.body?.canceled,
+    defKeys: req.body.defKeys ? JSON.stringify(req.body.defKeys) : undefined,
+    version: req.body.version,
+    active: req.body.active,
+    incidents: req.body.incidents,
+    completed: req.body.completed,
+    canceled: req.body.canceled,
   }
   await filterRepo.update({ id: req.params.id }, updates)
-  const rows = await filterRepo.find({ where: { id: req.params.id } })
-  if (!rows.length) throw Errors.notFound('Engine')
-  const row = rows[0]
-  res.json({ ...row, defKeys: JSON.parse(row.defKeys || '[]') })
+  const updated = await filterRepo.findOneBy({ id: req.params.id })
+  if (!updated) throw Errors.notFound('Saved filter')
+  res.json({ ...updated, defKeys: JSON.parse(updated.defKeys || '[]') })
 }))
 
 r.delete('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
-  const existing = await filterRepo.find({ where: { id: req.params.id }, take: 1 })
-  if (!existing.length) throw Errors.notFound('Engine')
-  if (!(await canViewEngine(req, String(existing[0].engineId)))) throw Errors.forbidden()
+  const existing = await filterRepo.findOneBy({ id: req.params.id })
+  if (!existing) throw Errors.notFound('Saved filter')
+  if (!(await canViewEngine(req, String(existing.engineId)))) throw Errors.forbidden()
   await filterRepo.delete({ id: req.params.id })
   res.status(204).end()
 }))

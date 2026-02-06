@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
+import { generateId } from '@shared/utils/id.js';
+import { addCaseInsensitiveEquals } from '@shared/db/adapters/QueryHelpers.js';
 import { verifyPassword } from '@shared/utils/password.js';
 import { generateAccessToken, generateRefreshToken } from '@shared/utils/jwt.js';
 import bcrypt from 'bcryptjs';
@@ -34,9 +35,10 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   const refreshTokenRepo = dataSource.getRepository(RefreshToken);
 
   // Find user by email (case-insensitive)
-  const user = await userRepo.createQueryBuilder('u')
-    .where('LOWER(u.email) = LOWER(:email) AND u.isActive = true', { email })
-    .getOne();
+  let qb = userRepo.createQueryBuilder('u')
+    .where('u.isActive = true');
+  qb = addCaseInsensitiveEquals(qb, 'u', 'email', 'email', email);
+  const user = await qb.getOne();
 
   if (!user) {
     // Log failed login attempt
@@ -129,7 +131,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   const refreshToken = generateRefreshToken(user);
 
   // Store refresh token (hashed)
-  const refreshTokenId = randomUUID();
+  const refreshTokenId = generateId();
   const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
   const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
 

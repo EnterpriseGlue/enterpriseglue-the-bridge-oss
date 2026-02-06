@@ -9,7 +9,7 @@ import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { requirePermission } from '@shared/middleware/requirePermission.js';
-import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { asyncHandler, AppError, Errors } from '@shared/middleware/errorHandler.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { EmailSendConfig } from '@shared/db/entities/EmailSendConfig.js';
 import { generateId } from '@shared/utils/id.js';
@@ -158,8 +158,9 @@ router.post('/api/admin/email-configs', apiLimiter, requireAuth, requirePermissi
       updatedAt: now,
     });
   } catch (error: any) {
+    if (error instanceof AppError) throw error;
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      throw Errors.validation('Validation failed', error.errors);
     }
     logger.error('Create email config error:', error);
     throw Errors.internal('Failed to create email configuration');
@@ -181,7 +182,7 @@ router.patch('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePer
     const existing = await configRepo.findOneBy({ id });
 
     if (!existing) {
-      return res.status(404).json({ error: 'Email configuration not found' });
+      throw Errors.notFound('Email configuration');
     }
 
     const updates: any = {
@@ -215,8 +216,9 @@ router.patch('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePer
 
     res.json({ success: true });
   } catch (error: any) {
+    if (error instanceof AppError) throw error;
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      throw Errors.validation('Validation failed', error.errors);
     }
     logger.error('Update email config error:', error);
     throw Errors.internal('Failed to update email configuration');
@@ -239,11 +241,11 @@ router.delete('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePe
     });
 
     if (!existing) {
-      return res.status(404).json({ error: 'Email configuration not found' });
+      throw Errors.notFound('Email configuration');
     }
 
     if (existing.isDefault) {
-      return res.status(400).json({ error: 'Cannot delete the default email configuration' });
+      throw Errors.validation('Cannot delete the default email configuration');
     }
 
     await configRepo.delete({ id });
@@ -278,7 +280,7 @@ router.post('/api/admin/email-configs/:id/set-default', apiLimiter, requireAuth,
     const existing = await configRepo.findOneBy({ id });
 
     if (!existing) {
-      return res.status(404).json({ error: 'Email configuration not found' });
+      throw Errors.notFound('Email configuration');
     }
 
     // Unset all defaults
@@ -304,7 +306,7 @@ router.post('/api/admin/email-configs/:id/test', apiLimiter, requireAuth, requir
     const { toEmail } = req.body as { toEmail?: string };
     
     if (!toEmail) {
-      return res.status(400).json({ error: 'toEmail is required' });
+      throw Errors.validation('toEmail is required');
     }
 
     const dataSource = await getDataSource();
@@ -313,7 +315,7 @@ router.post('/api/admin/email-configs/:id/test', apiLimiter, requireAuth, requir
     const config = await configRepo.findOneBy({ id });
 
     if (!config) {
-      return res.status(404).json({ error: 'Email configuration not found' });
+      throw Errors.notFound('Email configuration');
     }
     const apiKey = decrypt(config.apiKeyEncrypted);
 
@@ -335,9 +337,10 @@ router.post('/api/admin/email-configs/:id/test', apiLimiter, requireAuth, requir
     if (sendResult.success) {
       res.json({ success: true, message: 'Test email sent successfully' });
     } else {
-      res.status(400).json({ success: false, error: sendResult.error });
+      throw Errors.badRequest(sendResult.error || 'Failed to send test email');
     }
   } catch (error: any) {
+    if (error instanceof AppError) throw error;
     logger.error('Test email config error:', error);
     throw Errors.internal(error?.message || 'Failed to send test email');
   }

@@ -3,7 +3,6 @@
  */
 
 import { logger } from '@shared/utils/logger.js'
-import { randomUUID } from 'node:crypto'
 import {
   camundaGet,
   deleteBatchById,

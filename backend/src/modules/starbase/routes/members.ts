@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import { logger } from '@shared/utils/logger.js';
+import { addCaseInsensitiveEquals, caseInsensitiveColumn } from '@shared/db/adapters/QueryHelpers.js';
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import { requireAuth } from '@shared/middleware/auth.js';
@@ -103,9 +104,12 @@ router.get(
       });
       const existingMemberIds = existingMemberRows.map((r) => r.userId);
 
+      const ciEmail = caseInsensitiveColumn('u.email');
+      const ciFirst = caseInsensitiveColumn('u.firstName');
+      const ciLast = caseInsensitiveColumn('u.lastName');
       const qb = userRepo.createQueryBuilder('u')
         .select(['u.id', 'u.email', 'u.firstName', 'u.lastName'])
-        .where('(LOWER(u.email) LIKE :q OR LOWER(u.firstName) LIKE :q OR LOWER(u.lastName) LIKE :q)', { q: `%${q.toLowerCase()}%` })
+        .where(`(${ciEmail} LIKE :q OR ${ciFirst} LIKE :q OR ${ciLast} LIKE :q)`, { q: `%${q.toLowerCase()}%` })
         .orderBy('u.email', 'ASC')
         .limit(20);
 
@@ -269,10 +273,10 @@ router.post(
       // Find user by email
       const dataSource = await getDataSource();
       const userRepo = dataSource.getRepository(User);
-      const targetUser = await userRepo.createQueryBuilder('u')
-        .select(['u.id', 'u.email'])
-        .where('LOWER(u.email) = :email', { email: emailLower })
-        .getOne();
+      let targetQb = userRepo.createQueryBuilder('u')
+        .select(['u.id', 'u.email']);
+      targetQb = addCaseInsensitiveEquals(targetQb, 'u', 'email', 'email', emailLower);
+      const targetUser = await targetQb.getOne();
 
       // If user exists, add them directly as a member
       if (targetUser) {

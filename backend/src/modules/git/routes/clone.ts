@@ -5,7 +5,6 @@
 
 import { Router, Request, Response } from 'express';
 import { apiLimiter } from '@shared/middleware/rateLimiter.js';
-import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
@@ -186,7 +185,7 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
       : repoInfo.name;
 
     // Create project
-    const projectId = randomUUID();
+    const projectId = generateId();
     const now = unixTimestamp();
 
     await projectRepo.insert({
@@ -269,7 +268,7 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
       const parentPath = pathParts.slice(0, -1).join('/');
       const parentId = parentPath ? folderMap.get(parentPath) : null;
 
-      const folderId = randomUUID();
+      const folderId = generateId();
       await folderRepo.insert({
         id: folderId,
         projectId,
@@ -326,7 +325,7 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
           
           logger.info('File type detection', { fileName, ext, fileType, contentBased: ext !== fileType });
 
-          const fileId = randomUUID();
+          const fileId = generateId();
           await fileRepo.insert({
             id: fileId,
             projectId,

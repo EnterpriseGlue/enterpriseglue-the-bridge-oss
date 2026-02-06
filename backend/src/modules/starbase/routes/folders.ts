@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
-import { randomUUID } from 'crypto'
+import { generateId } from '@shared/utils/id.js'
+import { caseInsensitiveColumn } from '@shared/db/adapters/QueryHelpers.js'
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js'
 import { requireAuth } from '@shared/middleware/auth.js'
 import { requireProjectAccess, requireProjectRole } from '@shared/middleware/projectAuth.js'
@@ -257,7 +258,7 @@ r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, val
   const parentFolderIdStr = parentFolderId || null;
   const trimmed = name.trim();
 
-  const id = randomUUID();
+  const id = generateId();
   const now = unixTimestamp();
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
@@ -267,7 +268,7 @@ r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, val
     where: {
       projectId,
       parentFolderId: parentFolderIdStr ? parentFolderIdStr : IsNull(),
-      name: Raw(alias => `lower(${alias}) = lower(:name)`, { name: trimmed })
+      name: Raw(alias => `${caseInsensitiveColumn(alias)} = ${caseInsensitiveColumn(':name')}`, { name: trimmed })
     },
     select: ['id']
   });
@@ -338,7 +339,7 @@ r.patch('/starbase-api/folders/:folderId', apiLimiter, requireAuth, validatePara
   const dupCheck = await folderRepo.createQueryBuilder('f')
     .where('f.projectId = :projectId', { projectId })
     .andWhere(newParent ? 'f.parentFolderId = :newParent' : 'f.parentFolderId IS NULL', { newParent })
-    .andWhere('lower(f.name) = lower(:newName)', { newName })
+    .andWhere(`${caseInsensitiveColumn('f.name')} = ${caseInsensitiveColumn(':newName')}`, { newName })
     .andWhere('f.id <> :folderId', { folderId })
     .select(['f.id'])
     .getMany();

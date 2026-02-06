@@ -8,7 +8,7 @@ import { logger } from '@shared/utils/logger.js';
 import { config } from '@shared/config/index.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
-import { randomUUID } from 'crypto';
+import { generateId } from '@shared/utils/id.js';
 import { ssoClaimsMappingService, type SsoClaims } from './platform-admin/SsoClaimsMappingService.js';
 
 /**
@@ -84,7 +84,7 @@ export async function getAuthorizationUrl(state?: string): Promise<string> {
   const authCodeUrlParameters: AuthorizationUrlRequest = {
     scopes: ['openid', 'profile', 'email', 'User.Read'],
     redirectUri: config.microsoftRedirectUri!,
-    state: state || randomUUID(), // CSRF protection
+    state: state || generateId(), // CSRF protection
     prompt: 'select_account', // Let user choose account
   };
 
@@ -228,7 +228,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
   }
 
   // New user - create account with SSO-resolved role
-  const userId = randomUUID();
+  const userId = generateId();
   
   await userRepo.insert({
     id: userId,

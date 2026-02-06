@@ -3,7 +3,7 @@
  * Encapsulates engine migration calls and local batch creation.
  */
 
-import { randomUUID } from 'crypto'
+import { generateId } from '@shared/utils/id.js'
 import { getDataSource } from '@shared/db/data-source.js'
 import { Batch } from '@shared/db/entities/Batch.js'
 import {
@@ -65,7 +65,7 @@ async function insertLocalBatch(type: string, camundaBatchId: string, payload: a
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const now = Date.now()
-  const id = randomUUID()
+  const id = generateId()
   const totalJobs = typeof engineDto?.totalJobs === 'number' ? engineDto.totalJobs : null
   const jobsCreated = typeof engineDto?.jobsCreated === 'number' ? engineDto.jobsCreated : null
   const invocationsPerBatchJob = typeof engineDto?.invocationsPerBatchJob === 'number' ? engineDto.invocationsPerBatchJob : null

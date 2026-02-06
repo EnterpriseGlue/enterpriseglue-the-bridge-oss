@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { randomUUID } from 'crypto';
+import { generateId, unixTimestamp } from '@shared/utils/id.js';
+import { z } from 'zod';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { validateBody, validateParams } from '@shared/middleware/validate.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { Project } from '@shared/db/entities/Project.js';
 import { File } from '@shared/db/entities/File.js';
@@ -16,6 +18,27 @@ import { extractBpmnProcessId, extractDmnDecisionId, updateStarbaseFileNameInXml
 import { projectMemberService } from '@shared/services/platform-admin/ProjectMemberService.js';
 import { fileOperationsLimiter, apiLimiter } from '@shared/middleware/rateLimiter.js';
 import type { ProjectRole } from '@enterpriseglue/contracts/roles';
+
+// Validation schemas
+const projectIdParamSchema = z.object({ projectId: z.string().uuid() });
+const fileIdParamSchema = z.object({ fileId: z.string().uuid() });
+
+const createFileBodySchema = z.object({
+  type: z.string().default('bpmn'),
+  name: z.string().min(1).max(255),
+  folderId: z.string().uuid().nullable().optional(),
+  xml: z.string().optional(),
+});
+
+const updateFileBodySchema = z.object({
+  xml: z.string().min(1),
+  prevUpdatedAt: z.number().optional(),
+});
+
+const patchFileBodySchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  folderId: z.string().uuid().nullable().optional(),
+});
 
 /**
  * Get folder breadcrumb trail
@@ -188,7 +211,7 @@ r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, asyncH
   const userId = req.user!.userId;
   
   if (!(await AuthorizationService.verifyProjectAccess(projectId, userId))) {
-    return res.status(404).json({ error: 'Project not found' });
+    throw Errors.notFound('Project');
   }
   
   const dataSource = await getDataSource();
@@ -223,7 +246,7 @@ r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, asyncH
  * If an explicit XML payload is provided, this acts as an import endpoint.
  * ✨ Migrated to TypeORM
  */
-r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileOperationsLimiter, asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(projectIdParamSchema), validateBody(createFileBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const { projectId } = req.params;
   const userId = req.user!.userId;
   
@@ -233,17 +256,17 @@ r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileO
     ['owner', 'delegate', 'developer', 'editor'] as ProjectRole[]
   )
   if (!canEditProject) {
-    return res.status(404).json({ error: 'Project not found' });
+    throw Errors.notFound('Project');
   }
   
   const { type = 'bpmn', name, folderId, xml: xmlBody } = (req.body || {}) as { type?: string; name?: string; folderId?: string | null; xml?: string };
   const fileType = String(type).toLowerCase() === 'dmn' ? 'dmn' : 'bpmn';
-  const now = Math.floor(Date.now() / 1000);
-  const fileId = randomUUID();
+  const now = unixTimestamp();
+  const fileId = generateId();
 
   const fileName = typeof name === 'string' ? name.trim() : '';
   if (!fileName) {
-    return res.status(400).json({ error: 'ValidationError', message: 'File name is required' });
+    throw Errors.validation('File name is required');
   }
   
   const xml0 = typeof xmlBody === 'string' && xmlBody.trim().length > 0
@@ -266,7 +289,7 @@ r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileO
     select: ['id']
   });
   if (dupCheck.length > 0) {
-    return res.status(409).json({ error: 'FileAlreadyExists', message: 'A file with this name already exists in this folder.' });
+    throw Errors.conflict('A file with this name already exists in this folder.');
   }
   
   const bpmnProcessId = fileType === 'bpmn' ? extractBpmnProcessId(xml) : null;
@@ -289,7 +312,7 @@ r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileO
   
   // Initial version v1
   await versionRepo.insert({
-    id: randomUUID(),
+    id: generateId(),
     fileId,
     author: 'system',
     message: 'Initial import',
@@ -317,7 +340,7 @@ r.get('/starbase-api/files/:fileId', apiLimiter, requireAuth, asyncHandler(async
   const userId = req.user!.userId;
   
   if (!(await AuthorizationService.verifyFileAccess(fileId, userId))) {
-    return res.status(404).json({ error: 'File not found' });
+    throw Errors.notFound('File');
   }
   
   const dataSource = await getDataSource();
@@ -329,7 +352,7 @@ r.get('/starbase-api/files/:fileId', apiLimiter, requireAuth, asyncHandler(async
     select: ['id', 'projectId', 'folderId', 'name', 'type', 'xml', 'createdAt', 'updatedAt', 'bpmnProcessId', 'dmnDecisionId']
   });
   
-  if (!found) return res.status(404).json({ message: 'Not found' });
+  if (!found) throw Errors.notFound('File');
   
   // Get project name
   const projectResult = await projectRepo.findOne({
@@ -366,7 +389,7 @@ r.get('/starbase-api/files/:fileId/download', apiLimiter, requireAuth, asyncHand
   const userId = req.user!.userId;
 
   if (!(await AuthorizationService.verifyFileAccess(fileId, userId))) {
-    return res.status(404).json({ error: 'File not found' });
+    throw Errors.notFound('File');
   }
 
   const dataSource = await getDataSource();
@@ -376,7 +399,7 @@ r.get('/starbase-api/files/:fileId/download', apiLimiter, requireAuth, asyncHand
     select: ['name', 'type', 'xml']
   });
   
-  if (!row) return res.status(404).json({ message: 'Not found' });
+  if (!row) throw Errors.notFound('File');
 
   const fileName = String(row.name || 'diagram') + (String(row.name || '').includes('.') ? '' : `.${String(row.type || 'bpmn')}`);
   res.setHeader('Content-Type', 'application/xml');
@@ -388,14 +411,13 @@ r.get('/starbase-api/files/:fileId/download', apiLimiter, requireAuth, asyncHand
  * Update file XML (autosave)
  * ✨ Migrated to TypeORM
  */
-r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimiter, asyncHandler(async (req: Request, res: Response) => {
+r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(fileIdParamSchema), validateBody(updateFileBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const { fileId } = req.params;
   const userId = req.user!.userId;
   
-  const { xml: xmlBody2, prevUpdatedAt } = (req.body || {}) as { xml?: string; prevUpdatedAt?: number };
-  if (typeof xmlBody2 !== 'string') return res.status(400).json({ message: 'xml required' });
+  const { xml: xmlBody2, prevUpdatedAt } = req.body;
 
-  const now = Math.floor(Date.now() / 1000);
+  const now = unixTimestamp();
   const dataSource = await getDataSource();
   const fileRepo = dataSource.getRepository(File);
   const versionRepo = dataSource.getRepository(Version);
@@ -405,7 +427,7 @@ r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimi
     where: { id: fileId },
     select: ['projectId', 'folderId', 'name', 'type', 'updatedAt', 'xml']
   });
-  if (!row) return res.status(404).json({ message: 'Not found' });
+  if (!row) throw Errors.notFound('File');
   
   const ty = String(row.type)
   const xml = ty === 'dmn' ? sanitizeDmnXml(xmlBody2) : (ty === 'bpmn' ? sanitizeBpmnXml(xmlBody2) : xmlBody2)
@@ -415,11 +437,11 @@ r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimi
     ['owner', 'delegate', 'developer', 'editor'] as ProjectRole[]
   )
   if (!canEditFile) {
-    return res.status(404).json({ error: 'File not found' });
+    throw Errors.notFound('File');
   }
   const currentUpdatedAt = Number(row.updatedAt);
   if (typeof prevUpdatedAt === 'number' && currentUpdatedAt !== prevUpdatedAt) {
-    return res.status(409).json({ message: 'conflict', currentUpdatedAt });
+    throw Errors.conflict('File was modified by another user');
   }
 
   // Ensure initial version exists for legacy files with no versions yet
@@ -427,7 +449,7 @@ r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimi
   
   if (versionsCount === 0) {
     await versionRepo.insert({
-      id: randomUUID(),
+      id: generateId(),
       fileId,
       author: 'system',
       message: 'Initial import',
@@ -465,16 +487,15 @@ r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimi
  * Rename file (metadata)
  * ✨ Migrated to TypeORM
  */
-r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { fileId} = req.params;
+r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(fileIdParamSchema), validateBody(patchFileBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const { fileId } = req.params;
   const userId = req.user!.userId;
   
-  const { name, folderId } = (req.body || {}) as { name?: string; folderId?: string | null };
+  const { name, folderId } = req.body;
   const newName = name !== undefined ? String(name).trim() : undefined;
-  const now = Math.floor(Date.now() / 1000);
+  const now = unixTimestamp();
   
-  if (newName === undefined && folderId === undefined) return res.status(400).json({ message: 'nothing to update' });
-  if (newName !== undefined && newName.length === 0) return res.status(400).json({ message: 'name required' });
+  if (newName === undefined && folderId === undefined) throw Errors.validation('Nothing to update');
 
   // Check file exists
   await ResourceService.getFileOrThrow(fileId);
@@ -487,7 +508,7 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, asyncHandler(asy
     select: ['projectId', 'name']
   });
   if (!projectResult) {
-    return res.status(404).json({ error: 'File not found' });
+    throw Errors.notFound('File');
   }
   const canEditFile = await projectMemberService.hasRole(
     String(projectResult.projectId),
@@ -495,7 +516,7 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, asyncHandler(asy
     ['owner', 'delegate', 'developer', 'editor'] as ProjectRole[]
   )
   if (!canEditFile) {
-    return res.status(404).json({ error: 'File not found' });
+    throw Errors.notFound('File');
   }
 
   // Build dynamic UPDATE
@@ -559,7 +580,7 @@ r.delete('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsL
     select: ['projectId']
   });
   if (!projectResult) {
-    return res.status(404).json({ error: 'File not found' });
+    throw Errors.notFound('File');
   }
   const canEditFile = await projectMemberService.hasRole(
     String(projectResult.projectId),
@@ -567,7 +588,7 @@ r.delete('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsL
     ['owner', 'delegate', 'developer', 'editor'] as ProjectRole[]
   )
   if (!canEditFile) {
-    return res.status(404).json({ error: 'File not found' });
+    throw Errors.notFound('File');
   }
 
   // Delete file and all its associated data using cascade delete service

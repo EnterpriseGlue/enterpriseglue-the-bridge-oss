@@ -9,7 +9,7 @@ import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { requirePermission } from '@shared/middleware/requirePermission.js';
-import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { asyncHandler, AppError, Errors } from '@shared/middleware/errorHandler.js';
 import { validateBody, validateParams } from '@shared/middleware/validate.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { EmailTemplate } from '@shared/db/entities/EmailTemplate.js';
@@ -36,21 +36,16 @@ const updateEmailPlatformNameSchema = z.object({
   emailPlatformName: z.string().min(1).max(120),
 });
 
-router.get('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), async (_req: Request, res: Response) => {
-  try {
-    const dataSource = await getDataSource();
-    const settingsRepo = dataSource.getRepository(PlatformSettings);
-    const settings = await settingsRepo.findOne({
-      where: { id: 'default' },
-      select: ['emailPlatformName'],
-    });
+router.get('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (_req: Request, res: Response) => {
+  const dataSource = await getDataSource();
+  const settingsRepo = dataSource.getRepository(PlatformSettings);
+  const settings = await settingsRepo.findOne({
+    where: { id: 'default' },
+    select: ['emailPlatformName'],
+  });
 
-    res.json({ emailPlatformName: settings?.emailPlatformName || 'EnterpriseGlue' });
-  } catch (error) {
-    logger.error('Get email platform name error:', error);
-    throw Errors.internal('Failed to get email platform name');
-  }
-});
+  res.json({ emailPlatformName: settings?.emailPlatformName || 'EnterpriseGlue' });
+}));
 
 router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateBody(updateEmailPlatformNameSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
@@ -77,6 +72,7 @@ router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePer
 
     res.json({ success: true });
   } catch (error: any) {
+    if (error instanceof AppError) throw error;
     if (error instanceof z.ZodError) {
       throw Errors.validation('Validation failed');
     }
@@ -90,25 +86,20 @@ router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePer
  * List all email templates (platform admin only)
  */
 router.get('/api/admin/email-templates', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const dataSource = await getDataSource();
-    const templateRepo = dataSource.getRepository(EmailTemplate);
-    const templates = await templateRepo.find({
-      select: ['id', 'type', 'name', 'subject', 'htmlTemplate', 'textTemplate', 'variables', 'isActive', 'createdAt', 'updatedAt'],
-      order: { type: 'ASC' },
-    });
+  const dataSource = await getDataSource();
+  const templateRepo = dataSource.getRepository(EmailTemplate);
+  const templates = await templateRepo.find({
+    select: ['id', 'type', 'name', 'subject', 'htmlTemplate', 'textTemplate', 'variables', 'isActive', 'createdAt', 'updatedAt'],
+    order: { type: 'ASC' },
+  });
 
-    // Parse variables JSON
-    const parsed = templates.map((t) => ({
-      ...t,
-      variables: JSON.parse(t.variables || '[]'),
-    }));
+  // Parse variables JSON
+  const parsed = templates.map((t) => ({
+    ...t,
+    variables: JSON.parse(t.variables || '[]'),
+  }));
 
-    res.json(parsed);
-  } catch (error) {
-    logger.error('List email templates error:', error);
-    throw Errors.internal('Failed to list email templates');
-  }
+  res.json(parsed);
 }));
 
 /**
@@ -116,25 +107,20 @@ router.get('/api/admin/email-templates', apiLimiter, requireAuth, requirePermiss
  * Get a single email template (platform admin only)
  */
 router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const dataSource = await getDataSource();
-    const templateRepo = dataSource.getRepository(EmailTemplate);
+  const { id } = req.params;
+  const dataSource = await getDataSource();
+  const templateRepo = dataSource.getRepository(EmailTemplate);
 
-    const template = await templateRepo.findOneBy({ id });
+  const template = await templateRepo.findOneBy({ id });
 
-    if (!template) {
-      throw Errors.notFound('Email template');
-    }
-
-    res.json({
-      ...template,
-      variables: JSON.parse(template.variables || '[]'),
-    });
-  } catch (error) {
-    logger.error('Get email template error:', error);
-    throw Errors.internal('Failed to get email template');
+  if (!template) {
+    throw Errors.notFound('Email template');
   }
+
+  res.json({
+    ...template,
+    variables: JSON.parse(template.variables || '[]'),
+  });
 }));
 
 /**
@@ -180,6 +166,7 @@ router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireP
 
     res.json({ success: true });
   } catch (error: any) {
+    if (error instanceof AppError) throw error;
     if (error instanceof z.ZodError) {
       throw Errors.validation('Validation failed');
     }
@@ -193,23 +180,22 @@ router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireP
  * Reset an email template to default (platform admin only)
  */
 router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const dataSource = await getDataSource();
-    const templateRepo = dataSource.getRepository(EmailTemplate);
-    const now = Date.now();
+  const { id } = req.params;
+  const dataSource = await getDataSource();
+  const templateRepo = dataSource.getRepository(EmailTemplate);
+  const now = Date.now();
 
-    const existing = await templateRepo.findOne({
-      where: { id },
-      select: ['type'],
-    });
+  const existing = await templateRepo.findOne({
+    where: { id },
+    select: ['type'],
+  });
 
-    if (!existing) {
-      throw Errors.notFound('Email template');
-    }
+  if (!existing) {
+    throw Errors.notFound('Email template');
+  }
 
-    // Default templates
-    const defaults: Record<string, { name: string; subject: string; htmlTemplate: string; textTemplate: string; variables: string }> = {
+  // Default templates
+  const defaults: Record<string, { name: string; subject: string; htmlTemplate: string; textTemplate: string; variables: string }> = {
       invite: {
         name: 'User Invitation',
         subject: "You've been invited to {{platformName}}",
@@ -451,24 +437,20 @@ router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, req
       },
     };
 
-    const templateType = existing.type;
-    const defaultTemplate = defaults[templateType];
+  const templateType = existing.type;
+  const defaultTemplate = defaults[templateType];
 
-    if (!defaultTemplate) {
-      throw Errors.validation('No default template available for this type');
-    }
-
-    await templateRepo.update({ id }, {
-      ...defaultTemplate,
-      updatedAt: now,
-      updatedByUserId: req.user!.userId,
-    });
-
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('Reset email template error:', error);
-    throw Errors.internal('Failed to reset email template');
+  if (!defaultTemplate) {
+    throw Errors.validation('No default template available for this type');
   }
+
+  await templateRepo.update({ id }, {
+    ...defaultTemplate,
+    updatedAt: now,
+    updatedByUserId: req.user!.userId,
+  });
+
+  res.json({ success: true });
 }));
 
 /**
@@ -476,59 +458,54 @@ router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, req
  * Preview an email template with sample data (platform admin only)
  */
 router.post('/api/admin/email-templates/:id/preview', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { variables } = req.body as { variables?: Record<string, string> };
-    const dataSource = await getDataSource();
-    const templateRepo = dataSource.getRepository(EmailTemplate);
-    const settingsRepo = dataSource.getRepository(PlatformSettings);
+  const { id } = req.params;
+  const { variables } = req.body as { variables?: Record<string, string> };
+  const dataSource = await getDataSource();
+  const templateRepo = dataSource.getRepository(EmailTemplate);
+  const settingsRepo = dataSource.getRepository(PlatformSettings);
 
-    const template = await templateRepo.findOneBy({ id });
+  const template = await templateRepo.findOneBy({ id });
 
-    if (!template) {
-      throw Errors.notFound('Email template');
-    }
-
-    const settings = await settingsRepo.findOne({
-      where: { id: 'default' },
-      select: ['emailPlatformName'],
-    });
-    const platformName = settings?.emailPlatformName || 'EnterpriseGlue';
-    
-    // Sample data for preview
-    const sampleData: Record<string, string> = {
-      platformName,
-      userName: 'John Doe',
-      inviterName: 'Jane Smith',
-      inviteLink: 'https://app.example.com/invite/abc123',
-      resetLink: 'https://app.example.com/reset/abc123',
-      verifyLink: 'https://app.example.com/verify/abc123',
-      loginLink: 'https://app.example.com/login',
-      expiresIn: '24 hours',
-      ...variables,
-    };
-
-    // Replace variables in template
-    let html = template.htmlTemplate;
-    let text = template.textTemplate || '';
-    let subject = template.subject;
-
-    for (const [key, value] of Object.entries(sampleData)) {
-      const regex = new RegExp(`{{${key}}}`, 'g');
-      html = html.replace(regex, value);
-      text = text.replace(regex, value);
-      subject = subject.replace(regex, value);
-    }
-
-    res.json({
-      subject,
-      html,
-      text,
-    });
-  } catch (error) {
-    logger.error('Preview email template error:', error);
-    throw Errors.internal('Failed to preview email template');
+  if (!template) {
+    throw Errors.notFound('Email template');
   }
+
+  const settings = await settingsRepo.findOne({
+    where: { id: 'default' },
+    select: ['emailPlatformName'],
+  });
+  const platformName = settings?.emailPlatformName || 'EnterpriseGlue';
+  
+  // Sample data for preview
+  const sampleData: Record<string, string> = {
+    platformName,
+    userName: 'John Doe',
+    inviterName: 'Jane Smith',
+    inviteLink: 'https://app.example.com/invite/abc123',
+    resetLink: 'https://app.example.com/reset/abc123',
+    verifyLink: 'https://app.example.com/verify/abc123',
+    loginLink: 'https://app.example.com/login',
+    expiresIn: '24 hours',
+    ...variables,
+  };
+
+  // Replace variables in template
+  let html = template.htmlTemplate;
+  let text = template.textTemplate || '';
+  let subject = template.subject;
+
+  for (const [key, value] of Object.entries(sampleData)) {
+    const regex = new RegExp(`{{${key}}}`, 'g');
+    html = html.replace(regex, value);
+    text = text.replace(regex, value);
+    subject = subject.replace(regex, value);
+  }
+
+  res.json({
+    subject,
+    html,
+    text,
+  });
 }));
 
 export default router;

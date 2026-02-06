@@ -30,41 +30,39 @@ export class CascadeDeleteService {
    */
   static async deleteProject(projectId: string): Promise<void> {
     const dataSource = await getDataSource();
-    const projectRepo = dataSource.getRepository(Project);
-    const folderRepo = dataSource.getRepository(Folder);
     const fileRepo = dataSource.getRepository(File);
-    const versionRepo = dataSource.getRepository(Version);
-    const commentRepo = dataSource.getRepository(Comment);
-    const gitRepoRepo = dataSource.getRepository(GitRepository);
     
-    // Delete VCS data first (separate database)
+    // Delete VCS data first (separate concern, outside transaction)
     await vcsService.deleteProject(projectId);
     
-    // Delete git repository metadata
-    await gitRepoRepo.delete({ projectId });
-    
-    // Get all files in project
+    // Collect file IDs before transaction (read-only)
     const filesResult = await fileRepo.find({ where: { projectId }, select: ['id'] });
     const fileIds = filesResult.map((row) => row.id);
     
-    // Delete comments for each file
-    for (const fileId of fileIds) {
-      await commentRepo.delete({ fileId });
-    }
-    
-    // Delete versions for each file
-    for (const fileId of fileIds) {
-      await versionRepo.delete({ fileId });
-    }
-    
-    // Delete all files in project
-    await fileRepo.delete({ projectId });
-    
-    // Delete all folders in project
-    await folderRepo.delete({ projectId });
-    
-    // Delete the project itself
-    await projectRepo.delete({ id: projectId });
+    // Delete all DB resources in a single transaction
+    await dataSource.transaction(async (manager) => {
+      // Delete git repository metadata
+      await manager.getRepository(GitRepository).delete({ projectId });
+      
+      // Delete comments for each file
+      for (const fileId of fileIds) {
+        await manager.getRepository(Comment).delete({ fileId });
+      }
+      
+      // Delete versions for each file
+      for (const fileId of fileIds) {
+        await manager.getRepository(Version).delete({ fileId });
+      }
+      
+      // Delete all files in project
+      await manager.getRepository(File).delete({ projectId });
+      
+      // Delete all folders in project
+      await manager.getRepository(Folder).delete({ projectId });
+      
+      // Delete the project itself
+      await manager.getRepository(Project).delete({ id: projectId });
+    });
   }
 
   /**
@@ -83,33 +81,32 @@ export class CascadeDeleteService {
    */
   static async deleteFolder(folderId: string): Promise<void> {
     const dataSource = await getDataSource();
-    const folderRepo = dataSource.getRepository(Folder);
-    const fileRepo = dataSource.getRepository(File);
-    const versionRepo = dataSource.getRepository(Version);
-    const commentRepo = dataSource.getRepository(Comment);
     
-    // Collect all folders and files in the subtree
+    // Collect all folders and files in the subtree (read-only, outside transaction)
     const subtree = await this.collectSubtree(folderId);
     
-    // Delete comments for each file
-    for (const fileId of subtree.files) {
-      await commentRepo.delete({ fileId });
-    }
-    
-    // Delete versions for each file
-    for (const fileId of subtree.files) {
-      await versionRepo.delete({ fileId });
-    }
-    
-    // Delete all files
-    for (const fileId of subtree.files) {
-      await fileRepo.delete({ id: fileId });
-    }
-    
-    // Delete folders bottom-up (children before parents)
-    for (const folderIdToDelete of subtree.folders.reverse()) {
-      await folderRepo.delete({ id: folderIdToDelete });
-    }
+    // Delete all resources in a single transaction
+    await dataSource.transaction(async (manager) => {
+      // Delete comments for each file
+      for (const fileId of subtree.files) {
+        await manager.getRepository(Comment).delete({ fileId });
+      }
+      
+      // Delete versions for each file
+      for (const fileId of subtree.files) {
+        await manager.getRepository(Version).delete({ fileId });
+      }
+      
+      // Delete all files
+      for (const fileId of subtree.files) {
+        await manager.getRepository(File).delete({ id: fileId });
+      }
+      
+      // Delete folders bottom-up (children before parents)
+      for (const folderIdToDelete of subtree.folders.reverse()) {
+        await manager.getRepository(Folder).delete({ id: folderIdToDelete });
+      }
+    });
   }
 
   /**
@@ -124,18 +121,18 @@ export class CascadeDeleteService {
    */
   static async deleteFile(fileId: string): Promise<void> {
     const dataSource = await getDataSource();
-    const fileRepo = dataSource.getRepository(File);
-    const versionRepo = dataSource.getRepository(Version);
-    const commentRepo = dataSource.getRepository(Comment);
     
-    // Delete comments
-    await commentRepo.delete({ fileId });
-    
-    // Delete versions
-    await versionRepo.delete({ fileId });
-    
-    // Delete file
-    await fileRepo.delete({ id: fileId });
+    // Delete all resources in a single transaction
+    await dataSource.transaction(async (manager) => {
+      // Delete comments
+      await manager.getRepository(Comment).delete({ fileId });
+      
+      // Delete versions
+      await manager.getRepository(Version).delete({ fileId });
+      
+      // Delete file
+      await manager.getRepository(File).delete({ id: fileId });
+    });
   }
 
   /**

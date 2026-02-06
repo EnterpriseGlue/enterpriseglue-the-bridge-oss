@@ -1,8 +1,9 @@
-import { randomUUID } from 'crypto';
 import { getDataSource } from './data-source.js';
 import { User } from './entities/User.js';
 import { config } from '@shared/config/index.js';
 import { hashPassword } from '@shared/utils/password.js';
+import { generateId } from '@shared/utils/id.js';
+import { addCaseInsensitiveEquals } from './adapters/QueryHelpers.js';
 
 /**
  * Bootstrap admin account on first run
@@ -25,7 +26,7 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
     // No users exist, create admin account
     console.log('🔧 Creating admin account...');
 
-    const adminId = randomUUID();
+    const adminId = generateId();
     const passwordHash = await hashPassword(config.adminPassword);
     const now = Date.now();
 
@@ -78,10 +79,9 @@ export async function backfillKnownUserProfiles(options: { allowPlatformAdmin?: 
   const lastName = 'Selman';
 
   try {
-    const user = await userRepo
-      .createQueryBuilder('user')
-      .where('LOWER(user.email) = LOWER(:email)', { email })
-      .getOne();
+    let qb = userRepo.createQueryBuilder('user');
+    qb = addCaseInsensitiveEquals(qb, 'user', 'email', 'email', email);
+    const user = await qb.getOne();
 
     if (!user) return;
 

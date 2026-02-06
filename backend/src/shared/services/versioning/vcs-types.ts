@@ -63,7 +63,7 @@ export function mapCommit(row: any): CommitInfo {
     hash: row.hash,
     versionNumber: row.versionNumber ?? null,
     isRemote: row.isRemote ?? false,
-    createdAt: row.createdAt,
+    createdAt: Number(row.createdAt),
   };
 }
 

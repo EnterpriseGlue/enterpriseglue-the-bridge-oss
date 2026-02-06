@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { logger } from '@shared/utils/logger.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
@@ -267,47 +266,46 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
   const userId = req.user!.userId;
   const { name } = req.body;
   const trimmed = name.trim();
-  const id = randomUUID();
+  const id = generateId();
   const now = unixTimestamp();
   const dataSource = await getDataSource();
-  const projectRepo = dataSource.getRepository(Project);
-  const projectMemberRepo = dataSource.getRepository(ProjectMember);
-  const projectMemberRoleRepo = dataSource.getRepository(ProjectMemberRole);
 
-  await projectRepo.insert({
-    id,
-    name: trimmed,
-    ownerId: userId,
-    createdAt: now,
-    updatedAt: now
+  await dataSource.transaction(async (manager) => {
+    await manager.getRepository(Project).insert({
+      id,
+      name: trimmed,
+      ownerId: userId,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    const membershipNow = now;
+    await manager.getRepository(ProjectMember).createQueryBuilder()
+      .insert()
+      .values({
+        id: generateId(),
+        projectId: id,
+        userId,
+        role: 'owner',
+        invitedById: null,
+        joinedAt: membershipNow,
+        createdAt: membershipNow,
+        updatedAt: membershipNow,
+      })
+      .orIgnore()
+      .execute();
+
+    await manager.getRepository(ProjectMemberRole).createQueryBuilder()
+      .insert()
+      .values({
+        projectId: id,
+        userId,
+        role: 'owner',
+        createdAt: membershipNow,
+      })
+      .orIgnore()
+      .execute();
   });
-
-  const membershipNow = Date.now();
-  await projectMemberRepo.createQueryBuilder()
-    .insert()
-    .values({
-      id: generateId(),
-      projectId: id,
-      userId,
-      role: 'owner',
-      invitedById: null,
-      joinedAt: membershipNow,
-      createdAt: membershipNow,
-      updatedAt: membershipNow,
-    })
-    .orIgnore()
-    .execute();
-
-  await projectMemberRoleRepo.createQueryBuilder()
-    .insert()
-    .values({
-      projectId: id,
-      userId,
-      role: 'owner',
-      createdAt: membershipNow,
-    })
-    .orIgnore()
-    .execute();
 
   res.json({ id, name: trimmed, ownerId: userId, createdAt: now, updatedAt: now });
 }));

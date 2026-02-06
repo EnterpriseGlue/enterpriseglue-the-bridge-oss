@@ -37,7 +37,7 @@ router.post('/api/auth/reset-password', apiLimiter, requireAuth, passwordResetLi
   // Validate new password complexity
   const validation = validatePassword(newPassword);
   if (!validation.valid) {
-    return res.status(400).json({ error: 'Password does not meet requirements', details: validation.errors });
+    throw Errors.validation('Password does not meet requirements', validation.errors);
   }
 
   const dataSource = await getDataSource();
@@ -47,19 +47,19 @@ router.post('/api/auth/reset-password', apiLimiter, requireAuth, passwordResetLi
   const user = await userRepo.findOneBy({ id: req.user!.userId });
   
   if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+    throw Errors.notFound('User');
   }
 
   // Verify current password
   const isValid = await verifyPassword(currentPassword, user.passwordHash!);
   if (!isValid) {
-    return res.status(401).json({ error: 'Current password is incorrect' });
+    throw Errors.unauthorized('Current password is incorrect');
   }
 
   // Check if new password is same as current
   const isSame = await verifyPassword(newPassword, user.passwordHash!);
   if (isSame) {
-    return res.status(400).json({ error: 'New password must be different from current password' });
+    throw Errors.validation('New password must be different from current password');
   }
 
   // Hash new password
@@ -136,7 +136,7 @@ router.post('/api/auth/change-password', apiLimiter, requireAuth, validateBody(c
   // Validate new password complexity
   const validation = validatePassword(newPassword);
   if (!validation.valid) {
-    return res.status(400).json({ error: 'Password does not meet requirements', details: validation.errors });
+    throw Errors.validation('Password does not meet requirements', validation.errors);
   }
 
   const dataSource = await getDataSource();
@@ -145,19 +145,19 @@ router.post('/api/auth/change-password', apiLimiter, requireAuth, validateBody(c
   const user = await userRepo.findOneBy({ id: req.user!.userId });
   
   if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+    throw Errors.notFound('User');
   }
 
   // Verify current password
   const isValid = await verifyPassword(currentPassword, user.passwordHash!);
   if (!isValid) {
-    return res.status(401).json({ error: 'Current password is incorrect' });
+    throw Errors.unauthorized('Current password is incorrect');
   }
 
   // Check if new password is same as current
   const isSame = await verifyPassword(newPassword, user.passwordHash!);
   if (isSame) {
-    return res.status(400).json({ error: 'New password must be different from current password' });
+    throw Errors.validation('New password must be different from current password');
   }
 
   // Hash new password

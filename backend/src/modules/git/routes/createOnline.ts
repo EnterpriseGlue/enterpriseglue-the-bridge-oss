@@ -6,7 +6,7 @@
 import { Router, Request, Response } from 'express';
 import { apiLimiter } from '@shared/middleware/rateLimiter.js';
 import { z } from 'zod';
-import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { asyncHandler, AppError, Errors } from '@shared/middleware/errorHandler.js';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { validateBody } from '@shared/middleware/validate.js';
 import { getDataSource } from '@shared/db/data-source.js';
@@ -114,10 +114,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
   }
   
   if (!accessToken) {
-    return res.status(401).json({ 
-      error: 'No credentials available. Please connect to the provider first or provide a token.',
-      code: 'NO_CREDENTIALS'
-    });
+    throw Errors.noCredentials('No credentials available. Please connect to the provider first or provide a token.');
   }
 
   try {
@@ -127,10 +124,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
     const isValid = await client.validateCredentials();
     
     if (!isValid) {
-      return res.status(401).json({ 
-        error: 'Invalid credentials. Please check your token or reconnect.',
-        code: 'INVALID_CREDENTIALS'
-      });
+      throw Errors.invalidCredentials('Invalid credentials. Please check your token or reconnect.');
     }
 
     // Step 2: Check for duplicate repository
@@ -141,11 +135,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
     
     const existingRepo = await client.getRepository(fullRepoName);
     if (existingRepo) {
-      return res.status(409).json({ 
-        error: `Repository '${repositoryName}' already exists${namespace ? ` in '${namespace}'` : ''}. Please choose a different name.`,
-        code: 'DUPLICATE_REPOSITORY',
-        field: 'repositoryName'
-      });
+      throw Errors.duplicate('Repository', 'repositoryName');
     }
 
     // Step 3: Create repository on remote provider
@@ -262,22 +252,16 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
     });
 
   } catch (error: any) {
+    if (error instanceof AppError) throw error;
     logger.error('Create online project failed', { userId, providerId, error });
     
     // Handle specific error types
     if (error.message?.includes('already exists')) {
-      return res.status(409).json({
-        error: error.message,
-        code: 'DUPLICATE_REPOSITORY',
-        field: 'repositoryName'
-      });
+      throw Errors.duplicate('Repository', 'repositoryName');
     }
     
     if (error.message?.includes('authentication') || error.message?.includes('credentials')) {
-      return res.status(401).json({
-        error: 'Authentication failed. Please check your credentials.',
-        code: 'AUTH_FAILED'
-      });
+      throw Errors.authFailed('Authentication failed. Please check your credentials.');
     }
 
     throw Errors.internal(error.message || 'Failed to create project');

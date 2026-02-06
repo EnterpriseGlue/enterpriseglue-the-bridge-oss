@@ -12,7 +12,7 @@ import { In } from 'typeorm';
 import { createHash } from 'crypto';
 import { logger } from '@shared/utils/logger.js';
 import { vcsService } from '@shared/services/versioning/index.js';
-import { generateId } from '@shared/utils/id.js';
+import { generateId, unixTimestamp } from '@shared/utils/id.js';
 import {
   createGitProviderClient,
   detectProviderFromUrl,
@@ -529,7 +529,7 @@ class RemoteGitService {
         }
         
         // Create this folder
-        const now = Math.floor(Date.now() / 1000);
+        const now = unixTimestamp();
         const newFolderId = generateId();
         
         await folderRepo.insert({
@@ -606,13 +606,13 @@ class RemoteGitService {
       if (matchingFile) {
         await fileRepo.update({ id: matchingFile.id }, {
           xml: file.content,
-          updatedAt: Math.floor(Date.now() / 1000),
+          updatedAt: unixTimestamp(),
         });
         
         logger.info('Updated main DB file', { fileId: matchingFile.id, fileName: baseFileName, folderPath });
       } else {
         // Create new file in main DB with proper folder
-        const now = Math.floor(Date.now() / 1000);
+        const now = unixTimestamp();
         const newFileId = generateId();
         await fileRepo.insert({
           id: newFileId,

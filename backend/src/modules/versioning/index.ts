@@ -270,7 +270,7 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
         }
       }
       commits = Array.from(commitMap.values())
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, 50);
     } else if (branchType === 'main') {
       const mainBranch = await vcsService.getMainBranch(projectId);
@@ -386,7 +386,16 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
               where: { fileId, commitId: String(latest.id) }
             });
 
-            if (!existingLatest) {
+            // Also check if entry count matches expected non-auto commit count
+            let needsBackfill = !existingLatest;
+            if (!needsBackfill) {
+              const allRowsForCount = await buildFileCommitsQuery('ASC').getMany();
+              const expectedCount = allRowsForCount.filter((r) => !isAutoCommit(r.message)).length;
+              const actualCount = await fileCommitVersionRepo.count({ where: { fileId } });
+              needsBackfill = actualCount !== expectedCount;
+            }
+
+            if (needsBackfill) {
               // Full backfill: rebuild sequential v1..vN (oldest->newest), excluding auto commits.
               const allRowsAsc = await buildFileCommitsQuery('ASC').getMany();
               const rowsToNumber = allRowsAsc.filter((r) => !isAutoCommit(r.message));
@@ -411,10 +420,12 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
         }
 
         // Read DB-backed file version numbers for returned commits
+        // Only non-auto commits get version numbers (auto-commits are filtered by frontend)
+        const nonAutoCommits = filteredCommits.filter((c: any) => !isAutoCommit(c.message));
         const versionMap = new Map<string, number>();
-        if (filteredCommits.length > 0) {
+        if (nonAutoCommits.length > 0) {
           const versionRows = await fileCommitVersionRepo.find({
-            where: { fileId, commitId: In(filteredCommits.map((c: any) => String(c.id))) },
+            where: { fileId, commitId: In(nonAutoCommits.map((c: any) => String(c.id))) },
             select: ['commitId', 'versionNumber']
           });
 
@@ -423,17 +434,21 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
           }
         }
 
-        const fallbackVersionMap = new Map<string, number>();
-        if (versionMap.size < filteredCommits.length) {
-          const ascByCreatedAt = [...filteredCommits].sort((a, b) => a.createdAt - b.createdAt);
+        // If DB doesn't cover all non-auto commits, use computed sequential numbers exclusively
+        // to avoid collisions between DB numbers (with gaps) and fallback numbers.
+        if (versionMap.size < nonAutoCommits.length) {
+          versionMap.clear();
+          const ascByCreatedAt = [...nonAutoCommits].sort((a, b) => a.createdAt - b.createdAt);
           ascByCreatedAt.forEach((commit: any, index) => {
-            fallbackVersionMap.set(String(commit.id), index + 1);
+            versionMap.set(String(commit.id), index + 1);
           });
         }
 
         const commitsWithFileVersion = filteredCommits.map((commit: any) => {
           const commitId = String(commit.id);
-          const fileVersionNumber = versionMap.get(commitId) ?? fallbackVersionMap.get(commitId);
+          const fileVersionNumber = isAutoCommit(commit.message)
+            ? undefined
+            : versionMap.get(commitId);
           return {
             id: commit.id,
             projectId: commit.projectId,

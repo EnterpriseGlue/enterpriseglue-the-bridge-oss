@@ -22,5 +22,6 @@ export * from './PlatformSettingsService.js';
 export * from './permissions.js';
 export * from './SsoClaimsMappingService.js';
 export * from './PolicyService.js';
+export * from './UserService.js';
 
 export const LEIA_SERVICE_VERSION = '1.0.0';

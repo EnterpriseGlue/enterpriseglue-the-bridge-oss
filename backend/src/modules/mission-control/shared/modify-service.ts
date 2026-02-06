@@ -2,7 +2,7 @@
  * Mission Control modification service
  */
 
-import { randomUUID } from 'crypto'
+import { generateId } from '@shared/utils/id.js'
 import { getDataSource } from '@shared/db/data-source.js'
 import { Batch } from '@shared/db/entities/Batch.js'
 import {
@@ -15,7 +15,7 @@ async function insertLocalBatch(type: string, engineDto: any, payload: any, engi
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const now = Date.now()
-  const id = randomUUID()
+  const id = generateId()
   await batchRepo.insert({
     id,
     engineId,

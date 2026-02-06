@@ -3,13 +3,12 @@
  * Centralized service for file operations
  */
 
-import { randomUUID } from 'crypto';
 import { getDataSource } from '@shared/db/data-source.js';
 import { File } from '@shared/db/entities/File.js';
 import { Version } from '@shared/db/entities/Version.js';
 import { IsNull } from 'typeorm';
 import { Errors } from '@shared/middleware/errorHandler.js';
-import { unixTimestamp } from '@shared/utils/id.js';
+import { generateId, unixTimestamp } from '@shared/utils/id.js';
 import { syncFileUpdate } from '@shared/services/versioning/index.js';
 
 // Empty templates
@@ -117,7 +116,7 @@ class FileServiceImpl {
     const fileRepo = dataSource.getRepository(File);
     const versionRepo = dataSource.getRepository(Version);
     const now = unixTimestamp();
-    const fileId = randomUUID();
+    const fileId = generateId();
     
     // Determine XML content
     let xml = input.xml?.trim() || '';
@@ -153,7 +152,7 @@ class FileServiceImpl {
 
     // Create initial version
     await versionRepo.insert({
-      id: randomUUID(),
+      id: generateId(),
       fileId,
       author: input.userId,
       message: 'Created',

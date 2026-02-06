@@ -4,7 +4,7 @@
  * ✨ Migrated to TypeORM
  */
 
-import { randomUUID } from 'crypto';
+import { generateId } from '@shared/utils/id.js';
 import { logger } from '@shared/utils/logger.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { AuditLog } from '@shared/db/entities/AuditLog.js';
@@ -69,7 +69,7 @@ export async function auditLog(
  */
 export async function logAudit(entry: AuditLogEntry): Promise<void> {
   try {
-    const id = randomUUID();
+    const id = generateId();
     const createdAt = Date.now();
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(AuditLog);

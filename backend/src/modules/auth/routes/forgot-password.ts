@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import { asyncHandler } from '@shared/middleware/errorHandler.js';
+import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { getDataSource } from '@shared/db/data-source.js';
@@ -101,33 +101,21 @@ router.post('/api/auth/reset-password-with-token', apiLimiter, passwordResetVeri
   const resetToken = await resetTokenRepo.findOneBy({ tokenHash, consumedAt: IsNull() });
 
   if (!resetToken) {
-    return res.status(400).json({
-      error: 'InvalidToken',
-      message: 'Invalid or expired reset token',
-    });
+    throw Errors.validation('Invalid or expired reset token');
   }
 
   if (resetToken.expiresAt < now) {
-    return res.status(400).json({
-      error: 'TokenExpired',
-      message: 'Reset token has expired. Please request a new password reset.',
-    });
+    throw Errors.validation('Reset token has expired. Please request a new password reset.');
   }
 
   const user = await userRepo.findOneBy({ id: resetToken.userId });
 
   if (!user) {
-    return res.status(400).json({
-      error: 'InvalidToken',
-      message: 'Invalid or expired reset token',
-    });
+    throw Errors.validation('Invalid or expired reset token');
   }
 
   if (!user.isActive) {
-    return res.status(400).json({ 
-      error: 'AccountDisabled',
-      message: 'This account has been disabled',
-    });
+    throw Errors.validation('This account has been disabled');
   }
 
   // Hash new password
@@ -170,7 +158,7 @@ router.get('/api/auth/verify-reset-token', apiLimiter, passwordResetVerifyLimite
   const { token } = req.query;
 
   if (!token || typeof token !== 'string') {
-    return res.status(400).json({ valid: false, error: 'Token is required' });
+    throw Errors.validation('Token is required');
   }
 
   const dataSource = await getDataSource();
