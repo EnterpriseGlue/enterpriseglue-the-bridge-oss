@@ -5,6 +5,7 @@ import refreshRouter from '../../../../src/modules/auth/routes/refresh.js';
 import { getDataSource } from '../../../../src/shared/db/data-source.js';
 import { User } from '../../../../src/shared/db/entities/User.js';
 import { RefreshToken } from '../../../../src/shared/db/entities/RefreshToken.js';
+import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
 import * as jwt from '../../../../src/shared/utils/jwt.js';
 import bcrypt from 'bcryptjs';
 
@@ -14,13 +15,27 @@ vi.mock('@shared/db/data-source.js', () => ({
 
 vi.mock('@shared/utils/jwt.js');
 
+vi.mock('@shared/middleware/rateLimiter.js', () => ({
+  apiLimiter: (_req: any, _res: any, next: any) => next(),
+}));
+
+vi.mock('@shared/config/index.js', () => ({
+  config: {
+    jwtAccessTokenExpires: 3600,
+    jwtRefreshTokenExpires: 604800,
+    nodeEnv: 'test',
+  },
+}));
+
 describe('POST /api/auth/refresh', () => {
   let app: express.Application;
 
   beforeEach(() => {
     app = express();
     app.use(express.json());
+    app.use(require('cookie-parser')());
     app.use(refreshRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
   });
 
@@ -55,7 +70,7 @@ describe('POST /api/auth/refresh', () => {
       .send({ refreshToken: 'refresh-token' });
 
     expect(response.status).toBe(200);
-    expect(response.body.accessToken).toBe('new-access-token');
+    expect(response.body.expiresIn).toBe(3600);
   });
 
   it('rejects invalid token type', async () => {

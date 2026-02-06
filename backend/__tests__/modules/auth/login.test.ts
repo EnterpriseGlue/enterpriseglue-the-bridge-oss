@@ -4,6 +4,7 @@ import express from 'express';
 import loginRoute from '../../../src/modules/auth/routes/login.js';
 import { getDataSource } from '../../../src/shared/db/data-source.js';
 import { User } from '../../../src/shared/db/entities/User.js';
+import { errorHandler } from '../../../src/shared/middleware/errorHandler.js';
 
 vi.mock('@shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -27,6 +28,26 @@ vi.mock('@shared/services/audit.js', () => ({
   },
 }));
 
+vi.mock('@shared/db/adapters/QueryHelpers.js', () => ({
+  addCaseInsensitiveEquals: (_qb: any, _alias: string, _column: string, _paramName: string, _value: string) => _qb,
+}));
+
+vi.mock('@shared/services/capabilities.js', () => ({
+  buildUserCapabilities: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('@shared/config/index.js', () => ({
+  config: {
+    jwtSecret: 'test-secret',
+    jwtAccessTokenExpires: 3600,
+    jwtRefreshTokenExpires: 604800,
+    frontendUrl: 'http://localhost:5173',
+    nodeEnv: 'test',
+    adminEmail: 'admin@test.com',
+    adminEmailVerificationExempt: false,
+  },
+}));
+
 vi.mock('@shared/middleware/rateLimiter.js', () => ({
   authLimiter: (_req: any, _res: any, next: any) => next(),
   apiLimiter: (_req: any, _res: any, next: any) => next(),
@@ -40,6 +61,7 @@ describe('auth login module', () => {
     app = express();
     app.use(express.json());
     app.use(loginRoute);
+    app.use(errorHandler);
     vi.clearAllMocks();
   });
 

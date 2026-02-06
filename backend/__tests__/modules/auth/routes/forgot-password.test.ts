@@ -5,6 +5,7 @@ import forgotPasswordRouter from '../../../../src/modules/auth/routes/forgot-pas
 import { getDataSource } from '../../../../src/shared/db/data-source.js';
 import { User } from '../../../../src/shared/db/entities/User.js';
 import { PasswordResetToken } from '../../../../src/shared/db/entities/PasswordResetToken.js';
+import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
 
 vi.mock('@shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -27,6 +28,14 @@ vi.mock('@shared/services/audit.js', () => ({
 
 vi.mock('@shared/utils/password.js', () => ({
   hashPassword: vi.fn().mockResolvedValue('hashed-password'),
+  validatePassword: vi.fn().mockReturnValue({ valid: true, errors: [] }),
+}));
+
+vi.mock('@shared/config/index.js', () => ({
+  config: {
+    frontendUrl: 'http://localhost:5173',
+    nodeEnv: 'test',
+  },
 }));
 
 describe('POST /api/auth/forgot-password', () => {
@@ -36,6 +45,7 @@ describe('POST /api/auth/forgot-password', () => {
     app = express();
     app.use(express.json());
     app.use(forgotPasswordRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
   });
 
@@ -94,6 +104,7 @@ describe('POST /api/auth/reset-password-with-token', () => {
     app = express();
     app.use(express.json());
     app.use(forgotPasswordRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
   });
 
@@ -114,7 +125,7 @@ describe('POST /api/auth/reset-password-with-token', () => {
       .send({ token: 'bad-token', newPassword: 'Password123!' });
 
     expect(response.status).toBe(400);
-    expect(response.body.error).toBe('InvalidToken');
+    expect(response.body.error).toContain('Invalid or expired reset token');
   });
 
   it('resets password when token is valid', async () => {
@@ -152,6 +163,7 @@ describe('GET /api/auth/verify-reset-token', () => {
     app = express();
     app.use(express.json());
     app.use(forgotPasswordRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
   });
 
@@ -159,7 +171,7 @@ describe('GET /api/auth/verify-reset-token', () => {
     const response = await request(app).get('/api/auth/verify-reset-token');
 
     expect(response.status).toBe(400);
-    expect(response.body.valid).toBe(false);
+    expect(response.body.error).toContain('Token is required');
   });
 
   it('returns valid for active user token', async () => {

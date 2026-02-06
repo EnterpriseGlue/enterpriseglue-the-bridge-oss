@@ -22,43 +22,23 @@ function parseScryptSaltFromEnv(varName: string): Buffer {
   return Buffer.from(v, 'utf8');
 }
 
-function getEncryptionSecret(): string {
-  const encryptionKey = process.env.ENCRYPTION_KEY;
-  if (encryptionKey && encryptionKey.length !== 64) {
-    return encryptionKey;
-  }
-
-  const jwtSecret = process.env.JWT_SECRET || config.jwtSecret;
-  return jwtSecret;
+function getEncryptionKey(): Buffer {
+  return Buffer.from(config.encryptionKey, 'hex');
 }
 
-function getRawKeyIfHex(): Buffer | null {
-  const encryptionKey = process.env.ENCRYPTION_KEY;
-  if (encryptionKey && encryptionKey.length === 64 && /^[0-9a-fA-F]+$/.test(encryptionKey)) {
-    return Buffer.from(encryptionKey, 'hex');
-  }
-  return null;
-}
-
-function deriveKeyV2(salt: Buffer): Buffer {
-  const rawKey = getRawKeyIfHex();
-  if (rawKey) return rawKey;
-  return crypto.scryptSync(getEncryptionSecret(), salt, 32);
+function deriveKeyV2(_salt: Buffer): Buffer {
+  return getEncryptionKey();
 }
 
 function deriveKeyLegacy(): Buffer {
-  const rawKey = getRawKeyIfHex();
-  if (rawKey) return rawKey;
-
-  const encryptionKey = process.env.ENCRYPTION_KEY;
-  if (encryptionKey && encryptionKey.length !== 64) {
-    const salt = parseScryptSaltFromEnv('ENCRYPTION_LEGACY_KEY_SALT');
-    return crypto.scryptSync(encryptionKey, salt, 32);
-  }
-
+  // Legacy decryption: try scrypt derivation with legacy secret if provided,
+  // otherwise use the current ENCRYPTION_KEY directly.
   const legacySecret = process.env.ENCRYPTION_LEGACY_SECRET;
-  const salt = parseScryptSaltFromEnv('ENCRYPTION_LEGACY_JWT_SALT');
-  return crypto.scryptSync((legacySecret && legacySecret.trim().length > 0) ? legacySecret.trim() : getEncryptionSecret(), salt, 32);
+  if (legacySecret && legacySecret.trim().length > 0) {
+    const salt = parseScryptSaltFromEnv('ENCRYPTION_LEGACY_JWT_SALT');
+    return crypto.scryptSync(legacySecret.trim(), salt, 32);
+  }
+  return getEncryptionKey();
 }
 
 /**

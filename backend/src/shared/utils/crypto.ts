@@ -21,36 +21,22 @@ function parseLegacySalt(): Buffer {
   return Buffer.from(v, 'utf8');
 }
 
-function getSecret(): string {
-  const envSecret = process.env.ENCRYPTION_SECRET;
-  if (envSecret && envSecret.trim().length > 0) return envSecret.trim();
-
-  const secret = (config as any).encryptionSecret || process.env.JWT_SECRET || config.jwtSecret;
-  if (!secret || typeof secret !== 'string' || secret.trim().length === 0) {
-    throw new Error('Encryption secret is not configured');
-  }
-  return secret;
+function getEncryptionKey(): Buffer {
+  return Buffer.from(config.encryptionKey, 'hex');
 }
 
-function getRawKeyIfHex(): Buffer | null {
-  const encryptionKey = process.env.ENCRYPTION_KEY;
-  if (encryptionKey && encryptionKey.length === 64 && /^[0-9a-fA-F]+$/.test(encryptionKey)) {
-    return Buffer.from(encryptionKey, 'hex');
-  }
-  return null;
-}
-
-function deriveKeyV2(salt: Buffer): Buffer {
-  const raw = getRawKeyIfHex();
-  if (raw) return raw;
-  return scryptSync(getSecret(), salt, 32);
+function deriveKeyV2(_salt: Buffer): Buffer {
+  return getEncryptionKey();
 }
 
 function deriveKeyLegacy(): Buffer {
-  const raw = getRawKeyIfHex();
-  if (raw) return raw;
+  // Legacy decryption: try the current ENCRYPTION_KEY first, then fall back to scrypt derivation
+  // for data encrypted with the old secret-based scheme.
   const legacySecret = process.env.CRYPTO_LEGACY_SECRET;
-  return scryptSync((legacySecret && legacySecret.trim().length > 0) ? legacySecret.trim() : getSecret(), parseLegacySalt(), 32);
+  if (legacySecret && legacySecret.trim().length > 0) {
+    return scryptSync(legacySecret.trim(), parseLegacySalt(), 32);
+  }
+  return getEncryptionKey();
 }
 
 /**

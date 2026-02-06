@@ -22,7 +22,7 @@ describe('GET /api/dashboard/stats', () => {
   beforeEach(async () => {
     app = express();
     app.use(express.json());
-    const { default: statsRouter } = await import('../../../src/modules/dashboard/stats.js');
+    const { default: statsRouter } = await import('../../../src/modules/dashboard/routes/stats.js');
     app.use(statsRouter);
     vi.clearAllMocks();
   });

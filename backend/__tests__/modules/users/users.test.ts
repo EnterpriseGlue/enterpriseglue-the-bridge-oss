@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import usersRouter from '../../../src/modules/users/users.js';
+import usersRouter from '../../../src/modules/users/routes/users.js';
 import { getDataSource } from '../../../src/shared/db/data-source.js';
 import { User } from '../../../src/shared/db/entities/User.js';
 

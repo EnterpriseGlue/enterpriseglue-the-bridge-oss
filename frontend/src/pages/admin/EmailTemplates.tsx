@@ -384,14 +384,18 @@ export default function EmailTemplates() {
                 <div style={{ marginBottom: 'var(--spacing-3)' }}>
                   <strong>Subject:</strong> {previewData.subject}
                 </div>
-                <div
+                <iframe
+                  srcDoc={previewData.html}
+                  sandbox=""
                   style={{
                     border: '1px solid var(--cds-border-subtle)',
-                    padding: 'var(--spacing-4)',
+                    padding: 0,
                     background: 'white',
                     borderRadius: '4px',
+                    width: '100%',
+                    minHeight: '400px',
                   }}
-                  dangerouslySetInnerHTML={{ __html: previewData.html }}
+                  title="Email template preview"
                 />
               </TabPanel>
               <TabPanel>

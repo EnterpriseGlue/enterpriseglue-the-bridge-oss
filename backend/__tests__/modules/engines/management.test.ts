@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import managementRouter from '../../../src/modules/engines/management.js';
+import managementRouter from '../../../src/modules/engines/routes/management.js';
 import { getDataSource } from '../../../src/shared/db/data-source.js';
 import { User } from '../../../src/shared/db/entities/User.js';
 import { errorHandler } from '../../../src/shared/middleware/errorHandler.js';
@@ -14,6 +14,7 @@ vi.mock('@shared/db/data-source.js', () => ({
 vi.mock('@shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'owner-1' };
+    req.tenant = { tenantId: null };
     next();
   },
 }));
@@ -24,6 +25,27 @@ vi.mock('@shared/middleware/rateLimiter.js', () => ({
 
 vi.mock('@shared/services/audit.js', () => ({
   logAudit: vi.fn(),
+}));
+
+vi.mock('@shared/db/adapters/QueryHelpers.js', () => ({
+  addCaseInsensitiveEquals: (_qb: any) => _qb,
+}));
+
+vi.mock('@shared/config/index.js', () => ({
+  config: {
+    nodeEnv: 'test',
+    frontendUrl: 'http://localhost:5173',
+  },
+}));
+
+vi.mock('@shared/constants/roles.js', () => ({
+  ENGINE_VIEW_ROLES: ['owner', 'delegate', 'operator', 'viewer'],
+  ENGINE_MANAGE_ROLES: ['owner', 'delegate'],
+  MANAGE_ROLES: ['owner', 'delegate'],
+}));
+
+vi.mock('@shared/services/email/index.js', () => ({
+  sendInvitationEmail: vi.fn(),
 }));
 
 vi.mock('@shared/services/platform-admin/index.js', () => ({

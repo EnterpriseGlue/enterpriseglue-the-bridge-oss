@@ -62,8 +62,10 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
     if (error) {
       logger.error('[Microsoft Auth] OAuth error:', error, error_description);
       
-      // Redirect to frontend with error
-      const errorUrl = `${config.frontendUrl}/login?error=microsoft_auth_failed&message=${encodeURIComponent(error_description as string || error as string)}`;
+      // Sanitize error message: strip HTML, limit length, use only safe characters
+      const rawMessage = String(error_description || error || 'Authentication failed');
+      const safeMessage = rawMessage.replace(/<[^>]*>/g, '').slice(0, 200);
+      const errorUrl = `${config.frontendUrl}/login?error=microsoft_auth_failed&message=${encodeURIComponent(safeMessage)}`;
       return res.redirect(errorUrl);
     }
 

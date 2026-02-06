@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Sidebar, Menu, MenuItem } from 'react-pro-sidebar'
 import {
@@ -813,7 +814,8 @@ export default function ProSidebar() {
         </>
       )}
 
-      {/* Processes Time Filter Modal */}
+      {/* Processes Time Filter Modal — portalled to escape react-pro-sidebar z-index:3 stacking context */}
+      {createPortal(
       <Modal
         open={processTimeModalOpen}
         onRequestClose={() => setProcessTimeModalOpen(false)}
@@ -894,9 +896,12 @@ export default function ProSidebar() {
             invalidText="Use hh:mm (24h)"
           />
         </div>
-      </Modal>
+      </Modal>,
+      document.body
+      )}
 
-      {/* Decisions Time Filter Modal */}
+      {/* Decisions Time Filter Modal — portalled to escape react-pro-sidebar z-index:3 stacking context */}
+      {createPortal(
       <Modal
         open={decisionTimeModalOpen}
         onRequestClose={() => setDecisionTimeModalOpen(false)}
@@ -977,7 +982,9 @@ export default function ProSidebar() {
             invalidText="Use hh:mm (24h)"
           />
         </div>
-      </Modal>
+      </Modal>,
+      document.body
+      )}
     </Sidebar>
   )
 }

@@ -61,7 +61,7 @@ export class PostgresAdapter implements DatabaseAdapter {
       logging: this.logging,
       entities,
       migrations,
-      ssl: config.postgresSsl ? { rejectUnauthorized: false } : undefined,
+      ssl: config.postgresSsl ? { rejectUnauthorized: config.postgresSslRejectUnauthorized } : undefined,
     };
   }
 

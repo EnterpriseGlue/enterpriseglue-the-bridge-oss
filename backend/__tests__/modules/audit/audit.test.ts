@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import auditRouter from '../../../src/modules/audit/audit.js';
+import auditRouter from '../../../src/modules/audit/routes/audit.js';
 import { getDataSource } from '../../../src/shared/db/data-source.js';
 import { AuditLog } from '../../../src/shared/db/entities/AuditLog.js';
 

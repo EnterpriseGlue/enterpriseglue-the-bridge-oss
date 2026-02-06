@@ -10,6 +10,8 @@ import { logAudit, AuditActions } from '@shared/services/audit.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
 import { RefreshToken } from '@shared/db/entities/RefreshToken.js';
+import { PasswordResetToken } from '@shared/db/entities/PasswordResetToken.js';
+import { IsNull } from 'typeorm';
 import { validateBody } from '@shared/middleware/validate.js';
 import { passwordResetLimiter , apiLimiter} from '@shared/middleware/rateLimiter.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
@@ -169,6 +171,13 @@ router.post('/api/auth/change-password', apiLimiter, requireAuth, validateBody(c
     passwordHash: newPasswordHash,
     updatedAt: now
   });
+
+  // Invalidate all outstanding password reset tokens for this user
+  const resetTokenRepo = dataSource.getRepository(PasswordResetToken);
+  await resetTokenRepo.update(
+    { userId: user.id, consumedAt: IsNull() },
+    { consumedAt: now }
+  );
 
   res.json({ message: 'Password changed successfully' });
 }));

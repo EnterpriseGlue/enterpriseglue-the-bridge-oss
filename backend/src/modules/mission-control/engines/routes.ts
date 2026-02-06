@@ -13,13 +13,19 @@ import { validateBody, validateParams } from '@shared/middleware/validate.js'
 import { apiLimiter, engineLimiter } from '@shared/middleware/rateLimiter.js'
 import { engineService } from '@shared/services/platform-admin/index.js'
 import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES } from '@shared/constants/roles.js'
+import { config } from '@shared/config/index.js'
 
 // Validation schemas
 const engineIdParamSchema = z.object({ id: z.string().min(1) })
 
+const baseUrlSchema = z.string().min(1).url().refine(
+  (url) => config.nodeEnv !== 'production' || url.startsWith('https://'),
+  { message: 'Engine base URL must use HTTPS in production' }
+)
+
 const createEngineBodySchema = z.object({
   name: z.string().min(1).max(255),
-  baseUrl: z.string().min(1).url(),
+  baseUrl: baseUrlSchema,
   type: z.string().default('camunda7'),
   authType: z.string().optional(),
   username: z.string().nullable().optional(),
@@ -30,7 +36,7 @@ const createEngineBodySchema = z.object({
 
 const updateEngineBodySchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  baseUrl: z.string().min(1).url().optional(),
+  baseUrl: baseUrlSchema.optional(),
   type: z.string().optional(),
   authType: z.string().optional(),
   username: z.string().nullable().optional(),

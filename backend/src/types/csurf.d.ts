@@ -1,4 +1,1 @@
-declare module 'csurf' {
-  const csrf: any;
-  export default csrf;
-}
+// csurf has been replaced by csrf-csrf (see app.ts)

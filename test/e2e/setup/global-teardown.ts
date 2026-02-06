@@ -35,18 +35,40 @@ function getAdminCredentials() {
   };
 }
 
+const _cookies: Record<string, string> = {};
+let _csrfToken = '';
+
 async function fetchJson<T>(
   url: string,
   options?: RequestInit,
   extra?: { allowStatuses?: number[] }
 ): Promise<T> {
+  const cookieHeader = Object.entries(_cookies).map(([k, v]) => `${k}=${v}`).join('; ');
   const res = await fetch(`${API_BASE_URL}${url}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+      ...(_csrfToken ? { 'X-CSRF-Token': _csrfToken } : {}),
       ...(options?.headers || {}),
     },
   });
+
+  // Merge Set-Cookie headers into the cookie jar (preserves existing cookies)
+  const setCookies = res.headers.getSetCookie?.() || [];
+  for (const sc of setCookies) {
+    const pair = sc.split(';')[0];
+    const eqIdx = pair.indexOf('=');
+    if (eqIdx > 0) {
+      _cookies[pair.slice(0, eqIdx).trim()] = pair.slice(eqIdx + 1);
+    }
+  }
+
+  // Capture CSRF token from response headers
+  const csrf = res.headers.get('X-CSRF-Token');
+  if (csrf) {
+    _csrfToken = csrf;
+  }
 
   const data = await res.json().catch(() => null);
   const allowStatuses = extra?.allowStatuses || [];
@@ -146,27 +168,25 @@ export default async function globalTeardown() {
   };
 
   if (adminEmail && adminPassword) {
-    const adminLogin = await fetchJson<{ accessToken: string }>('/api/auth/login', {
+    // Login sets httpOnly cookies — fetchJson captures them automatically
+    await fetchJson('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email: adminEmail, password: adminPassword }),
     });
 
+    // Make a GET request to acquire a CSRF token (login endpoint is exempt from CSRF middleware)
+    await fetchJson('/api/dashboard/context', undefined, { allowStatuses: [401, 403, 404, 500] });
+
     await fetchJson(
       `/api/users/${data.userId}`,
-      {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${adminLogin.accessToken}` },
-      },
+      { method: 'DELETE' },
       { allowStatuses: [404] }
     );
 
     if (data.engineId) {
       await fetchJson(
         `/engines-api/engines/${data.engineId}`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${adminLogin.accessToken}` },
-        },
+        { method: 'DELETE' },
         { allowStatuses: [404] }
       );
     }
@@ -174,10 +194,7 @@ export default async function globalTeardown() {
     if (data.cleanupAdmin && data.adminUserId) {
       await fetchJson(
         `/api/users/${data.adminUserId}`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${adminLogin.accessToken}` },
-        },
+        { method: 'DELETE' },
         { allowStatuses: [400, 403, 404, 500] }
       );
     }

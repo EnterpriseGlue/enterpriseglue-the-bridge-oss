@@ -27,6 +27,7 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   postgresDatabase: z.string().optional(),
   postgresSchema: schemaName.default('public'),
   postgresSsl: z.boolean().default(false),
+  postgresSslRejectUnauthorized: z.enum(['true', 'false']).transform(v => v === 'true'),
 
   // Oracle configuration (when databaseType=oracle)
   oracleHost: z.string().optional(),
@@ -91,6 +92,12 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   googleClientSecret: z.string().optional(),
   googleRedirectUri: z.string().url().optional(),
   
+  // Encryption
+  encryptionKey: z.string().length(64).regex(/^[0-9a-fA-F]+$/, 'Must be a 64-character hex string'),
+
+  // Proxy
+  trustProxy: z.string().default('1'),
+
   // Environment
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
 });
@@ -116,6 +123,7 @@ function loadConfig(): Config {
     postgresDatabase: process.env.POSTGRES_DATABASE,
     postgresSchema: process.env.POSTGRES_SCHEMA,
     postgresSsl: process.env.POSTGRES_SSL === 'true',
+    postgresSslRejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED,
     oracleHost: process.env.ORACLE_HOST,
     oraclePort: process.env.ORACLE_PORT ? Number(process.env.ORACLE_PORT) : undefined,
     oracleUser: process.env.ORACLE_USER,
@@ -159,6 +167,8 @@ function loadConfig(): Config {
     googleClientId: process.env.GOOGLE_CLIENT_ID,
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
+    encryptionKey: process.env.ENCRYPTION_KEY,
+    trustProxy: process.env.TRUST_PROXY,
     nodeEnv: inferredNodeEnv,
   };
 

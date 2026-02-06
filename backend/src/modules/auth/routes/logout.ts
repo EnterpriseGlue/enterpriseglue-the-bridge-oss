@@ -20,7 +20,7 @@ const logoutSchema = z.object({
  * Revoke refresh token(s)
  */
 router.post('/api/auth/logout', apiLimiter, requireAuth, validateBody(logoutSchema), asyncHandler(async (req, res) => {
-  const { refreshToken } = req.body;
+  const refreshToken = req.body?.refreshToken || req.cookies?.refreshToken;
   const now = Date.now();
   const dataSource = await getDataSource();
   const refreshTokenRepo = dataSource.getRepository(RefreshToken);
@@ -38,6 +38,10 @@ router.post('/api/auth/logout', apiLimiter, requireAuth, validateBody(logoutSche
       { revokedAt: now }
     );
   }
+
+  // Clear auth cookies
+  res.clearCookie('accessToken', { path: '/' });
+  res.clearCookie('refreshToken', { path: '/' });
 
   res.json({ message: 'Logged out successfully' });
 }));

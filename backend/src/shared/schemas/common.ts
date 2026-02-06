@@ -2,6 +2,7 @@
  * Common Zod validation schemas for reuse across routes
  */
 import { z } from 'zod';
+import { config } from '@shared/config/index.js';
 
 // === ID Schemas ===
 export const uuidSchema = z.string().uuid();
@@ -102,9 +103,14 @@ export const updateMemberRoleBodySchema = z.object({
 // === Engine Schemas ===
 export const engineTypeSchema = z.enum(['camunda7', 'camunda8']);
 
+const engineBaseUrlSchema = z.string().url().refine(
+  (url) => config.nodeEnv !== 'production' || url.startsWith('https://'),
+  { message: 'Engine base URL must use HTTPS in production' }
+);
+
 export const createEngineBodySchema = z.object({
   name: z.string().min(1).max(255),
-  baseUrl: z.string().url(),
+  baseUrl: engineBaseUrlSchema,
   type: engineTypeSchema.default('camunda7'),
   authType: z.enum(['none', 'basic', 'bearer']).default('none'),
   username: z.string().nullable().optional(),

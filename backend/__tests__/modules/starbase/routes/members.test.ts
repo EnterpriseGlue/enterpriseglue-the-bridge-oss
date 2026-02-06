@@ -15,6 +15,7 @@ vi.mock('@shared/db/data-source.js', () => ({
 vi.mock('@shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'owner-1' };
+    req.tenant = { tenantId: null };
     next();
   },
 }));
@@ -30,6 +31,26 @@ vi.mock('@shared/middleware/rateLimiter.js', () => ({
 
 vi.mock('@shared/services/audit.js', () => ({
   logAudit: vi.fn(),
+}));
+
+vi.mock('@shared/db/adapters/QueryHelpers.js', () => ({
+  addCaseInsensitiveEquals: (_qb: any) => _qb,
+  caseInsensitiveColumn: (col: string) => `LOWER(${col})`,
+}));
+
+vi.mock('@shared/config/index.js', () => ({
+  config: {
+    nodeEnv: 'test',
+    frontendUrl: 'http://localhost:5173',
+  },
+}));
+
+vi.mock('@shared/constants/roles.js', () => ({
+  MANAGE_ROLES: ['owner', 'delegate'],
+}));
+
+vi.mock('@shared/services/email/index.js', () => ({
+  sendInvitationEmail: vi.fn(),
 }));
 
 vi.mock('@shared/services/platform-admin/ProjectMemberService.js', () => ({

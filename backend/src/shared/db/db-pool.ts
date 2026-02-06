@@ -53,7 +53,7 @@ class PostgresConnectionPool implements ConnectionPool {
       user: config.postgresUser,
       password: config.postgresPassword,
       database: config.postgresDatabase,
-      ssl: config.postgresSsl ? { rejectUnauthorized: false } : false,
+      ssl: config.postgresSsl ? { rejectUnauthorized: config.postgresSslRejectUnauthorized } : false,
       options: `-c search_path=${schema}`,
       max: 20,
       idleTimeoutMillis: 30000,

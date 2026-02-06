@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { AuthProvider } from '@src/contexts/AuthContext';
 import { useAuth } from '@src/shared/hooks/useAuth';
-import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '@src/constants/storageKeys';
+import { USER_KEY } from '@src/constants/storageKeys';
 
 vi.mock('@src/services/auth', () => ({
   authService: {
@@ -47,8 +47,6 @@ describe('AuthProvider', () => {
     (authService.logout as any).mockResolvedValue(undefined);
     (authService.getMe as any).mockResolvedValue({ id: 'user-1', email: 'test@example.com' });
 
-    localStorage.setItem(REFRESH_TOKEN_KEY, 'refresh-1');
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'token-1');
     localStorage.setItem(USER_KEY, JSON.stringify({ id: 'user-1' }));
 
     const { result } = renderHook(() => useAuth(), { wrapper });
@@ -61,8 +59,6 @@ describe('AuthProvider', () => {
       await result.current.logout();
     });
 
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
-    expect(localStorage.getItem(REFRESH_TOKEN_KEY)).toBeNull();
     expect(localStorage.getItem(USER_KEY)).toBeNull();
   });
 });

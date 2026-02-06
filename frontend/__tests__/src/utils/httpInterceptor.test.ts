@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { interceptedFetch, getAuthHeaders } from '@src/utils/httpInterceptor';
-import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '@src/constants/storageKeys';
+import { USER_KEY } from '@src/constants/storageKeys';
 
 vi.mock('@src/shared/api/apiErrorUtils', () => ({
   getErrorMessageFromResponse: vi.fn().mockResolvedValue('Error message'),
@@ -36,10 +36,9 @@ describe('httpInterceptor', () => {
       expect(headers.Authorization).toBeUndefined();
     });
 
-    it('includes Authorization header when token exists', () => {
-      localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    it('includes X-Tenant-Slug header with default tenant', () => {
       const headers = getAuthHeaders();
-      expect(headers.Authorization).toBe('Bearer test-token');
+      expect(headers['X-Tenant-Slug']).toBe('default');
     });
 
     it('includes tenant slug from pathname', () => {
@@ -76,7 +75,7 @@ describe('httpInterceptor', () => {
       const result = await interceptedFetch('/api/data');
 
       expect(result.status).toBe(200);
-      expect(fetchMock).toHaveBeenCalledWith('/api/data', {});
+      expect(fetchMock).toHaveBeenCalledWith('/api/data', { credentials: 'include' });
     });
 
     it('extracts CSRF token from response headers', async () => {
@@ -126,10 +125,8 @@ describe('httpInterceptor', () => {
 
     describe('token refresh on 401', () => {
       it('refreshes token and retries request', async () => {
-        localStorage.setItem(REFRESH_TOKEN_KEY, 'refresh-token');
-
         const first401 = new Response(null, { status: 401 });
-        const refreshSuccess = new Response(JSON.stringify({ accessToken: 'new-access-token' }), {
+        const refreshSuccess = new Response(JSON.stringify({ expiresIn: 3600 }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -144,17 +141,18 @@ describe('httpInterceptor', () => {
 
         expect(result.status).toBe(200);
         expect(fetchMock).toHaveBeenCalledTimes(3);
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('new-access-token');
       });
 
-      it('redirects to login when no refresh token', async () => {
-        const response = new Response(null, { status: 401 });
-        vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+      it('redirects to login on failed refresh', async () => {
+        localStorage.setItem(USER_KEY, JSON.stringify({ id: 'user-1' }));
+        const first401 = new Response(null, { status: 401 });
+        const refreshFail = new Response(null, { status: 401 });
+        vi.spyOn(globalThis, 'fetch')
+          .mockResolvedValueOnce(first401)
+          .mockResolvedValueOnce(refreshFail);
 
         await interceptedFetch('/api/data');
 
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
-        expect(localStorage.getItem(REFRESH_TOKEN_KEY)).toBeNull();
         expect(localStorage.getItem(USER_KEY)).toBeNull();
         expect(window.location.href).toBe('/t/default/login');
       });
@@ -170,7 +168,7 @@ describe('httpInterceptor', () => {
       });
 
       it('handles refresh token failure', async () => {
-        localStorage.setItem(REFRESH_TOKEN_KEY, 'invalid-refresh');
+        localStorage.setItem(USER_KEY, JSON.stringify({ id: 'user-1' }));
 
         const first401 = new Response(null, { status: 401 });
         const refreshFail = new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401 });
@@ -181,12 +179,12 @@ describe('httpInterceptor', () => {
 
         await interceptedFetch('/api/data');
 
-        expect(localStorage.getItem(REFRESH_TOKEN_KEY)).toBeNull();
+        expect(localStorage.getItem(USER_KEY)).toBeNull();
         expect(window.location.href).toBe('/t/default/login');
       });
 
       it('handles refresh network error', async () => {
-        localStorage.setItem(REFRESH_TOKEN_KEY, 'refresh-token');
+        localStorage.setItem(USER_KEY, JSON.stringify({ id: 'user-1' }));
 
         const first401 = new Response(null, { status: 401 });
 
@@ -196,14 +194,13 @@ describe('httpInterceptor', () => {
 
         await interceptedFetch('/api/data');
 
-        expect(localStorage.getItem(REFRESH_TOKEN_KEY)).toBeNull();
+        expect(localStorage.getItem(USER_KEY)).toBeNull();
         expect(window.location.href).toBe('/t/default/login');
       });
 
       it('does not redirect if already on login page', async () => {
         window.location.pathname = '/login';
         window.location.href = 'http://localhost/login';
-        localStorage.setItem(REFRESH_TOKEN_KEY, 'refresh-token');
 
         const first401 = new Response(null, { status: 401 });
         const refreshFail = new Response(null, { status: 401 });
@@ -224,7 +221,6 @@ describe('httpInterceptor', () => {
 
     describe('concurrent requests during refresh', () => {
       it('queues requests while refresh is in progress', async () => {
-        localStorage.setItem(REFRESH_TOKEN_KEY, 'refresh-token');
 
         const first401 = new Response(null, { status: 401 });
         const second401 = new Response(null, { status: 401 });
@@ -263,7 +259,7 @@ describe('httpInterceptor', () => {
 
       await interceptedFetch('/api/test', options);
 
-      expect(fetchMock).toHaveBeenCalledWith('/api/test', options);
+      expect(fetchMock).toHaveBeenCalledWith('/api/test', { ...options, credentials: 'include' });
     });
   });
 });

@@ -1,9 +1,8 @@
 import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { authService } from '../services/auth';
-import { shouldRefreshToken } from '../utils/jwtHelper';
 import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
 import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest } from '../shared/types/auth';
-import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../constants/storageKeys';
+import { USER_KEY } from '../constants/storageKeys';
 
 /**
  * Authentication Context
@@ -39,79 +38,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const storedToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-        const storedUser = localStorage.getItem(USER_KEY);
-
-        if (storedToken && storedUser) {
-          let storedUserData: User | null = null;
-          try {
-            storedUserData = JSON.parse(storedUser) as User;
-          } catch {
-            storedUserData = null;
-          }
-
-          if (storedUserData?.isEmailVerified === false || !storedUserData) {
+        // Try to fetch user - httpOnly cookies are sent automatically
+        const user = await authService.getMe();
+        if (user?.isEmailVerified === false) {
+          clearAuth();
+          return;
+        }
+        setUser(user);
+        localStorage.setItem(USER_KEY, JSON.stringify(user));
+      } catch (error) {
+        // No valid session (401) or network error - try refresh
+        try {
+          await authService.refreshToken();
+          const user = await authService.getMe();
+          if (user?.isEmailVerified === false) {
             clearAuth();
             return;
           }
-
-          // Set token for API calls
-          authService.setAccessToken(storedToken);
-
-          // Verify token is still valid by fetching user
-          try {
-            const user = await authService.getMe();
-            if (user?.isEmailVerified === false) {
-              clearAuth();
-              return;
-            }
-            setUser(user);
-            localStorage.setItem(USER_KEY, JSON.stringify(user));
-          } catch (error) {
-            // Token invalid, try to refresh
-            const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-            if (refreshToken) {
-              try {
-                const refreshResponse = await authService.refreshToken({ refreshToken });
-                authService.setAccessToken(refreshResponse.accessToken);
-                localStorage.setItem(ACCESS_TOKEN_KEY, refreshResponse.accessToken);
-
-                // Fetch user again
-                const user = await authService.getMe();
-                if (user?.isEmailVerified === false) {
-                  clearAuth();
-                  return;
-                }
-                setUser(user);
-                localStorage.setItem(USER_KEY, JSON.stringify(user));
-              } catch {
-                // Refresh failed, clear everything
-                clearAuth();
-              }
-            } else {
-              clearAuth();
-            }
-          }
-        } else {
-          // No localStorage token, but might have HTTP-only cookies from Microsoft auth
-          // Try to fetch user - cookies will be sent automatically
-          try {
-            const user = await authService.getMe();
-            if (user?.isEmailVerified === false) {
-              clearAuth();
-              return;
-            }
-            setUser(user);
-            localStorage.setItem(USER_KEY, JSON.stringify(user));
-          } catch (error) {
-            // No valid session, user needs to login (expected when not logged in)
-            // Suppress 401 errors in console as they're normal
-            clearAuth();
-          }
+          setUser(user);
+          localStorage.setItem(USER_KEY, JSON.stringify(user));
+        } catch {
+          // No valid session, user needs to login
+          clearAuth();
         }
-      } catch (error) {
-        console.error('Failed to initialize auth:', error);
-        clearAuth();
       } finally {
         setIsLoading(false);
       }
@@ -125,9 +74,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
    */
   const clearAuth = useCallback(() => {
     setUser(null);
-    authService.setAccessToken(null);
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   }, []);
 
@@ -144,10 +90,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return response;
     }
 
-    // Store tokens and user
-    authService.setAccessToken(response.accessToken);
-    localStorage.setItem(ACCESS_TOKEN_KEY, response.accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+    // Store user info locally (tokens are in httpOnly cookies set by the server)
     localStorage.setItem(USER_KEY, JSON.stringify(response.user));
 
     setUser(response.user);
@@ -160,10 +103,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
    */
   const logout = useCallback(async () => {
     try {
-      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-      if (refreshToken) {
-        await authService.logout(refreshToken);
-      }
+      await authService.logout();
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -217,35 +157,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (!user) return;
 
-    const checkAndRefreshToken = async () => {
-      const token = localStorage.getItem(ACCESS_TOKEN_KEY);
-      if (!token) return;
-
-      // Check if token should be refreshed (within 5 minutes of expiry)
-      if (shouldRefreshToken(token)) {
-        const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-        if (!refreshToken) {
-          await logout();
-          return;
-        }
-
-        try {
-          const response = await authService.refreshToken({ refreshToken });
-          authService.setAccessToken(response.accessToken);
-          localStorage.setItem(ACCESS_TOKEN_KEY, response.accessToken);
-          console.log('Token refreshed proactively');
-        } catch (error) {
-          console.error('Proactive token refresh failed:', error);
-          await logout();
-        }
+    const proactiveRefresh = async () => {
+      try {
+        await authService.refreshToken();
+      } catch (error) {
+        console.error('Proactive token refresh failed:', error);
+        await logout();
       }
     };
 
-    // Check immediately
-    checkAndRefreshToken();
-
-    // Then check every minute
-    const interval = setInterval(checkAndRefreshToken, 60000); // 1 minute
+    // Refresh token every 10 minutes to keep the session alive
+    const interval = setInterval(proactiveRefresh, 10 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [user, logout]);

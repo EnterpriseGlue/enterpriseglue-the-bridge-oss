@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import notificationsRouter from '../../../src/modules/notifications/notifications.js';
+import notificationsRouter from '../../../src/modules/notifications/routes/notifications.js';
 import { getDataSource } from '../../../src/shared/db/data-source.js';
 
 vi.mock('@shared/db/data-source.js', () => ({

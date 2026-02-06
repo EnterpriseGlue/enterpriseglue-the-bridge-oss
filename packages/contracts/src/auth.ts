@@ -20,8 +20,8 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   user: User;
-  accessToken: string;
-  refreshToken: string;
+  accessToken?: string;
+  refreshToken?: string;
   expiresIn: number;
   emailVerificationRequired?: boolean;
 }
@@ -31,7 +31,7 @@ export interface RefreshTokenRequest {
 }
 
 export interface RefreshTokenResponse {
-  accessToken: string;
+  accessToken?: string;
   expiresIn: number;
 }
 

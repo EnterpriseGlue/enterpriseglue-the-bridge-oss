@@ -5,6 +5,8 @@ import passwordRouter from '../../../../src/modules/auth/routes/password.js';
 import { getDataSource } from '../../../../src/shared/db/data-source.js';
 import { User } from '../../../../src/shared/db/entities/User.js';
 import { RefreshToken } from '../../../../src/shared/db/entities/RefreshToken.js';
+import { PasswordResetToken } from '../../../../src/shared/db/entities/PasswordResetToken.js';
+import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
 import * as passwordUtils from '../../../../src/shared/utils/password.js';
 
 vi.mock('@shared/db/data-source.js', () => ({
@@ -39,6 +41,13 @@ vi.mock('@shared/services/audit.js', () => ({
   AuditActions: {},
 }));
 
+vi.mock('@shared/config/index.js', () => ({
+  config: {
+    frontendUrl: 'http://localhost:5173',
+    nodeEnv: 'test',
+  },
+}));
+
 describe('POST /api/auth/change-password', () => {
   let app: express.Application;
 
@@ -46,6 +55,7 @@ describe('POST /api/auth/change-password', () => {
     app = express();
     app.use(express.json());
     app.use(passwordRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
   });
 
@@ -54,10 +64,12 @@ describe('POST /api/auth/change-password', () => {
       findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', passwordHash: 'old-hash' }),
       update: vi.fn(),
     };
+    const resetTokenRepo = { update: vi.fn() };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
+        if (entity === PasswordResetToken) return resetTokenRepo;
         throw new Error('Unexpected repository');
       },
     });
@@ -79,10 +91,12 @@ describe('POST /api/auth/change-password', () => {
     const userRepo = {
       findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', passwordHash: 'hash' }),
     };
+    const resetTokenRepo = { update: vi.fn() };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
+        if (entity === PasswordResetToken) return resetTokenRepo;
         throw new Error('Unexpected repository');
       },
     });

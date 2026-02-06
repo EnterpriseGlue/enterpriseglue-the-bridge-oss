@@ -8,7 +8,7 @@
  * - EE uses /t/:actualTenantSlug/* paths
  */
 
-import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../constants/storageKeys';
+import { USER_KEY } from '../constants/storageKeys';
 import { getErrorMessageFromResponse } from '../shared/api/apiErrorUtils';
 import { config } from '../config';
 
@@ -102,7 +102,7 @@ function getCookieValue(name: string): string | null {
 
 // Track if a token refresh is in progress to avoid multiple simultaneous refreshes
 let isRefreshing = false;
-let refreshSubscribers: Array<(token: string | null) => void> = [];
+let refreshSubscribers: Array<(success: boolean) => void> = [];
 
 // Store CSRF token from response headers (avoids non-httpOnly cookie)
 let csrfToken: string | null = null;
@@ -120,15 +120,15 @@ function updateCsrfToken(response: Response): void {
 /**
  * Subscribe to token refresh completion
  */
-function subscribeTokenRefresh(callback: (token: string | null) => void): void {
+function subscribeTokenRefresh(callback: (success: boolean) => void): void {
   refreshSubscribers.push(callback);
 }
 
 /**
  * Notify all subscribers when token refresh completes
  */
-function onTokenRefreshed(token: string | null): void {
-  refreshSubscribers.forEach((callback) => callback(token));
+function onTokenRefreshed(success: boolean): void {
+  refreshSubscribers.forEach((callback) => callback(success));
   refreshSubscribers = [];
 }
 
@@ -136,9 +136,7 @@ function onTokenRefreshed(token: string | null): void {
  * Clear authentication and redirect to login
  */
 function handleAuthFailure(): void {
-  // Clear all auth data
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  // Clear local user data (tokens are in httpOnly cookies, cleared server-side on logout)
   localStorage.removeItem(USER_KEY);
   
   // Only redirect if not already on login page
@@ -151,42 +149,28 @@ function handleAuthFailure(): void {
 /**
  * Attempt to refresh the access token
  */
-async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-  
-  if (!refreshToken) {
-    handleAuthFailure();
-    return null;
-  }
-
+async function refreshAccessToken(): Promise<boolean> {
   try {
     const response = await fetch(applyApiBaseUrl(`${API_BASE_URL}/auth/refresh`), {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ refreshToken }),
     });
 
     if (!response.ok) {
       const message = await getErrorMessageFromResponse(response);
       console.warn('Token refresh failed:', message);
-      // Refresh token is invalid or expired
       handleAuthFailure();
-      return null;
+      return false;
     }
 
-    const data = await response.json();
-    const newAccessToken = data.accessToken;
-    
-    // Store new access token
-    localStorage.setItem(ACCESS_TOKEN_KEY, newAccessToken);
-    
-    return newAccessToken;
+    return true;
   } catch (error) {
     console.error('Token refresh failed:', error);
     handleAuthFailure();
-    return null;
+    return false;
   }
 }
 
@@ -227,8 +211,11 @@ export async function interceptedFetch(
   // Don't intercept on public routes - let them handle 401s naturally
   const onPublicRoute = isPublicRoute();
 
+  // Ensure credentials are included so cookies are sent
+  const fetchOptions: RequestInit = { ...options, credentials: 'include' };
+
   // Make the original request with prefixed URL
-  let response = await fetch(requestUrl, options);
+  let response = await fetch(requestUrl, fetchOptions);
 
   // Extract CSRF token from response headers
   updateCsrfToken(response);
@@ -239,23 +226,15 @@ export async function interceptedFetch(
       // Start refresh process
       isRefreshing = true;
       
-      const newToken = await refreshAccessToken();
+      const success = await refreshAccessToken();
       isRefreshing = false;
       
       // Notify all waiting requests
-      onTokenRefreshed(newToken);
+      onTokenRefreshed(success);
       
-      if (newToken) {
-        // Retry the original request with the new token
-        const newHeaders = new Headers(options.headers);
-        newHeaders.set('Authorization', `Bearer ${newToken}`);
-        
-        const newOptions: RequestInit = {
-          ...options,
-          headers: newHeaders,
-        };
-        
-        response = await fetch(requestUrl, newOptions);
+      if (success) {
+        // Retry the original request (new access token is in the cookie)
+        response = await fetch(requestUrl, fetchOptions);
         updateCsrfToken(response);
       } else {
         // Refresh failed, user will be redirected to login
@@ -263,23 +242,15 @@ export async function interceptedFetch(
       }
     } else {
       // Wait for the ongoing refresh to complete
-      const newToken = await new Promise<string | null>((resolve) => {
-        subscribeTokenRefresh((token) => {
-          resolve(token);
+      const success = await new Promise<boolean>((resolve) => {
+        subscribeTokenRefresh((ok) => {
+          resolve(ok);
         });
       });
       
-      if (newToken) {
-        // Retry with new token
-        const newHeaders = new Headers(options.headers);
-        newHeaders.set('Authorization', `Bearer ${newToken}`);
-        
-        const newOptions: RequestInit = {
-          ...options,
-          headers: newHeaders,
-        };
-        
-        response = await fetch(requestUrl, newOptions);
+      if (success) {
+        // Retry (new access token is in the cookie)
+        response = await fetch(requestUrl, fetchOptions);
         updateCsrfToken(response);
       }
     }
@@ -292,11 +263,9 @@ export async function interceptedFetch(
  * Helper to create auth headers with current token
  */
 export function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem(ACCESS_TOKEN_KEY);
   const tenantSlug = getTenantSlugFromPathname(window.location.pathname);
   return {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(tenantSlug ? { 'X-Tenant-Slug': tenantSlug } : {}),
     ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
   };

@@ -6,7 +6,6 @@
 
 import { apiClient } from '../shared/api/client';
 import { parseApiError, getErrorMessageFromResponse } from '../shared/api/apiErrorUtils';
-import { ACCESS_TOKEN_KEY } from '../constants/storageKeys';
 import type {
   LoginRequest,
   LoginResponse,
@@ -27,17 +26,12 @@ const API_BASE_URL = '/api';
 
 
 class AuthService {
-  private accessToken: string | null = null;
-
   /**
-   * Set access token for authenticated requests
+   * Set access token (no-op, tokens are now in httpOnly cookies)
+   * @deprecated Kept for backward compatibility during migration
    */
-  setAccessToken(token: string | null) {
-    this.accessToken = token;
-    // Also update localStorage for the interceptor
-    if (token) {
-      localStorage.setItem(ACCESS_TOKEN_KEY, token);
-    }
+  setAccessToken(_token: string | null) {
+    // Tokens are now stored in httpOnly cookies, not localStorage
   }
 
   /**
@@ -75,13 +69,13 @@ class AuthService {
   }
 
   /**
-   * Refresh access token
+   * Refresh access token (cookie-based)
    */
-  async refreshToken(request: RefreshTokenRequest): Promise<RefreshTokenResponse> {
+  async refreshToken(_request?: RefreshTokenRequest): Promise<RefreshTokenResponse> {
     return apiClient.post<RefreshTokenResponse>(
       `${API_BASE_URL}/auth/refresh`,
-      request,
-      { headers: { Authorization: '' } }
+      {},
+      { headers: { Authorization: '' }, credentials: 'include' }
     );
   }
 

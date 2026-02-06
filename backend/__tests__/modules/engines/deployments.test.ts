@@ -45,7 +45,7 @@ describe('engines deployments routes', () => {
   beforeEach(async () => {
     app = express();
     app.use(express.json());
-    const { default: deploymentsRouter } = await import('../../../src/modules/engines/deployments.js');
+    const { default: deploymentsRouter } = await import('../../../src/modules/engines/routes/deployments.js');
     app.use(deploymentsRouter);
     vi.clearAllMocks();
 

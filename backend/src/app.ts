@@ -1,9 +1,10 @@
 import express from 'express';
+import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import swaggerUi from 'swagger-ui-express';
-import csrf from 'csurf';
+import { doubleCsrf } from 'csrf-csrf';
 import { config } from '@shared/config/index.js';
 import { generateOpenApi } from '@shared/schemas/openapi.js';
 import { errorHandler } from '@shared/middleware/errorHandler.js';
@@ -49,10 +50,35 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
 
   app.disable('x-powered-by');
 
+  // Trust proxy for correct req.ip behind reverse proxies
+  app.set('trust proxy', config.trustProxy);
+
+  // Security headers
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", 'data:'],
+        frameAncestors: ["'none'"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+    },
+    frameguard: { action: 'deny' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  }));
+
   // CORS configuration for cookie-based authentication
   app.use(cors({
     origin: config.frontendUrl, // Exact origin (not wildcard) for credentials
     credentials: true, // Allow cookies to be sent
+    exposedHeaders: ['X-CSRF-Token'], // Let the SPA read the CSRF token from response headers
   }));
 
   // Logging
@@ -60,13 +86,17 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
 
-  const csrfProtection = csrf({
-    cookie: {
-      key: 'csrf_secret',
+  const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
+    getSecret: () => config.jwtSecret,
+    getSessionIdentifier: (req) => req.cookies?.accessToken ?? req.ip ?? '',
+    cookieName: 'csrf_secret',
+    cookieOptions: {
       httpOnly: true,
       secure: config.nodeEnv === 'production',
       sameSite: 'lax',
+      path: '/',
     },
+    getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'],
   });
 
   app.use((req, res, next) => {
@@ -82,18 +112,16 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     // CSRF is relevant for cookie-authenticated requests; Bearer-token APIs are not vulnerable.
     if (hasBearer || !hasCookieAccessToken) return next();
 
-    csrfProtection(req as any, res as any, (err: any) => {
+    doubleCsrfProtection(req as any, res as any, (err: any) => {
       if (err) return res.status(403).json({ error: 'Invalid CSRF token' });
 
       // Send the CSRF token in a response header for the SPA to echo back in X-CSRF-Token.
       // Using a header instead of a non-httpOnly cookie avoids CWE-1004.
-      if (typeof (req as any).csrfToken === 'function') {
-        try {
-          const token = (req as any).csrfToken();
-          res.setHeader('X-CSRF-Token', token);
-        } catch {
-          // ignore
-        }
+      try {
+        const token = generateCsrfToken(req as any, res as any);
+        res.setHeader('X-CSRF-Token', token);
+      } catch {
+        // ignore
       }
 
       next();

@@ -159,7 +159,24 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
     platformRole: user.platformRole,
   });
   
-  // Return user info and tokens
+  // Set tokens in HTTP-only cookies (same pattern as Microsoft OAuth)
+  res.cookie('accessToken', accessToken, {
+    httpOnly: true,
+    secure: config.nodeEnv === 'production',
+    sameSite: 'lax',
+    maxAge: config.jwtAccessTokenExpires * 1000,
+    path: '/',
+  });
+
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: config.nodeEnv === 'production',
+    sameSite: 'lax',
+    maxAge: config.jwtRefreshTokenExpires * 1000,
+    path: '/',
+  });
+
+  // Return user info (tokens are in cookies, not in body)
   res.json({
     user: {
       id: user.id,
@@ -171,9 +188,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
       capabilities,
       isEmailVerified,
     },
-    accessToken,
-    refreshToken,
-    expiresIn: 900, // 15 minutes
+    expiresIn: config.jwtAccessTokenExpires,
     emailVerificationRequired: !isEmailVerified, // Flag for frontend
   });
 }));

@@ -4,10 +4,12 @@ import express from 'express';
 import enginesRouter from '../../../../src/modules/mission-control/engines/routes.js';
 import { engineService } from '../../../../src/shared/services/platform-admin/index.js';
 import { getDataSource } from '../../../../src/shared/db/data-source.js';
+import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
 
 vi.mock('@shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: null };
     next();
   },
 }));
@@ -37,6 +39,19 @@ vi.mock('@shared/services/platform-admin/index.js', () => ({
   },
 }));
 
+vi.mock('@shared/constants/roles.js', () => ({
+  ENGINE_VIEW_ROLES: ['owner', 'delegate', 'operator', 'viewer'],
+  ENGINE_MANAGE_ROLES: ['owner', 'delegate'],
+  MANAGE_ROLES: ['owner', 'delegate'],
+}));
+
+vi.mock('@shared/config/index.js', () => ({
+  config: {
+    nodeEnv: 'test',
+    frontendUrl: 'http://localhost:5173',
+  },
+}));
+
 describe('mission-control engines routes', () => {
   let app: express.Application;
 
@@ -44,10 +59,12 @@ describe('mission-control engines routes', () => {
     app = express();
     app.use(express.json());
     app.use(enginesRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
         find: vi.fn().mockResolvedValue([{ id: 'e1', name: 'Engine 1' }]),
+        findOneBy: vi.fn().mockResolvedValue({ id: 'e1', name: 'Engine 1' }),
       }),
     });
   });

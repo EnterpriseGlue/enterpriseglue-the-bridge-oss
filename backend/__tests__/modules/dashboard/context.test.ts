@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import contextRouter from '../../../src/modules/dashboard/context.js';
+import contextRouter from '../../../src/modules/dashboard/routes/context.js';
 import { getDataSource } from '../../../src/shared/db/data-source.js';
 import { Engine } from '../../../src/shared/db/entities/Engine.js';
 import { EngineMember } from '../../../src/shared/db/entities/EngineMember.js';

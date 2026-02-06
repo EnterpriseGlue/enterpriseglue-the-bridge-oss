@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { apiLimiter } from '@shared/middleware/rateLimiter.js';
 import { logger } from '@shared/utils/logger.js';
-import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { verifyToken } from '@shared/utils/jwt.js';
 import { generateAccessToken } from '@shared/utils/jwt.js';
@@ -9,21 +8,22 @@ import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
 import { RefreshToken } from '@shared/db/entities/RefreshToken.js';
 import { IsNull, MoreThan } from 'typeorm';
-import { validateBody } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { config } from '@shared/config/index.js';
 
 const router = Router();
-
-const refreshSchema = z.object({
-  refreshToken: z.string(),
-});
 
 /**
  * POST /api/auth/refresh
  * Exchange refresh token for new access token
+ * Reads refresh token from httpOnly cookie
  */
-router.post('/api/auth/refresh', apiLimiter, validateBody(refreshSchema), asyncHandler(async (req, res) => {
-  const { refreshToken } = req.body;
+router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
+  const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+
+  if (!refreshToken) {
+    throw Errors.unauthorized('No refresh token provided');
+  }
 
   // Verify refresh token
   const payload = verifyToken(refreshToken);
@@ -70,9 +70,17 @@ router.post('/api/auth/refresh', apiLimiter, validateBody(refreshSchema), asyncH
   // Generate new access token
   const accessToken = generateAccessToken(user);
 
+  // Set new access token as httpOnly cookie
+  res.cookie('accessToken', accessToken, {
+    httpOnly: true,
+    secure: config.nodeEnv === 'production',
+    sameSite: 'lax',
+    maxAge: config.jwtAccessTokenExpires * 1000,
+    path: '/',
+  });
+
   res.json({
-    accessToken,
-    expiresIn: 900, // 15 minutes
+    expiresIn: config.jwtAccessTokenExpires,
   });
 }));
 

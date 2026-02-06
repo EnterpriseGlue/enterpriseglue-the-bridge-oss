@@ -28,13 +28,16 @@ describe('CascadeDeleteService', () => {
     const versionRepo = { delete: vi.fn() };
     const commentRepo = { delete: vi.fn() };
 
+    const getRepo = (entity: unknown) => {
+      if (entity === File) return fileRepo;
+      if (entity === Version) return versionRepo;
+      if (entity === Comment) return commentRepo;
+      throw new Error('Unexpected repository');
+    };
+
     (getDataSource as unknown as Mock).mockResolvedValue({
-      getRepository: (entity: unknown) => {
-        if (entity === File) return fileRepo;
-        if (entity === Version) return versionRepo;
-        if (entity === Comment) return commentRepo;
-        throw new Error('Unexpected repository');
-      },
+      getRepository: getRepo,
+      transaction: async (cb: any) => cb({ getRepository: getRepo }),
     });
 
     await CascadeDeleteService.deleteFile('file-1');

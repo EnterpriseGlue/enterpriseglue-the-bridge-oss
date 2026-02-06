@@ -130,7 +130,8 @@ router.post('/api/auth/reset-password-with-token', apiLimiter, passwordResetVeri
     updatedAt: now,
   });
 
-  await resetTokenRepo.update({ id: resetToken.id }, { consumedAt: now });
+  // Consume ALL outstanding reset tokens for this user (not just the one used)
+  await resetTokenRepo.update({ userId: user.id, consumedAt: IsNull() }, { consumedAt: now });
 
   // Audit log
   await logAudit({
