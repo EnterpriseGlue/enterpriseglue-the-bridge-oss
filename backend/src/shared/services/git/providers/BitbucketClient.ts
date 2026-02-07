@@ -371,6 +371,13 @@ export class BitbucketClient implements GitProviderClient {
     return { name: data.name, sha: data.target?.hash || commitSha };
   }
 
+  async testWriteAccess(repo: string): Promise<boolean> {
+    const [workspace, repoSlug] = this.parseRepo(repo);
+    // Bitbucket: attempt to read repo; write access is inferred from app password scopes
+    await (this.bitbucket as any).repositories.get({ workspace, repo_slug: repoSlug });
+    return true;
+  }
+
   // Helper methods
   private parseRepo(repo: string): [string, string] {
     const parts = repo

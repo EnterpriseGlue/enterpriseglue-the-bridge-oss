@@ -211,8 +211,7 @@ export default function ProjectDetail() {
   // Fetch platform settings to determine if sync is enabled and who can deploy
   const { data: platformSettings } = usePlatformSyncSettings()
   const anySyncEnabled = (platformSettings?.syncPushEnabled ?? true) || 
-                         (platformSettings?.syncPullEnabled ?? false) || 
-                         (platformSettings?.syncBothEnabled ?? false)
+                         (platformSettings?.syncPullEnabled ?? false)
 
   // Fetch git repository info to check if project has git connection
   const gitRepoQ = useQuery({

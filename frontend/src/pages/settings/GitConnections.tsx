@@ -92,6 +92,12 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
   const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
 
+  // Update token modal state
+  const [updateTokenModalOpen, setUpdateTokenModalOpen] = useState(false);
+  const [updatedToken, setUpdatedToken] = useState('');
+  const [updatingToken, setUpdatingToken] = useState(false);
+  const [updateTokenError, setUpdateTokenError] = useState<string | null>(null);
+
   // Fetch credentials
   const credentialsQuery = useQuery({
     queryKey: ['git', 'credentials'],
@@ -163,6 +169,33 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
       notify({ kind: 'error', title: 'Failed to connect', subtitle: parsed.message });
     } finally {
       setConnecting(false);
+    }
+  };
+
+  // Update token
+  const handleUpdateToken = async () => {
+    if (!selectedCredential || !updatedToken.trim()) return;
+
+    setUpdatingToken(true);
+    setUpdateTokenError(null);
+
+    try {
+      await apiClient.post('/git-api/credentials', {
+        providerId: selectedCredential.providerId,
+        token: updatedToken.trim(),
+        name: selectedCredential.name || undefined,
+      });
+      queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] });
+      setUpdateTokenModalOpen(false);
+      setSelectedCredential(null);
+      setUpdatedToken('');
+      notify({ kind: 'success', title: 'Token updated successfully' });
+    } catch (error: any) {
+      const parsed = parseApiError(error, 'Failed to update token');
+      setUpdateTokenError(parsed.message);
+      notify({ kind: 'error', title: 'Failed to update token', subtitle: parsed.message });
+    } finally {
+      setUpdatingToken(false);
     }
   };
 
@@ -326,6 +359,15 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
             setSelectedCredential(cred);
             setNewName(cred.name || cred.providerUsername || '');
             setRenameModalOpen(true);
+          }}
+        />
+        <OverflowMenuItem
+          itemText="Update Token"
+          onClick={() => {
+            setSelectedCredential(cred);
+            setUpdatedToken('');
+            setUpdateTokenError(null);
+            setUpdateTokenModalOpen(true);
           }}
         />
         <OverflowMenuItem
@@ -568,6 +610,44 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
         <p style={{ marginTop: 'var(--spacing-3)', color: 'var(--cds-text-secondary)' }}>
           You won't be able to sync projects with this provider until you reconnect.
         </p>
+      </Modal>
+
+      {/* Update Token Modal */}
+      <Modal
+        open={updateTokenModalOpen}
+        onRequestClose={() => {
+          setUpdateTokenModalOpen(false);
+          setSelectedCredential(null);
+          setUpdatedToken('');
+          setUpdateTokenError(null);
+        }}
+        modalHeading="Update Access Token"
+        primaryButtonText={updatingToken ? 'Updating...' : 'Update Token'}
+        secondaryButtonText="Cancel"
+        onRequestSubmit={handleUpdateToken}
+        primaryButtonDisabled={updatingToken || !updatedToken.trim()}
+        size="sm"
+      >
+        <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
+          <p style={{ color: 'var(--cds-text-secondary)', fontSize: '14px' }}>
+            Replace the stored token for <strong>{selectedCredential?.name || selectedCredential?.providerUsername || selectedCredential?.providerName}</strong>.
+          </p>
+          <TextInput
+            id="update-token-input"
+            labelText="New Personal Access Token"
+            type="password"
+            placeholder="Paste your new token..."
+            value={updatedToken}
+            onChange={(e) => setUpdatedToken(e.target.value)}
+            disabled={updatingToken}
+            helperText="The new token will be validated and encrypted before saving"
+          />
+          {updateTokenError && (
+            <div style={{ color: 'var(--cds-support-error)', fontSize: 14 }}>
+              {updateTokenError}
+            </div>
+          )}
+        </div>
       </Modal>
 
       {/* Rename Connection Modal */}

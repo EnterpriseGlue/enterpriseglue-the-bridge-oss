@@ -99,80 +99,82 @@ function authHeaders(e: { username?: string|null; passwordEnc?: string|null }): 
 async function resolveFilesFromRequest(req: Request): Promise<DeploymentFileResource[]> {
   const body = (req.body || {}) as DeployRequestBody
   const { resources } = body
-  const out: Array<{ id: string; name: string; type: 'bpmn'|'dmn'; xml: string; projectId: string; folderId: string | null; updatedAt: number | null }> = []
   const dataSource = await getDataSource()
   const fileRepo = dataSource.getRepository(FileEntity)
   const folderRepo = dataSource.getRepository(Folder)
 
-  const addFileById = async (fid: string) => {
-    const row = await fileRepo.findOne({ where: { id: fid } })
-    
-    if (row) {
-      const ty = String(row.type)
-      if (ty === 'bpmn' || ty === 'dmn') {
-        out.push({ 
-          id: String(row.id), 
-          projectId: String(row.projectId), 
-          folderId: row.folderId ? String(row.folderId) : null, 
-          name: String(row.name), 
-          type: ty as 'bpmn'|'dmn', 
-          xml: ty === 'dmn' ? sanitizeDmnXml(String(row.xml || '')) : sanitizeBpmnXml(String(row.xml || '')),
-          updatedAt: row.updatedAt !== null && typeof row.updatedAt !== 'undefined' ? Number(row.updatedAt) : null,
-        })
+  const toResource = (row: FileEntity) => {
+    const ty = String(row.type)
+    if (ty !== 'bpmn' && ty !== 'dmn') return null
+    return {
+      id: String(row.id),
+      projectId: String(row.projectId),
+      folderId: row.folderId ? String(row.folderId) : null,
+      name: String(row.name),
+      type: ty as 'bpmn'|'dmn',
+      xml: ty === 'dmn' ? sanitizeDmnXml(String(row.xml || '')) : sanitizeBpmnXml(String(row.xml || '')),
+      updatedAt: row.updatedAt !== null && typeof row.updatedAt !== 'undefined' ? Number(row.updatedAt) : null,
+    }
+  }
+
+  let rows: FileEntity[] = []
+
+  if (resources?.fileIds && resources.fileIds.length > 0) {
+    // Batch fetch all requested files in one query
+    rows = await fileRepo.find({ where: { id: In(resources.fileIds.map(String)) } })
+  } else if (resources?.folderId) {
+    // Collect folder IDs breadth-first, then batch fetch files
+    const folderIds = [String(resources.folderId)]
+    if (resources.recursive) {
+      const allFolders = await folderRepo.find({ select: ['id', 'parentFolderId'] })
+      const childMap = new Map<string, string[]>()
+      for (const f of allFolders) {
+        if (f.parentFolderId) {
+          const pid = String(f.parentFolderId)
+          if (!childMap.has(pid)) childMap.set(pid, [])
+          childMap.get(pid)!.push(String(f.id))
+        }
+      }
+      const queue = [String(resources.folderId)]
+      while (queue.length) {
+        const cur = queue.shift()!
+        const children = childMap.get(cur) || []
+        for (const c of children) { folderIds.push(c); queue.push(c) }
       }
     }
-  }
-
-  const collectFolder = async (fid: string, recursive: boolean) => {
-    // Collect files in this folder
-    const filesResult = await fileRepo.find({ where: { folderId: fid }, select: ['id'] })
-    
-    for (const row of filesResult) {
-      await addFileById(String(row.id))
-    }
-    
-    if (!recursive) return
-    
-    const foldersResult = await folderRepo.find({ where: { parentFolderId: fid }, select: ['id'] })
-    
-    for (const row of foldersResult) {
-      await collectFolder(String(row.id), true)
-    }
-  }
-
-  if (resources?.fileIds) {
-    for (const fid of resources.fileIds) await addFileById(String(fid))
-  } else if (resources?.folderId) {
-    await collectFolder(String(resources.folderId), !!resources.recursive)
+    rows = await fileRepo.find({ where: { folderId: In(folderIds) } })
   } else if (resources?.projectId) {
-    const result = await fileRepo.find({ where: { projectId: String(resources.projectId) }, select: ['id'] })
-    
-    for (const row of result) {
-      await addFileById(String(row.id))
-    }
+    rows = await fileRepo.find({ where: { projectId: String(resources.projectId) } })
   }
 
-  return out
+  return rows.map(toResource).filter((r): r is NonNullable<typeof r> => r !== null)
 }
 
 /**
  * Build resource name from file and folder hierarchy
  * ✨ Migrated to TypeORM
  */
-async function buildResourceName(f: { name: string; type: 'bpmn'|'dmn'; folderId: string | null }): Promise<string> {
-  const parts: string[] = []
-  let current = f.folderId
+/** Pre-load all folders into a lookup map for fast path resolution */
+async function buildFolderLookup(): Promise<Map<string, { name: string; parentFolderId: string | null }>> {
   const dataSource = await getDataSource()
   const folderRepo = dataSource.getRepository(Folder)
-  
-  while (current) {
-    const row = await folderRepo.findOne({ where: { id: current }, select: ['name', 'parentFolderId'] })
-    
-    if (!row) break
-    parts.unshift(sanitize(String(row.name)))
-    current = row.parentFolderId ? String(row.parentFolderId) : null
+  const allFolders = await folderRepo.find({ select: ['id', 'name', 'parentFolderId'] })
+  const map = new Map<string, { name: string; parentFolderId: string | null }>()
+  for (const f of allFolders) {
+    map.set(String(f.id), { name: String(f.name), parentFolderId: f.parentFolderId ? String(f.parentFolderId) : null })
   }
-  
+  return map
+}
+
+function buildResourceNameFromMap(f: { name: string; type: 'bpmn'|'dmn'; folderId: string | null }, folderMap: Map<string, { name: string; parentFolderId: string | null }>): string {
+  const parts: string[] = []
+  let current = f.folderId
+  while (current) {
+    const folder = folderMap.get(current)
+    if (!folder) break
+    parts.unshift(sanitize(folder.name))
+    current = folder.parentFolderId
+  }
   const base = ensureExt(sanitize(f.name), f.type)
   parts.push(base)
   return parts.filter(Boolean).join('/')
@@ -235,12 +237,13 @@ async function inferDeployAuthIds(req: Request, res: Response, next: NextFunctio
 r.post('/engines-api/engines/:engineId/deployments/preview', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireDeployPermission(), asyncHandler(async (req: Request, res: Response) => {
   try {
     const files = await resolveFilesFromRequest(req)
+    const folderMap = await buildFolderLookup()
     const resources: string[] = []
     const warnings: string[] = []
     const errors: string[] = []
     const seen = new Set<string>()
     for (const f of files) {
-      const rn0 = await buildResourceName(f)
+      const rn0 = buildResourceNameFromMap(f, folderMap)
       let rn = rn0
       let counter = 1
       while (seen.has(rn)) {
@@ -355,8 +358,11 @@ r.post('/engines-api/engines/:engineId/deployments/preview', apiLimiter, require
 
 r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireDeployPermission(), asyncHandler(async (req: Request, res: Response) => {
   try {
+    const deployTotalStart = Date.now()
     const engine = await getEngineById(String(req.params.engineId))
+    const resolveStart = Date.now()
     const files = await resolveFilesFromRequest(req)
+    logger.info('Engine deploy: files resolved', { count: files.length, ms: Date.now() - resolveStart })
 
     for (const f of files) {
       if (f?.type !== 'dmn') continue
@@ -395,11 +401,13 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
     form.append('deploy-changed-only', String(changedOnly))
     if (opts.tenantId) form.append('tenant-id', String(opts.tenantId))
 
+    const formBuildStart = Date.now()
+    const folderMap = await buildFolderLookup()
     const used = new Set<string>()
     const resourceMetaByName = new Map<string, { fileId: string; fileType: 'bpmn'|'dmn'; fileName: string; fileUpdatedAt: number | null; fileContentHash: string }>()
     for (const f of files) {
       if (f.type !== 'bpmn' && f.type !== 'dmn') continue
-      const rn0 = await buildResourceName(f)
+      const rn0 = buildResourceNameFromMap(f, folderMap)
       let rn = rn0
       let counter = 1
       while (used.has(rn)) {
@@ -421,10 +429,13 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
         fileContentHash: hashContent(String(f.xml || '')),
       })
     }
+    logger.info('Engine deploy: form built', { resources: used.size, ms: Date.now() - formBuildStart })
 
+    const camundaStart = Date.now()
     const url = String(engine.baseUrl || '').replace(/\/$/, '') + '/deployment/create'
     const r2 = await fetch(url, { method: 'POST', headers: { ...authHeaders(engine) }, body: form as any })
     const text = await r2.text()
+    logger.info('Engine deploy: Camunda response', { status: r2.status, ms: Date.now() - camundaStart })
     if (!r2.ok) {
       try {
         const dmnMeta: DmnDebugMeta[] = []
@@ -506,11 +517,14 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
 
       const lastCommitByFileId = new Map<string, { id: string; message: string }>()
       try {
-        for (const f of files) {
-          if (!f?.id) continue
-          const fid = String((f as any).id)
-          if (!fid) continue
-          const last = await vcsService.getLastCommitForFile(projectId, fid)
+        const fileIds = files.map(f => f?.id ? String((f as any).id) : '').filter(Boolean)
+        const results = await Promise.all(
+          fileIds.map(async (fid) => {
+            const last = await vcsService.getLastCommitForFile(projectId, fid)
+            return { fid, last }
+          })
+        )
+        for (const { fid, last } of results) {
           if (last && last.id) {
             lastCommitByFileId.set(fid, { id: String(last.id), message: String(last.message || '') })
           }
@@ -619,6 +633,7 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
       // Best-effort persistence; do not fail the deployment if history recording fails
     }
 
+    logger.info('Engine deploy: complete', { engineId: engine.id, resources: used.size, totalMs: Date.now() - deployTotalStart })
     res.status(201).json({ engineId: engine.id, engineBaseUrl: engine.baseUrl, raw: data })
   } catch (e: any) {
     res.status(e?.status || 500).json({ message: e?.message || 'Deployment failed' })

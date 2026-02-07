@@ -65,9 +65,13 @@ export function decrypt(encryptedData: string): string {
 
   // v2 format
   if (parts.length === 5 && parts[0] === 'v2') {
-    const salt = Buffer.from(parts[1], 'hex');
-    const iv = Buffer.from(parts[2], 'hex');
-    const authTag = Buffer.from(parts[3], 'hex');
+    // Detect encoding: older builds used base64, current uses hex
+    const isHex = /^[0-9a-fA-F]+$/.test(parts[1]);
+    const encoding: BufferEncoding = isHex ? 'hex' : 'base64';
+
+    const salt = Buffer.from(parts[1], encoding);
+    const iv = Buffer.from(parts[2], encoding);
+    const authTag = Buffer.from(parts[3], encoding);
     const encrypted = parts[4];
 
     const key = deriveKeyV2(salt);
@@ -75,7 +79,7 @@ export function decrypt(encryptedData: string): string {
     const decipher = createDecipheriv(ALGORITHM, key, iv);
     decipher.setAuthTag(authTag);
 
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    let decrypted = decipher.update(encrypted, encoding, 'utf8');
     decrypted += decipher.final('utf8');
 
     return decrypted;

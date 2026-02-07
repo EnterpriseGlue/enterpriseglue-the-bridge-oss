@@ -13,7 +13,6 @@ export const handlers = [
     return HttpResponse.json({
       syncPushEnabled: true,
       syncPullEnabled: false,
-      syncBothEnabled: false,
       gitProjectTokenSharingEnabled: false,
       defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
     });

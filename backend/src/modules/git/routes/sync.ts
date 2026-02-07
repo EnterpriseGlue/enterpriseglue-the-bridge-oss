@@ -185,6 +185,12 @@ router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(syncBodySchem
     if (direction === 'push' || direction === 'both') {
       const pushStart = Date.now();
 
+      // Pre-flight: verify write permission before expensive VCS work
+      const preflightStart = Date.now();
+      const preflightClient = await remoteGitService.getClient(providerId, accessToken);
+      await preflightClient.testWriteAccess(repoFullName);
+      logger.info('Sync push preflight passed', { projectId, ms: Date.now() - preflightStart });
+
       // Sync main DB files to VCS and create a commit
       // This ensures VCS snapshots match what we push to GitHub
       // Also ensures draft branch is updated so UI shows files as synced

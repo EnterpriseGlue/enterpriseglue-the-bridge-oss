@@ -28,7 +28,6 @@ const updateSettingsSchema = z.object({
   defaultEnvironmentTagId: z.string().nullable().optional(),
   syncPushEnabled: z.boolean().optional(),
   syncPullEnabled: z.boolean().optional(),
-  syncBothEnabled: z.boolean().optional(),
   gitProjectTokenSharingEnabled: z.boolean().optional(),
   defaultDeployRoles: z.array(z.string()).optional(),
   inviteAllowAllDomains: z.boolean().optional(),

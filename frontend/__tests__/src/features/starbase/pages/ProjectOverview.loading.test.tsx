@@ -12,7 +12,6 @@ vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
     data: {
       syncPushEnabled: true,
       syncPullEnabled: false,
-      syncBothEnabled: false,
       gitProjectTokenSharingEnabled: false,
       defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
     },

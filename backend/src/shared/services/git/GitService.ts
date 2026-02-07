@@ -93,6 +93,7 @@ export class GitService {
 
       const dataSource = await getDataSource();
       const repoRepo = dataSource.getRepository(GitRepository);
+      await repoRepo.delete({ projectId });
       await repoRepo.insert(repo);
 
       // Audit log
@@ -175,6 +176,7 @@ export class GitService {
 
       const dataSource = await getDataSource();
       const repoRepo = dataSource.getRepository(GitRepository);
+      await repoRepo.delete({ projectId });
       await repoRepo.insert(repo);
 
       // Pull files from remote repository (only .bpmn and .dmn files)
@@ -241,7 +243,10 @@ export class GitService {
   async getRepository(projectId: string): Promise<RepositoryInfo | null> {
     const dataSource = await getDataSource();
     const repoRepo = dataSource.getRepository(GitRepository);
-    const repo = await repoRepo.findOneBy({ projectId });
+    const repo = await repoRepo.findOne({
+      where: { projectId },
+      order: { createdAt: 'DESC' },
+    });
 
     if (!repo) return null;
     return {
@@ -283,7 +288,10 @@ export class GitService {
     const repoRepo = dataSource.getRepository(GitRepository);
     const deploymentRepo = dataSource.getRepository(GitDeployment);
 
-    const repo = await repoRepo.findOneBy({ projectId: options.projectId });
+    const repo = await repoRepo.findOne({
+      where: { projectId: options.projectId },
+      order: { createdAt: 'DESC' },
+    });
 
     if (!repo) {
       throw new Error('Project is not connected to Git');
@@ -305,11 +313,14 @@ export class GitService {
     const repoFullName = repo.namespace ? `${repo.namespace}/${repo.repositoryName}` : repo.repositoryName;
     const branch = repo.defaultBranch || 'main';
 
-    // Pre-flight: verify token can access the repository before doing expensive work
+    // Pre-flight: verify token has write permission (createBlob) before expensive VCS work
+    const preflightStart = Date.now();
     const client = await remoteGitService.getClient(repo.providerId, accessToken);
-    await client.getBranches(repoFullName);
+    await client.testWriteAccess(repoFullName);
+    logger.info('Deploy preflight passed', { projectId: options.projectId, ms: Date.now() - preflightStart });
 
     // Always create VCS checkpoint before deploy to ensure consistency
+    const vcsStart = Date.now();
     let vcsCommitId: string | undefined;
     try {
       const mainBranch = await vcsService.getMainBranch(options.projectId);
@@ -322,14 +333,15 @@ export class GitService {
           { isRemote: false, source: 'deploy' }
         );
         vcsCommitId = vcsCommit.id;
-        logger.info('Created VCS checkpoint before deploy', { projectId: options.projectId, vcsCommitId });
+        logger.info('Created VCS checkpoint before deploy', { projectId: options.projectId, vcsCommitId, ms: Date.now() - vcsStart });
       }
     } catch (e) {
       // Log warning but continue - we still want to push
-      logger.warn('Failed to create VCS checkpoint before deploy', { projectId: options.projectId, error: e });
+      logger.warn('Failed to create VCS checkpoint before deploy', { projectId: options.projectId, error: e, ms: Date.now() - vcsStart });
     }
 
     // Push to remote - includes userId so pushToRemote can update VCS after push
+    const pushStart = Date.now();
     const pushResult = await remoteGitService.pushToRemote(options.projectId, repo.providerId, accessToken, {
       repo: repoFullName,
       branch,
@@ -337,6 +349,8 @@ export class GitService {
       patterns: ['**/*.bpmn', '**/*.dmn'],
       userId: options.userId, // Pass userId for VCS commit after push
     });
+
+    logger.info('Push to remote complete', { projectId: options.projectId, ms: Date.now() - pushStart, filesChanged: pushResult.pushedFilesCount + pushResult.deletionsCount });
 
     const commitSha = pushResult.commit?.sha || repo.lastCommitSha || '';
 
@@ -430,7 +444,10 @@ export class GitService {
     const repoRepo = dataSource.getRepository(GitRepository);
     const deploymentRepo = dataSource.getRepository(GitDeployment);
 
-    const repo = await repoRepo.findOneBy({ projectId });
+    const repo = await repoRepo.findOne({
+      where: { projectId },
+      order: { createdAt: 'DESC' },
+    });
 
     if (!repo) return { all: [] };
     const repoFullName = repo.namespace ? `${repo.namespace}/${repo.repositoryName}` : repo.repositoryName;

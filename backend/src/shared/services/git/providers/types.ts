@@ -170,4 +170,9 @@ export interface GitProviderClient {
    * Create a lightweight tag pointing to a commit SHA
    */
   createTag(repo: string, tagName: string, commitSha: string, message?: string): Promise<{ name: string; sha: string }>;
+
+  /**
+   * Test write access by creating a throwaway blob. Fast preflight check.
+   */
+  testWriteAccess(repo: string): Promise<boolean>;
 }

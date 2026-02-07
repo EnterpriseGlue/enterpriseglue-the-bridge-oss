@@ -89,7 +89,20 @@ export class VcsCommitService {
     
     await commitRepo.insert(commit);
     
-    // Create file snapshots with accurate changeType per file
+    // Pre-load previous snapshot content for reuse on unchanged files
+    const prevContentByWorkingId = new Map<string, { content: string | null; contentHash: string | null }>();
+    if (branch.headCommitId) {
+      const prevSnapshots = await snapshotRepo.find({
+        where: { commitId: branch.headCommitId },
+        select: ['workingFileId', 'content', 'contentHash']
+      });
+      for (const snap of prevSnapshots) {
+        prevContentByWorkingId.set(snap.workingFileId, { content: snap.content, contentHash: snap.contentHash });
+      }
+    }
+
+    // Create file snapshots with accurate changeType per file (batched)
+    const snapshotRows: any[] = [];
     for (const file of files) {
       let changeType: string;
       let snapshotContent = file.content;
@@ -111,23 +124,17 @@ export class VcsCommitService {
 
         if (contentUnchanged && nameUnchanged && typeUnchanged && folderUnchanged) {
           changeType = 'unchanged';
-          if (branch.headCommitId) {
-            const previousSnapshot = await snapshotRepo.findOne({
-              where: { commitId: branch.headCommitId, workingFileId: file.id },
-              select: ['content', 'contentHash']
-            });
-            
-            if (previousSnapshot) {
-              snapshotContent = previousSnapshot.content;
-              snapshotContentHash = previousSnapshot.contentHash;
-            }
+          const prevContent = prevContentByWorkingId.get(file.id);
+          if (prevContent) {
+            snapshotContent = prevContent.content;
+            snapshotContentHash = prevContent.contentHash;
           }
         } else {
           changeType = 'modified';
         }
       }
 
-      await snapshotRepo.insert({
+      snapshotRows.push({
         id: generateId(),
         commitId,
         workingFileId: file.id,
@@ -138,6 +145,10 @@ export class VcsCommitService {
         contentHash: snapshotContentHash,
         changeType,
       });
+    }
+
+    if (snapshotRows.length > 0) {
+      await snapshotRepo.insert(snapshotRows);
     }
     
     // Update branch head
@@ -386,6 +397,7 @@ export class VcsCommitService {
       createdAt: now,
     });
 
+    const stateSnapshotRows: any[] = [];
     for (const file of currentFiles) {
       const contentHash = hashContent((file as any).xml || '');
 
@@ -398,7 +410,7 @@ export class VcsCommitService {
       else if (prevHashes.has(contentHash)) changeType = 'unchanged';
       else changeType = 'modified';
 
-      await snapshotRepo.insert({
+      stateSnapshotRows.push({
         id: generateId(),
         commitId,
         workingFileId: file.id,
@@ -409,6 +421,10 @@ export class VcsCommitService {
         contentHash,
         changeType,
       });
+    }
+
+    if (stateSnapshotRows.length > 0) {
+      await snapshotRepo.insert(stateSnapshotRows);
     }
 
     await branchRepo.update({ id: mainBranch.id }, { headCommitId: commitId, updatedAt: now });
@@ -449,35 +465,48 @@ export class VcsCommitService {
         return;
       }
 
+      // Batch: load all project files once and build a lookup map
+      const allProjectFiles = await mainFileRepo.find({
+        where: { projectId },
+        select: ['id', 'name', 'type', 'folderId']
+      });
+      const fileByKey = new Map<string, string>();
+      for (const f of allProjectFiles) {
+        const fid = normalizeFolderId((f as any).folderId);
+        fileByKey.set(`${fid}:${f.name}:${f.type}`, f.id);
+      }
+
+      // Batch: load all existing max versions for affected files
+      const matchedFileIds: string[] = [];
       for (const snapshot of affectedSnapshots) {
-        const normalizedFolderId = snapshot.folderId ?? null;
+        const nfid = normalizeFolderId(snapshot.folderId);
+        const key = `${nfid}:${snapshot.name}:${snapshot.type}`;
+        const fileId = fileByKey.get(key);
+        if (fileId) matchedFileIds.push(fileId);
+      }
 
-        const qb = mainFileRepo.createQueryBuilder('f')
-          .select(['f.id'])
-          .where('f.projectId = :projectId', { projectId })
-          .andWhere('f.name = :name', { name: snapshot.name })
-          .andWhere('f.type = :type', { type: snapshot.type });
-        
-        if (normalizedFolderId === null || normalizedFolderId === '') {
-          qb.andWhere('(f.folderId IS NULL OR f.folderId = :empty)', { empty: '' });
-        } else {
-          qb.andWhere('f.folderId = :folderId', { folderId: normalizedFolderId });
+      const maxVersionsByFileId = new Map<string, number>();
+      if (matchedFileIds.length > 0) {
+        const maxVersionRows = await versionRepo.createQueryBuilder('v')
+          .select(['v.fileId AS "fileId"', 'COALESCE(MAX(v.versionNumber), 0) AS "maxVersion"'])
+          .where('v.fileId IN (:...fileIds)', { fileIds: matchedFileIds })
+          .groupBy('v.fileId')
+          .getRawMany();
+        for (const row of maxVersionRows) {
+          maxVersionsByFileId.set(String(row.fileId), Number(row.maxVersion));
         }
-        
-        const fileRow = await qb.getOne();
+      }
 
-        if (!fileRow) {
-          continue;
-        }
+      // Batch insert version rows
+      for (const snapshot of affectedSnapshots) {
+        const nfid = normalizeFolderId(snapshot.folderId);
+        const key = `${nfid}:${snapshot.name}:${snapshot.type}`;
+        const fileId = fileByKey.get(key);
+        if (!fileId) continue;
 
-        const fileId = fileRow.id;
-
-        const maxVersionResult = await versionRepo.createQueryBuilder('v')
-          .select('COALESCE(MAX(v.versionNumber), 0)', 'maxVersion')
-          .where('v.fileId = :fileId', { fileId })
-          .getRawOne();
-
-        const nextVersionNumber = (maxVersionResult?.maxVersion ?? 0) + 1;
+        const maxVersion = maxVersionsByFileId.get(fileId) ?? 0;
+        const nextVersionNumber = maxVersion + 1;
+        maxVersionsByFileId.set(fileId, nextVersionNumber);
 
         await versionRepo.createQueryBuilder()
           .insert()

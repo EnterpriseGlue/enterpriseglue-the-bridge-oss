@@ -21,7 +21,6 @@ export interface PlatformSettings {
   defaultEnvironmentTagId: string | null;
   syncPushEnabled: boolean;
   syncPullEnabled: boolean;
-  syncBothEnabled: boolean;
   gitProjectTokenSharingEnabled: boolean;
   defaultDeployRoles: string[];
   inviteAllowAllDomains: boolean;

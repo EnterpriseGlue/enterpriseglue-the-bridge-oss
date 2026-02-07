@@ -18,7 +18,7 @@ export type EngineAccessData = {
   availableEngines: { id: string; name: string }[]
 }
 
-export type SyncDirection = 'push' | 'pull' | 'both'
+export type SyncDirection = 'push' | 'pull'
 
 export type BulkSyncResult = {
   succeeded: { id: string; name: string }[]

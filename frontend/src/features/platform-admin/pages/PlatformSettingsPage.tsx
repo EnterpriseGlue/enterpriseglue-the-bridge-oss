@@ -227,7 +227,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const isAssigning = assignProjectOwner.isPending || assignProjectDelegate.isPending || 
                       assignEngineOwner.isPending || assignEngineDelegate.isPending;
 
-  const handleToggle = (key: 'syncPushEnabled' | 'syncPullEnabled' | 'syncBothEnabled' | 'gitProjectTokenSharingEnabled', value: boolean) => {
+  const handleToggle = (key: 'syncPushEnabled' | 'syncPullEnabled' | 'gitProjectTokenSharingEnabled', value: boolean) => {
     updateSettings.mutate({ [key]: value });
   };
 

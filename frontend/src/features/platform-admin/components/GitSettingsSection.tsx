@@ -8,7 +8,7 @@ interface GitSettingsSectionProps {
   settings: PlatformSettings | undefined
   gitProviders: any[]
   gitProvidersLoading: boolean
-  onToggle: (key: 'syncPushEnabled' | 'syncPullEnabled' | 'syncBothEnabled' | 'gitProjectTokenSharingEnabled', value: boolean) => void
+  onToggle: (key: 'syncPushEnabled' | 'syncPullEnabled' | 'gitProjectTokenSharingEnabled', value: boolean) => void
   onUpdateGitProvider: (id: string, updates: any) => Promise<void>
 }
 
@@ -33,13 +33,13 @@ export function GitSettingsSection({
               Git Sync Options
             </h3>
             <p style={{ margin: '0 0 var(--spacing-4) 0', fontSize: '14px', color: 'var(--color-text-secondary)' }}>
-              Configure how Voyager syncs with Git repositories.
+              Configure how StarBase syncs with Git repositories.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
               <Toggle
                 id="sync-push"
-                labelText="Push (Voyager → Git)"
+                labelText="Push (StarBase → Git)"
                 labelA="Off"
                 labelB="On"
                 toggled={settings?.syncPushEnabled ?? true}
@@ -47,19 +47,11 @@ export function GitSettingsSection({
               />
               <Toggle
                 id="sync-pull"
-                labelText="Pull (Git → Voyager)"
+                labelText="Pull (Git → StarBase)"
                 labelA="Off"
                 labelB="On"
                 toggled={settings?.syncPullEnabled ?? false}
                 onToggle={(checked) => onToggle('syncPullEnabled', checked)}
-              />
-              <Toggle
-                id="sync-both"
-                labelText="Sync Both Ways"
-                labelA="Off"
-                labelB="On"
-                toggled={settings?.syncBothEnabled ?? false}
-                onToggle={(checked) => onToggle('syncBothEnabled', checked)}
               />
               <Toggle
                 id="git-project-token-sharing"

@@ -10,7 +10,6 @@ export interface PlatformSettingsData {
   defaultEnvironmentTagId: string | null;
   syncPushEnabled: boolean;
   syncPullEnabled: boolean;
-  syncBothEnabled: boolean;
   gitProjectTokenSharingEnabled: boolean;
   defaultDeployRoles: string[];
   inviteAllowAllDomains: boolean;
@@ -34,7 +33,6 @@ export class PlatformSettingsService {
         defaultEnvironmentTagId: null,
         syncPushEnabled: true,
         syncPullEnabled: false,
-        syncBothEnabled: false,
         gitProjectTokenSharingEnabled: false,
         defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
         inviteAllowAllDomains: true,
@@ -46,7 +44,6 @@ export class PlatformSettingsService {
       defaultEnvironmentTagId: settings.defaultEnvironmentTagId,
       syncPushEnabled: settings.syncPushEnabled,
       syncPullEnabled: settings.syncPullEnabled,
-      syncBothEnabled: settings.syncBothEnabled,
       gitProjectTokenSharingEnabled: (settings as any).gitProjectTokenSharingEnabled ?? false,
       defaultDeployRoles: JSON.parse(settings.defaultDeployRoles),
       inviteAllowAllDomains: (settings as any).inviteAllowAllDomains ?? true,
@@ -68,7 +65,6 @@ export class PlatformSettingsService {
       defaultEnvironmentTagId: string | null;
       syncPushEnabled: boolean;
       syncPullEnabled: boolean;
-      syncBothEnabled: boolean;
       gitProjectTokenSharingEnabled: boolean;
       defaultDeployRoles: string[];
       inviteAllowAllDomains: boolean;
@@ -95,9 +91,6 @@ export class PlatformSettingsService {
     if (data.syncPullEnabled !== undefined) {
       updateData.syncPullEnabled = data.syncPullEnabled;
     }
-    if (data.syncBothEnabled !== undefined) {
-      updateData.syncBothEnabled = data.syncBothEnabled;
-    }
     if (data.gitProjectTokenSharingEnabled !== undefined) {
       updateData.gitProjectTokenSharingEnabled = data.gitProjectTokenSharingEnabled;
     }
@@ -121,7 +114,6 @@ export class PlatformSettingsService {
         defaultEnvironmentTagId: data.defaultEnvironmentTagId ?? null,
         syncPushEnabled: data.syncPushEnabled ?? true,
         syncPullEnabled: data.syncPullEnabled ?? false,
-        syncBothEnabled: data.syncBothEnabled ?? false,
         gitProjectTokenSharingEnabled: data.gitProjectTokenSharingEnabled ?? false,
         defaultDeployRoles: JSON.stringify(data.defaultDeployRoles ?? ['owner', 'delegate', 'operator', 'deployer']),
         inviteAllowAllDomains: data.inviteAllowAllDomains ?? true,

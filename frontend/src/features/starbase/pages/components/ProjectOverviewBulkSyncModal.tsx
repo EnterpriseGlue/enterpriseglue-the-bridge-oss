@@ -17,7 +17,6 @@ interface ProjectOverviewBulkSyncModalProps {
   sharingEnabled: boolean
   pushEnabled: boolean
   pullEnabled: boolean
-  bothEnabled: boolean
   onClose: () => void
   onSubmit: () => void
   onClearError: () => void
@@ -39,7 +38,6 @@ export function ProjectOverviewBulkSyncModal({
   sharingEnabled,
   pushEnabled,
   pullEnabled,
-  bothEnabled,
   onClose,
   onSubmit,
   onClearError,
@@ -133,7 +131,6 @@ export function ProjectOverviewBulkSyncModal({
         >
           {pushEnabled && <SelectItem value="push" text="Push" />}
           {pullEnabled && <SelectItem value="pull" text="Pull" />}
-          {bothEnabled && <SelectItem value="both" text="Both" />}
         </Select>
 
         <TextInput

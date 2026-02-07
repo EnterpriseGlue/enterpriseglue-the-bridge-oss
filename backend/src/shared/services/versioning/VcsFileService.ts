@@ -132,6 +132,7 @@ export class VcsFileService {
    * Sync files from main database to VCS draft branch
    */
   async syncFromMainDb(projectId: string, userId: string, branchId: string): Promise<void> {
+    const syncStart = Date.now();
     const dataSource = await getDataSource();
     const mainFileRepo = dataSource.getRepository(MainFile);
     const workingFileRepo = dataSource.getRepository(WorkingFile);
@@ -152,7 +153,10 @@ export class VcsFileService {
     );
     const dbFileKeys = new Set<string>();
     
-    // Update or create VCS files to match main DB
+    // Collect batch operations instead of sequential awaits
+    const updatePromises: Promise<any>[] = [];
+    const newRows: any[] = [];
+    
     for (const dbFile of dbFiles) {
       const key = `${normalizeFolderId((dbFile as any).folderId)}:${dbFile.name}:${dbFile.type}`;
       dbFileKeys.add(key);
@@ -164,15 +168,15 @@ export class VcsFileService {
       if (existingVcsFile) {
         const existingFolderId = normalizeFolderId(existingVcsFile.folderId);
         if (existingVcsFile.contentHash !== contentHash || existingFolderId !== normalizedFolderId) {
-          await workingFileRepo.update({ id: existingVcsFile.id }, {
+          updatePromises.push(workingFileRepo.update({ id: existingVcsFile.id }, {
             content,
             contentHash,
             folderId: (dbFile as any).folderId || '',
             updatedAt: now,
-          });
+          }));
         }
       } else {
-        await workingFileRepo.insert({
+        newRows.push({
           id: generateId(),
           branchId,
           projectId,
@@ -188,13 +192,20 @@ export class VcsFileService {
       }
     }
 
+    // Mark deleted files
     for (const [key, vcsFile] of vcsFileMap.entries()) {
       if (!dbFileKeys.has(key)) {
-        await workingFileRepo.update({ id: vcsFile.id }, { isDeleted: true, updatedAt: now });
+        updatePromises.push(workingFileRepo.update({ id: vcsFile.id }, { isDeleted: true, updatedAt: now }));
       }
     }
+
+    // Execute all updates in parallel + batch insert new rows
+    await Promise.all([
+      ...updatePromises,
+      ...(newRows.length > 0 ? [workingFileRepo.insert(newRows)] : []),
+    ]);
     
-    logger.debug('Synced main DB files to VCS', { projectId, branchId, fileCount: dbFiles.length });
+    logger.info('Synced main DB files to VCS', { projectId, branchId, fileCount: dbFiles.length, updated: updatePromises.length, inserted: newRows.length, ms: Date.now() - syncStart });
   }
 }
 

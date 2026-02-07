@@ -4,7 +4,6 @@ import { apiClient } from '../../../shared/api/client';
 export interface PlatformSyncSettings {
   syncPushEnabled: boolean;
   syncPullEnabled: boolean;
-  syncBothEnabled: boolean;
   gitProjectTokenSharingEnabled: boolean;
   defaultDeployRoles: string[];
 }

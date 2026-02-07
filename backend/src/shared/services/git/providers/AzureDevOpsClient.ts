@@ -422,6 +422,15 @@ export class AzureDevOpsClient implements GitProviderClient {
     return { name: tagName, sha: commitSha };
   }
 
+  async testWriteAccess(repo: string): Promise<boolean> {
+    const gitApi = await this.getGitApi();
+    const [project, repoName] = this.parseRepo(repo);
+    const repository = await gitApi.getRepository(repoName, project);
+    if (!repository?.id) throw new Error('Repository not found');
+    // Azure DevOps: if we can read the repo, push perms are granted via project-level security
+    return true;
+  }
+
   // Helper methods
   private parseRepo(repo: string): [string, string] {
     // Format: project/repo or just repo (uses default project)

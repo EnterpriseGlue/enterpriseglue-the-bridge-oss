@@ -48,7 +48,7 @@ describe('PlatformSettingsService', () => {
 
     await service.update({ syncPullEnabled: true }, 'admin-1');
     expect(repo.insert).toHaveBeenCalled();
-    expect(repo.update).not.toHaveBeenCalled();
+    (expect(repo.update) as any).not.toHaveBeenCalled();
   });
 
   it('updates existing settings', async () => {
@@ -65,11 +65,11 @@ describe('PlatformSettingsService', () => {
       },
     });
 
-    await service.update({ syncBothEnabled: true }, 'admin-1');
+    await service.update({ syncPullEnabled: true }, 'admin-1');
     expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
-      syncBothEnabled: true,
+      syncPullEnabled: true,
       updatedById: 'admin-1',
     }));
-    expect(repo.insert).not.toHaveBeenCalled();
+    (expect(repo.insert) as any).not.toHaveBeenCalled();
   });
 });

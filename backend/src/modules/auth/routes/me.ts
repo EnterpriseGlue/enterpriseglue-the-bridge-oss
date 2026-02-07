@@ -178,7 +178,6 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
       return res.json({
         syncPushEnabled: true,
         syncPullEnabled: false,
-        syncBothEnabled: false,
         gitProjectTokenSharingEnabled: false,
         defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
       });
@@ -196,7 +195,6 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
     res.json({
       syncPushEnabled: settings.syncPushEnabled ?? true,
       syncPullEnabled: settings.syncPullEnabled ?? false,
-      syncBothEnabled: settings.syncBothEnabled ?? false,
       gitProjectTokenSharingEnabled: settings.gitProjectTokenSharingEnabled ?? false,
       defaultDeployRoles,
     });

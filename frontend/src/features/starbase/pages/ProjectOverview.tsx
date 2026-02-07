@@ -39,8 +39,7 @@ export default function ProjectOverview() {
   const { data: platformSettings } = usePlatformSyncSettings()
   const pushEnabled = platformSettings?.syncPushEnabled ?? true
   const pullEnabled = platformSettings?.syncPullEnabled ?? false
-  const bothEnabled = platformSettings?.syncBothEnabled ?? false
-  const anySyncEnabled = pushEnabled || pullEnabled || bothEnabled
+  const anySyncEnabled = pushEnabled || pullEnabled
 
   const sharingEnabled = platformSettings?.gitProjectTokenSharingEnabled ?? false
 
@@ -117,12 +116,11 @@ export default function ProjectOverview() {
     if (!isBulkSyncOpen) return
     if (pushEnabled) setBulkDirection('push')
     else if (pullEnabled) setBulkDirection('pull')
-    else if (bothEnabled) setBulkDirection('both')
     setBulkMessage('')
     setBulkBusy(false)
     setBulkError(null)
     setBulkResult(null)
-  }, [isBulkSyncOpen, pushEnabled, pullEnabled, bothEnabled])
+  }, [isBulkSyncOpen, pushEnabled, pullEnabled])
 
   const requiresPersonalToken = !sharingEnabled
   const hasAnyCredentials = (credentialsQuery.data?.length ?? 0) > 0
@@ -293,7 +291,6 @@ export default function ProjectOverview() {
         sharingEnabled={sharingEnabled}
         pushEnabled={pushEnabled}
         pullEnabled={pullEnabled}
-        bothEnabled={bothEnabled}
         onClose={closeBulkSync}
         onSubmit={runBulkSync}
         onClearError={() => setBulkError(null)}

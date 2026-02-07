@@ -506,6 +506,17 @@ export class GitHubClient implements GitProviderClient {
     }
   }
 
+  async testWriteAccess(repo: string): Promise<boolean> {
+    const [owner, repoName] = this.parseRepo(repo);
+    await this.octokit.rest.git.createBlob({
+      owner,
+      repo: repoName,
+      content: Buffer.from(`preflight-${Date.now()}`).toString('base64'),
+      encoding: 'base64',
+    });
+    return true;
+  }
+
   private matchesPatterns(path: string, patterns: string[]): boolean {
     // Simple glob matching - supports * and **
     for (const pattern of patterns) {

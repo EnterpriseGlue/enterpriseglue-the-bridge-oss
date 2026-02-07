@@ -202,6 +202,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
 
     // Step 6: Link repository to project
     const repoId = generateId();
+    await gitRepoRepo.delete({ projectId });
     await gitRepoRepo.insert({
       id: repoId,
       projectId,

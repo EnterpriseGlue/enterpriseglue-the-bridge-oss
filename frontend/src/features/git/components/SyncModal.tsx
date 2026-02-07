@@ -17,7 +17,6 @@ import {
 import { 
   CloudUpload, 
   CloudDownload, 
-  Renew,
 } from '@carbon/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -33,7 +32,7 @@ interface SyncModalProps {
   onSuccess?: () => void;
 }
 
-type SyncDirection = 'push' | 'pull' | 'both';
+type SyncDirection = 'push' | 'pull';
 
 interface RepoInfo {
   id: string;
@@ -77,7 +76,6 @@ export default function SyncModal({
   const { data: platformSettings } = usePlatformSyncSettings();
   const pushEnabled = platformSettings?.syncPushEnabled ?? true;
   const pullEnabled = platformSettings?.syncPullEnabled ?? false;
-  const bothEnabled = platformSettings?.syncBothEnabled ?? false;
   const sharingEnabled = platformSettings?.gitProjectTokenSharingEnabled ?? false;
 
   // Auto-select first enabled option and reset message when modal opens
@@ -85,11 +83,10 @@ export default function SyncModal({
     if (open) {
       if (pushEnabled) setDirection('push');
       else if (pullEnabled) setDirection('pull');
-      else if (bothEnabled) setDirection('both');
       setCommitMessage('');
       setError(null);
     }
-  }, [open, pushEnabled, pullEnabled, bothEnabled]);
+  }, [open, pushEnabled, pullEnabled]);
 
   // Fetch repository info
   const repoQuery = useQuery({
@@ -277,20 +274,6 @@ export default function SyncModal({
                   value="pull"
                 />
               )}
-              {bothEnabled && (
-                <RadioButton
-                  labelText={
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
-                      <Renew size={16} />
-                      <span>Sync Both</span>
-                      <span style={{ color: 'var(--cds-text-secondary)', fontSize: '12px' }}>
-                        — Pull then push
-                      </span>
-                    </div>
-                  }
-                  value="both"
-                />
-              )}
             </RadioButtonGroup>
           </div>
 
@@ -299,8 +282,7 @@ export default function SyncModal({
             <InlineLoading 
               description={
                 direction === 'push' ? 'Pushing to remote...' :
-                direction === 'pull' ? 'Pulling from remote...' :
-                'Syncing...'
+                'Pulling from remote...'
               } 
             />
           )}

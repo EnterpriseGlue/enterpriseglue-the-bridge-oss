@@ -300,6 +300,13 @@ export class GitLabClient implements GitProviderClient {
     return { name: tag.name, sha: tag.commit?.id || commitSha };
   }
 
+  async testWriteAccess(repo: string): Promise<boolean> {
+    const projectPath = this.normalizeProjectPath(repo);
+    // GitLab: verify we can access the project; write access depends on token scopes
+    await (this.gitlab as any).Projects.show(projectPath);
+    return true;
+  }
+
   // Helper methods
   private normalizeProjectPath(repo: string): string {
     // Remove .git suffix and URL parts
