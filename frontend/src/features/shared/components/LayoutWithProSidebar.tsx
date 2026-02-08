@@ -750,27 +750,6 @@ export default function LayoutWithProSidebar() {
                     >
                       Platform Settings
                     </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/email')}
-                      isCurrentPage={effectivePathname === '/admin/email'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/email')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Email Settings
-                    </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/email-templates')}
-                      isCurrentPage={effectivePathname === '/admin/email-templates'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/email-templates')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Email Templates
-                    </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/branding')}
-                      isCurrentPage={effectivePathname === '/admin/branding'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/branding')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Branding
-                    </HeaderMenuItem>
                   </HeaderMenu>
                 )}
                 {/* Tenant Admin menu - only shows if EE plugin registers tenant-admin nav items */}

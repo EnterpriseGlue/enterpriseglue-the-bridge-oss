@@ -38,6 +38,9 @@ import { GitSettingsSection } from '../components/GitSettingsSection';
 import { ProjectsSettingsSection } from '../components/ProjectsSettingsSection';
 import { InviteDomainsSettingsSection } from '../components/InviteDomainsSettingsSection';
 import { EnginesSettingsSection } from '../components/EnginesSettingsSection';
+import EmailConfigurations from '../../../pages/admin/EmailConfigurations';
+import EmailTemplates from '../../../pages/admin/EmailTemplates';
+import BrandingSettingsTab from '../components/BrandingSettingsTab';
 
 // Predefined colors for environment tags
 const TAG_COLORS = [
@@ -51,7 +54,7 @@ const TAG_COLORS = [
   '#a2191f', // Dark Red
 ];
 
-type PlatformSettingsSection = 'git' | 'projects' | 'invite-domains' | 'engines' | 'sso';
+type PlatformSettingsSection = 'git' | 'projects' | 'invite-domains' | 'engines' | 'sso' | 'email' | 'email-templates' | 'branding';
 
 interface PlatformSettingsPageProps {
   section?: PlatformSettingsSection;
@@ -313,6 +316,12 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
 
   const renderSso = () => <SsoSettingsTab />;
 
+  const renderEmail = () => <EmailConfigurations embedded />;
+
+  const renderEmailTemplates = () => <EmailTemplates embedded />;
+
+  const renderBranding = () => <BrandingSettingsTab />;
+
   const renderSection = () => {
     switch (section) {
       case 'git':
@@ -325,6 +334,12 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         return renderEngines();
       case 'sso':
         return renderSso();
+      case 'email':
+        return renderEmail();
+      case 'email-templates':
+        return renderEmailTemplates();
+      case 'branding':
+        return renderBranding();
       default:
         return null;
     }
@@ -429,6 +444,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
             <Tab>Engines</Tab>
             <Tab>SSO</Tab>
             <Tab>Invite Domains</Tab>
+            <Tab>Email</Tab>
+            <Tab>Email Templates</Tab>
+            <Tab>Branding</Tab>
           </TabList>
           <TabPanels>
             {/* Tab 1: Git */}
@@ -479,6 +497,36 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               }}
             >
               {renderInviteDomains()}
+            </TabPanel>
+
+            {/* Tab 6: Email */}
+            <TabPanel
+              style={{
+                paddingInline: 0,
+                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
+              }}
+            >
+              {renderEmail()}
+            </TabPanel>
+
+            {/* Tab 7: Email Templates */}
+            <TabPanel
+              style={{
+                paddingInline: 0,
+                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
+              }}
+            >
+              {renderEmailTemplates()}
+            </TabPanel>
+
+            {/* Tab 8: Branding */}
+            <TabPanel
+              style={{
+                paddingInline: 0,
+                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
+              }}
+            >
+              {renderBranding()}
             </TabPanel>
           </TabPanels>
         </Tabs>

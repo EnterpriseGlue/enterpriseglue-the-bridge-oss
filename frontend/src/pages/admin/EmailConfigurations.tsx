@@ -63,7 +63,7 @@ const tableHeaders = [
   { key: 'actions', header: '' },
 ];
 
-export default function EmailConfigurations() {
+export default function EmailConfigurations({ embedded }: { embedded?: boolean } = {}) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
   const createModal = useModal();
@@ -224,23 +224,8 @@ export default function EmailConfigurations() {
     actions: config,
   }));
 
-  return (
-    <PageLayout
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--spacing-5)',
-        background: 'var(--color-bg-primary)',
-        minHeight: '100vh',
-      }}
-    >
-      <PageHeader
-        icon={Email}
-        title="Email Configurations"
-        subtitle="Manage email provider settings for sending emails"
-        gradient={PAGE_GRADIENTS.purple}
-      />
-
+  const content = (
+    <>
       {configsQuery.isLoading ? (
         <DataTableSkeleton columnCount={5} rowCount={3} />
       ) : configsQuery.error ? (
@@ -620,6 +605,28 @@ export default function EmailConfigurations() {
           />
         </div>
       </FormModal>
+    </>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <PageLayout
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--spacing-5)',
+        background: 'var(--color-bg-primary)',
+        minHeight: '100vh',
+      }}
+    >
+      <PageHeader
+        icon={Email}
+        title="Email Configurations"
+        subtitle="Manage email provider settings for sending emails"
+        gradient={PAGE_GRADIENTS.purple}
+      />
+      {content}
     </PageLayout>
   );
 }

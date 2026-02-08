@@ -56,7 +56,7 @@ const tableHeaders = [
   { key: 'actions', header: '' },
 ];
 
-export default function EmailTemplates() {
+export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
@@ -165,23 +165,8 @@ export default function EmailTemplates() {
     actions: template,
   }));
 
-  return (
-    <PageLayout
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--spacing-5)',
-        background: 'var(--color-bg-primary)',
-        minHeight: '100vh',
-      }}
-    >
-      <PageHeader
-        icon={Email}
-        title="Email Templates"
-        subtitle="Manage email templates for invitations, password resets, and notifications"
-        gradient={PAGE_GRADIENTS.purple}
-      />
-
+  const content = (
+    <>
       <div
         style={{
           display: 'flex',
@@ -419,6 +404,28 @@ export default function EmailTemplates() {
           </Tabs>
         ) : null}
       </Modal>
+    </>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <PageLayout
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--spacing-5)',
+        background: 'var(--color-bg-primary)',
+        minHeight: '100vh',
+      }}
+    >
+      <PageHeader
+        icon={Email}
+        title="Email Templates"
+        subtitle="Manage email templates for invitations, password resets, and notifications"
+        gradient={PAGE_GRADIENTS.purple}
+      />
+      {content}
     </PageLayout>
   );
 }

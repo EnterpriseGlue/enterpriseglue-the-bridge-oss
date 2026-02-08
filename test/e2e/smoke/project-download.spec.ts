@@ -21,7 +21,7 @@ test.describe('Smoke: download project', () => {
   test('download project zip @smoke', async ({ page }) => {
     await login(page);
 
-    const projectName = `Smoke Download ${Date.now()}`;
+    const projectName = `e2e-smoke-download-${Date.now()}`;
 
     await page.getByRole('button', { name: /new project|create project/i }).click();
     await page.getByLabel(/project name/i).fill(projectName);

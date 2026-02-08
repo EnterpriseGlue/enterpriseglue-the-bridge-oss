@@ -56,9 +56,6 @@ import AcceptInvite from '../pages/AcceptInvite'
 // Admin pages
 import AuditLogViewer from '../pages/AuditLogViewer'
 import UserManagement from '../pages/admin/UserManagement'
-import EmailConfigurations from '../pages/admin/EmailConfigurations'
-import EmailTemplates from '../pages/admin/EmailTemplates'
-import Branding from '../pages/admin/Branding'
 
 // Dashboard
 import Dashboard from '../pages/Dashboard'
@@ -188,14 +185,13 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         )
       },
     ] : []),
-    ...(!isMultiTenantEnabled() ? [{
-      path: `${pathPrefix}admin/email`, 
-      element: (
-        <ProtectedRoute requireAdmin>
-          <EmailConfigurations />
-        </ProtectedRoute>
-      )
-    }] : []),
+    // OSS: redirect old standalone pages to Platform Settings tabs
+    ...(!isMultiTenantEnabled() ? [
+      { path: `${pathPrefix}admin/email`, element: <Navigate to={isRootLevel ? '/admin/settings' : '../admin/settings'} replace /> },
+      { path: `${pathPrefix}admin/email-templates`, element: <Navigate to={isRootLevel ? '/admin/settings' : '../admin/settings'} replace /> },
+      { path: `${pathPrefix}admin/branding`, element: <Navigate to={isRootLevel ? '/admin/settings' : '../admin/settings'} replace /> },
+    ] : []),
+    // EE multi-tenant: keep extension page routes
     ...(isMultiTenantEnabled() ? [{
       path: `${pathPrefix}admin/email-settings`,
       element: (
@@ -204,21 +200,13 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         </ProtectedRoute>
       )
     }] : []),
-    { 
-      path: `${pathPrefix}admin/email-templates`, 
+    ...(isMultiTenantEnabled() ? [{
+      path: `${pathPrefix}admin/email-templates`,
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          {(isRootLevel || !isMultiTenantEnabled())
-            ? (isMultiTenantEnabled() ? <ExtensionPage name="platform-email-templates-page" /> : <EmailTemplates />)
+          {isRootLevel
+            ? <ExtensionPage name="platform-email-templates-page" />
             : <ExtensionPage name="tenant-email-templates-page" />}
-        </ProtectedRoute>
-      )
-    },
-    ...(!isMultiTenantEnabled() ? [{
-      path: `${pathPrefix}admin/branding`, 
-      element: (
-        <ProtectedRoute requireAdmin={isRootLevel}>
-          <Branding />
         </ProtectedRoute>
       )
     }] : []),

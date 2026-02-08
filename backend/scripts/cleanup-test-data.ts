@@ -21,7 +21,7 @@ async function cleanupTestData() {
   const engineCountResult = await dataSource.query(`
     SELECT COUNT(*) as count FROM main.engines 
     WHERE name LIKE 'test_camunda_%' OR name LIKE 'test_%engine%' OR name LIKE 'test_%'
-       OR name LIKE 'e2e-%-engine'
+       OR name LIKE 'e2e-%'
   `);
   const userCountResult = await dataSource.query(`
     SELECT COUNT(*) as count FROM main.users 
@@ -36,7 +36,7 @@ async function cleanupTestData() {
     WHERE name LIKE 'test_camunda_%' 
        OR name LIKE 'test_%engine%'
        OR name LIKE 'test_%'
-       OR name LIKE 'e2e-%-engine'
+       OR name LIKE 'e2e-%'
     RETURNING id
   `);
   // TypeORM returns [rows, affectedCount] for some drivers
@@ -58,22 +58,42 @@ async function cleanupTestData() {
     WHERE engine_id NOT IN (SELECT id FROM main.engines)
   `);
   
-  // Clean up test users (all patterns in one query)
-  console.log('Cleaning up test users...');
-  const userResult = await dataSource.query(`
-    DELETE FROM main.users 
-    WHERE email LIKE 'e2e-%@example.com' 
-       OR email LIKE 'test_%@example.com'
-       OR email LIKE 'test_%'
-    RETURNING id
+  // Clean up refresh tokens and audit logs BEFORE deleting users/projects/engines
+  // (subqueries reference those tables to find test data)
+  console.log('Cleaning up test refresh tokens and audit logs...');
+  await dataSource.query(`
+    DELETE FROM main.refresh_tokens
+    WHERE user_id IN (
+      SELECT id FROM main.users
+      WHERE email LIKE 'e2e-%@example.com'
+         OR email LIKE 'test_%@example.com'
+         OR email LIKE 'test_%'
+    )
   `);
-  const userCount = Array.isArray(userResult) ? (userResult[1] ?? userResult.length) : 0;
-  if (userCount > 0) {
-    console.log(`  - Deleted ${userCount} test users`);
-    totalDeleted += userCount;
-  }
-  
-  // Clean up test projects (all patterns in one query)
+  await dataSource.query(`
+    DELETE FROM main.audit_logs
+    WHERE user_id IN (
+      SELECT id FROM main.users
+      WHERE email LIKE 'e2e-%@example.com'
+         OR email LIKE 'test_%@example.com'
+         OR email LIKE 'test_%'
+    )
+       OR resource_id IN (
+      SELECT id FROM main.projects
+      WHERE name LIKE 'test_%'
+         OR name LIKE 'e2e-%'
+         OR name LIKE 'Smoke %'
+         OR name LIKE 'New Project to test Git%'
+    )
+       OR resource_id IN (
+      SELECT id FROM main.engines
+      WHERE name LIKE 'test_%' OR name LIKE 'test_camunda_%' OR name LIKE 'e2e-%'
+    )
+       OR details LIKE '%e2e-%@example.com%'
+       OR details LIKE '%test_%@example.com%'
+  `);
+
+  // Clean up test projects (before users, since projects reference owner_id)
   console.log('Cleaning up test projects...');
   await dataSource.query(`
     DELETE FROM main.project_member_roles 
@@ -141,38 +161,20 @@ async function cleanupTestData() {
     WHERE engine_id NOT IN (SELECT id FROM main.engines)
   `);
 
-  console.log('Cleaning up test refresh tokens and audit logs...');
-  await dataSource.query(`
-    DELETE FROM main.refresh_tokens
-    WHERE user_id IN (
-      SELECT id FROM main.users
-      WHERE email LIKE 'e2e-%@example.com'
-         OR email LIKE 'test_%@example.com'
-         OR email LIKE 'test_%'
-    )
+  // Clean up test users (after projects and tokens are removed)
+  console.log('Cleaning up test users...');
+  const userResult = await dataSource.query(`
+    DELETE FROM main.users 
+    WHERE email LIKE 'e2e-%@example.com' 
+       OR email LIKE 'test_%@example.com'
+       OR email LIKE 'test_%'
+    RETURNING id
   `);
-  await dataSource.query(`
-    DELETE FROM main.audit_logs
-    WHERE user_id IN (
-      SELECT id FROM main.users
-      WHERE email LIKE 'e2e-%@example.com'
-         OR email LIKE 'test_%@example.com'
-         OR email LIKE 'test_%'
-    )
-       OR resource_id IN (
-      SELECT id FROM main.projects
-      WHERE name LIKE 'test_%'
-         OR name LIKE 'e2e-%'
-         OR name LIKE 'Smoke %'
-         OR name LIKE 'New Project to test Git%'
-    )
-       OR resource_id IN (
-      SELECT id FROM main.engines
-      WHERE name LIKE 'test_%' OR name LIKE 'test_camunda_%' OR name LIKE 'e2e-%-engine'
-    )
-       OR details LIKE '%e2e-%@example.com%'
-       OR details LIKE '%test_%@example.com%'
-  `);
+  const userCount = Array.isArray(userResult) ? (userResult[1] ?? userResult.length) : 0;
+  if (userCount > 0) {
+    console.log(`  - Deleted ${userCount} test users`);
+    totalDeleted += userCount;
+  }
   
   console.log(`\n✅ Cleanup complete! Removed ${totalDeleted} test records.`);
   

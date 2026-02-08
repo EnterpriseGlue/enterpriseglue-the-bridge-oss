@@ -21,7 +21,7 @@ test.describe('Smoke: create project', () => {
   test('create project happy path @smoke', async ({ page }) => {
     await login(page);
 
-    const projectName = `Smoke Project ${Date.now()}`;
+    const projectName = `e2e-smoke-project-${Date.now()}`;
 
     await page.getByRole('button', { name: /create project/i }).first().click();
     await page.getByLabel(/project name/i).fill(projectName);

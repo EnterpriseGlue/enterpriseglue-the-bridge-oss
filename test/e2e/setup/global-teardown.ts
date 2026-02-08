@@ -133,6 +133,23 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   }
 
   await pool.query(`DELETE FROM ${schema}.users WHERE id = $1`, [userId]);
+
+  // Pattern-based sweep: catch any e2e/smoke artifacts not tied to specific IDs
+  // (e.g., projects created via the UI during smoke tests, owned by admin user)
+  const staleProjectIds = await pool.query(
+    `SELECT id FROM ${schema}.projects WHERE name LIKE 'e2e-%' OR name LIKE 'Smoke %'`
+  );
+  const staleIds = staleProjectIds.rows.map((r: any) => r.id);
+  if (staleIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.project_member_roles WHERE project_id = ANY($1::text[])`, [staleIds]);
+    await pool.query(`DELETE FROM ${schema}.project_members WHERE project_id = ANY($1::text[])`, [staleIds]);
+    await pool.query(`DELETE FROM ${schema}.files WHERE project_id = ANY($1::text[])`, [staleIds]);
+    await pool.query(`DELETE FROM ${schema}.folders WHERE project_id = ANY($1::text[])`, [staleIds]);
+    await pool.query(`DELETE FROM ${schema}.projects WHERE id = ANY($1::text[])`, [staleIds]);
+  }
+  await pool.query(`DELETE FROM ${schema}.engines WHERE name LIKE 'e2e-%'`);
+  await pool.query(`DELETE FROM ${schema}.users WHERE email LIKE 'e2e-%@example.com'`);
+
   await pool.end();
 }
 

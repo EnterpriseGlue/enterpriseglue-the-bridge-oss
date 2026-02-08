@@ -365,11 +365,11 @@ export async function cleanupStaleTestData() {
     )
        OR resource_id IN (
       SELECT id FROM main.projects
-      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%'
+      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
     )
        OR resource_id IN (
       SELECT id FROM main.engines
-      WHERE name LIKE 'test_%' OR name LIKE 'test_camunda_%'
+      WHERE name LIKE 'test_%' OR name LIKE 'test_camunda_%' OR name LIKE 'e2e-%'
     )
        OR details LIKE '%e2e-%@example.com%'
        OR details LIKE '%test_%@example.com%'
@@ -387,18 +387,32 @@ export async function cleanupStaleTestData() {
     DELETE FROM main.project_member_roles 
     WHERE project_id IN (
       SELECT id FROM main.projects 
-      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%'
+      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
     )
   `);
   await dataSource.query(`
     DELETE FROM main.project_members 
     WHERE project_id IN (
       SELECT id FROM main.projects 
-      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%'
+      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
+    )
+  `);
+  await dataSource.query(`
+    DELETE FROM main.files
+    WHERE project_id IN (
+      SELECT id FROM main.projects
+      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
+    )
+  `);
+  await dataSource.query(`
+    DELETE FROM main.folders
+    WHERE project_id IN (
+      SELECT id FROM main.projects
+      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
     )
   `);
   await dataSource.query(`
     DELETE FROM main.projects 
-    WHERE name LIKE 'test_%' OR name LIKE 'e2e-%'
+    WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
   `);
 }
