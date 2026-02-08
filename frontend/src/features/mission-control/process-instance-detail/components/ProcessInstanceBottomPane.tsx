@@ -30,6 +30,8 @@ interface ProcessInstanceBottomPaneProps {
   moveSourceActivityId: string | null
   selectedActivityId: string | null
   onExitModificationMode: () => void
+  onUndoLastOperation: () => void
+  modPlanLength: number
   verticalSplitSize: number | string
   onVerticalSplitChange: (size: number) => void
   activityPanelProps: {
@@ -66,12 +68,19 @@ interface ProcessInstanceBottomPaneProps {
     formatMappingType: (val: any) => string
     formatMappingValue: (val: any) => string
     modPlan: any[]
-    addPlanOperation: (kind: 'add' | 'cancel') => void
+    activeActivityIds: Set<string>
+    resolveActivityName: (id: string) => string
+    addPlanOperation: (kind: 'add' | 'addAfter' | 'cancel') => void
     removePlanItem: (index: number) => void
+    movePlanItem: (index: number, direction: 'up' | 'down') => void
+    updatePlanItemVariables: (index: number, variables: any[]) => void
+    undoLastOperation: () => void
     toggleMoveForSelection: () => void
+    onMoveToHere: (targetActivityId: string) => void
     applyModifications: () => void
     setDiscardConfirmOpen: (open: boolean) => void
     applyBusy: boolean
+    onExitModificationMode: () => void
   }
 }
 
@@ -100,6 +109,8 @@ export function ProcessInstanceBottomPane({
   moveSourceActivityId,
   selectedActivityId,
   onExitModificationMode,
+  onUndoLastOperation,
+  modPlanLength,
   verticalSplitSize,
   onVerticalSplitChange,
   activityPanelProps,
@@ -138,21 +149,7 @@ export function ProcessInstanceBottomPane({
           </div>
         </div>
       )}
-      {isModMode && (
-        <div className={styles.modificationBanner}>
-          <div className={styles.modificationBannerText}>Process Instance Modification Mode</div>
-          <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
-            {moveSourceActivityId
-              ? `Move: select the target flow node in the diagram (source: ${moveSourceActivityId})`
-              : selectedActivityId
-              ? `Selected node: ${selectedActivityId}`
-              : 'Select a flow node in the diagram to plan modifications.'}
-          </div>
-          <Button size="sm" kind="ghost" onClick={onExitModificationMode}>
-            Exit modification mode
-          </Button>
-        </div>
-      )}
+      
 
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         {/* @ts-expect-error - react-split-pane has type incompatibility with React 19 */}

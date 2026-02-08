@@ -1,5 +1,5 @@
 import React from 'react'
-import { InlineNotification } from '@carbon/react'
+import { InlineNotification, Tag } from '@carbon/react'
 import { ChevronDown, ChevronRight } from '@carbon/icons-react'
 
 export interface ActivityHistoryPanelProps {
@@ -14,9 +14,12 @@ export interface ActivityHistoryPanelProps {
   fmt: (ts?: string | null) => string
   isModMode: boolean
   moveSourceActivityId: string | null
+  activeActivityIds: Set<string>
+  modPlan?: any[]
   onActivityClick?: (activityId: string) => void
   onActivityHover?: (activityId: string | null) => void
   onHistoryContextChange?: (ctx: any | null) => void
+  onMoveToHere?: (targetActivityId: string) => void
   execGroups: any[]
   resolveBpmnIconVisual: (id: string, type?: string) => { iconClass: string; kind: string }
   buildHistoryContext: (g: any) => any | null
@@ -48,9 +51,12 @@ export function ActivityHistoryPanel({
   fmt,
   isModMode,
   moveSourceActivityId,
+  activeActivityIds,
+  modPlan = [],
   onActivityClick,
   onActivityHover,
   onHistoryContextChange,
+  onMoveToHere,
   execGroups,
   resolveBpmnIconVisual,
   buildHistoryContext,
@@ -368,11 +374,18 @@ export function ActivityHistoryPanel({
                           {g.activityName}
                         </button>
 
-                        {isModMode && g.isClickable ? (
-                          <span style={{ fontSize: 'var(--text-11)', color: 'var(--cds-text-secondary)', flexShrink: 0 }}>
-                            {moveSourceActivityId === g.activityId ? 'SOURCE' : 'SELECTABLE'}
-                          </span>
-                        ) : null}
+                        {isModMode && g.isClickable ? (() => {
+                          const isSource = moveSourceActivityId === g.activityId
+                          const isPlannedSource = modPlan.some((op: any) => op.kind === 'move' && op.fromActivityId === g.activityId)
+                          const isPlannedTarget = modPlan.some((op: any) => op.kind === 'move' && op.toActivityId === g.activityId)
+                          const tagType = isSource ? 'blue' : isPlannedSource ? 'red' : isPlannedTarget ? 'green' : g.isSelected ? 'green' : 'cool-gray'
+                          const tagLabel = isSource ? 'SOURCE' : isPlannedSource ? 'SOURCE' : isPlannedTarget ? 'TARGET' : g.isSelected ? 'SELECTED' : 'SELECTABLE'
+                          return (
+                            <Tag size="sm" type={tagType} style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                              {tagLabel}
+                            </Tag>
+                          )
+                        })() : null}
                       </div>
                     </div>
                   )

@@ -18,6 +18,7 @@ describe('ActivityHistoryPanel', () => {
         fmt={(ts) => String(ts || '')}
         isModMode={false}
         moveSourceActivityId={null}
+        activeActivityIds={new Set()}
         execGroups={[]}
         resolveBpmnIconVisual={() => ({ iconClass: 'bpmn-icon-process', kind: 'marker' })}
         buildHistoryContext={vi.fn()}

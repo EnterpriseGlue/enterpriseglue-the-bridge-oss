@@ -31,14 +31,6 @@ export interface ActivityDetailsPanelProps {
   formatMappingType: (val: any) => string
   formatMappingValue: (val: any) => string
   isModMode: boolean
-  modPlan: any[]
-  addPlanOperation: (kind: 'add' | 'cancel') => void
-  removePlanItem: (index: number) => void
-  toggleMoveForSelection: () => void
-  applyModifications: () => void
-  setDiscardConfirmOpen: (open: boolean) => void
-  applyBusy: boolean
-  moveSourceActivityId: string | null
 }
 
 export function ActivityDetailsPanel({
@@ -62,14 +54,6 @@ export function ActivityDetailsPanel({
   formatMappingType,
   formatMappingValue,
   isModMode,
-  modPlan,
-  addPlanOperation,
-  removePlanItem,
-  toggleMoveForSelection,
-  applyModifications,
-  setDiscardConfirmOpen,
-  applyBusy,
-  moveSourceActivityId,
 }: ActivityDetailsPanelProps) {
   return (
     <section key="right-panel" style={{ background: 'var(--color-bg-primary)', padding: 'var(--spacing-2)', display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, height: '100%' }}>
@@ -267,62 +251,6 @@ export function ActivityDetailsPanel({
           </TabPanels>
         </div>
       </Tabs>
-      {isModMode && (
-        <div style={{ paddingTop: 'var(--spacing-3)' }}>
-          {selectedActivityId && (
-            <div style={{ display: 'flex', gap: 'var(--spacing-2)', marginBottom: 'var(--spacing-2)', flexWrap: 'wrap' }}>
-              <Button size="sm" kind="tertiary" onClick={() => addPlanOperation('add')}>
-                Add here
-              </Button>
-              <Button size="sm" kind="tertiary" onClick={() => addPlanOperation('cancel')}>
-                Cancel here
-              </Button>
-              <Button size="sm" kind="tertiary" onClick={() => toggleMoveForSelection()}>
-                {moveSourceActivityId ? (moveSourceActivityId === selectedActivityId ? 'Cancel move' : `Move from ${moveSourceActivityId} → ${selectedActivityId}`) : 'Move from here'}
-              </Button>
-            </div>
-          )}
-          <div style={{ fontSize: 'var(--text-12)', marginBottom: 'var(--spacing-1)' }}>
-            {modPlan.length === 0 ? 'No modifications planned yet.' : `${modPlan.length} modification${modPlan.length === 1 ? '' : 's'} planned:`}
-          </div>
-          {modPlan.length > 0 && (
-            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 var(--spacing-2) 0', maxHeight: 120, overflow: 'auto', fontSize: 'var(--text-12)' }}>
-              {modPlan.map((op: any, idx: number) => {
-                let label = ''
-                if (op.kind === 'add') label = `Add token before ${op.activityId}`
-                else if (op.kind === 'cancel') label = `Cancel active instances at ${op.activityId}`
-                else if (op.kind === 'move') label = `Move instances from ${op.fromActivityId} to ${op.toActivityId}`
-                return (
-                  <li key={`${op.kind}-${idx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--spacing-2)', padding: '2px 0' }}>
-                    <span>{label}</span>
-                    <Button size="sm" kind="ghost" onClick={() => removePlanItem(idx)}>
-                      Remove
-                    </Button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-          <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
-            <Button
-              size="sm"
-              kind="primary"
-              onClick={() => applyModifications()}
-              disabled={modPlan.length === 0 || applyBusy}
-            >
-              Apply modifications
-            </Button>
-            <Button
-              size="sm"
-              kind="ghost"
-              onClick={() => setDiscardConfirmOpen(true)}
-              disabled={modPlan.length === 0}
-            >
-              Discard all
-            </Button>
-          </div>
-        </div>
-      )}
     </section>
   )
 }

@@ -3,6 +3,7 @@ import type { HistoricDecisionInstanceLite, DecisionIo } from './types'
 import { createBpmnIconVisualResolver } from '../../../../utils/bpmnIconResolver'
 import { ActivityHistoryPanel } from './ActivityHistoryPanel'
 import { ActivityDetailsPanel } from './ActivityDetailsPanel'
+import { ModificationPlanPanel } from './ModificationPlanPanel'
 import { buildActivityGroups, buildHistoryContext } from './activityDetailUtils'
 
 interface ActivityDetailPanelProps {
@@ -51,12 +52,19 @@ interface ActivityDetailPanelProps {
   
   // Modification mode
   modPlan: any[]
-  addPlanOperation: (kind: 'add' | 'cancel') => void
+  activeActivityIds: Set<string>
+  resolveActivityName: (id: string) => string
+  addPlanOperation: (kind: 'add' | 'addAfter' | 'cancel') => void
   removePlanItem: (index: number) => void
+  movePlanItem: (index: number, direction: 'up' | 'down') => void
+  updatePlanItemVariables: (index: number, variables: any[]) => void
+  undoLastOperation: () => void
   toggleMoveForSelection: () => void
+  onMoveToHere: (targetActivityId: string) => void
   applyModifications: () => void
   setDiscardConfirmOpen: (open: boolean) => void
   applyBusy: boolean
+  onExitModificationMode: () => void
 }
 
 
@@ -99,12 +107,19 @@ export function ActivityDetailPanel({
   formatMappingType,
   formatMappingValue,
   modPlan,
+  activeActivityIds,
+  resolveActivityName,
   addPlanOperation,
   removePlanItem,
+  movePlanItem,
+  updatePlanItemVariables,
+  undoLastOperation,
   toggleMoveForSelection,
+  onMoveToHere,
   applyModifications,
   setDiscardConfirmOpen,
   applyBusy,
+  onExitModificationMode,
 }: ActivityDetailPanelProps) {
   const resolveBpmnIconVisual = React.useMemo(() => {
     const getBpmnElementById = (activityId: string) => {
@@ -141,43 +156,65 @@ export function ActivityDetailPanel({
       fmt={fmt}
       isModMode={isModMode}
       moveSourceActivityId={moveSourceActivityId}
+      activeActivityIds={activeActivityIds}
+      modPlan={modPlan}
       onActivityClick={onActivityClick}
       onActivityHover={onActivityHover}
       onHistoryContextChange={onHistoryContextChange}
+      onMoveToHere={onMoveToHere}
       execGroups={groupedActivities}
       resolveBpmnIconVisual={resolveBpmnIconVisual}
       buildHistoryContext={buildHistoryContext}
     />,
-    <ActivityDetailsPanel
-      key="details"
-      rightTab={rightTab}
-      setRightTab={setRightTab}
-      varsQ={varsQ}
-      selectedActivityId={selectedActivityId}
-      selectedActivityName={selectedActivityName}
-      selectedNodeVariables={selectedNodeVariables}
-      shouldShowDecisionPanel={shouldShowDecisionPanel}
-      status={status}
-      openVariableEditor={openVariableEditor}
-      showAlert={showAlert}
-      onAddVariable={onAddVariable}
-      onBulkUploadVariables={onBulkUploadVariables}
-      selectedDecisionInstance={selectedDecisionInstance}
-      decisionInputs={decisionInputs}
-      decisionOutputs={decisionOutputs}
-      selectedNodeInputMappings={selectedNodeInputMappings}
-      selectedNodeOutputMappings={selectedNodeOutputMappings}
-      formatMappingType={formatMappingType}
-      formatMappingValue={formatMappingValue}
-      isModMode={isModMode}
-      modPlan={modPlan}
-      addPlanOperation={addPlanOperation}
-      removePlanItem={removePlanItem}
-      toggleMoveForSelection={toggleMoveForSelection}
-      applyModifications={applyModifications}
-      setDiscardConfirmOpen={setDiscardConfirmOpen}
-      applyBusy={applyBusy}
-      moveSourceActivityId={moveSourceActivityId}
-    />,
+    <div key="details" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {isModMode ? (
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <ModificationPlanPanel
+            modPlan={modPlan}
+            selectedActivityId={selectedActivityId}
+            moveSourceActivityId={moveSourceActivityId}
+            activeActivityIds={activeActivityIds}
+            resolveActivityName={resolveActivityName}
+            addPlanOperation={addPlanOperation}
+            toggleMoveForSelection={toggleMoveForSelection}
+            onMoveToHere={onMoveToHere}
+            removePlanItem={removePlanItem}
+            movePlanItem={movePlanItem}
+            updatePlanItemVariables={updatePlanItemVariables}
+            undoLastOperation={undoLastOperation}
+            applyModifications={applyModifications}
+            setDiscardConfirmOpen={setDiscardConfirmOpen}
+            applyBusy={applyBusy}
+            instanceVariables={varsQ?.data ? Object.entries(varsQ.data).map(([name, meta]: [string, any]) => ({ name, type: meta?.type ?? 'String', value: meta?.value })) : null}
+            onExitModificationMode={onExitModificationMode}
+          />
+        </div>
+      ) : (
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          <ActivityDetailsPanel
+            rightTab={rightTab}
+            setRightTab={setRightTab}
+            varsQ={varsQ}
+            selectedActivityId={selectedActivityId}
+            selectedActivityName={selectedActivityName}
+            selectedNodeVariables={selectedNodeVariables}
+            shouldShowDecisionPanel={shouldShowDecisionPanel}
+            status={status}
+            openVariableEditor={openVariableEditor}
+            showAlert={showAlert}
+            onAddVariable={onAddVariable}
+            onBulkUploadVariables={onBulkUploadVariables}
+            selectedDecisionInstance={selectedDecisionInstance}
+            decisionInputs={decisionInputs}
+            decisionOutputs={decisionOutputs}
+            selectedNodeInputMappings={selectedNodeInputMappings}
+            selectedNodeOutputMappings={selectedNodeOutputMappings}
+            formatMappingType={formatMappingType}
+            formatMappingValue={formatMappingValue}
+            isModMode={isModMode}
+          />
+        </div>
+      )}
+    </div>,
   ]
 }

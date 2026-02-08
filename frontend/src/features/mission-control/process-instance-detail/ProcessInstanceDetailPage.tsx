@@ -15,6 +15,8 @@ import { useDiagramOverlays } from './components/hooks/useDiagramOverlays'
 import { useVariableEditor } from './components/hooks/useVariableEditor'
 import { useInstanceRetry } from './components/hooks/useInstanceRetry'
 import { useInstanceModification } from './components/hooks/useInstanceModification'
+import { useModificationOverlays } from './components/hooks/useModificationOverlays'
+import { useModificationPopover } from './components/hooks/useModificationPopover'
 import { useNodeMetadata } from './components/hooks/useNodeMetadata'
 import { useSplitPaneState } from '../shared/hooks/useSplitPaneState'
 import { useBpmnElementSelection } from './components/hooks/useBpmnElementSelection'
@@ -33,6 +35,7 @@ import { ProcessInstanceDiagramPane } from './components/ProcessInstanceDiagramP
 import { ProcessInstanceBottomPane } from './components/ProcessInstanceBottomPane'
 import { ProcessInstanceModals } from './components/ProcessInstanceModals'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
+import { ApplyModificationsModal } from './components/modals/ApplyModificationsModal'
 
 export default function ProcessInstanceDetailPage() {
   const { instanceId } = useParams<{ instanceId: string }>()
@@ -42,8 +45,6 @@ export default function ProcessInstanceDetailPage() {
   const selectedEngineId = useSelectedEngine()
 
 
-  const showModifyAction = false
-  
   // Get filter state from Zustand store (persisted)
   const { selectedProcess, selectedVersion } = useProcessesFilterStore()
   
@@ -100,6 +101,30 @@ export default function ProcessInstanceDetailPage() {
     parentId,
     status,
   } = instanceData
+
+  const showModifyAction = status === 'ACTIVE'
+
+  // Compute set of activity IDs with currently active (running) instances
+  const activeActivityIds = React.useMemo(() => {
+    const ids = new Set<string>()
+    for (const a of actQ.data || []) {
+      if (a.activityId && !a.endTime && !(a as any).canceled) {
+        ids.add(a.activityId)
+      }
+    }
+    return ids
+  }, [actQ.data])
+
+  // Build a lookup from activityId → activityName using activity history data
+  const activityNameMap = React.useMemo(() => {
+    const map = new Map<string, string>()
+    for (const a of actQ.data || []) {
+      if (a.activityId && a.activityName && !map.has(a.activityId)) {
+        map.set(a.activityId, a.activityName)
+      }
+    }
+    return map
+  }, [actQ.data])
 
   // 2. Diagram Overlays Hook
   // Check if process instance is suspended (from runtime data)
@@ -178,9 +203,39 @@ export default function ProcessInstanceDetailPage() {
     addPlanOperation,
     toggleMoveForSelection,
     removePlanItem,
+    movePlanItem,
+    updatePlanItemVariables,
+    undoLastOperation,
+    addMoveToHere,
     applyModifications,
     discardModifications,
   } = modification
+
+  // 5. Modification Diagram Overlays Hook
+  useModificationOverlays({
+    bpmnRef,
+    modPlan,
+    isModMode,
+    moveSourceActivityId,
+  })
+
+  // 5b. Modification Popover Hook (click-to-modify on diagram)
+  const handleMoveToHere = React.useCallback((targetActivityId: string) => {
+    const activeIds = [...activeActivityIds].filter(id => id !== targetActivityId)
+    if (activeIds.length === 0) return
+    addMoveToHere(targetActivityId, activeIds)
+  }, [activeActivityIds, addMoveToHere])
+
+  useModificationPopover({
+    bpmnRef,
+    isModMode,
+    selectedActivityId,
+    moveSourceActivityId,
+    activeActivityIds,
+    addPlanOperation,
+    toggleMoveForSelection,
+    onMoveToHere: handleMoveToHere,
+  })
 
   // 6. Node Metadata Hook (I/O mappings and node info)
   const { ioMappings, selectedNodeMeta, formatMappingValue, formatMappingType } = useNodeMetadata({
@@ -220,6 +275,7 @@ export default function ProcessInstanceDetailPage() {
   const [addVariableBusy, setAddVariableBusy] = React.useState(false)
   const [addVariableError, setAddVariableError] = React.useState<string | null>(null)
 
+  const [applyModalOpen, setApplyModalOpen] = React.useState(false)
   const [bulkUploadOpen, setBulkUploadOpen] = React.useState(false)
   const [bulkUploadValue, setBulkUploadValue] = React.useState('')
   const [bulkUploadBusy, setBulkUploadBusy] = React.useState(false)
@@ -717,6 +773,8 @@ export default function ProcessInstanceDetailPage() {
           moveSourceActivityId={moveSourceActivityId}
           selectedActivityId={selectedActivityId}
           onExitModificationMode={requestExitModificationMode}
+          onUndoLastOperation={undoLastOperation}
+          modPlanLength={modPlan.length}
           verticalSplitSize={verticalSplitSize}
           onVerticalSplitChange={handleVerticalSplitChange}
           activityPanelProps={{
@@ -753,12 +811,30 @@ export default function ProcessInstanceDetailPage() {
             formatMappingType,
             formatMappingValue,
             modPlan,
+            activeActivityIds,
+            resolveActivityName: (id: string) => {
+              // Try activity history data first, then BPMN element registry
+              const fromHistory = activityNameMap.get(id)
+              if (fromHistory) return fromHistory
+              try {
+                const reg = bpmnRef.current?.get?.('elementRegistry')
+                const el = reg?.get?.(id)
+                const name = el?.businessObject?.name
+                if (name) return name
+              } catch {}
+              return id
+            },
             addPlanOperation,
             removePlanItem,
+            movePlanItem,
+            updatePlanItemVariables,
+            undoLastOperation,
             toggleMoveForSelection,
-            applyModifications,
+            onMoveToHere: handleMoveToHere,
+            applyModifications: () => setApplyModalOpen(true),
             setDiscardConfirmOpen,
             applyBusy,
+            onExitModificationMode: requestExitModificationMode,
           }}
         />
       </SplitPane>
@@ -830,6 +906,33 @@ export default function ProcessInstanceDetailPage() {
         submitRetrySelection={submitRetrySelection}
         alertState={alertState}
         closeAlert={closeAlert}
+      />
+
+      <ApplyModificationsModal
+        open={applyModalOpen}
+        modPlan={modPlan}
+        resolveActivityName={(id: string) => {
+          const fromHistory = activityNameMap.get(id)
+          if (fromHistory) return fromHistory
+          try {
+            const reg = bpmnRef.current?.get?.('elementRegistry')
+            const el = reg?.get?.(id)
+            const name = el?.businessObject?.name
+            if (name) return name
+          } catch {}
+          return id
+        }}
+        onClose={() => setApplyModalOpen(false)}
+        onApply={async (options) => {
+          try {
+            await applyModifications(options)
+            setApplyModalOpen(false)
+          } catch {
+            // Error already shown via showAlert - keep modal open
+          }
+        }}
+        onRemoveItem={removePlanItem}
+        applyBusy={applyBusy}
       />
     </div>
     </PageLoader>

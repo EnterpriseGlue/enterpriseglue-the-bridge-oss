@@ -56,6 +56,7 @@ export function createCountBadge(
     lineHeight?: string
     height?: string
     minWidth?: string
+    noIcon?: boolean
   },
   options?: {
     backgroundColor?: string
@@ -68,6 +69,7 @@ export function createCountBadge(
     lineHeight?: string
     height?: string
     minWidth?: string
+    noIcon?: boolean
   }
 ): HTMLElement {
   // Determine state and options based on arguments
@@ -189,7 +191,8 @@ export function createCountBadge(
     }
   }
 
-  const icon = makeIcon(state)
+  const skipIcon = (typeof stateOrOptions !== 'string' && stateOrOptions?.noIcon) || styleOptions?.noIcon
+  const icon = skipIcon ? null : makeIcon(state)
   if (icon) {
     const chip = document.createElement('span')
     const size = getIconSize(state)

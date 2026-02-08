@@ -68,9 +68,19 @@ export type ExternalTask = {
   errorDetails?: string
 }
 
+export type ModificationVariable = {
+  name: string
+  type: string
+  value: string
+}
+
 export type ModificationOperation = {
-  kind: 'add' | 'cancel' | 'move'
+  kind: 'add' | 'addAfter' | 'cancel' | 'move'
   activityId?: string
+  activityName?: string
   fromActivityId?: string
+  fromActivityName?: string
   toActivityId?: string
+  toActivityName?: string
+  variables?: ModificationVariable[]
 }
