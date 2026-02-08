@@ -7,6 +7,16 @@ import { Resend } from 'resend';
 import * as nodemailer from 'nodemailer';
 import { logger } from '@shared/utils/logger.js';
 
+/** Escape HTML special characters to prevent XSS when interpolating into HTML. */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export type EmailProvider = 'resend' | 'sendgrid' | 'mailgun' | 'mailjet' | 'smtp';
 
 export interface SendEmailParams {
@@ -90,9 +100,9 @@ export async function sendTestEmail(params: TestEmailParams): Promise<SendEmailR
           <h1 style="color: #198038;">✅ Email Configuration Test Successful</h1>
           <p>Your email configuration is working correctly.</p>
           <table style="border-collapse: collapse; margin-top: 20px;">
-            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Provider:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${provider}</td></tr>
-            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>From Name:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${fromName}</td></tr>
-            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>From Email:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${fromEmail}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Provider:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(provider)}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>From Name:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(fromName)}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>From Email:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(fromEmail)}</td></tr>
             <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Sent At:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${new Date().toISOString()}</td></tr>
           </table>
           <p style="color: #666; margin-top: 20px; font-size: 14px;">
