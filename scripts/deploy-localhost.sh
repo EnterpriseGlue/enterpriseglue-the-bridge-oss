@@ -138,7 +138,7 @@ check_env() {
   
   # Warn about optional features
   if [[ -z "${RESEND_API_KEY:-}" ]]; then
-    warn "RESEND_API_KEY not set - email features will not work"
+    warn "Email not configured (env) - configure via Admin UI or set RESEND_API_KEY"
   fi
   
   if [[ -z "${MICROSOFT_CLIENT_ID:-}" ]]; then
@@ -376,9 +376,9 @@ print_summary() {
   fi
   
   if [[ -n "${RESEND_API_KEY:-}" ]]; then
-    log "✅ Email Service: Enabled"
+    log "✅ Email Service: Enabled (env: Resend)"
   else
-    log "⚠️  Email Service: Not configured"
+    log "⚠️  Email Service: Not configured via env (configure in Admin UI → Platform Settings → Email)"
   fi
   
   log ""
