@@ -105,6 +105,8 @@ export default function ProcessInstanceDetailPage() {
   const showModifyAction = status === 'ACTIVE'
 
   // Compute set of activity IDs with currently active (running) instances
+  // Also include activity IDs from open incidents (e.g. async-before failures
+  // where the activity instance may not yet exist in history)
   const activeActivityIds = React.useMemo(() => {
     const ids = new Set<string>()
     for (const a of actQ.data || []) {
@@ -112,8 +114,13 @@ export default function ProcessInstanceDetailPage() {
         ids.add(a.activityId)
       }
     }
+    for (const inc of incidentsQ.data || []) {
+      if (inc?.activityId) {
+        ids.add(inc.activityId)
+      }
+    }
     return ids
-  }, [actQ.data])
+  }, [actQ.data, incidentsQ.data])
 
   // Build a lookup from activityId → activityName using activity history data
   const activityNameMap = React.useMemo(() => {

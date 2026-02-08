@@ -21,16 +21,17 @@ export function useInstanceData(instanceId: string) {
 
   // Historical instance data
   const histQ = useQuery({
-    queryKey: ['mission-control', 'hist-inst', instanceId],
+    queryKey: ['mission-control', 'hist-inst', instanceId, selectedEngineId],
     queryFn: () => getHistoricalProcessInstance(instanceId, selectedEngineId),
+    enabled: !!instanceId && !!selectedEngineId,
     retry: false,
   })
 
   // Runtime instance data (only if not completed)
   const runtimeQ = useQuery({
-    queryKey: ['mission-control', 'instance', instanceId],
+    queryKey: ['mission-control', 'instance', instanceId, selectedEngineId],
     queryFn: () => getProcessInstance(instanceId, selectedEngineId),
-    enabled: !!instanceId && histQ.isFetched && !(histQ.data as any)?.endTime,
+    enabled: !!instanceId && !!selectedEngineId && histQ.isFetched && !(histQ.data as any)?.endTime,
     retry: false,
   })
 
@@ -58,14 +59,16 @@ export function useInstanceData(instanceId: string) {
 
   // Variables
   const varsQ = useQuery({
-    queryKey: ['mission-control', 'vars', instanceId],
+    queryKey: ['mission-control', 'vars', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceVariables(instanceId, selectedEngineId),
+    enabled: !!instanceId && !!selectedEngineId,
   })
 
   // Historical variables
   const histVarsQ = useQuery({
-    queryKey: ['mission-control', 'hist-vars', instanceId],
+    queryKey: ['mission-control', 'hist-vars', instanceId, selectedEngineId],
     queryFn: () => getHistoricalVariableInstances(instanceId, selectedEngineId),
+    enabled: !!instanceId && !!selectedEngineId,
   })
 
   // Variable type map
@@ -95,8 +98,9 @@ export function useInstanceData(instanceId: string) {
 
   // Activity instances
   const actQ = useQuery({
-    queryKey: ['mission-control', 'act', instanceId],
+    queryKey: ['mission-control', 'act', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceActivityHistory(instanceId, selectedEngineId),
+    enabled: !!instanceId && !!selectedEngineId,
   })
 
   // Sorted activities
@@ -120,22 +124,23 @@ export function useInstanceData(instanceId: string) {
 
   // Incidents
   const incidentsQ = useQuery({
-    queryKey: ['mission-control', 'inc', instanceId],
+    queryKey: ['mission-control', 'inc', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceIncidents(instanceId, selectedEngineId),
+    enabled: !!instanceId && !!selectedEngineId,
   })
 
   // Retry jobs
   const retryJobsQ = useQuery({
-    queryKey: ['mission-control', 'jobs', instanceId],
+    queryKey: ['mission-control', 'jobs', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceJobs(instanceId, selectedEngineId),
-    enabled: !!instanceId,
+    enabled: !!instanceId && !!selectedEngineId,
   })
 
   // Retry external tasks
   const retryExtTasksQ = useQuery({
-    queryKey: ['mission-control', 'external-tasks', instanceId],
+    queryKey: ['mission-control', 'external-tasks', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceExternalTasks(instanceId, selectedEngineId),
-    enabled: !!instanceId,
+    enabled: !!instanceId && !!selectedEngineId,
   })
 
   // All retry items
@@ -176,8 +181,12 @@ export function useInstanceData(instanceId: string) {
     return map
   }, [actQ.data])
 
-  // Clickable activity IDs
-  const clickableActivityIds = useMemo(() => new Set(activityIdToInstances.keys()), [activityIdToInstances])
+  // Clickable activity IDs (include incident activities so they're selectable in mod mode)
+  const clickableActivityIds = useMemo(() => {
+    const set = new Set(activityIdToInstances.keys())
+    for (const id of incidentActivityIds) set.add(id)
+    return set
+  }, [activityIdToInstances, incidentActivityIds])
 
   // Called process instances - disabled as endpoint doesn't exist yet
   const calledQ = useQuery({

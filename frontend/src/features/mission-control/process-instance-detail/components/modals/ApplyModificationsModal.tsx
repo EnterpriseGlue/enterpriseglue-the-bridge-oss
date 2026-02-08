@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Modal, Checkbox, TextInput } from '@carbon/react'
-import { Add, Close, ArrowRight, TrashCan, Information } from '@carbon/icons-react'
+import { Add, Close, ArrowRight, TrashCan } from '@carbon/icons-react'
+import { ExecutionOptionsPanel } from '../../../../shared/components/ExecutionOptionsPanel'
 import type { ModificationOperation } from '../types'
 
 interface ApplyModificationsModalProps {
@@ -92,8 +93,6 @@ export function ApplyModificationsModal({
   const [skipIoMappings, setSkipIoMappings] = useState(false)
   const [annotation, setAnnotation] = useState('')
   const [showPayload, setShowPayload] = useState(false)
-  const [listenersInfoOpen, setListenersInfoOpen] = useState(false)
-  const [ioInfoOpen, setIoInfoOpen] = useState(false)
 
   if (!open) return null
 
@@ -163,46 +162,13 @@ export function ApplyModificationsModal({
 
         <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
           <div style={{ fontWeight: 'var(--font-weight-semibold)' }}>Options</div>
-          <div>
-            <Checkbox
-              id="mod-skip-listeners"
-              labelText={
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  Skip custom listeners
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setListenersInfoOpen(true) }}
-                    title="Learn more about Skip custom listeners"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', color: 'var(--color-text-tertiary)', lineHeight: 0 }}
-                  >
-                    <Information size={14} />
-                  </button>
-                </span>
-              }
-              checked={skipCustomListeners}
-              onChange={(_: any, data: any) => setSkipCustomListeners(!!data.checked)}
-            />
-          </div>
-          <div>
-            <Checkbox
-              id="mod-skip-io"
-              labelText={
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  Skip IO mappings
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIoInfoOpen(true) }}
-                    title="Learn more about Skip IO mappings"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', color: 'var(--color-text-tertiary)', lineHeight: 0 }}
-                  >
-                    <Information size={14} />
-                  </button>
-                </span>
-              }
-              checked={skipIoMappings}
-              onChange={(_: any, data: any) => setSkipIoMappings(!!data.checked)}
-            />
-          </div>
+          <ExecutionOptionsPanel
+            skipCustomListeners={skipCustomListeners}
+            onSkipCustomListenersChange={setSkipCustomListeners}
+            skipIoMappings={skipIoMappings}
+            onSkipIoMappingsChange={setSkipIoMappings}
+            idPrefix="mod"
+          />
           <TextInput
             id="mod-annotation"
             labelText="Annotation (optional)"
@@ -245,63 +211,6 @@ export function ApplyModificationsModal({
       </div>
     </Modal>
 
-    <Modal
-      open={listenersInfoOpen}
-      onRequestClose={() => setListenersInfoOpen(false)}
-      modalHeading="Skip Custom Listeners"
-      passiveModal
-      size="sm"
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)', padding: 'var(--spacing-3) 0' }}>
-        <div>
-          <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-13)' }}>What it does</h5>
-          <p style={{ margin: 0, fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
-            When enabled, execution listeners and task listeners attached to the affected activities will not be triggered during the modification.
-          </p>
-        </div>
-        <div>
-          <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-13)' }}>When to use</h5>
-          <p style={{ margin: 0, fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
-            Use this if listeners cause side effects (e.g. sending emails, calling external services, updating audit logs) that you want to avoid during the modification. This is common when re-running an activity or moving tokens past a failed step.
-          </p>
-        </div>
-        <div>
-          <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-13)' }}>Impact</h5>
-          <p style={{ margin: 0, fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
-            Any logic in execution or task listeners (e.g. notifications, variable initialization, external API calls) will be skipped. The activity itself will still execute its core business logic.
-          </p>
-        </div>
-      </div>
-    </Modal>
-
-    <Modal
-      open={ioInfoOpen}
-      onRequestClose={() => setIoInfoOpen(false)}
-      modalHeading="Skip IO Mappings"
-      passiveModal
-      size="sm"
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)', padding: 'var(--spacing-3) 0' }}>
-        <div>
-          <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-13)' }}>What it does</h5>
-          <p style={{ margin: 0, fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
-            When enabled, input/output variable mappings defined on the affected activities will not be executed during the modification.
-          </p>
-        </div>
-        <div>
-          <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-13)' }}>When to use</h5>
-          <p style={{ margin: 0, fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
-            Use this if the activity&apos;s variable mappings would overwrite data you want to preserve, or if the source variables referenced by the mappings are not available at the new execution point.
-          </p>
-        </div>
-        <div>
-          <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-13)' }}>Impact</h5>
-          <p style={{ margin: 0, fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
-            Input mappings will not copy variables into the activity&apos;s local scope, and output mappings will not write results back to the parent scope. The activity will use whatever variables are already available in its scope.
-          </p>
-        </div>
-      </div>
-    </Modal>
     </>
   )
 }

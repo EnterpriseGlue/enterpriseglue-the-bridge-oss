@@ -221,7 +221,7 @@ export function ModificationPlanPanel({
           size="sm"
           kind="danger--tertiary"
           onClick={onExitModificationMode}
-          style={{ flexShrink: 0 }}
+          style={{ flexShrink: 0, justifyContent: 'center', paddingInline: '1rem' }}
         >
           Exit modification mode
         </Button>

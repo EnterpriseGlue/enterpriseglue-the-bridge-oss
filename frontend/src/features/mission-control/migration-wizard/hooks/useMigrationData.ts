@@ -4,6 +4,7 @@ import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
+import { useToast } from '../../../../shared/notifications/ToastProvider'
 
 export interface MigrationDataParams {
   instanceIds: string[]
@@ -14,6 +15,7 @@ export interface MigrationDataParams {
 export function useMigrationData({ instanceIds, preselectedKey, preselectedVersion }: MigrationDataParams) {
   const { tenantNavigate } = useTenantNavigate()
   const selectedEngineId = useSelectedEngine()
+  const { notify } = useToast()
 
   // Process definitions query
   const defsQ = useQuery({
@@ -49,7 +51,9 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   }
 
   function idFor(k?: string, v?: number) {
-    const m = defs.find((d) => d.key === k && d.version === v)
+    if (k == null || v == null) return undefined
+    const numV = Number(v)
+    const m = defs.find((d) => d.key === k && d.version === numV)
     return m?.id
   }
 
@@ -63,11 +67,9 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   // Plan state
   const [plan, setPlan] = React.useState<any | null>(null)
   const [validation, setValidation] = React.useState<any | null>(null)
-  const [error, setError] = React.useState<string | null>(null)
   const [overrides, setOverrides] = React.useState<Record<number, string>>({})
   const [triggerOverrides, setTriggerOverrides] = React.useState<Record<number, boolean>>({})
   const [removed, setRemoved] = React.useState<Record<number, boolean>>({})
-  const [successMsg, setSuccessMsg] = React.useState<string | null>(null)
   const [generating, setGenerating] = React.useState(false)
 
   // Filter state
@@ -87,17 +89,27 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   const [skipIoMappings, setSkipIoMappings] = React.useState(false)
   const [pinnedIdx, setPinnedIdx] = React.useState<number | null>(null)
 
-  // Auto-pick latest versions
+  // Auto-pick or fix versions when definitions load
   React.useEffect(() => {
-    if (!srcVer && srcKey) setSrcVer(versionsForKey(srcKey)[0])
-    if (!tgtVer && tgtKey) setTgtVer(versionsForKey(tgtKey)[0])
+    if (!defsQ.data) return
+    if (srcKey) {
+      const versions = versionsForKey(srcKey)
+      if (versions.length > 0 && (!srcVer || !versions.includes(srcVer))) {
+        setSrcVer(versions[0])
+      }
+    }
+    if (tgtKey) {
+      const versions = versionsForKey(tgtKey)
+      if (versions.length > 0 && (!tgtVer || !versions.includes(tgtVer))) {
+        setTgtVer(versions[0])
+      }
+    }
   }, [srcKey, tgtKey, defsQ.data])
 
   // Generate plan handler
   async function handleGeneratePlan() {
     try {
       setGenerating(true)
-      setError(null)
       if (!selectedEngineId) throw new Error('Select an engine')
       const sourceDefinitionId = idFor(srcKey, srcVer)
       const targetDefinitionId = idFor(tgtKey, tgtVer)
@@ -120,18 +132,19 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       setOverrides({})
       setValidation(null)
     } catch (e: any) {
-      setError(getUiErrorMessage(e, 'Failed to generate plan'))
+      notify({ kind: 'error', title: 'Failed to generate plan', subtitle: getUiErrorMessage(e, 'Failed to generate plan') })
     } finally {
       setGenerating(false)
     }
   }
 
-  // Auto-generate plan when selections change
+  // Auto-generate plan when selections change (includes defsQ.data so plan generates after defs load on refresh)
   React.useEffect(() => {
     if (!srcKey || !srcVer || !tgtKey || !tgtVer) return
     if (generating) return
+    if (!idFor(srcKey, srcVer) || !idFor(tgtKey, tgtVer)) return
     handleGeneratePlan()
-  }, [srcKey, srcVer, tgtKey, tgtVer, updateEventTriggers])
+  }, [srcKey, srcVer, tgtKey, tgtVer, defsQ.data])
 
   // Normalize plan object
   const basePlan = React.useMemo(() => {
@@ -183,7 +196,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
     enabled: !!planWithOverrides,
   })
 
-  // Validate mutation
+  // Validate mutation — result handling is done by the component via mutateAsync
   const validateMutation = useMutation({
     mutationFn: async () =>
       apiClient.post<any>(
@@ -191,8 +204,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
         { engineId: selectedEngineId, plan: planWithOverrides },
         { credentials: 'include' }
       ),
-    onSuccess: (data) => setValidation(data),
-    onError: (e: any) => setError(getUiErrorMessage(e, 'Failed to validate plan')),
+    onError: (e: any) => notify({ kind: 'error', title: 'Validation failed', subtitle: getUiErrorMessage(e, 'Failed to validate plan') }),
   })
 
   // Variables object
@@ -232,7 +244,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
         { credentials: 'include' }
       ),
     onSuccess: (data) => tenantNavigate(`/mission-control/batches/${data.id}`),
-    onError: (e: any) => setError(getUiErrorMessage(e, 'Failed to start migration')),
+    onError: (e: any) => notify({ kind: 'error', title: 'Migration failed', subtitle: getUiErrorMessage(e, 'Failed to start migration') }),
   })
 
   const executeDirectMutation = useMutation({
@@ -250,10 +262,10 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
         { credentials: 'include' }
       ),
     onSuccess: () => {
-      setSuccessMsg('Migration completed')
+      notify({ kind: 'success', title: 'Migration completed' })
       setTimeout(() => tenantNavigate('/mission-control/processes'), 1200)
     },
-    onError: (e: any) => setError(getUiErrorMessage(e, 'Failed to execute migration directly')),
+    onError: (e: any) => notify({ kind: 'error', title: 'Migration failed', subtitle: getUiErrorMessage(e, 'Failed to execute migration directly') }),
   })
 
   // Fetch XML for source and target
@@ -377,16 +389,12 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
     setPlan,
     validation,
     setValidation,
-    error,
-    setError,
     overrides,
     setOverrides,
     triggerOverrides,
     setTriggerOverrides,
     removed,
     setRemoved,
-    successMsg,
-    setSuccessMsg,
     showErrorsOnly,
     setShowErrorsOnly,
     showWarningsOnly,

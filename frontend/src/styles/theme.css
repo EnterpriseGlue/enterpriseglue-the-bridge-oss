@@ -351,6 +351,14 @@ body::-webkit-scrollbar,
 
 /* Carbon header overrides moved to carbon-overrides.css */
 
+/* Fix Toggletip: ensure dark bg and wider content */
+.cds--toggletip .cds--popover-content {
+  background-color: var(--cds-background-inverse, #393939) !important;
+}
+.cds--toggletip-content {
+  max-inline-size: 22rem !important;
+}
+
 /* Carbon OverflowMenu dropdown styling - ensure white background for g10 theme */
 .cds--overflow-menu-options {
   background-color: #ffffff !important;

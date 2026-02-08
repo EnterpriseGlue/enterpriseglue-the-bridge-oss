@@ -396,7 +396,23 @@ export async function getProcessInstanceVariables(engineId: string, id: string) 
 }
 
 export async function listProcessInstanceActivityHistory(engineId: string, id: string) {
-  return camundaGet<any[]>(engineId, '/history/activity-instance', { processInstanceId: id })
+  const pageSize = 200
+  let firstResult = 0
+  const all: any[] = []
+  while (true) {
+    const page = await camundaGet<any[]>(engineId, '/history/activity-instance', {
+      processInstanceId: id,
+      sortBy: 'startTime',
+      sortOrder: 'asc',
+      firstResult,
+      maxResults: pageSize,
+    })
+    if (!Array.isArray(page) || page.length === 0) break
+    all.push(...page)
+    if (page.length < pageSize) break
+    firstResult += page.length
+  }
+  return all
 }
 
 export async function listProcessInstanceJobs(engineId: string, id: string) {

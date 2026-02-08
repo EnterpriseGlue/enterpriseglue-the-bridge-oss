@@ -66,3 +66,16 @@
 :global(.cds--table-container) {
   overflow: visible !important;
 }
+
+/* Widen the filter overflow menu so labels don't truncate */
+:global(.migration-filter-menu) {
+  min-width: 220px !important;
+}
+
+/* Center text in execute action buttons – override Carbon's asymmetric padding
+   and space-between layout which left-aligns text to make room for an icon */
+.centeredBtn :global(.cds--btn) {
+  justify-content: center !important;
+  text-align: center !important;
+  padding-inline: 1rem !important;
+}
