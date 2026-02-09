@@ -527,10 +527,10 @@ export default function ProcessesOverviewPage() {
         {fromInstanceId && (
           <BreadcrumbItem>
             <a
-              href={toTenantPath(`/mission-control/processes/instances/${sanitizePathParam(fromInstanceId)}`)}
+              href={toTenantPath(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstanceId))}`)}
               onClick={(e) => {
                 e.preventDefault()
-                tenantNavigate(`/mission-control/processes/instances/${sanitizePathParam(fromInstanceId)}`)
+                tenantNavigate(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstanceId))}`)
               }}
             >
               Instance {sanitizePathParam(fromInstanceId).substring(0, 8)}...

@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { sanitizePathParam } from '../utils/sanitize';
 import { useAuth } from '../hooks/useAuth';
 
 interface RequireEmailVerificationProps {
@@ -14,7 +15,7 @@ export function RequireEmailVerification({ children }: RequireEmailVerificationP
   const location = useLocation();
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null;
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : '';
   const resendPath = tenantSlug ? `${tenantPrefix}/resend-verification` : '/resend-verification';
 

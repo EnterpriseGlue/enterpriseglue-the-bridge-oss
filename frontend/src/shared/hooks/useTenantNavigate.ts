@@ -9,14 +9,14 @@
 
 import { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate, type NavigateOptions } from 'react-router-dom';
-import { safeRelativePath } from '../utils/sanitize';
+import { safeRelativePath, sanitizePathParam } from '../utils/sanitize';
 
 export function useTenantNavigate() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null;
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : '';
   const effectivePathname = tenantSlug ? (pathname.replace(/^\/t\/[^/]+/, '') || '/') : pathname;
 

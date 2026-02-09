@@ -54,7 +54,7 @@ export function useOnlineProjectWizard({
   const isEditConnectedProject = isExistingProject && !!existingRepo
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const toTenantPath = React.useCallback((p: string) => {
     const safe = safeRelativePath(p);
@@ -394,7 +394,7 @@ export function useOnlineProjectWizard({
       queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] })
       resetForm()
       onClose()
-      navigate(toTenantPath(`/starbase/project/${sanitizePathParam(data.project.id)}`), { state: { name: data.project.name } })
+      navigate(toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(data.project.id))}`), { state: { name: data.project.name } })
     },
     onError: (error: Error) => {
       setGeneralError(error.message)
@@ -414,7 +414,7 @@ export function useOnlineProjectWizard({
       await queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
       resetForm()
       onClose()
-      navigate(toTenantPath(`/starbase/project/${sanitizePathParam(data.id)}`), { state: { name: data.name } })
+      navigate(toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(data.id))}`), { state: { name: data.name } })
     },
     onError: (error: Error) => {
       setGeneralError(error.message)
@@ -478,7 +478,7 @@ export function useOnlineProjectWizard({
       resetForm()
       onClose()
       if (data?.projectId) {
-        navigate(toTenantPath(`/starbase/project/${sanitizePathParam(data.projectId)}`), { state: { name: data.projectName } })
+        navigate(toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(data.projectId))}`), { state: { name: data.projectName } })
       }
     },
     onError: (error: Error) => {

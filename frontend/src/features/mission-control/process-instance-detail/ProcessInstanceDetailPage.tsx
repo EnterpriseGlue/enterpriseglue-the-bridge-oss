@@ -716,10 +716,10 @@ export default function ProcessInstanceDetailPage() {
           return (
             <BreadcrumbItem>
               <a
-                href={toTenantPath(`/mission-control/processes/instances/${sanitizePathParam(fromInstance)}`)}
+                href={toTenantPath(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstance))}`)}
                 onClick={(e) => {
                   e.preventDefault()
-                  tenantNavigate(`/mission-control/processes/instances/${sanitizePathParam(fromInstance)}`)
+                  tenantNavigate(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstance))}`)
                 }}
               >
                 Instance {sanitizePathParam(fromInstance).substring(0, 8)}...

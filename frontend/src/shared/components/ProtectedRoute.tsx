@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { sanitizePathParam } from '../utils/sanitize';
 import { InlineLoading } from '@carbon/react';
 import { useAuth } from '../hooks/useAuth';
 import { apiClient } from '../../shared/api/client';
@@ -25,7 +26,7 @@ export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck 
   const canManagePlatformSettings = Boolean(user?.capabilities?.canManagePlatformSettings);
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null;
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : '';
   const effectivePathname = tenantSlug ? (location.pathname.replace(/^\/t\/[^/]+/, '') || '/') : location.pathname;
   const loginPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/login` : '/login';

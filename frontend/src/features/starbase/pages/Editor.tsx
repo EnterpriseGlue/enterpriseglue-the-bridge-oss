@@ -780,15 +780,15 @@ export default function Editor() {
           <a href={toTenantPath('/starbase')} onClick={(e) => { e.preventDefault(); tenantNavigate('/starbase'); }}>Starbase</a>
         </BreadcrumbItem>
         <BreadcrumbItem>
-          <a href={toTenantPath(`/starbase/project/${sanitizePathParam(f.projectId)}`)} onClick={(e) => { e.preventDefault(); tenantNavigate(`/starbase/project/${sanitizePathParam(f.projectId)}`); }}>
+          <a href={toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}`)} onClick={(e) => { e.preventDefault(); tenantNavigate(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}`); }}>
             {f.projectName}
           </a>
         </BreadcrumbItem>
         {f.folderBreadcrumb.map((folder) => (
           <BreadcrumbItem key={folder.id}>
             <a 
-              href={toTenantPath(`/starbase/project/${sanitizePathParam(f.projectId)}?folder=${sanitizePathParam(folder.id)}`)} 
-              onClick={(e) => { e.preventDefault(); tenantNavigate(`/starbase/project/${sanitizePathParam(f.projectId)}?folder=${sanitizePathParam(folder.id)}`); }}
+              href={toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}?folder=${encodeURIComponent(sanitizePathParam(folder.id))}`)} 
+              onClick={(e) => { e.preventDefault(); tenantNavigate(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}?folder=${encodeURIComponent(sanitizePathParam(folder.id))}`); }}
             >
               {folder.name}
             </a>
@@ -797,10 +797,10 @@ export default function Editor() {
         {location.state?.fromEditor?.fileId && location.state.fromEditor.fileId !== f.id && (
           <BreadcrumbItem>
             <a
-              href={toTenantPath(`/starbase/editor/${sanitizePathParam(location.state.fromEditor.fileId)}`)}
+              href={toTenantPath(`/starbase/editor/${encodeURIComponent(sanitizePathParam(location.state.fromEditor.fileId))}`)}
               onClick={(e) => {
                 e.preventDefault()
-                tenantNavigate(`/starbase/editor/${sanitizePathParam(location.state.fromEditor.fileId)}`)
+                tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(location.state.fromEditor.fileId))}`)
               }}
             >
               {location.state.fromEditor.fileName || 'Previous file'}

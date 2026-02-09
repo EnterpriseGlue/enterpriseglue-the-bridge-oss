@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { sanitizePathParam } from '../../../shared/utils/sanitize';
 import {
   Modal,
   RadioButtonGroup,
@@ -64,7 +65,7 @@ export default function SyncModal({
   const { pathname } = useLocation();
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null;
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : '';
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p);
 

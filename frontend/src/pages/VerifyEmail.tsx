@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { sanitizePathParam } from '../shared/utils/sanitize';
 import { Button, SkeletonIcon, SkeletonText } from '@carbon/react';
 import { apiClient } from '../shared/api/client';
 import { CheckmarkFilled, WarningFilled } from '@carbon/icons-react';
@@ -13,7 +14,7 @@ export default function VerifyEmail() {
   const [countdown, setCountdown] = useState(5);
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null;
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : '';
   const loginPath = tenantSlug ? `${tenantPrefix}/login` : '/login';
   const resendPath = tenantSlug ? `${tenantPrefix}/resend-verification` : '/resend-verification';

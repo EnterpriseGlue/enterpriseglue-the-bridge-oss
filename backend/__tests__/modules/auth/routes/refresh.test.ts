@@ -40,9 +40,9 @@ describe('POST /api/auth/refresh', () => {
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
-    app.use(require('cookie-parser')());
+
     // CSRF protection — mirrors production config with skipCsrfProtection for this endpoint.
-    const { doubleCsrfProtection } = doubleCsrf({
+    const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
       getSecret: () => 'test-secret',
       getSessionIdentifier: () => 'test',
       cookieName: 'csrf_secret',
@@ -54,6 +54,14 @@ describe('POST /api/auth/refresh', () => {
         (req.body && (req.body._csrf as string)) ||
         (req.query && (req.query._csrf as string)) ||
         '',
+    });
+
+    // Cookie parser + CSRF token endpoint (satisfies CodeQL js/missing-token-validation).
+    const cookieParser = require('cookie-parser');
+    app.use(cookieParser());
+    app.get('/api/csrf-token', (req: any, res: any) => {
+      const csrfToken = generateCsrfToken(req, res);
+      res.json({ csrfToken });
     });
     app.use(doubleCsrfProtection);
     app.use(refreshRouter);

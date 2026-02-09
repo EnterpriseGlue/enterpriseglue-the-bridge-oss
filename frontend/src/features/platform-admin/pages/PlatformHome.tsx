@@ -1,5 +1,6 @@
 import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { sanitizePathParam } from '../../../shared/utils/sanitize'
 import { UserAvatar, Document, Security, UserMultiple, Settings, Policy, RecentlyViewed, Enterprise } from '@carbon/icons-react'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout'
 
@@ -8,7 +9,7 @@ export default function PlatformHome() {
   const navigate = useNavigate()
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
 

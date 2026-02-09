@@ -1,5 +1,6 @@
 import { useState, FormEvent, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { sanitizePathParam } from '../shared/utils/sanitize';
 import { TextInput, Button, TextArea, Loading } from '@carbon/react';
 import { Login as LoginIcon } from '@carbon/icons-react';
 import FormModal from '../components/FormModal';
@@ -131,7 +132,7 @@ export default function Login() {
   const { notify } = useToast();
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null;
   const forgotPasswordPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/forgot-password` : '/forgot-password';
 
   const initialBranding = readCachedBranding();

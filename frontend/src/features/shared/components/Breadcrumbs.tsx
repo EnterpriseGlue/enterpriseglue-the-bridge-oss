@@ -1,5 +1,6 @@
 import React from 'react'
 import { useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { sanitizePathParam } from '../../../shared/utils/sanitize'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { BreadcrumbLink, BreadcrumbText, BreadcrumbSeparator } from './BreadcrumbHelpers'
 import FileMenu from './FileMenu'
@@ -18,7 +19,7 @@ export default function Breadcrumbs() {
   const qc = useQueryClient()
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const effectivePathname = tenantSlug ? (pathname.replace(/^\/t\/[^/]+/, '') || '/') : pathname
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)

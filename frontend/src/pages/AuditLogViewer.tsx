@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { sanitizePathParam } from '../shared/utils/sanitize';
 import {
   DataTable,
   DataTableSkeleton,
@@ -61,7 +62,7 @@ export default function AuditLogViewer() {
 
   const canViewAuditLogs = Boolean(user?.capabilities?.canViewAuditLogs);
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null;
   const [isTenantAdmin, setIsTenantAdmin] = useState(false);
   const [tenantAdminChecked, setTenantAdminChecked] = useState(false);
   const canView = canViewAuditLogs || (tenantSlug && isTenantAdmin);

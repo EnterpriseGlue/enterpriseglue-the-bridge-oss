@@ -1,5 +1,6 @@
 import React from 'react'
 import { Navigate, RouteObject, useLocation } from 'react-router-dom'
+import { sanitizePathParam } from '../shared/utils/sanitize'
 
 // Extension registry for EE plugin integration
 import { extensions, isMultiTenantEnabled } from '../enterprise/extensionRegistry'
@@ -80,7 +81,7 @@ function MissionControlRoleGuard({ children }: { children: React.ReactNode }) {
   const hideVoyagerForPlatformAdmin = isMultiTenant && canManagePlatformSettings
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
-  const tenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
+  const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
 

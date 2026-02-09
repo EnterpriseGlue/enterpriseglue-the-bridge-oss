@@ -747,7 +747,7 @@ export default function ProjectDetail() {
         </BreadcrumbItem>
         <BreadcrumbItem isCurrentPage={!folderId && (!contentsQ.data?.breadcrumb || contentsQ.data.breadcrumb.length === 0)}>
           {folderId || (contentsQ.data?.breadcrumb && contentsQ.data.breadcrumb.length > 0) ? (
-            <a href={toTenantPath(`/starbase/project/${sanitizePathParam(projectId)}`)} onClick={(e) => { e.preventDefault(); searchParams.delete('folder'); setSearchParams(searchParams); }}>
+            <a href={toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(projectId))}`)} onClick={(e) => { e.preventDefault(); searchParams.delete('folder'); setSearchParams(searchParams); }}>
               {projectName}
             </a>
           ) : (
