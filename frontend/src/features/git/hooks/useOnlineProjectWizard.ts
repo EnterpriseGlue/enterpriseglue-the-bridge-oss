@@ -55,11 +55,14 @@ export function useOnlineProjectWizard({
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
-  const tenantSlug = rawTenantSlug && /^[a-zA-Z0-9_-]+$/.test(rawTenantSlug) ? rawTenantSlug : null
+  const sanitizedTenantSlug = rawTenantSlug ? sanitizePathParam(rawTenantSlug) : null
+  const tenantSlug = rawTenantSlug && sanitizedTenantSlug && rawTenantSlug === sanitizedTenantSlug ? sanitizedTenantSlug : null
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const toTenantPath = React.useCallback((p: string) => {
-    const safe = safeRelativePath(p);
-    return tenantSlug ? `${tenantPrefix}${safe}` : safe;
+    const safe = safeRelativePath(p)
+    if (!tenantSlug) return safe
+    const combined = `${tenantPrefix}${safe}`
+    return safeRelativePath(combined, safe)
   }, [tenantSlug, tenantPrefix])
 
   // Form state
