@@ -5,17 +5,8 @@
 
 import { Resend } from 'resend';
 import * as nodemailer from 'nodemailer';
+import escapeHtml from 'escape-html';
 import { logger } from '@shared/utils/logger.js';
-
-/** Escape HTML special characters to prevent XSS when interpolating into HTML. */
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 export type EmailProvider = 'resend' | 'sendgrid' | 'mailgun' | 'mailjet' | 'smtp';
 

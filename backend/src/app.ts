@@ -112,22 +112,26 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     },
   });
 
-  // Apply CSRF protection directly so static analysis tools (CodeQL) can verify coverage.
-  app.use((req, res, next) => {
-    doubleCsrfProtection(req as any, res as any, (err: any) => {
-      if (err) return res.status(403).json({ error: 'Invalid CSRF token' });
+  // Apply CSRF protection directly so CodeQL can verify coverage (js/missing-token-validation).
+  app.use(doubleCsrfProtection);
 
-      // Send the CSRF token in a response header for the SPA to echo back in X-CSRF-Token.
-      // Using a header instead of a non-httpOnly cookie avoids CWE-1004.
-      try {
-        const token = generateCsrfToken(req as any, res as any);
-        res.setHeader('X-CSRF-Token', token);
-      } catch {
-        // ignore
-      }
+  // CSRF error handler — doubleCsrfProtection calls next(err) on invalid tokens.
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err && (err.code === 'EBADCSRFTOKEN' || err.message?.includes('csrf'))) {
+      return res.status(403).json({ error: 'Invalid CSRF token' });
+    }
+    next(err);
+  });
 
-      next();
-    });
+  // Send the CSRF token in a response header for the SPA to echo back in X-CSRF-Token.
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    try {
+      const token = generateCsrfToken(req as any, res as any);
+      res.setHeader('X-CSRF-Token', token);
+    } catch {
+      // ignore — token generation may fail for skipped requests
+    }
+    next();
   });
 
   // Apply global rate limiting (100000 requests per 15 minutes per user/IP)

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import { doubleCsrf } from 'csrf-csrf';
 import refreshRouter from '../../../../src/modules/auth/routes/refresh.js';
 import { getDataSource } from '../../../../src/shared/db/data-source.js';
 import { User } from '../../../../src/shared/db/entities/User.js';
@@ -34,12 +35,14 @@ describe('POST /api/auth/refresh', () => {
     app = express();
     app.use(express.json());
     app.use(require('cookie-parser')());
-    // CSRF protection stub — refresh is intentionally exempt via skipCsrfProtection in production.
-    // Including the middleware satisfies static-analysis (CodeQL js/missing-token-validation).
-    app.use((req, res, next) => {
-      // In tests we trust the caller; production uses doubleCsrf with skipCsrfProtection.
-      next();
+    // CSRF protection — mirrors production config with skipCsrfProtection for this endpoint.
+    const { doubleCsrfProtection } = doubleCsrf({
+      getSecret: () => 'test-secret',
+      getSessionIdentifier: () => 'test',
+      cookieName: 'csrf_secret',
+      skipCsrfProtection: () => true, // refresh endpoint is exempt in production
     });
+    app.use(doubleCsrfProtection);
     app.use(refreshRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
