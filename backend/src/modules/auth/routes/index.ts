@@ -12,6 +12,7 @@ import verifyEmailRoute from './verify-email.js';
 import microsoftRoute from './microsoft.js';
 import forgotPasswordRoute from './forgot-password.js';
 import ssoConfigRoute from './sso-config.js';
+import samlRoute from './saml.js';
 
 export {
   loginRoute,
@@ -21,6 +22,7 @@ export {
   meRoute,
   verifyEmailRoute,
   microsoftRoute,
+  samlRoute,
   forgotPasswordRoute,
   ssoConfigRoute,
 };

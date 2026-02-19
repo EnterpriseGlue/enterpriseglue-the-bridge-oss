@@ -15,12 +15,44 @@ For production, generate a strong JWT secret:
 openssl rand -base64 32
 ```
 
-## Microsoft Entra ID (Optional)
-Set the following when enabling Entra ID:
+## Microsoft Entra ID via OAuth (Optional)
+Set the following when enabling Entra ID OAuth/OIDC:
 - `MICROSOFT_CLIENT_ID`
 - `MICROSOFT_CLIENT_SECRET`
 - `MICROSOFT_TENANT_ID`
 - `MICROSOFT_REDIRECT_URI`
+
+## Microsoft Entra ID as SAML 2.0 IdP (Recommended for SAML assertions)
+
+### 1) Configure SAML provider in Platform Admin
+Go to **Platform Settings → SSO**, create a provider with:
+- `type`: `saml`
+- `name`: e.g. `Microsoft Entra ID (SAML)`
+- `entityId`: your Service Provider identifier (must match Entra Identifier)
+- `ssoUrl`: Entra Login URL (IdP SSO URL)
+- `certificate`: Entra SAML signing certificate (X.509)
+- `signatureAlgorithm`: `sha256` (recommended)
+- `enabled`: `true`
+
+### 2) Configure EnterpriseGlue callback URL in Entra
+Use the Assertion Consumer Service endpoint:
+- `https://<your-app-domain>/api/auth/saml/callback`
+
+For local dev with Vite proxy/Nginx same-origin:
+- `http://localhost:5173/api/auth/saml/callback`
+
+### 3) Optional metadata endpoint
+EnterpriseGlue exposes SP metadata at:
+- `GET /api/auth/saml/metadata`
+
+### 4) Login flow
+When a SAML provider is enabled, the login page shows an SSO button and redirects to:
+- `GET /api/auth/saml` → `/api/auth/saml/start` → Entra IdP
+
+Entra posts SAML assertion to:
+- `POST /api/auth/saml/callback`
+
+On success, EnterpriseGlue provisions/updates the user and issues platform JWT cookies.
 
 ## Google OAuth (Optional)
 Set the following when enabling Google OAuth:

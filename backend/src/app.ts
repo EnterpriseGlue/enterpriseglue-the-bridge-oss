@@ -84,6 +84,7 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   // Logging
   app.use(morgan('dev'));
   app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: false, limit: '2mb' }));
   app.use(cookieParser());
 
   const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({

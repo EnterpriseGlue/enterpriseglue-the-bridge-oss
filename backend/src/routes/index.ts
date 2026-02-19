@@ -58,10 +58,13 @@ import {
   meRoute,
   verifyEmailRoute,
   microsoftRoute,
+  samlRoute,
+  ssoConfigRoute,
   forgotPasswordRoute,
   googleRoute,
   googleStartRoute,
   microsoftStartRoute,
+  samlStartRoute,
 } from '@modules/auth/index.js';
 
 import {
@@ -165,9 +168,12 @@ export function registerRoutes(app: Express): void {
   app.use(meRoute);
   app.use(verifyEmailRoute);
   app.use(microsoftRoute);
+  app.use(samlRoute);
   app.use(googleRoute);
   app.use(microsoftStartRoute);
   app.use(googleStartRoute);
+  app.use(samlStartRoute);
+  app.use(ssoConfigRoute);
 
   // Admin routes (platform-level)
   app.use(emailConfigsRoute);

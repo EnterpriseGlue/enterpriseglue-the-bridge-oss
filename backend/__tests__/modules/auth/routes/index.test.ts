@@ -10,6 +10,7 @@ describe('auth routes index', () => {
     expect(authRoutes).toHaveProperty('meRoute');
     expect(authRoutes).toHaveProperty('verifyEmailRoute');
     expect(authRoutes).toHaveProperty('microsoftRoute');
+    expect(authRoutes).toHaveProperty('samlRoute');
     expect(authRoutes).toHaveProperty('forgotPasswordRoute');
   });
 });

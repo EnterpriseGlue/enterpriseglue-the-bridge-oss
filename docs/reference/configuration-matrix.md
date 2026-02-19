@@ -40,6 +40,10 @@ Audience: Developers and architects.
 | GOOGLE_CLIENT_SECRET | No | Google OAuth |
 | GOOGLE_REDIRECT_URI | No | Google OAuth |
 
+SAML 2.0 (including Microsoft Entra as IdP) is configured via **Platform Settings → SSO**
+using provider fields (`entityId`, `ssoUrl`, `certificate`, `signatureAlgorithm`), not
+via dedicated backend environment variables.
+
 ## Backend (Non-Postgres Databases)
 Set `DATABASE_TYPE` and the matching variables from `backend/.env.example`:
 - Oracle: `ORACLE_*`
