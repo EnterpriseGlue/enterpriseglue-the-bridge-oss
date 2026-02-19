@@ -10,12 +10,17 @@ import { z } from 'zod';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { validateBody, validateParams } from '@shared/middleware/validate.js';
-import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
+import { AppError, asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { ssoProviderService } from '@shared/services/platform-admin/SsoProviderService.js';
 import { logAudit } from '@shared/services/audit.js';
 import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
 const router = Router();
+
+function rethrowKnownError(error: unknown): never {
+  if (error instanceof AppError) throw error;
+  throw error;
+}
 
 // Validation schemas
 const createProviderSchema = z.object({
@@ -70,6 +75,7 @@ router.get(
       const providers = await ssoProviderService.getAllProviders();
       res.json(providers);
     } catch (error: any) {
+      rethrowKnownError(error);
       logger.error('Get SSO providers error:', error);
       throw Errors.internal('Failed to get SSO providers');
     }
@@ -95,6 +101,7 @@ router.get(
         iconUrl: p.iconUrl,
       })));
     } catch (error: any) {
+      rethrowKnownError(error);
       logger.error('Get enabled SSO providers error:', error);
       throw Errors.internal('Failed to get SSO providers');
     }
@@ -118,6 +125,7 @@ router.get(
       }
       res.json(provider);
     } catch (error: any) {
+      rethrowKnownError(error);
       logger.error('Get SSO provider error:', error);
       throw Errors.internal('Failed to get SSO provider');
     }
@@ -147,6 +155,7 @@ router.post(
 
       res.status(201).json(result);
     } catch (error: any) {
+      rethrowKnownError(error);
       logger.error('Create SSO provider error:', error);
       throw Errors.internal('Failed to create SSO provider');
     }
@@ -182,6 +191,7 @@ router.put(
 
       res.json({ success: true });
     } catch (error: any) {
+      rethrowKnownError(error);
       logger.error('Update SSO provider error:', error);
       throw Errors.internal('Failed to update SSO provider');
     }
@@ -216,6 +226,7 @@ router.delete(
 
       res.status(204).send();
     } catch (error: any) {
+      rethrowKnownError(error);
       logger.error('Delete SSO provider error:', error);
       throw Errors.internal('Failed to delete SSO provider');
     }
@@ -251,6 +262,7 @@ router.post(
 
       res.json({ enabled: newEnabled });
     } catch (error: any) {
+      rethrowKnownError(error);
       logger.error('Toggle SSO provider error:', error);
       throw Errors.internal('Failed to toggle SSO provider');
     }

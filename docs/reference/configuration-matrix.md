@@ -4,7 +4,7 @@ Summary: Required and optional environment variables for the platform.
 
 Audience: Developers and architects.
 
-## Backend (Minimum)
+## Backend (Common Required)
 | Variable | Required | Default (Docker) | Notes |
 | --- | --- | --- | --- |
 | API_PORT | Yes | 8787 | Backend port |
@@ -12,6 +12,18 @@ Audience: Developers and architects.
 | EXPOSE_BACKEND | No | true | Publish backend on host in Docker dev (`true`/`false`) |
 | FRONTEND_HOST_PORT | No | 5173 (dev), 8080 (prod) | Frontend host port |
 | DATABASE_TYPE | Yes | postgres | Database engine type |
+| JWT_SECRET | Yes | dev value | Must be strong in production |
+| ADMIN_EMAIL | Yes | admin@enterpriseglue.ai | Bootstrap admin user |
+| ADMIN_PASSWORD | Yes | dev value | Change in production |
+| FRONTEND_URL | Yes | http://localhost:5173 (dev), http://localhost:8080 (prod) | Frontend origin used by backend auth links |
+| ENCRYPTION_KEY | Yes | dev value | 64-char hex key |
+| ENTERPRISE_SCHEMA | No | enterprise | Must be non-public and distinct from active main schema |
+
+## Backend (Required by DATABASE_TYPE)
+
+### Postgres
+| Variable | Required | Default (Docker) | Notes |
+| --- | --- | --- | --- |
 | POSTGRES_HOST | Yes | db | Docker service name |
 | POSTGRES_PORT | Yes | 5432 | Postgres port |
 | POSTGRES_USER | Yes | enterpriseglue | Postgres user |
@@ -19,11 +31,42 @@ Audience: Developers and architects.
 | POSTGRES_DATABASE | Yes | enterpriseglue | Database name |
 | POSTGRES_SCHEMA | Yes | main | Must be non-public |
 | POSTGRES_SSL | Yes | false | Enable TLS for Postgres |
-| JWT_SECRET | Yes | dev value | Must be strong in production |
-| ADMIN_EMAIL | Yes | admin@enterpriseglue.ai | Bootstrap admin user |
-| ADMIN_PASSWORD | Yes | dev value | Change in production |
-| FRONTEND_URL | Yes | http://localhost:5173 (dev), http://localhost:8080 (prod) | Frontend origin used by backend auth links |
-| ENTERPRISE_SCHEMA | No | enterprise | Must be non-public and distinct |
+
+### Oracle
+| Variable | Required | Notes |
+| --- | --- | --- |
+| ORACLE_HOST | Yes | Oracle host |
+| ORACLE_PORT | No | Defaults to 1521 |
+| ORACLE_USER | Yes | Oracle username |
+| ORACLE_PASSWORD | Yes | Oracle password |
+| ORACLE_SERVICE_NAME or ORACLE_SID | Yes | At least one is required |
+| ORACLE_SCHEMA | No | Defaults to `MAIN` |
+
+### SQL Server
+| Variable | Required | Notes |
+| --- | --- | --- |
+| MSSQL_HOST | Yes | SQL Server host |
+| MSSQL_PORT | No | Defaults to 1433 |
+| MSSQL_USER | Yes | SQL Server username |
+| MSSQL_PASSWORD | Yes | SQL Server password |
+| MSSQL_DATABASE | Yes | Database name |
+| MSSQL_SCHEMA | No | Defaults to `dbo` |
+
+### MySQL
+| Variable | Required | Notes |
+| --- | --- | --- |
+| MYSQL_HOST | Yes | MySQL host |
+| MYSQL_PORT | No | Defaults to 3306 |
+| MYSQL_USER | Yes | MySQL username |
+| MYSQL_PASSWORD | Yes | MySQL password |
+| MYSQL_DATABASE | Yes | Database name |
+
+### Spanner
+| Variable | Required | Notes |
+| --- | --- | --- |
+| SPANNER_PROJECT_ID | Yes | GCP project |
+| SPANNER_INSTANCE_ID | Yes | Spanner instance |
+| SPANNER_DATABASE_ID | Yes | Spanner database |
 
 ## Backend (Optional Integrations)
 | Variable | Required | Notes |
@@ -44,12 +87,10 @@ SAML 2.0 (including Microsoft Entra as IdP) is configured via **Platform Setting
 using provider fields (`entityId`, `ssoUrl`, `certificate`, `signatureAlgorithm`), not
 via dedicated backend environment variables.
 
-## Backend (Non-Postgres Databases)
-Set `DATABASE_TYPE` and the matching variables from `backend/.env.example`:
-- Oracle: `ORACLE_*`
-- SQL Server: `MSSQL_*`
-- Spanner: `SPANNER_*`
-- MySQL: `MYSQL_*`
+## Dev launcher behavior
+- `npm run dev` defaults to Postgres and can auto-create `.env.docker` from `.env.docker.postgres.example`.
+- `npm run dev -- --db <db>` uses `.env.docker.<db>` and auto-creates it from `.env.docker.<db>.example` if missing.
+- `scripts/db-preflight.sh` validates required DB variables and installs missing DB driver packages.
 
 ## Frontend
 | Variable | Required | Default | Notes |

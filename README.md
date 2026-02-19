@@ -6,20 +6,33 @@ operations across Starbase and Mission Control modules.
 Audience: Developers and architects.
 
 ## Quickstart (Docker - Dev)
-1. Copy the Docker env file:
-   ```bash
-   cp .env.docker.example .env.docker
-   ```
-2. Start the stack:
+### Fast path (Postgres default)
+1. Start the stack:
    ```bash
    npm run dev
    ```
-3. Open the app:
+   On first run, if `.env.docker` is missing, it is created from `.env.docker.postgres.example`.
+2. Open the app:
    - Frontend: http://localhost:5173 (default)
    - Backend: http://localhost:8787 (default when `EXPOSE_BACKEND=true`)
    - If `EXPOSE_BACKEND=false`, call backend through frontend origin (for example `http://localhost:5173/api/...`).
    - Ports are configurable in `.env.docker`.
    - Docker dev serves frontend via Nginx for production-parity routing.
+
+### One-click alternative databases
+Use a database selector for Docker dev:
+
+```bash
+npm run dev -- --db mysql
+npm run dev -- --db mssql
+npm run dev -- --db oracle
+npm run dev -- --db spanner
+```
+
+Behavior:
+- On first run for a DB, `.env.docker.<db>` is auto-created from `.env.docker.<db>.example`.
+- `dev.sh` runs `scripts/db-preflight.sh` to validate env requirements and install missing DB drivers.
+- Docker compose automatically includes the matching DB overlay (`docker-compose.<db>.yml`).
 
 ## Production (Docker Compose)
 1. Copy the production env file:
@@ -41,6 +54,12 @@ Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin t
 ## Stop
 ```bash
 npm run down
+```
+
+To stop a specific DB stack explicitly:
+
+```bash
+npm run down -- --db mysql
 ```
 
 ```bash

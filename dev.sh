@@ -1,8 +1,21 @@
 #!/bin/bash
-set -e
+set -Eeuo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-ENV_FILE="$SCRIPT_DIR/.env.docker"
+DEFAULT_ENV_FILE="$SCRIPT_DIR/.env.docker"
+SELECTED_DB=""
+FORWARD_ARGS=()
+
+usage() {
+  cat <<'EOF'
+Usage: bash ./dev.sh [--db postgres|mysql|mssql|oracle|spanner] [docker compose up args...]
+
+Examples:
+  bash ./dev.sh
+  bash ./dev.sh --db mysql
+  bash ./dev.sh --db oracle --detach
+EOF
+}
 
 is_truthy() {
   local VALUE
@@ -13,14 +26,94 @@ is_truthy() {
   esac
 }
 
-EXPOSE_BACKEND="${EXPOSE_BACKEND:-true}"
-if [[ -f "$ENV_FILE" ]]; then
+normalize_db() {
+  local DB
+  DB="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$DB" in
+    postgres|mysql|mssql|oracle|spanner) echo "$DB" ;;
+    *)
+      echo "Unsupported --db value: $1" >&2
+      exit 1
+      ;;
+  esac
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --db)
+      [[ $# -lt 2 ]] && { echo "--db requires a value" >&2; exit 1; }
+      SELECTED_DB="$(normalize_db "$2")"
+      shift 2
+      ;;
+    --db=*)
+      SELECTED_DB="$(normalize_db "${1#*=}")"
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      FORWARD_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+ACTIVE_ENV_FILE="$DEFAULT_ENV_FILE"
+# If --db is provided, switch to DB-scoped env file (for example .env.docker.mysql).
+if [[ -n "$SELECTED_DB" ]]; then
+  ACTIVE_ENV_FILE="$SCRIPT_DIR/.env.docker.$SELECTED_DB"
+  TEMPLATE_FILE="$SCRIPT_DIR/.env.docker.$SELECTED_DB.example"
+  if [[ ! -f "$ACTIVE_ENV_FILE" ]]; then
+    if [[ ! -f "$TEMPLATE_FILE" ]]; then
+      echo "Missing template for DB '$SELECTED_DB': $TEMPLATE_FILE" >&2
+      exit 1
+    fi
+    cp "$TEMPLATE_FILE" "$ACTIVE_ENV_FILE"
+    echo "Created $ACTIVE_ENV_FILE from template. Adjust secrets if needed."
+  fi
+elif [[ ! -f "$ACTIVE_ENV_FILE" ]]; then
+  FALLBACK_TEMPLATE="$SCRIPT_DIR/.env.docker.postgres.example"
+  if [[ -f "$FALLBACK_TEMPLATE" ]]; then
+    cp "$FALLBACK_TEMPLATE" "$ACTIVE_ENV_FILE"
+    echo "Created $ACTIVE_ENV_FILE from $FALLBACK_TEMPLATE"
+  else
+    echo "Missing default env file ($ACTIVE_ENV_FILE) and fallback template ($FALLBACK_TEMPLATE)." >&2
+    exit 1
+  fi
+fi
+
+if [[ -f "$ACTIVE_ENV_FILE" ]]; then
   set -a
-  source "$ENV_FILE"
+  source "$ACTIVE_ENV_FILE"
   set +a
 fi
 
+if [[ -n "$SELECTED_DB" ]]; then
+  DATABASE_TYPE="$SELECTED_DB"
+fi
+
+DATABASE_TYPE="${DATABASE_TYPE:-postgres}"
+
+# One-click DB env bootstrap: if DB env file is missing, create it from template.
+# Preflight validates env requirements and ensures DB driver availability.
+bash "$SCRIPT_DIR/scripts/db-preflight.sh" --env-file "$ACTIVE_ENV_FILE" --mode docker --install-drivers true
+
 COMPOSE_ARGS=( -f docker-compose.yml )
+# Add DB-specific compose overlay for one-click multi-database startup.
+case "$DATABASE_TYPE" in
+  postgres) ;;
+  mysql) COMPOSE_ARGS+=( -f docker-compose.mysql.yml ) ;;
+  mssql) COMPOSE_ARGS+=( -f docker-compose.mssql.yml ) ;;
+  oracle) COMPOSE_ARGS+=( -f docker-compose.oracle.yml ) ;;
+  spanner) COMPOSE_ARGS+=( -f docker-compose.spanner.yml ) ;;
+  *)
+    echo "Unsupported DATABASE_TYPE: $DATABASE_TYPE" >&2
+    exit 1
+    ;;
+esac
+
 if [[ "${EG_COMPOSE_CI:-}" != "1" ]] && is_truthy "${EXPOSE_BACKEND:-true}"; then
   COMPOSE_ARGS+=( -f docker-compose.backend-expose.yml )
 fi
@@ -30,8 +123,10 @@ fi
 
 cd "$SCRIPT_DIR"
 
-if [[ -f "$ENV_FILE" ]]; then
-  exec docker compose --env-file .env.docker "${COMPOSE_ARGS[@]}" up --build "$@"
+if [[ -f "$ACTIVE_ENV_FILE" ]]; then
+  EG_BACKEND_ENV_FILE="$ACTIVE_ENV_FILE" \
+  EG_FORCE_DATABASE_TYPE="$DATABASE_TYPE" \
+  exec docker compose --env-file "$ACTIVE_ENV_FILE" "${COMPOSE_ARGS[@]}" up --build "${FORWARD_ARGS[@]}"
 fi
 
-exec docker compose "${COMPOSE_ARGS[@]}" up --build "$@"
+exec docker compose "${COMPOSE_ARGS[@]}" up --build "${FORWARD_ARGS[@]}"

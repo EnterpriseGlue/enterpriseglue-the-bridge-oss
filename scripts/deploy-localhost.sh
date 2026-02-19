@@ -4,7 +4,7 @@ set -Eeuo pipefail
 # Production deploy script for EnterpriseGlue
 # - Gracefully stops frontend (Vite) and backend (API)
 # - Validates environment configuration
-# - Runs database migrations (PostgreSQL)
+# - Runs database migrations (database-agnostic)
 # - Builds backend (ts -> dist) and frontend (vite build)
 # - Restarts backend and serves built frontend via Vite preview
 #
@@ -50,6 +50,7 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 BACKEND_PORT=${API_PORT:-8787}
 FRONTEND_PORT=5173
 PREVIEW_PORT=5173
+DATABASE_TYPE=${DATABASE_TYPE:-postgres}
 
 log() { echo "[deploy] $*"; }
 warn() { echo "[deploy] ⚠️  $*"; }
@@ -111,6 +112,12 @@ check_env() {
   set -a
   source "$BACKEND_DIR/.env"
   set +a
+  DATABASE_TYPE="${DATABASE_TYPE:-postgres}"
+
+  bash "$ROOT_DIR/scripts/db-preflight.sh" \
+    --env-file "$BACKEND_DIR/.env" \
+    --mode localhost \
+    --install-drivers true
   
   # Required for production
   local REQUIRED_VARS=(
@@ -218,21 +225,13 @@ check_frontend_env() {
 }
 
 check_database() {
-  log "Checking PostgreSQL configuration..."
-  
-  # Check if PostgreSQL is configured
-  if [[ -z "${POSTGRES_HOST:-}" ]]; then
-    error "POSTGRES_HOST not set. PostgreSQL is required."
-  fi
-  
-  log "✅ PostgreSQL configured: ${POSTGRES_HOST}:${POSTGRES_PORT:-5432}"
+  log "Checking database connectivity settings for DATABASE_TYPE=${DATABASE_TYPE}"
+  log "✅ Database settings are present (validated by db-preflight)"
 }
 
 run_migrations() {
   if [[ "$RUN_MIGRATIONS" == "true" ]]; then
-    log "Running database schema sync + migrations (first-time install)"
-    (cd "$BACKEND_DIR" && npm run db:schema:sync)
-    log "✅ Database schema synced"
+    log "Running database migrations for DATABASE_TYPE=${DATABASE_TYPE} (first-time install)"
     (cd "$BACKEND_DIR" && npm run db:migration:run)
     log "✅ Database migrations completed"
   else
@@ -347,6 +346,7 @@ print_summary() {
   log "=========================================="
   log ""
   log "Backend:     http://localhost:${BACKEND_PORT}"
+  log "Database:    ${DATABASE_TYPE}"
   log "Health:      http://localhost:${BACKEND_PORT}/health"
   log "Frontend:    http://localhost:${PREVIEW_PORT}"
   log "Login:       http://localhost:${PREVIEW_PORT}/login"

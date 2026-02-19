@@ -43,6 +43,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: detect
     if: needs.detect.outputs.run_tests == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [postgres, mysql]
     permissions:
       contents: write
     services:
@@ -59,17 +63,37 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: enterpriseglue
+          MYSQL_USER: enterpriseglue
+          MYSQL_PASSWORD: enterpriseglue
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     env:
       NODE_ENV: test
+      DATABASE_TYPE: ${{ matrix.database }}
       JWT_SECRET: test-secret-please-change-00000000000000
       CAMUNDA_BASE_URL: http://localhost:9080/engine-rest
-      POSTGRES_HOST: localhost
+      POSTGRES_HOST: ${{ matrix.database == 'postgres' && 'localhost' || '' }}
       POSTGRES_PORT: 5432
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DATABASE: postgres
+      POSTGRES_USER: ${{ matrix.database == 'postgres' && 'postgres' || '' }}
+      POSTGRES_PASSWORD: ${{ matrix.database == 'postgres' && 'postgres' || '' }}
+      POSTGRES_DATABASE: ${{ matrix.database == 'postgres' && 'postgres' || '' }}
       POSTGRES_SCHEMA: main
       POSTGRES_SSL_REJECT_UNAUTHORIZED: false
+      MYSQL_HOST: ${{ matrix.database == 'mysql' && 'localhost' || '' }}
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${{ matrix.database == 'mysql' && 'enterpriseglue' || '' }}
+      MYSQL_PASSWORD: ${{ matrix.database == 'mysql' && 'enterpriseglue' || '' }}
+      MYSQL_DATABASE: ${{ matrix.database == 'mysql' && 'enterpriseglue' || '' }}
       ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
     steps:
       - name: Checkout
@@ -86,6 +110,10 @@ jobs:
       - name: Install backend dependencies
         run: npm --prefix backend ci
 
+      - name: Install DB driver for matrix database
+        if: matrix.database == 'mysql'
+        run: npm --prefix backend install --no-save mysql2
+
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
 
@@ -99,6 +127,7 @@ jobs:
         run: npm --prefix backend run build:skip-generate
 
       - name: Create PostgreSQL schema
+        if: matrix.database == 'postgres'
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
 
@@ -106,22 +135,40 @@ jobs:
         run: npm --prefix backend run db:schema:sync
 
       - name: Run unit tests
+        if: matrix.database == 'postgres'
         run: npm run test:unit
 
       - name: Run integration tests
+        if: matrix.database == 'postgres'
         run: npm run test:integration
 
+      - name: Run MySQL backend smoke
+        if: matrix.database == 'mysql'
+        run: |
+          npm --prefix backend run start &
+          for i in {1..30}; do
+            if curl -sf http://localhost:8787/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://localhost:8787/health >/dev/null
+
       - name: Start Camunda mock server
+        if: matrix.database == 'postgres'
         run: |
           npx --yes @stoplight/prism-cli mock local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json -p 9080 &
 
       - name: Start backend
+        if: matrix.database == 'postgres'
         run: npm --prefix backend run start &
 
       - name: Start frontend
+        if: matrix.database == 'postgres'
         run: npm --prefix frontend run dev -- --host 0.0.0.0 --port 5173 &
 
       - name: Wait for services
+        if: matrix.database == 'postgres'
         run: |
           for i in {1..30}; do
             if curl -sf http://localhost:8787/health >/dev/null; then
@@ -132,26 +179,29 @@ jobs:
           curl -sf http://localhost:5173/login >/dev/null
 
       - name: Run smoke e2e
+        if: matrix.database == 'postgres'
         run: npm run test:e2e:smoke
 
       - name: Cleanup test data
-        if: always()
+        if: always() && matrix.database == 'postgres'
         run: npm --prefix backend run db:cleanup-test-data
 
       - name: Upload backend coverage
+        if: matrix.database == 'postgres'
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: backend-coverage
           path: backend/coverage
 
       - name: Upload frontend coverage
+        if: matrix.database == 'postgres'
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: frontend-coverage
           path: frontend/coverage
 
       - name: Update nightly CI marker
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' && matrix.database == 'postgres'
         run: |
           mkdir -p .sync
           echo "${{ needs.detect.outputs.current_sha }}" > .sync/ci-main.sha

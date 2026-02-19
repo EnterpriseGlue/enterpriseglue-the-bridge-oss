@@ -4,7 +4,7 @@ import { config } from '@shared/config/index.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
 import { generateId } from '@shared/utils/id.js';
-import { ssoClaimsMappingService, type SsoClaims } from './platform-admin/SsoClaimsMappingService.js';
+import { ssoClaimsMappingService, type PlatformRole, type SsoClaims } from './platform-admin/SsoClaimsMappingService.js';
 import { ssoProviderService } from './platform-admin/SsoProviderService.js';
 
 const require = createRequire(import.meta.url);
@@ -79,6 +79,7 @@ export interface SamlUserInfo {
   groups: string[];
   roles: string[];
   nameId?: string;
+  customClaims: Record<string, string | string[]>;
 }
 
 function normalizePemCertificate(input: string): string {
@@ -139,6 +140,35 @@ function uniqueLowerCase(values: string[]): string[] {
   }
 
   return output;
+}
+
+function extractCustomClaims(profile: SamlProfile): Record<string, string | string[]> {
+  const claims: Record<string, string | string[]> = {};
+
+  for (const [key, rawValue] of Object.entries(profile)) {
+    if (rawValue === undefined || rawValue === null || typeof rawValue === 'function') {
+      continue;
+    }
+
+    if (typeof rawValue === 'number' || typeof rawValue === 'boolean') {
+      claims[key] = String(rawValue);
+      continue;
+    }
+
+    const values = asStringArray(rawValue);
+    if (values.length === 0) continue;
+
+    claims[key] = values.length === 1 ? values[0] : values;
+  }
+
+  return claims;
+}
+
+function asPlatformRole(role: string | null | undefined): PlatformRole {
+  if (role === 'admin' || role === 'developer' || role === 'user') {
+    return role;
+  }
+  return 'user';
 }
 
 async function getEnabledSamlProvider() {
@@ -241,6 +271,7 @@ export function extractSamlUserInfo(profile: SamlProfile): SamlUserInfo {
   const roles = uniqueLowerCase(
     ROLE_CLAIM_KEYS.flatMap((key) => asStringArray(profile[key]))
   );
+  const customClaims = extractCustomClaims(profile);
 
   return {
     email: email.toLowerCase(),
@@ -252,6 +283,7 @@ export function extractSamlUserInfo(profile: SamlProfile): SamlUserInfo {
     groups,
     roles,
     nameId,
+    customClaims,
   };
 }
 
@@ -259,19 +291,27 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
   const now = Date.now();
+  const provider = await ssoProviderService.getProvider(providerId);
+  const fallbackRole = asPlatformRole(provider?.defaultRole);
 
   const ssoClaims: SsoClaims = {
+    ...userInfo.customClaims,
     email: userInfo.email,
     groups: userInfo.groups,
     roles: userInfo.roles,
   };
 
-  const resolvedRole = await ssoClaimsMappingService.resolveRoleFromClaims(ssoClaims, providerId);
+  const resolvedRole = await ssoClaimsMappingService.resolveRoleFromClaims(
+    ssoClaims,
+    providerId,
+    fallbackRole
+  );
 
   logger.info('[SAML Auth] SSO claims role resolution:', {
     email: userInfo.email,
     groups: userInfo.groups,
     roles: userInfo.roles,
+    fallbackRole,
     resolvedRole,
   });
 

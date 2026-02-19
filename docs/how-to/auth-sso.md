@@ -54,6 +54,12 @@ Entra posts SAML assertion to:
 
 On success, EnterpriseGlue provisions/updates the user and issues platform JWT cookies.
 
+### 5) Minor operational checks (recommended)
+- Confirm Entra **Identifier (Entity ID)** exactly matches the provider `entityId` value in EnterpriseGlue.
+- Confirm Entra **Reply URL / ACS URL** points to `https://<your-app-domain>/api/auth/saml/callback`.
+- Use `GET /api/auth/saml/status` to verify provider availability.
+- Use `GET /api/auth/saml/metadata` when you need SP metadata for IdP setup/review.
+
 ## Google OAuth (Optional)
 Set the following when enabling Google OAuth:
 - `GOOGLE_CLIENT_ID`

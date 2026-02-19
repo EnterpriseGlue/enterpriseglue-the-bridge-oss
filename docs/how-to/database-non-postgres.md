@@ -4,16 +4,55 @@ Summary: Configure EnterpriseGlue with Oracle, SQL Server, Spanner, or MySQL.
 
 Audience: Developers and architects.
 
-## General Steps
-1. Set `DATABASE_TYPE` in `backend/.env`.
-2. Fill in the database-specific env vars.
-3. Install the required driver package.
-4. Start the backend and confirm the database type in logs.
+## Recommended: One-click Docker workflow
+
+Use `--db` with the dev launcher:
+
+```bash
+npm run dev -- --db mysql
+npm run dev -- --db mssql
+npm run dev -- --db oracle
+npm run dev -- --db spanner
+```
+
+What the launcher does automatically:
+1. Creates `.env.docker.<db>` from `.env.docker.<db>.example` if missing.
+2. Runs `scripts/db-preflight.sh` to validate required environment variables.
+3. Installs a missing DB driver package (`mysql2`, `mssql`, `oracledb`, `@google-cloud/spanner`).
+4. Loads matching compose overlay (`docker-compose.<db>.yml`) and starts the stack.
+
+Stop the selected stack:
+
+```bash
+npm run down -- --db mysql
+```
+
+## Host-based backend workflow (without Docker DB overlays)
+
+For direct backend runs against an existing database:
+1. Configure `backend/.env` with `DATABASE_TYPE` + database-specific variables.
+2. Run preflight checks manually:
+   ```bash
+   bash ./scripts/db-preflight.sh --env-file ./backend/.env --mode localhost --install-drivers true
+   ```
+3. Start backend:
+   ```bash
+   npm --prefix backend run start
+   ```
+
+For production-style localhost deployment script:
+
+```bash
+bash ./scripts/deploy-localhost.sh
+```
+
+The deploy script now runs the same DB preflight checks before build/start.
 
 ## Oracle
 - Env vars: `ORACLE_HOST`, `ORACLE_PORT`, `ORACLE_USER`, `ORACLE_PASSWORD`,
   `ORACLE_SERVICE_NAME` (or `ORACLE_SID`), `ORACLE_SCHEMA`.
 - Driver: `oracledb` (requires Oracle Instant Client).
+- Important: if Oracle Instant Client is missing or not loadable, preflight fails with explicit setup guidance.
 
 ## SQL Server
 - Env vars: `MSSQL_HOST`, `MSSQL_PORT`, `MSSQL_USER`, `MSSQL_PASSWORD`,
@@ -32,7 +71,12 @@ Audience: Developers and architects.
 
 ## Verify
 - Backend logs print the active database type on startup.
-- Confirm schema settings are non-public and distinct.
+- Confirm schema settings are valid for your selected database type.
+- Hit health endpoint after startup:
+  - `http://localhost:8787/health` (host runs)
+  - or proxied via frontend origin in Docker if backend is internal-only.
 
 ## Reference
-See `backend/.env.example` for all supported variables.
+- `backend/.env.example`
+- `.env.docker.<db>.example` templates in repo root
+- `scripts/db-preflight.sh`

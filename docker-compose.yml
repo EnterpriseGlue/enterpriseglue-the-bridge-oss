@@ -3,15 +3,15 @@ services:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} -h 127.0.0.1"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres} -h 127.0.0.1"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -23,15 +23,16 @@ services:
     restart: unless-stopped
     init: true
     env_file:
-      - ./.env.docker
+      - ${EG_BACKEND_ENV_FILE:-./.env.docker}
     environment:
       CHOKIDAR_USEPOLLING: "true"
+      DATABASE_TYPE: ${EG_FORCE_DATABASE_TYPE:-${DATABASE_TYPE}}
     depends_on:
       db:
         condition: service_healthy
     working_dir: /app
     command: >-
-      sh -c "set -e; LOCK_HASH=$$(node -e \"const fs=require('fs');const crypto=require('crypto');const a=fs.readFileSync('package.json');const b=fs.readFileSync('package-lock.json');process.stdout.write(crypto.createHash('sha256').update(a).update(b).digest('hex'));\"); STORED_HASH=$$(cat node_modules/.deps-hash 2>/dev/null || true); if [ \"$$LOCK_HASH\" != \"$$STORED_HASH\" ]; then echo \"Backend deps changed; running npm ci...\"; npm ci --include=dev --no-audit --no-fund; echo \"$$LOCK_HASH\" > node_modules/.deps-hash; fi; npm run dev"
+      sh -c "set -e; LOCK_HASH=$$(node -e \"const fs=require('fs');const crypto=require('crypto');const a=fs.readFileSync('package.json');const b=fs.readFileSync('package-lock.json');process.stdout.write(crypto.createHash('sha256').update(a).update(b).digest('hex'));\"); STORED_HASH=$$(cat node_modules/.deps-hash 2>/dev/null || true); if [ \"$$LOCK_HASH\" != \"$$STORED_HASH\" ]; then echo \"Backend deps changed; running npm ci...\"; npm ci --include=dev --no-audit --no-fund; echo \"$$LOCK_HASH\" > node_modules/.deps-hash; fi; DB_DRIVER=pg; case \"$${DATABASE_TYPE:-postgres}\" in postgres) DB_DRIVER=pg ;; mysql) DB_DRIVER=mysql2 ;; mssql) DB_DRIVER=mssql ;; oracle) DB_DRIVER=oracledb ;; spanner) DB_DRIVER=@google-cloud/spanner ;; esac; node -e \"require.resolve(process.argv[1]);\" \"$$DB_DRIVER\" >/dev/null 2>&1 || npm install --include=dev --no-audit --no-fund --no-save \"$$DB_DRIVER\"; npm run dev"
     volumes:
       - ./backend:/app
       - ./packages:/packages:ro

@@ -43,9 +43,14 @@ class SsoClaimsMappingServiceClass {
    * 
    * @param claims - Claims from SSO provider (groups, roles, email, etc.)
    * @param providerId - Optional provider ID to filter mappings
-   * @returns The resolved platform role, or 'user' as default
+   * @param fallbackRole - Role used only when no mappings match
+   * @returns The resolved platform role
    */
-  async resolveRoleFromClaims(claims: SsoClaims, providerId?: string): Promise<PlatformRole> {
+  async resolveRoleFromClaims(
+    claims: SsoClaims,
+    providerId?: string,
+    fallbackRole: PlatformRole = 'user'
+  ): Promise<PlatformRole> {
     const dataSource = await getDataSource();
     const mappingRepo = dataSource.getRepository(SsoClaimsMapping);
     
@@ -61,7 +66,7 @@ class SsoClaimsMappingServiceClass {
     
     const mappings = await qb.getMany();
 
-    let highestRole: PlatformRole = 'user';
+    let highestRole: PlatformRole = fallbackRole;
     let highestPriority = -1;
 
     for (const mapping of mappings) {

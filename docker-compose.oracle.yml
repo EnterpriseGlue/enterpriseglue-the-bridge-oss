@@ -1,0 +1,20 @@
+services:
+  db:
+    image: gvenzl/oracle-xe:21-slim-faststart
+    restart: unless-stopped
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      APP_USER: ${ORACLE_USER}
+      APP_USER_PASSWORD: ${ORACLE_PASSWORD}
+    ports:
+      - "${ORACLE_HOST_PORT:-1521}:1521"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+
+  backend:
+    depends_on:
+      db:
+        condition: service_started
+
+volumes:
+  oracle_data:

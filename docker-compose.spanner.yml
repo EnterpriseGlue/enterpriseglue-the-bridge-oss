@@ -1,0 +1,12 @@
+services:
+  db:
+    image: gcr.io/cloud-spanner-emulator/emulator:1.5.30
+    restart: unless-stopped
+    command: ["/emulator_main", "--host_port=0.0.0.0:9010"]
+    ports:
+      - "${SPANNER_HOST_PORT:-9010}:9010"
+
+  backend:
+    depends_on:
+      db:
+        condition: service_started

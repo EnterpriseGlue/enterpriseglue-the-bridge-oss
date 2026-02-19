@@ -9,6 +9,7 @@ import { getDataSource } from '@shared/db/data-source.js';
 import { SsoProvider } from '@shared/db/entities/SsoProvider.js';
 import { generateId } from '@shared/utils/id.js';
 import { config } from '@shared/config/index.js';
+import { Errors } from '@shared/middleware/errorHandler.js';
 
 export type SsoProviderType = 'microsoft' | 'google' | 'saml' | 'oidc';
 export type PlatformRole = 'admin' | 'developer' | 'user';
@@ -81,6 +82,33 @@ export interface SsoProviderPublic {
 }
 
 class SsoProviderServiceClass {
+  private hasText(value: string | null | undefined): boolean {
+    return typeof value === 'string' && value.trim().length > 0;
+  }
+
+  private ensureProviderCanBeEnabled(
+    type: SsoProviderType,
+    configToValidate: {
+      entityId?: string | null;
+      ssoUrl?: string | null;
+      hasCertificate: boolean;
+    }
+  ): void {
+    if (type !== 'saml') return;
+
+    const missingFields: string[] = [];
+    if (!this.hasText(configToValidate.entityId)) missingFields.push('entityId');
+    if (!this.hasText(configToValidate.ssoUrl)) missingFields.push('ssoUrl');
+    if (!configToValidate.hasCertificate) missingFields.push('certificate');
+
+    if (missingFields.length > 0) {
+      throw Errors.validation(
+        `Cannot enable SAML provider. Missing required fields: ${missingFields.join(', ')}`,
+        { missingFields }
+      );
+    }
+  }
+
   /**
    * Simple encryption for secrets (in production, use proper key management)
    */
@@ -174,6 +202,15 @@ class SsoProviderServiceClass {
     const providerRepo = dataSource.getRepository(SsoProvider);
     const id = generateId();
     const now = Date.now();
+    const enabled = input.enabled ?? false;
+
+    if (enabled) {
+      this.ensureProviderCanBeEnabled(input.type, {
+        entityId: input.entityId || null,
+        ssoUrl: input.ssoUrl || null,
+        hasCertificate: this.hasText(input.certificate),
+      });
+    }
 
     // Generate callback URL based on type
     const baseUrl = config.frontendUrl || 'http://localhost:5173';
@@ -183,7 +220,7 @@ class SsoProviderServiceClass {
       id,
       name: input.name,
       type: input.type,
-      enabled: input.enabled ?? false,
+      enabled,
       
       // OIDC
       clientId: input.clientId || null,
@@ -228,6 +265,26 @@ class SsoProviderServiceClass {
     const dataSource = await getDataSource();
     const providerRepo = dataSource.getRepository(SsoProvider);
     const now = Date.now();
+
+    const existing = await providerRepo.findOneBy({ id });
+    if (!existing) {
+      throw Errors.providerNotFound(id);
+    }
+
+    const type = (input.type ?? existing.type) as SsoProviderType;
+    const enabled = input.enabled ?? existing.enabled;
+    const entityId = input.entityId !== undefined ? input.entityId || null : existing.entityId;
+    const ssoUrl = input.ssoUrl !== undefined ? input.ssoUrl || null : existing.ssoUrl;
+    const hasCertificate =
+      input.certificate !== undefined ? this.hasText(input.certificate) : !!existing.certificateEnc;
+
+    if (enabled) {
+      this.ensureProviderCanBeEnabled(type, {
+        entityId,
+        ssoUrl,
+        hasCertificate,
+      });
+    }
 
     const updates: any = { updatedAt: now };
 
@@ -285,6 +342,20 @@ class SsoProviderServiceClass {
   async toggleProvider(id: string, enabled: boolean): Promise<void> {
     const dataSource = await getDataSource();
     const providerRepo = dataSource.getRepository(SsoProvider);
+
+    if (enabled) {
+      const existing = await providerRepo.findOneBy({ id });
+      if (!existing) {
+        throw Errors.providerNotFound(id);
+      }
+
+      this.ensureProviderCanBeEnabled(existing.type as SsoProviderType, {
+        entityId: existing.entityId,
+        ssoUrl: existing.ssoUrl,
+        hasCertificate: !!existing.certificateEnc,
+      });
+    }
+
     await providerRepo.update({ id }, { enabled, updatedAt: Date.now() });
   }
 

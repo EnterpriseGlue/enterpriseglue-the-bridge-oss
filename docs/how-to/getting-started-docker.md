@@ -9,22 +9,35 @@ Audience: Developers and architects.
 - Docker Compose plugin (`docker compose`)
 
 ## Steps (Dev)
-1. Copy the Docker env file:
-   ```bash
-   cp .env.docker.example .env.docker
-   ```
-2. Start the stack:
+1. Start the stack (Postgres default):
    ```bash
    npm run dev
    ```
-3. Open the app:
+   - If `.env.docker` does not exist, it is auto-created from `.env.docker.postgres.example`.
+2. Open the app:
    - Frontend: http://localhost:5173 (default)
    - Backend: http://localhost:8787 (default when `EXPOSE_BACKEND=true`)
    - If `EXPOSE_BACKEND=false`, call backend via frontend origin (for example `http://localhost:5173/api/...`).
-4. Log in with the admin credentials from `.env.docker`:
+3. Log in with the admin credentials from the active env file:
    - `ADMIN_EMAIL`
    - `ADMIN_PASSWORD`
    - Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification
+
+## One-click database selection (Dev)
+Use `--db` to launch with another database:
+
+```bash
+npm run dev -- --db mysql
+npm run dev -- --db mssql
+npm run dev -- --db oracle
+npm run dev -- --db spanner
+```
+
+What happens automatically:
+- `dev.sh` creates `.env.docker.<db>` from `.env.docker.<db>.example` when missing.
+- `scripts/db-preflight.sh` validates required DB env variables.
+- Missing DB driver packages are installed automatically for local development.
+- Matching compose overlay is selected (`docker-compose.<db>.yml`).
 
 ## Steps (Production)
 1. Copy the production env file:
@@ -45,6 +58,12 @@ Audience: Developers and architects.
 ## Stop the stack
 ```bash
 npm run down
+```
+
+Stop a specific DB stack explicitly:
+
+```bash
+npm run down -- --db mysql
 ```
 
 ```bash

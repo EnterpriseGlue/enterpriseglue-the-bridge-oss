@@ -33,6 +33,7 @@ import {
 import { Add, Edit, TrashCan, Security, Link as LinkIcon, Information } from '@carbon/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
+import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid';
 
 // Types
@@ -142,13 +143,19 @@ export default function SsoSettingsTab() {
   
   // Documentation modal state
   const [docsModalOpen, setDocsModalOpen] = useState(false);
+  const [providerFormError, setProviderFormError] = useState<string | null>(null);
   
   // Mutations
   const createProvider = useMutation({
     mutationFn: (data: any) => apiClient.post('/api/sso/providers', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-providers'] });
+      setProviderFormError(null);
       closeProviderModal();
+    },
+    onError: (error: unknown) => {
+      const parsed = parseApiError(error, 'Failed to create SSO provider');
+      setProviderFormError(parsed.message);
     },
   });
   
@@ -156,7 +163,12 @@ export default function SsoSettingsTab() {
     mutationFn: ({ id, ...data }: any) => apiClient.put(`/api/sso/providers/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-providers'] });
+      setProviderFormError(null);
       closeProviderModal();
+    },
+    onError: (error: unknown) => {
+      const parsed = parseApiError(error, 'Failed to update SSO provider');
+      setProviderFormError(parsed.message);
     },
   });
   
@@ -247,9 +259,34 @@ export default function SsoSettingsTab() {
   const closeProviderModal = () => {
     setProviderModalOpen(false);
     setEditingProvider(null);
+    setProviderFormError(null);
+  };
+
+  const getMissingRequiredSamlFieldsForEnable = (): string[] => {
+    if (providerForm.type !== 'saml' || !providerForm.enabled) return [];
+
+    const missing: string[] = [];
+    if (!providerForm.entityId.trim()) missing.push('Entity ID');
+    if (!providerForm.ssoUrl.trim()) missing.push('SSO URL');
+
+    const hasCertificate =
+      Boolean(providerForm.certificate.trim()) || Boolean(editingProvider?.hasCertificate);
+    if (!hasCertificate) missing.push('IdP Certificate');
+
+    return missing;
   };
   
   const handleSaveProvider = () => {
+    setProviderFormError(null);
+
+    const missingSamlFields = getMissingRequiredSamlFieldsForEnable();
+    if (missingSamlFields.length > 0) {
+      setProviderFormError(
+        `Cannot enable SAML provider. Missing required fields: ${missingSamlFields.join(', ')}`
+      );
+      return;
+    }
+
     const data: any = {
       name: providerForm.name,
       type: providerForm.type,
@@ -586,6 +623,15 @@ export default function SsoSettingsTab() {
         size="md"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingTop: 'var(--spacing-4)' }}>
+          {providerFormError && (
+            <InlineNotification
+              kind="error"
+              title="Unable to save SSO provider"
+              subtitle={providerFormError}
+              onCloseButtonClick={() => setProviderFormError(null)}
+            />
+          )}
+
           <TextInput
             id="provider-name"
             labelText="Display Name"
@@ -650,10 +696,17 @@ export default function SsoSettingsTab() {
           
           {providerForm.type === 'saml' && (
             <>
+              <InlineNotification
+                kind="info"
+                title="Operational checks"
+                subtitle="Ensure Entra Identifier exactly matches Entity ID, and ACS URL is /api/auth/saml/callback on your app domain."
+              />
+
               <TextInput
                 id="provider-entity-id"
                 labelText="Entity ID (SP)"
                 placeholder="Service Provider Entity ID"
+                helperText="Must exactly match Microsoft Entra Identifier (Entity ID)."
                 value={providerForm.entityId}
                 onChange={(e) => setProviderForm({ ...providerForm, entityId: e.target.value })}
               />
@@ -662,6 +715,7 @@ export default function SsoSettingsTab() {
                 id="provider-sso-url"
                 labelText="SSO URL (IdP)"
                 placeholder="Identity Provider SSO URL"
+                helperText="Use the Microsoft Entra Login URL (HTTPS)."
                 value={providerForm.ssoUrl}
                 onChange={(e) => setProviderForm({ ...providerForm, ssoUrl: e.target.value })}
               />
@@ -670,6 +724,7 @@ export default function SsoSettingsTab() {
                 id="provider-certificate"
                 labelText={editingProvider ? 'IdP Certificate (leave empty to keep existing)' : 'IdP Certificate'}
                 placeholder="-----BEGIN CERTIFICATE-----..."
+                helperText="Paste the X.509 signing certificate from Microsoft Entra."
                 value={providerForm.certificate}
                 onChange={(e) => setProviderForm({ ...providerForm, certificate: e.target.value })}
                 rows={4}

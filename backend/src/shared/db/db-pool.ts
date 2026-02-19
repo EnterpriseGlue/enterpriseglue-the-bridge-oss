@@ -224,24 +224,14 @@ export function getConnectionPool(): ConnectionPool {
     const adapter = getAdapter();
     const dbType = adapter.getDatabaseType();
 
-    switch (dbType) {
-      case 'oracle':
-        poolInstance = new OracleConnectionPool();
-        break;
-      case 'mysql':
-        poolInstance = new MySQLConnectionPool();
-        break;
-      case 'mssql':
-        poolInstance = new SqlServerConnectionPool();
-        break;
-      case 'spanner':
-        poolInstance = new SpannerConnectionPool();
-        break;
-      case 'postgres':
-      default:
-        poolInstance = new PostgresConnectionPool();
-        break;
+    if (dbType !== 'postgres') {
+      throw new Error(
+        `ConnectionPool raw SQL adapter is not implemented for DATABASE_TYPE=${dbType} in OSS. ` +
+        'Use TypeORM data-source/repository APIs only, or implement the non-Postgres pool before enabling raw-SQL-dependent plugins.'
+      );
     }
+
+    poolInstance = new PostgresConnectionPool();
   }
 
   return poolInstance;

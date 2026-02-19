@@ -6,8 +6,13 @@ Audience: Developers and architects.
 
 ## Backend Configuration
 Primary sources:
-- `.env.docker` (Docker Compose)
+- `.env.docker` (Docker Compose, Postgres default)
+- `.env.docker.<db>` (Docker Compose with `npm run dev -- --db <db>`)
 - `backend/.env` (host-based runs)
+
+Launcher and validation scripts:
+- `dev.sh` / `down.sh` select DB overlays (`docker-compose.<db>.yml`) and env files.
+- `scripts/db-preflight.sh` validates DB-specific env requirements and can install missing DB drivers.
 
 ### Core Settings
 - `API_PORT`: backend port (default 8787)
@@ -16,6 +21,13 @@ Primary sources:
 - `FRONTEND_HOST_PORT`: frontend host port (Docker dev/prod)
 - `DATABASE_TYPE`: `postgres | oracle | mssql | spanner | mysql`
 - `FRONTEND_URL`: frontend origin for auth links
+
+### Database Required Variables (by `DATABASE_TYPE`)
+- `postgres`: `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DATABASE`, `POSTGRES_SCHEMA` (non-public)
+- `oracle`: `ORACLE_HOST`, `ORACLE_USER`, `ORACLE_PASSWORD`, and one of `ORACLE_SERVICE_NAME` or `ORACLE_SID`
+- `mssql`: `MSSQL_HOST`, `MSSQL_USER`, `MSSQL_PASSWORD`, `MSSQL_DATABASE`
+- `mysql`: `MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
+- `spanner`: `SPANNER_PROJECT_ID`, `SPANNER_INSTANCE_ID`, `SPANNER_DATABASE_ID`
 
 ### Database (Postgres default)
 - `POSTGRES_HOST`
@@ -27,7 +39,7 @@ Primary sources:
 - `POSTGRES_SSL`
 
 ### Enterprise Schema
-- `ENTERPRISE_SCHEMA` (must be non-public and distinct from `POSTGRES_SCHEMA`)
+- `ENTERPRISE_SCHEMA` (must be non-public and distinct from the active main schema)
 
 ### Auth & Admin Bootstrap
 - `JWT_SECRET`
@@ -49,7 +61,17 @@ Database support is provided via TypeORM adapters and driver packages:
 - **Spanner**: `@google-cloud/spanner`
 - **MySQL**: `mysql2`
 
-See `backend/.env.example` for detailed per-database settings.
+Notes:
+- In Docker dev, backend startup also checks/install the selected DB driver package.
+- For host runs, use `scripts/db-preflight.sh` before backend startup.
+
+See for detailed settings:
+- `backend/.env.example`
+- `.env.docker.postgres.example`
+- `.env.docker.mysql.example`
+- `.env.docker.mssql.example`
+- `.env.docker.oracle.example`
+- `.env.docker.spanner.example`
 
 ## Frontend Configuration
 Primary sources:
@@ -75,4 +97,8 @@ The UI is gated by `VITE_FEATURE_*` flags (see `frontend/.env.example`), such as
 - `backend/.env.example`
 - `frontend/.env.example`
 - `.env.docker.example`
+- `.env.docker.<db>.example`
 - `backend/src/shared/config/index.ts`
+- `scripts/db-preflight.sh`
+- `dev.sh`
+- `down.sh`
