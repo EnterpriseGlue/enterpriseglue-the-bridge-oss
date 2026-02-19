@@ -67,14 +67,14 @@ sequenceDiagram
 ## Deployment Topology (Docker-First)
 - `db`: PostgreSQL container (default)
 - `backend`: API service
-- `frontend`: Vite dev server
+- `frontend`: Nginx serving built frontend and proxying API routes
 
 ```mermaid
 flowchart TB
   subgraph Docker Compose
     db[(Postgres)]
     backend[Backend API]
-    frontend[Frontend (Vite)]
+    frontend[Frontend (Nginx)]
   end
   frontend --> backend
   backend --> db

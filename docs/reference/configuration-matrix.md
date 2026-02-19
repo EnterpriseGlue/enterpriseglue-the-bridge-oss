@@ -8,6 +8,9 @@ Audience: Developers and architects.
 | Variable | Required | Default (Docker) | Notes |
 | --- | --- | --- | --- |
 | API_PORT | Yes | 8787 | Backend port |
+| BACKEND_HOST_PORT | No | 8787 | Backend host port (Docker dev) |
+| EXPOSE_BACKEND | No | true | Publish backend on host in Docker dev (`true`/`false`) |
+| FRONTEND_HOST_PORT | No | 5173 (dev), 8080 (prod) | Frontend host port |
 | DATABASE_TYPE | Yes | postgres | Database engine type |
 | POSTGRES_HOST | Yes | db | Docker service name |
 | POSTGRES_PORT | Yes | 5432 | Postgres port |
@@ -19,7 +22,7 @@ Audience: Developers and architects.
 | JWT_SECRET | Yes | dev value | Must be strong in production |
 | ADMIN_EMAIL | Yes | admin@enterpriseglue.ai | Bootstrap admin user |
 | ADMIN_PASSWORD | Yes | dev value | Change in production |
-| FRONTEND_URL | Yes | http://localhost:5173 | Frontend origin |
+| FRONTEND_URL | Yes | http://localhost:5173 (dev), http://localhost:8080 (prod) | Frontend origin used by backend auth links |
 | ENTERPRISE_SCHEMA | No | enterprise | Must be non-public and distinct |
 
 ## Backend (Optional Integrations)
@@ -47,7 +50,8 @@ Set `DATABASE_TYPE` and the matching variables from `backend/.env.example`:
 ## Frontend
 | Variable | Required | Default | Notes |
 | --- | --- | --- | --- |
-| VITE_API_BASE_URL | Yes | http://localhost:8787 | Backend origin |
+| API_BASE_URL | No | empty in prod | Preferred Docker root env alias for API origin |
+| VITE_API_BASE_URL | No | mapped from `API_BASE_URL` | Frontend runtime variable exposed by Vite |
 | VITE_FEATURE_* | No | true | Feature flags per module |
 
 ## Git & Encryption

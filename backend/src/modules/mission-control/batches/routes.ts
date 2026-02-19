@@ -15,6 +15,7 @@ import {
   deleteProcessInstancesBatch,
   setBatchSuspended,
 } from './service.js'
+import { piiRedactionService } from '@shared/services/pii/PiiRedactionService.js'
 import { getDataSource } from '@shared/db/data-source.js'
 import { Batch } from '@shared/db/entities/Batch.js'
 
@@ -349,12 +350,14 @@ r.get('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFro
     } catch (e) { logger.debug('Failed to parse batch metadata', { batchId: req.params.id, error: e }) }
   }
 
-  res.json({
+  const redacted = await piiRedactionService.redactPayload(req, {
     batch: { ...row, lastError: batchError || row.lastError, ...(suspended === undefined ? {} : { suspended }) },
     engine,
     statistics: outStats,
     failedJobDetails,
-  })
+  }, 'errors')
+
+  res.json(redacted)
 }))
 
 r.delete('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {

@@ -78,6 +78,10 @@ export class PostgresAdapter implements DatabaseAdapter {
     return name.toLowerCase();
   }
 
+  /**
+   * @deprecated Use TypeORM QueryRunner schema APIs (`hasSchema`, `createSchema`) instead.
+   * Retained temporarily for OSS->EE sync compatibility.
+   */
   getCreateSchemaSQL(schemaName: string): string {
     return `CREATE SCHEMA IF NOT EXISTS "${schemaName}"`;
   }

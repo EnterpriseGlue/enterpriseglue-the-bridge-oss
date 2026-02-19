@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { IsNull } from 'typeorm';
 import { requireAuth } from '@shared/middleware/auth.js';
 import { notificationsLimiter } from '@shared/middleware/rateLimiter.js';
-import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
-import { validateBody } from '@shared/middleware/validate.js';
+import { asyncHandler } from '@shared/middleware/errorHandler.js';
+import { validateBody, validateParams, validateQuery } from '@shared/middleware/validate.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { Notification } from '@shared/db/entities/Notification.js';
 
@@ -16,14 +16,29 @@ const createNotificationSchema = z.object({
   subtitle: z.string().optional().nullable(),
 });
 
-router.get('/api/notifications', requireAuth, notificationsLimiter, asyncHandler(async (req, res) => {
+const notificationsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  unread: z.string().optional(),
+  state: z.string().optional(),
+});
+
+const markNotificationsReadSchema = z.object({
+  ids: z.array(z.string().min(1)).optional(),
+});
+
+const notificationIdParamSchema = z.object({
+  id: z.string().min(1),
+});
+
+router.get('/api/notifications', requireAuth, notificationsLimiter, validateQuery(notificationsQuerySchema), asyncHandler(async (req, res) => {
   const dataSource = await getDataSource();
   const notificationRepo = dataSource.getRepository(Notification);
   const userId = req.user!.userId;
   const tenantId = req.tenant?.tenantId || null;
 
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-  const offset = parseInt(req.query.offset as string) || 0;
+  const limit = Number(req.query.limit);
+  const offset = Number(req.query.offset);
   const unread = String(req.query.unread || '').toLowerCase();
   const unreadOnly = unread === 'true' || unread === '1';
   const stateParam = String(req.query.state || '').trim();
@@ -114,13 +129,13 @@ router.post('/api/notifications', requireAuth, notificationsLimiter, validateBod
   });
 }));
 
-router.patch('/api/notifications/read', requireAuth, notificationsLimiter, asyncHandler(async (req, res) => {
+router.patch('/api/notifications/read', requireAuth, notificationsLimiter, validateBody(markNotificationsReadSchema), asyncHandler(async (req, res) => {
   const dataSource = await getDataSource();
   const notificationRepo = dataSource.getRepository(Notification);
   const userId = req.user!.userId;
   const tenantId = req.tenant?.tenantId || null;
   const now = Date.now();
-  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : null;
+  const ids = req.body.ids?.filter(Boolean) ?? null;
 
   const qb = notificationRepo
     .createQueryBuilder()
@@ -161,9 +176,8 @@ router.delete('/api/notifications', requireAuth, notificationsLimiter, asyncHand
   res.json({ deleted: result.affected || 0 });
 }));
 
-router.delete('/api/notifications/:id', requireAuth, notificationsLimiter, asyncHandler(async (req, res) => {
-  const id = String(req.params.id || '').trim();
-  if (!id) throw Errors.validation('Notification id is required');
+router.delete('/api/notifications/:id', requireAuth, notificationsLimiter, validateParams(notificationIdParamSchema), asyncHandler(async (req, res) => {
+  const id = req.params.id;
 
   const dataSource = await getDataSource();
   const notificationRepo = dataSource.getRepository(Notification);

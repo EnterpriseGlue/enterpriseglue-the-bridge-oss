@@ -5,7 +5,8 @@ Summary: How to monitor health and access logs for the platform.
 Audience: Developers and architects.
 
 ## Health Checks
-- Backend health endpoint: `http://localhost:8787/health`
+- Dev backend health endpoint: `http://localhost:8787/health` (default)
+- Production (same-origin via Nginx): `http://localhost:8080/health` (default frontend host/port)
 
 ## Docker Logs
 ```bash

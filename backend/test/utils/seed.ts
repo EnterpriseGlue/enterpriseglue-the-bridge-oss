@@ -2,13 +2,17 @@ import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
 import { Project } from '@shared/db/entities/Project.js';
 import { Engine } from '@shared/db/entities/Engine.js';
+import { EngineHealth } from '@shared/db/entities/EngineHealth.js';
+import { EngineMember } from '@shared/db/entities/EngineMember.js';
 import { ProjectMember } from '@shared/db/entities/ProjectMember.js';
 import { ProjectMemberRole } from '@shared/db/entities/ProjectMemberRole.js';
 import { RefreshToken } from '@shared/db/entities/RefreshToken.js';
 import { AuditLog } from '@shared/db/entities/AuditLog.js';
+import { File } from '@shared/db/entities/File.js';
+import { Folder } from '@shared/db/entities/Folder.js';
 import { generateAccessToken } from '@shared/utils/jwt.js';
 import { generateId, unixTimestamp } from '@shared/utils/id.js';
-import { getAdapter } from '@shared/db/adapters/index.js';
+import { Brackets } from 'typeorm';
 
 type SeedUser = {
   id: string;
@@ -146,72 +150,42 @@ export async function seedFile(
   folderId: string | null = null
 ): Promise<SeedFile> {
   const dataSource = await getDataSource();
+  const fileRepo = dataSource.getRepository(File);
   const id = generateId();
   const now = Date.now();
 
-  const schema = getAdapter().getSchemaName() || 'public';
-  const columns = await dataSource.query(
-    `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'files'`,
-    [schema]
-  );
-  const columnSet = new Set(columns.map((c: any) => String(c.column_name)));
-
-  const entries: Array<{ name: string; value: any }> = [
-    { name: 'id', value: id },
-    { name: 'project_id', value: projectId },
-    { name: 'folder_id', value: folderId },
-    { name: 'name', value: name },
-    { name: 'type', value: type },
-    { name: 'xml', value: xml },
-    { name: 'created_by', value: null },
-    { name: 'updated_by', value: null },
-    { name: 'created_at', value: now },
-    { name: 'updated_at', value: now },
-  ].filter((entry) => columnSet.has(entry.name));
-
-  const columnNames = entries.map((entry) => `"${entry.name}"`).join(', ');
-  const placeholders = entries.map((_, index) => `$${index + 1}`).join(', ');
-  const values = entries.map((entry) => entry.value);
-
-  await dataSource.query(
-    `INSERT INTO "${schema}"."files" (${columnNames}) VALUES (${placeholders})`,
-    values
-  );
+  await fileRepo.insert({
+    id,
+    projectId,
+    folderId,
+    name,
+    type,
+    xml,
+    createdBy: null,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+  });
 
   return { id, name, type };
 }
 
 export async function seedFolder(projectId: string, name: string): Promise<SeedFolder> {
   const dataSource = await getDataSource();
+  const folderRepo = dataSource.getRepository(Folder);
   const id = generateId();
   const now = Date.now();
 
-  const schema = getAdapter().getSchemaName() || 'public';
-  const columns = await dataSource.query(
-    `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'folders'`,
-    [schema]
-  );
-  const columnSet = new Set(columns.map((c: any) => String(c.column_name)));
-
-  const entries: Array<{ name: string; value: any }> = [
-    { name: 'id', value: id },
-    { name: 'project_id', value: projectId },
-    { name: 'parent_folder_id', value: null },
-    { name: 'name', value: name },
-    { name: 'created_by', value: null },
-    { name: 'updated_by', value: null },
-    { name: 'created_at', value: now },
-    { name: 'updated_at', value: now },
-  ].filter((entry) => columnSet.has(entry.name));
-
-  const columnNames = entries.map((entry) => `"${entry.name}"`).join(', ');
-  const placeholders = entries.map((_, index) => `$${index + 1}`).join(', ');
-  const values = entries.map((entry) => entry.value);
-
-  await dataSource.query(
-    `INSERT INTO "${schema}"."folders" (${columnNames}) VALUES (${placeholders})`,
-    values
-  );
+  await folderRepo.insert({
+    id,
+    projectId,
+    parentFolderId: null,
+    name,
+    createdBy: null,
+    updatedBy: null,
+    createdAt: now,
+    updatedAt: now,
+  });
 
   return { id, name };
 }
@@ -230,8 +204,8 @@ export async function cleanupSeededData(
   const userRepo = dataSource.getRepository(User);
   const refreshTokenRepo = dataSource.getRepository(RefreshToken);
   const auditLogRepo = dataSource.getRepository(AuditLog);
-  const fileRepo = dataSource.getRepository((await import('@shared/db/entities/File.js')).File);
-  const folderRepo = dataSource.getRepository((await import('@shared/db/entities/Folder.js')).Folder);
+  const fileRepo = dataSource.getRepository(File);
+  const folderRepo = dataSource.getRepository(Folder);
 
   if (userIds.length > 0) {
     await refreshTokenRepo.delete({ userId: userIds as any });
@@ -305,114 +279,100 @@ export async function cleanupEngines(engineIds: string[]) {
  */
 export async function cleanupStaleTestData() {
   const dataSource = await getDataSource();
-  
-  // Clean old test engines created by test users or test name prefixes
-  await dataSource.query(`
-    DELETE FROM main.engine_members 
-    WHERE engine_id IN (
-      SELECT id FROM main.engines 
-      WHERE name LIKE 'test_%'
-         OR name LIKE 'test_camunda_%'
-         OR name LIKE 'e2e-%'
-         OR owner_id IN (
-           SELECT id FROM main.users
-           WHERE email LIKE 'e2e-%@example.com'
-              OR email LIKE 'test_%@example.com'
-         )
-    )
-  `);
-  await dataSource.query(`
-    DELETE FROM main.engine_health 
-    WHERE engine_id IN (
-      SELECT id FROM main.engines 
-      WHERE name LIKE 'test_%'
-         OR name LIKE 'test_camunda_%'
-         OR name LIKE 'e2e-%'
-         OR owner_id IN (
-           SELECT id FROM main.users
-           WHERE email LIKE 'e2e-%@example.com'
-              OR email LIKE 'test_%@example.com'
-         )
-    )
-  `);
-  await dataSource.query(`
-    DELETE FROM main.engines 
-    WHERE name LIKE 'test_%'
-       OR name LIKE 'test_camunda_%'
-       OR name LIKE 'e2e-%'
-       OR owner_id IN (
-         SELECT id FROM main.users
-         WHERE email LIKE 'e2e-%@example.com'
-            OR email LIKE 'test_%@example.com'
-       )
-  `);
-  
-  await dataSource.query(`
-    DELETE FROM main.refresh_tokens
-    WHERE user_id IN (
-      SELECT id FROM main.users
-      WHERE email LIKE 'e2e-%@example.com'
-         OR email LIKE 'test_%@example.com'
-    )
-  `);
+  const userRepo = dataSource.getRepository(User);
+  const engineRepo = dataSource.getRepository(Engine);
+  const engineMemberRepo = dataSource.getRepository(EngineMember);
+  const engineHealthRepo = dataSource.getRepository(EngineHealth);
+  const refreshTokenRepo = dataSource.getRepository(RefreshToken);
+  const auditLogRepo = dataSource.getRepository(AuditLog);
+  const projectRepo = dataSource.getRepository(Project);
+  const projectMemberRoleRepo = dataSource.getRepository(ProjectMemberRole);
+  const projectMemberRepo = dataSource.getRepository(ProjectMember);
+  const fileRepo = dataSource.getRepository(File);
+  const folderRepo = dataSource.getRepository(Folder);
 
-  await dataSource.query(`
-    DELETE FROM main.audit_logs
-    WHERE user_id IN (
-      SELECT id FROM main.users
-      WHERE email LIKE 'e2e-%@example.com'
-         OR email LIKE 'test_%@example.com'
-    )
-       OR resource_id IN (
-      SELECT id FROM main.projects
-      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
-    )
-       OR resource_id IN (
-      SELECT id FROM main.engines
-      WHERE name LIKE 'test_%' OR name LIKE 'test_camunda_%' OR name LIKE 'e2e-%'
-    )
-       OR details LIKE '%e2e-%@example.com%'
-       OR details LIKE '%test_%@example.com%'
-  `);
+  const userEmailPatterns = ['e2e-%@example.com', 'test_%@example.com'];
+  const projectNamePatterns = ['test_%', 'e2e-%', 'Smoke %'];
+  const engineNamePatterns = ['test_%', 'test_camunda_%', 'e2e-%'];
 
-  // Clean old test users
-  await dataSource.query(`
-    DELETE FROM main.users 
-    WHERE email LIKE 'e2e-%@example.com' 
-       OR email LIKE 'test_%@example.com'
-  `);
-  
-  // Clean old test projects
-  await dataSource.query(`
-    DELETE FROM main.project_member_roles 
-    WHERE project_id IN (
-      SELECT id FROM main.projects 
-      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
-    )
-  `);
-  await dataSource.query(`
-    DELETE FROM main.project_members 
-    WHERE project_id IN (
-      SELECT id FROM main.projects 
-      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
-    )
-  `);
-  await dataSource.query(`
-    DELETE FROM main.files
-    WHERE project_id IN (
-      SELECT id FROM main.projects
-      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
-    )
-  `);
-  await dataSource.query(`
-    DELETE FROM main.folders
-    WHERE project_id IN (
-      SELECT id FROM main.projects
-      WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
-    )
-  `);
-  await dataSource.query(`
-    DELETE FROM main.projects 
-    WHERE name LIKE 'test_%' OR name LIKE 'e2e-%' OR name LIKE 'Smoke %'
-  `);
+  const staleUsers = await userRepo
+    .createQueryBuilder('u')
+    .select(['u.id'])
+    .where(new Brackets((qb) => {
+      userEmailPatterns.forEach((pattern, index) => {
+        const paramName = `staleUserPattern${index}`;
+        if (index === 0) qb.where(`u.email LIKE :${paramName}`, { [paramName]: pattern });
+        else qb.orWhere(`u.email LIKE :${paramName}`, { [paramName]: pattern });
+      });
+    }))
+    .getMany();
+  const staleUserIds = staleUsers.map((u) => u.id);
+
+  const staleEnginesQb = engineRepo
+    .createQueryBuilder('e')
+    .select(['e.id'])
+    .where(new Brackets((qb) => {
+      engineNamePatterns.forEach((pattern, index) => {
+        const paramName = `staleEnginePattern${index}`;
+        if (index === 0) qb.where(`e.name LIKE :${paramName}`, { [paramName]: pattern });
+        else qb.orWhere(`e.name LIKE :${paramName}`, { [paramName]: pattern });
+      });
+      if (staleUserIds.length > 0) {
+        qb.orWhere('e.ownerId IN (:...staleUserIds)', { staleUserIds });
+      }
+    }));
+  const staleEngineIds = (await staleEnginesQb.getMany()).map((e) => e.id);
+
+  const staleProjects = await projectRepo
+    .createQueryBuilder('p')
+    .select(['p.id'])
+    .where(new Brackets((qb) => {
+      projectNamePatterns.forEach((pattern, index) => {
+        const paramName = `staleProjectPattern${index}`;
+        if (index === 0) qb.where(`p.name LIKE :${paramName}`, { [paramName]: pattern });
+        else qb.orWhere(`p.name LIKE :${paramName}`, { [paramName]: pattern });
+      });
+    }))
+    .getMany();
+  const staleProjectIds = staleProjects.map((p) => p.id);
+
+  if (staleEngineIds.length > 0) {
+    await engineMemberRepo.createQueryBuilder().delete().where('engineId IN (:...staleEngineIds)', { staleEngineIds }).execute();
+    await engineHealthRepo.createQueryBuilder().delete().where('engineId IN (:...staleEngineIds)', { staleEngineIds }).execute();
+    await engineRepo.createQueryBuilder().delete().where('id IN (:...staleEngineIds)', { staleEngineIds }).execute();
+  }
+
+  if (staleUserIds.length > 0) {
+    await refreshTokenRepo.createQueryBuilder().delete().where('userId IN (:...staleUserIds)', { staleUserIds }).execute();
+  }
+
+  await auditLogRepo
+    .createQueryBuilder()
+    .delete()
+    .where(new Brackets((qb) => {
+      if (staleUserIds.length > 0) {
+        qb.where('userId IN (:...staleUserIds)', { staleUserIds });
+      }
+      if (staleProjectIds.length > 0) {
+        qb.orWhere('resourceId IN (:...staleProjectIds)', { staleProjectIds });
+      }
+      if (staleEngineIds.length > 0) {
+        qb.orWhere('resourceId IN (:...staleEngineIds)', { staleEngineIds });
+      }
+      qb.orWhere('details LIKE :auditDetailPattern0', { auditDetailPattern0: '%e2e-%@example.com%' });
+      qb.orWhere('details LIKE :auditDetailPattern1', { auditDetailPattern1: '%test_%@example.com%' });
+    }))
+    .execute();
+
+  if (staleProjectIds.length > 0) {
+    await projectMemberRoleRepo.createQueryBuilder().delete().where('projectId IN (:...staleProjectIds)', { staleProjectIds }).execute();
+    await projectMemberRepo.createQueryBuilder().delete().where('projectId IN (:...staleProjectIds)', { staleProjectIds }).execute();
+    await fileRepo.createQueryBuilder().delete().where('projectId IN (:...staleProjectIds)', { staleProjectIds }).execute();
+    await folderRepo.createQueryBuilder().delete().where('projectId IN (:...staleProjectIds)', { staleProjectIds }).execute();
+    await projectRepo.createQueryBuilder().delete().where('id IN (:...staleProjectIds)', { staleProjectIds }).execute();
+  }
+
+  if (staleUserIds.length > 0) {
+    await userRepo.createQueryBuilder().delete().where('id IN (:...staleUserIds)', { staleUserIds }).execute();
+  }
 }

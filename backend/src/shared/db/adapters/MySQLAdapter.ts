@@ -88,6 +88,10 @@ export class MySQLAdapter implements DatabaseAdapter {
     return name;
   }
 
+  /**
+   * @deprecated Use TypeORM QueryRunner schema APIs (`hasSchema`, `createSchema`) instead.
+   * Retained temporarily for OSS->EE sync compatibility.
+   */
   getCreateSchemaSQL(schemaName: string): string {
     return `CREATE DATABASE IF NOT EXISTS \`${schemaName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`;
   }

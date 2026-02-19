@@ -1,4 +1,6 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { IsNull } from 'typeorm';
+import { GitRepository } from '../entities/GitRepository.js';
 
 /**
  * Migration: Drop the legacy git_credentials table.
@@ -13,11 +15,8 @@ export class DropGitCredentials1700000000004 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Safety check: ensure no git_repositories rows are still missing a token
     try {
-      const gitReposTable = queryRunner.connection.getMetadata('GitRepository').tablePath;
-      const missing = await queryRunner.query(
-        `SELECT COUNT(*) as cnt FROM ${gitReposTable} WHERE encrypted_token IS NULL`
-      );
-      const count = Number(missing?.[0]?.cnt ?? 0);
+      const gitRepoRepo = queryRunner.manager.getRepository(GitRepository);
+      const count = await gitRepoRepo.count({ where: { encryptedToken: IsNull() } });
       if (count > 0) {
         console.warn(`WARNING: ${count} git_repositories rows still have NULL encrypted_token. Skipping git_credentials drop.`);
         return;

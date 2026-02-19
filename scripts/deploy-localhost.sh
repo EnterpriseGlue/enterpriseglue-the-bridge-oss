@@ -178,30 +178,21 @@ check_frontend_env() {
     source "$FRONTEND_ENV_FILE"
     set +a
   else
-    warn "No frontend env file found in frontend/. Relying on current environment for VITE_* variables"
+    warn "No frontend env file found in frontend/. Relying on current environment for API_BASE_URL/VITE_* variables"
   fi
 
-  local REQUIRED_VARS=(
-    "VITE_API_BASE_URL"
-  )
+  local FRONTEND_API_BASE_URL="${API_BASE_URL:-${VITE_API_BASE_URL:-}}"
 
-  local MISSING_VARS=()
-  for VAR in "${REQUIRED_VARS[@]}"; do
-    if [[ -z "${!VAR:-}" ]]; then
-      MISSING_VARS+=("$VAR")
+  if [[ -z "$FRONTEND_API_BASE_URL" ]]; then
+    warn "API_BASE_URL/VITE_API_BASE_URL not set - frontend will use relative API URLs"
+  else
+    if [[ "$FRONTEND_API_BASE_URL" != /* ]] && [[ "$FRONTEND_API_BASE_URL" != http://* ]] && [[ "$FRONTEND_API_BASE_URL" != https://* ]]; then
+      error "API_BASE_URL (or VITE_API_BASE_URL) must be an absolute URL (http/https) or start with '/'"
     fi
-  done
 
-  if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
-    error "Missing required frontend environment variables: ${MISSING_VARS[*]}"
-  fi
-
-  if [[ "$VITE_API_BASE_URL" != /* ]] && [[ "$VITE_API_BASE_URL" != http://* ]] && [[ "$VITE_API_BASE_URL" != https://* ]]; then
-    error "VITE_API_BASE_URL must be an absolute URL (http/https) or start with '/'"
-  fi
-
-  if [[ "${NODE_ENV:-}" == "production" ]] && [[ "$VITE_API_BASE_URL" == *"localhost"* ]]; then
-    error "VITE_API_BASE_URL must use production domain (not localhost)"
+    if [[ "${NODE_ENV:-}" == "production" ]] && [[ "$FRONTEND_API_BASE_URL" == *"localhost"* ]]; then
+      error "API_BASE_URL (or VITE_API_BASE_URL) must use production domain (not localhost)"
+    fi
   fi
 
   local bad_feature_vars=()

@@ -17,27 +17,27 @@ vi.mock('@shared/services/bpmn-engine-client.js', () => ({
 
 describe('decisions service', () => {
   it('lists decision definitions', async () => {
-    const result = await listDecisionDefinitions({});
+    const result = await listDecisionDefinitions('engine-1', {});
     expect(result).toBeDefined();
   });
 
   it('fetches decision definition', async () => {
-    const result = await fetchDecisionDefinition('def-1');
+    const result = await fetchDecisionDefinition('engine-1', 'def-1');
     expect(result).toBeDefined();
   });
 
   it('fetches decision definition XML', async () => {
-    const result = await fetchDecisionDefinitionXml('def-1');
+    const result = await fetchDecisionDefinitionXml('engine-1', 'def-1');
     expect(result).toBeDefined();
   });
 
   it('evaluates decision by id', async () => {
-    const result = await evaluateDecisionById('def-1', { input: 'test' });
+    const result = await evaluateDecisionById('engine-1', 'def-1', { input: 'test' });
     expect(result).toBeDefined();
   });
 
   it('evaluates decision by key', async () => {
-    const result = await evaluateDecisionByKey('decision-key', { input: 'test' });
+    const result = await evaluateDecisionByKey('engine-1', 'decision-key', { input: 'test' });
     expect(result).toBeDefined();
   });
 });

@@ -99,6 +99,10 @@ export class OracleAdapter implements DatabaseAdapter {
     return name.toUpperCase();
   }
 
+  /**
+   * @deprecated Use TypeORM QueryRunner schema APIs (`hasSchema`, `createSchema`) instead.
+   * Retained temporarily for OSS->EE sync compatibility.
+   */
   getCreateSchemaSQL(schemaName: string): string {
     // Oracle creates schemas differently - typically tied to users
     // This creates a user that acts as a schema

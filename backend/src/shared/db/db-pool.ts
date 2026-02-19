@@ -18,8 +18,8 @@ const { Pool } = pg;
 export interface ConnectionPool {
   /**
    * Execute a raw SQL query
-   * @param sql - SQL query string (use :param for named parameters)
-   * @param params - Query parameters (array for positional, object for named)
+   * @param sql - SQL query string (placeholder syntax is driver-specific)
+   * @param params - Query parameters (typically positional array; some drivers may support named binds)
    */
   query<T = any>(sql: string, params?: any[] | Record<string, any>): Promise<{ rows: T[]; rowCount: number }>;
 

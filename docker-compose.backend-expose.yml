@@ -1,0 +1,4 @@
+services:
+  backend:
+    ports:
+      - "${BACKEND_HOST_PORT:-8787}:${API_PORT:-8787}"

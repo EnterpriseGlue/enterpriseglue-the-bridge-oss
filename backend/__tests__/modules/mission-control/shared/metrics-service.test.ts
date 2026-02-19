@@ -8,12 +8,12 @@ vi.mock('@shared/services/bpmn-engine-client.js', () => ({
 
 describe('metrics-service', () => {
   it('lists metrics', async () => {
-    const result = await listMetrics({ from: 'now-1d' });
+    const result = await listMetrics('engine-1', { from: 'now-1d' });
     expect(result).toEqual([{ name: 'metric-1' }]);
   });
 
   it('gets metric by name', async () => {
-    const result = await getMetric('metric-1', { from: 'now-1d' });
+    const result = await getMetric('engine-1', 'metric-1', { from: 'now-1d' });
     expect(result).toEqual({ name: 'metric-1', value: 2 });
   });
 });

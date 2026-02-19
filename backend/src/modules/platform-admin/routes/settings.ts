@@ -5,13 +5,13 @@
 import { Router } from 'express';
 import { apiLimiter } from '@shared/middleware/rateLimiter.js';
 import { logger } from '@shared/utils/logger.js';
-import { z } from 'zod';
 import { validateBody } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { platformSettingsService } from '@shared/services/platform-admin/index.js';
 import { logAudit } from '@shared/services/audit.js';
 import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
+import { UpdatePlatformSettingsRequest } from '@shared/schemas/platform-admin/platform-settings.js';
 
 const router = Router();
 
@@ -24,15 +24,7 @@ router.use((req, _res, next) => {
   return next();
 });
 
-const updateSettingsSchema = z.object({
-  defaultEnvironmentTagId: z.string().nullable().optional(),
-  syncPushEnabled: z.boolean().optional(),
-  syncPullEnabled: z.boolean().optional(),
-  gitProjectTokenSharingEnabled: z.boolean().optional(),
-  defaultDeployRoles: z.array(z.string()).optional(),
-  inviteAllowAllDomains: z.boolean().optional(),
-  inviteAllowedDomains: z.array(z.string()).optional(),
-});
+const updateSettingsSchema = UpdatePlatformSettingsRequest;
 
 /**
  * GET /api/platform-admin/admin/settings

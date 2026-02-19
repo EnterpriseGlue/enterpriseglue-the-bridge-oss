@@ -27,7 +27,8 @@ export interface DatabaseAdapter {
   formatIdentifier(name: string): string;
 
   /**
-   * Get SQL for creating the schema if it doesn't exist
+   * @deprecated Use TypeORM QueryRunner schema APIs (`hasSchema`, `createSchema`) instead.
+   * Retained temporarily for OSS->EE sync compatibility until EE call sites are migrated.
    */
   getCreateSchemaSQL(schemaName: string): string;
 

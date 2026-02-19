@@ -17,12 +17,13 @@ Audience: Developers and architects.
 - Ensure the `db` container is healthy in Docker.
 
 ## Frontend cannot reach API
-- Verify `VITE_API_BASE_URL`.
-- Confirm backend is running on `http://localhost:8787`.
+- Verify `API_BASE_URL` (Docker root env) or `VITE_API_BASE_URL` (frontend env).
+- If production uses same-origin mode, keep `API_BASE_URL` empty and confirm Nginx proxy is running.
+- Confirm backend is reachable on the configured backend port (`API_PORT`, default `8787`).
 
 ## Docker compose ports in use
-- Stop conflicting services on ports 8787/5173/5432.
-- Or change ports in `.env.docker`.
+- Stop conflicting services on configured ports.
+- Or change ports in `.env.docker` using `BACKEND_HOST_PORT`, `FRONTEND_HOST_PORT`, and `POSTGRES_HOST_PORT`.
 
 ## Migrations fail
 - Verify database credentials and schema permissions.

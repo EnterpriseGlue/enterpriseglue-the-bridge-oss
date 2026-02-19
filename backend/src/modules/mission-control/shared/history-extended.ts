@@ -11,6 +11,7 @@ import {
   listHistoricDecisionOutputs,
   listUserOperations,
 } from './history-extended-service.js';
+import { piiRedactionService } from '@shared/services/pii/PiiRedactionService.js';
 import {
   HistoricTaskQueryParams,
   HistoricVariableQueryParams,
@@ -34,35 +35,40 @@ r.get('/mission-control-api/history/tasks', validateQuery(HistoricTaskQueryParam
 r.get('/mission-control-api/history/variables', validateQuery(HistoricVariableQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const data = await listHistoricVariables(engineId, req.query);
-  res.json(data);
+  const redacted = await piiRedactionService.redactPayload(req, data, 'history');
+  res.json(redacted);
 }));
 
 // Get historic decision instances
 r.get('/mission-control-api/history/decisions', validateQuery(HistoricDecisionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const data = await listHistoricDecisions(engineId, req.query);
-  res.json(data);
+  const redacted = await piiRedactionService.redactPayload(req, data, 'history');
+  res.json(redacted);
 }));
 
 // Get historic decision instance inputs
 r.get('/mission-control-api/history/decisions/:id/inputs', asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const data = await listHistoricDecisionInputs(engineId, req.params.id);
-  res.json(data);
+  const redacted = await piiRedactionService.redactPayload(req, data, 'history');
+  res.json(redacted);
 }));
 
 // Get historic decision instance outputs
 r.get('/mission-control-api/history/decisions/:id/outputs', asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const data = await listHistoricDecisionOutputs(engineId, req.params.id);
-  res.json(data);
+  const redacted = await piiRedactionService.redactPayload(req, data, 'history');
+  res.json(redacted);
 }));
 
 // Get user operation log
 r.get('/mission-control-api/history/user-operations', validateQuery(UserOperationLogQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const data = await listUserOperations(engineId, req.query);
-  res.json(data);
+  const redacted = await piiRedactionService.redactPayload(req, data, 'history');
+  res.json(redacted);
 }));
 
 export default r;

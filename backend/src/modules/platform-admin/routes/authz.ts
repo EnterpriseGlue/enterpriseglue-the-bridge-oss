@@ -9,7 +9,7 @@ import { apiLimiter } from '@shared/middleware/rateLimiter.js';
 import { z } from 'zod';
 import { logger } from '@shared/utils/logger.js';
 import { requireAuth } from '@shared/middleware/auth.js';
-import { validateBody, validateParams } from '@shared/middleware/validate.js';
+import { validateBody, validateParams, validateQuery } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
 import { 
   policyService, 
@@ -28,24 +28,47 @@ const authzCheckSchema = z.object({
   resourceAttributes: z.record(z.unknown()).optional(),
 });
 
+const authzCheckBatchSchema = z.object({
+  checks: z.array(authzCheckSchema).min(1),
+});
+
 const idParamSchema = z.object({ id: z.string().uuid() });
 
-const policySchema = z.object({
+const policyCreateSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional(),
   effect: z.enum(['allow', 'deny']),
-  permissions: z.array(z.string()),
+  resourceType: z.string().optional(),
+  action: z.string().optional(),
   conditions: z.record(z.unknown()).optional(),
-  priority: z.number().int().min(0).default(0),
+  priority: z.number().int().min(0).optional(),
 });
 
-const ssoMappingSchema = z.object({
-  name: z.string().min(1).max(255),
-  provider: z.string().min(1),
-  claimPath: z.string().min(1),
+const policyUpdateSchema = policyCreateSchema.partial();
+
+const ssoMappingCreateSchema = z.object({
+  providerId: z.string().min(1).optional(),
+  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
+  claimKey: z.string().min(1),
   claimValue: z.string().min(1),
-  platformRole: z.enum(['admin', 'developer', 'user']),
-  enabled: z.boolean().default(true),
+  targetRole: z.enum(['admin', 'developer', 'user']),
+  priority: z.number().int().optional(),
+});
+
+const ssoMappingUpdateSchema = ssoMappingCreateSchema.partial();
+
+const ssoMappingTestSchema = z.object({
+  claims: z.record(z.unknown()),
+  providerId: z.string().min(1).optional(),
+});
+
+const authzAuditQuerySchema = z.object({
+  userId: z.string().optional(),
+  resourceType: z.string().optional(),
+  resourceId: z.string().optional(),
+  decision: z.enum(['allow', 'deny']).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
 });
 
 const router = Router();
@@ -94,13 +117,9 @@ router.post('/api/authz/check', apiLimiter, requireAuth, validateBody(authzCheck
  * POST /api/platform-admin/authz/check-batch
  * Check multiple permissions at once.
  */
-router.post('/api/authz/check-batch', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/check-batch', apiLimiter, requireAuth, validateBody(authzCheckBatchSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { checks } = req.body;
-
-    if (!Array.isArray(checks) || checks.length === 0) {
-      throw Errors.validation('checks array is required');
-    }
 
     const results = await Promise.all(
       checks.map(async (check: any) => {
@@ -159,17 +178,13 @@ router.get('/api/authz/policies', apiLimiter, requireAuth, asyncHandler(async (r
  * POST /api/platform-admin/authz/policies
  * Create a new authorization policy.
  */
-router.post('/api/authz/policies', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/policies', apiLimiter, requireAuth, validateBody(policyCreateSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!isPlatformAdmin(req)) {
       throw Errors.adminRequired();
     }
 
     const { name, description, effect, priority, resourceType, action, conditions } = req.body;
-
-    if (!name || !effect) {
-      throw Errors.validation('name and effect are required');
-    }
 
     const result = await policyService.createPolicy({
       name,
@@ -193,7 +208,7 @@ router.post('/api/authz/policies', apiLimiter, requireAuth, asyncHandler(async (
  * PUT /api/platform-admin/authz/policies/:id
  * Update an authorization policy.
  */
-router.put('/api/authz/policies/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.put('/api/authz/policies/:id', apiLimiter, requireAuth, validateParams(idParamSchema), validateBody(policyUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!isPlatformAdmin(req)) {
       throw Errors.adminRequired();
@@ -211,7 +226,7 @@ router.put('/api/authz/policies/:id', apiLimiter, requireAuth, asyncHandler(asyn
  * DELETE /api/platform-admin/authz/policies/:id
  * Delete an authorization policy.
  */
-router.delete('/api/authz/policies/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.delete('/api/authz/policies/:id', apiLimiter, requireAuth, validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!isPlatformAdmin(req)) {
       throw Errors.adminRequired();
@@ -251,17 +266,13 @@ router.get('/api/authz/sso-mappings', apiLimiter, requireAuth, asyncHandler(asyn
  * POST /api/platform-admin/authz/sso-mappings
  * Create a new SSO claims mapping.
  */
-router.post('/api/authz/sso-mappings', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/sso-mappings', apiLimiter, requireAuth, validateBody(ssoMappingCreateSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!isPlatformAdmin(req)) {
       throw Errors.adminRequired();
     }
 
     const { providerId, claimType, claimKey, claimValue, targetRole, priority } = req.body;
-
-    if (!claimType || !claimKey || !claimValue || !targetRole) {
-      throw Errors.validation('claimType, claimKey, claimValue, and targetRole are required');
-    }
 
     const result = await ssoClaimsMappingService.createMapping({
       providerId,
@@ -283,7 +294,7 @@ router.post('/api/authz/sso-mappings', apiLimiter, requireAuth, asyncHandler(asy
  * PUT /api/platform-admin/authz/sso-mappings/:id
  * Update an SSO claims mapping.
  */
-router.put('/api/authz/sso-mappings/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.put('/api/authz/sso-mappings/:id', apiLimiter, requireAuth, validateParams(idParamSchema), validateBody(ssoMappingUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!isPlatformAdmin(req)) {
       throw Errors.adminRequired();
@@ -301,7 +312,7 @@ router.put('/api/authz/sso-mappings/:id', apiLimiter, requireAuth, asyncHandler(
  * DELETE /api/platform-admin/authz/sso-mappings/:id
  * Delete an SSO claims mapping.
  */
-router.delete('/api/authz/sso-mappings/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.delete('/api/authz/sso-mappings/:id', apiLimiter, requireAuth, validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!isPlatformAdmin(req)) {
       throw Errors.adminRequired();
@@ -319,17 +330,13 @@ router.delete('/api/authz/sso-mappings/:id', apiLimiter, requireAuth, asyncHandl
  * POST /api/platform-admin/authz/sso-mappings/test
  * Test SSO claims against mappings (admin preview).
  */
-router.post('/api/authz/sso-mappings/test', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/sso-mappings/test', apiLimiter, requireAuth, validateBody(ssoMappingTestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!isPlatformAdmin(req)) {
       throw Errors.adminRequired();
     }
 
     const { claims, providerId } = req.body;
-
-    if (!claims) {
-      throw Errors.validation('claims object is required');
-    }
 
     const result = await ssoClaimsMappingService.testClaims(claims, providerId);
     res.json(result);
@@ -347,21 +354,28 @@ router.post('/api/authz/sso-mappings/test', apiLimiter, requireAuth, asyncHandle
  * GET /api/platform-admin/authz/audit
  * Query authorization audit log.
  */
-router.get('/api/authz/audit', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/api/authz/audit', apiLimiter, requireAuth, validateQuery(authzAuditQuerySchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!isPlatformAdmin(req)) {
       throw Errors.adminRequired();
     }
 
-    const { userId, resourceType, resourceId, decision, limit, offset } = req.query;
+    const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+    const resourceType = typeof req.query.resourceType === 'string' ? req.query.resourceType : undefined;
+    const resourceId = typeof req.query.resourceId === 'string' ? req.query.resourceId : undefined;
+    const decision = req.query.decision === 'allow' || req.query.decision === 'deny'
+      ? req.query.decision
+      : undefined;
+    const limit = typeof req.query.limit === 'number' ? req.query.limit : undefined;
+    const offset = typeof req.query.offset === 'number' ? req.query.offset : undefined;
 
     const entries = await policyService.getAuditLog({
-      userId: userId as string,
-      resourceType: resourceType as string,
-      resourceId: resourceId as string,
-      decision: decision as 'allow' | 'deny',
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      userId,
+      resourceType,
+      resourceId,
+      decision,
+      limit,
+      offset,
     });
 
     res.json(entries);

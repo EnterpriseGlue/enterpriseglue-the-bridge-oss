@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+const PiiProviderTypeSchema = z.enum(['presidio', 'gcp_dlp', 'aws_comprehend', 'azure_pii']);
+const PiiScopeSchema = z.enum(['processDetails', 'history', 'logs', 'errors', 'audit']);
+
 // Select schema (read responses)
 export const PlatformSettingsSchema = z.object({
   defaultEnvironmentTagId: z.string().nullable(),
@@ -9,6 +12,17 @@ export const PlatformSettingsSchema = z.object({
   defaultDeployRoles: z.array(z.string()),
   inviteAllowAllDomains: z.boolean(),
   inviteAllowedDomains: z.array(z.string()),
+  piiRegexEnabled: z.boolean(),
+  piiExternalProviderEnabled: z.boolean(),
+  piiExternalProviderType: PiiProviderTypeSchema.nullable(),
+  piiExternalProviderEndpoint: z.string().nullable(),
+  piiExternalProviderAuthHeader: z.string().nullable(),
+  piiExternalProviderAuthToken: z.string().nullable(),
+  piiExternalProviderProjectId: z.string().nullable(),
+  piiExternalProviderRegion: z.string().nullable(),
+  piiRedactionStyle: z.string(),
+  piiScopes: z.array(PiiScopeSchema),
+  piiMaxPayloadSizeBytes: z.number(),
 });
 
 // Request schemas
@@ -20,6 +34,17 @@ export const UpdatePlatformSettingsRequest = z.object({
   defaultDeployRoles: z.array(z.string()).optional(),
   inviteAllowAllDomains: z.boolean().optional(),
   inviteAllowedDomains: z.array(z.string()).optional(),
+  piiRegexEnabled: z.boolean().optional(),
+  piiExternalProviderEnabled: z.boolean().optional(),
+  piiExternalProviderType: PiiProviderTypeSchema.optional().nullable(),
+  piiExternalProviderEndpoint: z.string().optional().nullable(),
+  piiExternalProviderAuthHeader: z.string().optional().nullable(),
+  piiExternalProviderAuthToken: z.string().optional().nullable(),
+  piiExternalProviderProjectId: z.string().optional().nullable(),
+  piiExternalProviderRegion: z.string().optional().nullable(),
+  piiRedactionStyle: z.string().optional(),
+  piiScopes: z.array(PiiScopeSchema).optional(),
+  piiMaxPayloadSizeBytes: z.number().optional(),
 });
 
 // Types

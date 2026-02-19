@@ -93,6 +93,10 @@ export class SqlServerAdapter implements DatabaseAdapter {
     return name;
   }
 
+  /**
+   * @deprecated Use TypeORM QueryRunner schema APIs (`hasSchema`, `createSchema`) instead.
+   * Retained temporarily for OSS->EE sync compatibility.
+   */
   getCreateSchemaSQL(schemaName: string): string {
     return `IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = '${schemaName}') EXEC('CREATE SCHEMA [${schemaName}]')`;
   }

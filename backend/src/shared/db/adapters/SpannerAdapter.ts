@@ -89,6 +89,10 @@ export class SpannerAdapter implements DatabaseAdapter {
     return name;
   }
 
+  /**
+   * @deprecated Use TypeORM QueryRunner schema APIs (`hasSchema`, `createSchema`) instead.
+   * Retained temporarily for OSS->EE sync compatibility.
+   */
   getCreateSchemaSQL(_schemaName: string): string {
     // Spanner doesn't support schemas in the traditional sense
     // Database structure is defined at the database level

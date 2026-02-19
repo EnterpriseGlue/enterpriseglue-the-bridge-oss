@@ -5,6 +5,7 @@ import { requireAuth } from '@shared/middleware/auth.js';
 import { requirePermission } from '@shared/middleware/requirePermission.js';
 import { auditLimiter } from '@shared/middleware/rateLimiter.js';
 import { getUserAuditLogs, getResourceAuditLogs } from '@shared/services/audit.js';
+import { piiRedactionService } from '@shared/services/pii/PiiRedactionService.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { AuditLog } from '@shared/db/entities/AuditLog.js';
 import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
@@ -57,7 +58,7 @@ router.get('/api/audit/logs', requireAuth, requirePermission({ permission: Platf
     createdAt: row.createdAt,
   }));
 
-  res.json({
+  const redacted = await piiRedactionService.redactPayload(req, {
     logs,
     pagination: {
       limit: limitNum,
@@ -65,7 +66,9 @@ router.get('/api/audit/logs', requireAuth, requirePermission({ permission: Platf
       total,
       hasMore: offsetNum + limitNum < total,
     },
-  });
+  }, 'audit');
+
+  res.json(redacted);
 }));
 
 
@@ -78,7 +81,8 @@ router.get('/api/audit/logs/user/:userId', requireAuth, requirePermission({ perm
   const limit = parseInt(req.query.limit as string) || 100;
 
   const logs = await getUserAuditLogs(userId, limit);
-  res.json({ logs });
+  const redacted = await piiRedactionService.redactPayload(req, { logs }, 'audit');
+  res.json(redacted);
 }));
 
 /**
@@ -90,7 +94,8 @@ router.get('/api/audit/logs/resource/:resourceType/:resourceId', requireAuth, re
   const limit = parseInt(req.query.limit as string) || 50;
 
   const logs = await getResourceAuditLogs(resourceType, resourceId, limit);
-  res.json({ logs });
+  const redacted = await piiRedactionService.redactPayload(req, { logs }, 'audit');
+  res.json(redacted);
 }));
 
 /**

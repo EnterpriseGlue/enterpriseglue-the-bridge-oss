@@ -1,5 +1,7 @@
-import { TableColumn } from 'typeorm';
+import { TableColumn, IsNull } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { GitRepository } from '../entities/GitRepository.js';
+import { GitCredential } from '../entities/GitCredential.js';
 
 /**
  * Migration: Move Git PAT from user-level git_credentials to project-level git_repositories.
@@ -28,28 +30,30 @@ export class MigrateGitTokenToProject1700000000003 implements MigrationInterface
     }
 
     // 2. Copy encrypted tokens from git_credentials to git_repositories
-    // Match by connected_by_user_id + provider_id
-    const gitCredsTable = queryRunner.connection.getMetadata('GitCredential').tablePath;
+    // Match by connectedByUserId + providerId
+    const gitRepoRepo = queryRunner.manager.getRepository(GitRepository);
+    const gitCredRepo = queryRunner.manager.getRepository(GitCredential);
 
     try {
-      // Get all git_repositories that don't yet have a token
-      const repos = await queryRunner.query(
-        `SELECT id, connected_by_user_id, provider_id FROM ${gitReposTable} WHERE encrypted_token IS NULL`
-      );
+      const repos = await gitRepoRepo.find({
+        where: { encryptedToken: IsNull() },
+        select: ['id', 'connectedByUserId', 'providerId'],
+      });
 
       for (const repo of repos) {
-        if (!repo.connected_by_user_id || !repo.provider_id) continue;
+        if (!repo.connectedByUserId || !repo.providerId) continue;
 
-        const creds = await queryRunner.query(
-          `SELECT access_token FROM ${gitCredsTable} WHERE user_id = ? AND provider_id = ? LIMIT 1`,
-          [repo.connected_by_user_id, repo.provider_id]
-        );
+        const creds = await gitCredRepo.findOne({
+          where: {
+            userId: repo.connectedByUserId,
+            providerId: repo.providerId,
+          },
+          select: ['accessToken'],
+          order: { updatedAt: 'DESC' },
+        });
 
-        if (creds.length > 0 && creds[0].access_token) {
-          await queryRunner.query(
-            `UPDATE ${gitReposTable} SET encrypted_token = ? WHERE id = ?`,
-            [creds[0].access_token, repo.id]
-          );
+        if (creds?.accessToken) {
+          await gitRepoRepo.update({ id: repo.id }, { encryptedToken: creds.accessToken });
         }
       }
     } catch (err) {

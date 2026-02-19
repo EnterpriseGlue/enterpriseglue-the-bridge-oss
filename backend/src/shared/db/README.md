@@ -43,7 +43,7 @@ db/
 - **Purpose:** All application data in a single database instance
 - **Supported:** PostgreSQL, Oracle, MySQL, SQL Server, Spanner
 - **Schema:** All tables in the configured schema (default: `main`)
-- **Connection:** `getDataSource()` for TypeORM, `getConnectionPool()` for raw queries
+- **Connection:** `getDataSource()` for repositories/query builders; `getConnectionPool()` is infrastructure-only and should not be used in application routes/services
 
 ### Entity Categories
 - **Auth:** User, RefreshToken
@@ -81,18 +81,20 @@ const userProjects = await projectRepo.find({
 ```typescript
 import { getDataSource } from './db/data-source.js';
 import { Project } from './db/entities/Project.js';
-import { ILike } from 'typeorm';
+import { addCaseInsensitiveLike } from './db/adapters/index.js';
 
 const ds = await getDataSource();
 
 // QueryBuilder for complex queries
-const projects = await ds.getRepository(Project)
+const qb = ds.getRepository(Project)
   .createQueryBuilder('project')
   .leftJoinAndSelect('project.files', 'file')
-  .where('project.name ILIKE :search', { search: `%${term}%` })
   .orderBy('project.createdAt', 'DESC')
-  .limit(10)
-  .getMany();
+  .limit(10);
+
+addCaseInsensitiveLike(qb, 'project', 'name', 'search', `%${term}%`);
+
+const projects = await qb.getMany();
 ```
 
 ### Transactions

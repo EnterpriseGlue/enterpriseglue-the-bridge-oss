@@ -15,7 +15,7 @@ import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
 import { Project } from '@shared/db/entities/Project.js';
 import { Engine } from '@shared/db/entities/Engine.js';
-import { ILike } from 'typeorm';
+import { addCaseInsensitiveLike } from '@shared/db/adapters/index.js';
 import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
 const router = Router();
@@ -52,11 +52,13 @@ router.get('/users/search', apiLimiter, requirePermission({ permission: Platform
 
     const dataSource = await getDataSource();
     const userRepo = dataSource.getRepository(User);
-    const result = await userRepo.find({
-      where: { email: ILike(`%${query}%`) },
-      select: ['id', 'email', 'firstName', 'lastName', 'platformRole'],
-      take: 10,
-    });
+    let qb = userRepo.createQueryBuilder('u')
+      .select(['u.id', 'u.email', 'u.firstName', 'u.lastName', 'u.platformRole'])
+      .take(10)
+      .orderBy('u.email', 'ASC');
+    qb = addCaseInsensitiveLike(qb, 'u', 'email', 'query', `%${query}%`);
+
+    const result = await qb.getMany();
 
     res.json(result);
   } catch (error) {
@@ -77,12 +79,15 @@ router.get('/projects', apiLimiter, requirePermission({ permission: PlatformPerm
     const search = typeof searchRaw === 'string' ? searchRaw.trim() : '';
     const dataSource = await getDataSource();
     const projectRepo = dataSource.getRepository(Project);
-    
-    const projectList = await projectRepo.find({
-      where: search ? { name: ILike(`%${search}%`) } : undefined,
-      take: search ? 50 : undefined,
-      order: { name: 'ASC' },
-    });
+
+    let qb = projectRepo.createQueryBuilder('p')
+      .orderBy('p.name', 'ASC');
+    if (search) {
+      qb = addCaseInsensitiveLike(qb, 'p', 'name', 'search', `%${search}%`)
+        .take(50);
+    }
+
+    const projectList = await qb.getMany();
     
     const result = projectList.map((p) => ({
       id: p.id,
@@ -111,12 +116,15 @@ router.get('/engines', apiLimiter, requirePermission({ permission: PlatformPermi
     const search = typeof searchRaw === 'string' ? searchRaw.trim() : '';
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
-    
-    const engineList = await engineRepo.find({
-      where: search ? { name: ILike(`%${search}%`) } : undefined,
-      take: search ? 50 : undefined,
-      order: { name: 'ASC' },
-    });
+
+    let qb = engineRepo.createQueryBuilder('e')
+      .orderBy('e.name', 'ASC');
+    if (search) {
+      qb = addCaseInsensitiveLike(qb, 'e', 'name', 'search', `%${search}%`)
+        .take(50);
+    }
+
+    const engineList = await qb.getMany();
     
     const result = engineList.map((e) => ({
       id: e.id,

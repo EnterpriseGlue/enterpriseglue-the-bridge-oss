@@ -3,7 +3,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { seedUser } from '../utils/seed.js';
 import { getDataSource } from '@shared/db/data-source.js';
-import { getAdapter } from '@shared/db/adapters/index.js';
 import { generateAccessToken } from '@shared/utils/jwt.js';
 import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
 
@@ -22,13 +21,15 @@ const app = createApp({
 describe('Platform authz checks (authz storage required)', () => {
   beforeAll(async () => {
     const dataSource = await getDataSource();
-    const schema = getAdapter().getSchemaName() || 'public';
-    const tables = await dataSource.query(
-      `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name IN ('authz_policies', 'authz_audit_log', 'permission_grants')`,
-      [schema]
-    );
-    const tableNames = new Set(tables.map((row: any) => String(row.table_name)));
-    skipAuthz = !tableNames.has('authz_policies') || !tableNames.has('permission_grants');
+    const queryRunner = dataSource.createQueryRunner();
+    try {
+      const hasPolicies = await queryRunner.hasTable('authz_policies');
+      const hasAudit = await queryRunner.hasTable('authz_audit_log');
+      const hasGrants = await queryRunner.hasTable('permission_grants');
+      skipAuthz = !hasPolicies || !hasAudit || !hasGrants;
+    } finally {
+      await queryRunner.release();
+    }
 
     const user = await seedUser(prefix);
     userId = user.id;

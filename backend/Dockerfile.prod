@@ -1,0 +1,28 @@
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+COPY backend/package.json backend/package-lock.json ./
+COPY packages /packages
+RUN npm ci --include=dev --no-audit --no-fund
+
+COPY backend ./
+RUN npm run build:skip-generate
+
+FROM node:20-alpine
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY backend/package.json backend/package-lock.json ./
+COPY packages /packages
+RUN npm ci --omit=dev --no-audit --no-fund
+
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/src/shared/db/adapters/sql ./src/shared/db/adapters/sql
+
+EXPOSE 8787
+
+USER node
+
+CMD ["node", "dist/server.js"]

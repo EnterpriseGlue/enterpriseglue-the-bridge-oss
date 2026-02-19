@@ -2,6 +2,8 @@
   "scripts": {
     "dev": "bash ./dev.sh",
     "down": "bash ./down.sh",
+    "prod": "docker compose --env-file .env.production -f docker-compose.prod.yml up --build",
+    "prod:down": "docker compose --env-file .env.production -f docker-compose.prod.yml down",
     "deploy:localhost": "bash ./scripts/deploy-localhost.sh",
     "build": "docker compose --env-file .env.docker build",
     "typecheck": "npm --prefix backend run typecheck && npm --prefix frontend run typecheck",

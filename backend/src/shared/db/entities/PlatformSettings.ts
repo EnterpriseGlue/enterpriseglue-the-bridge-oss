@@ -29,6 +29,39 @@ export class PlatformSettings {
   @Column({ name: 'invite_allowed_domains', type: 'text', default: '[]' })
   inviteAllowedDomains!: string;
 
+  @Column({ name: 'pii_regex_enabled', type: 'boolean', default: false })
+  piiRegexEnabled!: boolean;
+
+  @Column({ name: 'pii_external_provider_enabled', type: 'boolean', default: false })
+  piiExternalProviderEnabled!: boolean;
+
+  @Column({ name: 'pii_external_provider_type', type: 'text', nullable: true })
+  piiExternalProviderType!: string | null;
+
+  @Column({ name: 'pii_external_provider_endpoint', type: 'text', nullable: true })
+  piiExternalProviderEndpoint!: string | null;
+
+  @Column({ name: 'pii_external_provider_auth_header', type: 'text', nullable: true })
+  piiExternalProviderAuthHeader!: string | null;
+
+  @Column({ name: 'pii_external_provider_auth_token', type: 'text', nullable: true })
+  piiExternalProviderAuthToken!: string | null;
+
+  @Column({ name: 'pii_external_provider_project_id', type: 'text', nullable: true })
+  piiExternalProviderProjectId!: string | null;
+
+  @Column({ name: 'pii_external_provider_region', type: 'text', nullable: true })
+  piiExternalProviderRegion!: string | null;
+
+  @Column({ name: 'pii_redaction_style', type: 'text', default: '<TYPE>' })
+  piiRedactionStyle!: string;
+
+  @Column({ name: 'pii_scopes', type: 'text', default: '["processDetails","history","logs","errors","audit"]' })
+  piiScopes!: string;
+
+  @Column({ name: 'pii_max_payload_size_bytes', type: 'integer', default: 262144 })
+  piiMaxPayloadSizeBytes!: number;
+
   @Column({ name: 'email_platform_name', type: 'text', default: 'EnterpriseGlue' })
   emailPlatformName!: string;
 

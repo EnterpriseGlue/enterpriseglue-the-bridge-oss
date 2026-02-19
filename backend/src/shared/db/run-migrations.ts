@@ -1,10 +1,26 @@
 import { getDataSource, adapter } from './data-source.js';
-import { getConnectionPool } from './db-pool.js';
 import { EnvironmentTag } from './entities/EnvironmentTag.js';
 import { PlatformSettings } from './entities/PlatformSettings.js';
 // Tenant entities removed - multi-tenancy is EE-only
 import { EmailTemplate } from './entities/EmailTemplate.js';
 import { SsoClaimsMapping } from './entities/SsoClaimsMapping.js';
+
+/**
+ * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
+ */
+export async function ensureSchemaExists(schemaName: string): Promise<void> {
+  const dataSource = await getDataSource();
+  const queryRunner = dataSource.createQueryRunner();
+
+  try {
+    const hasSchema = await queryRunner.hasSchema(schemaName);
+    if (!hasSchema) {
+      await queryRunner.createSchema(schemaName, true);
+    }
+  } finally {
+    await queryRunner.release();
+  }
+}
 
 /**
  * Run database migrations using TypeORM
@@ -16,14 +32,11 @@ export async function runMigrations() {
   const dbType = adapter.getDatabaseType();
   const schemaName = adapter.getSchemaName();
   
-  // Ensure schema exists (database-specific via adapter)
+  // Ensure schema exists using QueryRunner helpers (schema name still comes from adapter config)
   if (schemaName && schemaName !== 'public') {
     try {
-      const createSchemaSQL = adapter.getCreateSchemaSQL(schemaName);
-      if (createSchemaSQL) {
-        await getConnectionPool().query(createSchemaSQL);
-        console.log(`  ✅ Schema "${schemaName}" ensured`);
-      }
+      await ensureSchemaExists(schemaName);
+      console.log(`  ✅ Schema "${schemaName}" ensured`);
     } catch (error: any) {
       // Schema might already exist or be managed externally (e.g., Oracle DBA)
       if (dbType === 'oracle') {

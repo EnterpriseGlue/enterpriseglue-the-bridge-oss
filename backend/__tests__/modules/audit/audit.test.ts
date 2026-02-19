@@ -30,6 +30,12 @@ vi.mock('@shared/services/audit.js', () => ({
   getResourceAuditLogs: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock('@shared/services/pii/PiiRedactionService.js', () => ({
+  piiRedactionService: {
+    redactPayload: vi.fn((_req: any, payload: any) => Promise.resolve(payload)),
+  },
+}));
+
 describe('GET /api/audit/logs', () => {
   let app: express.Application;
 

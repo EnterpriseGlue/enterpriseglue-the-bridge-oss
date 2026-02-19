@@ -22,25 +22,25 @@ vi.mock('@shared/services/bpmn-engine-client.js', () => ({
 
 describe('tasks-service', () => {
   it('lists tasks', async () => {
-    const result = await listTasks({});
+    const result = await listTasks('engine-1', {});
     expect(result).toEqual([]);
   });
 
   it('gets task by id', async () => {
-    const result = await getTaskById('t1');
+    const result = await getTaskById('engine-1', 't1');
     expect(result).toEqual({ id: 't1' });
   });
 
   it('gets task count by query', async () => {
-    const result = await getTaskCountByQuery({});
+    const result = await getTaskCountByQuery('engine-1', {});
     expect(result).toEqual({ count: 1 });
   });
 
   it('claims task by id', async () => {
-    await expect(claimTaskById('t1', { userId: 'u1' })).resolves.toBeUndefined();
+    await expect(claimTaskById('engine-1', 't1', { userId: 'u1' })).resolves.toBeUndefined();
   });
 
   it('completes task by id', async () => {
-    await expect(completeTaskById('t1', { variables: {} })).resolves.toBeUndefined();
+    await expect(completeTaskById('engine-1', 't1', { variables: {} })).resolves.toBeUndefined();
   });
 });

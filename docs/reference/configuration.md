@@ -11,6 +11,9 @@ Primary sources:
 
 ### Core Settings
 - `API_PORT`: backend port (default 8787)
+- `BACKEND_HOST_PORT`: backend host port (Docker dev)
+- `EXPOSE_BACKEND`: publish backend on host in Docker dev (`true`/`false`)
+- `FRONTEND_HOST_PORT`: frontend host port (Docker dev/prod)
 - `DATABASE_TYPE`: `postgres | oracle | mssql | spanner | mysql`
 - `FRONTEND_URL`: frontend origin for auth links
 
@@ -52,9 +55,14 @@ See `backend/.env.example` for detailed per-database settings.
 Primary sources:
 - `frontend/.env.local` or `frontend/.env`
 - `.env.docker` (Docker Compose)
+- `.env.production` (Docker Compose production)
 
 ### Core Settings
-- `VITE_API_BASE_URL`: backend API base URL
+- `API_BASE_URL`: preferred root env alias in Docker compose files
+- `VITE_API_BASE_URL`: frontend runtime variable consumed by browser code (Vite-exposed)
+
+In Docker compose, `API_BASE_URL` is mapped to `VITE_API_BASE_URL` for frontend runtime.
+For production same-origin routing through Nginx, leave `API_BASE_URL` empty.
 
 ### Feature Flags
 The UI is gated by `VITE_FEATURE_*` flags (see `frontend/.env.example`), such as:

@@ -25,6 +25,17 @@ export interface PlatformSettings {
   defaultDeployRoles: string[];
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
+  piiRegexEnabled: boolean;
+  piiExternalProviderEnabled: boolean;
+  piiExternalProviderType: 'presidio' | 'gcp_dlp' | 'aws_comprehend' | 'azure_pii' | null;
+  piiExternalProviderEndpoint: string | null;
+  piiExternalProviderAuthHeader: string | null;
+  piiExternalProviderAuthToken: string | null;
+  piiExternalProviderProjectId: string | null;
+  piiExternalProviderRegion: string | null;
+  piiRedactionStyle: string;
+  piiScopes: Array<'processDetails' | 'history' | 'logs' | 'errors' | 'audit'>;
+  piiMaxPayloadSizeBytes: number;
 }
 
 export interface UserListItem {

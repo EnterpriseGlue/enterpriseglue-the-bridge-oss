@@ -10,8 +10,10 @@
     "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
     "build:skip-generate": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test:unit": "vitest --run --dir __tests__ --config vitest.config.ts",
-    "test:integration": "vitest --run --dir test/integration --config vitest.config.ts",
+    "guard:no-raw-sql": "tsx scripts/check-no-raw-sql.ts",
+    "test:unit": "npm run guard:no-raw-sql && vitest --run --dir __tests__ --config vitest.config.ts",
+    "test:integration": "npm run guard:no-raw-sql && vitest --run --dir test/integration --config vitest.config.ts",
+    "verify": "npm run typecheck && npm run build:skip-generate && npm run test:unit",
     "db:migration:generate": "npx typeorm migration:generate -d dist/shared/db/data-source.js",
     "db:migration:run": "npx typeorm migration:run -d dist/shared/db/data-source.js",
     "db:migration:revert": "npx typeorm migration:revert -d dist/shared/db/data-source.js",
@@ -72,6 +74,9 @@
   "overrides": {
     "esbuild": "^0.27.2",
     "cookie": "^0.7.0",
-    "lodash": "^4.17.23"
+    "lodash": "^4.17.23",
+    "minimatch": "^10.2.1",
+    "fast-xml-parser": "^5.3.6",
+    "qs": "^6.14.2"
   }
 }

@@ -41,6 +41,7 @@ import { EnginesSettingsSection } from '../components/EnginesSettingsSection';
 import EmailConfigurations from '../../../pages/admin/EmailConfigurations';
 import EmailTemplates from '../../../pages/admin/EmailTemplates';
 import BrandingSettingsTab from '../components/BrandingSettingsTab';
+import { PiiRedactionSettingsSection } from '../components/PiiRedactionSettingsSection';
 
 // Predefined colors for environment tags
 const TAG_COLORS = [
@@ -54,7 +55,7 @@ const TAG_COLORS = [
   '#a2191f', // Dark Red
 ];
 
-type PlatformSettingsSection = 'git' | 'projects' | 'invite-domains' | 'engines' | 'sso' | 'email' | 'email-templates' | 'branding';
+type PlatformSettingsSection = 'git' | 'projects' | 'invite-domains' | 'pii-redaction' | 'engines' | 'sso' | 'email' | 'email-templates' | 'branding';
 
 interface PlatformSettingsPageProps {
   section?: PlatformSettingsSection;
@@ -70,6 +71,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const updateTag = useUpdateEnvironmentTag();
   const deleteTag = useDeleteEnvironmentTag();
   const reorderTags = useReorderEnvironmentTags();
+  const [piiSaving, setPiiSaving] = useState(false);
 
   // Drag and drop state
   const [draggedTagId, setDraggedTagId] = useState<string | null>(null);
@@ -287,6 +289,21 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     />
   );
 
+  const renderPiiRedaction = () => (
+    <PiiRedactionSettingsSection
+      settings={settings}
+      saving={piiSaving || updateSettings.isPending}
+      onSave={async (updates) => {
+        setPiiSaving(true);
+        try {
+          await updateSettings.mutateAsync(updates);
+        } finally {
+          setPiiSaving(false);
+        }
+      }}
+    />
+  );
+
   const renderEngines = () => (
     <EnginesSettingsSection
       settings={settings}
@@ -330,6 +347,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         return renderProjects();
       case 'invite-domains':
         return renderInviteDomains();
+      case 'pii-redaction':
+        return renderPiiRedaction();
       case 'engines':
         return renderEngines();
       case 'sso':
@@ -441,9 +460,10 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
           <TabList aria-label="Platform settings tabs">
             <Tab>Git</Tab>
             <Tab>Projects</Tab>
+            <Tab>Invite Domains</Tab>
+            <Tab>PII Redaction</Tab>
             <Tab>Engines</Tab>
             <Tab>SSO</Tab>
-            <Tab>Invite Domains</Tab>
             <Tab>Email</Tab>
             <Tab>Email Templates</Tab>
             <Tab>Branding</Tab>
@@ -469,27 +489,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               {renderProjects()}
             </TabPanel>
 
-            {/* Tab 3: Engines */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderEngines()}
-            </TabPanel>
-
-            {/* Tab 4: SSO */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderSso()}
-            </TabPanel>
-
-            {/* Tab 5: Invite Domains */}
+            {/* Tab 3: Invite Domains */}
             <TabPanel
               style={{
                 paddingInline: 0,
@@ -499,7 +499,37 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               {renderInviteDomains()}
             </TabPanel>
 
-            {/* Tab 6: Email */}
+            {/* Tab 4: PII Redaction */}
+            <TabPanel
+              style={{
+                paddingInline: 0,
+                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
+              }}
+            >
+              {renderPiiRedaction()}
+            </TabPanel>
+
+            {/* Tab 5: Engines */}
+            <TabPanel
+              style={{
+                paddingInline: 0,
+                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
+              }}
+            >
+              {renderEngines()}
+            </TabPanel>
+
+            {/* Tab 6: SSO */}
+            <TabPanel
+              style={{
+                paddingInline: 0,
+                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
+              }}
+            >
+              {renderSso()}
+            </TabPanel>
+
+            {/* Tab 7: Email */}
             <TabPanel
               style={{
                 paddingInline: 0,
@@ -509,7 +539,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               {renderEmail()}
             </TabPanel>
 
-            {/* Tab 7: Email Templates */}
+            {/* Tab 8: Email Templates */}
             <TabPanel
               style={{
                 paddingInline: 0,
@@ -519,7 +549,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               {renderEmailTemplates()}
             </TabPanel>
 
-            {/* Tab 8: Branding */}
+            {/* Tab 9: Branding */}
             <TabPanel
               style={{
                 paddingInline: 0,

@@ -64,7 +64,7 @@ router.get('/git-api/providers', apiLimiter, requireAuth, asyncHandler(async (re
  * GET /git-api/providers/:id
  * Get a specific Git provider
  */
-router.get('/git-api/providers/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/providers/:id', apiLimiter, requireAuth, validateParams(providerIdSchema), asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const dataSource = await getDataSource();
   const providerRepo = dataSource.getRepository(GitProvider);
@@ -144,7 +144,7 @@ router.get('/git-api/admin/providers', apiLimiter, requireAuth, requirePermissio
  *
  * Same middleware order as GET: requireAuth first, then requirePlatformAdmin.
  */
-router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.GIT_PROVIDER_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
+router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.GIT_PROVIDER_MANAGE }), validateParams(providerIdSchema), validateBody(updateProviderSchema), asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const {
     isActive,
@@ -208,7 +208,7 @@ router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requirePermi
  * GET /git-api/providers/:id/repos
  * List repositories from a Git provider for the authenticated user
  */
-router.get('/git-api/providers/:id/repos', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/providers/:id/repos', apiLimiter, requireAuth, validateParams(providerIdSchema), asyncHandler(async (req: Request, res: Response) => {
   const { id: providerId } = req.params;
   const userId = req.user?.userId;
   

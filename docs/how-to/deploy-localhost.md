@@ -27,7 +27,7 @@ Create `backend/.env` from `backend/.env.example` and configure at least:
 
 ### Frontend
 Create `frontend/.env.local` (or `.env`) with at least:
-- `VITE_API_BASE_URL`
+- `API_BASE_URL` (preferred) or `VITE_API_BASE_URL`
 
 ## First-time install (recommended)
 
@@ -56,7 +56,7 @@ bash ./scripts/deploy-localhost.sh
 Use this for faster rebuilds when dependencies are already installed.
 
 ## What the script does
-- Stops any running services on ports `8787` and `5173`
+- Stops any running services on backend/frontend ports (defaults: `8787` and `5173`)
 - Validates backend and frontend environment variables
 - Builds backend and frontend
 - Starts backend (`node dist/src/server.js`) and frontend preview (`npm run preview`)
@@ -76,10 +76,10 @@ npm run db:migration:run
 ```
 
 ## Access URLs
-- Backend: http://localhost:8787
-- Backend health: http://localhost:8787/health
-- Frontend: http://localhost:5173
-- Login: http://localhost:5173/login
+- Backend: http://localhost:8787 (default, from `API_PORT`)
+- Backend health: http://localhost:8787/health (default)
+- Frontend: http://localhost:5173 (default)
+- Login: http://localhost:5173/login (default)
 
 ## Logs
 - Backend: `tail -f backend/server.log`

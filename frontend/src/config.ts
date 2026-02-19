@@ -14,9 +14,10 @@ function loadConfig(): Config {
   const environment = (import.meta.env.MODE || 'development') as Config['environment'];
   const enableDevTools = import.meta.env.DEV || false;
 
-  // Validate required configuration
+  // Empty API base URL is valid when frontend and backend share the same origin
+  // through a reverse proxy (e.g., Nginx).
   if (!apiBaseUrl && environment === 'production') {
-    console.warn('⚠️  VITE_API_BASE_URL not set - using relative URLs');
+    console.info('ℹ️  API base URL not set - using same-origin relative API URLs');
   }
 
   const config: Config = {

@@ -1,11 +1,10 @@
 import 'reflect-metadata';
 import { createApp, registerBaseRoutes, registerFinalMiddleware } from './app.js';
 import { config } from '@shared/config/index.js';
-import { initializeDatabase } from '@shared/db/run-migrations.js';
+import { initializeDatabase, ensureSchemaExists } from '@shared/db/run-migrations.js';
 import { bootstrapAdmin, backfillKnownUserProfiles, backfillMissingPlatformRoles } from '@shared/db/bootstrap.js';
 import { startBatchPoller } from './poller/batchPoller.js';
-import { getConnectionPool, ConnectionPool } from '@shared/db/db-pool.js';
-import { getAdapter } from '@shared/db/adapters/index.js';
+import { getConnectionPool } from '@shared/db/db-pool.js';
 import { loadEnterpriseBackendPlugin } from './enterprise/loadEnterpriseBackendPlugin.js';
 const app = createApp({ registerBaseRoutes: false, registerFinalMiddleware: false });
 
@@ -38,9 +37,7 @@ if (enterprisePlugin.migrateEnterpriseDatabase) {
     
     // Create enterprise schema if configured (and not 'public')
     if (schema && schema !== 'public') {
-      const adapter = getAdapter();
-      const createSchemaSQL = adapter.getCreateSchemaSQL(schema);
-      await getConnectionPool().query(createSchemaSQL);
+      await ensureSchemaExists(schema);
     }
 
     // Run enterprise migrations

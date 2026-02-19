@@ -16,9 +16,10 @@ vi.mock('@shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@shared/middleware/validate.js', () => ({
-  validateBody: () => (_req: any, _res: any, next: any) => next(),
-}));
+vi.mock('@shared/middleware/validate.js', async () => {
+  const { validateMiddlewareMock } = await import('../../utils/mockValidateMiddleware.js');
+  return validateMiddlewareMock;
+});
 
 describe('notifications module', () => {
   let app: express.Application;

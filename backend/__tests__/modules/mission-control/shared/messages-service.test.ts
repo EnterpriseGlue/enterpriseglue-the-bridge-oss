@@ -8,12 +8,12 @@ vi.mock('@shared/services/bpmn-engine-client.js', () => ({
 
 describe('messages-service', () => {
   it('sends message', async () => {
-    const result = await sendMessage({ messageName: 'test' });
+    const result = await sendMessage('engine-1', { messageName: 'test' });
     expect(result).toEqual({ result: 'ok' });
   });
 
   it('sends signal', async () => {
-    const result = await sendSignal({ signalName: 'signal' });
+    const result = await sendSignal('engine-1', { signalName: 'signal' });
     expect(result).toEqual({ delivered: true });
   });
 });

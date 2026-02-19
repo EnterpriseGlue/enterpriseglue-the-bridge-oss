@@ -27,6 +27,7 @@ import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js'
 import { validateBody } from '@shared/middleware/validate.js'
 import { requireAuth } from '@shared/middleware/auth.js'
 import { requireEngineReadOrWrite } from '@shared/middleware/engineAuth.js'
+import { piiRedactionService } from '@shared/services/pii/PiiRedactionService.js'
 
 // Validation schemas
 const previewCountSchema = z.object({}).passthrough()
@@ -139,7 +140,8 @@ r.get('/mission-control-api/process-instances', asyncHandler(async (req: Request
   try {
     const engineId = (req as any).engineId as string
     const data = await listProcessInstancesDetailed(engineId, req.query as any)
-    res.json(data)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process instances')
   }
@@ -149,7 +151,8 @@ r.get('/mission-control-api/process-instances/:id', asyncHandler(async (req: Req
   try {
     const engineId = (req as any).engineId as string
     const data = await getProcessInstanceById(engineId, req.params.id)
-    res.json(data)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process instance')
   }
@@ -159,7 +162,8 @@ r.get('/mission-control-api/process-instances/:id/variables', asyncHandler(async
   try {
     const engineId = (req as any).engineId as string
     const data = await getProcessInstanceVariables(engineId, req.params.id)
-    res.json(data)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load instance variables')
   }
@@ -169,7 +173,8 @@ r.get('/mission-control-api/process-instances/:id/history/activity-instances', a
   try {
     const engineId = (req as any).engineId as string
     const data = await listProcessInstanceActivityHistory(engineId, req.params.id)
-    res.json(data)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load activity instances history')
   }
@@ -179,7 +184,8 @@ r.get('/mission-control-api/process-instances/:id/jobs', asyncHandler(async (req
   try {
     const engineId = (req as any).engineId as string
     const data = await listProcessInstanceJobs(engineId, req.params.id)
-    res.json(data)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'errors')
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load jobs')
   }
@@ -190,7 +196,8 @@ r.get('/mission-control-api/history/process-instances/:id', asyncHandler(async (
   try {
     const engineId = (req as any).engineId as string
     const data = await getHistoricProcessInstanceById(engineId, req.params.id)
-    res.json(data)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'history')
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load historic process instance')
   }
@@ -201,7 +208,8 @@ r.get('/mission-control-api/history/process-instances', asyncHandler(async (req:
   try {
     const engineId = (req as any).engineId as string
     const data = await listHistoricProcessInstances(engineId, req.query as any)
-    res.json(data)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'history')
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load historic process instances')
   }
@@ -211,7 +219,8 @@ r.get('/mission-control-api/process-instances/:id/incidents', asyncHandler(async
   try {
     const engineId = (req as any).engineId as string
     const data = await listProcessInstanceIncidents(engineId, req.params.id)
-    res.json(data)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'errors')
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load incidents')
   }
@@ -222,7 +231,8 @@ r.get('/mission-control-api/history/variable-instances', asyncHandler(async (req
   try {
     const engineId = (req as any).engineId as string
     const data = await listHistoricVariableInstances(engineId, req.query as any)
-    res.json(data)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'history')
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load historic variables')
   }
