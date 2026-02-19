@@ -58,7 +58,7 @@ export default function DiagramZoomControls({ viewerApi, position = 'center-righ
   }
 
   return (
-    <div style={{ 
+    <div className="diagram-zoom-controls" style={{ 
       position: 'absolute', 
       ...positionStyles,
       display: 'flex', 
@@ -66,6 +66,7 @@ export default function DiagramZoomControls({ viewerApi, position = 'center-righ
       gap: 'var(--spacing-2)',
       zIndex: 10
     }}>
+      <style>{`.diagram-zoom-controls .cds--popover { display: none !important; }`}</style>
       <Button 
         hasIconOnly 
         size="sm" 
