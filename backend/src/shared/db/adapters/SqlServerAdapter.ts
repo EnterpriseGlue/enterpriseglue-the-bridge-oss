@@ -1,5 +1,7 @@
 import { DataSourceOptions, getMetadataArgsStorage } from 'typeorm';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@shared/config/index.js';
 import {
@@ -185,6 +187,13 @@ export class SqlServerAdapter implements DatabaseAdapter {
   }
 
   getMigrationsPath(): string {
+    const runtimePath = fileURLToPath(import.meta.url);
+    const runningFromDist = runtimePath.includes(`${path.sep}dist${path.sep}`);
+
+    if (!runningFromDist) {
+      return 'src/shared/db/migrations';
+    }
+
     const distPath = 'dist/shared/db/migrations';
     if (fs.existsSync(distPath)) return distPath;
 
