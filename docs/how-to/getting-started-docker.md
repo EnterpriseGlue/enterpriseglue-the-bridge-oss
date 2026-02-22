@@ -55,6 +55,27 @@ What happens automatically:
    - Frontend: http://localhost:8080 (default)
    - Backend is internal-only in production and is reached via proxied paths (for example `/api` and `/health`) on the frontend origin.
 
+## Steps (Production from published images)
+Use this when you want deployment from registry images without local source builds:
+
+1. Copy an image env template:
+   ```bash
+   cp .env.images.postgres.example .env.images.postgres
+   # or
+   cp .env.images.oracle.example .env.images.oracle
+   ```
+2. Set image refs in the copied file:
+   - `BACKEND_IMAGE`
+   - `FRONTEND_IMAGE`
+   - `IMAGE_TAG` (`sha-<commit>` or `vX.Y.Z`)
+3. Start from images:
+   ```bash
+   npm run prod:images:postgres
+   # or
+   npm run prod:images:oracle
+   ```
+4. Roll back by changing `IMAGE_TAG` to a previous working tag and re-running the same command.
+
 ## Stop the stack
 ```bash
 npm run down
@@ -68,6 +89,11 @@ npm run down -- --db mysql
 
 ```bash
 npm run prod:down
+```
+
+```bash
+npm run prod:images:postgres:down
+npm run prod:images:oracle:down
 ```
 
 ## Notes

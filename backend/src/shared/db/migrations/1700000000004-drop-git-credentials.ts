@@ -13,27 +13,28 @@ export class DropGitCredentials1700000000004 implements MigrationInterface {
   name = 'DropGitCredentials1700000000004';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Safety check: ensure no git_repositories rows are still missing a token
-    try {
-      const gitRepoRepo = queryRunner.manager.getRepository(GitRepository);
-      const count = await gitRepoRepo.count({ where: { encryptedToken: IsNull() } });
-      if (count > 0) {
-        console.warn(`WARNING: ${count} git_repositories rows still have NULL encrypted_token. Skipping git_credentials drop.`);
-        return;
-      }
-    } catch {
-      // If we can't check, skip the drop for safety
-      console.warn('WARNING: Could not verify migration readiness. Skipping git_credentials drop.');
+    const gitReposTable = queryRunner.connection.getMetadata('GitRepository').tablePath;
+    if (!(await queryRunner.hasTable(gitReposTable))) {
+      console.warn(`Migration ${this.name}: table "${gitReposTable}" not found; skipping.`);
       return;
     }
 
-    try {
-      const gitCredsTable = queryRunner.connection.getMetadata('GitCredential').tablePath;
-      await queryRunner.dropTable(gitCredsTable, true);
-      console.log('Dropped git_credentials table.');
-    } catch (err) {
-      console.warn('Could not drop git_credentials (may not exist):', err);
+    // Safety check: ensure no git_repositories rows are still missing a token
+    const gitRepoRepo = queryRunner.manager.getRepository(GitRepository);
+    const count = await gitRepoRepo.count({ where: { encryptedToken: IsNull() } });
+    if (count > 0) {
+      console.warn(`WARNING: ${count} git_repositories rows still have NULL encrypted_token. Skipping git_credentials drop.`);
+      return;
     }
+
+    const gitCredsTable = queryRunner.connection.getMetadata('GitCredential').tablePath;
+    if (!(await queryRunner.hasTable(gitCredsTable))) {
+      console.warn(`Migration ${this.name}: table "${gitCredsTable}" not found; skipping drop.`);
+      return;
+    }
+
+    await queryRunner.dropTable(gitCredsTable, true);
+    console.log('Dropped git_credentials table.');
   }
 
   public async down(_queryRunner: QueryRunner): Promise<void> {

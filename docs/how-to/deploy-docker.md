@@ -49,6 +49,19 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 3. Set `FRONTEND_HOST_PORT` and keep `FRONTEND_URL` in sync with that public URL.
 4. Keep `API_BASE_URL` empty for default same-origin behavior (Nginx proxy). Set it only if frontend must call a different API origin.
 
+## Configuration (Production from published images)
+1. Copy one image env template:
+   - `cp .env.images.postgres.example .env.images.postgres`
+   - `cp .env.images.oracle.example .env.images.oracle`
+2. Set image refs:
+   - `BACKEND_IMAGE`
+   - `FRONTEND_IMAGE`
+   - `IMAGE_TAG` (`sha-<commit>` or `vX.Y.Z`)
+3. Keep `EG_BACKEND_ENV_FILE` aligned with the copied file path:
+   - postgres: `EG_BACKEND_ENV_FILE=./.env.images.postgres`
+   - oracle: `EG_BACKEND_ENV_FILE=./.env.images.oracle`
+4. Keep `API_BASE_URL` empty for same-origin behavior.
+
 Key defaults:
 - Dev frontend: `http://localhost:5173`
 - Dev backend: `http://localhost:8787` (when `EXPOSE_BACKEND=true`)
@@ -66,6 +79,13 @@ npm run dev
 npm run prod
 ```
 
+## Start (Production from images)
+```bash
+npm run prod:images:postgres
+# or
+npm run prod:images:oracle
+```
+
 ## Stop
 ```bash
 npm run down
@@ -81,6 +101,16 @@ npm run down -- --db mysql
 npm run prod:down
 ```
 
+```bash
+npm run prod:images:postgres:down
+npm run prod:images:oracle:down
+```
+
+## Rollback (image mode)
+1. Open the active image env file (`.env.images.postgres` or `.env.images.oracle`).
+2. Set `IMAGE_TAG` to the previous known-good tag.
+3. Re-run the same start command (`npm run prod:images:postgres` or `npm run prod:images:oracle`).
+
 ## Volumes
 Docker creates persistent volumes for:
 - `postgres_data` (database)
@@ -92,3 +122,8 @@ Docker creates persistent volumes for:
 - Production compose does not publish backend port by default; call backend through frontend origin (`/api`, `/starbase-api`, `/mission-control-api`, `/engines-api`, `/git-api`, `/vcs-api`).
 - For a host-based production-style run, see `scripts/deploy-localhost.sh`.
 - If email verification is enabled, configure `RESEND_API_KEY` to receive verification links.
+
+## Troubleshooting
+- **Wrong env file selected**: ensure `--env-file` and `EG_BACKEND_ENV_FILE` point to the same `.env.images.*` file.
+- **Image pull errors**: verify registry access and image names (`BACKEND_IMAGE`, `FRONTEND_IMAGE`) and tag (`IMAGE_TAG`).
+- **Backend not reachable in image mode**: use frontend-proxied health (`http://localhost:8080/health`) when `EXPOSE_BACKEND=false`.

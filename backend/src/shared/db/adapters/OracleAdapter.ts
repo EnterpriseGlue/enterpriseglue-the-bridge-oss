@@ -1,4 +1,4 @@
-import { DataSourceOptions } from 'typeorm';
+import { DataSourceOptions, getMetadataArgsStorage } from 'typeorm';
 import fs from 'fs';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@shared/config/index.js';
@@ -45,6 +45,96 @@ export class OracleAdapter implements DatabaseAdapter {
     
     // Check if oracledb driver is available
     this.checkDriverAvailability();
+
+    // TypeORM has a stricter supported type set for Oracle.
+    // Normalize shared entity metadata to Oracle-safe column types.
+    this.normalizeColumnsForOracle();
+  }
+
+  private normalizeColumnsForOracle(): void {
+    const metadata = getMetadataArgsStorage();
+    const indexedColumns = new Set<string>();
+    const uniqueConstraintColumns = new Set<string>();
+
+    // Shared entities default to schema "main" for Postgres.
+    // Oracle schema must map to the configured Oracle user/schema.
+    for (const table of metadata.tables) {
+      const tableSchema = table.schema?.toLowerCase();
+      if (!tableSchema || tableSchema === 'main') {
+        table.schema = this.schema;
+      }
+    }
+
+    for (const unique of metadata.uniques) {
+      if (!Array.isArray(unique.columns)) continue;
+
+      const targetName = this.getTargetName(unique.target);
+      for (const columnName of unique.columns) {
+        if (typeof columnName === 'string') {
+          uniqueConstraintColumns.add(`${targetName}:${columnName}`);
+        }
+      }
+    }
+
+    for (const index of metadata.indices) {
+      if (!Array.isArray(index.columns)) continue;
+
+      const targetName = this.getTargetName(index.target);
+      for (const columnName of index.columns) {
+        if (typeof columnName === 'string') {
+          indexedColumns.add(`${targetName}:${columnName}`);
+        }
+      }
+    }
+
+    for (const column of metadata.columns) {
+      const targetName = this.getTargetName(column.target);
+      const key = `${targetName}:${column.propertyName}`;
+      const isPrimaryOrIndexedOrUnique =
+        Boolean(column.options.primary) ||
+        Boolean(column.options.unique) ||
+        indexedColumns.has(key) ||
+        uniqueConstraintColumns.has(key);
+
+      if (column.options.type === 'text') {
+        column.options.type = 'varchar2';
+        if (column.options.length == null) {
+          column.options.length = isPrimaryOrIndexedOrUnique ? 191 : 4000;
+        }
+        continue;
+      }
+
+      if (column.options.type === 'boolean') {
+        column.options.type = 'number';
+        if (column.options.transformer == null) {
+          column.options.transformer = {
+            to(value: unknown) {
+              if (value === null || value === undefined) return value;
+              return value ? 1 : 0;
+            },
+            from(value: unknown) {
+              if (value === null || value === undefined) return value;
+              return Number(value) === 1;
+            },
+          };
+        }
+        continue;
+      }
+
+      if (column.options.type === 'bigint') {
+        column.options.type = 'number';
+        if (column.options.precision == null) {
+          column.options.precision = 19;
+        }
+        if (column.options.scale == null) {
+          column.options.scale = 0;
+        }
+      }
+    }
+  }
+
+  private getTargetName(target: string | Function): string {
+    return typeof target === 'function' ? target.name : String(target);
   }
 
   private checkDriverAvailability(): void {

@@ -1,0 +1,135 @@
+name: Deploy OpenShift
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (for example sha-abc123 or v1.2.3)"
+        required: true
+        type: string
+      database_type:
+        description: "Database runtime mode"
+        required: true
+        type: choice
+        default: postgres
+        options:
+          - postgres
+          - oracle
+      namespace:
+        description: "OpenShift namespace"
+        required: true
+        type: string
+        default: enterpriseglue
+      route_host:
+        description: "Public route host"
+        required: true
+        type: string
+      skip_external_healthcheck:
+        description: "Skip route /health curl check"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: ${{ vars.OPENSHIFT_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install OpenShift CLI
+        uses: redhat-actions/oc-installer@v1
+
+      - name: Login to OpenShift
+        shell: bash
+        run: |
+          set -euo pipefail
+          oc login \
+            --token="${{ secrets.OPENSHIFT_TOKEN }}" \
+            --server="${{ secrets.OPENSHIFT_API_URL }}"
+
+      - name: Resolve image refs
+        shell: bash
+        env:
+          INPUT_BACKEND_IMAGE: ${{ vars.BACKEND_IMAGE }}
+          INPUT_FRONTEND_IMAGE: ${{ vars.FRONTEND_IMAGE }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+
+          owner_lc="${GITHUB_REPOSITORY_OWNER,,}"
+          backend_default="ghcr.io/${owner_lc}/enterpriseglue-the-bridge-oss-backend"
+          frontend_default="ghcr.io/${owner_lc}/enterpriseglue-the-bridge-oss-frontend"
+
+          backend_base="${INPUT_BACKEND_IMAGE:-$backend_default}"
+          frontend_base="${INPUT_FRONTEND_IMAGE:-$frontend_default}"
+
+          with_tag() {
+            local image="$1"
+            local tag="$2"
+            if [[ "$image" == *@* ]]; then
+              printf '%s' "$image"
+            elif [[ "$image" =~ :[^/]+$ ]]; then
+              printf '%s' "$image"
+            else
+              printf '%s:%s' "$image" "$tag"
+            fi
+          }
+
+          echo "BACKEND_IMAGE=$(with_tag "$backend_base" "$IMAGE_TAG")" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=$(with_tag "$frontend_base" "$IMAGE_TAG")" >> "$GITHUB_ENV"
+
+      - name: Deploy to OpenShift
+        shell: bash
+        env:
+          OPENSHIFT_NAMESPACE: ${{ inputs.namespace }}
+          OPENSHIFT_ROUTE_HOST: ${{ inputs.route_host }}
+          DATABASE_TYPE: ${{ inputs.database_type }}
+          SKIP_EXTERNAL_HEALTHCHECK: ${{ inputs.skip_external_healthcheck }}
+
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL || 'admin@enterpriseglue.ai' }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+
+          POSTGRES_HOST: ${{ vars.POSTGRES_HOST || 'postgresql' }}
+          POSTGRES_PORT: ${{ vars.POSTGRES_PORT || '5432' }}
+          POSTGRES_DATABASE: ${{ vars.POSTGRES_DATABASE || 'enterpriseglue' }}
+          POSTGRES_SCHEMA: ${{ vars.POSTGRES_SCHEMA || 'main' }}
+          POSTGRES_USER: ${{ vars.POSTGRES_USER || 'enterpriseglue' }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
+          ORACLE_HOST: ${{ vars.ORACLE_HOST || 'oracle-db' }}
+          ORACLE_PORT: ${{ vars.ORACLE_PORT || '1521' }}
+          ORACLE_SERVICE_NAME: ${{ vars.ORACLE_SERVICE_NAME || 'XEPDB1' }}
+          ORACLE_SCHEMA: ${{ vars.ORACLE_SCHEMA || 'ENTERPRISEGLUE' }}
+          ORACLE_USER: ${{ vars.ORACLE_USER || 'enterpriseglue' }}
+          ORACLE_PASSWORD: ${{ secrets.ORACLE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bash ./scripts/deploy-openshift.sh
+
+      - name: Deployment summary
+        run: |
+          echo "namespace=${{ inputs.namespace }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "route_host=${{ inputs.route_host }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "database_type=${{ inputs.database_type }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "backend_image=$BACKEND_IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          echo "frontend_image=$FRONTEND_IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-disabled:
+    if: ${{ vars.OPENSHIFT_DEPLOY_ENABLED != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: OpenShift deploy is disabled
+        run: |
+          echo "OPENSHIFT_DEPLOY_ENABLED is not true. Skipping deployment." >> "$GITHUB_STEP_SUMMARY"
+          echo "Set repository variable OPENSHIFT_DEPLOY_ENABLED=true when OpenShift environment is ready." >> "$GITHUB_STEP_SUMMARY"

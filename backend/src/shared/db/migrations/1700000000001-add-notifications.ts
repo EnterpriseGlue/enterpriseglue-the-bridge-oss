@@ -5,9 +5,14 @@ export class AddNotificationsTable1700000000001 implements MigrationInterface {
   name = 'AddNotificationsTable1700000000001';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    const tablePath = queryRunner.connection.getMetadata('Notification').tablePath;
+    if (await queryRunner.hasTable(tablePath)) {
+      return;
+    }
+
     await queryRunner.createTable(
       new Table({
-        name: 'notifications',
+        name: tablePath,
         columns: [
           { name: 'id', type: 'text', isPrimary: true },
           { name: 'user_id', type: 'text' },
@@ -22,7 +27,7 @@ export class AddNotificationsTable1700000000001 implements MigrationInterface {
       true
     );
 
-    await queryRunner.createIndices('notifications', [
+    await queryRunner.createIndices(tablePath, [
       new TableIndex({ name: 'idx_notifications_user', columnNames: ['user_id'] }),
       new TableIndex({ name: 'idx_notifications_tenant', columnNames: ['tenant_id'] }),
       new TableIndex({ name: 'idx_notifications_state', columnNames: ['state'] }),
@@ -32,6 +37,9 @@ export class AddNotificationsTable1700000000001 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropTable('notifications');
+    const tablePath = queryRunner.connection.getMetadata('Notification').tablePath;
+    if (await queryRunner.hasTable(tablePath)) {
+      await queryRunner.dropTable(tablePath);
+    }
   }
 }

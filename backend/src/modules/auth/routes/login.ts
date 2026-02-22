@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { generateId } from '@shared/utils/id.js';
-import { addCaseInsensitiveEquals } from '@shared/db/adapters/QueryHelpers.js';
+import { addCaseInsensitiveEquals, getDatabaseType } from '@shared/db/adapters/QueryHelpers.js';
 import { verifyPassword } from '@shared/utils/password.js';
 import { generateAccessToken, generateRefreshToken } from '@shared/utils/jwt.js';
 import bcrypt from 'bcryptjs';
@@ -55,8 +55,9 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   const refreshTokenRepo = dataSource.getRepository(RefreshToken);
 
   // Find user by email (case-insensitive)
+  const activeValue = getDatabaseType() === 'oracle' ? 1 : true;
   let qb = userRepo.createQueryBuilder('u')
-    .where('u.isActive = true');
+    .where('u.isActive = :isActive', { isActive: activeValue });
   qb = addCaseInsensitiveEquals(qb, 'u', 'email', 'email', email);
   const user = await qb.getOne();
 

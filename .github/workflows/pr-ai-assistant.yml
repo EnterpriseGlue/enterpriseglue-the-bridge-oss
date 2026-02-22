@@ -1,0 +1,376 @@
+name: PR AI Assistant
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-ai-assistant-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  suggest-and-apply:
+    if: ${{ github.event.pull_request.state == 'open' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate AI suggestions (title + release label + impact)
+        id: suggest
+        uses: actions/github-script@v7
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const releaseLabels = [
+              'release:breaking',
+              'release:feature',
+              'release:fix',
+              'release:security',
+              'release:docs',
+              'release:internal',
+              'release:deprecation',
+              'release:compat'
+            ];
+
+            const normalizeTitleSummary = (title) => {
+              if (!title) return 'update changes';
+              return title
+                .replace(/^[a-z]+\([^)]*\)!?:\s*/i, '')
+                .replace(/^[a-z]+!?:\s*/i, '')
+                .trim()
+                .slice(0, 90) || 'update changes';
+            };
+
+            const inferScope = (paths) => {
+              if (paths.some((p) => p.startsWith('backend/'))) return 'backend';
+              if (paths.some((p) => p.startsWith('frontend/'))) return 'frontend';
+              if (paths.some((p) => p.startsWith('.github/') || p.startsWith('scripts/') || p.startsWith('docker-compose'))) return 'infra';
+              if (paths.some((p) => p.startsWith('docs/') || p.endsWith('.md'))) return 'docs';
+              return 'core';
+            };
+
+            const deterministicFallback = (title, body, paths) => {
+              const lowerTitle = String(title || '').toLowerCase();
+              const lowerBody = String(body || '').toLowerCase();
+              const docsOnly = paths.length > 0 && paths.every((p) => p.startsWith('docs/') || p.endsWith('.md'));
+              const breaking = /breaking|!:/i.test(title || '') || /breaking\s+change/i.test(body || '');
+              const security = /security|vuln|cve/i.test(lowerTitle) || /security|vuln|cve/i.test(lowerBody);
+              const feature = /feat|feature|add|introduce|implement/i.test(lowerTitle);
+              const fix = /fix|bug|regress|hotfix/i.test(lowerTitle);
+
+              let releaseLabel = 'release:internal';
+              let impact = 'patch';
+              let type = 'chore';
+
+              if (breaking) {
+                releaseLabel = 'release:breaking';
+                impact = 'major';
+                type = 'feat';
+              } else if (security) {
+                releaseLabel = 'release:security';
+                impact = 'patch';
+                type = 'fix';
+              } else if (docsOnly) {
+                releaseLabel = 'release:docs';
+                impact = 'patch';
+                type = 'docs';
+              } else if (feature) {
+                releaseLabel = 'release:feature';
+                impact = 'minor';
+                type = 'feat';
+              } else if (fix) {
+                releaseLabel = 'release:fix';
+                impact = 'patch';
+                type = 'fix';
+              }
+
+              const scope = inferScope(paths);
+              const summary = normalizeTitleSummary(title);
+              const bang = breaking ? '!' : '';
+              const suggestedTitle = `${type}(${scope})${bang}: ${summary}`;
+
+              return {
+                title: suggestedTitle,
+                release_label: releaseLabel,
+                impact,
+                confidence: 0.55,
+                reasoning: 'Fallback inference (keyword + file-path heuristic) was used.',
+              };
+            };
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            const changedPaths = files.map((f) => f.filename);
+            const fileSummary = files.slice(0, 80).map((f) => {
+              const status = f.status;
+              return `${f.filename} (${status}, +${f.additions}/-${f.deletions})`;
+            }).join('\n');
+
+            if (!process.env.OPENAI_API_KEY) {
+              core.notice('OPENAI_API_KEY is not configured. Using deterministic fallback suggestions.');
+              const fallback = deterministicFallback(pr.title, pr.body || '', changedPaths);
+              core.setOutput('status', 'fallback');
+              core.setOutput('suggested_title', fallback.title);
+              core.setOutput('release_label', fallback.release_label);
+              core.setOutput('impact', fallback.impact);
+              core.setOutput('confidence', String(fallback.confidence));
+              core.setOutput('reasoning', fallback.reasoning);
+              return;
+            }
+
+            const systemPrompt = [
+              'You are a release engineering assistant.',
+              'Return ONLY valid JSON with keys: title, release_label, impact, confidence, reasoning.',
+              'title must follow conventional format: type(scope): summary.',
+              'Allowed release_label values: ' + releaseLabels.join(', ') + '.',
+              'Allowed impact values: patch, minor, major.',
+              'Use major only for clearly breaking changes.',
+              'Keep summary concise (max 90 chars).',
+            ].join(' ');
+
+            const userPrompt = [
+              `PR title: ${pr.title}`,
+              `PR body:\n${String(pr.body || '').slice(0, 4000)}`,
+              `Changed files (${changedPaths.length}):\n${fileSummary}`,
+              'Decide best title, release label, and semantic impact.'
+            ].join('\n\n');
+
+            let parsed;
+            try {
+              const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+                  temperature: 0.2,
+                  messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt },
+                  ],
+                  response_format: { type: 'json_object' },
+                }),
+              });
+
+              if (!response.ok) {
+                const err = await response.text();
+                throw new Error(`OpenAI API error ${response.status}: ${err}`);
+              }
+
+              const payload = await response.json();
+              const content = payload?.choices?.[0]?.message?.content;
+              if (!content) throw new Error('OpenAI returned empty content');
+              parsed = JSON.parse(content);
+            } catch (error) {
+              core.warning(`AI suggestion failed: ${error.message}`);
+              parsed = deterministicFallback(pr.title, pr.body || '', changedPaths);
+              parsed.reasoning = `AI request failed; ${parsed.reasoning}`;
+            }
+
+            const fallback = deterministicFallback(pr.title, pr.body || '', changedPaths);
+            const safeTitle = typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim() : fallback.title;
+            const safeLabel = releaseLabels.includes(parsed.release_label) ? parsed.release_label : fallback.release_label;
+            const safeImpact = ['patch', 'minor', 'major'].includes(parsed.impact) ? parsed.impact : fallback.impact;
+            const safeConfidence = Number.isFinite(Number(parsed.confidence)) ? Number(parsed.confidence) : fallback.confidence;
+            const safeReasoning = typeof parsed.reasoning === 'string' && parsed.reasoning.trim()
+              ? parsed.reasoning.trim().slice(0, 600)
+              : fallback.reasoning;
+
+            core.setOutput('status', 'ok');
+            core.setOutput('suggested_title', safeTitle);
+            core.setOutput('release_label', safeLabel);
+            core.setOutput('impact', safeImpact);
+            core.setOutput('confidence', String(safeConfidence));
+            core.setOutput('reasoning', safeReasoning);
+
+      - name: Upsert PR assistant comment
+        uses: actions/github-script@v7
+        env:
+          SUGGESTED_TITLE: ${{ steps.suggest.outputs.suggested_title }}
+          RELEASE_LABEL: ${{ steps.suggest.outputs.release_label }}
+          IMPACT: ${{ steps.suggest.outputs.impact }}
+          CONFIDENCE: ${{ steps.suggest.outputs.confidence }}
+          REASONING: ${{ steps.suggest.outputs.reasoning }}
+          STATUS: ${{ steps.suggest.outputs.status }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const marker = '<!-- ai-pr-assistant -->';
+
+            const body = [
+              marker,
+              '### AI PR Assistant',
+              '',
+              `- Suggested title: \`${process.env.SUGGESTED_TITLE || 'n/a'}\``,
+              `- Suggested release label: \`${process.env.RELEASE_LABEL || 'n/a'}\``,
+              `- Suggested release impact: \`${process.env.IMPACT || 'n/a'}\``,
+              `- Confidence: \`${process.env.CONFIDENCE || 'n/a'}\``,
+              '',
+              `Reasoning: ${process.env.REASONING || 'n/a'}`,
+              '',
+              'Auto-apply mode:',
+              '- Add label `ai:apply` to this PR, or set repo variable `AI_PR_AUTOFIX_ENABLED=true`.',
+              '- When enabled, this workflow can update PR title and add the suggested release label.'
+            ].join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((c) => c.user?.type === 'Bot' && c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body,
+              });
+            }
+
+      - name: Auto-apply title and label (optional)
+        uses: actions/github-script@v7
+        env:
+          AUTOFIX_ENABLED: ${{ vars.AI_PR_AUTOFIX_ENABLED || 'false' }}
+          AUTOFIX_ALLOW_FORKS: ${{ vars.AI_PR_AUTOFIX_ALLOW_FORKS || 'false' }}
+          SUGGESTED_TITLE: ${{ steps.suggest.outputs.suggested_title }}
+          RELEASE_LABEL: ${{ steps.suggest.outputs.release_label }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const labels = (pr.labels || []).map((l) => l.name);
+            const hasApplyLabel = labels.includes('ai:apply');
+            const autofixEnabled = String(process.env.AUTOFIX_ENABLED || 'false').toLowerCase() === 'true';
+            const shouldApply = autofixEnabled || hasApplyLabel;
+            const allowForkAutofix = String(process.env.AUTOFIX_ALLOW_FORKS || 'false').toLowerCase() === 'true';
+
+            const isFork = Boolean(pr.head?.repo?.fork);
+            if (isFork && !allowForkAutofix) {
+              core.notice('Auto-apply blocked: PR comes from a fork (set AI_PR_AUTOFIX_ALLOW_FORKS=true to override).');
+              return;
+            }
+
+            const trustedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+            const authorAssociation = String(pr.author_association || '').toUpperCase();
+            if (!trustedAssociations.has(authorAssociation)) {
+              core.notice(`Auto-apply blocked: untrusted author association (${authorAssociation || 'UNKNOWN'}).`);
+              return;
+            }
+
+            if (!shouldApply) {
+              core.notice('Auto-apply disabled. Advisory mode only.');
+              return;
+            }
+
+            const releaseLabel = process.env.RELEASE_LABEL;
+            const suggestedTitle = process.env.SUGGESTED_TITLE;
+            const allowedReleaseLabels = new Set([
+              'release:breaking',
+              'release:feature',
+              'release:fix',
+              'release:security',
+              'release:docs',
+              'release:internal',
+              'release:deprecation',
+              'release:compat'
+            ]);
+            const releaseLabelDefaults = {
+              'release:breaking': { color: 'B60205', description: 'Breaking change' },
+              'release:feature': { color: '0E8A16', description: 'Feature change' },
+              'release:fix': { color: '1D76DB', description: 'Bug fix change' },
+              'release:security': { color: 'D93F0B', description: 'Security change' },
+              'release:docs': { color: '5319E7', description: 'Documentation change' },
+              'release:internal': { color: '6B7280', description: 'Internal/infra change' },
+              'release:deprecation': { color: 'FBCA04', description: 'Deprecation change' },
+              'release:compat': { color: '0E8A16', description: 'Compatibility change' }
+            };
+            const ensureLabelExists = async (name) => {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name,
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                const defaults = releaseLabelDefaults[name] || { color: '6B7280', description: 'Release label' };
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name,
+                  color: defaults.color,
+                  description: defaults.description,
+                });
+              }
+            };
+            const existingReleaseLabels = labels.filter((label) => allowedReleaseLabels.has(label));
+
+            if (suggestedTitle && suggestedTitle !== pr.title) {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                title: suggestedTitle,
+              });
+              core.notice(`Updated PR title to: ${suggestedTitle}`);
+            }
+
+            if (releaseLabel && allowedReleaseLabels.has(releaseLabel) && existingReleaseLabels.length === 0) {
+              await ensureLabelExists(releaseLabel);
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: [releaseLabel],
+              });
+              core.notice(`Added release label: ${releaseLabel}`);
+              return;
+            }
+
+            const hasOnlyInternalLabel = existingReleaseLabels.length === 1 && existingReleaseLabels[0] === 'release:internal';
+            const shouldUpgradeInternal = hasOnlyInternalLabel && releaseLabel && releaseLabel !== 'release:internal' && allowedReleaseLabels.has(releaseLabel);
+            if (shouldUpgradeInternal) {
+              await ensureLabelExists(releaseLabel);
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                name: 'release:internal',
+              });
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: [releaseLabel],
+              });
+              core.notice(`Upgraded release label from release:internal to ${releaseLabel}`);
+            }

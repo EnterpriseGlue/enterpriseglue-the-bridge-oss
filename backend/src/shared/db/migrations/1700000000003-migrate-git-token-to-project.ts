@@ -14,6 +14,10 @@ export class MigrateGitTokenToProject1700000000003 implements MigrationInterface
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const gitReposTable = queryRunner.connection.getMetadata('GitRepository').tablePath;
+    if (!(await queryRunner.hasTable(gitReposTable))) {
+      console.warn(`Migration ${this.name}: table "${gitReposTable}" not found; skipping.`);
+      return;
+    }
 
     // 1. Add new columns to git_repositories
     const existingColumns = await queryRunner.getTable(gitReposTable);
@@ -64,6 +68,9 @@ export class MigrateGitTokenToProject1700000000003 implements MigrationInterface
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     const gitReposTable = queryRunner.connection.getMetadata('GitRepository').tablePath;
+    if (!(await queryRunner.hasTable(gitReposTable))) {
+      return;
+    }
 
     const existingColumns = await queryRunner.getTable(gitReposTable);
     const columnNames = (existingColumns?.columns || []).map(c => c.name);

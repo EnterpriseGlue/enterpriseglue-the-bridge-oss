@@ -383,7 +383,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
 
     await userRepo.update({ id: user.id }, {
       email: userInfo.email,
-      authProvider: 'microsoft',
+      authProvider: 'saml',
       entraEmail: userInfo.email,
       firstName: userInfo.given_name || user.firstName,
       lastName: userInfo.family_name || user.lastName,
@@ -409,7 +409,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
     const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
 
     await userRepo.update({ id: user.id }, {
-      authProvider: 'microsoft',
+      authProvider: 'saml',
       entraId: userInfo.oid || user.entraId,
       entraEmail: userInfo.email,
       firstName: userInfo.given_name || user.firstName,
@@ -424,7 +424,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
 
     return {
       ...user,
-      authProvider: 'microsoft',
+      authProvider: 'saml',
       entraId: userInfo.oid || user.entraId,
       platformRole,
       firstName: userInfo.given_name || user.firstName,
@@ -437,7 +437,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
   await userRepo.insert({
     id: userId,
     email: userInfo.email,
-    authProvider: 'microsoft',
+    authProvider: 'saml',
     passwordHash: null,
     entraId: userInfo.oid || null,
     entraEmail: userInfo.email,

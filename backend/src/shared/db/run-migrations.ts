@@ -1,9 +1,13 @@
 import { getDataSource, adapter } from './data-source.js';
 import { EnvironmentTag } from './entities/EnvironmentTag.js';
 import { PlatformSettings } from './entities/PlatformSettings.js';
+import { User } from './entities/User.js';
 // Tenant entities removed - multi-tenancy is EE-only
 import { EmailTemplate } from './entities/EmailTemplate.js';
 import { SsoClaimsMapping } from './entities/SsoClaimsMapping.js';
+import { SsoProvider } from './entities/SsoProvider.js';
+import { RefreshToken } from './entities/RefreshToken.js';
+import { GitProvider } from './entities/GitProvider.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -50,7 +54,39 @@ export async function runMigrations() {
   try {
     // Initialize TypeORM DataSource (runs pending migrations if any)
     const dataSource = await getDataSource();
-    
+
+    const queryRunner = dataSource.createQueryRunner();
+    try {
+      const coreBootstrapEntities = [
+        User,
+        SsoProvider,
+        RefreshToken,
+        EnvironmentTag,
+        PlatformSettings,
+        EmailTemplate,
+        SsoClaimsMapping,
+        GitProvider,
+      ];
+
+      const missingTables: string[] = [];
+      for (const entity of coreBootstrapEntities) {
+        const tablePath = dataSource.getMetadata(entity).tablePath;
+        const hasTable = await queryRunner.hasTable(tablePath);
+        if (!hasTable) {
+          missingTables.push(tablePath);
+        }
+      }
+
+      if (missingTables.length > 0) {
+        console.log(
+          `  ℹ️  Database bootstrap required (missing ${missingTables.length} core table(s): ${missingTables.join(', ')}). Running TypeORM synchronize().`
+        );
+        await dataSource.synchronize();
+      }
+    } finally {
+      await queryRunner.release();
+    }
+
     // Run pending migrations
     const pendingMigrations = await dataSource.showMigrations();
     if (pendingMigrations) {

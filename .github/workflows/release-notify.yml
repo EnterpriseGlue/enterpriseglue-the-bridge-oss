@@ -1,0 +1,67 @@
+name: Release Notify
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-notify-${{ github.event.release.tag_name }}
+  cancel-in-progress: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send release notification webhook (optional)
+        uses: actions/github-script@v7
+        env:
+          RELEASE_NOTIFICATIONS_ENABLED: ${{ vars.RELEASE_NOTIFICATIONS_ENABLED || 'false' }}
+          RELEASE_WEBHOOK_URL: ${{ secrets.RELEASE_WEBHOOK_URL }}
+        with:
+          script: |
+            const enabled = String(process.env.RELEASE_NOTIFICATIONS_ENABLED || 'false').toLowerCase() === 'true';
+            if (!enabled) {
+              core.notice('Release notifications disabled (set RELEASE_NOTIFICATIONS_ENABLED=true to enable).');
+              return;
+            }
+
+            const webhookUrl = String(process.env.RELEASE_WEBHOOK_URL || '').trim();
+            if (!webhookUrl) {
+              core.notice('RELEASE_WEBHOOK_URL is not configured. Skipping release notification.');
+              return;
+            }
+
+            const release = context.payload.release;
+            if (!release) {
+              core.setFailed('No release payload found.');
+              return;
+            }
+
+            const repo = `${context.repo.owner}/${context.repo.repo}`;
+            const releaseName = release.name || release.tag_name;
+            const bodyPreview = String(release.body || '').replace(/\r/g, '').slice(0, 1200);
+            const text = [
+              `🚀 ${repo} release published`,
+              `Tag: ${release.tag_name}`,
+              `Name: ${releaseName}`,
+              `URL: ${release.html_url}`,
+              bodyPreview ? `Notes:\n${bodyPreview}` : null,
+            ].filter(Boolean).join('\n');
+
+            const response = await fetch(webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text }),
+            });
+
+            if (!response.ok) {
+              const responseBody = await response.text();
+              core.setFailed(`Release notification webhook failed (${response.status}): ${responseBody}`);
+              return;
+            }
+
+            core.notice(`Release notification sent for ${release.tag_name}.`);

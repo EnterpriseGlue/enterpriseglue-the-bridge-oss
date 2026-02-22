@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: enterpriseglue-backend
+  labels:
+    app.kubernetes.io/name: enterpriseglue-backend
+    app.kubernetes.io/part-of: enterpriseglue
+spec:
+  selector:
+    app.kubernetes.io/name: enterpriseglue-backend
+  ports:
+    - name: http
+      port: 8787
+      targetPort: http
+      protocol: TCP
+  type: ClusterIP

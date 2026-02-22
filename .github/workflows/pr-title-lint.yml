@@ -1,0 +1,67 @@
+name: PR Title Lint
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - edited
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-title-lint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lint-pr-title:
+    if: ${{ github.event.pull_request.state == 'open' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate conventional PR title
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed('No pull request payload found.');
+              return;
+            }
+
+            if (pr.draft) {
+              core.notice('Draft PR: title lint is informational until ready for review.');
+              return;
+            }
+
+            const labels = (pr.labels || []).map((label) => label.name);
+            const isReleasePleaseBranch = String(pr.head?.ref || '').startsWith('release-please--branches--');
+            const isReleasePleaseLabel = labels.includes('autorelease: pending') || labels.includes('autorelease: triggered');
+            if (isReleasePleaseBranch || isReleasePleaseLabel) {
+              core.notice('Release Please PR detected. Skipping PR title lint.');
+              return;
+            }
+
+            const title = String(pr.title || '').trim();
+            const conventionalPattern = /^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s.+$/;
+            if (!conventionalPattern.test(title)) {
+              core.setFailed(
+                `PR title must follow conventional format: type(scope): summary. Received: "${title}"`
+              );
+              return;
+            }
+
+            const match = title.match(/^([a-z]+)/);
+            const type = match ? match[1] : '';
+            const allowedTypes = new Set(['feat', 'fix', 'docs', 'refactor', 'test', 'chore', 'ci', 'build', 'perf', 'revert', 'style']);
+            if (!allowedTypes.has(type)) {
+              core.setFailed(
+                `Unsupported conventional type "${type}". Allowed types: ${Array.from(allowedTypes).join(', ')}`
+              );
+              return;
+            }
+
+            core.notice(`PR title lint passed: ${title}`);
