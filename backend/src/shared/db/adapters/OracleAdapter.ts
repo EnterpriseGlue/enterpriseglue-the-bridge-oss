@@ -55,6 +55,7 @@ export class OracleAdapter implements DatabaseAdapter {
     const metadata = getMetadataArgsStorage();
     const indexedColumns = new Set<string>();
     const uniqueConstraintColumns = new Set<string>();
+    const uniqueConstraintSignatures = new Set<string>();
 
     // Shared entities default to schema "main" for Postgres.
     // Oracle schema must map to the configured Oracle user/schema.
@@ -69,12 +70,30 @@ export class OracleAdapter implements DatabaseAdapter {
       if (!Array.isArray(unique.columns)) continue;
 
       const targetName = this.getTargetName(unique.target);
+      const uniqueColumns: string[] = [];
       for (const columnName of unique.columns) {
         if (typeof columnName === 'string') {
           uniqueConstraintColumns.add(`${targetName}:${columnName}`);
+          uniqueColumns.push(columnName);
         }
       }
+
+      if (uniqueColumns.length > 0) {
+        uniqueConstraintSignatures.add(`${targetName}:${uniqueColumns.join(',')}`);
+      }
     }
+
+    const filteredIndices = metadata.indices.filter((index) => {
+      if (!Array.isArray(index.columns) || index.columns.length === 0) return true;
+
+      const targetName = this.getTargetName(index.target);
+      const indexColumns = index.columns.filter((column): column is string => typeof column === 'string');
+      if (indexColumns.length === 0) return true;
+
+      const signature = `${targetName}:${indexColumns.join(',')}`;
+      return !uniqueConstraintSignatures.has(signature);
+    });
+    metadata.indices.splice(0, metadata.indices.length, ...filteredIndices);
 
     for (const index of metadata.indices) {
       if (!Array.isArray(index.columns)) continue;

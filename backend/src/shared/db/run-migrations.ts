@@ -81,11 +81,7 @@ export async function runMigrations() {
         console.log(
           `  ℹ️  Database bootstrap required (missing ${missingTables.length} core table(s): ${missingTables.join(', ')}). Running TypeORM synchronize().`
         );
-        if (dbType === 'oracle') {
-          console.log('  ℹ️  Skipping TypeORM synchronize() bootstrap for Oracle; relying on migrations to avoid duplicate-index bootstrap errors.');
-        } else {
-          await dataSource.synchronize();
-        }
+        await dataSource.synchronize();
       }
     } finally {
       await queryRunner.release();
