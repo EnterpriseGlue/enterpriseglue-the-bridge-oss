@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: enterpriseglue-config
+  labels:
+    app.kubernetes.io/name: enterpriseglue
+    app.kubernetes.io/part-of: enterpriseglue
+
+data:
+  NODE_ENV: "production"
+  API_PORT: "8787"
+  FRONTEND_URL: "https://enterpriseglue.example.com"
+  API_BASE_URL: ""
+
+  DATABASE_TYPE: "postgres"
+
+  POSTGRES_HOST: "postgresql"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DATABASE: "enterpriseglue"
+  POSTGRES_SCHEMA: "main"
+
+  ORACLE_HOST: "oracle-db"
+  ORACLE_PORT: "1521"
+  ORACLE_SERVICE_NAME: "XEPDB1"
+  ORACLE_SCHEMA: "ENTERPRISEGLUE"
+
+  GIT_REPOS_PATH: "/app/data/repos"
+  GIT_DEFAULT_BRANCH: "main"
+  EXPOSE_BACKEND: "false"

@@ -4,6 +4,13 @@ import express from 'express';
 import samlRouter from '../../../../src/modules/auth/routes/saml.js';
 
 vi.mock('@shared/services/saml.js', () => ({
+  getSamlStatus: vi.fn().mockResolvedValue({
+    enabled: false,
+    message: 'SAML provider is not configured',
+    providerConfigured: false,
+    providerEnabled: false,
+    missingFields: ['entityId', 'ssoUrl', 'certificate'],
+  }),
   isSamlAuthEnabled: vi.fn().mockResolvedValue(false),
   validateSamlPostResponse: vi.fn(),
   extractSamlUserInfo: vi.fn(),
@@ -27,5 +34,7 @@ describe('auth saml routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.enabled).toBe(false);
+    expect(response.body.providerConfigured).toBe(false);
+    expect(response.body.missingFields).toEqual(['entityId', 'ssoUrl', 'certificate']);
   });
 });

@@ -103,6 +103,15 @@ describe('POST /api/auth/refresh', () => {
     expect(response.body.expiresIn).toBe(3600);
   });
 
+  it('rejects missing refresh token', async () => {
+    const response = await request(app)
+      .post('/api/auth/refresh')
+      .send({});
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('No refresh token provided');
+  });
+
   it('rejects invalid token type', async () => {
     (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'access' });
 
@@ -111,5 +120,59 @@ describe('POST /api/auth/refresh', () => {
       .send({ refreshToken: TEST_ACCESS_TOKEN });
 
     expect(response.status).toBe(401);
+  });
+
+  it('rejects inactive user for refresh token', async () => {
+    const userRepo = { findOneBy: vi.fn().mockResolvedValue(null) };
+    const refreshTokenRepo = { find: vi.fn() };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === User) return userRepo;
+        if (entity === RefreshToken) return refreshTokenRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'refresh' });
+
+    const response = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: TEST_REFRESH_TOKEN });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('User not found or inactive');
+    expect(refreshTokenRepo.find).not.toHaveBeenCalled();
+  });
+
+  it('rejects refresh token when no stored non-revoked token hash matches', async () => {
+    const mockUser = {
+      id: 'user-1',
+      email: 'test@example.com',
+      platformRole: 'user',
+      isActive: true,
+    };
+
+    const userRepo = { findOneBy: vi.fn().mockResolvedValue(mockUser) };
+    const refreshTokenRepo = {
+      find: vi.fn().mockResolvedValue([]),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === User) return userRepo;
+        if (entity === RefreshToken) return refreshTokenRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'refresh' });
+
+    const response = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: TEST_REFRESH_TOKEN });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('Invalid refresh token');
   });
 });

@@ -1,0 +1,18 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: enterpriseglue
+  labels:
+    app.kubernetes.io/name: enterpriseglue-frontend
+    app.kubernetes.io/part-of: enterpriseglue
+spec:
+  host: enterpriseglue.example.com
+  to:
+    kind: Service
+    name: enterpriseglue-frontend
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

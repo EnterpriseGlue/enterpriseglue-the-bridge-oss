@@ -3,6 +3,7 @@ import { apiLimiter } from '@shared/middleware/rateLimiter.js';
 import { asyncHandler } from '@shared/middleware/errorHandler.js';
 import { logger } from '@shared/utils/logger.js';
 import {
+  getSamlStatus,
   isSamlAuthEnabled,
   validateSamlPostResponse,
   extractSamlUserInfo,
@@ -20,11 +21,8 @@ const router = Router();
  * GET /api/auth/saml/status
  */
 router.get('/api/auth/saml/status', apiLimiter, asyncHandler(async (_req: Request, res: Response) => {
-  const enabled = await isSamlAuthEnabled();
-  res.json({
-    enabled,
-    message: enabled ? 'SAML authentication is available' : 'SAML authentication is not configured',
-  });
+  const status = await getSamlStatus();
+  res.json(status);
 }));
 
 /**

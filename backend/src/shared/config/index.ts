@@ -104,6 +104,11 @@ export type Config = z.infer<typeof configSchema>;
 
 function loadConfig(): Config {
   const inferredNodeEnv = (process.env.NODE_ENV as any) || 'development';
+  const envOrUndefined = (value?: string): string | undefined => {
+    if (value == null) return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
   const generatedJwtSecret = inferredNodeEnv === 'production'
     ? undefined
     : crypto.randomBytes(48).toString('hex');
@@ -119,7 +124,7 @@ function loadConfig(): Config {
     postgresUser: process.env.POSTGRES_USER,
     postgresPassword: process.env.POSTGRES_PASSWORD,
     postgresDatabase: process.env.POSTGRES_DATABASE,
-    postgresSchema: process.env.POSTGRES_SCHEMA,
+    postgresSchema: envOrUndefined(process.env.POSTGRES_SCHEMA),
     postgresSsl: process.env.POSTGRES_SSL === 'true',
     postgresSslRejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED,
     oracleHost: process.env.ORACLE_HOST,
@@ -128,13 +133,13 @@ function loadConfig(): Config {
     oraclePassword: process.env.ORACLE_PASSWORD,
     oracleServiceName: process.env.ORACLE_SERVICE_NAME,
     oracleSid: process.env.ORACLE_SID,
-    oracleSchema: process.env.ORACLE_SCHEMA,
+    oracleSchema: envOrUndefined(process.env.ORACLE_SCHEMA),
     mssqlHost: process.env.MSSQL_HOST,
     mssqlPort: process.env.MSSQL_PORT ? Number(process.env.MSSQL_PORT) : undefined,
     mssqlUser: process.env.MSSQL_USER,
     mssqlPassword: process.env.MSSQL_PASSWORD,
     mssqlDatabase: process.env.MSSQL_DATABASE,
-    mssqlSchema: process.env.MSSQL_SCHEMA,
+    mssqlSchema: envOrUndefined(process.env.MSSQL_SCHEMA),
     mssqlEncrypt: process.env.MSSQL_ENCRYPT === 'true',
     mssqlTrustServerCertificate: process.env.MSSQL_TRUST_SERVER_CERTIFICATE === 'true',
     spannerProjectId: process.env.SPANNER_PROJECT_ID,
@@ -146,7 +151,7 @@ function loadConfig(): Config {
     mysqlPassword: process.env.MYSQL_PASSWORD,
     mysqlDatabase: process.env.MYSQL_DATABASE,
 
-    enterpriseSchema: process.env.ENTERPRISE_SCHEMA || process.env.ENTERPRISE_POSTGRES_SCHEMA, // ENTERPRISE_POSTGRES_SCHEMA is deprecated
+    enterpriseSchema: envOrUndefined(process.env.ENTERPRISE_SCHEMA || process.env.ENTERPRISE_POSTGRES_SCHEMA), // ENTERPRISE_POSTGRES_SCHEMA is deprecated
     jwtSecret: process.env.JWT_SECRET || generatedJwtSecret,
     jwtAccessTokenExpires: process.env.JWT_ACCESS_TOKEN_EXPIRES ? Number(process.env.JWT_ACCESS_TOKEN_EXPIRES) : undefined,
     jwtRefreshTokenExpires: process.env.JWT_REFRESH_TOKEN_EXPIRES ? Number(process.env.JWT_REFRESH_TOKEN_EXPIRES) : undefined,

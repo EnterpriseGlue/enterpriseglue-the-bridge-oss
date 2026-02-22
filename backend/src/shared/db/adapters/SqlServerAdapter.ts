@@ -1,5 +1,7 @@
-import { DataSourceOptions } from 'typeorm';
+import { DataSourceOptions, getMetadataArgsStorage } from 'typeorm';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@shared/config/index.js';
 import {
@@ -45,6 +47,70 @@ export class SqlServerAdapter implements DatabaseAdapter {
     this.logging = config.nodeEnv === 'development';
     
     this.checkDriverAvailability();
+    this.normalizeColumnsForSqlServer();
+  }
+
+  private normalizeColumnsForSqlServer(): void {
+    const metadata = getMetadataArgsStorage();
+    const indexedColumns = new Set<string>();
+    const uniqueConstraintColumns = new Set<string>();
+
+    for (const table of metadata.tables) {
+      const tableSchema = table.schema?.toLowerCase();
+      if (!tableSchema || tableSchema === 'main') {
+        table.schema = this.schema;
+      }
+    }
+
+    for (const unique of metadata.uniques) {
+      if (!Array.isArray(unique.columns)) continue;
+      const targetName = this.getTargetName(unique.target);
+      for (const columnName of unique.columns) {
+        if (typeof columnName === 'string') {
+          uniqueConstraintColumns.add(`${targetName}:${columnName}`);
+        }
+      }
+    }
+
+    for (const index of metadata.indices) {
+      if (!Array.isArray(index.columns)) continue;
+      const targetName = this.getTargetName(index.target);
+      for (const columnName of index.columns) {
+        if (typeof columnName === 'string') {
+          indexedColumns.add(`${targetName}:${columnName}`);
+        }
+      }
+    }
+
+    for (const column of metadata.columns) {
+      const targetName = this.getTargetName(column.target);
+      const key = `${targetName}:${column.propertyName}`;
+
+      if (column.options.type === 'boolean') {
+        column.options.type = 'bit';
+        continue;
+      }
+
+      if (column.options.type !== 'text') continue;
+
+      const needsNvarchar =
+        column.options.default != null
+        || Boolean(column.options.primary)
+        || Boolean(column.options.unique)
+        || indexedColumns.has(key)
+        || uniqueConstraintColumns.has(key);
+
+      if (!needsNvarchar) continue;
+
+      column.options.type = 'nvarchar';
+      if (column.options.length == null) {
+        column.options.length = 191;
+      }
+    }
+  }
+
+  private getTargetName(target: string | Function): string {
+    return typeof target === 'function' ? target.name : String(target);
   }
 
   private checkDriverAvailability(): void {
@@ -121,8 +187,19 @@ export class SqlServerAdapter implements DatabaseAdapter {
   }
 
   getMigrationsPath(): string {
-    const distPath = 'dist/src/shared/db/migrations';
+    const runtimePath = fileURLToPath(import.meta.url);
+    const runningFromDist = runtimePath.includes(`${path.sep}dist${path.sep}`);
+
+    if (!runningFromDist) {
+      return 'src/shared/db/migrations';
+    }
+
+    const distPath = 'dist/shared/db/migrations';
     if (fs.existsSync(distPath)) return distPath;
+
+    const legacyDistPath = 'dist/src/shared/db/migrations';
+    if (fs.existsSync(legacyDistPath)) return legacyDistPath;
+
     return 'src/shared/db/migrations';
   }
 }

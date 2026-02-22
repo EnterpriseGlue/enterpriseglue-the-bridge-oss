@@ -25,6 +25,7 @@ export interface PlatformSettings {
   defaultDeployRoles: string[];
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
+  ssoAutoRedirectSingleProvider: boolean;
   piiRegexEnabled: boolean;
   piiExternalProviderEnabled: boolean;
   piiExternalProviderType: 'presidio' | 'gcp_dlp' | 'aws_comprehend' | 'azure_pii' | null;

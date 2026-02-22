@@ -1,0 +1,8 @@
+services:
+  backend:
+    image: ${BACKEND_IMAGE}:${IMAGE_TAG}
+    build: null
+
+  frontend:
+    image: ${FRONTEND_IMAGE}:${IMAGE_TAG}
+    build: null

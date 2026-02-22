@@ -1,0 +1,112 @@
+name: PR Release Labeler
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - unlabeled
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-release-labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  add-default-release-label:
+    if: ${{ github.event.pull_request.state == 'open' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure baseline release label exists
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const releaseLabels = new Set([
+              'release:breaking',
+              'release:feature',
+              'release:fix',
+              'release:security',
+              'release:docs',
+              'release:internal',
+              'release:deprecation',
+              'release:compat'
+            ]);
+
+            const labels = (pr.labels || []).map((l) => l.name);
+            const existingReleaseLabels = labels.filter((label) => releaseLabels.has(label));
+            if (existingReleaseLabels.length > 0) {
+              core.notice(`Release label already present: ${existingReleaseLabels.join(', ')}`);
+              return;
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            const changedPaths = files.map((f) => f.filename);
+            const docsOnly = changedPaths.length > 0 && changedPaths.every((p) => p.startsWith('docs/') || p.endsWith('.md'));
+            const title = String(pr.title || '').toLowerCase();
+            const body = String(pr.body || '').toLowerCase();
+            const isBreaking = /\)!:|!:/.test(String(pr.title || '')) || /breaking\s+change/.test(body);
+            const isSecurity = /security|vuln|cve/.test(title) || /security|vuln|cve/.test(body);
+            const isDeprecation = /deprecat/.test(title) || /deprecat/.test(body);
+            const isCompatibility = /compat|backward/.test(title) || /compat|backward/.test(body);
+            const isFeature = /^feat(\(|:)|\bfeature\b|\badd\b|\bintroduc/.test(title);
+            const isFix = /^fix(\(|:)|\bbug\b|\bhotfix\b|\bregress/.test(title);
+
+            let defaultLabel = 'release:internal';
+            if (isBreaking) defaultLabel = 'release:breaking';
+            else if (isSecurity) defaultLabel = 'release:security';
+            else if (isDeprecation) defaultLabel = 'release:deprecation';
+            else if (isCompatibility) defaultLabel = 'release:compat';
+            else if (docsOnly) defaultLabel = 'release:docs';
+            else if (isFeature) defaultLabel = 'release:feature';
+            else if (isFix) defaultLabel = 'release:fix';
+
+            const labelDefaults = {
+              'release:breaking': { color: 'B60205', description: 'Breaking change' },
+              'release:feature': { color: '0E8A16', description: 'Feature change' },
+              'release:fix': { color: '1D76DB', description: 'Bug fix change' },
+              'release:security': { color: 'D93F0B', description: 'Security change' },
+              'release:docs': { color: '5319E7', description: 'Documentation change' },
+              'release:internal': { color: '6B7280', description: 'Internal/infra change' },
+              'release:deprecation': { color: 'FBCA04', description: 'Deprecation change' },
+              'release:compat': { color: '0E8A16', description: 'Compatibility change' }
+            };
+
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: defaultLabel,
+              });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              const defaults = labelDefaults[defaultLabel] || { color: '6B7280', description: 'Release label' };
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: defaultLabel,
+                color: defaults.color,
+                description: defaults.description,
+              });
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels: [defaultLabel],
+            });
+
+            core.notice(`Added baseline release label: ${defaultLabel}`);

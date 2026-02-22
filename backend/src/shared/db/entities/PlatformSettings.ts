@@ -29,6 +29,9 @@ export class PlatformSettings {
   @Column({ name: 'invite_allowed_domains', type: 'text', default: '[]' })
   inviteAllowedDomains!: string;
 
+  @Column({ name: 'sso_auto_redirect_single_provider', type: 'boolean', default: false })
+  ssoAutoRedirectSingleProvider!: boolean;
+
   @Column({ name: 'pii_regex_enabled', type: 'boolean', default: false })
   piiRegexEnabled!: boolean;
 

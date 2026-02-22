@@ -35,7 +35,7 @@ describe('Platform settings PII fields API', () => {
 
   it('rejects non-admin GET of platform settings', async () => {
     const res = await request(app)
-      .get('/api/platform-admin/admin/settings')
+      .get('/api/admin/settings')
       .set('Authorization', `Bearer ${userToken}`);
 
     expect(res.status).toBe(403);
@@ -43,7 +43,7 @@ describe('Platform settings PII fields API', () => {
 
   it('returns default PII settings when no row exists', async () => {
     const res = await request(app)
-      .get('/api/platform-admin/admin/settings')
+      .get('/api/admin/settings')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -60,7 +60,7 @@ describe('Platform settings PII fields API', () => {
 
   it('allows admin to enable regex PII filtering', async () => {
     const res = await request(app)
-      .put('/api/platform-admin/admin/settings')
+      .put('/api/admin/settings')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ piiRegexEnabled: true, piiScopes: ['logs', 'errors'] });
 
@@ -70,7 +70,7 @@ describe('Platform settings PII fields API', () => {
 
   it('reflects updated PII settings on subsequent GET', async () => {
     const res = await request(app)
-      .get('/api/platform-admin/admin/settings')
+      .get('/api/admin/settings')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -80,7 +80,7 @@ describe('Platform settings PII fields API', () => {
 
   it('masks auth token in GET response after saving it', async () => {
     const putRes = await request(app)
-      .put('/api/platform-admin/admin/settings')
+      .put('/api/admin/settings')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         piiExternalProviderEnabled: true,
@@ -92,7 +92,7 @@ describe('Platform settings PII fields API', () => {
     expect(putRes.status).toBe(200);
 
     const getRes = await request(app)
-      .get('/api/platform-admin/admin/settings')
+      .get('/api/admin/settings')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(getRes.status).toBe(200);
@@ -102,14 +102,14 @@ describe('Platform settings PII fields API', () => {
 
   it('allows admin to disable PII filtering', async () => {
     const res = await request(app)
-      .put('/api/platform-admin/admin/settings')
+      .put('/api/admin/settings')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ piiRegexEnabled: false, piiExternalProviderEnabled: false });
 
     expect(res.status).toBe(200);
 
     const getRes = await request(app)
-      .get('/api/platform-admin/admin/settings')
+      .get('/api/admin/settings')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(getRes.body.piiRegexEnabled).toBe(false);
@@ -118,7 +118,7 @@ describe('Platform settings PII fields API', () => {
 
   it('rejects non-admin PUT of platform settings', async () => {
     const res = await request(app)
-      .put('/api/platform-admin/admin/settings')
+      .put('/api/admin/settings')
       .set('Authorization', `Bearer ${userToken}`)
       .send({ piiRegexEnabled: true });
 

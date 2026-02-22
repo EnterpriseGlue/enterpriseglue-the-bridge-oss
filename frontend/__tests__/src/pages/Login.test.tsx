@@ -1,11 +1,12 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '../../../src/shared/notifications/ToastProvider';
 import Login from '../../../src/pages/Login';
+import { apiClient } from '@src/shared/api/client';
 
 const loginMock = vi.fn().mockResolvedValue(undefined);
 
@@ -13,7 +14,33 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
   useAuth: () => ({ login: loginMock }),
 }));
 
+vi.mock('@src/shared/api/client', () => ({
+  ApiError: class ApiError extends Error {
+    status: number;
+    data: unknown;
+
+    constructor(message: string, status = 500, data?: unknown) {
+      super(message);
+      this.status = status;
+      this.data = data;
+    }
+  },
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 describe('Login', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (apiClient.get as any).mockImplementation((url: string) => {
+      if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
+      if (url === '/api/auth/branding') return Promise.resolve({ ssoAutoRedirectSingleProvider: false });
+      return Promise.resolve({});
+    });
+  });
+
   it('submits credentials when form is filled', async () => {
     const user = userEvent.setup();
 

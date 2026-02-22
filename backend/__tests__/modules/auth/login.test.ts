@@ -4,6 +4,7 @@ import express from 'express';
 import loginRoute from '../../../src/modules/auth/routes/login.js';
 import { getDataSource } from '../../../src/shared/db/data-source.js';
 import { User } from '../../../src/shared/db/entities/User.js';
+import { SsoProvider } from '../../../src/shared/db/entities/SsoProvider.js';
 import { errorHandler } from '../../../src/shared/middleware/errorHandler.js';
 
 vi.mock('@shared/db/data-source.js', () => ({
@@ -30,6 +31,7 @@ vi.mock('@shared/services/audit.js', () => ({
 
 vi.mock('@shared/db/adapters/QueryHelpers.js', () => ({
   addCaseInsensitiveEquals: (_qb: any, _alias: string, _column: string, _paramName: string, _value: string) => _qb,
+  getDatabaseType: () => 'postgres',
 }));
 
 vi.mock('@shared/services/capabilities.js', () => ({
@@ -75,6 +77,9 @@ describe('auth login module', () => {
   });
 
   it('returns 401 for non-existent user', async () => {
+    const ssoProviderRepo = {
+      count: vi.fn().mockResolvedValue(0),
+    };
     const userRepo = {
       createQueryBuilder: vi.fn(() => ({
         where: vi.fn().mockReturnThis(),
@@ -85,6 +90,7 @@ describe('auth login module', () => {
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity === User) return userRepo;
+        if (entity === SsoProvider) return ssoProviderRepo;
         return { insert: vi.fn() };
       },
     });

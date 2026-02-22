@@ -82,6 +82,14 @@ export interface SamlUserInfo {
   customClaims: Record<string, string | string[]>;
 }
 
+export interface SamlStatus {
+  enabled: boolean;
+  message: string;
+  providerConfigured: boolean;
+  providerEnabled: boolean;
+  missingFields: Array<'entityId' | 'ssoUrl' | 'certificate'>;
+}
+
 function normalizePemCertificate(input: string): string {
   const trimmed = input.trim();
   if (trimmed.includes('BEGIN CERTIFICATE')) {
@@ -171,12 +179,67 @@ function asPlatformRole(role: string | null | undefined): PlatformRole {
   return 'user';
 }
 
+function getMissingSamlFields(provider: {
+  entityId?: string | null;
+  ssoUrl?: string | null;
+  certificateEnc?: string | null;
+}): Array<'entityId' | 'ssoUrl' | 'certificate'> {
+  const missing: Array<'entityId' | 'ssoUrl' | 'certificate'> = [];
+  if (!provider.entityId || !provider.entityId.trim()) missing.push('entityId');
+  if (!provider.ssoUrl || !provider.ssoUrl.trim()) missing.push('ssoUrl');
+  if (!provider.certificateEnc || !provider.certificateEnc.trim()) missing.push('certificate');
+  return missing;
+}
+
+export async function getSamlStatus(): Promise<SamlStatus> {
+  const provider = await ssoProviderService.getProviderByType('saml');
+
+  if (!provider) {
+    return {
+      enabled: false,
+      message: 'SAML provider is not configured',
+      providerConfigured: false,
+      providerEnabled: false,
+      missingFields: ['entityId', 'ssoUrl', 'certificate'],
+    };
+  }
+
+  const missingFields = getMissingSamlFields(provider);
+  if (!provider.enabled) {
+    return {
+      enabled: false,
+      message: 'SAML provider exists but is disabled',
+      providerConfigured: true,
+      providerEnabled: false,
+      missingFields,
+    };
+  }
+
+  if (missingFields.length > 0) {
+    return {
+      enabled: false,
+      message: `SAML provider is missing required fields: ${missingFields.join(', ')}`,
+      providerConfigured: true,
+      providerEnabled: true,
+      missingFields,
+    };
+  }
+
+  return {
+    enabled: true,
+    message: 'SAML authentication is available',
+    providerConfigured: true,
+    providerEnabled: true,
+    missingFields: [],
+  };
+}
+
 async function getEnabledSamlProvider() {
   const provider = await ssoProviderService.getProviderByType('saml');
   if (!provider || !provider.enabled) {
     throw new Error('SAML authentication is not enabled');
   }
-  if (!provider.entityId || !provider.ssoUrl || !provider.certificateEnc) {
+  if (getMissingSamlFields(provider).length > 0) {
     throw new Error('SAML provider is missing required configuration');
   }
   return provider;
@@ -204,12 +267,8 @@ function getSamlClient(provider: Awaited<ReturnType<typeof getEnabledSamlProvide
 }
 
 export async function isSamlAuthEnabled(): Promise<boolean> {
-  try {
-    await getEnabledSamlProvider();
-    return true;
-  } catch {
-    return false;
-  }
+  const status = await getSamlStatus();
+  return status.enabled;
 }
 
 export async function getSamlAuthorizationUrl(relayState: string): Promise<{ url: string; entryPoint: string }> {
@@ -324,7 +383,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
 
     await userRepo.update({ id: user.id }, {
       email: userInfo.email,
-      authProvider: 'microsoft',
+      authProvider: 'saml',
       entraEmail: userInfo.email,
       firstName: userInfo.given_name || user.firstName,
       lastName: userInfo.family_name || user.lastName,
@@ -350,7 +409,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
     const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
 
     await userRepo.update({ id: user.id }, {
-      authProvider: 'microsoft',
+      authProvider: 'saml',
       entraId: userInfo.oid || user.entraId,
       entraEmail: userInfo.email,
       firstName: userInfo.given_name || user.firstName,
@@ -365,7 +424,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
 
     return {
       ...user,
-      authProvider: 'microsoft',
+      authProvider: 'saml',
       entraId: userInfo.oid || user.entraId,
       platformRole,
       firstName: userInfo.given_name || user.firstName,
@@ -378,7 +437,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
   await userRepo.insert({
     id: userId,
     email: userInfo.email,
-    authProvider: 'microsoft',
+    authProvider: 'saml',
     passwordHash: null,
     entraId: userInfo.oid || null,
     entraEmail: userInfo.email,

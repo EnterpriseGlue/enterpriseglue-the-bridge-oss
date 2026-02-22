@@ -17,6 +17,7 @@ export interface PlatformSettingsData {
   defaultDeployRoles: string[];
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
+  ssoAutoRedirectSingleProvider: boolean;
   piiRegexEnabled: boolean;
   piiExternalProviderEnabled: boolean;
   piiExternalProviderType: string | null;
@@ -51,6 +52,7 @@ export class PlatformSettingsService {
         defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
         inviteAllowAllDomains: true,
         inviteAllowedDomains: [],
+        ssoAutoRedirectSingleProvider: false,
         piiRegexEnabled: false,
         piiExternalProviderEnabled: false,
         piiExternalProviderType: null,
@@ -79,6 +81,7 @@ export class PlatformSettingsService {
           return [];
         }
       })(),
+      ssoAutoRedirectSingleProvider: (settings as any).ssoAutoRedirectSingleProvider ?? false,
       piiRegexEnabled: (settings as any).piiRegexEnabled ?? false,
       piiExternalProviderEnabled: (settings as any).piiExternalProviderEnabled ?? false,
       piiExternalProviderType: (settings as any).piiExternalProviderType ?? null,
@@ -128,6 +131,7 @@ export class PlatformSettingsService {
       defaultDeployRoles: string[];
       inviteAllowAllDomains: boolean;
       inviteAllowedDomains: string[];
+      ssoAutoRedirectSingleProvider: boolean;
       piiRegexEnabled: boolean;
       piiExternalProviderEnabled: boolean;
       piiExternalProviderType: string | null;
@@ -172,6 +176,9 @@ export class PlatformSettingsService {
     }
     if (data.inviteAllowedDomains !== undefined) {
       updateData.inviteAllowedDomains = JSON.stringify(data.inviteAllowedDomains);
+    }
+    if (data.ssoAutoRedirectSingleProvider !== undefined) {
+      updateData.ssoAutoRedirectSingleProvider = data.ssoAutoRedirectSingleProvider;
     }
     if (data.piiRegexEnabled !== undefined) {
       updateData.piiRegexEnabled = data.piiRegexEnabled;
@@ -227,6 +234,7 @@ export class PlatformSettingsService {
         defaultDeployRoles: JSON.stringify(data.defaultDeployRoles ?? ['owner', 'delegate', 'operator', 'deployer']),
         inviteAllowAllDomains: data.inviteAllowAllDomains ?? true,
         inviteAllowedDomains: JSON.stringify(data.inviteAllowedDomains ?? []),
+        ssoAutoRedirectSingleProvider: data.ssoAutoRedirectSingleProvider ?? false,
         piiRegexEnabled: data.piiRegexEnabled ?? false,
         piiExternalProviderEnabled: data.piiExternalProviderEnabled ?? false,
         piiExternalProviderType: data.piiExternalProviderType ?? null,

@@ -1,0 +1,82 @@
+name: Release Policy
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  release-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release policy requirements
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed('No pull request payload found.');
+              return;
+            }
+
+            if (pr.draft) {
+              core.notice('Draft PR: release policy check is informational until ready for review.');
+              return;
+            }
+
+            const labels = (pr.labels || []).map((label) => label.name);
+            const isReleasePleaseBranch = String(pr.head?.ref || '').startsWith('release-please--branches--');
+            const isReleasePleaseLabel = labels.includes('autorelease: pending') || labels.includes('autorelease: triggered');
+            if (isReleasePleaseBranch || isReleasePleaseLabel) {
+              core.notice('Release Please PR detected. Skipping release policy label/migration enforcement.');
+              return;
+            }
+            const releaseLabels = new Set([
+              'release:breaking',
+              'release:feature',
+              'release:fix',
+              'release:security',
+              'release:docs',
+              'release:internal',
+              'release:deprecation',
+              'release:compat'
+            ]);
+
+            const hasReleaseLabel = labels.some((label) => releaseLabels.has(label));
+            if (!hasReleaseLabel) {
+              core.setFailed('Missing release label. Add one release:* label to classify this PR.');
+              return;
+            }
+
+            const title = String(pr.title || '');
+            const body = String(pr.body || '');
+            const titleIndicatesBreaking = /!\s*:/.test(title) || /\)!:/.test(title);
+            const labelIndicatesBreaking = labels.includes('release:breaking');
+            const bodyIndicatesBreaking = /breaking\s+change/i.test(body);
+            const isBreaking = titleIndicatesBreaking || labelIndicatesBreaking || bodyIndicatesBreaking;
+
+            if (!isBreaking) {
+              core.notice('Release policy check passed (non-breaking change).');
+              return;
+            }
+
+            const bodyLower = body.toLowerCase();
+            const hasCompatibility = bodyLower.includes('compat') || bodyLower.includes('backward');
+            const hasMigration = bodyLower.includes('migration');
+
+            if (!hasCompatibility || !hasMigration) {
+              core.setFailed('Breaking change detected. Add compatibility and migration notes to the PR description before merge.');
+              return;
+            }
+
+            core.notice('Release policy check passed (breaking change includes compatibility + migration notes).');

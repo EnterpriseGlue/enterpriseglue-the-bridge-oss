@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { logger } from '@shared/utils/logger.js';
 import { z } from 'zod';
 import { generateId } from '@shared/utils/id.js';
-import { addCaseInsensitiveEquals } from '@shared/db/adapters/QueryHelpers.js';
+import { addCaseInsensitiveEquals, getDatabaseType } from '@shared/db/adapters/QueryHelpers.js';
 import { verifyPassword } from '@shared/utils/password.js';
 import { generateAccessToken, generateRefreshToken } from '@shared/utils/jwt.js';
 import bcrypt from 'bcryptjs';
@@ -10,6 +10,7 @@ import { logAudit, AuditActions } from '@shared/services/audit.js';
 import { authLimiter , apiLimiter} from '@shared/middleware/rateLimiter.js';
 import { getDataSource } from '@shared/db/data-source.js';
 import { User } from '@shared/db/entities/User.js';
+import { SsoProvider } from '@shared/db/entities/SsoProvider.js';
 import { RefreshToken } from '@shared/db/entities/RefreshToken.js';
 import { validateBody } from '@shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@shared/middleware/errorHandler.js';
@@ -23,6 +24,12 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+async function isSsoRequiredForLogin(dataSource: Awaited<ReturnType<typeof getDataSource>>): Promise<boolean> {
+  const ssoProviderRepo = dataSource.getRepository(SsoProvider);
+  const enabledCount = await ssoProviderRepo.count({ where: { enabled: true } });
+  return enabledCount > 0;
+}
+
 /**
  * POST /api/auth/login
  * Authenticate user and return tokens
@@ -31,12 +38,26 @@ const loginSchema = z.object({
 router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema), asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   const dataSource = await getDataSource();
+
+  const ssoRequired = await isSsoRequiredForLogin(dataSource);
+  if (ssoRequired) {
+    await logAudit({
+      tenantId: req.tenant?.tenantId,
+      action: AuditActions.LOGIN_FAILED,
+      ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+      userAgent: req.headers['user-agent'],
+      details: { email, reason: 'local_login_disabled_by_sso_policy' },
+    });
+    throw Errors.forbidden('Local login is disabled. Please use your SSO provider.');
+  }
+
   const userRepo = dataSource.getRepository(User);
   const refreshTokenRepo = dataSource.getRepository(RefreshToken);
 
   // Find user by email (case-insensitive)
+  const activeValue = getDatabaseType() === 'oracle' ? 1 : true;
   let qb = userRepo.createQueryBuilder('u')
-    .where('u.isActive = true');
+    .where('u.isActive = :isActive', { isActive: activeValue });
   qb = addCaseInsensitiveEquals(qb, 'u', 'email', 'email', email);
   const user = await qb.getOne();
 
@@ -50,6 +71,18 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
       details: { email, reason: 'user_not_found' },
     });
     throw Errors.unauthorized('Invalid email or password');
+  }
+
+  if (user.authProvider !== 'local' || !user.passwordHash) {
+    await logAudit({
+      tenantId: req.tenant?.tenantId,
+      userId: user.id,
+      action: AuditActions.LOGIN_FAILED,
+      ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+      userAgent: req.headers['user-agent'],
+      details: { email, reason: 'local_login_not_allowed_for_auth_provider', authProvider: user.authProvider },
+    });
+    throw Errors.forbidden('Local login is disabled for this account. Please use SSO.');
   }
 
   // Check if account is locked
@@ -70,7 +103,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   }
 
   // Verify password
-  const isValidPassword = await verifyPassword(password, user.passwordHash!);
+  const isValidPassword = await verifyPassword(password, user.passwordHash);
 
   if (!isValidPassword) {
     // Increment failed login attempts

@@ -1,6 +1,6 @@
 import { useState, FormEvent, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { TextInput, Button, TextArea, Loading } from '@carbon/react';
+import { TextInput, Button, TextArea, Loading, InlineNotification } from '@carbon/react';
 import { Login as LoginIcon } from '@carbon/icons-react';
 import FormModal from '../components/FormModal';
 import { useModal } from '../shared/hooks/useModal';
@@ -10,6 +10,7 @@ import { parseApiError } from '../shared/api/apiErrorUtils';
 import { useToast } from '../shared/notifications/ToastProvider';
 import logoPng from '../assets/logo.png';
 import { toSafeInternalPath } from '../utils/safeNavigation';
+import { redirectTo } from '../utils/redirect';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
 
 // SSO Provider type from backend
@@ -31,9 +32,11 @@ interface PublicBranding {
   logoScale: number;
   titleFontWeight: string;
   faviconUrl: string | null;
+  ssoAutoRedirectSingleProvider: boolean;
 }
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
+const SSO_AUTO_REDIRECT_BLOCK_UNTIL_KEY = 'eg.sso.autoRedirect.blockUntil';
 
 function normalizeBranding(raw: any): PublicBranding {
   const r = raw && typeof raw === 'object' ? raw : {};
@@ -46,6 +49,7 @@ function normalizeBranding(raw: any): PublicBranding {
     logoScale: typeof r.logoScale === 'number' ? r.logoScale : 100,
     titleFontWeight: typeof r.titleFontWeight === 'string' ? r.titleFontWeight : '600',
     faviconUrl: typeof r.faviconUrl === 'string' ? r.faviconUrl : null,
+    ssoAutoRedirectSingleProvider: Boolean(r.ssoAutoRedirectSingleProvider),
   };
 }
 
@@ -148,6 +152,8 @@ export default function Login() {
     return makeLogoObjectUrl(raw);
   });
   const logoObjectUrlRef = useRef<string | null>(logoObjectUrl);
+  const hasTriggeredAutoSsoRedirect = useRef(false);
+  const localLoginDisabledByPolicy = !ssoLoading && ssoProviders.length > 0;
   
   // Fetch enabled SSO providers
   useEffect(() => {
@@ -234,6 +240,12 @@ export default function Login() {
     const errorMessage = params.get('message');
 
     if (error) {
+      try {
+        window.sessionStorage.setItem(SSO_AUTO_REDIRECT_BLOCK_UNTIL_KEY, String(Date.now() + 60_000));
+      } catch {
+        // ignore
+      }
+
       notify({
         kind: 'error',
         title: 'Login failed',
@@ -244,7 +256,52 @@ export default function Login() {
     }
   }, [location, navigate, notify]);
 
+  useEffect(() => {
+    if (hasTriggeredAutoSsoRedirect.current) return;
+    if (ssoLoading || !brandingFetchDone) return;
+    if (!branding?.ssoAutoRedirectSingleProvider) return;
+    if (ssoProviders.length !== 1) return;
+
+    const params = new URLSearchParams(location.search);
+    const bypassLocal = params.get('local') === '1' || params.get('no_sso_redirect') === '1';
+    if (bypassLocal) return;
+
+    try {
+      const raw = window.sessionStorage.getItem(SSO_AUTO_REDIRECT_BLOCK_UNTIL_KEY);
+      if (raw) {
+        const blockUntil = Number(raw);
+        if (Number.isFinite(blockUntil) && Date.now() < blockUntil) {
+          return;
+        }
+        window.sessionStorage.removeItem(SSO_AUTO_REDIRECT_BLOCK_UNTIL_KEY);
+      }
+    } catch {
+      // ignore
+    }
+
+    hasTriggeredAutoSsoRedirect.current = true;
+    const provider = ssoProviders[0];
+    const tenantQuery = tenantSlug ? `?tenantSlug=${encodeURIComponent(tenantSlug)}` : '';
+    redirectTo(`/api/auth/${provider.type}${tenantQuery}`);
+  }, [
+    ssoLoading,
+    brandingFetchDone,
+    branding?.ssoAutoRedirectSingleProvider,
+    ssoProviders,
+    location.search,
+    tenantSlug,
+  ]);
+
   const submitLogin = async () => {
+    if (localLoginDisabledByPolicy) {
+      notify({
+        kind: 'warning',
+        title: 'Local sign-in disabled',
+        subtitle: 'Use your configured SSO provider to sign in.',
+      });
+      return;
+    }
+
     if (isLoading) return;
     setIsLoading(true);
 
@@ -277,7 +334,7 @@ export default function Login() {
   const handleSsoLogin = (provider: SsoProviderButton) => {
     // Redirect to backend OAuth endpoint for the provider
     const tenantQuery = tenantSlug ? `?tenantSlug=${encodeURIComponent(tenantSlug)}` : '';
-    window.location.href = `/api/auth/${provider.type}${tenantQuery}`;
+    redirectTo(`/api/auth/${provider.type}${tenantQuery}`);
   };
 
   // Get provider icon SVG
@@ -375,65 +432,73 @@ export default function Login() {
         </div>
 
         {/* Login form */}
-        <form
-          onSubmit={handleSubmit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              submitLogin();
-            }
-          }}
-        >
-          <div style={{ marginBottom: 'var(--spacing-5)' }}>
-            <TextInput
-              id="email"
-              labelText="Email"
-              placeholder="Enter your email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
-
-          <div style={{ marginBottom: 'var(--spacing-6)' }}>
-            <TextInput
-              id="password"
-              labelText="Password"
-              placeholder="Enter your password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
-
-          <Button
-            type="submit"
-            kind="primary"
-            disabled={isLoading || !email || !password}
-            style={{ 
-              width: '100%',
-              backgroundColor: 'var(--eg-color-dark-gray)',
-              borderColor: 'var(--eg-color-dark-gray)',
-              fontWeight: 'var(--font-weight-semibold)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-              paddingInline: '1rem'
+        {localLoginDisabledByPolicy ? (
+          <InlineNotification
+            kind="info"
+            title="Local sign-in disabled"
+            subtitle="Your organization requires SSO. Use one of the SSO options below."
+          />
+        ) : (
+          <form
+            onSubmit={handleSubmit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !isLoading && email && password) {
+                e.preventDefault();
+                submitLogin();
+              }
             }}
           >
-            {isLoading ? 'Signing in...' : 'Sign in'}
-          </Button>
-          <div style={{ textAlign: 'right', marginTop: 'var(--spacing-3)' }}>
-            <Link to={forgotPasswordPath} style={{ color: 'var(--cds-link-01)', fontSize: 'var(--text-14)' }}>
-              Forgot your password?
-            </Link>
-          </div>
-        </form>
+            <div style={{ marginBottom: 'var(--spacing-5)' }}>
+              <TextInput
+                id="email"
+                labelText="Email"
+                placeholder="Enter your email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+              />
+            </div>
+
+            <div style={{ marginBottom: 'var(--spacing-6)' }}>
+              <TextInput
+                id="password"
+                labelText="Password"
+                placeholder="Enter your password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isLoading}
+              />
+            </div>
+
+            <Button
+              type="submit"
+              kind="primary"
+              disabled={isLoading || ssoLoading || localLoginDisabledByPolicy || !email || !password}
+              style={{ 
+                width: '100%',
+                backgroundColor: 'var(--eg-color-dark-gray)',
+                borderColor: 'var(--eg-color-dark-gray)',
+                fontWeight: 'var(--font-weight-semibold)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                paddingInline: '1rem'
+              }}
+            >
+              {isLoading ? 'Signing in...' : 'Sign in'}
+            </Button>
+            <div style={{ textAlign: 'right', marginTop: 'var(--spacing-3)' }}>
+              <Link to={forgotPasswordPath} style={{ color: 'var(--cds-link-01)', fontSize: 'var(--text-14)' }}>
+                Forgot your password?
+              </Link>
+            </div>
+          </form>
+        )}
 
         {/* SSO Providers */}
         {ssoLoading ? (

@@ -98,6 +98,12 @@ export default function SsoSettingsTab() {
     queryKey: ['sso-providers'],
     queryFn: () => apiClient.get<SsoProvider[]>('/api/sso/providers'),
   });
+
+  const ssoLoginBehaviorQuery = useQuery({
+    queryKey: ['platform-settings', 'sso-login-behavior'],
+    queryFn: () =>
+      apiClient.get<{ ssoAutoRedirectSingleProvider: boolean }>('/api/admin/settings'),
+  });
   
   const mappingsQuery = useQuery({
     queryKey: ['sso-mappings'],
@@ -121,7 +127,6 @@ export default function SsoSettingsTab() {
     ssoUrl: '',
     certificate: '',
     buttonLabel: '',
-    autoProvision: true,
     defaultRole: 'user',
   });
   
@@ -144,6 +149,36 @@ export default function SsoSettingsTab() {
   // Documentation modal state
   const [docsModalOpen, setDocsModalOpen] = useState(false);
   const [providerFormError, setProviderFormError] = useState<string | null>(null);
+  const [ssoLoginBehaviorError, setSsoLoginBehaviorError] = useState<string | null>(null);
+  const [samlStatusNotice, setSamlStatusNotice] = useState<{
+    kind: 'success' | 'warning' | 'error';
+    title: string;
+    subtitle: string;
+  } | null>(null);
+  const [isTestingSamlStatus, setIsTestingSamlStatus] = useState(false);
+  const [copiedField, setCopiedField] = useState<'acs' | 'metadata' | null>(null);
+
+  const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const samlAcsUrl =
+    editingProvider?.type === 'saml' && editingProvider.callbackUrl
+      ? editingProvider.callbackUrl
+      : appOrigin
+        ? `${appOrigin}/api/auth/saml/callback`
+        : '/api/auth/saml/callback';
+  const samlMetadataUrl = appOrigin
+    ? `${appOrigin}/api/auth/saml/metadata`
+    : '/api/auth/saml/metadata';
+
+  const samlAcsOriginMismatch = (() => {
+    if (!appOrigin) return false;
+    if (!samlAcsUrl.startsWith('http://') && !samlAcsUrl.startsWith('https://')) return false;
+
+    try {
+      return new URL(samlAcsUrl).origin !== appOrigin;
+    } catch {
+      return false;
+    }
+  })();
   
   // Mutations
   const createProvider = useMutation({
@@ -184,6 +219,19 @@ export default function SsoSettingsTab() {
     mutationFn: (id: string) => apiClient.post(`/api/sso/providers/${id}/toggle`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-providers'] });
+    },
+  });
+
+  const updateSsoLoginBehavior = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiClient.put('/api/admin/settings', { ssoAutoRedirectSingleProvider: enabled }),
+    onSuccess: () => {
+      setSsoLoginBehaviorError(null);
+      queryClient.invalidateQueries({ queryKey: ['platform-settings', 'sso-login-behavior'] });
+    },
+    onError: (error: unknown) => {
+      const parsed = parseApiError(error, 'Failed to update SSO login behavior');
+      setSsoLoginBehaviorError(parsed.message);
     },
   });
   
@@ -228,7 +276,6 @@ export default function SsoSettingsTab() {
       ssoUrl: '',
       certificate: '',
       buttonLabel: '',
-      autoProvision: true,
       defaultRole: 'user',
     });
     setProviderModalOpen(true);
@@ -250,7 +297,6 @@ export default function SsoSettingsTab() {
       ssoUrl: '',
       certificate: '',
       buttonLabel: provider.buttonLabel || '',
-      autoProvision: provider.autoProvision,
       defaultRole: provider.defaultRole,
     });
     setProviderModalOpen(true);
@@ -260,6 +306,80 @@ export default function SsoSettingsTab() {
     setProviderModalOpen(false);
     setEditingProvider(null);
     setProviderFormError(null);
+    setSamlStatusNotice(null);
+    setCopiedField(null);
+  };
+
+  const handleCopySamlValue = async (value: string, field: 'acs' | 'metadata') => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = value;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+
+      setCopiedField(field);
+      setTimeout(() => {
+        setCopiedField((current) => (current === field ? null : current));
+      }, 1500);
+    } catch {
+      setSamlStatusNotice({
+        kind: 'error',
+        title: 'Copy failed',
+        subtitle: 'Could not copy value to clipboard. Please copy it manually.',
+      });
+    }
+  };
+
+  const handleTestSamlConfig = async () => {
+    setIsTestingSamlStatus(true);
+    setSamlStatusNotice(null);
+
+    try {
+      const status = await apiClient.get<{
+        enabled: boolean;
+        message?: string;
+        missingFields?: string[];
+        providerConfigured?: boolean;
+        providerEnabled?: boolean;
+      }>('/api/auth/saml/status');
+
+      if (status.enabled) {
+        setSamlStatusNotice({
+          kind: 'success',
+          title: 'SAML config is reachable',
+          subtitle: status.message || 'SAML authentication endpoint is configured and available.',
+        });
+      } else {
+        const missingSummary = Array.isArray(status.missingFields) && status.missingFields.length > 0
+          ? ` Missing fields: ${status.missingFields.join(', ')}.`
+          : '';
+        setSamlStatusNotice({
+          kind: 'warning',
+          title: 'SAML is not enabled yet',
+          subtitle:
+            (status.message || 'Complete provider fields and enable the provider before testing login.') +
+            missingSummary,
+        });
+      }
+    } catch (error: unknown) {
+      const parsed = parseApiError(error, 'Failed to test SAML configuration');
+      setSamlStatusNotice({
+        kind: 'error',
+        title: 'SAML check failed',
+        subtitle: parsed.message,
+      });
+    } finally {
+      setIsTestingSamlStatus(false);
+    }
   };
 
   const getMissingRequiredSamlFieldsForEnable = (): string[] => {
@@ -295,7 +415,7 @@ export default function SsoSettingsTab() {
       tenantId: providerForm.tenantId || undefined,
       issuerUrl: providerForm.issuerUrl || undefined,
       buttonLabel: providerForm.buttonLabel || undefined,
-      autoProvision: providerForm.autoProvision,
+      autoProvision: true,
       defaultRole: providerForm.defaultRole,
     };
     
@@ -433,6 +553,47 @@ export default function SsoSettingsTab() {
                 Add Provider
               </Button>
             </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--spacing-4)',
+                marginBottom: 'var(--spacing-4)',
+                padding: 'var(--spacing-3)',
+                borderRadius: '4px',
+                background: 'var(--cds-layer-01)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                  Auto-redirect login when exactly one SSO provider is enabled
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  Users can bypass by opening login with <code>?local=1</code>.
+                </div>
+              </div>
+              <Toggle
+                id="sso-auto-redirect-single-provider"
+                labelText=""
+                hideLabel
+                labelA="Off"
+                labelB="On"
+                toggled={Boolean(ssoLoginBehaviorQuery.data?.ssoAutoRedirectSingleProvider)}
+                disabled={ssoLoginBehaviorQuery.isLoading || updateSsoLoginBehavior.isPending}
+                onToggle={(checked) => updateSsoLoginBehavior.mutate(checked)}
+              />
+            </div>
+
+            {ssoLoginBehaviorError && (
+              <InlineNotification
+                kind="error"
+                title="Unable to update login redirect setting"
+                subtitle={ssoLoginBehaviorError}
+                onCloseButtonClick={() => setSsoLoginBehaviorError(null)}
+              />
+            )}
             
             {providers.length === 0 ? (
               <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', margin: 0 }}>
@@ -702,6 +863,84 @@ export default function SsoSettingsTab() {
                 subtitle="Ensure Entra Identifier exactly matches Entity ID, and ACS URL is /api/auth/saml/callback on your app domain."
               />
 
+              {samlAcsOriginMismatch && (
+                <InlineNotification
+                  kind="warning"
+                  title="Callback URL origin differs from current app origin"
+                  subtitle={`Current app origin: ${appOrigin}. Configured ACS URL: ${samlAcsUrl}. Ensure Entra Reply URL matches the ACS URL exactly.`}
+                />
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  onClick={handleTestSamlConfig}
+                  disabled={isTestingSamlStatus}
+                >
+                  {isTestingSamlStatus ? 'Testing...' : 'Test SAML Config'}
+                </Button>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  Checks <code>/api/auth/saml/status</code> availability.
+                </span>
+              </div>
+
+              {samlStatusNotice && (
+                <InlineNotification
+                  kind={samlStatusNotice.kind}
+                  title={samlStatusNotice.title}
+                  subtitle={samlStatusNotice.subtitle}
+                  onCloseButtonClick={() => setSamlStatusNotice(null)}
+                />
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--spacing-3)' }}>
+                <div style={{ flex: 1 }}>
+                  <TextInput
+                    id="provider-acs-url"
+                    labelText="ACS URL (Reply URL in Entra)"
+                    helperText="Use this exact URL as the Reply URL / Assertion Consumer Service URL in Entra."
+                    value={samlAcsUrl}
+                    readOnly
+                  />
+                </div>
+                <Button kind="secondary" size="sm" onClick={() => handleCopySamlValue(samlAcsUrl, 'acs')}>
+                  {copiedField === 'acs' ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--spacing-3)' }}>
+                <div style={{ flex: 1 }}>
+                  <TextInput
+                    id="provider-metadata-url"
+                    labelText="SP Metadata URL"
+                    helperText="Share this with your identity team if they want to import Service Provider metadata."
+                    value={samlMetadataUrl}
+                    readOnly
+                  />
+                </div>
+                <Button kind="secondary" size="sm" onClick={() => handleCopySamlValue(samlMetadataUrl, 'metadata')}>
+                  {copiedField === 'metadata' ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+
+              <div
+                style={{
+                  padding: 'var(--spacing-3)',
+                  background: 'var(--cds-layer-01)',
+                  borderRadius: '4px',
+                }}
+              >
+                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: 'var(--spacing-2)' }}>
+                  SAML glossary (quick)
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 'var(--spacing-5)', fontSize: '12px', lineHeight: 1.5 }}>
+                  <li><strong>Entity ID</strong>: unique ID of your app (Service Provider) in SAML.</li>
+                  <li><strong>ACS URL</strong>: endpoint where Entra posts the signed SAML response.</li>
+                  <li><strong>IdP Certificate</strong>: Entra signing cert used to verify SAML assertions.</li>
+                </ul>
+              </div>
+
               <TextInput
                 id="provider-entity-id"
                 labelText="Entity ID (SP)"
@@ -750,15 +989,6 @@ export default function SsoSettingsTab() {
             <SelectItem value="developer" text="Developer" />
             <SelectItem value="admin" text="Admin" />
           </Select>
-          
-          <Toggle
-            id="provider-auto-provision"
-            labelText="Auto-Provision Users"
-            labelA="Off"
-            labelB="On"
-            toggled={providerForm.autoProvision}
-            onToggle={(checked) => setProviderForm({ ...providerForm, autoProvision: checked })}
-          />
           
           <Toggle
             id="provider-enabled"

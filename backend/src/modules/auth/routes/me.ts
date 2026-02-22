@@ -140,6 +140,7 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
         titleVerticalOffset: 0,
         menuAccentColor: null,
         faviconUrl: null,
+        ssoAutoRedirectSingleProvider: false,
       });
     }
 
@@ -156,6 +157,7 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
       titleVerticalOffset: settings.titleVerticalOffset ?? 0,
       menuAccentColor: settings.menuAccentColor || null,
       faviconUrl: settings.faviconUrl || null,
+      ssoAutoRedirectSingleProvider: (settings as any).ssoAutoRedirectSingleProvider ?? false,
     });
   } catch (error) {
     logger.error('Get branding error:', error);

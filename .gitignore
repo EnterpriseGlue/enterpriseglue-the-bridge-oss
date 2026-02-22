@@ -35,6 +35,8 @@ coverage/
 !.env.docker.example
 !.env.docker.*.example
 !.env.production.example
+!.env.images.*.example
+!.env.openshift.example
 
 # OS / editor files
 .DS_Store

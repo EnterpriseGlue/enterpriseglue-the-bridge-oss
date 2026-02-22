@@ -48,6 +48,27 @@ Behavior:
    - Frontend: http://localhost:8080 (default)
    - Backend is internal-only in production and is reached via Nginx proxy routes (`/api`, `/starbase-api`, `/mission-control-api`, etc.)
 
+### Production from published images (no local source build)
+Use this mode when you want to run exactly what CI published:
+
+1. Copy one image env template:
+   ```bash
+   cp .env.images.postgres.example .env.images.postgres
+   # or
+   cp .env.images.oracle.example .env.images.oracle
+   ```
+2. Set these in the copied env file:
+   - `BACKEND_IMAGE`
+   - `FRONTEND_IMAGE`
+   - `IMAGE_TAG` (`sha-<commit>` or `vX.Y.Z`)
+3. Start stack from images:
+   ```bash
+   npm run prod:images:postgres
+   # or
+   npm run prod:images:oracle
+   ```
+4. Roll back by changing only `IMAGE_TAG` and re-running the same command.
+
 Admin credentials come from the active env file (`.env.docker` for dev, `.env.production` for prod).
 Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
 
@@ -64,6 +85,11 @@ npm run down -- --db mysql
 
 ```bash
 npm run prod:down
+```
+
+```bash
+npm run prod:images:postgres:down
+npm run prod:images:oracle:down
 ```
 
 ## Documentation

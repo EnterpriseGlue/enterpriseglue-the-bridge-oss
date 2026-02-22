@@ -22,8 +22,12 @@ Provide steps to validate the change.
 ## Checklist
 
 - [ ] I have kept the PR focused and scoped
+- [ ] PR title follows release format (for example: `feat(scope): summary`, `fix(scope): summary`)
 - [ ] I have added/updated tests where appropriate
 - [ ] I have updated documentation where appropriate
+- [ ] I have added a release label (`release:feature`, `release:fix`, `release:breaking`, etc.)
+- [ ] If this is breaking, I added compatibility + migration notes in this PR
+- [ ] I confirmed release impact (patch/minor/major) for this change
 - [ ] I have included screenshots for UI changes (if applicable)
 - [ ] I have not included secrets in code or logs
 

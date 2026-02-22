@@ -6,6 +6,10 @@ export class AddPiiSettings1700000000005 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const tablePath = queryRunner.connection.getMetadata('PlatformSettings').tablePath;
+    if (!(await queryRunner.hasTable(tablePath))) {
+      console.warn(`Migration ${this.name}: table "${tablePath}" not found; skipping.`);
+      return;
+    }
 
     const columns = [
       new TableColumn({ name: 'pii_regex_enabled', type: 'boolean', default: false }),
@@ -35,6 +39,9 @@ export class AddPiiSettings1700000000005 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     const tablePath = queryRunner.connection.getMetadata('PlatformSettings').tablePath;
+    if (!(await queryRunner.hasTable(tablePath))) {
+      return;
+    }
     const columnNames = [
       'pii_max_payload_size_bytes',
       'pii_scopes',
