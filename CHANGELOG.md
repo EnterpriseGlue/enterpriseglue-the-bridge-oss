@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.1.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.1.1...v0.1.2) (2026-02-22)
+
+
+### Bug Fixes
+
+* **oracle:** dedupe Oracle bootstrap indexes ([#4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/4)) ([140f5dd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/140f5dd454fa468842f017bae8abde0700dec3cc))
+
 ## [0.1.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.1.0...v0.1.1) (2026-02-22)
 
 
