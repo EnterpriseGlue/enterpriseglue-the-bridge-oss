@@ -1,4 +1,4 @@
-import { DataSourceOptions } from 'typeorm';
+import { DataSourceOptions, getMetadataArgsStorage } from 'typeorm';
 import fs from 'fs';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@shared/config/index.js';
@@ -43,6 +43,57 @@ export class MySQLAdapter implements DatabaseAdapter {
     this.logging = config.nodeEnv === 'development';
     
     this.checkDriverAvailability();
+    this.normalizeColumnsForMySQL();
+  }
+
+  private normalizeColumnsForMySQL(): void {
+    const metadata = getMetadataArgsStorage();
+    const indexedColumns = new Set<string>();
+    const uniqueConstraintColumns = new Set<string>();
+
+    for (const unique of metadata.uniques) {
+      if (!Array.isArray(unique.columns)) continue;
+      const targetName = this.getTargetName(unique.target);
+      for (const columnName of unique.columns) {
+        if (typeof columnName === 'string') {
+          uniqueConstraintColumns.add(`${targetName}:${columnName}`);
+        }
+      }
+    }
+
+    for (const index of metadata.indices) {
+      if (!Array.isArray(index.columns)) continue;
+      const targetName = this.getTargetName(index.target);
+      for (const columnName of index.columns) {
+        if (typeof columnName === 'string') {
+          indexedColumns.add(`${targetName}:${columnName}`);
+        }
+      }
+    }
+
+    for (const column of metadata.columns) {
+      if (column.options.type !== 'text') continue;
+
+      const targetName = this.getTargetName(column.target);
+      const key = `${targetName}:${column.propertyName}`;
+      const needsVarchar =
+        column.options.default != null
+        || Boolean(column.options.primary)
+        || Boolean(column.options.unique)
+        || indexedColumns.has(key)
+        || uniqueConstraintColumns.has(key);
+
+      if (!needsVarchar) continue;
+
+      column.options.type = 'varchar';
+      if (column.options.length == null) {
+        column.options.length = 191;
+      }
+    }
+  }
+
+  private getTargetName(target: string | Function): string {
+    return typeof target === 'function' ? target.name : String(target);
   }
 
   private checkDriverAvailability(): void {

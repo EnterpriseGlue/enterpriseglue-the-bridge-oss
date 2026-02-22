@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import cookieParser from 'cookie-parser';
 import { doubleCsrf } from 'csrf-csrf';
 import logoutRouter from '../../../../src/modules/auth/routes/logout.js';
 import { getDataSource } from '../../../../src/shared/db/data-source.js';
@@ -20,6 +19,22 @@ vi.mock('@shared/middleware/auth.js', () => ({
 
 describe('POST /api/auth/logout', () => {
   let app: express.Application;
+
+  const testCookieParser: express.RequestHandler = (req, _res, next) => {
+    const cookieHeader = req.headers.cookie;
+    const cookies: Record<string, string> = {};
+
+    if (cookieHeader) {
+      for (const part of cookieHeader.split(';')) {
+        const [nameRaw, ...rest] = part.trim().split('=');
+        if (!nameRaw) continue;
+        cookies[nameRaw] = decodeURIComponent(rest.join('=') || '');
+      }
+    }
+
+    (req as any).cookies = cookies;
+    next();
+  };
 
   function registerCsrfMiddleware(app: express.Application) {
     const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
@@ -58,8 +73,7 @@ describe('POST /api/auth/logout', () => {
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
-    // lgtm[js/csrf] -- CSRF middleware is registered via registerCsrfMiddleware below in this test harness
-    app.use(cookieParser());
+    app.use(testCookieParser);
     registerCsrfMiddleware(app);
     app.use(logoutRouter);
     vi.clearAllMocks();

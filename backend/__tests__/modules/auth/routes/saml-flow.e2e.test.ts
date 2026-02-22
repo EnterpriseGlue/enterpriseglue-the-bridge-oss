@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import cookieParser from 'cookie-parser';
 import samlRouter from '../../../../src/modules/auth/routes/saml.js';
 import samlStartRouter from '../../../../src/modules/auth/routes/saml-start.js';
 import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
@@ -63,6 +62,22 @@ function getSetCookieHeader(headers: Record<string, unknown>): string[] | undefi
   return undefined;
 }
 
+const testCookieParser: express.RequestHandler = (req, _res, next) => {
+  const cookieHeader = req.headers.cookie;
+  const cookies: Record<string, string> = {};
+
+  if (cookieHeader) {
+    for (const part of cookieHeader.split(';')) {
+      const [nameRaw, ...rest] = part.trim().split('=');
+      if (!nameRaw) continue;
+      cookies[nameRaw] = decodeURIComponent(rest.join('=') || '');
+    }
+  }
+
+  (req as any).cookies = cookies;
+  next();
+};
+
 describe('SAML auth flow e2e harness', () => {
   let app: express.Application;
 
@@ -71,8 +86,7 @@ describe('SAML auth flow e2e harness', () => {
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
-    // lgtm[js/csrf] -- test-only harness validates SAML callback flow, not production middleware wiring
-    app.use(cookieParser());
+    app.use(testCookieParser);
     app.use(samlRouter);
     app.use(samlStartRouter);
     app.use(errorHandler);

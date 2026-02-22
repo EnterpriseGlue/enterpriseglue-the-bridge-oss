@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import cookieParser from 'cookie-parser';
 import googleRouter from '../../../../src/modules/auth/routes/google.js';
 import googleStartRouter from '../../../../src/modules/auth/routes/google-start.js';
 import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
@@ -61,6 +60,22 @@ function getCookieValue(setCookieHeader: string[] | undefined, cookieName: strin
   return null;
 }
 
+const testCookieParser: express.RequestHandler = (req, _res, next) => {
+  const cookieHeader = req.headers.cookie;
+  const cookies: Record<string, string> = {};
+
+  if (cookieHeader) {
+    for (const part of cookieHeader.split(';')) {
+      const [nameRaw, ...rest] = part.trim().split('=');
+      if (!nameRaw) continue;
+      cookies[nameRaw] = decodeURIComponent(rest.join('=') || '');
+    }
+  }
+
+  (req as any).cookies = cookies;
+  next();
+};
+
 describe('Google OAuth flow e2e harness', () => {
   let app: express.Application;
 
@@ -68,8 +83,7 @@ describe('Google OAuth flow e2e harness', () => {
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
-    // lgtm[js/csrf] -- test-only harness validates OAuth redirects/cookies, not production middleware wiring
-    app.use(cookieParser());
+    app.use(testCookieParser);
     app.use(googleRouter);
     app.use(googleStartRouter);
     app.use(errorHandler);

@@ -71,6 +71,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cp .env.production.example .env.production
           docker compose --env-file .env.docker.postgres.example -f docker-compose.yml -f docker-compose.backend-expose.yml config >/dev/null
           docker compose --env-file .env.production.example -f docker-compose.prod.yml -f docker-compose.backend-expose.yml config >/dev/null
           EG_BACKEND_ENV_FILE=./.env.images.postgres.example docker compose --env-file .env.images.postgres.example -f docker-compose.prod.yml -f docker-compose.images.yml -f docker-compose.backend-expose.yml config >/dev/null
