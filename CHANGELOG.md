@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.2.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.1.3...v0.2.0) (2026-02-23)
+
+
+### Features
+
+* **ci:** add Docker Hub image publishing alongside GHCR ([86ed873](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/86ed873a6fa7b318d1ccc73587059f6c22b002eb))
+
 ## [0.1.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.1.2...v0.1.3) (2026-02-23)
 
 
