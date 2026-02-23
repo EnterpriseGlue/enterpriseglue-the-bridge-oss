@@ -20,7 +20,7 @@ export class DropGitCredentials1700000000004 implements MigrationInterface {
     }
 
     const rows: any[] = await queryRunner.query(
-      `SELECT COUNT(*) AS cnt FROM ${GIT_REPOS_TABLE} WHERE encrypted_token IS NULL`
+      `SELECT COUNT(*) AS "cnt" FROM "${GIT_REPOS_TABLE}" WHERE "encrypted_token" IS NULL`
     );
     const count = Number(rows[0]?.cnt ?? rows[0]?.CNT ?? 0);
     if (count > 0) {

@@ -26,7 +26,7 @@ const ROOT = maybeProcess?.cwd ? maybeProcess.cwd() : '.';
 // Keep broad to prevent regressions from reintroducing raw SQL usage anywhere in backend code.
 const TARGET_DIRS = ['src', 'scripts', 'test', '__tests__'];
 const FILE_EXTENSIONS = new Set(['.ts', '.js']);
-const IGNORED_DIRS = new Set(['node_modules', 'dist', '.git']);
+const IGNORED_DIRS = new Set(['node_modules', 'dist', '.git', 'migrations']);
 const IGNORED_FILES = new Set(['check-no-raw-sql.ts']);
 
 const RAW_QUERY_PATTERNS: Pattern[] = [

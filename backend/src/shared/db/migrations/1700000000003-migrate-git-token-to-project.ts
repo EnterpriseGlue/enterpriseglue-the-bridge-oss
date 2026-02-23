@@ -35,18 +35,18 @@ export class MigrateGitTokenToProject1700000000003 implements MigrationInterface
     try {
       const esc = (s: string) => String(s).replace(/'/g, "''");
       const repos: Array<{ id: string; connected_by_user_id: string | null; provider_id: string | null }> =
-        await queryRunner.query(`SELECT id, connected_by_user_id, provider_id FROM ${GIT_REPOS_TABLE} WHERE encrypted_token IS NULL`);
+        await queryRunner.query(`SELECT "id", "connected_by_user_id", "provider_id" FROM "${GIT_REPOS_TABLE}" WHERE "encrypted_token" IS NULL`);
 
       for (const repo of repos) {
         if (!repo.connected_by_user_id || !repo.provider_id) continue;
 
         const creds: Array<{ access_token: string }> = await queryRunner.query(
-          `SELECT access_token FROM ${GIT_CREDS_TABLE} WHERE user_id = '${esc(repo.connected_by_user_id)}' AND provider_id = '${esc(repo.provider_id)}' ORDER BY updated_at DESC`
+          `SELECT "access_token" FROM "${GIT_CREDS_TABLE}" WHERE "user_id" = '${esc(repo.connected_by_user_id)}' AND "provider_id" = '${esc(repo.provider_id)}' ORDER BY "updated_at" DESC`
         );
 
         const token = creds[0]?.access_token;
         if (token) {
-          await queryRunner.query(`UPDATE ${GIT_REPOS_TABLE} SET encrypted_token = '${esc(token)}' WHERE id = '${esc(repo.id)}'`);
+          await queryRunner.query(`UPDATE "${GIT_REPOS_TABLE}" SET "encrypted_token" = '${esc(token)}' WHERE "id" = '${esc(repo.id)}'`);
         }
       }
     } catch (err) {

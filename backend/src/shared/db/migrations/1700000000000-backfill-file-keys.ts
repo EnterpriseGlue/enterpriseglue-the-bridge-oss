@@ -36,19 +36,19 @@ export class AddFileLinkColumns1700000000000 implements MigrationInterface {
 
     const esc = (s: string) => String(s).replace(/'/g, "''");
     const files: Array<{ id: string; type: string; xml: string; bpmn_process_id: string | null; dmn_decision_id: string | null }> =
-      await queryRunner.query(`SELECT id, type, xml, bpmn_process_id, dmn_decision_id FROM ${TABLE}`);
+      await queryRunner.query(`SELECT "id", "type", "xml", "bpmn_process_id", "dmn_decision_id" FROM "${TABLE}"`);
 
     for (const file of files) {
       const type = String(file.type || '');
       if (type === 'bpmn') {
         const nextId = extractBpmnProcessId(String(file.xml || ''));
         if (nextId && nextId !== file.bpmn_process_id) {
-          await queryRunner.query(`UPDATE ${TABLE} SET bpmn_process_id = '${esc(nextId)}' WHERE id = '${esc(file.id)}'`);
+          await queryRunner.query(`UPDATE "${TABLE}" SET "bpmn_process_id" = '${esc(nextId)}' WHERE "id" = '${esc(file.id)}'`);
         }
       } else if (type === 'dmn') {
         const nextId = extractDmnDecisionId(String(file.xml || ''));
         if (nextId && nextId !== file.dmn_decision_id) {
-          await queryRunner.query(`UPDATE ${TABLE} SET dmn_decision_id = '${esc(nextId)}' WHERE id = '${esc(file.id)}'`);
+          await queryRunner.query(`UPDATE "${TABLE}" SET "dmn_decision_id" = '${esc(nextId)}' WHERE "id" = '${esc(file.id)}'`);
         }
       }
     }
