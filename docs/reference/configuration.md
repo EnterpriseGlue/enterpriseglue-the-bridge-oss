@@ -11,7 +11,7 @@ Primary sources:
 - `backend/.env` (host-based runs)
 
 Launcher and validation scripts:
-- `dev.sh` / `down.sh` select DB overlays (`docker-compose.<db>.yml`) and env files.
+- `dev.sh` / `down.sh` select DB overlays from `infra/docker/compose/` (`docker-compose.<db>.yml`) and env files.
 - `scripts/db-preflight.sh` validates DB-specific env requirements and can install missing DB drivers.
 
 ### Core Settings
@@ -98,6 +98,9 @@ The UI is gated by `VITE_FEATURE_*` flags (see `frontend/.env.example`), such as
 - `frontend/.env.example`
 - `.env.docker.example`
 - `.env.docker.<db>.example`
+- `infra/docker/compose/docker-compose.yml`
+- `infra/docker/compose/docker-compose.<db>.yml`
+- `infra/docker/compose/docker-compose.prod.yml`
 - `backend/src/shared/config/index.ts`
 - `scripts/db-preflight.sh`
 - `dev.sh`

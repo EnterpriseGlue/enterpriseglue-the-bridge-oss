@@ -10,13 +10,13 @@ Audience: Developers and architects.
 
 ## Docker Logs
 ```bash
-docker compose logs -f backend
+docker compose --project-directory . -f infra/docker/compose/docker-compose.yml logs -f backend
 ```
 ```bash
-docker compose logs -f frontend
+docker compose --project-directory . -f infra/docker/compose/docker-compose.yml logs -f frontend
 ```
 ```bash
-docker compose logs -f db
+docker compose --project-directory . -f infra/docker/compose/docker-compose.yml logs -f db
 ```
 
 ## Host-Based Logs (deploy-localhost)

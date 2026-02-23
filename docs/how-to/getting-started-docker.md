@@ -37,7 +37,7 @@ What happens automatically:
 - `dev.sh` creates `.env.docker.<db>` from `.env.docker.<db>.example` when missing.
 - `scripts/db-preflight.sh` validates required DB env variables.
 - Missing DB driver packages are installed automatically for local development.
-- Matching compose overlay is selected (`docker-compose.<db>.yml`).
+- Matching compose overlay is selected from `infra/docker/compose/` (`docker-compose.<db>.yml`).
 
 ## Steps (Production)
 1. Copy the production env file:

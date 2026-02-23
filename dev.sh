@@ -95,19 +95,20 @@ if [[ -n "$SELECTED_DB" ]]; then
 fi
 
 DATABASE_TYPE="${DATABASE_TYPE:-postgres}"
+COMPOSE_DIR="infra/docker/compose"
 
 # One-click DB env bootstrap: if DB env file is missing, create it from template.
 # Preflight validates env requirements and ensures DB driver availability.
 bash "$SCRIPT_DIR/scripts/db-preflight.sh" --env-file "$ACTIVE_ENV_FILE" --mode docker --install-drivers true
 
-COMPOSE_ARGS=( -f docker-compose.yml )
+COMPOSE_ARGS=( --project-directory "$SCRIPT_DIR" -f "$COMPOSE_DIR/docker-compose.yml" )
 # Add DB-specific compose overlay for one-click multi-database startup.
 case "$DATABASE_TYPE" in
   postgres) ;;
-  mysql) COMPOSE_ARGS+=( -f docker-compose.mysql.yml ) ;;
-  mssql) COMPOSE_ARGS+=( -f docker-compose.mssql.yml ) ;;
-  oracle) COMPOSE_ARGS+=( -f docker-compose.oracle.yml ) ;;
-  spanner) COMPOSE_ARGS+=( -f docker-compose.spanner.yml ) ;;
+  mysql) COMPOSE_ARGS+=( -f "$COMPOSE_DIR/docker-compose.mysql.yml" ) ;;
+  mssql) COMPOSE_ARGS+=( -f "$COMPOSE_DIR/docker-compose.mssql.yml" ) ;;
+  oracle) COMPOSE_ARGS+=( -f "$COMPOSE_DIR/docker-compose.oracle.yml" ) ;;
+  spanner) COMPOSE_ARGS+=( -f "$COMPOSE_DIR/docker-compose.spanner.yml" ) ;;
   *)
     echo "Unsupported DATABASE_TYPE: $DATABASE_TYPE" >&2
     exit 1
@@ -115,10 +116,10 @@ case "$DATABASE_TYPE" in
 esac
 
 if [[ "${EG_COMPOSE_CI:-}" != "1" ]] && is_truthy "${EXPOSE_BACKEND:-true}"; then
-  COMPOSE_ARGS+=( -f docker-compose.backend-expose.yml )
+  COMPOSE_ARGS+=( -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" )
 fi
 if [[ "${EG_COMPOSE_CI:-}" == "1" ]]; then
-  COMPOSE_ARGS+=( -f docker-compose.ci.yml )
+  COMPOSE_ARGS+=( -f "$COMPOSE_DIR/docker-compose.ci.yml" )
 fi
 
 cd "$SCRIPT_DIR"

@@ -32,7 +32,7 @@ npm run dev -- --db spanner
 Behavior:
 - On first run for a DB, `.env.docker.<db>` is auto-created from `.env.docker.<db>.example`.
 - `dev.sh` runs `scripts/db-preflight.sh` to validate env requirements and install missing DB drivers.
-- Docker compose automatically includes the matching DB overlay (`docker-compose.<db>.yml`).
+- Docker compose automatically includes the matching DB overlay from `infra/docker/compose/` (`docker-compose.<db>.yml`).
 
 ## Production (Docker Compose)
 1. Copy the production env file:

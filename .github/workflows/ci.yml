@@ -53,28 +53,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          COMPOSE_DIR="infra/docker/compose"
           cp .env.docker.postgres.example .env.docker
-          docker compose --env-file .env.docker.postgres.example -f docker-compose.yml config >/dev/null
-          docker compose --env-file .env.docker.mysql.example -f docker-compose.yml -f docker-compose.mysql.yml config >/dev/null
-          docker compose --env-file .env.docker.mssql.example -f docker-compose.yml -f docker-compose.mssql.yml config >/dev/null
-          docker compose --env-file .env.docker.oracle.example -f docker-compose.yml -f docker-compose.oracle.yml config >/dev/null
-          docker compose --env-file .env.docker.spanner.example -f docker-compose.yml -f docker-compose.spanner.yml config >/dev/null
+          docker compose --project-directory . --env-file .env.docker.postgres.example -f "$COMPOSE_DIR/docker-compose.yml" config >/dev/null
+          docker compose --project-directory . --env-file .env.docker.mysql.example -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mysql.yml" config >/dev/null
+          docker compose --project-directory . --env-file .env.docker.mssql.example -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mssql.yml" config >/dev/null
+          docker compose --project-directory . --env-file .env.docker.oracle.example -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" config >/dev/null
+          docker compose --project-directory . --env-file .env.docker.spanner.example -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.spanner.yml" config >/dev/null
 
       - name: Validate compose render for image deployment overlays
         shell: bash
         run: |
           set -euo pipefail
-          EG_BACKEND_ENV_FILE=./.env.images.postgres.example docker compose --env-file .env.images.postgres.example -f docker-compose.prod.yml -f docker-compose.images.yml config >/dev/null
-          EG_BACKEND_ENV_FILE=./.env.images.oracle.example docker compose --env-file .env.images.oracle.example -f docker-compose.prod.yml -f docker-compose.oracle.yml -f docker-compose.images.yml config >/dev/null
+          COMPOSE_DIR="infra/docker/compose"
+          EG_BACKEND_ENV_FILE=./.env.images.postgres.example docker compose --project-directory . --env-file .env.images.postgres.example -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./.env.images.oracle.example docker compose --project-directory . --env-file .env.images.oracle.example -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" config >/dev/null
 
       - name: Validate backend exposure overlay wiring
         shell: bash
         run: |
           set -euo pipefail
+          COMPOSE_DIR="infra/docker/compose"
           cp .env.production.example .env.production
-          docker compose --env-file .env.docker.postgres.example -f docker-compose.yml -f docker-compose.backend-expose.yml config >/dev/null
-          docker compose --env-file .env.production.example -f docker-compose.prod.yml -f docker-compose.backend-expose.yml config >/dev/null
-          EG_BACKEND_ENV_FILE=./.env.images.postgres.example docker compose --env-file .env.images.postgres.example -f docker-compose.prod.yml -f docker-compose.images.yml -f docker-compose.backend-expose.yml config >/dev/null
+          docker compose --project-directory . --env-file .env.docker.postgres.example -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
+          docker compose --project-directory . --env-file .env.production.example -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./.env.images.postgres.example docker compose --project-directory . --env-file .env.images.postgres.example -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
 
   test:
     runs-on: ubuntu-latest

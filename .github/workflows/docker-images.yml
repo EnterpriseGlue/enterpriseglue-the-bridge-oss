@@ -305,12 +305,14 @@ jobs:
 
       - name: Start image deployment stack
         run: |
-          docker compose --env-file .env.images.ci -f docker-compose.prod.yml -f docker-compose.images.yml up -d
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
 
       - name: Wait for frontend and backend health
         shell: bash
         run: |
           set -euo pipefail
+          COMPOSE_DIR="infra/docker/compose"
           for i in {1..45}; do
             if curl -sf http://localhost:8080/login >/dev/null && curl -sf http://localhost:8080/health >/dev/null; then
               break
@@ -319,12 +321,13 @@ jobs:
           done
           curl -sf http://localhost:8080/login >/dev/null
           curl -sf http://localhost:8080/health >/dev/null
-          docker compose --env-file .env.images.ci -f docker-compose.prod.yml -f docker-compose.images.yml exec -T backend node -e "require('http').get('http://127.0.0.1:'+(process.env.API_PORT||'8787')+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));"
+          docker compose --project-directory . --env-file .env.images.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" exec -T backend node -e "require('http').get('http://127.0.0.1:'+(process.env.API_PORT||'8787')+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));"
 
       - name: Stop image deployment stack
         if: always()
         run: |
-          docker compose --env-file .env.images.ci -f docker-compose.prod.yml -f docker-compose.images.yml down -v
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" down -v
 
   smoke-postgres-image-deploy-exposed:
     needs: publish
@@ -377,7 +380,8 @@ jobs:
 
       - name: Start image deployment stack (backend exposed)
         run: |
-          docker compose --env-file .env.images.exposed.ci -f docker-compose.prod.yml -f docker-compose.images.yml -f docker-compose.backend-expose.yml up -d
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.exposed.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" up -d
 
       - name: Wait for frontend and backend direct health
         shell: bash
@@ -395,7 +399,8 @@ jobs:
       - name: Stop image deployment stack (backend exposed)
         if: always()
         run: |
-          docker compose --env-file .env.images.exposed.ci -f docker-compose.prod.yml -f docker-compose.images.yml -f docker-compose.backend-expose.yml down -v
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.exposed.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" down -v
 
   smoke-oracle-image-deploy:
     needs: publish
@@ -446,12 +451,14 @@ jobs:
 
       - name: Start oracle image deployment stack
         run: |
-          docker compose --env-file .env.images.oracle.ci -f docker-compose.prod.yml -f docker-compose.oracle.yml -f docker-compose.images.yml up -d
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.oracle.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
 
       - name: Wait for frontend and backend health (oracle)
         shell: bash
         run: |
           set -euo pipefail
+          COMPOSE_DIR="infra/docker/compose"
           for i in {1..120}; do
             if curl -sf http://localhost:8080/login >/dev/null && curl -sf http://localhost:8080/health >/dev/null; then
               break
@@ -460,9 +467,10 @@ jobs:
           done
           curl -sf http://localhost:8080/login >/dev/null
           curl -sf http://localhost:8080/health >/dev/null
-          docker compose --env-file .env.images.oracle.ci -f docker-compose.prod.yml -f docker-compose.oracle.yml -f docker-compose.images.yml exec -T backend node -e "require('http').get('http://127.0.0.1:'+(process.env.API_PORT||'8787')+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));"
+          docker compose --project-directory . --env-file .env.images.oracle.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" exec -T backend node -e "require('http').get('http://127.0.0.1:'+(process.env.API_PORT||'8787')+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));"
 
       - name: Stop oracle image deployment stack
         if: always()
         run: |
-          docker compose --env-file .env.images.oracle.ci -f docker-compose.prod.yml -f docker-compose.oracle.yml -f docker-compose.images.yml down -v
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.oracle.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" down -v

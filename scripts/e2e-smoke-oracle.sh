@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMPOSE_DIR="infra/docker/compose"
 ENV_FILE="$ROOT_DIR/.env.images.oracle"
 WAIT_SECONDS=360
 FRONTEND_PORT=""
@@ -24,8 +25,8 @@ wait_for_container_health() {
     sleep 3
     elapsed=$((elapsed + 3))
     if (( elapsed >= timeout )); then
-      docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml -f docker-compose.oracle.yml -f docker-compose.images.yml ps || true
-      docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml -f docker-compose.oracle.yml -f docker-compose.images.yml logs backend --tail=150 || true
+      docker compose --project-directory "$ROOT_DIR" --env-file "$ENV_FILE" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" ps || true
+      docker compose --project-directory "$ROOT_DIR" --env-file "$ENV_FILE" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" logs backend --tail=150 || true
       error "Timed out waiting for $container_name to become healthy"
     fi
   done
@@ -76,7 +77,7 @@ wait_for_http() {
 cleanup() {
   set +e
   FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" \
-    docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml -f docker-compose.oracle.yml -f docker-compose.images.yml down -v >/dev/null 2>&1
+    docker compose --project-directory "$ROOT_DIR" --env-file "$ENV_FILE" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" down -v >/dev/null 2>&1
 }
 trap cleanup EXIT
 
@@ -99,14 +100,14 @@ main() {
 
   log "Starting Oracle db/backend services"
   FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" \
-    docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml -f docker-compose.oracle.yml -f docker-compose.images.yml up -d db backend
+    docker compose --project-directory "$ROOT_DIR" --env-file "$ENV_FILE" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d db backend
 
   wait_for_container_health "enterpriseglue-the-bridge-oss-db-1" "$WAIT_SECONDS"
   wait_for_container_health "enterpriseglue-the-bridge-oss-backend-1" "$WAIT_SECONDS"
 
   log "Starting frontend service"
   FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" \
-    docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml -f docker-compose.oracle.yml -f docker-compose.images.yml up -d frontend
+    docker compose --project-directory "$ROOT_DIR" --env-file "$ENV_FILE" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d frontend
 
   wait_for_http "http://localhost:$FRONTEND_PORT/health" "$WAIT_SECONDS"
   wait_for_http "http://localhost:$FRONTEND_PORT/login" "$WAIT_SECONDS"

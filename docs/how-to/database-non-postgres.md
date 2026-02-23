@@ -19,7 +19,7 @@ What the launcher does automatically:
 1. Creates `.env.docker.<db>` from `.env.docker.<db>.example` if missing.
 2. Runs `scripts/db-preflight.sh` to validate required environment variables.
 3. Installs a missing DB driver package (`mysql2`, `mssql`, `oracledb`, `@google-cloud/spanner`).
-4. Loads matching compose overlay (`docker-compose.<db>.yml`) and starts the stack.
+4. Loads matching compose overlay from `infra/docker/compose/` (`docker-compose.<db>.yml`) and starts the stack.
 
 Stop the selected stack:
 

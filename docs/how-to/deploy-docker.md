@@ -5,19 +5,19 @@ Summary: Deploy EnterpriseGlue using the Docker Compose stack defined in the rep
 Audience: Developers and architects.
 
 ## Services (Dev)
-The default `docker-compose.yml` defines:
+The default compose file `infra/docker/compose/docker-compose.yml` defines:
 - **db**: PostgreSQL 18 container
 - **backend**: API service (TypeScript, runs migrations on startup)
 - **frontend**: Nginx serving the built SPA and reverse-proxying API routes to backend
 
 For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
-- `docker-compose.mysql.yml`
-- `docker-compose.mssql.yml`
-- `docker-compose.oracle.yml`
-- `docker-compose.spanner.yml`
+- `infra/docker/compose/docker-compose.mysql.yml`
+- `infra/docker/compose/docker-compose.mssql.yml`
+- `infra/docker/compose/docker-compose.oracle.yml`
+- `infra/docker/compose/docker-compose.spanner.yml`
 
 ## Services (Production)
-`docker-compose.prod.yml` defines:
+`infra/docker/compose/docker-compose.prod.yml` defines:
 - **db**: PostgreSQL 18 container
 - **backend**: API service (production build, runs migrations on startup, internal-only)
 - **frontend**: Nginx serving the built SPA and reverse-proxying API routes to backend
@@ -39,7 +39,7 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
    - `EXPOSE_BACKEND` (`true` to publish backend port on host, `false` for internal-only)
    - `FRONTEND_HOST_PORT` (frontend host port)
    - `POSTGRES_HOST_PORT` (PostgreSQL host port)
-   - `dev.sh`/`down.sh` automatically include `docker-compose.backend-expose.yml` when `EXPOSE_BACKEND=true`.
+   - `dev.sh`/`down.sh` automatically include `infra/docker/compose/docker-compose.backend-expose.yml` when `EXPOSE_BACKEND=true`.
 5. Set `API_BASE_URL` only if you need an explicit API origin. Leave empty to use relative `/api` calls through the Nginx proxy.
 6. Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
 
@@ -127,3 +127,11 @@ Docker creates persistent volumes for:
 - **Wrong env file selected**: ensure `--env-file` and `EG_BACKEND_ENV_FILE` point to the same `.env.images.*` file.
 - **Image pull errors**: verify registry access and image names (`BACKEND_IMAGE`, `FRONTEND_IMAGE`) and tag (`IMAGE_TAG`).
 - **Backend not reachable in image mode**: use frontend-proxied health (`http://localhost:8080/health`) when `EXPOSE_BACKEND=false`.
+
+## Compose file layout
+- `infra/docker/compose/docker-compose.yml` (dev base)
+- `infra/docker/compose/docker-compose.<db>.yml` (dev database overlays)
+- `infra/docker/compose/docker-compose.prod.yml` (production base)
+- `infra/docker/compose/docker-compose.images.yml` (published image overlay)
+- `infra/docker/compose/docker-compose.backend-expose.yml` (optional backend host publish)
+- `infra/docker/compose/docker-compose.ci.yml` (CI-specific overrides)
