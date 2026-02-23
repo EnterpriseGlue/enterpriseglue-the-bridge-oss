@@ -5,6 +5,32 @@ operations across Starbase and Mission Control modules.
 
 Audience: Developers and architects.
 
+## Self-host (no git clone needed)
+
+Run EnterpriseGlue with pre-built published images — no source code or Node.js required.
+
+```bash
+# 1. Download the selfhost compose file and env template
+curl -O https://raw.githubusercontent.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/main/infra/docker/compose/docker-compose.selfhost.yml
+curl -o .env https://raw.githubusercontent.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/main/infra/docker/env/examples/selfhost.env.example
+
+# 2. Set your secrets (generate with openssl rand -hex 32)
+#    Edit .env and replace: JWT_SECRET, ADMIN_PASSWORD, ENCRYPTION_KEY, POSTGRES_PASSWORD
+
+# 3. Start
+docker compose -f docker-compose.selfhost.yml up -d
+```
+
+Open the app at **http://localhost:8080** — log in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` from your `.env`.
+
+To stop: `docker compose -f docker-compose.selfhost.yml down`
+
+To upgrade: change `IMAGE_TAG=latest` (or pin to e.g. `v1.2.3`) and re-run `up -d`.
+
+> **Images:** published to `ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-{backend,frontend}` and `docker.io/enterpriseglue/enterpriseglue-the-bridge-oss-{backend,frontend}` on every release.
+
+---
+
 ## Quickstart (Docker - Dev)
 ### Fast path (Postgres default)
 1. Start the stack:

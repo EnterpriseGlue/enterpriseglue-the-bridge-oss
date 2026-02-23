@@ -1,0 +1,62 @@
+# EnterpriseGlue Self-Host Compose
+#
+# Standalone compose file for self-hosters who do NOT need to clone the full repo.
+# Pulls pre-built images from GHCR (or Docker Hub) and wires them with a Postgres database.
+#
+# Quick start:
+#   1. curl -O https://raw.githubusercontent.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/main/infra/docker/compose/docker-compose.selfhost.yml
+#   2. curl -o .env https://raw.githubusercontent.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/main/infra/docker/env/examples/selfhost.env.example
+#   3. Edit .env — set JWT_SECRET, ADMIN_PASSWORD, ENCRYPTION_KEY, POSTGRES_PASSWORD
+#   4. docker compose -f docker-compose.selfhost.yml up -d
+#
+# Open the app at http://localhost:8080
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-enterpriseglue}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-enterpriseglue}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-enterpriseglue} -d ${POSTGRES_DB:-enterpriseglue} -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - git_repos:/app/data/repos
+    expose:
+      - "${API_PORT:-8787}"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const p=process.env.API_PORT||'8787';require('http').get('http://127.0.0.1:'+p+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-frontend}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      API_UPSTREAM: backend:${API_PORT:-8787}
+    ports:
+      - "${FRONTEND_HOST_PORT:-8080}:8080"
+
+volumes:
+  postgres_data:
+  git_repos:

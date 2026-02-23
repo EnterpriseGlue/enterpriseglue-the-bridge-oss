@@ -4,6 +4,23 @@ Summary: Run the EnterpriseGlue platform locally using Docker Compose.
 
 Audience: Developers and architects.
 
+## Self-host (no git clone needed)
+
+The fastest path for anyone who just wants to run the platform:
+
+```bash
+curl -O https://raw.githubusercontent.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/main/infra/docker/compose/docker-compose.selfhost.yml
+curl -o .env https://raw.githubusercontent.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/main/infra/docker/env/examples/selfhost.env.example
+# Edit .env — set JWT_SECRET, ADMIN_PASSWORD, ENCRYPTION_KEY, POSTGRES_PASSWORD
+docker compose -f docker-compose.selfhost.yml up -d
+```
+
+Open **http://localhost:8080**. Stop with `docker compose -f docker-compose.selfhost.yml down`.
+
+See `infra/docker/env/examples/selfhost.env.example` for all available options.
+
+---
+
 ## Prerequisites
 - Docker Desktop (or Docker Engine)
 - Docker Compose plugin (`docker compose`)
@@ -57,8 +74,16 @@ What happens automatically:
    - Backend is internal-only in production and is reached via proxied paths (for example `/api` and `/health`) on the frontend origin.
 
 ## Steps (Production from published images)
-Use this when you want deployment from registry images without local source builds:
+Use this when you want deployment from registry images without local source builds.
 
+Published images:
+- `ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend:latest`
+- `ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-frontend:latest`
+- Docker Hub mirrors: `docker.io/enterpriseglue/enterpriseglue-the-bridge-oss-{backend,frontend}:latest`
+
+**Option A — Standalone (no git clone):** use `docker-compose.selfhost.yml` as described above.
+
+**Option B — From cloned repo:**
 1. Copy an image env template:
    ```bash
    mkdir -p .local/docker/env
@@ -66,10 +91,7 @@ Use this when you want deployment from registry images without local source buil
    # or
    cp infra/docker/env/examples/images.oracle.env.example .local/docker/env/images.oracle.env
    ```
-2. Set image refs in the copied file:
-   - `BACKEND_IMAGE`
-   - `FRONTEND_IMAGE`
-   - `IMAGE_TAG` (`sha-<commit>` or `vX.Y.Z`)
+2. `BACKEND_IMAGE` and `FRONTEND_IMAGE` default to the published GHCR images. Set `IMAGE_TAG` to `latest` or a specific version.
 3. Start from images:
    ```bash
    npm run prod:images:postgres
