@@ -34,7 +34,22 @@ jobs:
               return;
             }
 
-            const labels = (pr.labels || []).map((label) => label.name);
+            // On opened/reopened the pr-release-labeler workflow runs concurrently.
+            // The event payload labels are stale, so wait briefly then fetch fresh labels
+            // from the API to avoid a false-negative race condition.
+            const needsFresh = ['opened', 'reopened'].includes(context.payload.action);
+            let labels;
+            if (needsFresh) {
+              await new Promise((r) => setTimeout(r, 15000));
+              const { data: freshPR } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+              });
+              labels = (freshPR.labels || []).map((label) => label.name);
+            } else {
+              labels = (pr.labels || []).map((label) => label.name);
+            }
             const isReleasePleaseBranch = String(pr.head?.ref || '').startsWith('release-please--branches--');
             const isReleasePleaseLabel = labels.includes('autorelease: pending') || labels.includes('autorelease: triggered');
             if (isReleasePleaseBranch || isReleasePleaseLabel) {
