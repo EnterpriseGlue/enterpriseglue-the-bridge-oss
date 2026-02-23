@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.3.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.2.0...v0.3.0) (2026-02-23)
+
+
+### Features
+
+* **selfhost:** add standalone selfhost compose, fix image placeholders, add secret hints ([123b3b4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/123b3b4c2803b7fa46f87a065123433875f46f8f))
+
 ## [0.2.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.1.3...v0.2.0) (2026-02-23)
 
 
