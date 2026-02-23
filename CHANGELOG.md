@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.3.2...v0.4.0) (2026-02-23)
+
+
+### Features
+
+* **ci:** add ci-watch helper script for one-command workflow monitoring ([ce42c93](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ce42c930c74532d7365caa7359b0dbaf1cda8644))
+
 ## [0.3.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.3.1...v0.3.2) (2026-02-23)
 
 
