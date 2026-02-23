@@ -27,13 +27,14 @@ Launcher and validation scripts:
 - `FRONTEND_URL`: frontend origin for auth links
 
 ### Database Required Variables (by `DATABASE_TYPE`)
-- `postgres`: `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DATABASE`, `POSTGRES_SCHEMA` (non-public)
-- `oracle`: `ORACLE_HOST`, `ORACLE_USER`, `ORACLE_PASSWORD`, and one of `ORACLE_SERVICE_NAME` or `ORACLE_SID`
+- `postgres`: either `POSTGRES_URL` (connection string) **or** `POSTGRES_HOST` + `POSTGRES_USER` + `POSTGRES_PASSWORD` + `POSTGRES_DATABASE` + `POSTGRES_SCHEMA` (non-public)
+- `oracle`: `ORACLE_USER` + `ORACLE_PASSWORD` + either `ORACLE_CONNECTION_STRING` **or** (`ORACLE_HOST` + one of `ORACLE_SERVICE_NAME` / `ORACLE_SID`)
 - `mssql`: `MSSQL_HOST`, `MSSQL_USER`, `MSSQL_PASSWORD`, `MSSQL_DATABASE`
 - `mysql`: `MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
 - `spanner`: `SPANNER_PROJECT_ID`, `SPANNER_INSTANCE_ID`, `SPANNER_DATABASE_ID`
 
 ### Database (Postgres default)
+- `POSTGRES_URL` — connection string alternative; when set, individual host/port/user/password/database vars are not required. Format: `postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=SCHEMA&sslmode=require`
 - `POSTGRES_HOST`
 - `POSTGRES_PORT`
 - `POSTGRES_USER`
@@ -41,6 +42,12 @@ Launcher and validation scripts:
 - `POSTGRES_DATABASE`
 - `POSTGRES_SCHEMA` (must be non-public)
 - `POSTGRES_SSL`
+- `POSTGRES_SSL_REJECT_UNAUTHORIZED`
+
+### Database (Oracle)
+- `ORACLE_CONNECTION_STRING` — Easy Connect Plus or TNS descriptor; required for multi-host HA/failover. When set, `ORACLE_HOST`/`ORACLE_PORT`/`ORACLE_SERVICE_NAME`/`ORACLE_SID` are not required.
+- `ORACLE_HOST`, `ORACLE_PORT`, `ORACLE_SERVICE_NAME` / `ORACLE_SID` (single-host alternative)
+- `ORACLE_USER`, `ORACLE_PASSWORD`, `ORACLE_SCHEMA`
 
 ### Enterprise Schema
 - `ENTERPRISE_SCHEMA` (must be non-public and distinct from the active main schema)

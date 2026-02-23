@@ -1,7 +1,8 @@
-import { TableColumn, IsNull } from 'typeorm';
+import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { GitRepository } from '../entities/GitRepository.js';
-import { GitCredential } from '../entities/GitCredential.js';
+
+const GIT_REPOS_TABLE = 'git_repositories';
+const GIT_CREDS_TABLE = 'git_credentials';
 
 /**
  * Migration: Move Git PAT from user-level git_credentials to project-level git_repositories.
@@ -13,18 +14,16 @@ export class MigrateGitTokenToProject1700000000003 implements MigrationInterface
   name = 'MigrateGitTokenToProject1700000000003';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const gitReposTable = queryRunner.connection.getMetadata('GitRepository').tablePath;
-    if (!(await queryRunner.hasTable(gitReposTable))) {
-      console.warn(`Migration ${this.name}: table "${gitReposTable}" not found; skipping.`);
+    if (!(await queryRunner.hasTable(GIT_REPOS_TABLE))) {
+      console.warn(`Migration ${this.name}: table "${GIT_REPOS_TABLE}" not found; skipping.`);
       return;
     }
 
-    // 1. Add new columns to git_repositories
-    const existingColumns = await queryRunner.getTable(gitReposTable);
+    const existingColumns = await queryRunner.getTable(GIT_REPOS_TABLE);
     const columnNames = (existingColumns?.columns || []).map(c => c.name);
 
     if (!columnNames.includes('encrypted_token')) {
-      await queryRunner.addColumns(gitReposTable, [
+      await queryRunner.addColumns(GIT_REPOS_TABLE, [
         new TableColumn({ name: 'encrypted_token', type: 'text', isNullable: true }),
         new TableColumn({ name: 'last_validated_at', type: 'bigint', isNullable: true }),
         new TableColumn({ name: 'token_scope_hint', type: 'text', isNullable: true }),
@@ -33,52 +32,38 @@ export class MigrateGitTokenToProject1700000000003 implements MigrationInterface
       ]);
     }
 
-    // 2. Copy encrypted tokens from git_credentials to git_repositories
-    // Match by connectedByUserId + providerId
-    const gitRepoRepo = queryRunner.manager.getRepository(GitRepository);
-    const gitCredRepo = queryRunner.manager.getRepository(GitCredential);
-
     try {
-      const repos = await gitRepoRepo.find({
-        where: { encryptedToken: IsNull() },
-        select: ['id', 'connectedByUserId', 'providerId'],
-      });
+      const esc = (s: string) => String(s).replace(/'/g, "''");
+      const repos: Array<{ id: string; connected_by_user_id: string | null; provider_id: string | null }> =
+        await queryRunner.query(`SELECT "id", "connected_by_user_id", "provider_id" FROM "${GIT_REPOS_TABLE}" WHERE "encrypted_token" IS NULL`);
 
       for (const repo of repos) {
-        if (!repo.connectedByUserId || !repo.providerId) continue;
+        if (!repo.connected_by_user_id || !repo.provider_id) continue;
 
-        const creds = await gitCredRepo.findOne({
-          where: {
-            userId: repo.connectedByUserId,
-            providerId: repo.providerId,
-          },
-          select: ['accessToken'],
-          order: { updatedAt: 'DESC' },
-        });
+        const creds: Array<{ access_token: string }> = await queryRunner.query(
+          `SELECT "access_token" FROM "${GIT_CREDS_TABLE}" WHERE "user_id" = '${esc(repo.connected_by_user_id)}' AND "provider_id" = '${esc(repo.provider_id)}' ORDER BY "updated_at" DESC`
+        );
 
-        if (creds?.accessToken) {
-          await gitRepoRepo.update({ id: repo.id }, { encryptedToken: creds.accessToken });
+        const token = creds[0]?.access_token;
+        if (token) {
+          await queryRunner.query(`UPDATE "${GIT_REPOS_TABLE}" SET "encrypted_token" = '${esc(token)}' WHERE "id" = '${esc(repo.id)}'`);
         }
       }
     } catch (err) {
-      // git_credentials table may not exist yet in fresh installs — that's fine
       console.warn('Migration: Could not copy tokens from git_credentials (may not exist):', err);
     }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    const gitReposTable = queryRunner.connection.getMetadata('GitRepository').tablePath;
-    if (!(await queryRunner.hasTable(gitReposTable))) {
-      return;
-    }
+    if (!(await queryRunner.hasTable(GIT_REPOS_TABLE))) return;
 
-    const existingColumns = await queryRunner.getTable(gitReposTable);
+    const existingColumns = await queryRunner.getTable(GIT_REPOS_TABLE);
     const columnNames = (existingColumns?.columns || []).map(c => c.name);
 
     const toDrop = ['encrypted_token', 'last_validated_at', 'token_scope_hint', 'auto_push_enabled', 'auto_pull_enabled'];
     for (const col of toDrop) {
       if (columnNames.includes(col)) {
-        await queryRunner.dropColumn(gitReposTable, col);
+        await queryRunner.dropColumn(GIT_REPOS_TABLE, col);
       }
     }
   }

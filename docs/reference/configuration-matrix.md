@@ -24,22 +24,25 @@ Audience: Developers and architects.
 ### Postgres
 | Variable | Required | Default (Docker) | Notes |
 | --- | --- | --- | --- |
-| POSTGRES_HOST | Yes | db | Docker service name |
-| POSTGRES_PORT | Yes | 5432 | Postgres port |
-| POSTGRES_USER | Yes | enterpriseglue | Postgres user |
-| POSTGRES_PASSWORD | Yes | enterpriseglue | Postgres password |
-| POSTGRES_DATABASE | Yes | enterpriseglue | Database name |
+| POSTGRES_URL | No (alt. to individual vars) | — | Connection string: `postgresql://USER:PASS@HOST:PORT/DB?schema=SCHEMA`. When set, HOST/PORT/USER/PASSWORD/DATABASE are not required. |
+| POSTGRES_HOST | Yes (unless POSTGRES_URL set) | db | Docker service name |
+| POSTGRES_PORT | No | 5432 | Postgres port |
+| POSTGRES_USER | Yes (unless POSTGRES_URL set) | enterpriseglue | Postgres user |
+| POSTGRES_PASSWORD | Yes (unless POSTGRES_URL set) | enterpriseglue | Postgres password |
+| POSTGRES_DATABASE | Yes (unless POSTGRES_URL set) | enterpriseglue | Database name |
 | POSTGRES_SCHEMA | Yes | main | Must be non-public |
-| POSTGRES_SSL | Yes | false | Enable TLS for Postgres |
+| POSTGRES_SSL | No | false | Enable TLS for Postgres |
+| POSTGRES_SSL_REJECT_UNAUTHORIZED | No | false | Verify server TLS certificate |
 
 ### Oracle
 | Variable | Required | Notes |
 | --- | --- | --- |
-| ORACLE_HOST | Yes | Oracle host |
+| ORACLE_CONNECTION_STRING | No (alt. to individual vars) | Easy Connect Plus or TNS descriptor. Required for multi-host HA/failover. When set, HOST/PORT/SERVICE_NAME/SID are not required. Example: `host1:1521,host2:1521/MYSERVICE` |
+| ORACLE_HOST | Yes (unless ORACLE_CONNECTION_STRING set) | Oracle host |
 | ORACLE_PORT | No | Defaults to 1521 |
 | ORACLE_USER | Yes | Oracle username |
 | ORACLE_PASSWORD | Yes | Oracle password |
-| ORACLE_SERVICE_NAME or ORACLE_SID | Yes | At least one is required |
+| ORACLE_SERVICE_NAME or ORACLE_SID | Yes (unless ORACLE_CONNECTION_STRING set) | At least one is required |
 | ORACLE_SCHEMA | No | Defaults to `MAIN` |
 
 ### SQL Server

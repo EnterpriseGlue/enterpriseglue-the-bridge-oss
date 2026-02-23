@@ -20,6 +20,8 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   databaseType: z.enum(['postgres', 'oracle', 'mssql', 'spanner', 'mysql']).default('postgres'),
   
   // PostgreSQL configuration (when databaseType=postgres)
+  // Either POSTGRES_URL (connection string) or individual POSTGRES_HOST/PORT/USER/PASSWORD/DATABASE vars.
+  postgresUrl: z.string().url().optional(),
   postgresHost: z.string().optional(),
   postgresPort: z.number().int().positive().optional(),
   postgresUser: z.string().optional(),
@@ -30,6 +32,9 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   postgresSslRejectUnauthorized: z.enum(['true', 'false']).default('false').transform(v => v === 'true'),
 
   // Oracle configuration (when databaseType=oracle)
+  // Either ORACLE_CONNECTION_STRING (Easy Connect Plus / TNS descriptor for multi-host)
+  // or individual ORACLE_HOST/PORT/SERVICE_NAME vars.
+  oracleConnectionString: z.string().optional(),
   oracleHost: z.string().optional(),
   oraclePort: z.number().int().positive().default(1521),
   oracleUser: z.string().optional(),
@@ -116,17 +121,28 @@ function loadConfig(): Config {
     ? undefined
     : crypto.randomBytes(18).toString('base64url');
 
+  // Parse POSTGRES_URL connection string as fallback for individual vars.
+  // Individual vars always take priority over the URL.
+  let pgUrlParsed: URL | null = null;
+  if (process.env.POSTGRES_URL) {
+    try { pgUrlParsed = new URL(process.env.POSTGRES_URL); } catch {}
+  }
+
   const raw = {
     port: process.env.API_PORT ? Number(process.env.API_PORT) : undefined,
     databaseType: process.env.DATABASE_TYPE,
-    postgresHost: process.env.POSTGRES_HOST,
-    postgresPort: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : undefined,
-    postgresUser: process.env.POSTGRES_USER,
-    postgresPassword: process.env.POSTGRES_PASSWORD,
-    postgresDatabase: process.env.POSTGRES_DATABASE,
-    postgresSchema: envOrUndefined(process.env.POSTGRES_SCHEMA),
+    postgresUrl: process.env.POSTGRES_URL,
+    postgresHost: process.env.POSTGRES_HOST || pgUrlParsed?.hostname || undefined,
+    postgresPort: process.env.POSTGRES_PORT
+      ? Number(process.env.POSTGRES_PORT)
+      : pgUrlParsed?.port ? Number(pgUrlParsed.port) : undefined,
+    postgresUser: process.env.POSTGRES_USER || (pgUrlParsed?.username ? decodeURIComponent(pgUrlParsed.username) : undefined),
+    postgresPassword: process.env.POSTGRES_PASSWORD || (pgUrlParsed?.password ? decodeURIComponent(pgUrlParsed.password) : undefined),
+    postgresDatabase: process.env.POSTGRES_DATABASE || (pgUrlParsed?.pathname ? pgUrlParsed.pathname.replace(/^\//, '') : undefined),
+    postgresSchema: envOrUndefined(process.env.POSTGRES_SCHEMA || pgUrlParsed?.searchParams.get('schema') || undefined),
     postgresSsl: process.env.POSTGRES_SSL === 'true',
     postgresSslRejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED,
+    oracleConnectionString: envOrUndefined(process.env.ORACLE_CONNECTION_STRING),
     oracleHost: process.env.ORACLE_HOST,
     oraclePort: process.env.ORACLE_PORT ? Number(process.env.ORACLE_PORT) : undefined,
     oracleUser: process.env.ORACLE_USER,
@@ -199,10 +215,12 @@ const requireConfig = (name: string, value: unknown, dbType: string): void => {
 
 switch (config.databaseType) {
   case 'postgres': {
-    requireConfig('POSTGRES_HOST', config.postgresHost, 'postgres');
-    requireConfig('POSTGRES_USER', config.postgresUser, 'postgres');
-    requireConfig('POSTGRES_PASSWORD', config.postgresPassword, 'postgres');
-    requireConfig('POSTGRES_DATABASE', config.postgresDatabase, 'postgres');
+    if (!config.postgresUrl) {
+      requireConfig('POSTGRES_HOST', config.postgresHost, 'postgres');
+      requireConfig('POSTGRES_USER', config.postgresUser, 'postgres');
+      requireConfig('POSTGRES_PASSWORD', config.postgresPassword, 'postgres');
+      requireConfig('POSTGRES_DATABASE', config.postgresDatabase, 'postgres');
+    }
 
     if (config.postgresSchema === 'public') {
       throw new Error(
@@ -213,11 +231,13 @@ switch (config.databaseType) {
   }
 
   case 'oracle': {
-    requireConfig('ORACLE_HOST', config.oracleHost, 'oracle');
     requireConfig('ORACLE_USER', config.oracleUser, 'oracle');
     requireConfig('ORACLE_PASSWORD', config.oraclePassword, 'oracle');
-    if (!config.oracleServiceName && !config.oracleSid) {
-      throw new Error('Either ORACLE_SERVICE_NAME or ORACLE_SID is required when DATABASE_TYPE=oracle.');
+    if (!config.oracleConnectionString) {
+      requireConfig('ORACLE_HOST', config.oracleHost, 'oracle');
+      if (!config.oracleServiceName && !config.oracleSid) {
+        throw new Error('Either ORACLE_SERVICE_NAME, ORACLE_SID, or ORACLE_CONNECTION_STRING is required when DATABASE_TYPE=oracle.');
+      }
     }
     break;
   }
@@ -277,11 +297,20 @@ console.log('✅ Configuration loaded:');
 console.log(`  - Port: ${config.port}`);
 console.log(`  - Database Type: ${config.databaseType}`);
 if (config.databaseType === 'postgres') {
-  console.log(`  - PostgreSQL Host: ${config.postgresHost}`);
-  console.log(`  - PostgreSQL Database: ${config.postgresDatabase}`);
+  if (config.postgresUrl) {
+    const masked = config.postgresUrl.replace(/:([^@/]+)@/, ':***@');
+    console.log(`  - PostgreSQL URL: ${masked}`);
+  } else {
+    console.log(`  - PostgreSQL Host: ${config.postgresHost}`);
+    console.log(`  - PostgreSQL Database: ${config.postgresDatabase}`);
+  }
 } else if (config.databaseType === 'oracle') {
-  console.log(`  - Oracle Host: ${config.oracleHost}`);
-  console.log(`  - Oracle Service: ${config.oracleServiceName || config.oracleSid}`);
+  if (config.oracleConnectionString) {
+    console.log(`  - Oracle Connection String: ${config.oracleConnectionString.substring(0, 80)}...`);
+  } else {
+    console.log(`  - Oracle Host: ${config.oracleHost}`);
+    console.log(`  - Oracle Service: ${config.oracleServiceName || config.oracleSid}`);
+  }
 } else if (config.databaseType === 'mssql') {
   console.log(`  - SQL Server Host: ${config.mssqlHost}`);
   console.log(`  - SQL Server Database: ${config.mssqlDatabase}`);

@@ -1,6 +1,7 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { IsNull } from 'typeorm';
-import { GitRepository } from '../entities/GitRepository.js';
+
+const GIT_REPOS_TABLE = 'git_repositories';
+const GIT_CREDS_TABLE = 'git_credentials';
 
 /**
  * Migration: Drop the legacy git_credentials table.
@@ -13,27 +14,26 @@ export class DropGitCredentials1700000000004 implements MigrationInterface {
   name = 'DropGitCredentials1700000000004';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const gitReposTable = queryRunner.connection.getMetadata('GitRepository').tablePath;
-    if (!(await queryRunner.hasTable(gitReposTable))) {
-      console.warn(`Migration ${this.name}: table "${gitReposTable}" not found; skipping.`);
+    if (!(await queryRunner.hasTable(GIT_REPOS_TABLE))) {
+      console.warn(`Migration ${this.name}: table "${GIT_REPOS_TABLE}" not found; skipping.`);
       return;
     }
 
-    // Safety check: ensure no git_repositories rows are still missing a token
-    const gitRepoRepo = queryRunner.manager.getRepository(GitRepository);
-    const count = await gitRepoRepo.count({ where: { encryptedToken: IsNull() } });
+    const rows: any[] = await queryRunner.query(
+      `SELECT COUNT(*) AS "cnt" FROM "${GIT_REPOS_TABLE}" WHERE "encrypted_token" IS NULL`
+    );
+    const count = Number(rows[0]?.cnt ?? rows[0]?.CNT ?? 0);
     if (count > 0) {
       console.warn(`WARNING: ${count} git_repositories rows still have NULL encrypted_token. Skipping git_credentials drop.`);
       return;
     }
 
-    const gitCredsTable = queryRunner.connection.getMetadata('GitCredential').tablePath;
-    if (!(await queryRunner.hasTable(gitCredsTable))) {
-      console.warn(`Migration ${this.name}: table "${gitCredsTable}" not found; skipping drop.`);
+    if (!(await queryRunner.hasTable(GIT_CREDS_TABLE))) {
+      console.warn(`Migration ${this.name}: table "${GIT_CREDS_TABLE}" not found; skipping drop.`);
       return;
     }
 
-    await queryRunner.dropTable(gitCredsTable, true);
+    await queryRunner.dropTable(GIT_CREDS_TABLE, true);
     console.log('Dropped git_credentials table.');
   }
 

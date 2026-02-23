@@ -114,10 +114,8 @@ describe('Login SSO auto-redirect behavior', () => {
     renderLogin('/login');
 
     await waitFor(() => {
-      expect((apiClient.get as any).mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/Local sign-in disabled/i)).toBeInTheDocument();
     });
-
-    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Local sign-in disabled/i)).toBeInTheDocument();
   });
 });

@@ -49,8 +49,11 @@ bash ./scripts/deploy-localhost.sh
 The deploy script now runs the same DB preflight checks before build/start.
 
 ## Oracle
-- Env vars: `ORACLE_HOST`, `ORACLE_PORT`, `ORACLE_USER`, `ORACLE_PASSWORD`,
-  `ORACLE_SERVICE_NAME` (or `ORACLE_SID`), `ORACLE_SCHEMA`.
+- Env vars: `ORACLE_USER`, `ORACLE_PASSWORD`, `ORACLE_SCHEMA`, plus one of:
+  - `ORACLE_CONNECTION_STRING` — Easy Connect Plus or TNS descriptor. **Required for multi-host HA/failover.** Examples:
+    - Easy Connect Plus (two hosts): `host1:1521,host2:1521/MYSERVICE`
+    - TNS descriptor: `(DESCRIPTION=(FAILOVER=on)(LOAD_BALANCE=on)(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=host1)(PORT=1521))(ADDRESS=(PROTOCOL=TCP)(HOST=host2)(PORT=1521)))(CONNECT_DATA=(SERVICE_NAME=MYSERVICE)))`
+  - Individual vars (single host): `ORACLE_HOST`, `ORACLE_PORT`, `ORACLE_SERVICE_NAME` (or `ORACLE_SID`)
 - Driver: `oracledb` (requires Oracle Instant Client).
 - Important: if Oracle Instant Client is missing or not loadable, preflight fails with explicit setup guidance.
 

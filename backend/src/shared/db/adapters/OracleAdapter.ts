@@ -169,27 +169,34 @@ export class OracleAdapter implements DatabaseAdapter {
   }
 
   getDataSourceOptions(): DataSourceOptions {
-    const connectString = config.oracleServiceName
-      ? `${config.oracleHost}:${config.oraclePort}/${config.oracleServiceName}`
-      : `${config.oracleHost}:${config.oraclePort}:${config.oracleSid}`;
+    const migrationsPath = this.getMigrationsPath();
+
+    // ORACLE_CONNECTION_STRING takes priority — supports Easy Connect Plus and
+    // full TNS descriptors for multi-host HA/failover setups, e.g.:
+    //   Easy Connect Plus (two hosts):
+    //     host1:1521,host2:1521/myservice
+    //   TNS descriptor with failover:
+    //     (DESCRIPTION=(FAILOVER=on)(ADDRESS_LIST=
+    //       (ADDRESS=(PROTOCOL=TCP)(HOST=host1)(PORT=1521))
+    //       (ADDRESS=(PROTOCOL=TCP)(HOST=host2)(PORT=1521)))
+    //     (CONNECT_DATA=(SERVICE_NAME=myservice)))
+    const connectString = config.oracleConnectionString
+      || (config.oracleServiceName
+        ? `${config.oracleHost}:${config.oraclePort}/${config.oracleServiceName}`
+        : `${config.oracleHost}:${config.oraclePort}:${config.oracleSid}`);
 
     return {
       type: 'oracle',
-      host: config.oracleHost,
-      port: config.oraclePort,
       username: config.oracleUser,
       password: config.oraclePassword,
-      serviceName: config.oracleServiceName,
-      sid: config.oracleSid,
       schema: this.schema,
       synchronize: false,
       logging: this.logging,
       entities,
       migrations: [
-        this.getMigrationsPath() + (this.getMigrationsPath().startsWith('dist/') ? '/*.js' : '/*.ts')
+        migrationsPath + (migrationsPath.startsWith('dist/') ? '/*.js' : '/*.ts')
       ],
       extra: {
-        // Oracle-specific connection options
         connectString,
       },
     } as DataSourceOptions;

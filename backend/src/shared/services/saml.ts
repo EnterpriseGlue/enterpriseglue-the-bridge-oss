@@ -395,6 +395,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
     return {
       ...user,
       email: userInfo.email,
+      authProvider: 'saml',
       platformRole,
       firstName: userInfo.given_name || user.firstName,
       lastName: userInfo.family_name || user.lastName,
