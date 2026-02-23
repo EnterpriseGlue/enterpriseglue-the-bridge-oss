@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.3.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.3.1...v0.3.2) (2026-02-23)
+
+
+### Bug Fixes
+
+* **ci:** derive Docker Hub image namespace from DOCKERHUB_USERNAME secret ([ea6db58](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ea6db589d960b88782b58941f1d98e756ce19bfc))
+
 ## [0.3.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.3.0...v0.3.1) (2026-02-23)
 
 
