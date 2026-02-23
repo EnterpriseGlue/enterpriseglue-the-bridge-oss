@@ -103,9 +103,16 @@ export const updateMemberRoleBodySchema = z.object({
 // === Engine Schemas ===
 export const engineTypeSchema = z.enum(['camunda7', 'camunda8']);
 
+const isLocalOrPrivate = (raw: string): boolean => {
+  try {
+    const host = new URL(raw).hostname;
+    return /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|\[::1\])$/.test(host);
+  } catch { return false; }
+};
+
 const engineBaseUrlSchema = z.string().url().refine(
-  (url) => config.nodeEnv !== 'production' || url.startsWith('https://'),
-  { message: 'Engine base URL must use HTTPS in production' }
+  (url) => config.nodeEnv !== 'production' || url.startsWith('https://') || isLocalOrPrivate(url),
+  { message: 'Engine base URL must use HTTPS in production (HTTP allowed for localhost/private networks)' }
 );
 
 export const createEngineBodySchema = z.object({
