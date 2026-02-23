@@ -21,7 +21,11 @@ const engineIdParamSchema = z.object({ id: z.string().min(1) })
 const isLocalOrPrivate = (raw: string): boolean => {
   try {
     const host = new URL(raw).hostname
-    return /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|\[::1\])$/.test(host)
+    // Private IPs, localhost, IPv6 loopback
+    if (/^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|\[::1\])$/.test(host)) return true
+    // Docker-internal: service names (no dots), host.docker.internal, *.local
+    if (!host.includes('.') || host === 'host.docker.internal' || host.endsWith('.local')) return true
+    return false
   } catch { return false }
 }
 
