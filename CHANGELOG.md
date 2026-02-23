@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.3.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.3.0...v0.3.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* **ci:** use job-level env var for Docker Hub conditional to avoid secrets in if: expressions ([c2c7286](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c2c72861db5397ffba0784114d71d2b9744f145e))
+
 ## [0.3.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.2.0...v0.3.0) (2026-02-23)
 
 
