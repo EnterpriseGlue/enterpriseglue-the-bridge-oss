@@ -54,30 +54,33 @@ jobs:
         run: |
           set -euo pipefail
           COMPOSE_DIR="infra/docker/compose"
-          cp .env.docker.postgres.example .env.docker
-          docker compose --project-directory . --env-file .env.docker.postgres.example -f "$COMPOSE_DIR/docker-compose.yml" config >/dev/null
-          docker compose --project-directory . --env-file .env.docker.mysql.example -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mysql.yml" config >/dev/null
-          docker compose --project-directory . --env-file .env.docker.mssql.example -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mssql.yml" config >/dev/null
-          docker compose --project-directory . --env-file .env.docker.oracle.example -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" config >/dev/null
-          docker compose --project-directory . --env-file .env.docker.spanner.example -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.spanner.yml" config >/dev/null
+          ENV_EXAMPLES_DIR="infra/docker/env/examples"
+          cp "$ENV_EXAMPLES_DIR/docker.postgres.env.example" .env.docker
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.mysql.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.mysql.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mysql.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.mssql.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.mssql.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mssql.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.oracle.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.oracle.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.spanner.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.spanner.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.spanner.yml" config >/dev/null
 
       - name: Validate compose render for image deployment overlays
         shell: bash
         run: |
           set -euo pipefail
           COMPOSE_DIR="infra/docker/compose"
-          EG_BACKEND_ENV_FILE=./.env.images.postgres.example docker compose --project-directory . --env-file .env.images.postgres.example -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" config >/dev/null
-          EG_BACKEND_ENV_FILE=./.env.images.oracle.example docker compose --project-directory . --env-file .env.images.oracle.example -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" config >/dev/null
+          ENV_EXAMPLES_DIR="infra/docker/env/examples"
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/images.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/images.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/images.oracle.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/images.oracle.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" config >/dev/null
 
       - name: Validate backend exposure overlay wiring
         shell: bash
         run: |
           set -euo pipefail
           COMPOSE_DIR="infra/docker/compose"
-          cp .env.production.example .env.production
-          docker compose --project-directory . --env-file .env.docker.postgres.example -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
-          docker compose --project-directory . --env-file .env.production.example -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
-          EG_BACKEND_ENV_FILE=./.env.images.postgres.example docker compose --project-directory . --env-file .env.images.postgres.example -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
+          ENV_EXAMPLES_DIR="infra/docker/env/examples"
+          cp "$ENV_EXAMPLES_DIR/production.env.example" .env.production
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/production.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/production.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/images.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/images.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
 
   test:
     runs-on: ubuntu-latest

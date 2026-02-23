@@ -2,7 +2,9 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OPENSHIFT_DIR="$ROOT_DIR/deploy/openshift"
+OPENSHIFT_ROOT_DIR="$ROOT_DIR/infra/kubernetes/openshift"
+OPENSHIFT_OVERLAY="${OPENSHIFT_OVERLAY:-prod}"
+OPENSHIFT_KUSTOMIZE_DIR="$OPENSHIFT_ROOT_DIR/kustomize/overlays/$OPENSHIFT_OVERLAY"
 
 log() { echo "[openshift-deploy] $*"; }
 warn() { echo "[openshift-deploy] WARN: $*"; }
@@ -103,12 +105,7 @@ EOF
 }
 
 apply_base_manifests() {
-  oc -n "$OPENSHIFT_NAMESPACE" apply -f "$OPENSHIFT_DIR/backend-pvc.yaml"
-  oc -n "$OPENSHIFT_NAMESPACE" apply -f "$OPENSHIFT_DIR/backend-service.yaml"
-  oc -n "$OPENSHIFT_NAMESPACE" apply -f "$OPENSHIFT_DIR/frontend-service.yaml"
-  oc -n "$OPENSHIFT_NAMESPACE" apply -f "$OPENSHIFT_DIR/backend-deployment.yaml"
-  oc -n "$OPENSHIFT_NAMESPACE" apply -f "$OPENSHIFT_DIR/frontend-deployment.yaml"
-  oc -n "$OPENSHIFT_NAMESPACE" apply -f "$OPENSHIFT_DIR/frontend-route.yaml"
+  oc -n "$OPENSHIFT_NAMESPACE" apply -k "$OPENSHIFT_KUSTOMIZE_DIR"
 }
 
 set_images_and_route() {
@@ -153,8 +150,8 @@ main() {
 
   DATABASE_TYPE="${DATABASE_TYPE:-postgres}"
 
-  if [[ ! -d "$OPENSHIFT_DIR" ]]; then
-    error "Missing deploy directory: $OPENSHIFT_DIR"
+  if [[ ! -d "$OPENSHIFT_KUSTOMIZE_DIR" ]]; then
+    error "Missing OpenShift overlay directory: $OPENSHIFT_KUSTOMIZE_DIR"
   fi
 
   log "Using namespace: $OPENSHIFT_NAMESPACE"
@@ -162,15 +159,16 @@ main() {
   log "Using frontend image: $FRONTEND_IMAGE"
   log "Using route host: $OPENSHIFT_ROUTE_HOST"
   log "Using database type: $DATABASE_TYPE"
+  log "Using OpenShift overlay: $OPENSHIFT_OVERLAY"
 
   oc whoami >/dev/null
   oc project "$OPENSHIFT_NAMESPACE" >/dev/null
 
   print_arch_summary
   create_or_update_pull_secret
+  apply_base_manifests
   apply_runtime_secret
   apply_runtime_config
-  apply_base_manifests
   set_images_and_route
   wait_for_rollout
   verify_health

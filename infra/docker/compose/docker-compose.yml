@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     init: true
     env_file:
-      - ${EG_BACKEND_ENV_FILE:-./.env.docker}
+      - ${EG_BACKEND_ENV_FILE:-./.local/docker/env/docker.env}
     environment:
       CHOKIDAR_USEPOLLING: "true"
       DATABASE_TYPE: ${EG_FORCE_DATABASE_TYPE:-${DATABASE_TYPE}}
@@ -42,7 +42,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: frontend/Dockerfile.nginx
+      dockerfile: frontend/Dockerfile.prod
       args:
         API_BASE_URL: ${API_BASE_URL:-}
     restart: unless-stopped

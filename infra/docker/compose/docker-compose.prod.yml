@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
     init: true
     env_file:
-      - ${EG_BACKEND_ENV_FILE:-./.env.production}
+      - ${EG_BACKEND_ENV_FILE:-./.local/docker/env/production.env}
     depends_on:
       db:
         condition: service_healthy
@@ -38,7 +38,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: frontend/Dockerfile.nginx
+      dockerfile: frontend/Dockerfile.prod
       args:
         API_BASE_URL: ${API_BASE_URL:-}
     restart: unless-stopped

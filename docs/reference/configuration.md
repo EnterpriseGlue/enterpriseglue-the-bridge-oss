@@ -6,9 +6,13 @@ Audience: Developers and architects.
 
 ## Backend Configuration
 Primary sources:
-- `.env.docker` (Docker Compose, Postgres default)
-- `.env.docker.<db>` (Docker Compose with `npm run dev -- --db <db>`)
+- `.local/docker/env/docker.env` (Docker Compose, Postgres default)
+- `.local/docker/env/docker.<db>.env` (Docker Compose with `npm run dev -- --db <db>`)
 - `backend/.env` (host-based runs)
+
+Legacy fallback support:
+- root `.env.docker`
+- root `.env.docker.<db>`
 
 Launcher and validation scripts:
 - `dev.sh` / `down.sh` select DB overlays from `infra/docker/compose/` (`docker-compose.<db>.yml`) and env files.
@@ -67,20 +71,20 @@ Notes:
 
 See for detailed settings:
 - `backend/.env.example`
-- `.env.docker.postgres.example`
-- `.env.docker.mysql.example`
-- `.env.docker.mssql.example`
-- `.env.docker.oracle.example`
-- `.env.docker.spanner.example`
+- `infra/docker/env/examples/docker.postgres.env.example`
+- `infra/docker/env/examples/docker.mysql.env.example`
+- `infra/docker/env/examples/docker.mssql.env.example`
+- `infra/docker/env/examples/docker.oracle.env.example`
+- `infra/docker/env/examples/docker.spanner.env.example`
 
 ## Frontend Configuration
 Primary sources:
 - `frontend/.env.local` or `frontend/.env`
-- `.env.docker` (Docker Compose)
-- `.env.production` (Docker Compose production)
+- `.local/docker/env/docker.env` (Docker Compose dev)
+- `.local/docker/env/production.env` (Docker Compose production)
 
 ### Core Settings
-- `API_BASE_URL`: preferred root env alias in Docker compose files
+- `API_BASE_URL`: preferred compose-level env alias for API origin
 - `VITE_API_BASE_URL`: frontend runtime variable consumed by browser code (Vite-exposed)
 
 In Docker compose, `API_BASE_URL` is mapped to `VITE_API_BASE_URL` for frontend runtime.
@@ -96,11 +100,17 @@ The UI is gated by `VITE_FEATURE_*` flags (see `frontend/.env.example`), such as
 ## Related Files
 - `backend/.env.example`
 - `frontend/.env.example`
-- `.env.docker.example`
-- `.env.docker.<db>.example`
+- `infra/docker/env/examples/docker.default.env.example`
+- `infra/docker/env/examples/docker.<db>.env.example`
+- `infra/docker/env/examples/production.env.example`
+- `infra/docker/env/examples/images.postgres.env.example`
+- `infra/docker/env/examples/images.oracle.env.example`
+- `infra/docker/env/examples/openshift.env.example`
 - `infra/docker/compose/docker-compose.yml`
 - `infra/docker/compose/docker-compose.<db>.yml`
 - `infra/docker/compose/docker-compose.prod.yml`
+- `infra/kubernetes/openshift/kustomize/base/`
+- `infra/kubernetes/openshift/kustomize/overlays/{dev,staging,prod}`
 - `backend/src/shared/config/index.ts`
 - `scripts/db-preflight.sh`
 - `dev.sh`

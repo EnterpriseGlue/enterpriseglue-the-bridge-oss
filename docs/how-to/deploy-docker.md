@@ -10,6 +10,11 @@ The default compose file `infra/docker/compose/docker-compose.yml` defines:
 - **backend**: API service (TypeScript, runs migrations on startup)
 - **frontend**: Nginx serving the built SPA and reverse-proxying API routes to backend
 
+Canonical Dockerfiles used by compose/workflows:
+- `backend/Dockerfile` (dev)
+- `backend/Dockerfile.prod` (production image)
+- `frontend/Dockerfile.prod` (dev/prod/image frontend build)
+
 For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 - `infra/docker/compose/docker-compose.mysql.yml`
 - `infra/docker/compose/docker-compose.mssql.yml`
@@ -27,8 +32,8 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
    - Postgres default: `npm run dev`
    - Explicit DB: `npm run dev -- --db <postgres|mysql|mssql|oracle|spanner>`
 2. Env file behavior:
-   - If `.env.docker` is missing, `dev.sh` creates it from `.env.docker.postgres.example`.
-   - If using `--db mysql` (or others) and `.env.docker.<db>` is missing, it is created from `.env.docker.<db>.example`.
+   - If `.local/docker/env/docker.env` is missing, `dev.sh` creates it from `infra/docker/env/examples/docker.postgres.env.example`.
+   - If using `--db mysql` (or others) and `.local/docker/env/docker.<db>.env` is missing, it is created from `infra/docker/env/examples/docker.<db>.env.example`.
 3. `dev.sh` runs `scripts/db-preflight.sh` before compose startup to:
    - validate required DB env vars for the selected `DATABASE_TYPE`
    - install missing DB driver package when needed
@@ -44,22 +49,25 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 6. Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
 
 ## Configuration (Production)
-1. Copy `.env.production.example` to `.env.production`.
+1. Prepare local env directory and copy production template:
+   - `mkdir -p .local/docker/env`
+   - `cp infra/docker/env/examples/production.env.example .local/docker/env/production.env`
 2. Set production secrets (`JWT_SECRET`, `ADMIN_PASSWORD`, `ENCRYPTION_KEY`).
 3. Set `FRONTEND_HOST_PORT` and keep `FRONTEND_URL` in sync with that public URL.
 4. Keep `API_BASE_URL` empty for default same-origin behavior (Nginx proxy). Set it only if frontend must call a different API origin.
 
 ## Configuration (Production from published images)
 1. Copy one image env template:
-   - `cp .env.images.postgres.example .env.images.postgres`
-   - `cp .env.images.oracle.example .env.images.oracle`
+   - `mkdir -p .local/docker/env`
+   - `cp infra/docker/env/examples/images.postgres.env.example .local/docker/env/images.postgres.env`
+   - `cp infra/docker/env/examples/images.oracle.env.example .local/docker/env/images.oracle.env`
 2. Set image refs:
    - `BACKEND_IMAGE`
    - `FRONTEND_IMAGE`
    - `IMAGE_TAG` (`sha-<commit>` or `vX.Y.Z`)
 3. Keep `EG_BACKEND_ENV_FILE` aligned with the copied file path:
-   - postgres: `EG_BACKEND_ENV_FILE=./.env.images.postgres`
-   - oracle: `EG_BACKEND_ENV_FILE=./.env.images.oracle`
+   - postgres: `EG_BACKEND_ENV_FILE=./.local/docker/env/images.postgres.env`
+   - oracle: `EG_BACKEND_ENV_FILE=./.local/docker/env/images.oracle.env`
 4. Keep `API_BASE_URL` empty for same-origin behavior.
 
 Key defaults:
@@ -107,7 +115,7 @@ npm run prod:images:oracle:down
 ```
 
 ## Rollback (image mode)
-1. Open the active image env file (`.env.images.postgres` or `.env.images.oracle`).
+1. Open the active image env file (`.local/docker/env/images.postgres.env` or `.local/docker/env/images.oracle.env`).
 2. Set `IMAGE_TAG` to the previous known-good tag.
 3. Re-run the same start command (`npm run prod:images:postgres` or `npm run prod:images:oracle`).
 
@@ -124,7 +132,7 @@ Docker creates persistent volumes for:
 - If email verification is enabled, configure `RESEND_API_KEY` to receive verification links.
 
 ## Troubleshooting
-- **Wrong env file selected**: ensure `--env-file` and `EG_BACKEND_ENV_FILE` point to the same `.env.images.*` file.
+- **Wrong env file selected**: ensure `--env-file` and `EG_BACKEND_ENV_FILE` point to the same `.local/docker/env/images.*.env` file.
 - **Image pull errors**: verify registry access and image names (`BACKEND_IMAGE`, `FRONTEND_IMAGE`) and tag (`IMAGE_TAG`).
 - **Backend not reachable in image mode**: use frontend-proxied health (`http://localhost:8080/health`) when `EXPOSE_BACKEND=false`.
 

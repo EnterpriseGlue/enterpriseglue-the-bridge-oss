@@ -3,8 +3,11 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_DIR="infra/docker/compose"
-POSTGRES_ENV_FILE=".env.images.postgres"
-ORACLE_ENV_FILE=".env.images.oracle"
+LOCAL_DOCKER_ENV_DIR=".local/docker/env"
+POSTGRES_ENV_FILE="$LOCAL_DOCKER_ENV_DIR/images.postgres.env"
+ORACLE_ENV_FILE="$LOCAL_DOCKER_ENV_DIR/images.oracle.env"
+LEGACY_POSTGRES_ENV_FILE=".env.images.postgres"
+LEGACY_ORACLE_ENV_FILE=".env.images.oracle"
 WAIT_SECONDS=360
 SKIP_ORACLE=false
 SKIP_EXPOSED=false
@@ -68,13 +71,32 @@ run_auth_flow_smoke() {
 }
 error() { echo "[smoke-images] ERROR: $*"; exit 1; }
 
+resolve_env_file() {
+  local preferred="$1"
+  local legacy="$2"
+  local preferred_path="$ROOT_DIR/$preferred"
+  local legacy_path="$ROOT_DIR/$legacy"
+
+  if [[ -f "$preferred_path" ]]; then
+    printf '%s' "$preferred_path"
+    return
+  fi
+
+  if [[ -n "$legacy" && -f "$legacy_path" ]]; then
+    printf '%s' "$legacy_path"
+    return
+  fi
+
+  printf '%s' "$preferred_path"
+}
+
 usage() {
   cat <<'EOF'
 Usage: bash ./scripts/smoke-images-local.sh [options]
 
 Options:
-  --postgres-env <file>   Env file for postgres image deployment (default: .env.images.postgres)
-  --oracle-env <file>     Env file for oracle image deployment (default: .env.images.oracle)
+  --postgres-env <file>   Env file for postgres image deployment (default: .local/docker/env/images.postgres.env)
+  --oracle-env <file>     Env file for oracle image deployment (default: .local/docker/env/images.oracle.env)
   --wait-seconds <n>      Max wait time per stack health check (default: 360)
   --skip-oracle           Skip oracle image smoke
   --skip-exposed          Skip postgres backend-exposed smoke
@@ -210,16 +232,17 @@ wait_for_http() {
 compose_down() {
   local env_file="$1"
   shift
-  docker compose --env-file "$env_file" "$@" down -v >/dev/null 2>&1 || true
+  EG_BACKEND_ENV_FILE="$env_file" docker compose --env-file "$env_file" "$@" down -v >/dev/null 2>&1 || true
 }
 
 run_postgres_internal() {
   log "Smoke: postgres image deployment (same-origin path)"
-  local env_file="$ROOT_DIR/$POSTGRES_ENV_FILE"
+  local env_file
+  env_file="$(resolve_env_file "$POSTGRES_ENV_FILE" "$LEGACY_POSTGRES_ENV_FILE")"
   require_file "$env_file"
 
-  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT docker compose --project-directory \"$ROOT_DIR\" --env-file \"$env_file\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.images.yml down -v >/dev/null 2>&1 || true"
-  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" docker compose --project-directory "$ROOT_DIR" --env-file "$env_file" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
+  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT EG_BACKEND_ENV_FILE=$env_file docker compose --project-directory \"$ROOT_DIR\" --env-file \"$env_file\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.images.yml down -v >/dev/null 2>&1 || true"
+  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" EG_BACKEND_ENV_FILE="$env_file" docker compose --project-directory "$ROOT_DIR" --env-file "$env_file" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
   wait_for_http "http://localhost:$FRONTEND_PORT/login" "$WAIT_SECONDS"
   wait_for_http "http://localhost:$FRONTEND_PORT/health" "$WAIT_SECONDS"
   if [[ "$SKIP_AUTH" != "true" ]]; then
@@ -231,11 +254,13 @@ run_postgres_internal() {
 
 run_postgres_exposed() {
   log "Smoke: postgres image deployment (backend exposed path)"
-  local env_file="$ROOT_DIR/$POSTGRES_ENV_FILE"
+  local env_file
+  env_file="$(resolve_env_file "$POSTGRES_ENV_FILE" "$LEGACY_POSTGRES_ENV_FILE")"
   require_file "$env_file"
-  local tmp_env="$ROOT_DIR/.env.images.postgres.smoke.tmp"
+  local tmp_env="$ROOT_DIR/.local/docker/env/images.postgres.smoke.tmp"
 
   register_cleanup "rm -f \"$tmp_env\""
+  mkdir -p "$ROOT_DIR/.local/docker/env"
   awk '
     BEGIN { updated = 0 }
     /^EXPOSE_BACKEND=/ { print "EXPOSE_BACKEND=true"; updated = 1; next }
@@ -247,8 +272,8 @@ run_postgres_exposed() {
     }
   ' "$env_file" > "$tmp_env"
 
-  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT BACKEND_HOST_PORT=$BACKEND_PORT docker compose --project-directory \"$ROOT_DIR\" --env-file \"$tmp_env\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.images.yml -f $COMPOSE_DIR/docker-compose.backend-expose.yml down -v >/dev/null 2>&1 || true"
-  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" BACKEND_HOST_PORT="$BACKEND_PORT" docker compose --project-directory "$ROOT_DIR" --env-file "$tmp_env" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" up -d
+  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT BACKEND_HOST_PORT=$BACKEND_PORT EG_BACKEND_ENV_FILE=$tmp_env docker compose --project-directory \"$ROOT_DIR\" --env-file \"$tmp_env\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.images.yml -f $COMPOSE_DIR/docker-compose.backend-expose.yml down -v >/dev/null 2>&1 || true"
+  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" BACKEND_HOST_PORT="$BACKEND_PORT" EG_BACKEND_ENV_FILE="$tmp_env" docker compose --project-directory "$ROOT_DIR" --env-file "$tmp_env" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" up -d
   wait_for_http "http://localhost:$FRONTEND_PORT/health" "$WAIT_SECONDS"
   wait_for_http "http://localhost:$BACKEND_PORT/health" "$WAIT_SECONDS"
   if [[ "$SKIP_AUTH" != "true" ]]; then
@@ -262,11 +287,12 @@ run_postgres_exposed() {
 
 run_oracle_internal() {
   log "Smoke: oracle image deployment (same-origin path)"
-  local env_file="$ROOT_DIR/$ORACLE_ENV_FILE"
+  local env_file
+  env_file="$(resolve_env_file "$ORACLE_ENV_FILE" "$LEGACY_ORACLE_ENV_FILE")"
   require_file "$env_file"
 
-  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT docker compose --project-directory \"$ROOT_DIR\" --env-file \"$env_file\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.oracle.yml -f $COMPOSE_DIR/docker-compose.images.yml down -v >/dev/null 2>&1 || true"
-  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" docker compose --project-directory "$ROOT_DIR" --env-file "$env_file" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
+  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT EG_BACKEND_ENV_FILE=$env_file docker compose --project-directory \"$ROOT_DIR\" --env-file \"$env_file\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.oracle.yml -f $COMPOSE_DIR/docker-compose.images.yml down -v >/dev/null 2>&1 || true"
+  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" EG_BACKEND_ENV_FILE="$env_file" docker compose --project-directory "$ROOT_DIR" --env-file "$env_file" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
   wait_for_http "http://localhost:$FRONTEND_PORT/login" "$WAIT_SECONDS"
   wait_for_http "http://localhost:$FRONTEND_PORT/health" "$WAIT_SECONDS"
   if [[ "$SKIP_AUTH" != "true" ]]; then

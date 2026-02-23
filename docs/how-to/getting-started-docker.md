@@ -13,7 +13,7 @@ Audience: Developers and architects.
    ```bash
    npm run dev
    ```
-   - If `.env.docker` does not exist, it is auto-created from `.env.docker.postgres.example`.
+   - If `.local/docker/env/docker.env` does not exist, it is auto-created from `infra/docker/env/examples/docker.postgres.env.example`.
 2. Open the app:
    - Frontend: http://localhost:5173 (default)
    - Backend: http://localhost:8787 (default when `EXPOSE_BACKEND=true`)
@@ -34,7 +34,7 @@ npm run dev -- --db spanner
 ```
 
 What happens automatically:
-- `dev.sh` creates `.env.docker.<db>` from `.env.docker.<db>.example` when missing.
+- `dev.sh` creates `.local/docker/env/docker.<db>.env` from `infra/docker/env/examples/docker.<db>.env.example` when missing.
 - `scripts/db-preflight.sh` validates required DB env variables.
 - Missing DB driver packages are installed automatically for local development.
 - Matching compose overlay is selected from `infra/docker/compose/` (`docker-compose.<db>.yml`).
@@ -42,9 +42,10 @@ What happens automatically:
 ## Steps (Production)
 1. Copy the production env file:
    ```bash
-   cp .env.production.example .env.production
+   mkdir -p .local/docker/env
+   cp infra/docker/env/examples/production.env.example .local/docker/env/production.env
    ```
-2. Update production secrets in `.env.production` (JWT, admin password, encryption key).
+2. Update production secrets in `.local/docker/env/production.env` (JWT, admin password, encryption key).
 3. Keep `FRONTEND_URL` and `FRONTEND_HOST_PORT` aligned.
 4. Keep `API_BASE_URL` empty for same-origin API calls through Nginx proxy.
 5. Start the production stack:
@@ -60,9 +61,10 @@ Use this when you want deployment from registry images without local source buil
 
 1. Copy an image env template:
    ```bash
-   cp .env.images.postgres.example .env.images.postgres
+   mkdir -p .local/docker/env
+   cp infra/docker/env/examples/images.postgres.env.example .local/docker/env/images.postgres.env
    # or
-   cp .env.images.oracle.example .env.images.oracle
+   cp infra/docker/env/examples/images.oracle.env.example .local/docker/env/images.oracle.env
    ```
 2. Set image refs in the copied file:
    - `BACKEND_IMAGE`
@@ -97,7 +99,7 @@ npm run prod:images:oracle:down
 ```
 
 ## Notes
-- Docker uses a PostgreSQL container by default (see `.env.docker` / `.env.production`).
+- Docker uses a PostgreSQL container by default (see `.local/docker/env/docker.env` / `.local/docker/env/production.env`).
 - Docker dev serves frontend through Nginx (production-parity pathing and proxy behavior).
 - Frontend source changes in Docker dev require rebuilding the frontend image (`npm run dev` already runs with `--build`).
 - Git repositories are stored at `./data/repos` inside the backend container.

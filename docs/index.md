@@ -6,7 +6,7 @@ operating the platform.
 Audience: Developers and architects.
 
 ## Scope (Current MVP)
-- Technical deployment (Docker-first).
+- Technical deployment (Docker-first + OpenShift overlays).
 - Configuration reference for backend and frontend.
 - Platform module overview (Voyager, Starbase, Mission Control, etc.).
 - Links to existing technical references.
@@ -16,6 +16,7 @@ Audience: Developers and architects.
 
 ## Deployment
 - [Docker Compose Deployment](how-to/deploy-docker.md)
+- [OpenShift Deployment](how-to/deploy-openshift.md)
 - [Deployment Runbook](how-to/deployment-runbook.md)
 
 ## Configuration

@@ -5,7 +5,8 @@ Summary: Common issues and fixes for EnterpriseGlue setup.
 Audience: Developers and architects.
 
 ## Backend fails to start (missing env)
-- Ensure `.env.docker` (Docker) or `backend/.env` (host) exists.
+- Ensure `.local/docker/env/docker.env` (Docker) or `backend/.env` (host) exists.
+- Legacy fallback: root `.env.docker` is still accepted.
 - Check required variables: `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
 
 ## Schema validation errors
@@ -17,13 +18,13 @@ Audience: Developers and architects.
 - Ensure the `db` container is healthy in Docker.
 
 ## Frontend cannot reach API
-- Verify `API_BASE_URL` (Docker root env) or `VITE_API_BASE_URL` (frontend env).
+- Verify `API_BASE_URL` in the active Docker env file (`.local/docker/env/docker.env` or `.local/docker/env/production.env`) or `VITE_API_BASE_URL` (frontend env).
 - If production uses same-origin mode, keep `API_BASE_URL` empty and confirm Nginx proxy is running.
 - Confirm backend is reachable on the configured backend port (`API_PORT`, default `8787`).
 
 ## Docker compose ports in use
 - Stop conflicting services on configured ports.
-- Or change ports in `.env.docker` using `BACKEND_HOST_PORT`, `FRONTEND_HOST_PORT`, and `POSTGRES_HOST_PORT`.
+- Or change ports in `.local/docker/env/docker.env` using `BACKEND_HOST_PORT`, `FRONTEND_HOST_PORT`, and `POSTGRES_HOST_PORT`.
 
 ## Migrations fail
 - Verify database credentials and schema permissions.

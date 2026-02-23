@@ -11,12 +11,12 @@ Audience: Developers and architects.
    ```bash
    npm run dev
    ```
-   On first run, if `.env.docker` is missing, it is created from `.env.docker.postgres.example`.
+   On first run, if `.local/docker/env/docker.env` is missing, it is created from `infra/docker/env/examples/docker.postgres.env.example`.
 2. Open the app:
    - Frontend: http://localhost:5173 (default)
    - Backend: http://localhost:8787 (default when `EXPOSE_BACKEND=true`)
    - If `EXPOSE_BACKEND=false`, call backend through frontend origin (for example `http://localhost:5173/api/...`).
-   - Ports are configurable in `.env.docker`.
+   - Ports are configurable in the active env file (`.local/docker/env/docker.env` by default).
    - Docker dev serves frontend via Nginx for production-parity routing.
 
 ### One-click alternative databases
@@ -30,16 +30,17 @@ npm run dev -- --db spanner
 ```
 
 Behavior:
-- On first run for a DB, `.env.docker.<db>` is auto-created from `.env.docker.<db>.example`.
+- On first run for a DB, `.local/docker/env/docker.<db>.env` is auto-created from `infra/docker/env/examples/docker.<db>.env.example`.
 - `dev.sh` runs `scripts/db-preflight.sh` to validate env requirements and install missing DB drivers.
 - Docker compose automatically includes the matching DB overlay from `infra/docker/compose/` (`docker-compose.<db>.yml`).
 
 ## Production (Docker Compose)
 1. Copy the production env file:
    ```bash
-   cp .env.production.example .env.production
+   mkdir -p .local/docker/env
+   cp infra/docker/env/examples/production.env.example .local/docker/env/production.env
    ```
-2. Update secrets in `.env.production` (JWT, admin password, encryption key).
+2. Update secrets in `.local/docker/env/production.env` (JWT, admin password, encryption key).
 3. Start the production stack:
    ```bash
    npm run prod
@@ -53,9 +54,10 @@ Use this mode when you want to run exactly what CI published:
 
 1. Copy one image env template:
    ```bash
-   cp .env.images.postgres.example .env.images.postgres
+   mkdir -p .local/docker/env
+   cp infra/docker/env/examples/images.postgres.env.example .local/docker/env/images.postgres.env
    # or
-   cp .env.images.oracle.example .env.images.oracle
+   cp infra/docker/env/examples/images.oracle.env.example .local/docker/env/images.oracle.env
    ```
 2. Set these in the copied env file:
    - `BACKEND_IMAGE`
@@ -69,8 +71,20 @@ Use this mode when you want to run exactly what CI published:
    ```
 4. Roll back by changing only `IMAGE_TAG` and re-running the same command.
 
-Admin credentials come from the active env file (`.env.docker` for dev, `.env.production` for prod).
+Admin credentials come from the active env file (`.local/docker/env/docker.env` for dev, `.local/docker/env/production.env` for prod).
 Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
+
+## OpenShift deployment assets
+- Kustomize base and overlays:
+  - `infra/kubernetes/openshift/kustomize/base/`
+  - `infra/kubernetes/openshift/kustomize/overlays/{dev,staging,prod}`
+- OpenShift examples:
+  - `infra/kubernetes/openshift/examples/`
+- OpenShift env template:
+  - `infra/docker/env/examples/openshift.env.example`
+- Deploy entrypoint:
+  - `npm run deploy:openshift`
+  - Optional overlay selector: `OPENSHIFT_OVERLAY=staging npm run deploy:openshift`
 
 ## Stop
 ```bash
@@ -95,6 +109,7 @@ npm run prod:images:oracle:down
 ## Documentation
 - [Developer/Architect Docs](docs/index.md)
 - [Docker Deployment (Dev + Production)](docs/how-to/deploy-docker.md)
+- [OpenShift Deployment](docs/how-to/deploy-openshift.md)
 - [Configuration Reference](docs/reference/configuration.md)
 - [Platform Modules Overview](docs/explanation/platform-modules.md)
 

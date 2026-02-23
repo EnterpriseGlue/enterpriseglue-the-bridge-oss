@@ -183,7 +183,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: frontend/Dockerfile.nginx
+          file: frontend/Dockerfile.prod
           platforms: ${{ steps.meta.outputs.image_platforms }}
           push: true
           build-args: |

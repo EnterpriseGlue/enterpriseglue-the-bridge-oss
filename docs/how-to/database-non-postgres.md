@@ -16,7 +16,7 @@ npm run dev -- --db spanner
 ```
 
 What the launcher does automatically:
-1. Creates `.env.docker.<db>` from `.env.docker.<db>.example` if missing.
+1. Creates `.local/docker/env/docker.<db>.env` from `infra/docker/env/examples/docker.<db>.env.example` if missing.
 2. Runs `scripts/db-preflight.sh` to validate required environment variables.
 3. Installs a missing DB driver package (`mysql2`, `mssql`, `oracledb`, `@google-cloud/spanner`).
 4. Loads matching compose overlay from `infra/docker/compose/` (`docker-compose.<db>.yml`) and starts the stack.
@@ -78,5 +78,5 @@ The deploy script now runs the same DB preflight checks before build/start.
 
 ## Reference
 - `backend/.env.example`
-- `.env.docker.<db>.example` templates in repo root
+- `infra/docker/env/examples/docker.<db>.env.example` templates
 - `scripts/db-preflight.sh`

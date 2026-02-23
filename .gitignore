@@ -28,15 +28,13 @@ coverage/
 .env
 .env.*
 *.local
+.local/
 .github_token
 
 !.env.example
 !**/.env.example
-!.env.docker.example
-!.env.docker.*.example
-!.env.production.example
-!.env.images.*.example
-!.env.openshift.example
+!infra/docker/env/examples/*.example
+!infra/kubernetes/openshift/examples/*.example.yaml
 
 # OS / editor files
 .DS_Store

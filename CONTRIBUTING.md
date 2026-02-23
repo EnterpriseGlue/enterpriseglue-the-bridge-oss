@@ -32,7 +32,8 @@ Optional (only if running services outside Docker):
 
 ### Configure environment
 
-- Docker-first development uses the root `.env.docker` file.
+- Docker-first development uses `.local/docker/env/docker.env` (legacy root `.env.docker` is still accepted as fallback).
+- If missing, `dev.sh` can bootstrap it from `infra/docker/env/examples/docker.postgres.env.example`.
 - The Docker environment runs PostgreSQL 18 in a container and the backend uses PostgreSQL schemas for different logical databases.
 
 ### Run locally (Docker-first)
@@ -106,6 +107,8 @@ npm run test:integration    # Integration tests only
 npm run test:e2e            # E2E tests (requires services running)
 npm run test:ci             # All tests (unit + integration + e2e)
 ```
+
+Playwright uses `test/e2e/playwright.config.ts` as the canonical E2E config path.
 
 **Note:** Integration and E2E tests require:
 - PostgreSQL running (Docker or local)

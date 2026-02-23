@@ -2,7 +2,10 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-DEFAULT_ENV_FILE="$SCRIPT_DIR/.env.docker"
+LOCAL_DOCKER_ENV_DIR="$SCRIPT_DIR/.local/docker/env"
+DEFAULT_ENV_FILE="$LOCAL_DOCKER_ENV_DIR/docker.env"
+LEGACY_DEFAULT_ENV_FILE="$SCRIPT_DIR/.env.docker"
+ENV_TEMPLATE_DIR="$SCRIPT_DIR/infra/docker/env/examples"
 SELECTED_DB=""
 FORWARD_ARGS=()
 
@@ -48,17 +51,28 @@ done
 ACTIVE_ENV_FILE="$DEFAULT_ENV_FILE"
 # Match env file selection logic from dev.sh so down targets the same DB stack.
 if [[ -n "$SELECTED_DB" ]]; then
-  ACTIVE_ENV_FILE="$SCRIPT_DIR/.env.docker.$SELECTED_DB"
-  TEMPLATE_FILE="$SCRIPT_DIR/.env.docker.$SELECTED_DB.example"
-  if [[ ! -f "$ACTIVE_ENV_FILE" && -f "$TEMPLATE_FILE" ]]; then
+  ACTIVE_ENV_FILE="$LOCAL_DOCKER_ENV_DIR/docker.$SELECTED_DB.env"
+  LEGACY_ENV_FILE="$SCRIPT_DIR/.env.docker.$SELECTED_DB"
+  TEMPLATE_FILE="$ENV_TEMPLATE_DIR/docker.$SELECTED_DB.env.example"
+  if [[ -f "$ACTIVE_ENV_FILE" ]]; then
+    :
+  elif [[ -f "$LEGACY_ENV_FILE" ]]; then
+    ACTIVE_ENV_FILE="$LEGACY_ENV_FILE"
+  elif [[ -f "$TEMPLATE_FILE" ]]; then
+    mkdir -p "$LOCAL_DOCKER_ENV_DIR"
     cp "$TEMPLATE_FILE" "$ACTIVE_ENV_FILE"
     echo "Created $ACTIVE_ENV_FILE from template."
   fi
 elif [[ ! -f "$ACTIVE_ENV_FILE" ]]; then
-  FALLBACK_TEMPLATE="$SCRIPT_DIR/.env.docker.postgres.example"
-  if [[ -f "$FALLBACK_TEMPLATE" ]]; then
-    cp "$FALLBACK_TEMPLATE" "$ACTIVE_ENV_FILE"
-    echo "Created $ACTIVE_ENV_FILE from $FALLBACK_TEMPLATE"
+  if [[ -f "$LEGACY_DEFAULT_ENV_FILE" ]]; then
+    ACTIVE_ENV_FILE="$LEGACY_DEFAULT_ENV_FILE"
+  else
+    FALLBACK_TEMPLATE="$ENV_TEMPLATE_DIR/docker.postgres.env.example"
+    if [[ -f "$FALLBACK_TEMPLATE" ]]; then
+      mkdir -p "$LOCAL_DOCKER_ENV_DIR"
+      cp "$FALLBACK_TEMPLATE" "$ACTIVE_ENV_FILE"
+      echo "Created $ACTIVE_ENV_FILE from $FALLBACK_TEMPLATE"
+    fi
   fi
 fi
 
