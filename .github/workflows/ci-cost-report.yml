@@ -1,0 +1,152 @@
+name: CI Cost Report
+
+on:
+  schedule:
+    - cron: "30 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  weekly-ci-cost-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build weekly CI cost report (last 7 days)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const workflowId = 'ci.yml';
+            const daysBack = 7;
+            const lookbackMs = daysBack * 24 * 60 * 60 * 1000;
+            const nowMs = Date.now();
+            const sinceMs = nowMs - lookbackMs;
+
+            const allRuns = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner,
+              repo,
+              workflow_id: workflowId,
+              event: 'pull_request',
+              per_page: 100,
+            });
+
+            const recentRuns = allRuns
+              .filter((run) => run.status === 'completed' && Date.parse(run.created_at) >= sinceMs)
+              .slice(0, 60);
+
+            const durationMinutes = (startedAt, completedAt) => {
+              if (!startedAt || !completedAt) return null;
+              const started = Date.parse(startedAt);
+              const completed = Date.parse(completedAt);
+              if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) return null;
+              return (completed - started) / 60000;
+            };
+
+            const byJobName = new Map();
+            const runDurations = [];
+
+            for (const run of recentRuns) {
+              const runDuration = durationMinutes(run.created_at, run.updated_at);
+              if (runDuration !== null) {
+                runDurations.push(runDuration);
+              }
+
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                owner,
+                repo,
+                run_id: run.id,
+                per_page: 100,
+              });
+
+              for (const job of jobs) {
+                const jobDuration = durationMinutes(job.started_at, job.completed_at);
+                if (jobDuration === null) continue;
+
+                const key = String(job.name || 'unknown');
+                const prev = byJobName.get(key) || { name: key, count: 0, totalMinutes: 0 };
+                prev.count += 1;
+                prev.totalMinutes += jobDuration;
+                byJobName.set(key, prev);
+              }
+            }
+
+            const median = (values) => {
+              if (!values.length) return 0;
+              const sorted = [...values].sort((a, b) => a - b);
+              const mid = Math.floor(sorted.length / 2);
+              if (sorted.length % 2 === 0) {
+                return (sorted[mid - 1] + sorted[mid]) / 2;
+              }
+              return sorted[mid];
+            };
+
+            const jobs = Array.from(byJobName.values())
+              .map((j) => ({
+                ...j,
+                avgMinutes: j.totalMinutes / j.count,
+              }))
+              .sort((a, b) => b.totalMinutes - a.totalMinutes);
+
+            const topJobs = jobs.slice(0, 5);
+            const totalJobMinutes = jobs.reduce((sum, j) => sum + j.totalMinutes, 0);
+            const medianRun = median(runDurations);
+            const avgRun = runDurations.length
+              ? runDurations.reduce((sum, v) => sum + v, 0) / runDurations.length
+              : 0;
+
+            const report = {
+              generatedAt: new Date().toISOString(),
+              daysBack,
+              analyzedRuns: recentRuns.length,
+              medianRunMinutes: Number(medianRun.toFixed(2)),
+              averageRunMinutes: Number(avgRun.toFixed(2)),
+              totalJobMinutes: Number(totalJobMinutes.toFixed(2)),
+              topJobs: topJobs.map((j) => ({
+                name: j.name,
+                runs: j.count,
+                totalMinutes: Number(j.totalMinutes.toFixed(2)),
+                avgMinutes: Number(j.avgMinutes.toFixed(2)),
+              })),
+            };
+
+            const lines = [];
+            lines.push('# Weekly CI Cost Report');
+            lines.push('');
+            lines.push(`Window: last ${daysBack} days`);
+            lines.push(`Analyzed CI pull_request runs: ${report.analyzedRuns}`);
+            lines.push(`Median PR CI runtime: ${report.medianRunMinutes} min`);
+            lines.push(`Average PR CI runtime: ${report.averageRunMinutes} min`);
+            lines.push(`Total job compute minutes: ${report.totalJobMinutes} min`);
+            lines.push('');
+            lines.push('## Most expensive jobs (by total minutes)');
+            lines.push('');
+
+            if (report.topJobs.length === 0) {
+              lines.push('- No completed PR runs found in this window.');
+            } else {
+              for (const [idx, job] of report.topJobs.entries()) {
+                lines.push(`${idx + 1}. ${job.name} — total ${job.totalMinutes} min across ${job.runs} runs (avg ${job.avgMinutes} min)`);
+              }
+            }
+
+            const markdown = lines.join('\n');
+            fs.writeFileSync('ci-cost-report.json', JSON.stringify(report, null, 2));
+            fs.writeFileSync('ci-cost-report.md', markdown + '\n');
+
+            await core.summary
+              .addRaw(markdown)
+              .write();
+
+      - name: Upload CI cost report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-cost-report
+          path: |
+            ci-cost-report.json
+            ci-cost-report.md
+          if-no-files-found: error

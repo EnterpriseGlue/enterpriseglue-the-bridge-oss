@@ -5,11 +5,9 @@ on:
     types:
       - opened
       - reopened
-      - synchronize
       - edited
       - ready_for_review
       - labeled
-      - unlabeled
 
 permissions:
   contents: read
@@ -22,7 +20,7 @@ concurrency:
 
 jobs:
   suggest-and-apply:
-    if: ${{ github.event.pull_request.state == 'open' }}
+    if: ${{ github.event.pull_request.state == 'open' && (github.event.action != 'labeled' || github.event.label.name == 'ai:apply') }}
     runs-on: ubuntu-latest
     steps:
       - name: Generate AI suggestions (title + release label + impact)
@@ -229,8 +227,8 @@ jobs:
               `Reasoning: ${process.env.REASONING || 'n/a'}`,
               '',
               'Auto-apply mode:',
-              '- Add label `ai:apply` to this PR, or set repo variable `AI_PR_AUTOFIX_ENABLED=true`.',
-              '- When enabled, this workflow can update PR title and add the suggested release label.'
+              '- Release label baseline is auto-managed by this workflow.',
+              '- Add label `ai:apply` to this PR, or set repo variable `AI_PR_AUTOFIX_ENABLED=true` to also auto-update the PR title.'
             ].join('\n');
 
             const comments = await github.paginate(github.rest.issues.listComments, {
@@ -270,26 +268,12 @@ jobs:
             const labels = (pr.labels || []).map((l) => l.name);
             const hasApplyLabel = labels.includes('ai:apply');
             const autofixEnabled = String(process.env.AUTOFIX_ENABLED || 'false').toLowerCase() === 'true';
-            const shouldApply = autofixEnabled || hasApplyLabel;
+            const shouldApplyTitle = autofixEnabled || hasApplyLabel;
             const allowForkAutofix = String(process.env.AUTOFIX_ALLOW_FORKS || 'false').toLowerCase() === 'true';
 
             const isFork = Boolean(pr.head?.repo?.fork);
-            if (isFork && !allowForkAutofix) {
-              core.notice('Auto-apply blocked: PR comes from a fork (set AI_PR_AUTOFIX_ALLOW_FORKS=true to override).');
-              return;
-            }
-
             const trustedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
             const authorAssociation = String(pr.author_association || '').toUpperCase();
-            if (!trustedAssociations.has(authorAssociation)) {
-              core.notice(`Auto-apply blocked: untrusted author association (${authorAssociation || 'UNKNOWN'}).`);
-              return;
-            }
-
-            if (!shouldApply) {
-              core.notice('Auto-apply disabled. Advisory mode only.');
-              return;
-            }
 
             const releaseLabel = process.env.RELEASE_LABEL;
             const suggestedTitle = process.env.SUGGESTED_TITLE;
@@ -334,16 +318,6 @@ jobs:
             };
             const existingReleaseLabels = labels.filter((label) => allowedReleaseLabels.has(label));
 
-            if (suggestedTitle && suggestedTitle !== pr.title) {
-              await github.rest.pulls.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: pr.number,
-                title: suggestedTitle,
-              });
-              core.notice(`Updated PR title to: ${suggestedTitle}`);
-            }
-
             if (releaseLabel && allowedReleaseLabels.has(releaseLabel) && existingReleaseLabels.length === 0) {
               await ensureLabelExists(releaseLabel);
               await github.rest.issues.addLabels({
@@ -353,7 +327,6 @@ jobs:
                 labels: [releaseLabel],
               });
               core.notice(`Added release label: ${releaseLabel}`);
-              return;
             }
 
             const hasOnlyInternalLabel = existingReleaseLabels.length === 1 && existingReleaseLabels[0] === 'release:internal';
@@ -373,4 +346,29 @@ jobs:
                 labels: [releaseLabel],
               });
               core.notice(`Upgraded release label from release:internal to ${releaseLabel}`);
+            }
+
+            if (!shouldApplyTitle) {
+              core.notice('Title auto-apply disabled. Advisory mode for title updates.');
+              return;
+            }
+
+            if (isFork && !allowForkAutofix) {
+              core.notice('Title auto-apply blocked: PR comes from a fork (set AI_PR_AUTOFIX_ALLOW_FORKS=true to override).');
+              return;
+            }
+
+            if (!trustedAssociations.has(authorAssociation)) {
+              core.notice(`Title auto-apply blocked: untrusted author association (${authorAssociation || 'UNKNOWN'}).`);
+              return;
+            }
+
+            if (suggestedTitle && suggestedTitle !== pr.title) {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                title: suggestedTitle,
+              });
+              core.notice(`Updated PR title to: ${suggestedTitle}`);
             }

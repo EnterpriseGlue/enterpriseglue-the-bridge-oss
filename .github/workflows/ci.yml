@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   detect:
     runs-on: ubuntu-latest
@@ -17,6 +21,10 @@ jobs:
     outputs:
       run_tests: ${{ steps.detect.outputs.run_tests }}
       current_sha: ${{ steps.detect.outputs.current_sha }}
+      run_postgres: ${{ steps.detect.outputs.run_postgres }}
+      run_oracle: ${{ steps.detect.outputs.run_oracle }}
+      run_smoke: ${{ steps.detect.outputs.run_smoke }}
+      changed_files_count: ${{ steps.detect.outputs.changed_files_count }}
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -25,18 +33,93 @@ jobs:
 
       - name: Detect changes since last nightly run
         id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          set -euo pipefail
+
+          emit_all_true() {
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "run_postgres=true" >> "$GITHUB_OUTPUT"
+            echo "run_oracle=true" >> "$GITHUB_OUTPUT"
+            echo "run_smoke=true" >> "$GITHUB_OUTPUT"
+          }
+
           CURRENT_SHA=$(git rev-parse HEAD)
           echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.event_name }}" != "schedule" ]; then
-            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            emit_all_true
+            echo "changed_files_count=manual" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            BASE_SHA="${PR_BASE_SHA}"
+            HEAD_SHA="${PR_HEAD_SHA:-$CURRENT_SHA}"
+            CHANGED_FILES="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)"
+            CHANGED_COUNT="$(printf '%s\n' "$CHANGED_FILES" | sed '/^$/d' | wc -l | tr -d ' ')"
+            echo "changed_files_count=$CHANGED_COUNT" >> "$GITHUB_OUTPUT"
+
+            if [ -z "$CHANGED_FILES" ]; then
+              emit_all_true
+              exit 0
+            fi
+
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+
+            backend_changed=false
+            frontend_changed=false
+            infra_changed=false
+            db_changed=false
+            docs_only=true
+
+            if grep -Eq '^(backend/|packages/contracts/|package\.json|package-lock\.json)' <<< "$CHANGED_FILES"; then backend_changed=true; fi
+            if grep -Eq '^(frontend/|packages/contracts/|package\.json|package-lock\.json)' <<< "$CHANGED_FILES"; then frontend_changed=true; fi
+            if grep -Eq '^(infra/docker/|infra/kubernetes/|scripts/smoke-images-local\.sh|backend/Dockerfile\.prod|frontend/Dockerfile\.prod|\.github/workflows/(ci|docker-images)\.yml)' <<< "$CHANGED_FILES"; then infra_changed=true; fi
+            if grep -Eq '^backend/src/shared/db/|^backend/src/shared/config/|^backend/src/modules/.*/.*(db|migration)|^backend/.+migration' <<< "$CHANGED_FILES"; then db_changed=true; fi
+            if grep -Evq '^(docs/|README\.md|CHANGELOG\.md|\.github/.*\.md$)' <<< "$CHANGED_FILES"; then docs_only=false; fi
+
+            run_postgres=false
+            run_oracle=false
+            run_smoke=false
+
+            if [ "$docs_only" = false ]; then
+              if [ "$backend_changed" = true ] || [ "$frontend_changed" = true ] || [ "$infra_changed" = true ]; then
+                run_postgres=true
+              fi
+              if [ "$backend_changed" = true ] || [ "$db_changed" = true ] || [ "$infra_changed" = true ]; then
+                run_oracle=true
+              fi
+              if [ "$backend_changed" = true ] || [ "$frontend_changed" = true ] || [ "$infra_changed" = true ] || [ "$db_changed" = true ]; then
+                run_smoke=true
+              fi
+            fi
+
+            echo "run_postgres=$run_postgres" >> "$GITHUB_OUTPUT"
+            echo "run_oracle=$run_oracle" >> "$GITHUB_OUTPUT"
+            echo "run_smoke=$run_smoke" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${EVENT_NAME}" != "schedule" ]; then
+            emit_all_true
+            echo "changed_files_count=all" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           LAST_SHA=$(cat .sync/ci-main.sha 2>/dev/null || echo "")
           if [ "$CURRENT_SHA" = "$LAST_SHA" ]; then
             echo "run_tests=false" >> "$GITHUB_OUTPUT"
+            echo "run_postgres=false" >> "$GITHUB_OUTPUT"
+            echo "run_oracle=false" >> "$GITHUB_OUTPUT"
+            echo "run_smoke=false" >> "$GITHUB_OUTPUT"
+            echo "changed_files_count=0" >> "$GITHUB_OUTPUT"
           else
-            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            emit_all_true
+            echo "changed_files_count=since-last-nightly" >> "$GITHUB_OUTPUT"
           fi
 
   compose-render:
@@ -263,18 +346,34 @@ jobs:
   smoke-postgres-image-deploy:
     runs-on: ubuntu-latest
     needs: detect
-    if: needs.detect.outputs.run_tests == 'true'
+    if: needs.detect.outputs.run_tests == 'true' && needs.detect.outputs.run_smoke == 'true'
     permissions:
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build local backend image
-        run: docker build -f backend/Dockerfile.prod -t eg-local-backend:pr .
+        run: |
+          docker buildx build --load \
+            --cache-from type=gha,scope=ci-smoke-backend \
+            --cache-to type=gha,mode=max,scope=ci-smoke-backend \
+            -f backend/Dockerfile.prod \
+            -t eg-local-backend:pr \
+            .
 
       - name: Build local frontend image
-        run: docker build -f frontend/Dockerfile.prod --build-arg API_BASE_URL= -t eg-local-frontend:pr .
+        run: |
+          docker buildx build --load \
+            --cache-from type=gha,scope=ci-smoke-frontend \
+            --cache-to type=gha,mode=max,scope=ci-smoke-frontend \
+            -f frontend/Dockerfile.prod \
+            --build-arg API_BASE_URL= \
+            -t eg-local-frontend:pr \
+            .
 
       - name: Prepare image deployment env file
         shell: bash
@@ -345,18 +444,34 @@ jobs:
   smoke-postgres-image-deploy-exposed:
     runs-on: ubuntu-latest
     needs: detect
-    if: needs.detect.outputs.run_tests == 'true'
+    if: needs.detect.outputs.run_tests == 'true' && needs.detect.outputs.run_smoke == 'true'
     permissions:
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build local backend image
-        run: docker build -f backend/Dockerfile.prod -t eg-local-backend:pr .
+        run: |
+          docker buildx build --load \
+            --cache-from type=gha,scope=ci-smoke-backend \
+            --cache-to type=gha,mode=max,scope=ci-smoke-backend \
+            -f backend/Dockerfile.prod \
+            -t eg-local-backend:pr \
+            .
 
       - name: Build local frontend image
-        run: docker build -f frontend/Dockerfile.prod --build-arg API_BASE_URL= -t eg-local-frontend:pr .
+        run: |
+          docker buildx build --load \
+            --cache-from type=gha,scope=ci-smoke-frontend \
+            --cache-to type=gha,mode=max,scope=ci-smoke-frontend \
+            -f frontend/Dockerfile.prod \
+            --build-arg API_BASE_URL= \
+            -t eg-local-frontend:pr \
+            .
 
       - name: Prepare image deployment env file (backend exposed)
         shell: bash
@@ -421,3 +536,36 @@ jobs:
         run: |
           COMPOSE_DIR="infra/docker/compose"
           docker compose --project-directory . --env-file .env.images.exposed.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" down -v
+
+  # ---------------------------------------------------------------------------
+  # Single aggregate gate: required check target for branch protection.
+  # Always runs. Succeeds if all work jobs succeeded or were skipped.
+  # Fails if any work job failed or was cancelled.
+  # ---------------------------------------------------------------------------
+
+  ci-complete:
+    runs-on: ubuntu-latest
+    needs: [detect, compose-render, test, smoke-postgres-image-deploy, smoke-postgres-image-deploy-exposed]
+    if: always()
+    steps:
+      - name: Evaluate CI result
+        run: |
+          echo "detect: ${{ needs.detect.result }}"
+          echo "compose-render: ${{ needs.compose-render.result }}"
+          echo "test: ${{ needs.test.result }}"
+          echo "smoke-postgres-image-deploy: ${{ needs.smoke-postgres-image-deploy.result }}"
+          echo "smoke-postgres-image-deploy-exposed: ${{ needs.smoke-postgres-image-deploy-exposed.result }}"
+
+          for result in \
+            "${{ needs.detect.result }}" \
+            "${{ needs.compose-render.result }}" \
+            "${{ needs.test.result }}" \
+            "${{ needs.smoke-postgres-image-deploy.result }}" \
+            "${{ needs.smoke-postgres-image-deploy-exposed.result }}"; do
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "CI failed: at least one job reported $result"
+              exit 1
+            fi
+          done
+
+          echo "All CI jobs passed or were skipped."

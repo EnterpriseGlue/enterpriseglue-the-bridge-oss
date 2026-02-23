@@ -34,6 +34,7 @@ jobs:
               return;
             }
 
+            const isReleasePleaseBranch = String(pr.head?.ref || '').startsWith('release-please--branches--');
             // On opened/reopened the pr-release-labeler workflow runs concurrently.
             // The event payload labels are stale, so wait briefly then fetch fresh labels
             // from the API to avoid a false-negative race condition.
@@ -50,12 +51,33 @@ jobs:
             } else {
               labels = (pr.labels || []).map((label) => label.name);
             }
-            const isReleasePleaseBranch = String(pr.head?.ref || '').startsWith('release-please--branches--');
             const isReleasePleaseLabel = labels.includes('autorelease: pending') || labels.includes('autorelease: triggered');
             if (isReleasePleaseBranch || isReleasePleaseLabel) {
-              core.notice('Release Please PR detected. Skipping release policy label/migration enforcement.');
+              core.notice('Release Please PR detected. Skipping release policy enforcement.');
               return;
             }
+
+            // --- Conventional PR title lint (merged from pr-title-lint.yml) ---
+            const title = String(pr.title || '').trim();
+            const conventionalPattern = /^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s.+$/;
+            if (!conventionalPattern.test(title)) {
+              core.setFailed(
+                `PR title must follow conventional format: type(scope): summary. Received: "${title}"`
+              );
+              return;
+            }
+
+            const titleTypeMatch = title.match(/^([a-z]+)/);
+            const titleType = titleTypeMatch ? titleTypeMatch[1] : '';
+            const allowedTypes = new Set(['feat', 'fix', 'docs', 'refactor', 'test', 'chore', 'ci', 'build', 'perf', 'revert', 'style']);
+            if (!allowedTypes.has(titleType)) {
+              core.setFailed(
+                `Unsupported conventional type "${titleType}". Allowed types: ${Array.from(allowedTypes).join(', ')}`
+              );
+              return;
+            }
+
+            // --- Release label requirement ---
             const releaseLabels = new Set([
               'release:breaking',
               'release:feature',
@@ -73,8 +95,39 @@ jobs:
               return;
             }
 
-            const title = String(pr.title || '');
             const body = String(pr.body || '');
+            const conventionalTitleMatch = title.match(/^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s.+$/i);
+            if (conventionalTitleMatch) {
+              const titleHasBreakingMarker = Boolean(conventionalTitleMatch[3]);
+              const allowedLabelsByType = {
+                feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:compat']),
+                fix: new Set(['release:fix', 'release:breaking', 'release:security', 'release:compat']),
+                docs: new Set(['release:docs', 'release:internal']),
+                perf: new Set(['release:feature', 'release:fix', 'release:internal', 'release:breaking']),
+                refactor: new Set(['release:internal', 'release:compat', 'release:deprecation', 'release:breaking']),
+                test: new Set(['release:internal']),
+                chore: new Set(['release:internal']),
+                ci: new Set(['release:internal']),
+                build: new Set(['release:internal']),
+                style: new Set(['release:internal']),
+                revert: new Set(['release:fix', 'release:internal', 'release:breaking'])
+              };
+
+              if (titleHasBreakingMarker && !labels.includes('release:breaking')) {
+                core.setFailed('PR title uses breaking marker (!) but release:breaking label is missing.');
+                return;
+              }
+
+              const allowedLabels = allowedLabelsByType[titleType];
+              if (allowedLabels && !labels.some((label) => allowedLabels.has(label))) {
+                core.setFailed(
+                  `PR title type "${titleType}" is inconsistent with release label(s): ${labels.join(', ')}. ` +
+                  `Expected one of: ${Array.from(allowedLabels).join(', ')}`
+                );
+                return;
+              }
+            }
+
             const titleIndicatesBreaking = /!\s*:/.test(title) || /\)!:/.test(title);
             const labelIndicatesBreaking = labels.includes('release:breaking');
             const bodyIndicatesBreaking = /breaking\s+change/i.test(body);

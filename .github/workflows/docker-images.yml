@@ -1,11 +1,6 @@
 name: Docker Images
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - v*
   release:
     types:
       - published
@@ -29,6 +24,7 @@ jobs:
       frontend_image: ${{ steps.meta.outputs.frontend_image }}
       image_tag: ${{ steps.meta.outputs.image_tag }}
       publish_latest: ${{ steps.meta.outputs.publish_latest }}
+      publish_dockerhub: ${{ steps.meta.outputs.publish_dockerhub }}
       image_platforms: ${{ steps.meta.outputs.image_platforms }}
       backend_digest: ${{ steps.backend.outputs.digest }}
       frontend_digest: ${{ steps.frontend.outputs.digest }}
@@ -50,7 +46,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to Docker Hub
-        if: env.HAS_DOCKERHUB == 'true'
+        if: env.HAS_DOCKERHUB == 'true' && github.event_name == 'release'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -99,10 +95,16 @@ jobs:
             publish_latest="true"
           fi
 
+          publish_dockerhub="false"
+          if [[ "${publish_latest}" == "true" ]]; then
+            publish_dockerhub="true"
+          fi
+
           echo "backend_image=${backend_image}" >> "$GITHUB_OUTPUT"
           echo "frontend_image=${frontend_image}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
           echo "publish_latest=${publish_latest}" >> "$GITHUB_OUTPUT"
+          echo "publish_dockerhub=${publish_dockerhub}" >> "$GITHUB_OUTPUT"
           echo "image_platforms=${image_platforms}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push backend image
@@ -115,7 +117,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}
-            ${{ env.HAS_DOCKERHUB == 'true' && format('{0}:{1}', steps.meta.outputs.dockerhub_backend, steps.meta.outputs.image_tag) || '' }}
+            ${{ env.HAS_DOCKERHUB == 'true' && steps.meta.outputs.publish_dockerhub == 'true' && format('{0}:{1}', steps.meta.outputs.dockerhub_backend, steps.meta.outputs.image_tag) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -215,7 +217,7 @@ jobs:
             API_BASE_URL=
           tags: |
             ${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}
-            ${{ env.HAS_DOCKERHUB == 'true' && format('{0}:{1}', steps.meta.outputs.dockerhub_frontend, steps.meta.outputs.image_tag) || '' }}
+            ${{ env.HAS_DOCKERHUB == 'true' && steps.meta.outputs.publish_dockerhub == 'true' && format('{0}:{1}', steps.meta.outputs.dockerhub_frontend, steps.meta.outputs.image_tag) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

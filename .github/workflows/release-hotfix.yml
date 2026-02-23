@@ -1,0 +1,100 @@
+name: Hotfix Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why are we triggering a hotfix release now?
+        required: true
+        type: string
+      release_as:
+        description: Optional explicit version (without v prefix, e.g. 0.4.5). Leave empty for automatic bump.
+        required: false
+        type: string
+      enable_release_pr_automerge:
+        description: Enable auto-merge on the generated Release Please PR.
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: hotfix-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  trigger-hotfix-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Release Please (automatic bump)
+        id: release_auto
+        if: ${{ inputs.release_as == '' }}
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: .github/release-please-config.json
+          manifest-file: .github/.release-please-manifest.json
+
+      - name: Run Release Please (forced release-as)
+        id: release_forced
+        if: ${{ inputs.release_as != '' }}
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: .github/release-please-config.json
+          manifest-file: .github/.release-please-manifest.json
+          release-as: ${{ inputs.release_as }}
+
+      - name: Resolve release outputs
+        id: resolve
+        uses: actions/github-script@v7
+        env:
+          PRS_JSON: ${{ steps.release_auto.outputs.prs || steps.release_forced.outputs.prs || '[]' }}
+          PR_JSON: ${{ steps.release_auto.outputs.pr || steps.release_forced.outputs.pr || '{}' }}
+          PRS_CREATED: ${{ steps.release_auto.outputs.prs_created || steps.release_forced.outputs.prs_created || 'false' }}
+          RELEASES_CREATED: ${{ steps.release_auto.outputs.releases_created || steps.release_forced.outputs.releases_created || 'false' }}
+        with:
+          script: |
+            const parseJson = (value, fallback) => {
+              try {
+                return JSON.parse(value);
+              } catch {
+                return fallback;
+              }
+            };
+
+            const prs = parseJson(process.env.PRS_JSON || '[]', []);
+            const pr = parseJson(process.env.PR_JSON || '{}', {});
+
+            let pullNumber = '';
+            if (Array.isArray(prs) && prs.length > 0) {
+              const first = prs[0] || {};
+              pullNumber = String(first.number || first.pullRequestNumber || '');
+            }
+            if (!pullNumber) {
+              pullNumber = String(pr.number || pr.pullRequestNumber || '');
+            }
+
+            core.setOutput('pull_number', pullNumber);
+            core.setOutput('prs_created', String(process.env.PRS_CREATED || 'false'));
+            core.setOutput('releases_created', String(process.env.RELEASES_CREATED || 'false'));
+
+      - name: Enable auto-merge on generated release PR
+        if: ${{ inputs.enable_release_pr_automerge && steps.resolve.outputs.pull_number != '' }}
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          pull-request-number: ${{ steps.resolve.outputs.pull_number }}
+          merge-method: squash
+
+      - name: Publish hotfix summary
+        run: |
+          echo "hotfix_reason=${{ inputs.reason }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "release_as=${{ inputs.release_as || 'auto' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "prs_created=${{ steps.resolve.outputs.prs_created }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "releases_created=${{ steps.resolve.outputs.releases_created }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "release_pr_number=${{ steps.resolve.outputs.pull_number || 'none' }}" >> "$GITHUB_STEP_SUMMARY"
