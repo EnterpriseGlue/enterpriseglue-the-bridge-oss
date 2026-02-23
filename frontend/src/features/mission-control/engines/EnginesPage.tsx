@@ -33,6 +33,7 @@ import { Add, Chip, UserMultiple, Close, Checkmark } from '@carbon/icons-react'
 import FormModal from '../../../components/FormModal'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout'
 import { useModal } from '../../../shared/hooks/useModal'
+import { useAuth } from '../../../shared/hooks/useAuth'
 import { useToast } from '../../../shared/notifications/ToastProvider'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
@@ -83,6 +84,7 @@ export default function Engines() {
   const location = useLocation() as any
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { refreshUser } = useAuth()
   const engineModal = useModal<any>()
   const { notify } = useToast()
   const [editing, setEditing] = React.useState<any | null>(null)
@@ -111,9 +113,15 @@ export default function Engines() {
 
   const createM = useMutation({
     mutationFn: (payload: any) => apiClient.post<any>('/engines-api/engines', payload, { credentials: 'include' }),
-    onSuccess: () => {
+    onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['engines'] })
       qc.invalidateQueries({ queryKey: ['engines','active'] })
+      qc.invalidateQueries({ queryKey: ['engines-selector'] })
+      try {
+        await refreshUser()
+      } catch {
+        // Non-blocking: engine creation succeeded even if capability refresh fails.
+      }
       engineModal.closeModal()
       notify({ kind: 'success', title: 'Engine created' })
     },
