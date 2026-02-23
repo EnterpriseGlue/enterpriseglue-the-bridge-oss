@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.1...v0.4.2) (2026-02-23)
+
+
+### Features
+
+* add POSTGRES_URL and ORACLE_CONNECTION_STRING connection string support ([#16](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/16)) ([5178886](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/51788865b812141f260cee2cb5eb06eab6b6d1bf))
+
 ## [0.4.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.0...v0.4.1) (2026-02-23)
 
 
