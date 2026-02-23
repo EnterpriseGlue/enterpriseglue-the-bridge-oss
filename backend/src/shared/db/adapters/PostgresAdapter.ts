@@ -49,19 +49,27 @@ export class PostgresAdapter implements DatabaseAdapter {
       ? []
       : [migrationsPath + (migrationsPath.startsWith('dist/') ? '/*.js' : '/*.ts')];
 
-    return {
-      type: 'postgres',
-      host: config.postgresHost,
-      port: config.postgresPort,
-      username: config.postgresUser,
-      password: config.postgresPassword,
-      database: config.postgresDatabase,
+    const base = {
+      type: 'postgres' as const,
       schema: this.schema,
       synchronize: false,
       logging: this.logging,
       entities,
       migrations,
       ssl: config.postgresSsl ? { rejectUnauthorized: config.postgresSslRejectUnauthorized } : undefined,
+    };
+
+    if (config.postgresUrl) {
+      return { ...base, url: config.postgresUrl };
+    }
+
+    return {
+      ...base,
+      host: config.postgresHost,
+      port: config.postgresPort,
+      username: config.postgresUser,
+      password: config.postgresPassword,
+      database: config.postgresDatabase,
     };
   }
 

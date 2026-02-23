@@ -18,6 +18,8 @@ data:
   POSTGRES_PORT: "5432"
   POSTGRES_DATABASE: "enterpriseglue"
   POSTGRES_SCHEMA: "main"
+  POSTGRES_SSL: "false"
+  POSTGRES_SSL_REJECT_UNAUTHORIZED: "false"
 
   ORACLE_HOST: "oracle-db"
   ORACLE_PORT: "1521"

@@ -13,6 +13,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    networks:
+      - enterpriseglue-network
 
   backend:
     build:
@@ -34,6 +36,8 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+    networks:
+      - enterpriseglue-network
 
   frontend:
     build:
@@ -49,7 +53,14 @@ services:
       API_UPSTREAM: backend:${API_PORT:-8787}
     ports:
       - "${FRONTEND_HOST_PORT:-8080}:8080"
+    networks:
+      - enterpriseglue-network
 
 volumes:
   postgres_data:
   git_repos:
+
+networks:
+  enterpriseglue-network:
+    driver: bridge
+    name: enterpriseglue-network

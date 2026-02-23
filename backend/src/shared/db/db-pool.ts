@@ -41,24 +41,36 @@ class PostgresConnectionPool implements ConnectionPool {
   private pool: pg.Pool;
 
   constructor() {
-    if (!config.postgresHost || !config.postgresDatabase) {
-      throw new Error('PostgreSQL configuration is missing. Please set POSTGRES_HOST and POSTGRES_DATABASE in .env');
+    if (!config.postgresUrl && (!config.postgresHost || !config.postgresDatabase)) {
+      throw new Error('PostgreSQL configuration is missing. Set either POSTGRES_URL or POSTGRES_HOST + POSTGRES_DATABASE in .env');
     }
 
     const schema = config.postgresSchema;
+    const sslOption = config.postgresSsl ? { rejectUnauthorized: config.postgresSslRejectUnauthorized } : false;
 
-    this.pool = new Pool({
-      host: config.postgresHost,
-      port: config.postgresPort || 5432,
-      user: config.postgresUser,
-      password: config.postgresPassword,
-      database: config.postgresDatabase,
-      ssl: config.postgresSsl ? { rejectUnauthorized: config.postgresSslRejectUnauthorized } : false,
-      options: `-c search_path=${schema}`,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
+    this.pool = new Pool(
+      config.postgresUrl
+        ? {
+            connectionString: config.postgresUrl,
+            ssl: sslOption,
+            options: `-c search_path=${schema}`,
+            max: 20,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 2000,
+          }
+        : {
+            host: config.postgresHost,
+            port: config.postgresPort || 5432,
+            user: config.postgresUser,
+            password: config.postgresPassword,
+            database: config.postgresDatabase,
+            ssl: sslOption,
+            options: `-c search_path=${schema}`,
+            max: 20,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 2000,
+          }
+    );
 
     this.pool.on('error', (err) => {
       console.error('Unexpected PostgreSQL pool error:', err);
