@@ -68,25 +68,26 @@ jobs:
               exit 0
             fi
 
-            echo "run_tests=true" >> "$GITHUB_OUTPUT"
-
             backend_changed=false
             frontend_changed=false
             infra_changed=false
             db_changed=false
-            docs_only=true
+            ci_only=true
 
-            if grep -Eq '^(backend/|packages/contracts/|package\.json|package-lock\.json)' <<< "$CHANGED_FILES"; then backend_changed=true; fi
-            if grep -Eq '^(frontend/|packages/contracts/|package\.json|package-lock\.json)' <<< "$CHANGED_FILES"; then frontend_changed=true; fi
-            if grep -Eq '^(infra/docker/|infra/kubernetes/|scripts/smoke-images-local\.sh|backend/Dockerfile\.prod|frontend/Dockerfile\.prod|\.github/workflows/(ci|docker-images)\.yml)' <<< "$CHANGED_FILES"; then infra_changed=true; fi
-            if grep -Eq '^backend/src/shared/db/|^backend/src/shared/config/|^backend/src/modules/.*/.*(db|migration)|^backend/.+migration' <<< "$CHANGED_FILES"; then db_changed=true; fi
-            if grep -Evq '^(docs/|README\.md|CHANGELOG\.md|\.github/.*\.md$)' <<< "$CHANGED_FILES"; then docs_only=false; fi
+            if grep -Eq '^(backend/|packages/contracts/|package\.json|package-lock\.json)' <<< "$CHANGED_FILES"; then backend_changed=true; ci_only=false; fi
+            if grep -Eq '^(frontend/|packages/contracts/|package\.json|package-lock\.json)' <<< "$CHANGED_FILES"; then frontend_changed=true; ci_only=false; fi
+            if grep -Eq '^(infra/docker/|infra/kubernetes/|scripts/smoke-images-local\.sh|backend/Dockerfile\.prod|frontend/Dockerfile\.prod)' <<< "$CHANGED_FILES"; then infra_changed=true; ci_only=false; fi
+            if grep -Eq '^backend/src/shared/db/|^backend/src/shared/config/|^backend/src/modules/.*/.*(db|migration)|^backend/.+migration' <<< "$CHANGED_FILES"; then db_changed=true; ci_only=false; fi
+            # Files that don't need application tests: docs, workflow configs, markdown
+            if grep -Evq '^(docs/|README\.md|CHANGELOG\.md|\.github/|local-docs/)' <<< "$CHANGED_FILES"; then ci_only=false; fi
 
+            run_tests=false
             run_postgres=false
             run_oracle=false
             run_smoke=false
 
-            if [ "$docs_only" = false ]; then
+            if [ "$ci_only" = false ]; then
+              run_tests=true
               if [ "$backend_changed" = true ] || [ "$frontend_changed" = true ] || [ "$infra_changed" = true ]; then
                 run_postgres=true
               fi
@@ -98,6 +99,7 @@ jobs:
               fi
             fi
 
+            echo "run_tests=$run_tests" >> "$GITHUB_OUTPUT"
             echo "run_postgres=$run_postgres" >> "$GITHUB_OUTPUT"
             echo "run_oracle=$run_oracle" >> "$GITHUB_OUTPUT"
             echo "run_smoke=$run_smoke" >> "$GITHUB_OUTPUT"
@@ -247,9 +249,26 @@ jobs:
       - name: Install root dependencies
         run: npm ci
 
-      - name: Install Playwright browsers
+      - name: Get Playwright version
         if: matrix.database == 'postgres'
+        id: pw-version
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        if: matrix.database == 'postgres'
+        uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
+
+      - name: Install Playwright OS deps only
+        if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps
 
       - name: Build backend
         run: npm --prefix backend run build:skip-generate
