@@ -27,10 +27,12 @@ jobs:
         uses: actions/github-script@v7
         env:
           AI_AUTOPILOT_ENABLED: ${{ vars.AI_AUTOPILOT_ENABLED || 'false' }}
+          RELEASE_AUTOPILOT_ENABLED: ${{ vars.RELEASE_AUTOPILOT_ENABLED || 'false' }}
         with:
           script: |
             const pr = context.payload.pull_request;
             const autopilotEnabled = String(process.env.AI_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
+            const releaseAutopilotEnabled = String(process.env.RELEASE_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
             if (!autopilotEnabled) {
               core.notice('AI_AUTOPILOT_ENABLED is false. Skipping autopilot merge.');
               core.setOutput('should_enable', 'false');
@@ -45,10 +47,16 @@ jobs:
 
             const labels = (pr.labels || []).map((label) => label.name);
 
-            // Release Please PRs: always eligible
+            // Release Please PRs: opt-in (disabled by default)
             const isReleasePleaseBranch = (pr.head.ref || '').startsWith('release-please--branches--');
             const isReleasePleaseLabel = labels.includes('autorelease: pending') || labels.includes('autorelease: triggered');
             const isReleasePR = isReleasePleaseBranch || isReleasePleaseLabel;
+
+            if (isReleasePR && !releaseAutopilotEnabled) {
+              core.notice('Release Please PR detected. Auto-merge is disabled by default (set RELEASE_AUTOPILOT_ENABLED=true to enable).');
+              core.setOutput('should_enable', 'false');
+              return;
+            }
 
             // Feature PRs: eligible when they have a release:* label
             const releaseLabels = new Set([
