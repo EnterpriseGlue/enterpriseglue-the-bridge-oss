@@ -1,40 +1,23 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
-const GIT_REPOS_TABLE = 'git_repositories';
-const GIT_CREDS_TABLE = 'git_credentials';
-
 /**
- * Migration: Drop the legacy git_credentials table.
+ * Migration: Originally dropped the git_credentials table.
  * 
- * All tokens now live on git_repositories.encrypted_token (project-level).
- * Run this only after confirming all projects have been migrated
- * (i.e. migration 1700000000003 ran and project tokens are populated).
+ * Now a NO-OP because the GitCredential entity and CredentialService are
+ * still actively used for user-level credential management. On fresh
+ * deployments the old safety check (count of NULL encrypted_token in
+ * git_repositories) incorrectly evaluated to 0 rows and dropped the table.
  */
 export class DropGitCredentials1700000000004 implements MigrationInterface {
   name = 'DropGitCredentials1700000000004';
 
-  public async up(queryRunner: QueryRunner): Promise<void> {
-    if (!(await queryRunner.hasTable(GIT_REPOS_TABLE))) {
-      console.warn(`Migration ${this.name}: table "${GIT_REPOS_TABLE}" not found; skipping.`);
-      return;
-    }
-
-    const rows: any[] = await queryRunner.query(
-      `SELECT COUNT(*) AS "cnt" FROM "${GIT_REPOS_TABLE}" WHERE "encrypted_token" IS NULL`
-    );
-    const count = Number(rows[0]?.cnt ?? rows[0]?.CNT ?? 0);
-    if (count > 0) {
-      console.warn(`WARNING: ${count} git_repositories rows still have NULL encrypted_token. Skipping git_credentials drop.`);
-      return;
-    }
-
-    if (!(await queryRunner.hasTable(GIT_CREDS_TABLE))) {
-      console.warn(`Migration ${this.name}: table "${GIT_CREDS_TABLE}" not found; skipping drop.`);
-      return;
-    }
-
-    await queryRunner.dropTable(GIT_CREDS_TABLE, true);
-    console.log('Dropped git_credentials table.');
+  public async up(_queryRunner: QueryRunner): Promise<void> {
+    // NO-OP: The GitCredential entity and CredentialService are still actively
+    // used for user-level credential management. Dropping the table breaks the
+    // admin providers endpoint (and any credential CRUD) on fresh deployments
+    // where git_repositories has zero rows, causing the old safety check to
+    // incorrectly allow the drop.
+    console.log(`Migration ${this.name}: skipped (git_credentials table is still in active use).`);
   }
 
   public async down(_queryRunner: QueryRunner): Promise<void> {

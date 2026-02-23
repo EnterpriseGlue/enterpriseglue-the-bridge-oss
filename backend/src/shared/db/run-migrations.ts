@@ -8,6 +8,7 @@ import { SsoClaimsMapping } from './entities/SsoClaimsMapping.js';
 import { SsoProvider } from './entities/SsoProvider.js';
 import { RefreshToken } from './entities/RefreshToken.js';
 import { GitProvider } from './entities/GitProvider.js';
+import { GitCredential } from './entities/GitCredential.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -66,6 +67,7 @@ export async function runMigrations() {
         EmailTemplate,
         SsoClaimsMapping,
         GitProvider,
+        GitCredential,
       ];
 
       const missingTables: string[] = [];
