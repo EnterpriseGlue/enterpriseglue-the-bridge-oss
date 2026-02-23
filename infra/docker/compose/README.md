@@ -22,3 +22,5 @@ Always call Docker Compose from repository root with:
 - one or more `-f infra/docker/compose/<file>.yml` arguments
 
 This keeps path resolution stable for build contexts, env-file references, and volume mounts across local, CI, and release workflows.
+
+Wrapper scripts may pass an absolute project directory (`--project-directory "$ROOT_DIR"`) and quoted compose file paths; that is equivalent and preferred inside scripted automation.
