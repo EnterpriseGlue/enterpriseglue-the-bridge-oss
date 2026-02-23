@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.2...v0.4.3) (2026-02-23)
+
+
+### Bug Fixes
+
+* allow HTTP engine URLs for localhost/private networks in production ([#18](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/18)) ([29fccd0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/29fccd0fa8a1b16bc2f027a2d11641ee18efcf61))
+
 ## [0.4.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.1...v0.4.2) (2026-02-23)
 
 
