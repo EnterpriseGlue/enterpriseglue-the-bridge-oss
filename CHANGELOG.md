@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.3...v0.4.4) (2026-02-23)
+
+
+### Bug Fixes
+
+* refresh mission control menu and gate image smoke checks ([#20](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/20)) ([33bfeaf](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/33bfeafb18b1fd6772c58edb99abfb511171651f))
+
 ## [0.4.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.2...v0.4.3) (2026-02-23)
 
 
