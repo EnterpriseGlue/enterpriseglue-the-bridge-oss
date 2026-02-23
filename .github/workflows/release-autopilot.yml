@@ -1,4 +1,4 @@
-name: Release Autopilot
+name: PR Autopilot
 
 on:
   pull_request_target:
@@ -14,11 +14,11 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: release-autopilot-${{ github.event.pull_request.number }}
+  group: pr-autopilot-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
-  enable-release-pr-automerge:
+  enable-automerge:
     if: ${{ github.event.pull_request.state == 'open' }}
     runs-on: ubuntu-latest
     steps:
@@ -32,31 +32,44 @@ jobs:
             const pr = context.payload.pull_request;
             const autopilotEnabled = String(process.env.AI_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
             if (!autopilotEnabled) {
-              core.notice('AI_AUTOPILOT_ENABLED is false. Skipping release autopilot merge.');
-              core.setOutput('should_enable', 'false');
-              return;
-            }
-
-            const labels = (pr.labels || []).map((label) => label.name);
-            const isReleasePleaseBranch = (pr.head.ref || '').startsWith('release-please--branches--');
-            const isReleasePleaseLabel = labels.includes('autorelease: pending') || labels.includes('autorelease: triggered');
-            const isReleasePR = isReleasePleaseBranch || isReleasePleaseLabel;
-            if (!isReleasePR) {
-              core.notice('PR is not a release-please PR. Skipping.');
+              core.notice('AI_AUTOPILOT_ENABLED is false. Skipping autopilot merge.');
               core.setOutput('should_enable', 'false');
               return;
             }
 
             if (pr.draft) {
-              core.notice('Release PR is still draft. Skipping merge.');
+              core.notice('PR is still draft. Skipping auto-merge.');
               core.setOutput('should_enable', 'false');
               return;
             }
+
+            const labels = (pr.labels || []).map((label) => label.name);
+
+            // Release Please PRs: always eligible
+            const isReleasePleaseBranch = (pr.head.ref || '').startsWith('release-please--branches--');
+            const isReleasePleaseLabel = labels.includes('autorelease: pending') || labels.includes('autorelease: triggered');
+            const isReleasePR = isReleasePleaseBranch || isReleasePleaseLabel;
+
+            // Feature PRs: eligible when they have a release:* label
+            const releaseLabels = new Set([
+              'release:breaking', 'release:feature', 'release:fix',
+              'release:security', 'release:docs', 'release:internal',
+              'release:deprecation', 'release:compat'
+            ]);
+            const hasReleaseLabel = labels.some((l) => releaseLabels.has(l));
+
+            if (!isReleasePR && !hasReleaseLabel) {
+              core.notice('PR has no release label yet. Auto-merge will activate once labeled.');
+              core.setOutput('should_enable', 'false');
+              return;
+            }
+
+            const prType = isReleasePR ? 'release' : 'feature';
             core.setOutput('should_enable', 'true');
             core.setOutput('pull_number', String(pr.number));
-            core.notice(`Autopilot is enabled for release PR #${pr.number}. Enabling GitHub auto-merge.`);
+            core.notice(`Autopilot enabled for ${prType} PR #${pr.number}. GitHub auto-merge will activate once all checks pass.`);
 
-      - name: Enable GitHub auto-merge for release PR
+      - name: Enable GitHub auto-merge
         if: steps.evaluate.outputs.should_enable == 'true'
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
