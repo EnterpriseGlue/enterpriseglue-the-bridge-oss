@@ -37,6 +37,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -112,7 +113,7 @@ jobs:
             exit 0
           fi
 
-          LAST_SHA=$(cat .sync/ci-main.sha 2>/dev/null || echo "")
+          LAST_SHA=$(gh variable get CI_NIGHTLY_LAST_SHA 2>/dev/null || echo "")
           if [ "$CURRENT_SHA" = "$LAST_SHA" ]; then
             echo "run_tests=false" >> "$GITHUB_OUTPUT"
             echo "run_postgres=false" >> "$GITHUB_OUTPUT"
@@ -176,7 +177,8 @@ jobs:
       matrix:
         database: [postgres, oracle]
     permissions:
-      contents: write
+      contents: read
+      actions: write
     services:
       postgres:
         image: postgres:17
@@ -349,18 +351,10 @@ jobs:
 
       - name: Update nightly CI marker
         if: github.event_name == 'schedule' && matrix.database == 'postgres'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p .sync
-          echo "${{ needs.detect.outputs.current_sha }}" > .sync/ci-main.sha
-          git add .sync/ci-main.sha
-          if git diff --cached --quiet; then
-            echo "No marker changes to commit."
-            exit 0
-          fi
-          git config user.name "enterpriseglue-ci-bot"
-          git config user.email "ci-bot@enterpriseglue.ai"
-          git commit -m "chore: update nightly CI marker"
-          git push origin HEAD:main
+          gh variable set CI_NIGHTLY_LAST_SHA --body "${{ needs.detect.outputs.current_sha }}"
 
   smoke-postgres-image-deploy:
     runs-on: ubuntu-latest
