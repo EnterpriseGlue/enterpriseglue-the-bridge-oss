@@ -141,7 +141,7 @@ jobs:
             -e FRONTEND_URL=http://localhost:8080
           )
 
-          docker run --rm \
+          docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
             -e DATABASE_TYPE=postgres \
             -e POSTGRES_HOST=db \
@@ -153,7 +153,7 @@ jobs:
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
             node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('postgres'); const options=adapter.getDataSourceOptions(); if(options.type!=='postgres'){process.exit(1)} console.log('postgres runtime contract ok');"
 
-          docker run --rm \
+          docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
             -e DATABASE_TYPE=oracle \
             -e ORACLE_HOST=db \
@@ -165,7 +165,7 @@ jobs:
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
             node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('oracle'); const options=adapter.getDataSourceOptions(); if(options.type!=='oracle'){process.exit(1)} console.log('oracle runtime contract ok');"
 
-          docker run --rm \
+          docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
             -e DATABASE_TYPE=mysql \
             -e MYSQL_HOST=db \
@@ -176,7 +176,7 @@ jobs:
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
             node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('mysql'); const options=adapter.getDataSourceOptions(); if(options.type!=='mysql'){process.exit(1)} console.log('mysql runtime contract ok');"
 
-          docker run --rm \
+          docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
             -e DATABASE_TYPE=mssql \
             -e MSSQL_HOST=db \
@@ -190,7 +190,7 @@ jobs:
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
             node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('mssql'); const options=adapter.getDataSourceOptions(); if(options.type!=='mssql'){process.exit(1)} console.log('mssql runtime contract ok');"
 
-          docker run --rm \
+          docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
             -e DATABASE_TYPE=spanner \
             -e SPANNER_PROJECT_ID=test-project \
