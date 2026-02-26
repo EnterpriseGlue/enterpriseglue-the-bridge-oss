@@ -372,6 +372,7 @@ jobs:
       - name: Build local backend image
         run: |
           docker buildx build --load \
+            --pull \
             --cache-from type=gha,scope=ci-smoke-backend \
             --cache-to type=gha,mode=max,scope=ci-smoke-backend \
             -f backend/Dockerfile.prod \
@@ -381,6 +382,7 @@ jobs:
       - name: Build local frontend image
         run: |
           docker buildx build --load \
+            --pull \
             --cache-from type=gha,scope=ci-smoke-frontend \
             --cache-to type=gha,mode=max,scope=ci-smoke-frontend \
             -f frontend/Dockerfile.prod \
@@ -470,6 +472,7 @@ jobs:
       - name: Build local backend image
         run: |
           docker buildx build --load \
+            --pull \
             --cache-from type=gha,scope=ci-smoke-backend \
             --cache-to type=gha,mode=max,scope=ci-smoke-backend \
             -f backend/Dockerfile.prod \
@@ -479,6 +482,7 @@ jobs:
       - name: Build local frontend image
         run: |
           docker buildx build --load \
+            --pull \
             --cache-from type=gha,scope=ci-smoke-frontend \
             --cache-to type=gha,mode=max,scope=ci-smoke-frontend \
             -f frontend/Dockerfile.prod \

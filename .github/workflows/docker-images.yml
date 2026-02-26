@@ -5,6 +5,12 @@ on:
     types:
       - published
   workflow_dispatch:
+    inputs:
+      security_rebuild:
+        description: Rebuild without cache and pull latest base image layers
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -114,6 +120,8 @@ jobs:
           context: .
           file: backend/Dockerfile.prod
           platforms: ${{ steps.meta.outputs.image_platforms }}
+          pull: true
+          no-cache: ${{ github.event_name == 'workflow_dispatch' && inputs.security_rebuild }}
           push: true
           tags: |
             ${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}
@@ -212,6 +220,8 @@ jobs:
           context: .
           file: frontend/Dockerfile.prod
           platforms: ${{ steps.meta.outputs.image_platforms }}
+          pull: true
+          no-cache: ${{ github.event_name == 'workflow_dispatch' && inputs.security_rebuild }}
           push: true
           build-args: |
             API_BASE_URL=
