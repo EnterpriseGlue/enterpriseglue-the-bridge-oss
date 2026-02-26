@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   suggest-and-apply:
-    if: ${{ github.event.pull_request.state == 'open' && (github.event.action != 'labeled' || github.event.label.name == 'ai:apply') }}
+    if: ${{ github.event.pull_request.state == 'open' }}
     runs-on: ubuntu-latest
     steps:
       - name: Generate AI suggestions (title + release label + impact)
@@ -194,8 +194,56 @@ jobs:
               ? parsed.reasoning.trim().slice(0, 600)
               : fallback.reasoning;
 
+            const allowedLabelsByType = {
+              feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:compat']),
+              fix: new Set(['release:fix', 'release:breaking', 'release:security', 'release:compat']),
+              docs: new Set(['release:docs', 'release:internal']),
+              perf: new Set(['release:feature', 'release:fix', 'release:internal', 'release:breaking']),
+              refactor: new Set(['release:internal', 'release:compat', 'release:deprecation', 'release:breaking']),
+              test: new Set(['release:internal']),
+              chore: new Set(['release:internal']),
+              ci: new Set(['release:internal']),
+              build: new Set(['release:internal']),
+              style: new Set(['release:internal']),
+              revert: new Set(['release:fix', 'release:internal', 'release:breaking'])
+            };
+            const preferredTypeByLabel = {
+              'release:breaking': 'feat',
+              'release:feature': 'feat',
+              'release:fix': 'fix',
+              'release:security': 'fix',
+              'release:docs': 'docs',
+              'release:internal': 'chore',
+              'release:deprecation': 'refactor',
+              'release:compat': 'fix'
+            };
+            const coerceTitleForReleaseLabel = (title, releaseLabel) => {
+              const fallbackScope = `(${inferScope(changedPaths)})`;
+              const parsedTitle = String(title || '').trim().match(/^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s(.+)$/i);
+
+              if (!parsedTitle) {
+                const targetType = preferredTypeByLabel[releaseLabel] || 'chore';
+                const summary = normalizeTitleSummary(title);
+                const bang = releaseLabel === 'release:breaking' ? '!' : '';
+                return `${targetType}${fallbackScope}${bang}: ${summary}`;
+              }
+
+              const [, rawType, rawScope = '', rawBang = '', rawSummary = 'update changes'] = parsedTitle;
+              const currentType = String(rawType || '').toLowerCase();
+              const summary = String(rawSummary || 'update changes').trim();
+              const allowedForCurrentType = allowedLabelsByType[currentType];
+              if (allowedForCurrentType && allowedForCurrentType.has(releaseLabel)) {
+                return `${currentType}${rawScope}${rawBang}: ${summary}`;
+              }
+
+              const targetType = preferredTypeByLabel[releaseLabel] || currentType;
+              const bang = releaseLabel === 'release:breaking' ? '!' : '';
+              return `${targetType}${rawScope || fallbackScope}${bang}: ${summary}`;
+            };
+            const compatibleTitle = coerceTitleForReleaseLabel(safeTitle, safeLabel);
+
             core.setOutput('status', 'ok');
-            core.setOutput('suggested_title', safeTitle);
+            core.setOutput('suggested_title', compatibleTitle);
             core.setOutput('release_label', safeLabel);
             core.setOutput('impact', safeImpact);
             core.setOutput('confidence', String(safeConfidence));
@@ -317,6 +365,74 @@ jobs:
               }
             };
             const existingReleaseLabels = labels.filter((label) => allowedReleaseLabels.has(label));
+            const releaseLabelPriority = [
+              'release:breaking',
+              'release:security',
+              'release:feature',
+              'release:fix',
+              'release:deprecation',
+              'release:compat',
+              'release:docs',
+              'release:internal'
+            ];
+            let effectiveReleaseLabel = releaseLabelPriority.find((label) => existingReleaseLabels.includes(label)) || releaseLabel;
+
+            const allowedLabelsByType = {
+              feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:compat']),
+              fix: new Set(['release:fix', 'release:breaking', 'release:security', 'release:compat']),
+              docs: new Set(['release:docs', 'release:internal']),
+              perf: new Set(['release:feature', 'release:fix', 'release:internal', 'release:breaking']),
+              refactor: new Set(['release:internal', 'release:compat', 'release:deprecation', 'release:breaking']),
+              test: new Set(['release:internal']),
+              chore: new Set(['release:internal']),
+              ci: new Set(['release:internal']),
+              build: new Set(['release:internal']),
+              style: new Set(['release:internal']),
+              revert: new Set(['release:fix', 'release:internal', 'release:breaking'])
+            };
+            const preferredTypeByLabel = {
+              'release:breaking': 'feat',
+              'release:feature': 'feat',
+              'release:fix': 'fix',
+              'release:security': 'fix',
+              'release:docs': 'docs',
+              'release:internal': 'chore',
+              'release:deprecation': 'refactor',
+              'release:compat': 'fix'
+            };
+            const normalizeTitleSummary = (title) => {
+              if (!title) return 'update changes';
+              return String(title)
+                .replace(/^[a-z]+\([^)]*\)!?:\s*/i, '')
+                .replace(/^[a-z]+!?:\s*/i, '')
+                .trim()
+                .slice(0, 90) || 'update changes';
+            };
+            const coerceTitleForReleaseLabel = (title, label) => {
+              if (!label) return title;
+
+              const fallbackScope = '(core)';
+              const parsedTitle = String(title || '').trim().match(/^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s(.+)$/i);
+              if (!parsedTitle) {
+                const targetType = preferredTypeByLabel[label] || 'chore';
+                const summary = normalizeTitleSummary(title);
+                const bang = label === 'release:breaking' ? '!' : '';
+                return `${targetType}${fallbackScope}${bang}: ${summary}`;
+              }
+
+              const [, rawType, rawScope = '', rawBang = '', rawSummary = 'update changes'] = parsedTitle;
+              const currentType = String(rawType || '').toLowerCase();
+              const summary = String(rawSummary || 'update changes').trim();
+              const allowedForCurrentType = allowedLabelsByType[currentType];
+              if (allowedForCurrentType && allowedForCurrentType.has(label)) {
+                return `${currentType}${rawScope}${rawBang}: ${summary}`;
+              }
+
+              const targetType = preferredTypeByLabel[label] || currentType;
+              const bang = label === 'release:breaking' ? '!' : '';
+              const scope = rawScope || '(core)';
+              return `${targetType}${scope}${bang}: ${summary}`;
+            };
 
             if (releaseLabel && allowedReleaseLabels.has(releaseLabel) && existingReleaseLabels.length === 0) {
               await ensureLabelExists(releaseLabel);
@@ -345,6 +461,7 @@ jobs:
                 issue_number: pr.number,
                 labels: [releaseLabel],
               });
+              effectiveReleaseLabel = releaseLabel;
               core.notice(`Upgraded release label from release:internal to ${releaseLabel}`);
             }
 
@@ -363,12 +480,13 @@ jobs:
               return;
             }
 
-            if (suggestedTitle && suggestedTitle !== pr.title) {
+            const desiredTitle = coerceTitleForReleaseLabel(suggestedTitle || pr.title, effectiveReleaseLabel);
+            if (desiredTitle && desiredTitle !== pr.title) {
               await github.rest.pulls.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: pr.number,
-                title: suggestedTitle,
+                title: desiredTitle,
               });
-              core.notice(`Updated PR title to: ${suggestedTitle}`);
+              core.notice(`Updated PR title to: ${desiredTitle}`);
             }
