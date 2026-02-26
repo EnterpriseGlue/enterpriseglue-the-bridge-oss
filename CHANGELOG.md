@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.6...v0.4.7) (2026-02-26)
+
+
+### Features
+
+* **security:** add nightly vulnerability drift scan workflow ([#32](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/32)) ([5996d2c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5996d2c3709407667afc7363fdc9e3f1d6b03c78))
+* **security:** add Trivy PR gate and release gate with zero-tolerance policy ([#31](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/31)) ([30a0c33](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/30a0c33b3788fc693d6d1e40c0dce53355c2bc35))
+
+
+### Bug Fixes
+
+* **security:** update minimatch and fast-xml-parser transitive deps ([#33](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/33)) ([34ff726](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/34ff72614d4dacea6210f501792221188fc8a64a))
+* **security:** update rollup to 4.59.0 (CVE-2026-27606) ([#30](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/30)) ([7b34401](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7b344014f59008b1834caa9cbbdeca9115359fc5))
+
 ## [0.4.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.5...v0.4.6) (2026-02-26)
 
 
