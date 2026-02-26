@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.7...v0.4.8) (2026-02-26)
+
+
+### Bug Fixes
+
+* **ci:** clear ENTRYPOINT in runtime contract verification for Chainguard node ([#36](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/36)) ([597217d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/597217d5aba95d3aa285dc097499e85c5f999e07))
+
 ## [0.4.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.6...v0.4.7) (2026-02-26)
 
 
