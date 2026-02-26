@@ -37,4 +37,4 @@ EXPOSE 8787
 
 USER 65532
 
-CMD ["node", "dist/server.js"]
+CMD ["dist/server.js"]
