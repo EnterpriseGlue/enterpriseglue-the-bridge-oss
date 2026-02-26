@@ -3,20 +3,21 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 ARG API_BASE_URL
+ARG API_UPSTREAM=backend:8787
 ENV VITE_API_BASE_URL=${API_BASE_URL}
 
 COPY frontend/package.json frontend/package-lock.json ./
 COPY packages /packages
-RUN npm ci --include=dev --no-audit --no-fund
+RUN apk upgrade --no-cache \
+    && npm ci --include=dev --no-audit --no-fund
 
 COPY frontend ./
-RUN npm run build
+RUN npm run build \
+    && sed "s|\${API_UPSTREAM}|${API_UPSTREAM}|g" nginx.conf > /tmp/nginx.conf
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM cgr.dev/chainguard/nginx:latest
 
-COPY frontend/nginx.conf /etc/nginx/templates/default.conf.template
+COPY --from=build /tmp/nginx.conf /etc/nginx/conf.d/nginx.default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
-
-CMD ["nginx", "-g", "daemon off;"]
