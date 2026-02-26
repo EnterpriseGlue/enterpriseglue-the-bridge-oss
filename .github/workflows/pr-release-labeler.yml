@@ -28,6 +28,7 @@ jobs:
       - name: Ensure baseline release label exists
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const pr = context.payload.pull_request;
             const releaseLabels = new Set([

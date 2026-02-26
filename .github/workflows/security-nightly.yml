@@ -1,0 +1,294 @@
+name: Security Nightly
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # daily at 02:00 UTC (avoids CI nightly at 00:00)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+  issues: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Nightly vulnerability drift scan.
+  # Scans the :latest published images from GHCR for newly disclosed CVEs.
+  # Opens or updates a tracking issue when findings appear.
+  # Also audits .trivyignore for expired suppressions.
+  # ---------------------------------------------------------------------------
+
+  drift-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image refs
+        id: refs
+        run: |
+          owner_lc="${GITHUB_REPOSITORY_OWNER,,}"
+          backend="ghcr.io/${owner_lc}/enterpriseglue-the-bridge-oss-backend:latest"
+          frontend="ghcr.io/${owner_lc}/enterpriseglue-the-bridge-oss-frontend:latest"
+          echo "backend=${backend}" >> "$GITHUB_OUTPUT"
+          echo "frontend=${frontend}" >> "$GITHUB_OUTPUT"
+
+      # -- Trivy scans --------------------------------------------------------
+
+      - name: Trivy scan backend image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.refs.outputs.backend }}
+          format: 'json'
+          output: 'backend-trivy.json'
+          exit-code: '0'          # don't fail the workflow — report via issue
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
+          scanners: 'vuln'
+          trivyignores: '.trivyignore'
+
+      - name: Trivy scan frontend image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.refs.outputs.frontend }}
+          format: 'json'
+          output: 'frontend-trivy.json'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
+          scanners: 'vuln'
+          trivyignores: '.trivyignore'
+
+      # -- Artifact upload -----------------------------------------------------
+
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-nightly-${{ github.run_id }}
+          path: |
+            backend-trivy.json
+            frontend-trivy.json
+          if-no-files-found: warn
+
+      # -- Audit .trivyignore expiry -------------------------------------------
+
+      - name: Audit trivyignore expiry
+        id: expiry
+        run: |
+          today=$(date -u +%Y-%m-%d)
+          expired=""
+          while IFS= read -r line; do
+            if [[ "$line" =~ expires:\ ([0-9]{4}-[0-9]{2}-[0-9]{2}) ]]; then
+              exp_date="${BASH_REMATCH[1]}"
+              if [[ "$exp_date" < "$today" || "$exp_date" == "$today" ]]; then
+                expired="${expired}\n${line}"
+              fi
+            fi
+          done < .trivyignore
+
+          if [ -n "$expired" ]; then
+            echo "has_expired=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "expired_entries<<EOF"
+              echo -e "$expired"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "has_expired=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # -- Collect results and decide if issue is needed -----------------------
+
+      - name: Evaluate findings
+        id: evaluate
+        run: |
+          total=0
+          body=""
+
+          for img in backend frontend; do
+            file="${img}-trivy.json"
+            if [ -f "$file" ]; then
+              count=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' "$file")
+              critical=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "CRITICAL")] | length' "$file")
+              high=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "HIGH")] | length' "$file")
+              medium=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "MEDIUM")] | length' "$file")
+              low=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "LOW")] | length' "$file")
+              total=$((total + count))
+
+              body="${body}### ${img}\n"
+              body="${body}| Severity | Count |\n|---|---|\n"
+              body="${body}| Critical | ${critical} |\n"
+              body="${body}| High | ${high} |\n"
+              body="${body}| Medium | ${medium} |\n"
+              body="${body}| Low | ${low} |\n"
+              body="${body}| **Total** | **${count}** |\n\n"
+
+              if [ "$count" -gt 0 ]; then
+                body="${body}<details><summary>Vulnerability list</summary>\n\n"
+                body="${body}| CVE | Package | Severity | Installed | Fixed |\n|---|---|---|---|---|\n"
+                body="${body}$(jq -r '[.Results[]?.Vulnerabilities // [] | .[] | "| \(.VulnerabilityID) | \(.PkgName) | \(.Severity) | \(.InstalledVersion) | \(.FixedVersion // "none") |"] | .[]' "$file")\n"
+                body="${body}\n</details>\n\n"
+              fi
+            fi
+          done
+
+          echo "total=${total}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "body<<EOF"
+            echo -e "$body"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # -- Step summary --------------------------------------------------------
+
+      - name: Security scan summary
+        if: always()
+        run: |
+          echo "## Nightly Security Drift Scan" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Date:** $(date -u +%Y-%m-%d)" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Total findings:** ${{ steps.evaluate.outputs.total }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          for img in backend frontend; do
+            file="${img}-trivy.json"
+            if [ -f "$file" ]; then
+              count=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' "$file")
+              critical=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "CRITICAL")] | length' "$file")
+              high=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "HIGH")] | length' "$file")
+              medium=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "MEDIUM")] | length' "$file")
+              low=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "LOW")] | length' "$file")
+              echo "### ${img}" >> "$GITHUB_STEP_SUMMARY"
+              echo "| Severity | Count |" >> "$GITHUB_STEP_SUMMARY"
+              echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+              echo "| Critical | ${critical} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| High | ${high} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| Medium | ${medium} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| Low | ${low} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| **Total** | **${count}** |" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+          if [ "${{ steps.expiry.outputs.has_expired }}" == "true" ]; then
+            echo "### ⚠️ Expired .trivyignore entries" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "${{ steps.expiry.outputs.expired_entries }}" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # -- Create or update tracking issue -------------------------------------
+
+      - name: Create or update security issue
+        if: steps.evaluate.outputs.total != '0' || steps.expiry.outputs.has_expired == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '🔒 Nightly Security Drift: vulnerabilities detected';
+            const label = 'security';
+            const total = '${{ steps.evaluate.outputs.total }}';
+            const hasExpired = '${{ steps.expiry.outputs.has_expired }}' === 'true';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+            let body = `## Nightly Security Drift Report\n\n`;
+            body += `**Run:** [${process.env.GITHUB_RUN_ID}](${runUrl})\n`;
+            body += `**Date:** ${new Date().toISOString().split('T')[0]}\n`;
+            body += `**Total findings:** ${total}\n\n`;
+            body += ${{ toJSON(steps.evaluate.outputs.body) }};
+
+            if (hasExpired) {
+              body += `\n### ⚠️ Expired .trivyignore entries\n\n`;
+              body += '```\n';
+              body += ${{ toJSON(steps.expiry.outputs.expired_entries) }};
+              body += '\n```\n';
+              body += `\nThese suppressions have expired and should be reviewed.\n`;
+            }
+
+            body += `\n---\n_This issue is auto-managed by the nightly security drift scan. It will be closed when findings reach zero._`;
+
+            // Ensure label exists
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+              });
+            } catch {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+                color: 'e11d48',
+                description: 'Security-related issues',
+              });
+            }
+
+            // Find existing open issue
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: label,
+              state: 'open',
+              creator: 'github-actions[bot]',
+              per_page: 10,
+            });
+
+            const existing = issues.find(i => i.title === title);
+
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: body,
+              });
+              core.info(`Updated issue #${existing.number}`);
+            } else {
+              const { data: created } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: [label],
+              });
+              core.info(`Created issue #${created.number}`);
+            }
+
+      - name: Close resolved security issue
+        if: steps.evaluate.outputs.total == '0' && steps.expiry.outputs.has_expired != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '🔒 Nightly Security Drift: vulnerabilities detected';
+            const label = 'security';
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: label,
+              state: 'open',
+              creator: 'github-actions[bot]',
+              per_page: 10,
+            });
+
+            const existing = issues.find(i => i.title === title);
+
+            if (existing) {
+              const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: 'closed',
+                state_reason: 'completed',
+                body: existing.body + `\n\n---\n✅ **Resolved** on ${new Date().toISOString().split('T')[0]} — [run](${runUrl})`,
+              });
+              core.info(`Closed issue #${existing.number} — zero findings`);
+            }
