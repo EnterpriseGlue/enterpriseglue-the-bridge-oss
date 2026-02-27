@@ -1,6 +1,9 @@
 name: Release Please
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: "30 3 * * *"
   workflow_dispatch:
