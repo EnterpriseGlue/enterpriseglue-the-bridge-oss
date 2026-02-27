@@ -1,0 +1,327 @@
+name: Docker Images (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      backend_image:
+        required: true
+        type: string
+      frontend_image:
+        required: true
+        type: string
+      dockerhub_backend_image:
+        required: false
+        type: string
+      dockerhub_frontend_image:
+        required: false
+        type: string
+      image_tag:
+        required: true
+        type: string
+      image_platforms:
+        required: false
+        type: string
+        default: linux/amd64,linux/arm64
+      security_rebuild:
+        required: false
+        type: boolean
+        default: false
+      enable_dockerhub:
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      backend_image:
+        value: ${{ jobs.publish.outputs.backend_image }}
+      frontend_image:
+        value: ${{ jobs.publish.outputs.frontend_image }}
+      image_tag:
+        value: ${{ jobs.publish.outputs.image_tag }}
+      publish_latest:
+        value: ${{ jobs.publish.outputs.publish_latest }}
+      publish_dockerhub:
+        value: ${{ jobs.publish.outputs.publish_dockerhub }}
+      image_platforms:
+        value: ${{ jobs.publish.outputs.image_platforms }}
+      backend_digest:
+        value: ${{ jobs.publish.outputs.backend_digest }}
+      frontend_digest:
+        value: ${{ jobs.publish.outputs.frontend_digest }}
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image: ${{ steps.meta.outputs.backend_image }}
+      frontend_image: ${{ steps.meta.outputs.frontend_image }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      publish_latest: ${{ steps.meta.outputs.publish_latest }}
+      publish_dockerhub: ${{ steps.meta.outputs.publish_dockerhub }}
+      image_platforms: ${{ steps.meta.outputs.image_platforms }}
+      backend_digest: ${{ steps.backend.outputs.digest }}
+      frontend_digest: ${{ steps.frontend.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image names and tags
+        id: meta
+        shell: bash
+        env:
+          INPUT_BACKEND_IMAGE: ${{ inputs.backend_image }}
+          INPUT_FRONTEND_IMAGE: ${{ inputs.frontend_image }}
+          INPUT_DOCKERHUB_BACKEND_IMAGE: ${{ inputs.dockerhub_backend_image }}
+          INPUT_DOCKERHUB_FRONTEND_IMAGE: ${{ inputs.dockerhub_frontend_image }}
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+          INPUT_IMAGE_PLATFORMS: ${{ inputs.image_platforms }}
+          ENABLE_DOCKERHUB: ${{ inputs.enable_dockerhub }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          set -euo pipefail
+
+          backend_image="${INPUT_BACKEND_IMAGE}"
+          frontend_image="${INPUT_FRONTEND_IMAGE}"
+          dockerhub_backend="${INPUT_DOCKERHUB_BACKEND_IMAGE:-}"
+          dockerhub_frontend="${INPUT_DOCKERHUB_FRONTEND_IMAGE:-}"
+
+          image_platforms="${INPUT_IMAGE_PLATFORMS:-linux/amd64,linux/arm64}"
+          image_tag="${INPUT_IMAGE_TAG}"
+
+          publish_latest="false"
+          if [[ "${image_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            publish_latest="true"
+          fi
+
+          publish_dockerhub="false"
+          if [[ "${ENABLE_DOCKERHUB}" == "true" && -n "${DOCKERHUB_USERNAME:-}" && "${publish_latest}" == "true" ]]; then
+            publish_dockerhub="true"
+          fi
+
+          echo "backend_image=${backend_image}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${frontend_image}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
+          echo "publish_latest=${publish_latest}" >> "$GITHUB_OUTPUT"
+          echo "publish_dockerhub=${publish_dockerhub}" >> "$GITHUB_OUTPUT"
+          echo "image_platforms=${image_platforms}" >> "$GITHUB_OUTPUT"
+          echo "dockerhub_backend=${dockerhub_backend}" >> "$GITHUB_OUTPUT"
+          echo "dockerhub_frontend=${dockerhub_frontend}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Docker Hub
+        if: steps.meta.outputs.publish_dockerhub == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push backend image
+        id: backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile.prod
+          platforms: ${{ steps.meta.outputs.image_platforms }}
+          pull: true
+          no-cache: ${{ inputs.security_rebuild }}
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}
+            ${{ steps.meta.outputs.publish_dockerhub == 'true' && steps.meta.outputs.dockerhub_backend != '' && format('{0}:{1}', steps.meta.outputs.dockerhub_backend, steps.meta.outputs.image_tag) || '' }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}
+
+      - name: Verify backend image runtime contract for supported database adapters
+        run: |
+          COMMON_ENV=(
+            -e API_PORT=8787
+            -e JWT_SECRET=runtime_contract_test_secret_with_32_chars
+            -e ADMIN_PASSWORD=runtime_contract_test_password
+            -e ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+            -e FRONTEND_URL=http://localhost:8080
+          )
+
+          docker run --rm --entrypoint '' \
+            "${COMMON_ENV[@]}" \
+            -e DATABASE_TYPE=postgres \
+            -e POSTGRES_HOST=db \
+            -e POSTGRES_PORT=5432 \
+            -e POSTGRES_USER=enterpriseglue \
+            -e POSTGRES_PASSWORD=enterpriseglue \
+            -e POSTGRES_DATABASE=enterpriseglue \
+            -e POSTGRES_SCHEMA=main \
+            "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
+            node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('postgres'); const options=adapter.getDataSourceOptions(); if(options.type!=='postgres'){process.exit(1)} console.log('postgres runtime contract ok');"
+
+          docker run --rm --entrypoint '' \
+            "${COMMON_ENV[@]}" \
+            -e DATABASE_TYPE=oracle \
+            -e ORACLE_HOST=db \
+            -e ORACLE_PORT=1521 \
+            -e ORACLE_USER=enterpriseglue \
+            -e ORACLE_PASSWORD=oracle \
+            -e ORACLE_SERVICE_NAME=XEPDB1 \
+            -e ORACLE_SCHEMA=ENTERPRISEGLUE \
+            "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
+            node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('oracle'); const options=adapter.getDataSourceOptions(); if(options.type!=='oracle'){process.exit(1)} console.log('oracle runtime contract ok');"
+
+          docker run --rm --entrypoint '' \
+            "${COMMON_ENV[@]}" \
+            -e DATABASE_TYPE=mysql \
+            -e MYSQL_HOST=db \
+            -e MYSQL_PORT=3306 \
+            -e MYSQL_USER=enterpriseglue \
+            -e MYSQL_PASSWORD=enterpriseglue \
+            -e MYSQL_DATABASE=enterpriseglue \
+            "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
+            node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('mysql'); const options=adapter.getDataSourceOptions(); if(options.type!=='mysql'){process.exit(1)} console.log('mysql runtime contract ok');"
+
+          docker run --rm --entrypoint '' \
+            "${COMMON_ENV[@]}" \
+            -e DATABASE_TYPE=mssql \
+            -e MSSQL_HOST=db \
+            -e MSSQL_PORT=1433 \
+            -e MSSQL_USER=sa \
+            -e MSSQL_PASSWORD='Str0ngPassword!_123' \
+            -e MSSQL_DATABASE=master \
+            -e MSSQL_SCHEMA=dbo \
+            -e MSSQL_ENCRYPT=false \
+            -e MSSQL_TRUST_SERVER_CERTIFICATE=true \
+            "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
+            node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('mssql'); const options=adapter.getDataSourceOptions(); if(options.type!=='mssql'){process.exit(1)} console.log('mssql runtime contract ok');"
+
+          docker run --rm --entrypoint '' \
+            "${COMMON_ENV[@]}" \
+            -e DATABASE_TYPE=spanner \
+            -e SPANNER_PROJECT_ID=test-project \
+            -e SPANNER_INSTANCE_ID=test-instance \
+            -e SPANNER_DATABASE_ID=test-database \
+            "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
+            node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('spanner'); const options=adapter.getDataSourceOptions(); if(options.type!=='spanner'){process.exit(1)} console.log('spanner runtime contract ok');"
+
+      - name: Promote backend latest tag
+        if: steps.meta.outputs.publish_latest == 'true'
+        run: |
+          docker buildx imagetools create \
+            -t "${{ steps.meta.outputs.backend_image }}:latest" \
+            "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}"
+
+      - name: Promote backend latest tag on Docker Hub
+        if: steps.meta.outputs.publish_dockerhub == 'true' && steps.meta.outputs.dockerhub_backend != ''
+        run: |
+          docker buildx imagetools create \
+            -t "${{ steps.meta.outputs.dockerhub_backend }}:latest" \
+            "${{ steps.meta.outputs.dockerhub_backend }}:${{ steps.meta.outputs.image_tag }}"
+
+      - name: Build and push frontend image
+        id: frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile.prod
+          platforms: ${{ steps.meta.outputs.image_platforms }}
+          pull: true
+          no-cache: ${{ inputs.security_rebuild }}
+          push: true
+          build-args: |
+            API_BASE_URL=
+          tags: |
+            ${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}
+            ${{ steps.meta.outputs.publish_dockerhub == 'true' && steps.meta.outputs.dockerhub_frontend != '' && format('{0}:{1}', steps.meta.outputs.dockerhub_frontend, steps.meta.outputs.image_tag) || '' }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}
+
+      - name: Promote frontend latest tag
+        if: steps.meta.outputs.publish_latest == 'true'
+        run: |
+          docker buildx imagetools create \
+            -t "${{ steps.meta.outputs.frontend_image }}:latest" \
+            "${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}"
+
+      - name: Promote frontend latest tag on Docker Hub
+        if: steps.meta.outputs.publish_dockerhub == 'true' && steps.meta.outputs.dockerhub_frontend != ''
+        run: |
+          docker buildx imagetools create \
+            -t "${{ steps.meta.outputs.dockerhub_frontend }}:latest" \
+            "${{ steps.meta.outputs.dockerhub_frontend }}:${{ steps.meta.outputs.image_tag }}"
+
+      - name: Publish summary
+        run: |
+          echo "backend_image=${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "frontend_image=${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "platforms=${{ steps.meta.outputs.image_platforms }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "backend_digest=${{ steps.backend.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "frontend_digest=${{ steps.frontend.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "publish_latest=${{ steps.meta.outputs.publish_latest }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture image digest metadata
+        run: |
+          set -euo pipefail
+          cat > image-digests.json <<EOF
+          {
+            "backend_image": "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}",
+            "frontend_image": "${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}",
+            "backend_digest": "${{ steps.backend.outputs.digest }}",
+            "frontend_digest": "${{ steps.frontend.outputs.digest }}",
+            "platforms": "${{ steps.meta.outputs.image_platforms }}",
+            "publish_latest": "${{ steps.meta.outputs.publish_latest }}"
+          }
+          EOF
+
+      - name: Upload image digest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-digests-${{ steps.meta.outputs.image_tag }}
+          path: image-digests.json
+          if-no-files-found: error
+
+      - name: Verify multi-arch manifest coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_platforms="${{ steps.meta.outputs.image_platforms }}"
+          backend_ref="${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}"
+          frontend_ref="${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}"
+
+          backend_manifest="$(docker buildx imagetools inspect "$backend_ref")"
+          frontend_manifest="$(docker buildx imagetools inspect "$frontend_ref")"
+
+          IFS=',' read -ra platforms <<< "$expected_platforms"
+          for platform in "${platforms[@]}"; do
+            if ! grep -Fq "$platform" <<< "$backend_manifest"; then
+              echo "Backend manifest missing platform: $platform"
+              exit 1
+            fi
+            if ! grep -Fq "$platform" <<< "$frontend_manifest"; then
+              echo "Frontend manifest missing platform: $platform"
+              exit 1
+            fi
+          done
