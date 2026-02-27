@@ -1,12 +1,18 @@
 import 'reflect-metadata';
 import { createApp, registerBaseRoutes, registerFinalMiddleware } from './app.js';
 import { config } from '@shared/config/index.js';
-import { initializeDatabase, ensureSchemaExists } from '@shared/db/run-migrations.js';
+import { ensureSchemaExists, initializeDatabase } from '@shared/db/run-migrations.js';
 import { bootstrapAdmin, backfillKnownUserProfiles, backfillMissingPlatformRoles } from '@shared/db/bootstrap.js';
+import { requireAuth } from '@shared/middleware/auth.js';
+import { requirePlatformAdmin } from '@shared/middleware/platformAuth.js';
 import { startBatchPoller } from './poller/batchPoller.js';
-import { getConnectionPool } from '@shared/db/db-pool.js';
+import { getConnectionPool, ConnectionPool } from '@shared/db/db-pool.js';
 import { loadEnterpriseBackendPlugin } from './enterprise/loadEnterpriseBackendPlugin.js';
 const app = createApp({ registerBaseRoutes: false, registerFinalMiddleware: false });
+
+// Expose middleware to enterprise plugin via app.locals
+app.locals.requireAuth = requireAuth;
+app.locals.requirePlatformAdmin = requirePlatformAdmin;
 
 const enterprisePlugin = await loadEnterpriseBackendPlugin();
 app.locals.enterprisePluginLoaded = Boolean(
