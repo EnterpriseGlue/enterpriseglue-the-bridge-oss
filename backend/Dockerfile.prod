@@ -22,7 +22,12 @@ RUN npm ci --omit=dev --no-audit --no-fund \
       mssql \
       @google-cloud/spanner
 
-FROM cgr.dev/chainguard/node:latest
+FROM cgr.dev/chainguard/node:latest-dev AS runtime-base
+USER root
+RUN rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx
+USER 65532
+
+FROM runtime-base
 
 WORKDIR /app
 ENV NODE_ENV=production
