@@ -76,7 +76,7 @@
     "esbuild": "^0.27.2",
     "cookie": "^0.7.0",
     "lodash": "^4.17.23",
-    "minimatch": "^10.2.1",
+    "minimatch": "^10.2.4",
     "cross-spawn": "^7.0.6",
     "glob": "^10.5.0",
     "tar": "^7.5.8",
