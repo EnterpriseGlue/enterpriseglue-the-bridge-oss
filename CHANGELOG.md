@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.11](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.10...v0.4.11) (2026-02-27)
+
+
+### Bug Fixes
+
+* **security:** strip npm from runtime image to eliminate base-image CVEs ([#44](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/44)) ([9b584d5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9b584d58e3be4e16d63583f12d89755c8d8c56e5))
+
 ## [0.4.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.9...v0.4.10) (2026-02-27)
 
 
