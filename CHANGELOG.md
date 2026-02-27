@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.8...v0.4.9) (2026-02-27)
+
+
+### Bug Fixes
+
+* **ci:** make nightly CI read-only by replacing mutable marker with API lookup ([#38](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/38)) ([cc45720](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cc4572086eef1baa831033452c1362d69e29f217))
+* expose auth middleware to enterprise plugin via app.locals ([#39](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/39)) ([eda5d13](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/eda5d138bd40a9b40a31a581db42fb249a665d6b))
+* **security:** bump minimatch override to ^10.2.4 ([#40](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/40)) ([44fc3e6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/44fc3e6cc10c18260349136523a0ccde1a4818e2))
+
 ## [0.4.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.7...v0.4.8) (2026-02-26)
 
 
