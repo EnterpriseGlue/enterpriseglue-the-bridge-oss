@@ -384,8 +384,13 @@ export async function getProcessInstanceById(engineId: string, id: string) {
 
 export async function getProcessInstanceVariables(engineId: string, id: string) {
   const histVars = await camundaGet<any[]>(engineId, '/history/variable-instance', { processInstanceId: id })
+  const varsWithExecutionScope = (histVars || []).filter((v: any) => v?.executionId !== undefined && v?.executionId !== null)
+  const globalScopeVars = varsWithExecutionScope.length > 0
+    ? varsWithExecutionScope.filter((v: any) => String(v.executionId) === id)
+    : (histVars || [])
+
   const out: Record<string, { value: any; type: string }> = {}
-  for (const v of histVars || []) {
+  for (const v of globalScopeVars) {
     if (!v || !v.name) continue
     out[v.name] = {
       value: v.value,

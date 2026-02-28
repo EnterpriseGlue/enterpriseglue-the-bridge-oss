@@ -41,6 +41,7 @@ coverage/
 Thumbs.db
 .idea/
 .vscode/
+.windsurf/
 *.swp
 
 # Logs
