@@ -98,7 +98,13 @@ export function ProcessesDataTable({
       size: 0,
     },
     {
-      accessorKey: "processDefinitionKey",
+      id: "name",
+      accessorFn: (row) => {
+        const key = row.processDefinitionKey
+        if (!key) return ''
+        const resolvedName = processNameMap[key] || key
+        return `${resolvedName} ${key}`
+      },
       header: () => <span>Name</span>,
       cell: ({ row }) => {
         const key = row.original.processDefinitionKey
@@ -276,14 +282,15 @@ export function ProcessesDataTable({
     },
     {
       id: "parent",
+      accessorFn: (row) => row.superProcessInstanceId || (row as any).parent || '',
       header: "Parent Instance",
       cell: ({ row }) => {
-        const parent = (row.original as any).superProcessInstanceId || (row.original as any).parent
+        const parent = String(row.getValue('parent') || '')
         const clickable = parent && parent !== "None" && parent !== "--"
         const isHovered = hoveredRowId === row.original.id
         
         if (!clickable) {
-          return parent || "--"
+          return "--"
         }
         
         const truncatedParent =
@@ -394,8 +401,8 @@ export function ProcessesDataTable({
       onRowHover={setHoveredRowId}
       getRowId={(row) => row.id}
       enableSearch
-      searchPlaceholder="Search by ID, name, or business key..."
-      searchableColumns={["id", "processDefinitionKey", "businessKey"]}
+      searchPlaceholder="Search by ID, name, parent, or business key..."
+      searchableColumns={["id", "name", "parent", "businessKey"]}
       externalSearchValue={searchValue}
     />
   )
