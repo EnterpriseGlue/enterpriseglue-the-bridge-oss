@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.14](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.13...v0.4.14) (2026-02-28)
+
+
+### Bug Fixes
+
+* **mission-control:** fix process overview search filtering by name and parent instance ([#52](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/52)) ([54bb011](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/54bb0118576da320fda357d322333d19c339c51a))
+
 ## [0.4.13](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.12...v0.4.13) (2026-02-28)
 
 
