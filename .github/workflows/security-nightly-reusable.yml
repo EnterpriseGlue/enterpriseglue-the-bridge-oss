@@ -29,6 +29,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # -- Validate image freshness ---------------------------------------------
+
+      - name: Validate scanned image versions
+        id: image-meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_ref="${{ inputs.backend_image_ref }}"
+          frontend_ref="${{ inputs.frontend_image_ref }}"
+
+          backend_digest="$(docker manifest inspect "$backend_ref" -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .config.digest // "unknown"' 2>/dev/null || echo 'unavailable')"
+          frontend_digest="$(docker manifest inspect "$frontend_ref" -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .config.digest // "unknown"' 2>/dev/null || echo 'unavailable')"
+
+          backend_version="$(docker manifest inspect "$backend_ref" -v 2>/dev/null | jq -r '.[0].OCIManifest.annotations["org.opencontainers.image.version"] // .[0].Descriptor.annotations["org.opencontainers.image.version"] // "unknown"' 2>/dev/null || echo 'unknown')"
+          frontend_version="$(docker manifest inspect "$frontend_ref" -v 2>/dev/null | jq -r '.[0].OCIManifest.annotations["org.opencontainers.image.version"] // .[0].Descriptor.annotations["org.opencontainers.image.version"] // "unknown"' 2>/dev/null || echo 'unknown')"
+
+          echo "backend_digest=${backend_digest}" >> "$GITHUB_OUTPUT"
+          echo "frontend_digest=${frontend_digest}" >> "$GITHUB_OUTPUT"
+          echo "backend_version=${backend_version}" >> "$GITHUB_OUTPUT"
+          echo "frontend_version=${frontend_version}" >> "$GITHUB_OUTPUT"
+
+          echo "### Scanned image metadata" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | Ref | Version | Digest |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| backend | \`${backend_ref}\` | ${backend_version} | \`${backend_digest:0:20}…\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| frontend | \`${frontend_ref}\` | ${frontend_version} | \`${frontend_digest:0:20}…\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
       # -- Trivy scans --------------------------------------------------------
 
       - name: Trivy scan backend image
@@ -163,6 +191,17 @@ jobs:
               echo "| Low | ${low} |" >> "$GITHUB_STEP_SUMMARY"
               echo "| **Total** | **${count}** |" >> "$GITHUB_STEP_SUMMARY"
               echo "" >> "$GITHUB_STEP_SUMMARY"
+
+              if [ "$count" -gt 0 ]; then
+                echo "<details><summary>Vulnerability details</summary>" >> "$GITHUB_STEP_SUMMARY"
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "| CVE | Package | Severity | Installed | Fixed |" >> "$GITHUB_STEP_SUMMARY"
+                echo "|---|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+                jq -r '[.Results[]?.Vulnerabilities // [] | .[] | "| \(.VulnerabilityID) | \(.PkgName) | \(.Severity) | \(.InstalledVersion) | \(.FixedVersion // "none") |"] | .[]' "$file" >> "$GITHUB_STEP_SUMMARY"
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+              fi
             fi
           done
 
@@ -190,6 +229,10 @@ jobs:
             body += `**Run:** [${process.env.GITHUB_RUN_ID}](${runUrl})\n`;
             body += `**Date:** ${new Date().toISOString().split('T')[0]}\n`;
             body += `**Total findings:** ${total}\n\n`;
+            body += `### Scanned images\n\n`;
+            body += `| Image | Ref | Version | Digest |\n|---|---|---|---|\n`;
+            body += `| backend | \`${{ inputs.backend_image_ref }}\` | ${{ steps.image-meta.outputs.backend_version }} | \`${{ steps.image-meta.outputs.backend_digest }}\` |\n`;
+            body += `| frontend | \`${{ inputs.frontend_image_ref }}\` | ${{ steps.image-meta.outputs.frontend_version }} | \`${{ steps.image-meta.outputs.frontend_digest }}\` |\n\n`;
             body += ${{ toJSON(steps.evaluate.outputs.body) }};
 
             if (hasExpired) {

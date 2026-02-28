@@ -57,10 +57,6 @@ permissions:
   contents: read
   packages: write
 
-concurrency:
-  group: docker-images-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   publish:
     runs-on: ubuntu-latest
