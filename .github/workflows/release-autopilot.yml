@@ -18,7 +18,9 @@ concurrency:
 
 jobs:
   enable-automerge:
-    if: ${{ github.event.pull_request.state == 'open' }}
+    if: >-
+      github.event.pull_request.state == 'open' &&
+      (github.event.action != 'labeled' || github.actor != 'github-actions[bot]')
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate autopilot eligibility
