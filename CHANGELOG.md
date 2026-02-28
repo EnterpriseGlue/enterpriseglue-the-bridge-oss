@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.15](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.14...v0.4.15) (2026-02-28)
+
+
+### Features
+
+* **frontend:** add token pass count toggle on process detail ([#55](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/55)) ([bdd653e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bdd653ed426622b9d8c18e1e04d317cafec67522))
+
 ## [0.4.14](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.13...v0.4.14) (2026-02-28)
 
 
