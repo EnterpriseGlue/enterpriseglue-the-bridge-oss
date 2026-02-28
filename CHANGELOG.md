@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.12](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.11...v0.4.12) (2026-02-28)
+
+
+### Bug Fixes
+
+* **ci:** resolve Docker publish deadlock and add CVE details to nightly reports ([#47](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/47)) ([9fe949e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9fe949ea76ecdc9a481f979f2040d5539ecee1e4))
+
 ## [0.4.11](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.10...v0.4.11) (2026-02-27)
 
 
