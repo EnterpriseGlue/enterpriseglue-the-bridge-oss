@@ -26,8 +26,6 @@ jobs:
     outputs:
       backend_image: ${{ steps.meta.outputs.backend_image }}
       frontend_image: ${{ steps.meta.outputs.frontend_image }}
-      dockerhub_backend: ${{ steps.meta.outputs.dockerhub_backend }}
-      dockerhub_frontend: ${{ steps.meta.outputs.dockerhub_frontend }}
       image_tag: ${{ steps.meta.outputs.image_tag }}
       image_platforms: ${{ steps.meta.outputs.image_platforms }}
     steps:
@@ -38,7 +36,6 @@ jobs:
           INPUT_BACKEND_IMAGE: ${{ vars.BACKEND_IMAGE }}
           INPUT_FRONTEND_IMAGE: ${{ vars.FRONTEND_IMAGE }}
           INPUT_IMAGE_PLATFORMS: ${{ vars.IMAGE_PLATFORMS }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
           EVENT_NAME: ${{ github.event_name }}
@@ -53,10 +50,6 @@ jobs:
           backend_image="${INPUT_BACKEND_IMAGE:-$backend_default}"
           frontend_image="${INPUT_FRONTEND_IMAGE:-$frontend_default}"
 
-          dockerhub_user="${DOCKERHUB_USERNAME:-}"
-          dockerhub_backend="docker.io/${dockerhub_user:-${owner_lc}}/enterpriseglue-the-bridge-oss-backend"
-          dockerhub_frontend="docker.io/${dockerhub_user:-${owner_lc}}/enterpriseglue-the-bridge-oss-frontend"
-
           image_platforms="${INPUT_IMAGE_PLATFORMS:-linux/amd64,linux/arm64}"
 
           if [[ "${EVENT_NAME}" == "release" && -n "${RELEASE_TAG}" ]]; then
@@ -69,8 +62,6 @@ jobs:
 
           echo "backend_image=${backend_image}" >> "$GITHUB_OUTPUT"
           echo "frontend_image=${frontend_image}" >> "$GITHUB_OUTPUT"
-          echo "dockerhub_backend=${dockerhub_backend}" >> "$GITHUB_OUTPUT"
-          echo "dockerhub_frontend=${dockerhub_frontend}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
           echo "image_platforms=${image_platforms}" >> "$GITHUB_OUTPUT"
 
@@ -80,8 +71,7 @@ jobs:
     with:
       backend_image: ${{ needs.resolve.outputs.backend_image }}
       frontend_image: ${{ needs.resolve.outputs.frontend_image }}
-      dockerhub_backend_image: ${{ needs.resolve.outputs.dockerhub_backend }}
-      dockerhub_frontend_image: ${{ needs.resolve.outputs.dockerhub_frontend }}
+      dockerhub_namespace: ${{ vars.DOCKERHUB_NAMESPACE }}
       image_tag: ${{ needs.resolve.outputs.image_tag }}
       image_platforms: ${{ needs.resolve.outputs.image_platforms }}
       security_rebuild: ${{ github.event_name == 'workflow_dispatch' && inputs.security_rebuild }}

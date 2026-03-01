@@ -9,10 +9,7 @@ on:
       frontend_image:
         required: true
         type: string
-      dockerhub_backend_image:
-        required: false
-        type: string
-      dockerhub_frontend_image:
+      dockerhub_namespace:
         required: false
         type: string
       image_tag:
@@ -92,8 +89,7 @@ jobs:
         env:
           INPUT_BACKEND_IMAGE: ${{ inputs.backend_image }}
           INPUT_FRONTEND_IMAGE: ${{ inputs.frontend_image }}
-          INPUT_DOCKERHUB_BACKEND_IMAGE: ${{ inputs.dockerhub_backend_image }}
-          INPUT_DOCKERHUB_FRONTEND_IMAGE: ${{ inputs.dockerhub_frontend_image }}
+          INPUT_DOCKERHUB_NAMESPACE: ${{ inputs.dockerhub_namespace }}
           INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
           INPUT_IMAGE_PLATFORMS: ${{ inputs.image_platforms }}
           ENABLE_DOCKERHUB: ${{ inputs.enable_dockerhub }}
@@ -103,8 +99,13 @@ jobs:
 
           backend_image="${INPUT_BACKEND_IMAGE}"
           frontend_image="${INPUT_FRONTEND_IMAGE}"
-          dockerhub_backend="${INPUT_DOCKERHUB_BACKEND_IMAGE:-}"
-          dockerhub_frontend="${INPUT_DOCKERHUB_FRONTEND_IMAGE:-}"
+          dockerhub_namespace="${INPUT_DOCKERHUB_NAMESPACE:-}"
+          dockerhub_backend=""
+          dockerhub_frontend=""
+          if [[ -n "${dockerhub_namespace}" ]]; then
+            dockerhub_backend="docker.io/${dockerhub_namespace}/enterpriseglue-the-bridge-oss-backend"
+            dockerhub_frontend="docker.io/${dockerhub_namespace}/enterpriseglue-the-bridge-oss-frontend"
+          fi
 
           image_platforms="${INPUT_IMAGE_PLATFORMS:-linux/amd64,linux/arm64}"
           image_tag="${INPUT_IMAGE_TAG}"
@@ -115,7 +116,7 @@ jobs:
           fi
 
           publish_dockerhub="false"
-          if [[ "${ENABLE_DOCKERHUB}" == "true" && -n "${DOCKERHUB_USERNAME:-}" && "${publish_latest}" == "true" ]]; then
+          if [[ "${ENABLE_DOCKERHUB}" == "true" && -n "${DOCKERHUB_USERNAME:-}" && -n "${dockerhub_namespace}" && "${publish_latest}" == "true" ]]; then
             publish_dockerhub="true"
           fi
 
