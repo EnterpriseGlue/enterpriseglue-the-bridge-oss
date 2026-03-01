@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
@@ -35,6 +36,7 @@ jobs:
         id: detect
         env:
           EVENT_NAME: ${{ github.event_name }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -58,6 +60,18 @@ jobs:
           fi
 
           if [ "${EVENT_NAME}" = "pull_request" ]; then
+            # Skip heavy CI for draft PRs — use draft mode to batch features
+            # without incurring CI cost on every push.  Mark "Ready for review"
+            # to trigger full CI once.
+            if [ "${PR_DRAFT}" = "true" ]; then
+              echo "run_tests=false"  >> "$GITHUB_OUTPUT"
+              echo "run_postgres=false" >> "$GITHUB_OUTPUT"
+              echo "run_oracle=false"  >> "$GITHUB_OUTPUT"
+              echo "run_smoke=false"   >> "$GITHUB_OUTPUT"
+              echo "changed_files_count=draft" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
             BASE_SHA="${PR_BASE_SHA}"
             HEAD_SHA="${PR_HEAD_SHA:-$CURRENT_SHA}"
             CHANGED_FILES="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)"
