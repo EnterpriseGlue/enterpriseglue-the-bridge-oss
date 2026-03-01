@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.16](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.15...v0.4.16) (2026-03-01)
+
+
+### Features
+
+* **starbase:** import from engine on create ([#57](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/57)) ([93e8a29](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/93e8a2925918db9fa9f9291845251d45a8c8ec03))
+
 ## [0.4.15](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.14...v0.4.15) (2026-02-28)
 
 
