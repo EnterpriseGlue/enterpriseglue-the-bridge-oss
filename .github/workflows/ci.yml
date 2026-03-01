@@ -213,6 +213,7 @@ jobs:
           name: plugin-api-package
           path: .artifacts/
           if-no-files-found: error
+          include-hidden-files: true
 
   compose-render:
     runs-on: ubuntu-latest
