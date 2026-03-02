@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.20](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.19...v0.4.20) (2026-03-02)
+
+
+### Bug Fixes
+
+* gracefully handle enterprise plugin on non-postgres databases ([#66](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/66)) ([c7e947c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c7e947cc03ed5262f8eb5bb9c04184715866dd91))
+
 ## [0.4.19](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.18...v0.4.19) (2026-03-02)
 
 
