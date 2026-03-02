@@ -39,8 +39,21 @@ describe('loadEnterpriseBackendPlugin validation helpers', () => {
   });
 
   it('returns noop plugin when enterprise package is unavailable (OSS mode)', async () => {
-    const plugin = await loadEnterpriseBackendPlugin();
+    // Skip this test in EE where the enterprise package IS installed
+    let hasEnterprise = false;
+    try {
+      await import('@enterpriseglue/enterprise-backend');
+      hasEnterprise = true;
+    } catch {
+      // expected in OSS
+    }
+    if (hasEnterprise) {
+      const plugin = await loadEnterpriseBackendPlugin();
+      expect(plugin.registerRoutes).toBeDefined();
+      return;
+    }
 
+    const plugin = await loadEnterpriseBackendPlugin();
     expect(plugin.registerRoutes).toBeUndefined();
     expect(plugin.migrateEnterpriseDatabase).toBeUndefined();
   });
