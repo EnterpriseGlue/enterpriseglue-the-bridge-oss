@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import { getDataSource } from '../../../src/shared/db/data-source.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('../../../src/shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
@@ -27,7 +27,7 @@ vi.mock('undici', () => ({
   FormData: class {},
 }));
 
-vi.mock('@shared/services/platform-admin/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   engineService: {
     canManageEngine: vi.fn().mockResolvedValue(true),
     canViewEngine: vi.fn().mockResolvedValue(true),
@@ -46,7 +46,7 @@ describe('engines deployments routes', () => {
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
-    const { default: deploymentsRouter } = await import('../../../src/modules/engines/routes/deployments.js');
+    const { default: deploymentsRouter } = await import('../../../../packages/backend-host/src/modules/engines/routes/deployments.js');
     app.use(deploymentsRouter);
     vi.clearAllMocks();
 

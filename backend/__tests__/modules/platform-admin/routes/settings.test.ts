@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import settingsRouter from '../../../../src/modules/platform-admin/routes/settings.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { PlatformSettings } from '../../../../src/shared/db/entities/PlatformSettings.js';
+import settingsRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/settings.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { PlatformSettings } from '@enterpriseglue/shared/db/entities/PlatformSettings.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
 

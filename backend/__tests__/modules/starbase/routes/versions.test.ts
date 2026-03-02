@@ -1,27 +1,27 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import versionsRouter from '../../../../src/modules/starbase/routes/versions.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
+import versionsRouter from '../../../../../packages/backend-host/src/modules/starbase/routes/versions.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/projectAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/projectAuth.js', () => ({
   requireProjectAccess: () => (_req: any, _res: any, next: any) => next(),
   requireFileAccess: () => (_req: any, _res: any, next: any) => next(),
   requireProjectRole: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/services/versioning/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({
   vcsService: {
     listCommits: vi.fn().mockResolvedValue([]),
     getCommit: vi.fn().mockResolvedValue({ id: 'commit-1', message: 'Test commit' }),

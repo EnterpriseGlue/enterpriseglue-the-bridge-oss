@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import contactAdminRouter from '../../../../src/modules/admin/routes/contact-admin.js';
+import contactAdminRouter from '../../../../../packages/backend-host/src/modules/admin/routes/contact-admin.js';
 
-vi.mock('@shared/services/email/contact.js', () => ({
+vi.mock('@enterpriseglue/shared/services/email/contact.js', () => ({
   sendContactAdminEmail: vi.fn().mockResolvedValue({ success: true }),
 }));
 

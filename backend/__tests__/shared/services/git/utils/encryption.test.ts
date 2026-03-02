@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { encryptToken, decryptToken } from '../../../../../src/shared/services/git/utils/encryption.js';
+import { encryptToken, decryptToken } from '@enterpriseglue/shared/services/git/utils/encryption.js';
 
 describe('git encryption utils', () => {
   beforeEach(() => {

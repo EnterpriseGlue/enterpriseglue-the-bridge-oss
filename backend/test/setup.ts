@@ -3,7 +3,7 @@ process.env.NODE_ENV = 'test';
 import { vi } from 'vitest';
 
 // Global mock for rate limiters - all limiters are no-ops in tests
-vi.mock('@shared/middleware/rateLimiter.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
   authLimiter: (_req: any, _res: any, next: any) => next(),
   passwordResetLimiter: (_req: any, _res: any, next: any) => next(),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as authRoutes from '../../../../src/modules/auth/routes/index.js';
+import * as authRoutes from '../../../../../packages/backend-host/src/modules/auth/routes/index.js';
 
 describe('auth routes index', () => {
   it('exports all auth route modules', () => {

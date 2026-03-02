@@ -1,31 +1,31 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import emailConfigsRouter from '../../../../src/modules/admin/routes/email-configs.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { EmailSendConfig } from '../../../../src/shared/db/entities/EmailSendConfig.js';
+import emailConfigsRouter from '../../../../../packages/backend-host/src/modules/admin/routes/email-configs.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { EmailSendConfig } from '@enterpriseglue/shared/db/entities/EmailSendConfig.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', platformRole: 'admin' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/requirePermission.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/requirePermission.js', () => ({
   requirePermission: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/utils/crypto.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/crypto.js', () => ({
   encrypt: vi.fn((val) => `encrypted:${val}`),
   decrypt: vi.fn((val) => val.replace('encrypted:', '')),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
   AuditActions: {},
 }));

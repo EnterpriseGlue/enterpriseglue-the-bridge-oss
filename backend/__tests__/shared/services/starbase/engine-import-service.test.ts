@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Engine } from '../../../../src/shared/db/entities/Engine.js';
-import { EngineProjectAccess } from '../../../../src/shared/db/entities/EngineProjectAccess.js';
-import { File } from '../../../../src/shared/db/entities/File.js';
-import { Version } from '../../../../src/shared/db/entities/Version.js';
+import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
+import { EngineProjectAccess } from '@enterpriseglue/shared/db/entities/EngineProjectAccess.js';
+import { File } from '@enterpriseglue/shared/db/entities/File.js';
+import { Version } from '@enterpriseglue/shared/db/entities/Version.js';
 
 const mocks = vi.hoisted(() => ({
   camundaGet: vi.fn(),
@@ -11,17 +11,17 @@ const mocks = vi.hoisted(() => ({
   findOne: vi.fn(),
 }));
 
-vi.mock('@shared/services/bpmn-engine-client.js', () => ({
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   camundaGet: mocks.camundaGet,
 }));
 
-vi.mock('@shared/services/platform-admin/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   engineService: {
     hasEngineAccess: mocks.hasEngineAccess,
   },
 }));
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: async () => ({
     getRepository: mocks.getRepository,
   }),
@@ -31,7 +31,7 @@ import {
   applyPreparedEngineImportToProject,
   assertUserCanImportFromEngine,
   prepareLatestEngineImport,
-} from '../../../../src/shared/services/starbase/engine-import-service.js';
+} from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
 
 describe('engine import service', () => {
   beforeEach(() => {

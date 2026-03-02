@@ -13,9 +13,9 @@ const mockConfig = vi.hoisted(() => ({
   postgresDatabase: undefined as string | undefined,
 }));
 
-vi.mock('@shared/config/index.js', () => ({ config: mockConfig }));
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({ config: mockConfig }));
 
-import { PostgresAdapter } from '../../../src/shared/db/adapters/PostgresAdapter.js';
+import { PostgresAdapter } from '@enterpriseglue/shared/db/adapters/PostgresAdapter.js';
 
 beforeEach(() => {
   mockConfig.postgresSsl = false;

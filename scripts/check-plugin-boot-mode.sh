@@ -28,24 +28,24 @@ if [[ "$MODE" == "oss" ]]; then
   echo "▶ Checking OSS plugin boot path…"
 
   # Backend loader exists and handles missing plugin gracefully
-  LOADER="backend/src/enterprise/loadEnterpriseBackendPlugin.ts"
+  LOADER="packages/backend-host/src/enterprise/loadEnterpriseBackendPlugin.ts"
   assert_file "$LOADER"
   assert_contains "$LOADER" "noopPlugin"
   assert_contains "$LOADER" "isMissingEnterprisePlugin"
   assert_contains "$LOADER" "assertValidPluginShape"
 
   # Frontend loader exists and returns empty plugin when missing
-  FE_LOADER="frontend/src/enterprise/loadEnterpriseFrontendPlugin.ts"
+  FE_LOADER="packages/frontend-host/src/enterprise/loadEnterpriseFrontendPlugin.ts"
   assert_file "$FE_LOADER"
   assert_contains "$FE_LOADER" "emptyPlugin"
 
   # Server wires up plugin diagnostics
-  assert_contains "backend/src/server.ts" "enterprisePluginLoaded"
-  assert_contains "backend/src/server.ts" "Backend plugin status"
+  assert_contains "packages/backend-host/src/server.ts" "enterprisePluginLoaded"
+  assert_contains "packages/backend-host/src/server.ts" "Backend plugin status"
 
   # Extension slot fallback exists for engines route
-  assert_contains "frontend/src/routes/index.tsx" "engines-page"
-  assert_contains "frontend/src/routes/index.tsx" "ExtensionPage"
+  assert_contains "packages/frontend-host/src/routes/index.tsx" "engines-page"
+  assert_contains "packages/frontend-host/src/routes/index.tsx" "ExtensionPage"
 
   # Plugin API contract files present
   assert_file "packages/enterprise-plugin-api/src/frontend.d.ts"

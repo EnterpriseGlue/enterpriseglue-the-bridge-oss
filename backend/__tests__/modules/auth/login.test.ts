@@ -1,26 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import loginRoute from '../../../src/modules/auth/routes/login.js';
-import { getDataSource } from '../../../src/shared/db/data-source.js';
-import { User } from '../../../src/shared/db/entities/User.js';
-import { SsoProvider } from '../../../src/shared/db/entities/SsoProvider.js';
-import { errorHandler } from '../../../src/shared/middleware/errorHandler.js';
+import loginRoute from '../../../../packages/backend-host/src/modules/auth/routes/login.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { SsoProvider } from '@enterpriseglue/shared/db/entities/SsoProvider.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/utils/password.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/password.js', () => ({
   verifyPassword: vi.fn(),
 }));
 
-vi.mock('@shared/utils/jwt.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
   generateAccessToken: vi.fn(() => 'mock-access-token'),
   generateRefreshToken: vi.fn(() => 'mock-refresh-token'),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
   AuditActions: {
     LOGIN_SUCCESS: 'LOGIN_SUCCESS',
@@ -29,16 +29,16 @@ vi.mock('@shared/services/audit.js', () => ({
   },
 }));
 
-vi.mock('@shared/db/adapters/QueryHelpers.js', () => ({
+vi.mock('@enterpriseglue/shared/db/adapters/QueryHelpers.js', () => ({
   addCaseInsensitiveEquals: (_qb: any, _alias: string, _column: string, _paramName: string, _value: string) => _qb,
   getDatabaseType: () => 'postgres',
 }));
 
-vi.mock('@shared/services/capabilities.js', () => ({
+vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
   buildUserCapabilities: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('@shared/config/index.js', () => ({
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   config: {
     jwtSecret: 'test-secret',
     jwtAccessTokenExpires: 3600,
@@ -50,7 +50,7 @@ vi.mock('@shared/config/index.js', () => ({
   },
 }));
 
-vi.mock('@shared/middleware/rateLimiter.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   authLimiter: (_req: any, _res: any, next: any) => next(),
   apiLimiter: (_req: any, _res: any, next: any) => next(),
   engineLimiter: (_req: any, _res: any, next: any) => next(),

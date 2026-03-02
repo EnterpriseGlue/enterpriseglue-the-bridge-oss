@@ -21,8 +21,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@shared': path.resolve(rootDir, 'src/shared'),
-      '@modules': path.resolve(rootDir, 'src/modules'),
+      '@enterpriseglue/shared': path.resolve(rootDir, '..', 'packages', 'shared', 'src'),
+      '@enterpriseglue/backend-host': path.resolve(rootDir, '..', 'packages', 'backend-host', 'src'),
+      '@modules': path.resolve(rootDir, '..', 'packages', 'backend-host', 'src', 'modules'),
     },
   },
 });

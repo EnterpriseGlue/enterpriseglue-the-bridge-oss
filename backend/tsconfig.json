@@ -13,22 +13,22 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["./src/shared/*"],
-      "@modules/*": ["./src/modules/*"],
+      "@enterpriseglue/shared/contracts": ["../packages/shared/src/contracts/index.d.ts"],
+      "@enterpriseglue/shared/contracts/auth": ["../packages/shared/src/contracts/auth.d.ts"],
+      "@enterpriseglue/shared/contracts/roles": ["../packages/shared/src/contracts/roles.d.ts"],
+      "@enterpriseglue/shared/contracts/members": ["../packages/shared/src/contracts/members.d.ts"],
+      "@enterpriseglue/shared/*": ["../packages/shared/src/*"],
+      "@enterpriseglue/backend-host/*": ["../packages/backend-host/src/*"],
+      "@modules/*": ["../packages/backend-host/src/modules/*"],
       "@vitest/expect": ["./node_modules/@vitest/expect/dist/index.d.ts"],
       "@azure/msal-common": ["./node_modules/@azure/msal-common/lib/types/index.d.ts"],
       "@azure/msal-common/*": ["./node_modules/@azure/msal-common/lib/types/*"],
-      "@enterpriseglue/contracts": ["../packages/contracts/src/index.d.ts"],
-      "@enterpriseglue/contracts/auth": ["../packages/contracts/src/auth.d.ts"],
-      "@enterpriseglue/contracts/roles": ["../packages/contracts/src/roles.d.ts"],
-      "@enterpriseglue/contracts/members": ["../packages/contracts/src/members.d.ts"],
-      "@enterpriseglue/contracts/*": ["../packages/contracts/src/*"],
       "@enterpriseglue/enterprise-plugin-api": ["../packages/enterprise-plugin-api/src/index.d.ts"],
       "@enterpriseglue/enterprise-plugin-api/backend": ["../packages/enterprise-plugin-api/src/backend.d.ts"],
       "@enterpriseglue/enterprise-plugin-api/frontend": ["../packages/enterprise-plugin-api/src/frontend.d.ts"]
     },
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts", "__tests__/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts", "__tests__/**/*.ts", "../packages/backend-host/src/**/*.ts"],
   "exclude": ["src/db/schema/drizzle-kit-schema.ts"]
 }

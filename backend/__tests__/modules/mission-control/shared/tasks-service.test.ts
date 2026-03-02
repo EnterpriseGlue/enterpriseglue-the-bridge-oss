@@ -5,9 +5,9 @@ import {
   claimTaskById,
   completeTaskById,
   getTaskCountByQuery,
-} from '../../../../src/modules/mission-control/shared/tasks-service.js';
+} from '../../../../../packages/backend-host/src/modules/mission-control/shared/tasks-service.js';
 
-vi.mock('@shared/services/bpmn-engine-client.js', () => ({
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   getTasks: vi.fn().mockResolvedValue([]),
   getTask: vi.fn().mockResolvedValue({ id: 't1' }),
   getTaskCount: vi.fn().mockResolvedValue({ count: 1 }),

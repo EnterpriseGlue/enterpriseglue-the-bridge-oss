@@ -2,8 +2,8 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import UserManagement from '../../../../src/pages/admin/UserManagement';
-import { authService } from '../../../../src/services/auth';
+import UserManagement from '@src/pages/admin/UserManagement';
+import { authService } from '@src/services/auth';
 
 vi.mock('@src/shared/hooks/useAuth', () => ({
   useAuth: () => ({ user: { id: 'admin-1', capabilities: { canManageUsers: true } } }),

@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import { getDataSource } from '../../../src/shared/db/data-source.js';
-import { ProjectMember } from '../../../src/shared/db/entities/ProjectMember.js';
-import { File } from '../../../src/shared/db/entities/File.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
+import { File } from '@enterpriseglue/shared/db/entities/File.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', type: 'access', platformRole: 'user' };
     next();
@@ -23,7 +23,7 @@ describe('GET /api/dashboard/stats', () => {
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
-    const { default: statsRouter } = await import('../../../src/modules/dashboard/routes/stats.js');
+    const { default: statsRouter } = await import('../../../../packages/backend-host/src/modules/dashboard/routes/stats.js');
     app.use(statsRouter);
     vi.clearAllMocks();
   });

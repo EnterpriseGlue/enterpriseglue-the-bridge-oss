@@ -1,22 +1,22 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import commentsRouter from '../../../../src/modules/starbase/routes/comments.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { Comment } from '../../../../src/shared/db/entities/Comment.js';
+import commentsRouter from '../../../../../packages/backend-host/src/modules/starbase/routes/comments.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Comment } from '@enterpriseglue/shared/db/entities/Comment.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/projectAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/projectAuth.js', () => ({
   requireProjectAccess: () => (_req: any, _res: any, next: any) => next(),
   requireFileAccess: () => (_req: any, _res: any, next: any) => next(),
   requireProjectRole: () => (_req: any, _res: any, next: any) => next(),

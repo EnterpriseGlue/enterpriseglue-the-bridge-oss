@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import ssoProvidersRouter from '../../../../src/modules/platform-admin/routes/sso-providers.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
+import ssoProvidersRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/sso-providers.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
 

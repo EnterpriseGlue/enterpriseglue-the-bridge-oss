@@ -1,26 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import syncRouter from '../../../../src/modules/git/routes/sync.js';
+import syncRouter from '../../../../../packages/backend-host/src/modules/git/routes/sync.js';
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/projectAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/projectAuth.js', () => ({
   requireProjectRole: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/services/git/GitService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/git/GitService.js', () => ({
   GitService: vi.fn().mockImplementation(() => ({
     syncRepository: vi.fn().mockResolvedValue({ success: true }),
   })),
 }));
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 

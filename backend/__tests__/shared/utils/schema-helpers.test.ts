@@ -5,7 +5,7 @@ import {
   toOptionalTimestamp,
   toTimestamp,
   undefinedToNull,
-} from '../../../src/shared/utils/schema-helpers.js';
+} from '@enterpriseglue/shared/utils/schema-helpers.js';
 
 describe('schema helpers', () => {
   it('converts timestamps safely', () => {

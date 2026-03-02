@@ -35,7 +35,8 @@ COPY backend/package.json ./package.json
 COPY --from=deps /app/node_modules ./node_modules
 
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/src/shared/db/adapters/sql ./src/shared/db/adapters/sql
+COPY --from=build /packages/shared/src/db/adapters/sql ./packages/shared/src/db/adapters/sql
+COPY --from=build /packages/shared/src/db/migrations ./packages/shared/src/db/migrations
 
 EXPOSE 8787
 

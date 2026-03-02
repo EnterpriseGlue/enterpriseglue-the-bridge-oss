@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
 

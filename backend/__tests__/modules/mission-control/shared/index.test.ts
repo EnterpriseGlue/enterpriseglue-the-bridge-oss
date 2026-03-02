@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as sharedRoutes from '../../../../src/modules/mission-control/shared/index.js';
+import * as sharedRoutes from '../../../../../packages/backend-host/src/modules/mission-control/shared/index.js';
 
 describe('mission-control shared index', () => {
   it('exports shared mission-control routes', () => {

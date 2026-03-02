@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as migrationModule from '../../../../src/modules/mission-control/migration/index.js';
+import * as migrationModule from '../../../../../packages/backend-host/src/modules/mission-control/migration/index.js';
 
 describe('mission-control migration index', () => {
   it('exports migration route', () => {

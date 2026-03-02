@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import googleStartRouter from '../../../../src/modules/auth/routes/google-start.js';
+import googleStartRouter from '../../../../../packages/backend-host/src/modules/auth/routes/google-start.js';
 
-vi.mock('@shared/services/google.js', () => ({
+vi.mock('@enterpriseglue/shared/services/google.js', () => ({
   isGoogleAuthEnabled: vi.fn().mockResolvedValue(false),
   getGoogleAuthorizationUrl: vi.fn().mockResolvedValue('https://accounts.google.com/o/oauth2/v2/auth?state=test'),
 }));

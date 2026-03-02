@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as dashboardModule from '../../../src/modules/dashboard/index.js';
+import * as dashboardModule from '../../../../packages/backend-host/src/modules/dashboard/index.js';
 
 describe('dashboard module index', () => {
   it('exports dashboard routes', () => {

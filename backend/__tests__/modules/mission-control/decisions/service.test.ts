@@ -5,9 +5,9 @@ import {
   fetchDecisionDefinitionXml,
   evaluateDecisionById,
   evaluateDecisionByKey,
-} from '../../../../src/modules/mission-control/decisions/service.js';
+} from '../../../../../packages/backend-host/src/modules/mission-control/decisions/service.js';
 
-vi.mock('@shared/services/bpmn-engine-client.js', () => ({
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   camundaPost: vi.fn().mockResolvedValue({}),
   getDecisionDefinitions: vi.fn().mockResolvedValue([]),
   getDecisionDefinition: vi.fn().mockResolvedValue({}),

@@ -1,23 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import decisionsRouter from '../../../../src/modules/mission-control/decisions/routes.js';
+import decisionsRouter from '../../../../../packages/backend-host/src/modules/mission-control/decisions/routes.js';
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/engineAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/engineAuth.js', () => ({
   requireEngineReadOrWrite: () => (req: any, _res: any, next: any) => {
     req.engineId = 'engine-1';
     next();
   },
 }));
 
-vi.mock('../../../../src/modules/mission-control/decisions/service.js', () => ({
+vi.mock('../../../../../packages/backend-host/src/modules/mission-control/decisions/service.js', () => ({
   listDecisionDefinitions: vi.fn().mockResolvedValue([]),
   fetchDecisionDefinition: vi.fn().mockResolvedValue({ id: 'd1', key: 'decision1' }),
   fetchDecisionDefinitionXml: vi.fn().mockResolvedValue({ id: 'd1', dmnXml: '<definitions />' }),

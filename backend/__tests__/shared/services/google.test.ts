@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { isGoogleAuthEnabled } from '../../../src/shared/services/google.js';
+import { isGoogleAuthEnabled } from '@enterpriseglue/shared/services/google.js';
 
-vi.mock('../../../src/shared/services/platform-admin/SsoProviderService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoProviderService.js', () => ({
   ssoProviderService: {
     getProviderByType: vi.fn().mockResolvedValue(null),
   },
 }));
 
-vi.mock('@shared/config/index.js', () => ({
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   config: {
     googleClientId: null,
     googleClientSecret: null,

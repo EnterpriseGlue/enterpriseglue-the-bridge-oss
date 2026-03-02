@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import governanceRouter from '../../../../src/modules/platform-admin/routes/governance.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
+import governanceRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/governance.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
 
-vi.mock('@shared/services/platform-admin/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   policyService: {
     listPolicies: vi.fn().mockResolvedValue([]),
   },

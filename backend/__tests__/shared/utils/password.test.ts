@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generatePassword, hashPassword, validatePassword, verifyPassword } from '../../../src/shared/utils/password.js';
+import { generatePassword, hashPassword, validatePassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
 
 describe('password utils', () => {
   it('validates password complexity', () => {

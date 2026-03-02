@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import batchesRouter from '../../../../src/modules/mission-control/batches/routes.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { Batch } from '../../../../src/shared/db/entities/Batch.js';
+import batchesRouter from '../../../../../packages/backend-host/src/modules/mission-control/batches/routes.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Batch } from '@enterpriseglue/shared/db/entities/Batch.js';
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/engineAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/engineAuth.js', () => ({
   requireEngineReadOrWrite: () => (req: any, _res: any, next: any) => {
     req.engineId = 'engine-1';
     next();
@@ -23,11 +23,11 @@ vi.mock('@shared/middleware/engineAuth.js', () => ({
   },
 }));
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('../../../../src/modules/mission-control/batches/service.js', () => ({
+vi.mock('../../../../../packages/backend-host/src/modules/mission-control/batches/service.js', () => ({
   processRetries: vi.fn().mockResolvedValue(undefined),
   fetchBatchInfo: vi.fn().mockResolvedValue({ id: 'b1', type: 'delete' }),
   fetchBatchStatistics: vi.fn().mockResolvedValue({ remainingJobs: 0, completedJobs: 10, failedJobs: 0 }),

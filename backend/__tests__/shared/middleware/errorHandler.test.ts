@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AppError, Errors, ErrorCode } from '../../../src/shared/middleware/errorHandler.js';
+import { AppError, Errors, ErrorCode } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 describe('errorHandler', () => {
   describe('AppError', () => {

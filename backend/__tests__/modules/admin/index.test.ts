@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as adminModule from '../../../src/modules/admin/index.js';
+import * as adminModule from '../../../../packages/backend-host/src/modules/admin/index.js';
 
 describe('admin module index', () => {
   it('exports admin routes', () => {

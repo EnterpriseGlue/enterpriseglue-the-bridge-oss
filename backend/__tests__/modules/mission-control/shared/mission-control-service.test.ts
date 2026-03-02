@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getProcessInstanceVariables } from '../../../../src/modules/mission-control/shared/mission-control-service.js';
-import { camundaGet } from '@shared/services/bpmn-engine-client.js';
+import { getProcessInstanceVariables } from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
+import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 
-vi.mock('@shared/services/bpmn-engine-client.js', () => ({
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   camundaGet: vi.fn(),
   camundaPost: vi.fn(),
   camundaPut: vi.fn(),

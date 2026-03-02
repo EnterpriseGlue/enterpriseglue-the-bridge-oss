@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GitService } from '../../../../src/shared/services/git/GitService.js';
+import { GitService } from '@enterpriseglue/shared/services/git/GitService.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn().mockResolvedValue({
     getRepository: vi.fn().mockReturnValue({
       save: vi.fn(),
@@ -10,19 +10,19 @@ vi.mock('@shared/db/data-source.js', () => ({
   }),
 }));
 
-vi.mock('@shared/services/versioning/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({
   vcsService: {},
 }));
 
-vi.mock('@shared/services/git/RemoteGitService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/git/RemoteGitService.js', () => ({
   remoteGitService: {},
 }));
 
-vi.mock('@shared/services/git/CredentialService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/git/CredentialService.js', () => ({
   credentialService: {},
 }));
 
-vi.mock('@shared/services/platform-admin/PlatformSettingsService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js', () => ({
   platformSettingsService: {},
 }));
 

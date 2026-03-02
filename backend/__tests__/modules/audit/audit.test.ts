@@ -1,36 +1,36 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import auditRouter from '../../../src/modules/audit/routes/audit.js';
-import { getDataSource } from '../../../src/shared/db/data-source.js';
-import { AuditLog } from '../../../src/shared/db/entities/AuditLog.js';
+import auditRouter from '../../../../packages/backend-host/src/modules/audit/routes/audit.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AuditLog } from '@enterpriseglue/shared/db/entities/AuditLog.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', platformRole: 'admin' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/requirePermission.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/requirePermission.js', () => ({
   requirePermission: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/middleware/tenant.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/tenant.js', () => ({
   resolveTenantContext: () => (_req: any, _res: any, next: any) => next(),
   requireTenantRole: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   getUserAuditLogs: vi.fn().mockResolvedValue([]),
   getResourceAuditLogs: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('@shared/services/pii/PiiRedactionService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/pii/PiiRedactionService.js', () => ({
   piiRedactionService: {
     redactPayload: vi.fn((_req: any, payload: any) => Promise.resolve(payload)),
   },

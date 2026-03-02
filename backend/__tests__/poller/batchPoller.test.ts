@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/services/bpmn-engine-client.js', () => ({
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   bpmnEngineClient: {
     getBatchById: vi.fn(),
   },

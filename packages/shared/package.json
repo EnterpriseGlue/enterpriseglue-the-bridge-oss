@@ -1,0 +1,103 @@
+{
+  "name": "@enterpriseglue/shared",
+  "version": "0.1.0",
+  "description": "Shared utilities, contracts, and services for EnterpriseGlue",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicholasgriffintn/enterpriseglue-the-bridge-oss.git",
+    "directory": "packages/shared"
+  },
+  "type": "module",
+  "types": "./src/contracts/index.d.ts",
+  "files": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.js",
+    "src/**/*.sql"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^7.0.12",
+    "oracledb": "^6.0.0",
+    "pg": "^8.11.3",
+    "resend": "^6.4.1",
+    "typeorm": "^0.3.28",
+    "undici": "^7.18.2",
+    "uuid": "^11.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^22.16.0",
+    "@types/nodemailer": "^6.4.17",
+    "@types/pg": "^8.11.6",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.8.3"
+  },
+  "exports": {
+    "./contracts": {
+      "types": "./src/contracts/index.d.ts",
+      "default": "./src/contracts/index.js"
+    },
+    "./contracts/auth": {
+      "types": "./src/contracts/auth.d.ts",
+      "default": "./src/contracts/auth.js"
+    },
+    "./contracts/roles": {
+      "types": "./src/contracts/roles.d.ts",
+      "default": "./src/contracts/roles.js"
+    },
+    "./contracts/members": {
+      "types": "./src/contracts/members.d.ts",
+      "default": "./src/contracts/members.js"
+    },
+    "./config": {
+      "types": "./src/config/index.ts",
+      "default": "./src/config/index.ts"
+    },
+    "./db": {
+      "types": "./src/db/index.ts",
+      "default": "./src/db/index.ts"
+    },
+    "./middleware": {
+      "types": "./src/middleware/index.ts",
+      "default": "./src/middleware/index.ts"
+    },
+    "./services": {
+      "types": "./src/services/index.ts",
+      "default": "./src/services/index.ts"
+    },
+    "./constants": {
+      "types": "./src/constants/index.ts",
+      "default": "./src/constants/index.ts"
+    },
+    "./schemas": {
+      "types": "./src/schemas/index.ts",
+      "default": "./src/schemas/index.ts"
+    },
+    "./types": {
+      "types": "./src/types/index.ts",
+      "default": "./src/types/index.ts"
+    },
+    "./utils": {
+      "types": "./src/utils/index.ts",
+      "default": "./src/utils/index.ts"
+    }
+  }
+}

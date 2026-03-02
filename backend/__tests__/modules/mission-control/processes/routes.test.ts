@@ -1,38 +1,38 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import processesRouter from '../../../../src/modules/mission-control/processes/routes.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { EngineDeploymentArtifact } from '../../../../src/shared/db/entities/EngineDeploymentArtifact.js';
-import { FileCommitVersion } from '../../../../src/shared/db/entities/FileCommitVersion.js';
-import { projectMemberService } from '../../../../src/shared/services/platform-admin/ProjectMemberService.js';
+import processesRouter from '../../../../../packages/backend-host/src/modules/mission-control/processes/routes.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { EngineDeploymentArtifact } from '@enterpriseglue/shared/db/entities/EngineDeploymentArtifact.js';
+import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
+import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/engineAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/engineAuth.js', () => ({
   requireEngineReadOrWrite: () => (req: any, _res: any, next: any) => {
     req.engineId = 'engine-1';
     next();
   },
 }));
 
-vi.mock('@shared/services/platform-admin/ProjectMemberService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js', () => ({
   projectMemberService: {
     hasAccess: vi.fn().mockResolvedValue(true),
     hasRole: vi.fn().mockResolvedValue(true),
   },
 }));
 
-vi.mock('../../../../src/modules/mission-control/processes/service.js', () => ({
+vi.mock('../../../../../packages/backend-host/src/modules/mission-control/processes/service.js', () => ({
   listProcessDefinitions: vi.fn().mockResolvedValue([]),
   getProcessDefinition: vi.fn().mockResolvedValue({ id: 'pd1', key: 'process1' }),
   getProcessDefinitionXml: vi.fn().mockResolvedValue({ id: 'pd1', bpmn20Xml: '<bpmn/>' }),

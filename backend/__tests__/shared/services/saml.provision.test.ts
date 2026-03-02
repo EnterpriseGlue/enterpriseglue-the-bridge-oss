@@ -1,20 +1,20 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { getDataSource } from '@shared/db/data-source.js';
-import { provisionSamlUser, type SamlUserInfo } from '../../../src/shared/services/saml.js';
-import { ssoProviderService } from '../../../src/shared/services/platform-admin/SsoProviderService.js';
-import { ssoClaimsMappingService } from '../../../src/shared/services/platform-admin/SsoClaimsMappingService.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { provisionSamlUser, type SamlUserInfo } from '@enterpriseglue/shared/services/saml.js';
+import { ssoProviderService } from '@enterpriseglue/shared/services/platform-admin/SsoProviderService.js';
+import { ssoClaimsMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('../../../src/shared/services/platform-admin/SsoProviderService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoProviderService.js', () => ({
   ssoProviderService: {
     getProvider: vi.fn(),
   },
 }));
 
-vi.mock('../../../src/shared/services/platform-admin/SsoClaimsMappingService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.js', () => ({
   ssoClaimsMappingService: {
     resolveRoleFromClaims: vi.fn(),
   },

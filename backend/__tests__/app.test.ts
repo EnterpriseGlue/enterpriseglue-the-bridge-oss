@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
-import { createApp } from '../src/app.js';
+import { createApp } from '../../packages/backend-host/src/app.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn().mockResolvedValue({
     getRepository: vi.fn(),
     initialize: vi.fn(),
@@ -10,13 +10,13 @@ vi.mock('@shared/db/data-source.js', () => ({
   initializeDatabase: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@shared/middleware/tenant.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/tenant.js', () => ({
   tenantMiddleware: (_req: any, _res: any, next: any) => next(),
   resolveTenantContext: () => (_req: any, _res: any, next: any) => next(),
   requireTenantRole: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/config/index.js', () => ({
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   config: {
     nodeEnv: 'test',
     port: 8787,

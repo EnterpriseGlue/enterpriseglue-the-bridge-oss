@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { fileService } from '../../../../src/shared/services/starbase/FileService.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { File } from '../../../../src/shared/db/entities/File.js';
-import { Version } from '../../../../src/shared/db/entities/Version.js';
+import { fileService } from '@enterpriseglue/shared/services/starbase/FileService.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { File } from '@enterpriseglue/shared/db/entities/File.js';
+import { Version } from '@enterpriseglue/shared/db/entities/Version.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/services/versioning/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({
   syncFileUpdate: vi.fn(),
 }));
 

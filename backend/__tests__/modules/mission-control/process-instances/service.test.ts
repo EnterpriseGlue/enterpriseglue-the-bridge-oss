@@ -6,9 +6,9 @@ import {
   getActivityInstances,
   deleteProcessInstance,
   modifyProcessInstanceVariables,
-} from '../../../../src/modules/mission-control/process-instances/service.js';
+} from '../../../../../packages/backend-host/src/modules/mission-control/process-instances/service.js';
 
-vi.mock('@shared/services/bpmn-engine-client.js', () => ({
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   camundaGet: vi.fn().mockResolvedValue([]),
   camundaPost: vi.fn().mockResolvedValue({}),
   camundaDelete: vi.fn().mockResolvedValue(undefined),

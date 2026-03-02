@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, type Mock } from 'vitest';
-import { escapeHtml, renderBracesTemplate, getActiveTemplateByType } from '../../../../src/shared/services/email/utils.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { EmailTemplate } from '../../../../src/shared/db/entities/EmailTemplate.js';
+import { escapeHtml, renderBracesTemplate, getActiveTemplateByType } from '@enterpriseglue/shared/services/email/utils.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { EmailTemplate } from '@enterpriseglue/shared/db/entities/EmailTemplate.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 

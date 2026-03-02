@@ -3,8 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import PasswordResetWithToken from '../../../src/pages/PasswordResetWithToken';
-import { authService } from '../../../src/services/auth';
+import PasswordResetWithToken from '@src/pages/PasswordResetWithToken';
+import { authService } from '@src/services/auth';
 
 const notifyMock = vi.fn();
 

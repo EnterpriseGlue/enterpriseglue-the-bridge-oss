@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { CascadeDeleteService } from '../../../src/shared/services/cascade-delete.js';
-import { getDataSource } from '../../../src/shared/db/data-source.js';
-import { Project } from '../../../src/shared/db/entities/Project.js';
-import { Folder } from '../../../src/shared/db/entities/Folder.js';
-import { File } from '../../../src/shared/db/entities/File.js';
-import { Version } from '../../../src/shared/db/entities/Version.js';
-import { Comment } from '../../../src/shared/db/entities/Comment.js';
-import { GitRepository } from '../../../src/shared/db/entities/GitRepository.js';
+import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
+import { Folder } from '@enterpriseglue/shared/db/entities/Folder.js';
+import { File } from '@enterpriseglue/shared/db/entities/File.js';
+import { Version } from '@enterpriseglue/shared/db/entities/Version.js';
+import { Comment } from '@enterpriseglue/shared/db/entities/Comment.js';
+import { GitRepository } from '@enterpriseglue/shared/db/entities/GitRepository.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('../../../src/shared/services/versioning/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({
   vcsService: {
     deleteProject: vi.fn(),
   },

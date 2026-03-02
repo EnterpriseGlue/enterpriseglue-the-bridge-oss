@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getSafeRedirectUrl } from '../../../src/shared/utils/safeRedirect.js';
+import { getSafeRedirectUrl } from '@enterpriseglue/shared/utils/safeRedirect.js';
 
 describe('getSafeRedirectUrl', () => {
   it('accepts allowed host and protocol', () => {

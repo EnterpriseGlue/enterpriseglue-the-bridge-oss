@@ -1,38 +1,38 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import loginRouter from '../../../../src/modules/auth/routes/login.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { User } from '../../../../src/shared/db/entities/User.js';
-import { SsoProvider } from '../../../../src/shared/db/entities/SsoProvider.js';
-import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
-import { verifyPassword } from '@shared/utils/password.js';
-import { buildUserCapabilities } from '@shared/services/capabilities.js';
-import { getDatabaseType } from '@shared/db/adapters/QueryHelpers.js';
+import loginRouter from '../../../../../packages/backend-host/src/modules/auth/routes/login.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { SsoProvider } from '@enterpriseglue/shared/db/entities/SsoProvider.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { verifyPassword } from '@enterpriseglue/shared/utils/password.js';
+import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
+import { getDatabaseType } from '@enterpriseglue/shared/db/adapters/QueryHelpers.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/utils/password.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/password.js', () => ({
   verifyPassword: vi.fn().mockResolvedValue(false),
 }));
 
-vi.mock('@shared/services/capabilities.js', () => ({
+vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
   buildUserCapabilities: vi.fn().mockResolvedValue({ canManagePlatform: false }),
 }));
 
-vi.mock('@shared/db/adapters/QueryHelpers.js', () => ({
+vi.mock('@enterpriseglue/shared/db/adapters/QueryHelpers.js', () => ({
   addCaseInsensitiveEquals: (qb: any) => qb,
   getDatabaseType: vi.fn().mockReturnValue('postgres'),
 }));
 
-vi.mock('@shared/utils/jwt.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
   generateAccessToken: vi.fn().mockReturnValue('access-token'),
   generateRefreshToken: vi.fn().mockReturnValue('refresh-token'),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
   AuditActions: {
     LOGIN_FAILED: 'LOGIN_FAILED',
@@ -40,7 +40,7 @@ vi.mock('@shared/services/audit.js', () => ({
   },
 }));
 
-vi.mock('@shared/middleware/rateLimiter.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   authLimiter: (_req: any, _res: any, next: any) => next(),
   apiLimiter: (_req: any, _res: any, next: any) => next(),
   engineLimiter: (_req: any, _res: any, next: any) => next(),

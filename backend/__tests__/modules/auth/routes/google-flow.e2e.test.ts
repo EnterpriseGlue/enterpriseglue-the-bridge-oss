@@ -1,19 +1,19 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import googleRouter from '../../../../src/modules/auth/routes/google.js';
-import googleStartRouter from '../../../../src/modules/auth/routes/google-start.js';
-import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
-import { config } from '../../../../src/shared/config/index.js';
+import googleRouter from '../../../../../packages/backend-host/src/modules/auth/routes/google.js';
+import googleStartRouter from '../../../../../packages/backend-host/src/modules/auth/routes/google-start.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import {
   isGoogleAuthEnabled,
   getGoogleAuthorizationUrl,
   exchangeGoogleCodeForTokens,
   extractGoogleUserInfo,
   provisionGoogleUser,
-} from '@shared/services/google.js';
+} from '@enterpriseglue/shared/services/google.js';
 
-vi.mock('@shared/services/google.js', () => ({
+vi.mock('@enterpriseglue/shared/services/google.js', () => ({
   isGoogleAuthEnabled: vi.fn().mockResolvedValue(true),
   getGoogleAuthorizationUrl: vi.fn(),
   exchangeGoogleCodeForTokens: vi.fn(),
@@ -21,12 +21,12 @@ vi.mock('@shared/services/google.js', () => ({
   provisionGoogleUser: vi.fn(),
 }));
 
-vi.mock('@shared/utils/jwt.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
   generateAccessToken: vi.fn().mockReturnValue('google-access-token'),
   generateRefreshToken: vi.fn().mockReturnValue('google-refresh-token'),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
   AuditActions: {
     LOGIN_FAILED: 'LOGIN_FAILED',

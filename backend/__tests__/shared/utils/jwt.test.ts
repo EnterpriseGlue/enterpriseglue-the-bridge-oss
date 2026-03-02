@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateAccessToken, generateRefreshToken, verifyToken, decodeToken } from '../../../src/shared/utils/jwt.js';
+import { generateAccessToken, generateRefreshToken, verifyToken, decodeToken } from '@enterpriseglue/shared/utils/jwt.js';
 
 const user = { id: 'user-1', email: 'user@example.com', platformRole: 'admin' };
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('@shared/services/bpmn-engine-client.js', () => ({
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   bpmnEngineClient: {
     listProcessDefinitions: vi.fn().mockResolvedValue([]),
     getProcessDefinitionById: vi.fn().mockResolvedValue({ id: 'pd1', key: 'process1' }),

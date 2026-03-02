@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import samlRouter from '../../../../src/modules/auth/routes/saml.js';
+import samlRouter from '../../../../../packages/backend-host/src/modules/auth/routes/saml.js';
 
-vi.mock('@shared/services/saml.js', () => ({
+vi.mock('@enterpriseglue/shared/services/saml.js', () => ({
   getSamlStatus: vi.fn().mockResolvedValue({
     enabled: false,
     message: 'SAML provider is not configured',

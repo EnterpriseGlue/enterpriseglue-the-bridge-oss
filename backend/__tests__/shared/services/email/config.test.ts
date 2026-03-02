@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getEmailConfigForTenant } from '../../../../src/shared/services/email/config.js';
+import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/config.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn().mockResolvedValue({
     getRepository: () => ({
       findOneBy: vi.fn().mockResolvedValue(null),
@@ -9,7 +9,7 @@ vi.mock('@shared/db/data-source.js', () => ({
   }),
 }));
 
-vi.mock('@shared/utils/crypto.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/crypto.js', () => ({
   decrypt: vi.fn((v: string) => v),
 }));
 

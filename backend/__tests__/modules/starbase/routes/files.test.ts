@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { extractBpmnProcessId, extractDmnDecisionId } from '../../../../src/shared/utils/starbase-xml.js';
+import { extractBpmnProcessId, extractDmnDecisionId } from '@enterpriseglue/shared/utils/starbase-xml.js';
 
 describe('starbase XML utilities', () => {
   it('extracts BPMN process ID', () => {

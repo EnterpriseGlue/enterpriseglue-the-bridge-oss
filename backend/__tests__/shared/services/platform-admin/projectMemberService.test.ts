@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { ProjectMemberService } from '../../../../src/shared/services/platform-admin/ProjectMemberService.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { ProjectMember } from '../../../../src/shared/db/entities/ProjectMember.js';
-import { ProjectMemberRole } from '../../../../src/shared/db/entities/ProjectMemberRole.js';
-import { Project } from '../../../../src/shared/db/entities/Project.js';
-import { User } from '../../../../src/shared/db/entities/User.js';
+import { ProjectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
+import { ProjectMemberRole } from '@enterpriseglue/shared/db/entities/ProjectMemberRole.js';
+import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
+import { User } from '@enterpriseglue/shared/db/entities/User.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 

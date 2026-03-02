@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { describe, it, expect } from 'vitest';
-import { createApp } from '../../src/app.js';
+import { createApp } from '../../../packages/backend-host/src/app.js';
 
 describe('POST /api/auth/login', () => {
   it('returns validation error for missing body fields', async () => {

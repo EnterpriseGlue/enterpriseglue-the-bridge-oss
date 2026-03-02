@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import membersRouter from '../../../../src/modules/starbase/routes/members.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { ProjectMember } from '../../../../src/shared/db/entities/ProjectMember.js';
-import { User } from '../../../../src/shared/db/entities/User.js';
-import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
-import { logAudit } from '../../../../src/shared/services/audit.js';
+import membersRouter from '../../../../../packages/backend-host/src/modules/starbase/routes/members.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
+import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'owner-1' };
     req.tenant = { tenantId: null };
@@ -20,40 +20,40 @@ vi.mock('@shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@shared/middleware/projectAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/projectAuth.js', () => ({
   requireProjectRole: () => (_req: any, _res: any, next: any) => next(),
   requireProjectAccess: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/middleware/rateLimiter.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
 
-vi.mock('@shared/db/adapters/QueryHelpers.js', () => ({
+vi.mock('@enterpriseglue/shared/db/adapters/QueryHelpers.js', () => ({
   addCaseInsensitiveEquals: (_qb: any) => _qb,
   caseInsensitiveColumn: (col: string) => `LOWER(${col})`,
 }));
 
-vi.mock('@shared/config/index.js', () => ({
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   config: {
     nodeEnv: 'test',
     frontendUrl: 'http://localhost:5173',
   },
 }));
 
-vi.mock('@shared/constants/roles.js', () => ({
+vi.mock('@enterpriseglue/shared/constants/roles.js', () => ({
   MANAGE_ROLES: ['owner', 'delegate'],
 }));
 
-vi.mock('@shared/services/email/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/email/index.js', () => ({
   sendInvitationEmail: vi.fn(),
 }));
 
-vi.mock('@shared/services/platform-admin/ProjectMemberService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js', () => ({
   projectMemberService: {
     hasAccess: vi.fn().mockResolvedValue(true),
     hasRole: vi.fn().mockResolvedValue(true),
@@ -95,7 +95,7 @@ describe('starbase members routes', () => {
       },
     });
 
-    const { projectMemberService } = await import('../../../../src/shared/services/platform-admin/ProjectMemberService.js');
+    const { projectMemberService } = await import('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js');
     (projectMemberService.getMembership as Mock).mockResolvedValueOnce({ role: 'owner', roles: ['owner'] })
       .mockResolvedValueOnce(null);
 

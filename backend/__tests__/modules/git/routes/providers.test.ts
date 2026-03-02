@@ -1,34 +1,34 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import providersRouter from '../../../../src/modules/git/routes/providers.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { GitProvider } from '../../../../src/shared/db/entities/GitProvider.js';
+import providersRouter from '../../../../../packages/backend-host/src/modules/git/routes/providers.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { GitProvider } from '@enterpriseglue/shared/db/entities/GitProvider.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/requirePermission.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/requirePermission.js', () => ({
   requirePermission: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/services/git/RemoteGitService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/git/RemoteGitService.js', () => ({
   remoteGitService: {},
 }));
 
-vi.mock('@shared/services/git/CredentialService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/git/CredentialService.js', () => ({
   credentialService: {},
 }));
 
-vi.mock('@shared/services/encryption.js', () => ({
+vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
   encrypt: vi.fn((v) => `encrypted:${v}`),
   isEncrypted: vi.fn(() => false),
 }));

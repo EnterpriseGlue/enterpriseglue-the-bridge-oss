@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
-import { runMigrations } from '../../../src/shared/db/run-migrations.js';
-import { getDataSource, adapter } from '../../../src/shared/db/data-source.js';
+import { runMigrations } from '@enterpriseglue/shared/db/run-migrations.js';
+import { getDataSource, adapter } from '@enterpriseglue/shared/db/data-source.js';
 
-vi.mock('../../../src/shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
   adapter: {
     getDatabaseType: vi.fn().mockReturnValue('oracle'),

@@ -4,8 +4,8 @@ import {
   resolveTenantContext,
   requireTenantRole,
   checkTenantAdmin,
-} from '../../../src/shared/middleware/tenant.js';
-import { Errors } from '../../../src/shared/middleware/errorHandler.js';
+} from '@enterpriseglue/shared/middleware/tenant.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 describe('tenant middleware', () => {
   let req: any;

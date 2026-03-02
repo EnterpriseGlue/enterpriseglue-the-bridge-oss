@@ -5,7 +5,7 @@ import {
   ensureExt,
   normalizeXmlnsUrisInDefinitions,
   normalizeBpmnProcessHistoryTtl,
-} from '../../../../src/shared/services/engines/deployment-utils.js';
+} from '@enterpriseglue/shared/services/engines/deployment-utils.js';
 
 describe('deployment-utils', () => {
   describe('sanitize', () => {

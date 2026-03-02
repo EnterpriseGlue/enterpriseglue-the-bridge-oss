@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { encrypt, decrypt, isEncrypted, safeDecrypt, hash } from '../../../src/shared/services/encryption.js';
+import { encrypt, decrypt, isEncrypted, safeDecrypt, hash } from '@enterpriseglue/shared/services/encryption.js';
 
 describe('encryption service', () => {
   const originalEnv = process.env.ENCRYPTION_KEY;
