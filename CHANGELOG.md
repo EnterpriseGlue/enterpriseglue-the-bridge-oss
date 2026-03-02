@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.18](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.17...v0.4.18) (2026-03-02)
+
+
+### Features
+
+* **plugin-api:** add FrontendPluginContext for dependency injection of host shared utilities ([#61](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/61)) ([c47923b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c47923b2811f6ae76a98ddba56a008cd4e1bcba0))
+
 ## [0.4.17](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.16...v0.4.17) (2026-03-01)
 
 
