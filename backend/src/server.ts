@@ -25,14 +25,25 @@ console.log(
 );
 
 try {
-  // Pass database-agnostic connection pool to enterprise plugin
-  await enterprisePlugin.registerRoutes?.(app as any, {
-    connectionPool: getConnectionPool(),
-    config,
-  } as any);
+  // Pass database-agnostic connection pool to enterprise plugin.
+  // getConnectionPool() only supports postgres today; on other db types
+  // we skip enterprise route registration gracefully.
+  if (enterprisePlugin.registerRoutes) {
+    const pool = getConnectionPool();
+    await enterprisePlugin.registerRoutes(app as any, {
+      connectionPool: pool,
+      config,
+    } as any);
+  }
 } catch (error) {
-  console.error('Failed to register enterprise routes:', error);
-  throw error;
+  // If the pool isn't implemented for this database type, log and continue
+  // without enterprise routes rather than crashing the server.
+  if (error instanceof Error && error.message.includes('ConnectionPool raw SQL adapter is not implemented')) {
+    console.warn(`[Enterprise] Skipping enterprise routes: ${error.message}`);
+  } else {
+    console.error('Failed to register enterprise routes:', error);
+    throw error;
+  }
 }
 
 registerBaseRoutes(app);
@@ -57,8 +68,12 @@ if (enterprisePlugin.migrateEnterpriseDatabase) {
       config,
     } as any);
   } catch (error) {
-    console.error('Failed to run enterprise migrations:', error);
-    throw error;
+    if (error instanceof Error && error.message.includes('ConnectionPool raw SQL adapter is not implemented')) {
+      console.warn(`[Enterprise] Skipping enterprise migrations: ${error.message}`);
+    } else {
+      console.error('Failed to run enterprise migrations:', error);
+      throw error;
+    }
   }
 }
 
