@@ -77,11 +77,13 @@ if (enterprisePlugin.migrateEnterpriseDatabase) {
   }
 }
 
-// Bootstrap admin account on first run
-await bootstrapAdmin({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded });
+// Bootstrap admin account on first run.
+// Always grant platform admin to the bootstrap user — the EE plugin can
+// layer its own tenant-level role management on top.
+await bootstrapAdmin({ allowPlatformAdmin: true });
 await backfillMissingPlatformRoles();
 
-await backfillKnownUserProfiles({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded });
+await backfillKnownUserProfiles({ allowPlatformAdmin: true });
 
 // Seed Git providers on first run
 try {
