@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { PrimaryColumn, BeforeInsert } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 

@@ -4,7 +4,8 @@ WORKDIR /app
 
 COPY backend/package.json backend/package-lock.json ./
 COPY packages /packages
-RUN npm ci --include=dev --no-audit --no-fund
+RUN npm ci --include=dev --no-audit --no-fund \
+    && ln -s /app/node_modules /packages/node_modules
 
 COPY backend ./
 RUN npm run build:skip-generate
