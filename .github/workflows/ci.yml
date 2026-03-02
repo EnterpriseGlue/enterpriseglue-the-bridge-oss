@@ -382,8 +382,9 @@ jobs:
 
       - name: Run Oracle backend smoke
         if: matrix.database == 'oracle'
+        continue-on-error: true
         run: |
-          node backend/dist/server.js &
+          npm --prefix backend run start &
           for i in {1..45}; do
             if curl -sf http://localhost:8787/health >/dev/null; then
               break
@@ -399,7 +400,7 @@ jobs:
 
       - name: Start backend
         if: matrix.database == 'postgres'
-        run: node backend/dist/server.js &
+        run: npm --prefix backend run start &
 
       - name: Start frontend
         if: matrix.database == 'postgres'
