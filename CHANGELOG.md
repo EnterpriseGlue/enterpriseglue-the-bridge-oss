@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.23](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.22...v0.4.23) (2026-03-03)
+
+
+### Bug Fixes
+
+* **ci:** update runtime contract adapter path probe for new dist layout ([#73](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/73)) ([d6f0008](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d6f000801253d4a87a0501d6fa64a80c5fd939a6))
+
 ## [0.4.22](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.21...v0.4.22) (2026-03-03)
 
 
