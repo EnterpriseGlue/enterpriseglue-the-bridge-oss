@@ -174,7 +174,7 @@ jobs:
             -e POSTGRES_DATABASE=enterpriseglue \
             -e POSTGRES_SCHEMA=main \
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
-            node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('postgres'); const options=adapter.getDataSourceOptions(); if(options.type!=='postgres'){process.exit(1)} console.log('postgres runtime contract ok');"
+            node --input-type=module -e "import fs from 'fs'; const candidates=['./dist/shared/db/adapters/index.js','./dist/src/shared/db/adapters/index.js','./dist/packages/shared/src/db/adapters/index.js']; const adapterPath=candidates.find(p=>fs.existsSync(p)); if(!adapterPath){console.error('No adapters/index.js found');process.exit(1)} const { createAdapter } = await import(adapterPath); const adapter=createAdapter('postgres'); const options=adapter.getDataSourceOptions(); if(options.type!=='postgres'){process.exit(1)} console.log('postgres runtime contract ok');"
 
           docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
@@ -186,7 +186,7 @@ jobs:
             -e ORACLE_SERVICE_NAME=XEPDB1 \
             -e ORACLE_SCHEMA=ENTERPRISEGLUE \
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
-            node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('oracle'); const options=adapter.getDataSourceOptions(); if(options.type!=='oracle'){process.exit(1)} console.log('oracle runtime contract ok');"
+            node --input-type=module -e "import fs from 'fs'; const candidates=['./dist/shared/db/adapters/index.js','./dist/src/shared/db/adapters/index.js','./dist/packages/shared/src/db/adapters/index.js']; const adapterPath=candidates.find(p=>fs.existsSync(p)); if(!adapterPath){console.error('No adapters/index.js found');process.exit(1)} const { createAdapter } = await import(adapterPath); const adapter=createAdapter('oracle'); const options=adapter.getDataSourceOptions(); if(options.type!=='oracle'){process.exit(1)} console.log('oracle runtime contract ok');"
 
           docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
@@ -197,7 +197,7 @@ jobs:
             -e MYSQL_PASSWORD=enterpriseglue \
             -e MYSQL_DATABASE=enterpriseglue \
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
-            node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('mysql'); const options=adapter.getDataSourceOptions(); if(options.type!=='mysql'){process.exit(1)} console.log('mysql runtime contract ok');"
+            node --input-type=module -e "import fs from 'fs'; const candidates=['./dist/shared/db/adapters/index.js','./dist/src/shared/db/adapters/index.js','./dist/packages/shared/src/db/adapters/index.js']; const adapterPath=candidates.find(p=>fs.existsSync(p)); if(!adapterPath){console.error('No adapters/index.js found');process.exit(1)} const { createAdapter } = await import(adapterPath); const adapter=createAdapter('mysql'); const options=adapter.getDataSourceOptions(); if(options.type!=='mysql'){process.exit(1)} console.log('mysql runtime contract ok');"
 
           docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
@@ -211,7 +211,7 @@ jobs:
             -e MSSQL_ENCRYPT=false \
             -e MSSQL_TRUST_SERVER_CERTIFICATE=true \
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
-            node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('mssql'); const options=adapter.getDataSourceOptions(); if(options.type!=='mssql'){process.exit(1)} console.log('mssql runtime contract ok');"
+            node --input-type=module -e "import fs from 'fs'; const candidates=['./dist/shared/db/adapters/index.js','./dist/src/shared/db/adapters/index.js','./dist/packages/shared/src/db/adapters/index.js']; const adapterPath=candidates.find(p=>fs.existsSync(p)); if(!adapterPath){console.error('No adapters/index.js found');process.exit(1)} const { createAdapter } = await import(adapterPath); const adapter=createAdapter('mssql'); const options=adapter.getDataSourceOptions(); if(options.type!=='mssql'){process.exit(1)} console.log('mssql runtime contract ok');"
 
           docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
@@ -220,7 +220,7 @@ jobs:
             -e SPANNER_INSTANCE_ID=test-instance \
             -e SPANNER_DATABASE_ID=test-database \
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
-            node --input-type=module -e "import fs from 'fs'; const adapterPath=fs.existsSync('./dist/shared/db/adapters/index.js') ? './dist/shared/db/adapters/index.js' : './dist/src/shared/db/adapters/index.js'; const { createAdapter } = await import(adapterPath); const adapter=createAdapter('spanner'); const options=adapter.getDataSourceOptions(); if(options.type!=='spanner'){process.exit(1)} console.log('spanner runtime contract ok');"
+            node --input-type=module -e "import fs from 'fs'; const candidates=['./dist/shared/db/adapters/index.js','./dist/src/shared/db/adapters/index.js','./dist/packages/shared/src/db/adapters/index.js']; const adapterPath=candidates.find(p=>fs.existsSync(p)); if(!adapterPath){console.error('No adapters/index.js found');process.exit(1)} const { createAdapter } = await import(adapterPath); const adapter=createAdapter('spanner'); const options=adapter.getDataSourceOptions(); if(options.type!=='spanner'){process.exit(1)} console.log('spanner runtime contract ok');"
 
       - name: Promote backend latest tag
         if: steps.meta.outputs.publish_latest == 'true'
