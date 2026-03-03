@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.22](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.21...v0.4.22) (2026-03-03)
+
+
+### Bug Fixes
+
+* gitignore node_modules symlinks, fix resolve-dist-imports for EE submodule layout ([#71](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/71)) ([5a8de2f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5a8de2ffd8a10ad02b4dd336bca6cdfc84772bac))
+
 ## [0.4.21](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.20...v0.4.21) (2026-03-02)
 
 
