@@ -137,7 +137,7 @@ export class SqlServerAdapter implements DatabaseAdapter {
       logging: this.logging,
       entities,
       migrations: [
-        this.getMigrationsPath() + (this.getMigrationsPath().startsWith('dist/') ? '/*.js' : '/*.ts')
+        this.getMigrationsPath() + (path.isAbsolute(this.getMigrationsPath()) ? '/*.js' : '/*.ts')
       ],
       options: {
         encrypt: config.mssqlEncrypt,
@@ -183,23 +183,24 @@ export class SqlServerAdapter implements DatabaseAdapter {
   }
 
   getSqlFilesPath(): string {
+    const runtimePath = fileURLToPath(import.meta.url);
+    const adapterDir = path.dirname(runtimePath);
+    const runningFromDist = runtimePath.includes(`${path.sep}dist${path.sep}`);
+
+    if (runningFromDist) {
+      return path.join(adapterDir, 'sql', 'mssql');
+    }
     return 'packages/shared/src/db/adapters/sql/mssql';
   }
 
   getMigrationsPath(): string {
     const runtimePath = fileURLToPath(import.meta.url);
+    const adapterDir = path.dirname(runtimePath);
     const runningFromDist = runtimePath.includes(`${path.sep}dist${path.sep}`);
 
-    if (!runningFromDist) {
-      return 'packages/shared/src/db/migrations';
+    if (runningFromDist) {
+      return path.join(adapterDir, '..', 'migrations');
     }
-
-    const distPath = 'packages/shared/dist/db/migrations';
-    if (fs.existsSync(distPath)) return distPath;
-
-    const legacyDistPath = 'packages/shared/dist/src/db/migrations';
-    if (fs.existsSync(legacyDistPath)) return legacyDistPath;
-
     return 'packages/shared/src/db/migrations';
   }
 }

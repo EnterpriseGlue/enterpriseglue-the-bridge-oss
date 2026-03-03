@@ -1,10 +1,11 @@
+export type PlatformRole = 'admin' | 'developer' | 'user';
+
 export interface User {
   id: string;
   email: string;
   firstName?: string;
   lastName?: string;
-  role: 'admin' | 'user';
-  platformRole?: 'admin' | 'developer' | 'user';
+  platformRole: PlatformRole;
   capabilities?: UserCapabilities;
   isActive: boolean;
   isEmailVerified: boolean;
@@ -63,8 +64,7 @@ export interface CreateUserRequest {
   email: string;
   firstName?: string;
   lastName?: string;
-  role?: 'admin' | 'user';
-  platformRole?: 'admin' | 'developer' | 'user';
+  platformRole?: PlatformRole;
   sendEmail?: boolean;
 }
 
@@ -78,8 +78,7 @@ export interface CreateUserResponse {
 export interface UpdateUserRequest {
   firstName?: string;
   lastName?: string;
-  role?: 'admin' | 'user';
-  platformRole?: 'admin' | 'developer' | 'user';
+  platformRole?: PlatformRole;
   isActive?: boolean;
 }
 

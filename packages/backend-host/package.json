@@ -8,21 +8,23 @@
     "url": "https://github.com/nicholasgriffintn/enterpriseglue-the-bridge-oss.git",
     "directory": "packages/backend-host"
   },
-  "private": true,
   "type": "module",
+  "scripts": {
+    "build": "tsc && node scripts/rewrite-modules.mjs",
+    "clean": "rm -rf dist"
+  },
   "files": [
-    "src/**/*.ts",
-    "src/**/*.js"
+    "dist/**/*.js",
+    "dist/**/*.d.ts"
   ],
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
     "access": "restricted"
   },
   "exports": {
-    "./server": "./src/server.ts",
-    "./app": "./src/app.ts",
-    "./enterprise/*": "./src/enterprise/*",
-    "./modules/*": "./src/modules/*",
-    "./routes": "./src/routes/index.ts"
+    "./*": "./dist/*"
   }
 }

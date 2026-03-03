@@ -7,6 +7,10 @@ COPY packages /repo/packages
 RUN npm ci --include=dev --no-audit --no-fund \
     && ln -s /repo/backend/node_modules /repo/packages/node_modules
 
+# Build OSS packages (shared must be built before backend-host)
+RUN cd /repo/packages/shared && npm run build
+RUN cd /repo/packages/backend-host && npm run build
+
 COPY backend ./
 RUN npm run build:skip-generate
 

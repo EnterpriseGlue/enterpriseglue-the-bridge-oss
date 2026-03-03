@@ -1,5 +1,7 @@
 import { DataSourceOptions, getMetadataArgsStorage } from 'typeorm';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
@@ -194,7 +196,7 @@ export class OracleAdapter implements DatabaseAdapter {
       logging: this.logging,
       entities,
       migrations: [
-        migrationsPath + (migrationsPath.startsWith('dist/') ? '/*.js' : '/*.ts')
+        migrationsPath + (path.isAbsolute(migrationsPath) ? '/*.js' : '/*.ts')
       ],
       extra: {
         connectString,
@@ -251,16 +253,24 @@ export class OracleAdapter implements DatabaseAdapter {
   }
 
   getSqlFilesPath(): string {
+    const runtimePath = fileURLToPath(import.meta.url);
+    const adapterDir = path.dirname(runtimePath);
+    const runningFromDist = runtimePath.includes(`${path.sep}dist${path.sep}`);
+
+    if (runningFromDist) {
+      return path.join(adapterDir, 'sql', 'oracle');
+    }
     return 'packages/shared/src/db/adapters/sql/oracle';
   }
 
   getMigrationsPath(): string {
-    const distPath = 'packages/shared/dist/db/migrations';
-    if (fs.existsSync(distPath)) return distPath;
+    const runtimePath = fileURLToPath(import.meta.url);
+    const adapterDir = path.dirname(runtimePath);
+    const runningFromDist = runtimePath.includes(`${path.sep}dist${path.sep}`);
 
-    const legacyDistPath = 'packages/shared/dist/src/db/migrations';
-    if (fs.existsSync(legacyDistPath)) return legacyDistPath;
-
+    if (runningFromDist) {
+      return path.join(adapterDir, '..', 'migrations');
+    }
     return 'packages/shared/src/db/migrations';
   }
 }

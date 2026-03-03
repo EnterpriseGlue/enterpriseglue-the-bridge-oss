@@ -8,29 +8,20 @@
     "url": "https://github.com/nicholasgriffintn/enterpriseglue-the-bridge-oss.git",
     "directory": "packages/frontend-host"
   },
-  "private": true,
   "type": "module",
   "files": [
     "src/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.css",
     "src/**/*.svg",
-    "src/**/*.png"
+    "src/**/*.png",
+    "assets/**/*"
   ],
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
     "access": "restricted"
   },
   "exports": {
-    "./main": "./src/main.tsx",
-    "./routes": "./src/routes/index.tsx",
-    "./enterprise/*": "./src/enterprise/*",
-    "./features/*": "./src/features/*",
-    "./shared/*": "./src/shared/*",
-    "./contexts/*": "./src/contexts/*",
-    "./pages/*": "./src/pages/*",
-    "./styles/*": "./src/styles/*",
-    "./config": "./src/config.ts",
-    "./config/*": "./src/config/*"
+    "./*": "./src/*"
   }
 }

@@ -7,7 +7,7 @@
  */
 
 // Re-export from contracts for convenience
-export type { ProjectRole, EngineRole } from '@enterpriseglue/shared/contracts/roles';
+export type { ProjectRole, EngineRole } from '@enterpriseglue/shared/contracts/roles.js';
 
 /**
  * Platform-level roles

@@ -18,6 +18,9 @@ frontend/.vite/
 backend/dist/
 backend/.tsbuildinfo
 
+# Package build outputs
+packages/*/dist/
+
 # Coverage
 coverage/
 

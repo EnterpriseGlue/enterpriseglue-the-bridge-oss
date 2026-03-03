@@ -9,12 +9,16 @@
     "directory": "packages/shared"
   },
   "type": "module",
-  "types": "./src/contracts/index.d.ts",
+  "types": "./dist/contracts/index.d.ts",
+  "scripts": {
+    "build": "tsc && npm run build:copy",
+    "build:copy": "cp -r src/db/adapters/sql dist/db/adapters/ && cp src/contracts/members.d.ts src/contracts/members.js src/contracts/roles.d.ts src/contracts/roles.js dist/contracts/",
+    "clean": "rm -rf dist"
+  },
   "files": [
-    "src/**/*.ts",
-    "src/**/*.d.ts",
-    "src/**/*.js",
-    "src/**/*.sql"
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.sql"
   ],
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
@@ -52,52 +56,21 @@
   },
   "exports": {
     "./contracts": {
-      "types": "./src/contracts/index.d.ts",
-      "default": "./src/contracts/index.js"
+      "types": "./dist/contracts/index.d.ts",
+      "default": "./dist/contracts/index.js"
     },
     "./contracts/auth": {
-      "types": "./src/contracts/auth.d.ts",
-      "default": "./src/contracts/auth.js"
+      "types": "./dist/contracts/auth.d.ts",
+      "default": "./dist/contracts/auth.js"
     },
     "./contracts/roles": {
-      "types": "./src/contracts/roles.d.ts",
-      "default": "./src/contracts/roles.js"
+      "types": "./dist/contracts/roles.d.ts",
+      "default": "./dist/contracts/roles.js"
     },
     "./contracts/members": {
-      "types": "./src/contracts/members.d.ts",
-      "default": "./src/contracts/members.js"
+      "types": "./dist/contracts/members.d.ts",
+      "default": "./dist/contracts/members.js"
     },
-    "./config": {
-      "types": "./src/config/index.ts",
-      "default": "./src/config/index.ts"
-    },
-    "./db": {
-      "types": "./src/db/index.ts",
-      "default": "./src/db/index.ts"
-    },
-    "./middleware": {
-      "types": "./src/middleware/index.ts",
-      "default": "./src/middleware/index.ts"
-    },
-    "./services": {
-      "types": "./src/services/index.ts",
-      "default": "./src/services/index.ts"
-    },
-    "./constants": {
-      "types": "./src/constants/index.ts",
-      "default": "./src/constants/index.ts"
-    },
-    "./schemas": {
-      "types": "./src/schemas/index.ts",
-      "default": "./src/schemas/index.ts"
-    },
-    "./types": {
-      "types": "./src/types/index.ts",
-      "default": "./src/types/index.ts"
-    },
-    "./utils": {
-      "types": "./src/utils/index.ts",
-      "default": "./src/utils/index.ts"
-    }
+    "./*": "./dist/*"
   }
 }

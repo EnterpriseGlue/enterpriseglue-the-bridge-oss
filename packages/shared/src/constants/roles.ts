@@ -3,7 +3,7 @@
  * Centralized role definitions to avoid duplication across routes
  */
 
-import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles';
+import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles.js';
 
 /** Roles that can edit project content (files, folders, etc.) */
 export const EDIT_ROLES: ProjectRole[] = ['owner', 'delegate', 'developer', 'editor'];

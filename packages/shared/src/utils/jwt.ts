@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import type { User } from '@enterpriseglue/shared/db/entities/User.js';
-import type { PlatformRole } from '@enterpriseglue/shared/contracts/auth';
+import type { PlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
 
 /**
  * JWT utility functions

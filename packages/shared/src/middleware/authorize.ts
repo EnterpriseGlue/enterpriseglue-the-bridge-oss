@@ -9,7 +9,7 @@ import { Errors } from './errorHandler.js';
 import { projectMemberService } from '../services/platform-admin/ProjectMemberService.js';
 import { engineService } from '../services/platform-admin/EngineService.js';
 import { logAudit } from '../services/audit.js';
-import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles';
+import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles.js';
 import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
 
 export interface AuthorizeOptions {

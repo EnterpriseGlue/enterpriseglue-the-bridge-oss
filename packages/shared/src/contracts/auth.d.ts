@@ -1,111 +1,96 @@
 export type PlatformRole = 'admin' | 'developer' | 'user';
-
 export interface User {
-  id: string;
-  email: string;
-  firstName?: string;
-  lastName?: string;
-  platformRole: PlatformRole;
-  capabilities?: UserCapabilities;
-  isActive: boolean;
-  isEmailVerified: boolean;
-  mustResetPassword: boolean;
-  createdAt: number;
-  lastLoginAt?: number;
+    id: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    platformRole: PlatformRole;
+    capabilities?: UserCapabilities;
+    isActive: boolean;
+    isEmailVerified: boolean;
+    mustResetPassword: boolean;
+    createdAt: number;
+    lastLoginAt?: number;
 }
-
 export interface LoginRequest {
-  email: string;
-  password: string;
+    email: string;
+    password: string;
 }
-
 export interface LoginResponse {
-  user: User;
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  emailVerificationRequired?: boolean;
+    user: User;
+    accessToken?: string;
+    refreshToken?: string;
+    expiresIn: number;
+    emailVerificationRequired?: boolean;
 }
-
 export interface RefreshTokenRequest {
-  refreshToken: string;
+    refreshToken: string;
 }
-
 export interface RefreshTokenResponse {
-  accessToken: string;
-  expiresIn: number;
+    accessToken?: string;
+    expiresIn: number;
 }
-
 export interface ResetPasswordRequest {
-  currentPassword: string;
-  newPassword: string;
+    currentPassword: string;
+    newPassword: string;
 }
-
 export interface ForgotPasswordRequest {
-  email: string;
+    email: string;
 }
-
 export interface ResetPasswordWithTokenRequest {
-  token: string;
-  newPassword: string;
+    token: string;
+    newPassword: string;
 }
-
 export interface VerifyResetTokenResponse {
-  valid: boolean;
-  error?: string;
+    valid: boolean;
+    error?: string;
 }
-
 export interface ChangePasswordRequest {
-  currentPassword: string;
-  newPassword: string;
+    currentPassword: string;
+    newPassword: string;
 }
-
 export interface CreateUserRequest {
-  email: string;
-  firstName?: string;
-  lastName?: string;
-  platformRole?: PlatformRole;
-  sendEmail?: boolean;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    platformRole?: PlatformRole;
+    sendEmail?: boolean;
 }
-
 export interface CreateUserResponse {
-  user: User;
-  temporaryPassword?: string;
-  emailSent: boolean;
-  emailError?: string;
+    user: User;
+    temporaryPassword?: string;
+    emailSent: boolean;
+    emailError?: string;
 }
-
 export interface UpdateUserRequest {
-  firstName?: string;
-  lastName?: string;
-  platformRole?: PlatformRole;
-  isActive?: boolean;
+    firstName?: string;
+    lastName?: string;
+    platformRole?: PlatformRole;
+    isActive?: boolean;
 }
-
 export interface ApiError {
-  error: string;
-  details?: any;
+    error: string;
+    details?: any;
 }
-
 export interface UserCapabilities {
-  canViewAdminMenu: boolean;
-  canAccessAdminRoutes: boolean;
-  canManageUsers: boolean;
-  canViewAuditLogs: boolean;
-  canManagePlatformSettings: boolean;
-  canViewMissionControl: boolean;
-  canManageTenants: boolean;
-  canManagePlatformEmail: boolean;
-  canManageSsoProviders: boolean;
-  canManagePlatformBranding: boolean;
-  canManageTenantDomains: boolean;
-  canManageTenantUsers: boolean;
-  canManageTenantBranding: boolean;
-  canManageTenantEmailTemplates: boolean;
-  canViewTenantAudit: boolean;
-  canManageTenantSso: boolean;
-  canManageProject: boolean;
-  canManageEngine: boolean;
-  canInviteProjectMembers: boolean;
-  canInviteEngineMembers: boolean;
+    canViewAdminMenu: boolean;
+    canAccessAdminRoutes: boolean;
+    canManageUsers: boolean;
+    canViewAuditLogs: boolean;
+    canManagePlatformSettings: boolean;
+    canViewMissionControl: boolean;
+    canManageTenants: boolean;
+    canManagePlatformEmail: boolean;
+    canManageSsoProviders: boolean;
+    canManagePlatformBranding: boolean;
+    canManageTenantDomains: boolean;
+    canManageTenantUsers: boolean;
+    canManageTenantBranding: boolean;
+    canManageTenantEmailTemplates: boolean;
+    canViewTenantAudit: boolean;
+    canManageTenantSso: boolean;
+    canManageProject: boolean;
+    canManageEngine: boolean;
+    canInviteProjectMembers: boolean;
+    canInviteEngineMembers: boolean;
 }

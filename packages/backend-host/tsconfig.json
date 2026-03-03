@@ -13,11 +13,14 @@
     "baseUrl": ".",
     "rootDir": "src",
     "paths": {
-      "@enterpriseglue/shared/*": ["./src/*"]
+      "@enterpriseglue/shared/*": ["../shared/dist/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@enterpriseglue/enterprise-plugin-api": ["../enterprise-plugin-api/src/index.d.ts"],
+      "@enterpriseglue/enterprise-plugin-api/backend": ["../enterprise-plugin-api/src/backend.d.ts"]
     },
     "outDir": "dist",
     "declaration": true
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

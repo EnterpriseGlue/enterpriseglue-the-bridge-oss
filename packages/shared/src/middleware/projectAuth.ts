@@ -4,7 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles';
+import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles.js';
 import { Errors } from './errorHandler.js';
 import { projectMemberService } from '../services/platform-admin/ProjectMemberService.js';
 import { AuthorizationService } from '../services/authorization.js';

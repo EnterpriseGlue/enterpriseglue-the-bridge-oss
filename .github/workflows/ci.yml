@@ -361,6 +361,11 @@ jobs:
         if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps
 
+      - name: Build OSS packages
+        run: |
+          npm --prefix packages/shared run build
+          npm --prefix packages/backend-host run build
+
       - name: Build backend
         run: npm --prefix backend run build:skip-generate
 

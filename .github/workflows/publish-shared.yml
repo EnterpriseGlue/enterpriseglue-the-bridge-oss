@@ -37,6 +37,13 @@ jobs:
           registry-url: https://npm.pkg.github.com
           scope: "@enterpriseglue"
 
+      - name: Install dependencies
+        run: npm install
+        working-directory: .
+
+      - name: Build package
+        run: npm run build
+
       - name: Read package version
         id: pkg
         run: |
