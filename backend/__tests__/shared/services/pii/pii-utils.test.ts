@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildRedactions, applyRedactions, mergeDetections } from '../../../../src/shared/services/pii/utils.js';
-import type { PiiDetection } from '../../../../src/shared/services/pii/types.js';
+import { buildRedactions, applyRedactions, mergeDetections } from '@enterpriseglue/shared/services/pii/utils.js';
+import type { PiiDetection } from '@enterpriseglue/shared/services/pii/types.js';
 
 describe('buildRedactions', () => {
   it('replaces <TYPE> placeholder with detection type', () => {

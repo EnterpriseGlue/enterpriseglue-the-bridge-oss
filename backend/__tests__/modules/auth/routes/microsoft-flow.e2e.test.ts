@@ -1,19 +1,19 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import microsoftRouter from '../../../../src/modules/auth/routes/microsoft.js';
-import microsoftStartRouter from '../../../../src/modules/auth/routes/microsoft-start.js';
-import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
-import { config } from '../../../../src/shared/config/index.js';
+import microsoftRouter from '../../../../../packages/backend-host/src/modules/auth/routes/microsoft.js';
+import microsoftStartRouter from '../../../../../packages/backend-host/src/modules/auth/routes/microsoft-start.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import {
   isMicrosoftAuthEnabled,
   getAuthorizationUrl,
   exchangeCodeForTokens,
   extractUserInfo,
   provisionMicrosoftUser,
-} from '@shared/services/microsoft.js';
+} from '@enterpriseglue/shared/services/microsoft.js';
 
-vi.mock('@shared/services/microsoft.js', () => ({
+vi.mock('@enterpriseglue/shared/services/microsoft.js', () => ({
   isMicrosoftAuthEnabled: vi.fn().mockReturnValue(true),
   getAuthorizationUrl: vi.fn(),
   exchangeCodeForTokens: vi.fn(),
@@ -21,12 +21,12 @@ vi.mock('@shared/services/microsoft.js', () => ({
   provisionMicrosoftUser: vi.fn(),
 }));
 
-vi.mock('@shared/utils/jwt.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
   generateAccessToken: vi.fn().mockReturnValue('microsoft-access-token'),
   generateRefreshToken: vi.fn().mockReturnValue('microsoft-refresh-token'),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
   AuditActions: {
     LOGIN_FAILED: 'LOGIN_FAILED',

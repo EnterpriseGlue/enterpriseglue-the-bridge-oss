@@ -1,19 +1,19 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import samlRouter from '../../../../src/modules/auth/routes/saml.js';
-import samlStartRouter from '../../../../src/modules/auth/routes/saml-start.js';
-import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
-import { config } from '../../../../src/shared/config/index.js';
+import samlRouter from '../../../../../packages/backend-host/src/modules/auth/routes/saml.js';
+import samlStartRouter from '../../../../../packages/backend-host/src/modules/auth/routes/saml-start.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import {
   isSamlAuthEnabled,
   getSamlAuthorizationUrl,
   validateSamlPostResponse,
   extractSamlUserInfo,
   provisionSamlUser,
-} from '@shared/services/saml.js';
+} from '@enterpriseglue/shared/services/saml.js';
 
-vi.mock('@shared/services/saml.js', () => ({
+vi.mock('@enterpriseglue/shared/services/saml.js', () => ({
   getSamlStatus: vi.fn().mockResolvedValue({ enabled: true }),
   isSamlAuthEnabled: vi.fn().mockResolvedValue(true),
   getSamlAuthorizationUrl: vi.fn(),
@@ -23,12 +23,12 @@ vi.mock('@shared/services/saml.js', () => ({
   generateSamlServiceProviderMetadata: vi.fn().mockResolvedValue('<xml />'),
 }));
 
-vi.mock('@shared/utils/jwt.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
   generateAccessToken: vi.fn().mockReturnValue('saml-access-token'),
   generateRefreshToken: vi.fn().mockReturnValue('saml-refresh-token'),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
   AuditActions: {
     LOGIN_FAILED: 'LOGIN_FAILED',

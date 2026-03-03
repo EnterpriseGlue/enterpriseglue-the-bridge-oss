@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, waitFor, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ToastProvider } from '../../../src/shared/notifications/ToastProvider';
-import Login from '../../../src/pages/Login';
+import { ToastProvider } from '@src/shared/notifications/ToastProvider';
+import Login from '@src/pages/Login';
 import { apiClient } from '@src/shared/api/client';
 import { redirectTo } from '@src/utils/redirect';
 

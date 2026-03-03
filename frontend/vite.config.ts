@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'node:path'
 
 export default defineConfig(({ mode }) => {
   const proxyTarget = (globalThis as any).process?.env?.DEV_PROXY_TARGET || 'http://localhost:8787'
@@ -9,6 +10,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    resolve: {
+      alias: {
+        '@src': path.resolve(__dirname, '../packages/frontend-host/src'),
+      },
+    },
     esbuild: {
       jsxDev: mode !== 'production',
     },

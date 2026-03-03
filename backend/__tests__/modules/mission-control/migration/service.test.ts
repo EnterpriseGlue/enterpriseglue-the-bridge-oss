@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toEnginePlan } from '../../../../src/modules/mission-control/migration/service.js';
+import { toEnginePlan } from '../../../../../packages/backend-host/src/modules/mission-control/migration/service.js';
 
 describe('migration service', () => {
   describe('toEnginePlan', () => {

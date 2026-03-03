@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { validateBody, validateParams, validateQuery, validateResponse } from '../../../src/shared/middleware/validate.js';
+import { validateBody, validateParams, validateQuery, validateResponse } from '@enterpriseglue/shared/middleware/validate.js';
 
 const createRes = () => {
   const res = {

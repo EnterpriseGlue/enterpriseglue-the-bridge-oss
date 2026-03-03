@@ -8,19 +8,20 @@
  * Usage: npx tsx scripts/cleanup-test-data.ts
  */
 
-import { getDataSource } from '../src/shared/db/data-source.js';
+import 'reflect-metadata';
+import { getDataSource } from '../../packages/shared/src/db/data-source.js';
 import { Brackets } from 'typeorm';
-import { Engine } from '../src/shared/db/entities/Engine.js';
-import { User } from '../src/shared/db/entities/User.js';
-import { Project } from '../src/shared/db/entities/Project.js';
-import { EngineHealth } from '../src/shared/db/entities/EngineHealth.js';
-import { EngineMember } from '../src/shared/db/entities/EngineMember.js';
-import { RefreshToken } from '../src/shared/db/entities/RefreshToken.js';
-import { AuditLog } from '../src/shared/db/entities/AuditLog.js';
-import { ProjectMemberRole } from '../src/shared/db/entities/ProjectMemberRole.js';
-import { ProjectMember } from '../src/shared/db/entities/ProjectMember.js';
-import { File } from '../src/shared/db/entities/File.js';
-import { Folder } from '../src/shared/db/entities/Folder.js';
+import { Engine } from '../../packages/shared/src/db/entities/Engine.js';
+import { User } from '../../packages/shared/src/db/entities/User.js';
+import { Project } from '../../packages/shared/src/db/entities/Project.js';
+import { EngineHealth } from '../../packages/shared/src/db/entities/EngineHealth.js';
+import { EngineMember } from '../../packages/shared/src/db/entities/EngineMember.js';
+import { RefreshToken } from '../../packages/shared/src/db/entities/RefreshToken.js';
+import { AuditLog } from '../../packages/shared/src/db/entities/AuditLog.js';
+import { ProjectMemberRole } from '../../packages/shared/src/db/entities/ProjectMemberRole.js';
+import { ProjectMember } from '../../packages/shared/src/db/entities/ProjectMember.js';
+import { File } from '../../packages/shared/src/db/entities/File.js';
+import { Folder } from '../../packages/shared/src/db/entities/Folder.js';
 
 async function cleanupTestData() {
   console.log('🧹 Starting test data cleanup...\n');

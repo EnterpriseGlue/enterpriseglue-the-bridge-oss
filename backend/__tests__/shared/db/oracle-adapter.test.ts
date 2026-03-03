@@ -1,8 +1,8 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { getMetadataArgsStorage } from 'typeorm';
-import { OracleAdapter } from '../../../src/shared/db/adapters/OracleAdapter.js';
+import { OracleAdapter } from '@enterpriseglue/shared/db/adapters/OracleAdapter.js';
 
-vi.mock('@shared/config/index.js', () => ({
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   config: {
     nodeEnv: 'test',
     oracleSchema: 'enterpriseglue',

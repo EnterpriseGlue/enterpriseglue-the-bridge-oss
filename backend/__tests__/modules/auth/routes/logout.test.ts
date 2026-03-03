@@ -2,15 +2,15 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { doubleCsrf } from 'csrf-csrf';
-import logoutRouter from '../../../../src/modules/auth/routes/logout.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { RefreshToken } from '../../../../src/shared/db/entities/RefreshToken.js';
+import logoutRouter from '../../../../../packages/backend-host/src/modules/auth/routes/logout.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { RefreshToken } from '@enterpriseglue/shared/db/entities/RefreshToken.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', type: 'access', platformRole: 'user' };
     next();

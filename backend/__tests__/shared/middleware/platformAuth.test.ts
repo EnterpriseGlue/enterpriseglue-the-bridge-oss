@@ -5,10 +5,10 @@ import {
   requirePlatformRole,
   checkPlatformAdmin,
   isPlatformAdmin,
-} from '../../../src/shared/middleware/platformAuth.js';
-import { Errors } from '../../../src/shared/middleware/errorHandler.js';
+} from '@enterpriseglue/shared/middleware/platformAuth.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', platformRole: 'admin' };
     next();

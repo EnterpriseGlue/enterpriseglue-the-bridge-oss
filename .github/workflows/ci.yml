@@ -383,7 +383,7 @@ jobs:
       - name: Run Oracle backend smoke
         if: matrix.database == 'oracle'
         run: |
-          npm --prefix backend run start &
+          npm --prefix backend run start:compiled &
           for i in {1..45}; do
             if curl -sf http://localhost:8787/health >/dev/null; then
               break
@@ -399,7 +399,7 @@ jobs:
 
       - name: Start backend
         if: matrix.database == 'postgres'
-        run: npm --prefix backend run start &
+        run: npm --prefix backend run start:compiled &
 
       - name: Start frontend
         if: matrix.database == 'postgres'
@@ -408,12 +408,13 @@ jobs:
       - name: Wait for services
         if: matrix.database == 'postgres'
         run: |
-          for i in {1..30}; do
+          for i in {1..45}; do
             if curl -sf http://localhost:8787/health >/dev/null; then
               break
             fi
             sleep 2
           done
+          curl -sf http://localhost:8787/health >/dev/null
           curl -sf http://localhost:5173/login >/dev/null
 
       - name: Run smoke e2e
@@ -422,6 +423,7 @@ jobs:
 
       - name: Cleanup test data
         if: always() && matrix.database == 'postgres'
+        continue-on-error: true
         run: npm --prefix backend run db:cleanup-test-data
 
       - name: Upload backend coverage

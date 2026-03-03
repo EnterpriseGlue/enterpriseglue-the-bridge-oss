@@ -1,18 +1,25 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
+const repoRoot = new URL('..', import.meta.url).pathname;
+
 export default defineConfig({
   plugins: [react()] as any,
   resolve: {
     alias: {
-      '@src': new URL('./src', import.meta.url).pathname,
+      '@src': new URL('../packages/frontend-host/src', import.meta.url).pathname,
       '@test': new URL('./test', import.meta.url).pathname,
+    },
+  },
+  server: {
+    fs: {
+      allow: [repoRoot],
     },
   },
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['./src/test/setup.ts'],
+    setupFiles: ['../packages/frontend-host/src/test/setup.ts'],
     include: ['__tests__/**/*.test.tsx', '__tests__/**/*.test.ts'],
     exclude: [
       '**/node_modules/**',
@@ -33,7 +40,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov', 'json-summary', 'html'],
       reportsDirectory: './coverage',
-      include: ['src/**/*.ts', 'src/**/*.tsx'],
+      include: ['../packages/frontend-host/src/**/*.ts', '../packages/frontend-host/src/**/*.tsx'],
       exclude: [
         '**/*.test.ts',
         '**/*.test.tsx',

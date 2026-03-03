@@ -1,39 +1,39 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import foldersRouter from '../../../../src/modules/starbase/routes/folders.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { Folder } from '../../../../src/shared/db/entities/Folder.js';
+import foldersRouter from '../../../../../packages/backend-host/src/modules/starbase/routes/folders.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Folder } from '@enterpriseglue/shared/db/entities/Folder.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/projectAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/projectAuth.js', () => ({
   requireProjectAccess: () => (_req: any, _res: any, next: any) => next(),
   requireProjectRole: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/services/authorization.js', () => ({
+vi.mock('@enterpriseglue/shared/services/authorization.js', () => ({
   AuthorizationService: {},
 }));
 
-vi.mock('@shared/services/resources.js', () => ({
+vi.mock('@enterpriseglue/shared/services/resources.js', () => ({
   ResourceService: {},
 }));
 
-vi.mock('@shared/services/cascade-delete.js', () => ({
+vi.mock('@enterpriseglue/shared/services/cascade-delete.js', () => ({
   CascadeDeleteService: {},
 }));
 
-vi.mock('@shared/services/versioning/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({
   vcsService: {
     getUserBranch: vi.fn().mockResolvedValue({ id: 'branch-1' }),
     saveFile: vi.fn(),
@@ -41,7 +41,7 @@ vi.mock('@shared/services/versioning/index.js', () => ({
   },
 }));
 
-vi.mock('@shared/services/platform-admin/ProjectMemberService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js', () => ({
   projectMemberService: {},
 }));
 

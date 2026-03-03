@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { EnvironmentTagService } from '../../../../src/shared/services/platform-admin/EnvironmentTagService.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { EnvironmentTag } from '../../../../src/shared/db/entities/EnvironmentTag.js';
-import { Engine } from '../../../../src/shared/db/entities/Engine.js';
+import { EnvironmentTagService } from '@enterpriseglue/shared/services/platform-admin/EnvironmentTagService.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { EnvironmentTag } from '@enterpriseglue/shared/db/entities/EnvironmentTag.js';
+import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/utils/logger.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/logger.js', () => ({
   logger: { info: vi.fn() },
 }));
 

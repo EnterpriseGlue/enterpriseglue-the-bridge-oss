@@ -11,17 +11,18 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@src/*": ["src/*"],
+      "@src/*": ["../packages/frontend-host/src/*"],
       "@test/*": ["test/*"],
-      "@enterpriseglue/contracts": ["../packages/contracts/src/index.d.ts"],
-      "@enterpriseglue/contracts/auth": ["../packages/contracts/src/auth.d.ts"],
-      "@enterpriseglue/contracts/roles": ["../packages/contracts/src/roles.d.ts"],
-      "@enterpriseglue/contracts/members": ["../packages/contracts/src/members.d.ts"],
-      "@enterpriseglue/contracts/*": ["../packages/contracts/src/*"],
+      "@enterpriseglue/frontend-host/*": ["../packages/frontend-host/src/*"],
+      "@enterpriseglue/shared/contracts": ["../packages/shared/src/contracts/index.d.ts"],
+      "@enterpriseglue/shared/contracts/auth": ["../packages/shared/src/contracts/auth.d.ts"],
+      "@enterpriseglue/shared/contracts/roles": ["../packages/shared/src/contracts/roles.d.ts"],
+      "@enterpriseglue/shared/contracts/members": ["../packages/shared/src/contracts/members.d.ts"],
+      "@enterpriseglue/shared/contracts/*": ["../packages/shared/src/contracts/*"],
       "@enterpriseglue/enterprise-plugin-api": ["../packages/enterprise-plugin-api/src/index.d.ts"],
       "@enterpriseglue/enterprise-plugin-api/backend": ["../packages/enterprise-plugin-api/src/backend.d.ts"],
       "@enterpriseglue/enterprise-plugin-api/frontend": ["../packages/enterprise-plugin-api/src/frontend.d.ts"]
     }
   },
-  "include": ["src", "__tests__", "test"]
+  "include": ["src", "__tests__", "test", "../packages/frontend-host/src"]
 }

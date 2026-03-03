@@ -1,28 +1,28 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import meRouter from '../../../../src/modules/auth/routes/me.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { User } from '../../../../src/shared/db/entities/User.js';
-import { PlatformSettings } from '../../../../src/shared/db/entities/PlatformSettings.js';
+import meRouter from '../../../../../packages/backend-host/src/modules/auth/routes/me.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { PlatformSettings } from '@enterpriseglue/shared/db/entities/PlatformSettings.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', type: 'access', platformRole: 'user' };
     next();
   },
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
   AuditActions: { USER_UPDATE: 'USER_UPDATE' },
 }));
 
-vi.mock('@shared/services/capabilities.js', () => ({
+vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
   buildUserCapabilities: vi.fn().mockResolvedValue({
     canViewAdminMenu: false,
     canAccessAdminRoutes: false,

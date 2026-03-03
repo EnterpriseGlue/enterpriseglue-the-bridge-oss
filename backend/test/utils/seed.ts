@@ -1,17 +1,17 @@
-import { getDataSource } from '@shared/db/data-source.js';
-import { User } from '@shared/db/entities/User.js';
-import { Project } from '@shared/db/entities/Project.js';
-import { Engine } from '@shared/db/entities/Engine.js';
-import { EngineHealth } from '@shared/db/entities/EngineHealth.js';
-import { EngineMember } from '@shared/db/entities/EngineMember.js';
-import { ProjectMember } from '@shared/db/entities/ProjectMember.js';
-import { ProjectMemberRole } from '@shared/db/entities/ProjectMemberRole.js';
-import { RefreshToken } from '@shared/db/entities/RefreshToken.js';
-import { AuditLog } from '@shared/db/entities/AuditLog.js';
-import { File } from '@shared/db/entities/File.js';
-import { Folder } from '@shared/db/entities/Folder.js';
-import { generateAccessToken } from '@shared/utils/jwt.js';
-import { generateId, unixTimestamp } from '@shared/utils/id.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
+import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
+import { EngineHealth } from '@enterpriseglue/shared/db/entities/EngineHealth.js';
+import { EngineMember } from '@enterpriseglue/shared/db/entities/EngineMember.js';
+import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
+import { ProjectMemberRole } from '@enterpriseglue/shared/db/entities/ProjectMemberRole.js';
+import { RefreshToken } from '@enterpriseglue/shared/db/entities/RefreshToken.js';
+import { AuditLog } from '@enterpriseglue/shared/db/entities/AuditLog.js';
+import { File } from '@enterpriseglue/shared/db/entities/File.js';
+import { Folder } from '@enterpriseglue/shared/db/entities/Folder.js';
+import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { Brackets } from 'typeorm';
 
 type SeedUser = {

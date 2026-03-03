@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   __enterpriseBackendPluginTestUtils,
   loadEnterpriseBackendPlugin,
-} from '../../src/enterprise/loadEnterpriseBackendPlugin.js';
+} from '../../../packages/backend-host/src/enterprise/loadEnterpriseBackendPlugin.js';
 
 describe('loadEnterpriseBackendPlugin validation helpers', () => {
   it('detects missing module errors by code', () => {

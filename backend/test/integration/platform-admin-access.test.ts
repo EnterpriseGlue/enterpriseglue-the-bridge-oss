@@ -1,8 +1,8 @@
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createApp } from '../../src/app.js';
+import { createApp } from '../../../packages/backend-host/src/app.js';
 import { cleanupSeededData, seedUser } from '../utils/seed.js';
-import { generateAccessToken } from '@shared/utils/jwt.js';
+import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
 
 const prefix = `test_seed_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 

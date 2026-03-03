@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import samlStartRouter from '../../../../src/modules/auth/routes/saml-start.js';
+import samlStartRouter from '../../../../../packages/backend-host/src/modules/auth/routes/saml-start.js';
 
-vi.mock('@shared/services/saml.js', () => ({
+vi.mock('@enterpriseglue/shared/services/saml.js', () => ({
   isSamlAuthEnabled: vi.fn().mockResolvedValue(false),
   getSamlAuthorizationUrl: vi.fn(),
 }));

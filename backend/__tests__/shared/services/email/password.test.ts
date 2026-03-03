@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('@shared/services/email/config.js', () => ({
+vi.mock('@enterpriseglue/shared/services/email/config.js', () => ({
   getResendClient: vi.fn(),
 }));
 

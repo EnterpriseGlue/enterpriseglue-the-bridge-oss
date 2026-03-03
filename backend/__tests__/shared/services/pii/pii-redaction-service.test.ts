@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { piiRedactionService } from '../../../../src/shared/services/pii/PiiRedactionService.js';
-import { platformSettingsService } from '@shared/services/platform-admin/index.js';
+import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js';
+import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 
-vi.mock('@shared/services/platform-admin/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   platformSettingsService: {
     getWithSecrets: vi.fn(),
   },

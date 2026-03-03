@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { isMicrosoftAuthEnabled } from '../../../src/shared/services/microsoft.js';
+import { isMicrosoftAuthEnabled } from '@enterpriseglue/shared/services/microsoft.js';
 
-vi.mock('@shared/config/index.js', () => ({
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   config: {
     microsoftClientId: null,
     microsoftClientSecret: null,

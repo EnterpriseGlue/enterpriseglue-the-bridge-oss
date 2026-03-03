@@ -1,37 +1,37 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import forgotPasswordRouter from '../../../../src/modules/auth/routes/forgot-password.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { User } from '../../../../src/shared/db/entities/User.js';
-import { PasswordResetToken } from '../../../../src/shared/db/entities/PasswordResetToken.js';
-import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
+import forgotPasswordRouter from '../../../../../packages/backend-host/src/modules/auth/routes/forgot-password.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { PasswordResetToken } from '@enterpriseglue/shared/db/entities/PasswordResetToken.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/rateLimiter.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   passwordResetLimiter: (_req: any, _res: any, next: any) => next(),
   passwordResetVerifyLimiter: (_req: any, _res: any, next: any) => next(),
   apiLimiter: (_req: any, _res: any, next: any) => next(),
   engineLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/services/email/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/email/index.js', () => ({
   sendPasswordResetEmail: vi.fn(),
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
 
-vi.mock('@shared/utils/password.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/password.js', () => ({
   hashPassword: vi.fn().mockResolvedValue('hashed-password'),
   validatePassword: vi.fn().mockReturnValue({ valid: true, errors: [] }),
 }));
 
-vi.mock('@shared/config/index.js', () => ({
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   config: {
     frontendUrl: 'http://localhost:5173',
     nodeEnv: 'test',

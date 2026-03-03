@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import gitRouter from '../../../../src/modules/git/routes/index.js';
+import gitRouter from '../../../../../packages/backend-host/src/modules/git/routes/index.js';
 
 describe('git routes index', () => {
   it('exports git router', () => {

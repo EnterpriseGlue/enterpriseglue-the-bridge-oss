@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { sendMessage, sendSignal } from '../../../../src/modules/mission-control/shared/messages-service.js';
+import { sendMessage, sendSignal } from '../../../../../packages/backend-host/src/modules/mission-control/shared/messages-service.js';
 
-vi.mock('@shared/services/bpmn-engine-client.js', () => ({
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   correlateMessage: vi.fn().mockResolvedValue({ result: 'ok' }),
   deliverSignal: vi.fn().mockResolvedValue({ delivered: true }),
 }));

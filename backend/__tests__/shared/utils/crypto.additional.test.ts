@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { encrypt, decrypt } from '../../../src/shared/utils/crypto.js';
+import { encrypt, decrypt } from '@enterpriseglue/shared/utils/crypto.js';
 
 describe('crypto utils additional', () => {
   const originalEnv = {

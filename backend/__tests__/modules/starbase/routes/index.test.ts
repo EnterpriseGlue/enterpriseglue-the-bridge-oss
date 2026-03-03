@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as starbaseRoutes from '../../../../src/modules/starbase/routes/index.js';
+import * as starbaseRoutes from '../../../../../packages/backend-host/src/modules/starbase/routes/index.js';
 
 describe('starbase routes index', () => {
   it('exports starbase routes', () => {

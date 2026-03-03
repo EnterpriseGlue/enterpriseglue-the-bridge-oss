@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import microsoftStartRouter from '../../../../src/modules/auth/routes/microsoft-start.js';
+import microsoftStartRouter from '../../../../../packages/backend-host/src/modules/auth/routes/microsoft-start.js';
 
-vi.mock('@shared/services/microsoft.js', () => ({
+vi.mock('@enterpriseglue/shared/services/microsoft.js', () => ({
   isMicrosoftAuthEnabled: vi.fn().mockReturnValue(false),
   getAuthorizationUrl: vi.fn().mockResolvedValue('https://login.microsoftonline.com/oauth2/v2.0/authorize?state=test'),
 }));

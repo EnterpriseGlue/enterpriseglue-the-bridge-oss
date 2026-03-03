@@ -1,24 +1,24 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { createHash } from 'crypto';
-import { GitRepository } from '../../../../src/shared/db/entities/GitRepository.js';
-import { File } from '../../../../src/shared/db/entities/File.js';
-import { Folder } from '../../../../src/shared/db/entities/Folder.js';
-import { pushToRemote } from '../../../../src/shared/services/git/remote-git-push.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { vcsService } from '../../../../src/shared/services/versioning/index.js';
+import { GitRepository } from '@enterpriseglue/shared/db/entities/GitRepository.js';
+import { File } from '@enterpriseglue/shared/db/entities/File.js';
+import { Folder } from '@enterpriseglue/shared/db/entities/Folder.js';
+import { pushToRemote } from '@enterpriseglue/shared/services/git/remote-git-push.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/utils/logger.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
     warn: vi.fn(),
   },
 }));
 
-vi.mock('@shared/services/versioning/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({
   vcsService: {
     getMainBranch: vi.fn(),
     commit: vi.fn(),

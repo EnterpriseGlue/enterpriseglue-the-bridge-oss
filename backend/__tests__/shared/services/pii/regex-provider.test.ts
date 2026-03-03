@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { RegexProvider } from '../../../../src/shared/services/pii/providers/regex-provider.js';
-import type { PiiDetection } from '../../../../src/shared/services/pii/types.js';
+import { RegexProvider } from '@enterpriseglue/shared/services/pii/providers/regex-provider.js';
+import type { PiiDetection } from '@enterpriseglue/shared/services/pii/types.js';
 
 describe('RegexProvider', () => {
   it('detects common PII patterns', async () => {

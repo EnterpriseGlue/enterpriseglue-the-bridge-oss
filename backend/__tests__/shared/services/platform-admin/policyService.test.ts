@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { policyService } from '../../../../src/shared/services/platform-admin/PolicyService.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { AuthzPolicy } from '../../../../src/shared/db/entities/AuthzPolicy.js';
-import { AuthzAuditLog } from '../../../../src/shared/db/entities/AuthzAuditLog.js';
-import { permissionService, PlatformPermissions } from '../../../../src/shared/services/platform-admin/permissions.js';
+import { policyService } from '@enterpriseglue/shared/services/platform-admin/PolicyService.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AuthzPolicy } from '@enterpriseglue/shared/db/entities/AuthzPolicy.js';
+import { AuthzAuditLog } from '@enterpriseglue/shared/db/entities/AuthzAuditLog.js';
+import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 

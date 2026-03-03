@@ -1,10 +1,10 @@
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createApp } from '../../src/app.js';
+import { createApp } from '../../../packages/backend-host/src/app.js';
 import { seedUser } from '../utils/seed.js';
-import { getDataSource } from '@shared/db/data-source.js';
-import { generateAccessToken } from '@shared/utils/jwt.js';
-import { PlatformPermissions } from '@shared/services/platform-admin/permissions.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const prefix = `test_seed_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -40,7 +40,7 @@ describe('Platform authz checks (authz storage required)', () => {
 
   afterAll(async () => {
     if (!userId) return;
-    const { User } = await import('@shared/db/entities/User.js');
+    const { User } = await import('@enterpriseglue/shared/db/entities/User.js');
     const dataSource = await getDataSource();
     await dataSource.getRepository(User).delete({ id: userId as any });
   });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('@shared/services/authorization.js', () => ({
+vi.mock('@enterpriseglue/shared/services/authorization.js', () => ({
   AuthorizationService: {},
 }));
 

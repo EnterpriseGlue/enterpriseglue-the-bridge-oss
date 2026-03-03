@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { doubleCsrf } from 'csrf-csrf';
-import refreshRouter from '../../../../src/modules/auth/routes/refresh.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { User } from '../../../../src/shared/db/entities/User.js';
-import { RefreshToken } from '../../../../src/shared/db/entities/RefreshToken.js';
-import { errorHandler } from '../../../../src/shared/middleware/errorHandler.js';
-import * as jwt from '../../../../src/shared/utils/jwt.js';
+import refreshRouter from '../../../../../packages/backend-host/src/modules/auth/routes/refresh.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { RefreshToken } from '@enterpriseglue/shared/db/entities/RefreshToken.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
 import bcrypt from 'bcryptjs';
 
 // Test fixture tokens — not real secrets (CWE-547)
@@ -15,17 +15,17 @@ const TEST_REFRESH_TOKEN = `test-refresh-${Date.now()}`;
 const TEST_ACCESS_TOKEN = `test-access-${Date.now()}`;
 const TEST_NEW_ACCESS_TOKEN = `test-new-access-${Date.now()}`;
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/utils/jwt.js');
+vi.mock('@enterpriseglue/shared/utils/jwt.js');
 
-vi.mock('@shared/middleware/rateLimiter.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/config/index.js', () => ({
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   config: {
     jwtAccessTokenExpires: 3600,
     jwtRefreshTokenExpires: 604800,

@@ -13,9 +13,9 @@ const mockConfig = vi.hoisted(() => ({
   oracleSid: undefined as string | undefined,
 }));
 
-vi.mock('@shared/config/index.js', () => ({ config: mockConfig }));
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({ config: mockConfig }));
 
-import { OracleAdapter } from '../../../src/shared/db/adapters/OracleAdapter.js';
+import { OracleAdapter } from '@enterpriseglue/shared/db/adapters/OracleAdapter.js';
 
 type ColumnSnapshot = { column: any; type: any; length: any; precision: any; scale: any; transformer: any };
 type TableSnapshot = { table: any; schema: any };

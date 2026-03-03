@@ -1,32 +1,32 @@
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import adminRouter from '../../../../src/modules/platform-admin/routes/admin.js';
+import adminRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/admin.js';
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', platformRole: 'admin' };
     next();
   },
 }));
 
-vi.mock('../../../../src/modules/platform-admin/routes/settings.js', () => ({
+vi.mock('../../../../../packages/backend-host/src/modules/platform-admin/routes/settings.js', () => ({
   default: express.Router(),
 }));
 
-vi.mock('../../../../src/modules/platform-admin/routes/branding.js', () => ({
+vi.mock('../../../../../packages/backend-host/src/modules/platform-admin/routes/branding.js', () => ({
   default: express.Router(),
 }));
 
-vi.mock('../../../../src/modules/platform-admin/routes/tenants.js', () => ({
+vi.mock('../../../../../packages/backend-host/src/modules/platform-admin/routes/tenants.js', () => ({
   default: express.Router(),
 }));
 
-vi.mock('../../../../src/modules/platform-admin/routes/environments.js', () => ({
+vi.mock('../../../../../packages/backend-host/src/modules/platform-admin/routes/environments.js', () => ({
   default: express.Router(),
 }));
 
-vi.mock('../../../../src/modules/platform-admin/routes/governance.js', () => ({
+vi.mock('../../../../../packages/backend-host/src/modules/platform-admin/routes/governance.js', () => ({
   default: express.Router(),
 }));
 

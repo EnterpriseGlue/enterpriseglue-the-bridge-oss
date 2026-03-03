@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { generateId, unixTimestamp, unixTimestampMs } from '../../../src/shared/utils/id.js';
+import { generateId, unixTimestamp, unixTimestampMs } from '@enterpriseglue/shared/utils/id.js';
 
 describe('id utilities', () => {
   it('generates unique IDs in UUID format', () => {

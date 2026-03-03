@@ -7,17 +7,18 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
-    "build:skip-generate": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node scripts/resolve-dist-imports.mjs",
+    "build:skip-generate": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node scripts/resolve-dist-imports.mjs",
+    "start:compiled": "node dist/backend/src/server.js",
     "typecheck": "tsc --noEmit",
     "guard:no-raw-sql": "tsx scripts/check-no-raw-sql.ts",
     "test:unit": "npm run guard:no-raw-sql && vitest --run --dir __tests__ --config vitest.config.ts",
     "test:integration": "npm run guard:no-raw-sql && vitest --run --dir test/integration --config vitest.config.ts",
     "verify": "npm run typecheck && npm run build:skip-generate && npm run test:unit",
-    "db:migration:generate": "npx typeorm migration:generate -d dist/shared/db/data-source.js",
-    "db:migration:run": "npx typeorm migration:run -d dist/shared/db/data-source.js",
-    "db:migration:revert": "npx typeorm migration:revert -d dist/shared/db/data-source.js",
-    "db:schema:sync": "npx typeorm schema:sync -d dist/shared/db/data-source.js",
+    "db:migration:generate": "npx typeorm migration:generate -d dist/packages/shared/src/db/data-source.js",
+    "db:migration:run": "npx typeorm migration:run -d dist/packages/shared/src/db/data-source.js",
+    "db:migration:revert": "npx typeorm migration:revert -d dist/packages/shared/src/db/data-source.js",
+    "db:schema:sync": "npx typeorm schema:sync -d dist/packages/shared/src/db/data-source.js",
     "db:cleanup-test-data": "tsx scripts/cleanup-test-data.ts"
   },
   "dependencies": {
@@ -53,7 +54,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@enterpriseglue/contracts": "file:../packages/contracts",
+    "@enterpriseglue/shared": "file:../packages/shared",
     "@types/archiver": "^6.0.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",

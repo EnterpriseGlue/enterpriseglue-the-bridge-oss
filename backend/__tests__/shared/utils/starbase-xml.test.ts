@@ -3,7 +3,7 @@ import {
   extractBpmnProcessId,
   extractDmnDecisionId,
   updateStarbaseFileNameInXml,
-} from '../../../src/shared/utils/starbase-xml.js';
+} from '@enterpriseglue/shared/utils/starbase-xml.js';
 
 describe('starbase xml utils', () => {
   it('extracts BPMN process id', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as enginesModule from '../../../../src/modules/mission-control/engines/index.js';
+import * as enginesModule from '../../../../../packages/backend-host/src/modules/mission-control/engines/index.js';
 
 describe('mission-control engines index', () => {
   it('exports engines route', () => {

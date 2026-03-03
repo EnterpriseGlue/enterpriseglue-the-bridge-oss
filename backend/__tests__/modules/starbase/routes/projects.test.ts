@@ -1,26 +1,26 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import projectsRouter from '../../../../src/modules/starbase/routes/projects.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { Project } from '../../../../src/shared/db/entities/Project.js';
+import projectsRouter from '../../../../../packages/backend-host/src/modules/starbase/routes/projects.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/projectAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/projectAuth.js', () => ({
   requireProjectRole: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock('@shared/services/platform-admin/ProjectMemberService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js', () => ({
   projectMemberService: {
     listUserProjects: vi.fn().mockResolvedValue([]),
   },

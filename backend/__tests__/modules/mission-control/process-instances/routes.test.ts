@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import processInstancesRouter from '../../../../src/modules/mission-control/process-instances/routes.js';
+import processInstancesRouter from '../../../../../packages/backend-host/src/modules/mission-control/process-instances/routes.js';
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/engineAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/engineAuth.js', () => ({
   requireEngineReadOrWrite: () => (req: any, _res: any, next: any) => {
     req.engineId = 'engine-1';
     next();
@@ -21,7 +21,7 @@ vi.mock('@shared/middleware/engineAuth.js', () => ({
   },
 }));
 
-vi.mock('../../../../src/modules/mission-control/process-instances/service.js', () => ({
+vi.mock('../../../../../packages/backend-host/src/modules/mission-control/process-instances/service.js', () => ({
   listProcessInstances: vi.fn().mockResolvedValue([]),
   getProcessInstance: vi.fn().mockResolvedValue({ id: 'pi1', processDefinitionId: 'pd1' }),
   deleteProcessInstance: vi.fn().mockResolvedValue(undefined),

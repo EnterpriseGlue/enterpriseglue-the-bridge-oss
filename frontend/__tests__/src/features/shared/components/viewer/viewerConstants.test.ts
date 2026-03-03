@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MAX_ZOOM, MIN_ZOOM, PADDING_FACTOR, STATE_COLORS, HIGHLIGHT_STYLES } from '../../../../../../src/features/shared/components/viewer/viewerConstants';
+import { MAX_ZOOM, MIN_ZOOM, PADDING_FACTOR, STATE_COLORS, HIGHLIGHT_STYLES } from '@src/features/shared/components/viewer/viewerConstants';
 
 describe('viewerConstants', () => {
   it('exports zoom configuration', () => {

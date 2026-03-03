@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { logger } from '../../../src/shared/utils/logger.js';
+import { logger } from '@enterpriseglue/shared/utils/logger.js';
 
 describe('logger', () => {
   let infoSpy: any;

@@ -1,25 +1,25 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import contextRouter from '../../../src/modules/dashboard/routes/context.js';
-import { getDataSource } from '../../../src/shared/db/data-source.js';
-import { Engine } from '../../../src/shared/db/entities/Engine.js';
-import { EngineMember } from '../../../src/shared/db/entities/EngineMember.js';
-import { ProjectMember } from '../../../src/shared/db/entities/ProjectMember.js';
-import { Project } from '../../../src/shared/db/entities/Project.js';
+import contextRouter from '../../../../packages/backend-host/src/modules/dashboard/routes/context.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
+import { EngineMember } from '@enterpriseglue/shared/db/entities/EngineMember.js';
+import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
+import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', platformRole: 'user' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/platformAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/platformAuth.js', () => ({
   isPlatformAdmin: (req: any) => req.user?.platformRole === 'admin',
 }));
 

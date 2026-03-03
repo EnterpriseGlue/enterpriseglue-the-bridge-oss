@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { requireAuth, requireAdmin, optionalAuth } from '../../../src/shared/middleware/auth.js';
-import { AppError } from '../../../src/shared/middleware/errorHandler.js';
-import * as jwt from '../../../src/shared/utils/jwt.js';
-import { getDataSource } from '../../../src/shared/db/data-source.js';
-import { User } from '../../../src/shared/db/entities/User.js';
+import { requireAuth, requireAdmin, optionalAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { Request, Response, NextFunction } from 'express';
 
-vi.mock('@shared/utils/jwt.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
   verifyToken: vi.fn(),
 }));
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 

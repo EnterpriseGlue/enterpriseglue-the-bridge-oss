@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { now, nowSeconds, msToSeconds, secondsToMs, isExpired, fromNow, Duration } from '../../../src/shared/utils/timestamp.js';
+import { now, nowSeconds, msToSeconds, secondsToMs, isExpired, fromNow, Duration } from '@enterpriseglue/shared/utils/timestamp.js';
 
 describe('timestamp utils', () => {
   it('returns current times', () => {

@@ -1,10 +1,10 @@
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createApp } from '../../src/app.js';
+import { createApp } from '../../../packages/backend-host/src/app.js';
 import { cleanupSeededData, seedUser, seedAdditionalUser } from '../utils/seed.js';
-import { getDataSource } from '@shared/db/data-source.js';
-import { Engine } from '@shared/db/entities/Engine.js';
-import { generateId } from '@shared/utils/id.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
+import { generateId } from '@enterpriseglue/shared/utils/id.js';
 
 const prefix = `test_seed_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 

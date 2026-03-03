@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { EngineService } from '../../../../src/shared/services/platform-admin/EngineService.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { Engine } from '../../../../src/shared/db/entities/Engine.js';
-import { EngineMember } from '../../../../src/shared/db/entities/EngineMember.js';
+import { EngineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
+import { EngineMember } from '@enterpriseglue/shared/db/entities/EngineMember.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import type { createApp as CreateAppFn } from '../../src/app.js';
+import type { createApp as CreateAppFn } from '../../../packages/backend-host/src/app.js';
 import { seedUser, seedEngine, cleanupEngines, cleanupStaleTestData } from '../utils/seed.js';
 import { createCamundaFetchMock } from '../utils/camunda-mock.js';
 
@@ -22,7 +22,7 @@ describe('Mission control Camunda integration', () => {
       FormData: class {},
     }));
 
-    const { createApp } = await import('../../src/app.js');
+    const { createApp } = await import('../../../packages/backend-host/src/app.js');
     app = createApp({
       includeRateLimiting: false,
       includeDocs: false,
@@ -31,7 +31,7 @@ describe('Mission control Camunda integration', () => {
     process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-please-change-00000000000000';
     const user = await seedUser(prefix);
     userId = user.id;
-    const { generateAccessToken } = await import('@shared/utils/jwt.js');
+    const { generateAccessToken } = await import('@enterpriseglue/shared/utils/jwt.js');
     token = generateAccessToken({ id: user.id, email: user.email, platformRole: 'admin' });
 
     const engine = await seedEngine(userId, 'http://camunda.mock/engine-rest', `${prefix}-engine`);
@@ -44,8 +44,8 @@ describe('Mission control Camunda integration', () => {
   afterAll(async () => {
     await cleanupEngines(engineId ? [engineId] : []);
     if (userId) {
-      const { getDataSource } = await import('@shared/db/data-source.js');
-      const { User } = await import('@shared/db/entities/User.js');
+      const { getDataSource } = await import('@enterpriseglue/shared/db/data-source.js');
+      const { User } = await import('@enterpriseglue/shared/db/entities/User.js');
       const dataSource = await getDataSource();
       await dataSource.getRepository(User).delete({ id: userId as any });
     }

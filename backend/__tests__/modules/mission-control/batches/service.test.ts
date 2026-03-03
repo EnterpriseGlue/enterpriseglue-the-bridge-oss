@@ -3,7 +3,7 @@ import {
   toNumberOrUndefined,
   normalizeBatchStatistics,
   type BatchStatisticsEntry,
-} from '../../../../src/modules/mission-control/batches/service.js';
+} from '../../../../../packages/backend-host/src/modules/mission-control/batches/service.js';
 
 describe('batch service utils', () => {
   describe('toNumberOrUndefined', () => {

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
-import { getDataSource } from '@shared/db/data-source.js';
-import { ssoProviderService } from '@shared/services/platform-admin/SsoProviderService.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { ssoProviderService } from '@enterpriseglue/shared/services/platform-admin/SsoProviderService.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 

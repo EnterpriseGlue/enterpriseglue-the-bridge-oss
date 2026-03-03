@@ -1,23 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import tasksRouter from '../../../../src/modules/mission-control/shared/tasks.js';
+import tasksRouter from '../../../../../packages/backend-host/src/modules/mission-control/shared/tasks.js';
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/engineAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/engineAuth.js', () => ({
   requireEngineReadOrWrite: () => (req: any, _res: any, next: any) => {
     req.engineId = 'engine-1';
     next();
   },
 }));
 
-vi.mock('../../../../src/modules/mission-control/shared/tasks-service.js', () => ({
+vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared/tasks-service.js', () => ({
   listTasks: vi.fn().mockResolvedValue([{ id: 't1', name: 'Task 1' }]),
   getTaskById: vi.fn().mockResolvedValue({ id: 't1', name: 'Task 1' }),
   getTaskCountByQuery: vi.fn().mockResolvedValue({ count: 5 }),

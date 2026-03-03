@@ -6,9 +6,9 @@ import {
   setJobRetriesById,
   listJobDefinitions,
   setJobDefinitionRetriesById,
-} from '../../../../src/modules/mission-control/shared/jobs-service.js';
+} from '../../../../../packages/backend-host/src/modules/mission-control/shared/jobs-service.js';
 
-vi.mock('@shared/services/bpmn-engine-client.js', () => ({
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   getJobs: vi.fn().mockResolvedValue([]),
   getJob: vi.fn().mockResolvedValue({ id: 'j1' }),
   executeJob: vi.fn().mockResolvedValue(undefined),

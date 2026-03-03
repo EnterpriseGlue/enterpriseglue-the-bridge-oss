@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { PlatformSettingsService } from '../../../../src/shared/services/platform-admin/PlatformSettingsService.js';
-import { getDataSource } from '../../../../src/shared/db/data-source.js';
-import { PlatformSettings } from '../../../../src/shared/db/entities/PlatformSettings.js';
-import { encrypt, isEncrypted, safeDecrypt } from '../../../../src/shared/services/encryption.js';
+import { PlatformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { PlatformSettings } from '@enterpriseglue/shared/db/entities/PlatformSettings.js';
+import { encrypt, isEncrypted, safeDecrypt } from '@enterpriseglue/shared/services/encryption.js';
 
-vi.mock('@shared/db/data-source.js', () => ({
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@shared/services/encryption.js', () => ({
+vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
   encrypt: vi.fn((value: string) => `enc:${value}`),
   isEncrypted: vi.fn((value: string) => value.startsWith('v2:') || value.startsWith('enc:')),
   safeDecrypt: vi.fn((value: string) => value.startsWith('enc:') ? value.slice(4) : value),

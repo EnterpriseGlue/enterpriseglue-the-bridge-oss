@@ -1,0 +1,89 @@
+name: Publish Frontend Host
+
+on:
+  push:
+    tags:
+      - "frontend-host/v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no actual publish)"
+        required: false
+        default: "false"
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-frontend-host
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/frontend-host
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com
+          scope: "@enterpriseglue"
+
+      - name: Read package version
+        id: pkg
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Publishing $NAME@$VERSION"
+
+      - name: Validate package contents
+        run: npm pack --dry-run
+
+      - name: Verify not already published
+        id: check
+        continue-on-error: true
+        run: |
+          npm view "${{ steps.pkg.outputs.name }}@${{ steps.pkg.outputs.version }}" version \
+            --registry=https://npm.pkg.github.com 2>/dev/null
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip if already published
+        if: steps.check.outcome == 'success'
+        run: |
+          echo "::warning::${{ steps.pkg.outputs.name }}@${{ steps.pkg.outputs.version }} is already published. Skipping."
+          exit 0
+
+      - name: Publish (dry run)
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true')
+          && steps.check.outcome != 'success'
+        run: npm publish --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish
+        if: >-
+          !(github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true')
+          && steps.check.outcome != 'success'
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "### Frontend Host Published :package:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Package**: \`${{ steps.pkg.outputs.name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version**: \`${{ steps.pkg.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Registry**: GitHub Packages" >> "$GITHUB_STEP_SUMMARY"

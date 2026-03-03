@@ -1,24 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response, NextFunction } from 'express';
-import { authorize } from '../../../src/shared/middleware/authorize.js';
-import { Errors } from '../../../src/shared/middleware/errorHandler.js';
-import { projectMemberService } from '../../../src/shared/services/platform-admin/ProjectMemberService.js';
-import { engineService } from '../../../src/shared/services/platform-admin/EngineService.js';
-import { logAudit } from '../../../src/shared/services/audit.js';
+import { authorize } from '@enterpriseglue/shared/middleware/authorize.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
+import { engineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
+import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
-vi.mock('@shared/services/platform-admin/ProjectMemberService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js', () => ({
   projectMemberService: {
     getMembership: vi.fn(),
   },
 }));
 
-vi.mock('@shared/services/platform-admin/EngineService.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineService.js', () => ({
   engineService: {
     getEngineRole: vi.fn(),
   },
 }));
 
-vi.mock('@shared/services/audit.js', () => ({
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
 

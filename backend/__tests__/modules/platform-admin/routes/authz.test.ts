@@ -1,20 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import authzRouter from '../../../../src/modules/platform-admin/routes/authz.js';
+import authzRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/authz.js';
 
-vi.mock('@shared/middleware/auth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', platformRole: 'admin' };
     next();
   },
 }));
 
-vi.mock('@shared/middleware/platformAuth.js', () => ({
+vi.mock('@enterpriseglue/shared/middleware/platformAuth.js', () => ({
   isPlatformAdmin: vi.fn().mockReturnValue(true),
 }));
 
-vi.mock('@shared/services/platform-admin/index.js', () => ({
+vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   policyService: {
     evaluateAndLog: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'User is admin' }),
   },

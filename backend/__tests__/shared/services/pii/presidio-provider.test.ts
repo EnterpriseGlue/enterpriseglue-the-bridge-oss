@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, type Mock } from 'vitest';
-import { PresidioProvider } from '../../../../src/shared/services/pii/providers/presidio-provider.js';
-import { postJson } from '../../../../src/shared/services/pii/http.js';
+import { PresidioProvider } from '@enterpriseglue/shared/services/pii/providers/presidio-provider.js';
+import { postJson } from '@enterpriseglue/shared/services/pii/http.js';
 
-vi.mock('../../../../src/shared/services/pii/http.js', () => ({
+vi.mock('@enterpriseglue/shared/services/pii/http.js', () => ({
   buildAuthHeaders: vi.fn().mockReturnValue({ 'Content-Type': 'application/json' }),
   postJson: vi.fn(),
 }));
