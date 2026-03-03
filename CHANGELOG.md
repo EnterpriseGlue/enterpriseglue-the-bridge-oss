@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.21](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.20...v0.4.21) (2026-03-02)
+
+
+### Bug Fixes
+
+* always grant platform admin role to bootstrap user ([#68](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/68)) ([ef0deee](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ef0deee50e1c655132b2769312a6199495a6b809))
+
+## [0.4.20](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.19...v0.4.20) (2026-03-02)
+
+
+### Bug Fixes
+
+* gracefully handle enterprise plugin on non-postgres databases ([#66](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/66)) ([c7e947c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c7e947cc03ed5262f8eb5bb9c04184715866dd91))
+
+## [0.4.19](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.18...v0.4.19) (2026-03-02)
+
+
+### Bug Fixes
+
+* **oracle:** declare oracledb dependency and clarify env config ([#64](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/64)) ([ab27c12](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ab27c128f6670bee30ec2ab198c65d49d33e8777))
+
 ## [0.4.18](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.17...v0.4.18) (2026-03-02)
 
 
