@@ -10,10 +10,8 @@
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const scriptDir = dirname(fileURLToPath(import.meta.url));
-const distDir = join(scriptDir, '..', 'dist');
+const distDir = join(process.cwd(), 'dist');
 
 // Alias prefix → corresponding directory inside the dist tree
 const aliases = [
