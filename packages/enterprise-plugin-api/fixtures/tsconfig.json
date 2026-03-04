@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "paths": {
+      "@enterpriseglue/enterprise-plugin-api/frontend": ["../src/frontend.d.ts"],
+      "@enterpriseglue/enterprise-plugin-api/backend": ["../src/backend.d.ts"]
+    }
+  },
+  "include": ["*.ts"]
+}

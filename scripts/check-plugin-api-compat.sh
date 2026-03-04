@@ -57,11 +57,30 @@ if [[ "$MODE" == "current" ]]; then
   fi
 fi
 
+# Layer 1: Fixture compilation — compile typed fixture against contract types.
+# If any contract type change breaks the consumer shape, tsc fails here.
+assert_file_exists "$FIXTURE_TS"
+assert_contains "$FIXTURE_TS" "frontendPluginFixture" "frontend compatibility fixture"
+assert_contains "$FIXTURE_TS" "backendPluginFixture" "backend compatibility fixture"
+assert_contains "$FIXTURE_TS" "backendContextFixture" "backend context fixture"
+
+echo "▶ Compiling contract fixture with tsc…"
+TSC="$ROOT_DIR/backend/node_modules/.bin/tsc"
+if [[ ! -x "$TSC" ]]; then
+  TSC="$(command -v tsc 2>/dev/null || echo "")"
+fi
+if [[ -z "$TSC" ]]; then
+  echo "⚠ [plugin-api-compat] tsc not found — skipping fixture compilation (run npm ci in backend/ first)"
+elif ! "$TSC" -p packages/enterprise-plugin-api/fixtures/tsconfig.json 2>&1; then
+  echo "❌ [plugin-api-compat] Fixture compilation failed — contract types are incompatible with consumer fixture"
+  fail=1
+else
+  echo "  ✓ Fixture compiles successfully"
+fi
+
 if [[ "$MODE" == "next" ]]; then
-  assert_file_exists "$FIXTURE_TS"
-  assert_contains "$FIXTURE_TS" "frontendPluginFixture" "frontend compatibility fixture"
-  assert_contains "$FIXTURE_TS" "backendPluginFixture" "backend compatibility fixture"
-  assert_contains "$FIXTURE_TS" "backendContextFixture" "backend context fixture"
+  # Additional next-mode checks can go here
+  :
 fi
 
 if [[ "$fail" -ne 0 ]]; then
