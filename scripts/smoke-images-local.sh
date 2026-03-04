@@ -9,6 +9,7 @@ ORACLE_ENV_FILE="$LOCAL_DOCKER_ENV_DIR/images.oracle.env"
 LEGACY_POSTGRES_ENV_FILE=".env.images.postgres"
 LEGACY_ORACLE_ENV_FILE=".env.images.oracle"
 WAIT_SECONDS=360
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-enterpriseglue-the-bridge-oss}"
 SKIP_ORACLE=false
 SKIP_EXPOSED=false
 SKIP_AUTH=false
@@ -232,7 +233,7 @@ wait_for_http() {
 compose_down() {
   local env_file="$1"
   shift
-  EG_BACKEND_ENV_FILE="$env_file" docker compose --env-file "$env_file" "$@" down -v >/dev/null 2>&1 || true
+  EG_BACKEND_ENV_FILE="$env_file" docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file "$env_file" "$@" down -v >/dev/null 2>&1 || true
 }
 
 run_postgres_internal() {
@@ -241,8 +242,8 @@ run_postgres_internal() {
   env_file="$(resolve_env_file "$POSTGRES_ENV_FILE" "$LEGACY_POSTGRES_ENV_FILE")"
   require_file "$env_file"
 
-  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT EG_BACKEND_ENV_FILE=$env_file docker compose --project-directory \"$ROOT_DIR\" --env-file \"$env_file\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.images.yml down -v >/dev/null 2>&1 || true"
-  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" EG_BACKEND_ENV_FILE="$env_file" docker compose --project-directory "$ROOT_DIR" --env-file "$env_file" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
+  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT EG_BACKEND_ENV_FILE=$env_file docker compose --project-name $COMPOSE_PROJECT_NAME --project-directory \"$ROOT_DIR\" --env-file \"$env_file\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.images.yml down -v >/dev/null 2>&1 || true"
+  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" EG_BACKEND_ENV_FILE="$env_file" docker compose --project-name "$COMPOSE_PROJECT_NAME" --project-directory "$ROOT_DIR" --env-file "$env_file" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
   wait_for_http "http://localhost:$FRONTEND_PORT/login" "$WAIT_SECONDS"
   wait_for_http "http://localhost:$FRONTEND_PORT/health" "$WAIT_SECONDS"
   if [[ "$SKIP_AUTH" != "true" ]]; then
@@ -272,8 +273,8 @@ run_postgres_exposed() {
     }
   ' "$env_file" > "$tmp_env"
 
-  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT BACKEND_HOST_PORT=$BACKEND_PORT EG_BACKEND_ENV_FILE=$tmp_env docker compose --project-directory \"$ROOT_DIR\" --env-file \"$tmp_env\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.images.yml -f $COMPOSE_DIR/docker-compose.backend-expose.yml down -v >/dev/null 2>&1 || true"
-  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" BACKEND_HOST_PORT="$BACKEND_PORT" EG_BACKEND_ENV_FILE="$tmp_env" docker compose --project-directory "$ROOT_DIR" --env-file "$tmp_env" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" up -d
+  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT BACKEND_HOST_PORT=$BACKEND_PORT EG_BACKEND_ENV_FILE=$tmp_env docker compose --project-name $COMPOSE_PROJECT_NAME --project-directory \"$ROOT_DIR\" --env-file \"$tmp_env\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.images.yml -f $COMPOSE_DIR/docker-compose.backend-expose.yml down -v >/dev/null 2>&1 || true"
+  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" BACKEND_HOST_PORT="$BACKEND_PORT" EG_BACKEND_ENV_FILE="$tmp_env" docker compose --project-name "$COMPOSE_PROJECT_NAME" --project-directory "$ROOT_DIR" --env-file "$tmp_env" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" up -d
   wait_for_http "http://localhost:$FRONTEND_PORT/health" "$WAIT_SECONDS"
   wait_for_http "http://localhost:$BACKEND_PORT/health" "$WAIT_SECONDS"
   if [[ "$SKIP_AUTH" != "true" ]]; then
@@ -291,8 +292,8 @@ run_oracle_internal() {
   env_file="$(resolve_env_file "$ORACLE_ENV_FILE" "$LEGACY_ORACLE_ENV_FILE")"
   require_file "$env_file"
 
-  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT EG_BACKEND_ENV_FILE=$env_file docker compose --project-directory \"$ROOT_DIR\" --env-file \"$env_file\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.oracle.yml -f $COMPOSE_DIR/docker-compose.images.yml down -v >/dev/null 2>&1 || true"
-  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" EG_BACKEND_ENV_FILE="$env_file" docker compose --project-directory "$ROOT_DIR" --env-file "$env_file" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
+  register_cleanup "FRONTEND_HOST_PORT=$FRONTEND_PORT FRONTEND_URL=http://localhost:$FRONTEND_PORT EG_BACKEND_ENV_FILE=$env_file docker compose --project-name $COMPOSE_PROJECT_NAME --project-directory \"$ROOT_DIR\" --env-file \"$env_file\" -f $COMPOSE_DIR/docker-compose.prod.yml -f $COMPOSE_DIR/docker-compose.oracle.yml -f $COMPOSE_DIR/docker-compose.images.yml down -v >/dev/null 2>&1 || true"
+  FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" EG_BACKEND_ENV_FILE="$env_file" docker compose --project-name "$COMPOSE_PROJECT_NAME" --project-directory "$ROOT_DIR" --env-file "$env_file" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
   wait_for_http "http://localhost:$FRONTEND_PORT/login" "$WAIT_SECONDS"
   wait_for_http "http://localhost:$FRONTEND_PORT/health" "$WAIT_SECONDS"
   if [[ "$SKIP_AUTH" != "true" ]]; then

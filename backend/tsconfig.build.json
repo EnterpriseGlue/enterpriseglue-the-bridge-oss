@@ -14,6 +14,6 @@
       "@azure/msal-node/*": ["node_modules/@azure/msal-node/lib/types/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "../packages/backend-host/src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "../packages/backend-host/src/**/*.ts", "../packages/shared/src/types/**/*.d.ts"],
   "exclude": ["test", "__tests__", "node_modules"]
 }

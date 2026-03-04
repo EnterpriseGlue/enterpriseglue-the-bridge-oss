@@ -29,6 +29,6 @@
     },
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts", "__tests__/**/*.ts", "../packages/backend-host/src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts", "__tests__/**/*.ts", "../packages/backend-host/src/**/*.ts", "../packages/shared/src/types/**/*.d.ts"],
   "exclude": ["src/db/schema/drizzle-kit-schema.ts"]
 }
