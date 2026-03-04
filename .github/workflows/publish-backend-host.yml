@@ -37,9 +37,15 @@ jobs:
           registry-url: https://npm.pkg.github.com
           scope: "@enterpriseglue"
 
-      - name: Install dependencies
+      - name: Install shared dependencies
+        run: npm ci
+        working-directory: packages/shared
+
+      - name: Install backend-host dependencies
         run: npm install
-        working-directory: .
+
+      - name: Link shared node_modules for transitive type resolution
+        run: ln -s "$PWD/packages/shared/node_modules" packages/node_modules
 
       - name: Build shared (dependency)
         run: npm run build
