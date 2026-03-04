@@ -265,16 +265,31 @@ kill_port() {
   fi
 }
 
+npm_install_with_lockfile() {
+  local dir="$1"
+  local prefer_online="${2:-false}"
+  local prefer_flag=""
+  if [[ "$prefer_online" == "true" ]]; then
+    prefer_flag="--prefer-online"
+  fi
+
+  if [[ -f "$dir/package-lock.json" ]]; then
+    (cd "$dir" && npm ci --no-audit --no-fund $prefer_flag)
+  else
+    (cd "$dir" && npm install --include=dev --no-audit --no-fund $prefer_flag)
+  fi
+}
+
 build_backend() {
   local MSAL_DIST="$BACKEND_DIR/node_modules/@azure/msal-node/dist/index.d.ts"
   if [[ ! -d "$BACKEND_DIR/node_modules" ]]; then
     log "Installing backend deps (including devDependencies for build)"
-    (cd "$BACKEND_DIR" && npm install --include=dev --no-audit --no-fund)
+    npm_install_with_lockfile "$BACKEND_DIR"
   elif [[ ! -f "$MSAL_DIST" ]]; then
     warn "Backend deps appear incomplete (missing @azure/msal-node dist). Cleaning cache and reinstalling..."
     rm -rf "$BACKEND_DIR/node_modules"
     (cd "$BACKEND_DIR" && npm cache clean --force)
-    (cd "$BACKEND_DIR" && npm install --include=dev --no-audit --no-fund --prefer-online)
+    npm_install_with_lockfile "$BACKEND_DIR" "true"
   else
     log "Backend dependencies already installed (offline mode)"
   fi
@@ -292,7 +307,7 @@ build_backend() {
 build_frontend() {
   if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
     log "Installing frontend deps (including devDependencies for build)"
-    (cd "$FRONTEND_DIR" && npm install --include=dev --no-audit --no-fund)
+    npm_install_with_lockfile "$FRONTEND_DIR"
   else
     log "Frontend dependencies already installed (offline mode)"
   fi

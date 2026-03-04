@@ -52,6 +52,8 @@ if [[ "$MODE" == "oss" ]]; then
   assert_file "packages/enterprise-plugin-api/src/backend.d.ts"
 
 # ── EE mode ───────────────────────────────────────────────
+# NOTE: EE no longer uses a git submodule. It consumes OSS as npm packages.
+# This mode should be run from the EE repo root.
 elif [[ "$MODE" == "ee" ]]; then
   echo "▶ Checking EE plugin boot path…"
 
@@ -78,9 +80,10 @@ elif [[ "$MODE" == "ee" ]]; then
   assert_contains "$MT" "engines-page"
   assert_contains "$MT" "EEEnginesPage"
 
-  # Plugin API contract files present and aligned
-  assert_file "packages/enterprise-plugin-api/src/frontend.d.ts"
-  assert_file "packages/enterprise-plugin-api/src/backend.d.ts"
+  # Plugin API consumed as npm package (no local packages/enterprise-plugin-api/)
+  # Verify it's listed as a dependency in enterprise packages
+  assert_contains "packages/enterprise-backend/package.json" "@enterpriseglue/enterprise-plugin-api"
+  assert_contains "packages/enterprise-frontend/package.json" "@enterpriseglue/enterprise-plugin-api"
 
 else
   echo "❌ [plugin-boot] Unknown mode: $MODE (use oss|ee)"
