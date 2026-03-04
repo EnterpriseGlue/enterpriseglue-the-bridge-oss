@@ -96,26 +96,60 @@ class PostgresConnectionPool implements ConnectionPool {
 }
 
 /**
- * Oracle Connection Pool Implementation (placeholder)
+ * Oracle Connection Pool Implementation
  * Uses oracledb when available
  */
 class OracleConnectionPool implements ConnectionPool {
   private pool: any = null;
+  private oracledb: any = null;
 
   constructor() {
-    // Oracle connection will be initialized lazily when oracledb is available
-    console.log('✅ Oracle connection pool placeholder created');
+    // Oracle connection will be initialized lazily when first used
+    console.log('✅ Oracle connection pool ready (lazy init)');
+  }
+
+  private async ensurePool(): Promise<void> {
+    if (this.pool) {
+      return;
+    }
+
+    let oracledbModule: any;
+    try {
+      oracledbModule = await import('oracledb');
+    } catch {
+      throw new Error(
+        'Oracle driver (oracledb) not installed. Install with: npm install oracledb ' +
+          'and configure Oracle Instant Client: https://oracle.github.io/node-oracledb/INSTALL.html'
+      );
+    }
+
+    this.oracledb = oracledbModule?.default ?? oracledbModule;
+
+    const connectString = config.oracleConnectionString
+      || (config.oracleServiceName
+        ? `${config.oracleHost}:${config.oraclePort || 1521}/${config.oracleServiceName}`
+        : `${config.oracleHost}:${config.oraclePort || 1521}:${config.oracleSid}`);
+
+    this.pool = await this.oracledb.createPool({
+      user: config.oracleUser,
+      password: config.oraclePassword,
+      connectString,
+      poolMin: 1,
+      poolMax: 10,
+      poolIncrement: 1,
+    });
+
+    console.log('✅ Oracle connection pool created');
   }
 
   async query<T = any>(sql: string, params?: any[] | Record<string, any>): Promise<{ rows: T[]; rowCount: number }> {
-    // Convert :param style to Oracle bind variables
-    // Oracle uses :param for named parameters which is already compatible
-    if (!this.pool) {
-      throw new Error('Oracle connection pool not initialized. Please install oracledb package.');
-    }
+    await this.ensurePool();
     const connection = await this.pool.getConnection();
     try {
-      const result = await connection.execute(sql, params || {}, { outFormat: 2 /* OBJECT */ });
+      const bindings = params ?? [];
+      const result = await connection.execute(sql, bindings, {
+        outFormat: this.oracledb.OUT_FORMAT_OBJECT,
+      });
       return { rows: (result.rows || []) as T[], rowCount: result.rowsAffected || 0 };
     } finally {
       await connection.close();
@@ -236,14 +270,16 @@ export function getConnectionPool(): ConnectionPool {
     const adapter = getAdapter();
     const dbType = adapter.getDatabaseType();
 
-    if (dbType !== 'postgres') {
+    if (dbType === 'postgres') {
+      poolInstance = new PostgresConnectionPool();
+    } else if (dbType === 'oracle') {
+      poolInstance = new OracleConnectionPool();
+    } else {
       throw new Error(
         `ConnectionPool raw SQL adapter is not implemented for DATABASE_TYPE=${dbType} in OSS. ` +
         'Use TypeORM data-source/repository APIs only, or implement the non-Postgres pool before enabling raw-SQL-dependent plugins.'
       );
     }
-
-    poolInstance = new PostgresConnectionPool();
   }
 
   return poolInstance;
