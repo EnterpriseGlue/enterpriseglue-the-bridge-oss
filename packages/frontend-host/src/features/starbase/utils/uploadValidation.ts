@@ -40,6 +40,7 @@ export async function validateAndUploadFile(params: {
   let xml: Document
   try {
     const parser = new DOMParser()
+    // codeql[js/xss-through-dom]: Parsing local BPMN/DMN XML for validation only; output is never injected into DOM.
     xml = parser.parseFromString(text, 'application/xml')
     const parserError = xml.getElementsByTagName('parsererror')[0]
     if (parserError) throw new Error('Invalid XML')

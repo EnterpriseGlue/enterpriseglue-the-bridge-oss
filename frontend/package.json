@@ -65,6 +65,8 @@
     "vitest": "^2.1.9"
   },
   "overrides": {
+    "dompurify": "3.3.2",
+    "immutable": "5.1.5",
     "react-split-pane": {
       "react": "^19.1.1",
       "react-dom": "^19.1.1"

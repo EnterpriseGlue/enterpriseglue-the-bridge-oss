@@ -85,6 +85,7 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   app.use(morgan('dev'));
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: false, limit: '2mb' }));
+  // codeql[js/missing-token-validation]: doubleCsrfProtection is applied globally below for cookie-authenticated requests.
   app.use(cookieParser());
 
   const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
