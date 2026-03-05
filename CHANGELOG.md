@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.26](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.25...v0.4.26) (2026-03-05)
+
+
+### Bug Fixes
+
+* **backend:** gate batch polling by active viewers ([#85](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/85)) ([292a47f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/292a47f160d78b51c09bf7b586271ad9aa27bb03))
+
 ## [0.4.25](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.24...v0.4.25) (2026-03-05)
 
 
