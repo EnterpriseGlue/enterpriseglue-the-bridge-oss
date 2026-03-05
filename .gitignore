@@ -21,6 +21,11 @@ backend/.tsbuildinfo
 # Package build outputs
 packages/*/dist/
 
+# Per-workspace lockfiles (single root lockfile via npm workspaces)
+backend/package-lock.json
+frontend/package-lock.json
+packages/*/package-lock.json
+
 # Coverage
 coverage/
 

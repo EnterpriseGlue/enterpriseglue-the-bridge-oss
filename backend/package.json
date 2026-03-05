@@ -54,7 +54,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@enterpriseglue/shared": "file:../packages/shared",
+    "@enterpriseglue/shared": "*",
     "@types/archiver": "^6.0.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",

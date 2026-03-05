@@ -32,14 +32,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    working_dir: /app
+    working_dir: /repo/backend
     command: >-
-      sh -c "set -e; LOCK_HASH=$$(node -e \"const fs=require('fs');const crypto=require('crypto');const a=fs.readFileSync('package.json');const b=fs.readFileSync('package-lock.json');process.stdout.write(crypto.createHash('sha256').update(a).update(b).digest('hex'));\"); STORED_HASH=$$(cat node_modules/.deps-hash 2>/dev/null || true); if [ \"$$LOCK_HASH\" != \"$$STORED_HASH\" ]; then echo \"Backend deps changed; running npm ci...\"; npm ci --include=dev --no-audit --no-fund; echo \"$$LOCK_HASH\" > node_modules/.deps-hash; fi; DB_DRIVER=pg; case \"$${DATABASE_TYPE:-postgres}\" in postgres) DB_DRIVER=pg ;; mysql) DB_DRIVER=mysql2 ;; mssql) DB_DRIVER=mssql ;; oracle) DB_DRIVER=oracledb ;; spanner) DB_DRIVER=@google-cloud/spanner ;; esac; node -e \"require.resolve(process.argv[1]);\" \"$$DB_DRIVER\" >/dev/null 2>&1 || npm install --include=dev --no-audit --no-fund --no-save \"$$DB_DRIVER\"; npm run dev"
+      sh -c "set -e; cd /repo; LOCK_HASH=$$(node -e \"const fs=require('fs');const crypto=require('crypto');const a=fs.readFileSync('package.json');const b=fs.readFileSync('package-lock.json');process.stdout.write(crypto.createHash('sha256').update(a).update(b).digest('hex'));\"); STORED_HASH=$$(cat node_modules/.deps-hash 2>/dev/null || true); if [ \"$$LOCK_HASH\" != \"$$STORED_HASH\" ]; then echo \"Deps changed; running npm ci...\"; npm ci --include=dev --no-audit --no-fund; echo \"$$LOCK_HASH\" > node_modules/.deps-hash; fi; cd /repo/backend; DB_DRIVER=pg; case \"$${DATABASE_TYPE:-postgres}\" in postgres) DB_DRIVER=pg ;; mysql) DB_DRIVER=mysql2 ;; mssql) DB_DRIVER=mssql ;; oracle) DB_DRIVER=oracledb ;; spanner) DB_DRIVER=@google-cloud/spanner ;; esac; node -e \"require.resolve(process.argv[1]);\" \"$$DB_DRIVER\" >/dev/null 2>&1 || npm install -w backend --include=dev --no-audit --no-fund --no-save \"$$DB_DRIVER\"; npm run dev"
     volumes:
-      - ./backend:/app
-      - ./packages:/packages:ro
-      - backend_node_modules:/app/node_modules
-      - git_repos:/app/data/repos
+      - .:/repo
+      - workspace_node_modules:/repo/node_modules
+      - git_repos:/repo/backend/data/repos
     networks:
       - enterpriseglue-network
 
@@ -63,7 +62,7 @@ services:
 
 volumes:
   postgres_data:
-  backend_node_modules:
+  workspace_node_modules:
   git_repos:
 
 networks:

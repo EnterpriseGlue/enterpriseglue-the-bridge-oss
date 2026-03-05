@@ -1,27 +1,41 @@
 FROM node:20-bookworm-slim AS build
 
-WORKDIR /repo/backend
+WORKDIR /repo
 
-COPY backend/package.json backend/package-lock.json ./
-COPY packages /repo/packages
-RUN npm ci --include=dev --no-audit --no-fund \
-    && ln -s /repo/backend/node_modules /repo/packages/node_modules
+# Copy workspace manifests for npm ci layer caching
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY packages/shared/package.json packages/shared/
+COPY packages/backend-host/package.json packages/backend-host/
+COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
+COPY packages/frontend-host/package.json packages/frontend-host/
+COPY frontend/package.json frontend/
+
+RUN npm ci -w backend -w packages/shared -w packages/backend-host \
+    --include=dev --no-audit --no-fund
 
 # Build OSS packages (shared must be built before backend-host)
-RUN cd /repo/packages/shared && npm run build
-RUN cd /repo/packages/backend-host && npm run build
+COPY packages packages
+RUN npm -w packages/shared run build
+RUN npm -w packages/backend-host run build
 
-COPY backend ./
-RUN npm run build:skip-generate
+COPY backend backend
+RUN npm -w backend run build:skip-generate
 
 FROM node:20-bookworm-slim AS deps
 
-WORKDIR /repo/backend
+WORKDIR /repo
 
-COPY backend/package.json backend/package-lock.json ./
-COPY packages /repo/packages
-RUN npm ci --omit=dev --no-audit --no-fund \
-    && npm install --omit=dev --no-audit --no-fund --no-save \
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY packages/shared/package.json packages/shared/
+COPY packages/backend-host/package.json packages/backend-host/
+COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
+COPY packages/frontend-host/package.json packages/frontend-host/
+COPY frontend/package.json frontend/
+
+RUN npm ci -w backend --omit=dev --no-audit --no-fund \
+    && npm install -w backend --omit=dev --no-audit --no-fund --no-save \
       mysql2 \
       mssql \
       @google-cloud/spanner
@@ -37,7 +51,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY backend/package.json ./package.json
-COPY --from=deps /repo/backend/node_modules ./node_modules
+COPY --from=deps /repo/node_modules ./node_modules
 
 COPY --from=build /repo/backend/dist ./dist
 COPY --from=build /repo/packages/shared/src/db/adapters/sql ./packages/shared/src/db/adapters/sql

@@ -1,14 +1,22 @@
 FROM node:20-alpine
 
-WORKDIR /app
+WORKDIR /repo
 
-# For some native deps (if any) we might need build tools, but keep it lean for now.
+# Copy workspace manifests for npm ci
+COPY --chown=node:node package.json package-lock.json ./
+COPY --chown=node:node backend/package.json backend/
+COPY --chown=node:node packages/shared/package.json packages/shared/
+COPY --chown=node:node packages/backend-host/package.json packages/backend-host/
+COPY --chown=node:node packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
+COPY --chown=node:node packages/frontend-host/package.json packages/frontend-host/
+COPY --chown=node:node frontend/package.json frontend/
 
-COPY --chown=node:node backend/package.json backend/package-lock.json ./
-COPY --chown=node:node packages /packages
-RUN npm ci --include=dev --no-audit --no-fund
+RUN npm ci -w backend -w packages/shared -w packages/backend-host \
+    --include=dev --no-audit --no-fund
 
-COPY --chown=node:node backend ./
+COPY --chown=node:node backend backend
+
+WORKDIR /repo/backend
 
 EXPOSE 8787
 

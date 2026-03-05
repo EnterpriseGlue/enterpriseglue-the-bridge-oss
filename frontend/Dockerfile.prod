@@ -1,20 +1,27 @@
 FROM node:20-alpine AS build
 
-WORKDIR /repo/frontend
+WORKDIR /repo
 
 ARG API_BASE_URL
 ARG API_UPSTREAM=backend:8787
 ENV VITE_API_BASE_URL=${API_BASE_URL}
 
-COPY frontend/package.json frontend/package-lock.json ./
-COPY packages /repo/packages
-RUN apk upgrade --no-cache \
-    && npm ci --include=dev --no-audit --no-fund \
-    && ln -s /repo/frontend/node_modules /repo/packages/node_modules
+# Copy workspace manifests for npm ci layer caching
+COPY package.json package-lock.json ./
+COPY frontend/package.json frontend/
+COPY packages/shared/package.json packages/shared/
+COPY packages/frontend-host/package.json packages/frontend-host/
+COPY packages/backend-host/package.json packages/backend-host/
+COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
+COPY backend/package.json backend/
 
-COPY frontend ./
-RUN npm run build \
-    && sed "s|\${API_UPSTREAM}|${API_UPSTREAM}|g" nginx.conf > /tmp/nginx.conf
+RUN apk upgrade --no-cache \
+    && npm ci -w frontend --include=dev --no-audit --no-fund
+
+COPY frontend frontend
+COPY packages packages
+RUN npm -w frontend run build \
+    && sed "s|\${API_UPSTREAM}|${API_UPSTREAM}|g" frontend/nginx.conf > /tmp/nginx.conf
 
 FROM cgr.dev/chainguard/nginx:latest
 

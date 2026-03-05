@@ -47,8 +47,8 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
-    "@enterpriseglue/frontend-host": "file:../packages/frontend-host",
-    "@enterpriseglue/shared": "file:../packages/shared",
+    "@enterpriseglue/frontend-host": "*",
+    "@enterpriseglue/shared": "*",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
