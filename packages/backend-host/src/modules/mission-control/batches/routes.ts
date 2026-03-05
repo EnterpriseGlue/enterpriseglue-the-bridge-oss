@@ -15,6 +15,7 @@ import {
   deleteProcessInstancesBatch,
   setBatchSuspended,
 } from './service.js'
+import { markBatchPollerViewer } from '../../../poller/batchPoller.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Batch } from '@enterpriseglue/shared/db/entities/Batch.js'
@@ -123,6 +124,7 @@ r.post('/mission-control-api/batches/jobs/retries', requireEngineReadOrWrite({ e
 }))
 
 r.get('/mission-control-api/batches', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+  await markBatchPollerViewer()
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string
@@ -184,6 +186,7 @@ r.put('/mission-control-api/batches/:id/suspended', requireEngineReadOrWrite({ e
 }))
 
 r.get('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+  await markBatchPollerViewer()
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string

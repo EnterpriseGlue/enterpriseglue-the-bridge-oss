@@ -4,17 +4,56 @@ import { In } from 'typeorm'
 import { getBatchInfo, getBatchStatistics } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 
 let timer: ReturnType<typeof setInterval> | null = null
+let lastViewerAt: number | null = null
+const viewerTtlMs = Number(process.env.BATCH_VIEWER_TTL_MS || 15000)
+
+function hasActiveViewer(now = Date.now()) {
+  if (!lastViewerAt) return false
+  if (!Number.isFinite(viewerTtlMs) || viewerTtlMs <= 0) return false
+  return (now - lastViewerAt) <= viewerTtlMs
+}
+
+export async function markBatchPollerViewer(intervalMs = Number(process.env.BATCH_POLL_INTERVAL_MS || 5000)) {
+  lastViewerAt = Date.now()
+  await startBatchPollerIfActive(intervalMs)
+}
+
+export async function startBatchPollerIfActive(intervalMs = Number(process.env.BATCH_POLL_INTERVAL_MS || 5000)) {
+  if (timer) return timer
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) return null
+  if (!hasActiveViewer()) return null
+  try {
+    const dataSource = await getDataSource()
+    const batchRepo = dataSource.getRepository(Batch)
+    const activeCount = await batchRepo.count({
+      where: { status: In(['RUNNING', 'PENDING']) },
+    })
+    if (activeCount === 0) return null
+  } catch {
+    return null
+  }
+  return startBatchPoller(intervalMs)
+}
 
 export function startBatchPoller(intervalMs = Number(process.env.BATCH_POLL_INTERVAL_MS || 5000)) {
   if (timer) return timer
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) return null
   timer = setInterval(async () => {
     try {
+      if (!hasActiveViewer()) {
+        stopBatchPoller()
+        return
+      }
       const dataSource = await getDataSource()
       const batchRepo = dataSource.getRepository(Batch)
       // Load active batches directly
       const active = await batchRepo.find({
         where: { status: In(['RUNNING', 'PENDING']) },
       })
+      if (active.length === 0) {
+        stopBatchPoller()
+        return
+      }
       const now = Date.now()
       for (const row of active) {
         try {

@@ -5,7 +5,7 @@ import { ensureSchemaExists, initializeDatabase } from '@enterpriseglue/shared/d
 import { bootstrapAdmin, backfillKnownUserProfiles, backfillMissingPlatformRoles } from '@enterpriseglue/shared/db/bootstrap.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requirePlatformAdmin } from '@enterpriseglue/shared/middleware/platformAuth.js';
-import { startBatchPoller } from './poller/batchPoller.js';
+import { startBatchPollerIfActive } from './poller/batchPoller.js';
 import { getConnectionPool, ConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
 import { loadEnterpriseBackendPlugin } from './enterprise/loadEnterpriseBackendPlugin.js';
 
@@ -110,7 +110,7 @@ export async function startServer() {
   });
 
   // Start background pollers
-  startBatchPoller();
+  void startBatchPollerIfActive();
 
   // Graceful shutdown
   process.on('SIGINT', () => process.exit(0));
