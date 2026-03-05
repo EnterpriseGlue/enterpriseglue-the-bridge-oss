@@ -25,6 +25,7 @@ jobs:
       run_postgres: ${{ steps.detect.outputs.run_postgres }}
       run_oracle: ${{ steps.detect.outputs.run_oracle }}
       run_smoke: ${{ steps.detect.outputs.run_smoke }}
+      test_databases: ${{ steps.detect.outputs.test_databases }}
       changed_files_count: ${{ steps.detect.outputs.changed_files_count }}
     steps:
       - name: Checkout
@@ -48,6 +49,7 @@ jobs:
             echo "run_postgres=true" >> "$GITHUB_OUTPUT"
             echo "run_oracle=true" >> "$GITHUB_OUTPUT"
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
+            echo 'test_databases=["postgres","oracle"]' >> "$GITHUB_OUTPUT"
           }
 
           CURRENT_SHA=$(git rev-parse HEAD)
@@ -68,6 +70,7 @@ jobs:
               echo "run_postgres=false" >> "$GITHUB_OUTPUT"
               echo "run_oracle=false"  >> "$GITHUB_OUTPUT"
               echo "run_smoke=false"   >> "$GITHUB_OUTPUT"
+              echo 'test_databases=["postgres"]' >> "$GITHUB_OUTPUT"
               echo "changed_files_count=draft" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -114,10 +117,23 @@ jobs:
               fi
             fi
 
+            # Keep at least one matrix lane when run_tests=true.
+            if [ "$run_tests" = true ] && [ "$run_postgres" = false ] && [ "$run_oracle" = false ]; then
+              run_postgres=true
+            fi
+
+            test_databases='["postgres"]'
+            if [ "$run_postgres" = true ] && [ "$run_oracle" = true ]; then
+              test_databases='["postgres","oracle"]'
+            elif [ "$run_oracle" = true ]; then
+              test_databases='["oracle"]'
+            fi
+
             echo "run_tests=$run_tests" >> "$GITHUB_OUTPUT"
             echo "run_postgres=$run_postgres" >> "$GITHUB_OUTPUT"
             echo "run_oracle=$run_oracle" >> "$GITHUB_OUTPUT"
             echo "run_smoke=$run_smoke" >> "$GITHUB_OUTPUT"
+            echo "test_databases=$test_databases" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -141,6 +157,7 @@ jobs:
             echo "run_postgres=false" >> "$GITHUB_OUTPUT"
             echo "run_oracle=false" >> "$GITHUB_OUTPUT"
             echo "run_smoke=false" >> "$GITHUB_OUTPUT"
+            echo 'test_databases=["postgres"]' >> "$GITHUB_OUTPUT"
             echo "changed_files_count=0" >> "$GITHUB_OUTPUT"
           else
             emit_all_true
@@ -265,7 +282,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        database: [postgres, oracle]
+        database: ${{ fromJSON(needs.detect.outputs.test_databases) }}
     permissions:
       contents: read
     services:
@@ -439,11 +456,10 @@ jobs:
           name: frontend-coverage
           path: frontend/coverage
 
-
-  smoke-postgres-image-deploy:
+  build-ci-images:
     runs-on: ubuntu-latest
     needs: detect
-    if: needs.detect.outputs.run_tests == 'true' && needs.detect.outputs.run_smoke == 'true'
+    if: needs.detect.outputs.run_tests == 'true'
     permissions:
       contents: read
     steps:
@@ -453,7 +469,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build local backend image
+      - name: Build backend image once
         run: |
           docker buildx build --load \
             --pull \
@@ -463,7 +479,7 @@ jobs:
             -t eg-local-backend:pr \
             .
 
-      - name: Build local frontend image
+      - name: Build frontend image once
         run: |
           docker buildx build --load \
             --pull \
@@ -473,6 +489,40 @@ jobs:
             --build-arg API_BASE_URL= \
             -t eg-local-frontend:pr \
             .
+
+      - name: Export local images
+        run: |
+          docker save eg-local-backend:pr | gzip -1 > eg-local-backend-pr.tar.gz
+          docker save eg-local-frontend:pr | gzip -1 > eg-local-frontend-pr.tar.gz
+
+      - name: Upload prebuilt images artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: ci-images
+          path: |
+            eg-local-backend-pr.tar.gz
+            eg-local-frontend-pr.tar.gz
+
+
+  smoke-postgres-image-deploy:
+    runs-on: ubuntu-latest
+    needs: [detect, build-ci-images]
+    if: needs.detect.outputs.run_tests == 'true' && needs.detect.outputs.run_smoke == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download prebuilt images artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ci-images
+
+      - name: Load prebuilt images
+        run: |
+          gunzip -c eg-local-backend-pr.tar.gz | docker load
+          gunzip -c eg-local-frontend-pr.tar.gz | docker load
 
       - name: Prepare image deployment env file
         shell: bash
@@ -542,7 +592,7 @@ jobs:
 
   smoke-postgres-image-deploy-exposed:
     runs-on: ubuntu-latest
-    needs: detect
+    needs: [detect, build-ci-images]
     if: needs.detect.outputs.run_tests == 'true' && needs.detect.outputs.run_smoke == 'true'
     permissions:
       contents: read
@@ -550,29 +600,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Download prebuilt images artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ci-images
 
-      - name: Build local backend image
+      - name: Load prebuilt images
         run: |
-          docker buildx build --load \
-            --pull \
-            --cache-from type=gha,scope=ci-smoke-backend \
-            --cache-to type=gha,mode=max,scope=ci-smoke-backend \
-            -f backend/Dockerfile.prod \
-            -t eg-local-backend:pr \
-            .
-
-      - name: Build local frontend image
-        run: |
-          docker buildx build --load \
-            --pull \
-            --cache-from type=gha,scope=ci-smoke-frontend \
-            --cache-to type=gha,mode=max,scope=ci-smoke-frontend \
-            -f frontend/Dockerfile.prod \
-            --build-arg API_BASE_URL= \
-            -t eg-local-frontend:pr \
-            .
+          gunzip -c eg-local-backend-pr.tar.gz | docker load
+          gunzip -c eg-local-frontend-pr.tar.gz | docker load
 
       - name: Prepare image deployment env file (backend exposed)
         shell: bash
@@ -647,7 +683,7 @@ jobs:
 
   security-pr-scan:
     runs-on: ubuntu-latest
-    needs: detect
+    needs: [detect, build-ci-images]
     if: needs.detect.outputs.run_tests == 'true'
     permissions:
       contents: read
@@ -655,32 +691,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Download prebuilt images artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ci-images
 
-      - name: Build backend image
+      - name: Load prebuilt images
         run: |
-          docker buildx build --load \
-            --pull \
-            --cache-from type=gha,scope=ci-smoke-backend \
-            -f backend/Dockerfile.prod \
-            -t eg-scan-backend:pr \
-            .
-
-      - name: Build frontend image
-        run: |
-          docker buildx build --load \
-            --pull \
-            --cache-from type=gha,scope=ci-smoke-frontend \
-            -f frontend/Dockerfile.prod \
-            --build-arg API_BASE_URL= \
-            -t eg-scan-frontend:pr \
-            .
+          gunzip -c eg-local-backend-pr.tar.gz | docker load
+          gunzip -c eg-local-frontend-pr.tar.gz | docker load
 
       - name: Trivy scan backend image
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: 'eg-scan-backend:pr'
+          image-ref: 'eg-local-backend:pr'
           format: 'json'
           output: 'backend-trivy.json'
           exit-code: '1'
@@ -692,7 +716,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: 'eg-scan-frontend:pr'
+          image-ref: 'eg-local-frontend:pr'
           format: 'json'
           output: 'frontend-trivy.json'
           exit-code: '1'
@@ -742,7 +766,7 @@ jobs:
 
   ci-complete:
     runs-on: ubuntu-latest
-    needs: [detect, boundary-guards, plugin-api-compat-current, plugin-api-compat-next, plugin-api-package, compose-render, test, smoke-postgres-image-deploy, smoke-postgres-image-deploy-exposed, security-pr-scan]
+    needs: [detect, boundary-guards, plugin-api-compat-current, plugin-api-compat-next, plugin-api-package, compose-render, test, build-ci-images, smoke-postgres-image-deploy, smoke-postgres-image-deploy-exposed, security-pr-scan]
     if: always()
     steps:
       - name: Evaluate CI result
@@ -754,6 +778,7 @@ jobs:
           echo "plugin-api-package: ${{ needs.plugin-api-package.result }}"
           echo "compose-render: ${{ needs.compose-render.result }}"
           echo "test: ${{ needs.test.result }}"
+          echo "build-ci-images: ${{ needs.build-ci-images.result }}"
           echo "smoke-postgres-image-deploy: ${{ needs.smoke-postgres-image-deploy.result }}"
           echo "smoke-postgres-image-deploy-exposed: ${{ needs.smoke-postgres-image-deploy-exposed.result }}"
           echo "security-pr-scan: ${{ needs.security-pr-scan.result }}"
@@ -766,6 +791,7 @@ jobs:
             "${{ needs.plugin-api-package.result }}" \
             "${{ needs.compose-render.result }}" \
             "${{ needs.test.result }}" \
+            "${{ needs.build-ci-images.result }}" \
             "${{ needs.smoke-postgres-image-deploy.result }}" \
             "${{ needs.smoke-postgres-image-deploy-exposed.result }}" \
             "${{ needs.security-pr-scan.result }}"; do
