@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.29](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.28...v0.4.29) (2026-03-05)
+
+
+### Bug Fixes
+
+* **nginx:** make backend host configurable ([#87](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/87)) ([660c1e5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/660c1e521e40f170f85e828f1da8c01e86279977))
+
 ## [0.4.28](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.27...v0.4.28) (2026-03-05)
 
 
