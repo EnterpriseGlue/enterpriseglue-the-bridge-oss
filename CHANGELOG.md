@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.32](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.31...v0.4.32) (2026-03-06)
+
+
+### Bug Fixes
+
+* **ci:** declare reusable core token contract ([#146](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/146)) ([eedc2fa](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/eedc2faf96200e00aedc149b34899bf7730ea06f))
+
 ## [0.4.31](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.30...v0.4.31) (2026-03-06)
 
 
