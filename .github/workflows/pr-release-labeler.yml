@@ -40,12 +40,14 @@ jobs:
               'release:compat'
             ]);
 
-            const labels = (pr.labels || []).map((l) => l.name);
+            const { data: freshPR } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+
+            const labels = (freshPR.labels || []).map((l) => l.name);
             const existingReleaseLabels = labels.filter((label) => releaseLabels.has(label));
-            if (existingReleaseLabels.length > 0) {
-              core.notice(`Release label already present: ${existingReleaseLabels.join(', ')}`);
-              return;
-            }
 
             const files = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner,
@@ -56,9 +58,12 @@ jobs:
 
             const changedPaths = files.map((f) => f.filename);
             const docsOnly = changedPaths.length > 0 && changedPaths.every((p) => p.startsWith('docs/') || p.endsWith('.md'));
-            const title = String(pr.title || '').toLowerCase();
-            const body = String(pr.body || '').toLowerCase();
-            const isBreaking = /\)!:|!:/.test(String(pr.title || '')) || /breaking\s+change/.test(body);
+            const normalizedTitle = String(freshPR.title || '');
+            const title = normalizedTitle.toLowerCase();
+            const body = String(freshPR.body || '').toLowerCase();
+            const titleMatch = normalizedTitle.match(/^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s.+$/i);
+            const titleType = titleMatch ? titleMatch[1].toLowerCase() : '';
+            const isBreaking = /\)!:|!:/.test(normalizedTitle) || /breaking\s+change/.test(body);
             const isSecurity = /security|vuln|cve/.test(title) || /security|vuln|cve/.test(body);
             const isDeprecation = /deprecat/.test(title) || /deprecat/.test(body);
             const isCompatibility = /compat|backward/.test(title) || /compat|backward/.test(body);
@@ -73,6 +78,11 @@ jobs:
             else if (docsOnly) defaultLabel = 'release:docs';
             else if (isFeature) defaultLabel = 'release:feature';
             else if (isFix) defaultLabel = 'release:fix';
+
+            const internalOnlyTypes = new Set(['ci', 'chore', 'build', 'test']);
+            if (!isBreaking && internalOnlyTypes.has(titleType)) {
+              defaultLabel = 'release:internal';
+            }
 
             const labelDefaults = {
               'release:breaking': { color: 'B60205', description: 'Breaking change' },
@@ -103,11 +113,29 @@ jobs:
               });
             }
 
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              labels: [defaultLabel],
-            });
+            for (const label of existingReleaseLabels) {
+              if (label === defaultLabel) continue;
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                name: label,
+              });
+            }
 
-            core.notice(`Added baseline release label: ${defaultLabel}`);
+            if (!existingReleaseLabels.includes(defaultLabel)) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: [defaultLabel],
+              });
+              core.notice(`Set release label: ${defaultLabel}`);
+              return;
+            }
+
+            if (existingReleaseLabels.length > 1) {
+              core.notice(`Normalized release labels to ${defaultLabel}`);
+            } else {
+              core.notice(`Release label already correct: ${defaultLabel}`);
+            }

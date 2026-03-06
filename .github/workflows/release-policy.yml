@@ -89,9 +89,14 @@ jobs:
               'release:compat'
             ]);
 
-            const hasReleaseLabel = labels.some((label) => releaseLabels.has(label));
-            if (!hasReleaseLabel) {
+            const selectedReleaseLabels = labels.filter((label) => releaseLabels.has(label));
+            if (selectedReleaseLabels.length === 0) {
               core.setFailed('Missing release label. Add one release:* label to classify this PR.');
+              return;
+            }
+
+            if (selectedReleaseLabels.length > 1) {
+              core.setFailed(`Multiple release labels found (${selectedReleaseLabels.join(', ')}). Keep exactly one release:* label.`);
               return;
             }
 
