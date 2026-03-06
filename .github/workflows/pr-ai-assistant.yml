@@ -59,6 +59,15 @@ jobs:
               return 'core';
             };
 
+            const isInternalAutomationOnly = (paths) => {
+              return paths.length > 0 && paths.every((path) =>
+                path.startsWith('.github/') ||
+                path.startsWith('.sync/') ||
+                path.startsWith('.windsurf/') ||
+                path.startsWith('.vscode/')
+              );
+            };
+
             const analyzeChangeScope = (paths) => {
               const bucketForPath = (path) => {
                 if (path.startsWith('.github/workflows/')) return 'ci';
@@ -127,6 +136,7 @@ jobs:
               const lowerTitle = String(title || '').toLowerCase();
               const lowerBody = String(body || '').toLowerCase();
               const docsOnly = paths.length > 0 && paths.every((p) => p.startsWith('docs/') || p.endsWith('.md'));
+              const automationOnly = isInternalAutomationOnly(paths);
               const breaking = /breaking|!:/i.test(title || '') || /breaking\s+change/i.test(body || '');
               const security = /security|vuln|cve/i.test(lowerTitle) || /security|vuln|cve/i.test(lowerBody);
               const feature = /feat|feature|add|introduce|implement/i.test(lowerTitle);
@@ -158,8 +168,15 @@ jobs:
                 type = 'fix';
               }
 
+              if (automationOnly) {
+                releaseLabel = 'release:internal';
+                impact = 'patch';
+                type = 'chore';
+              }
+
               const scope = inferScope(paths);
               const fallbackSummary = (() => {
+                if (automationOnly) return 'refine CI/release automation';
                 if (docsOnly) return 'refresh documentation';
                 if (breaking) return `introduce ${scope} breaking changes`;
                 if (security) return `harden ${scope} security`; 
@@ -200,6 +217,7 @@ jobs:
             });
 
             const changedPaths = files.map((f) => f.filename);
+            const internalAutomationOnly = isInternalAutomationOnly(changedPaths);
             const fileSummary = files.slice(0, 80).map((f) => {
               const status = f.status;
               return `${f.filename} (${status}, +${f.additions}/-${f.deletions})`;
@@ -283,7 +301,7 @@ jobs:
             const fallback = deterministicFallback(pr.title, pr.body || '', changedPaths);
             const safeTitle = typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim() : fallback.title;
             let safeLabel = releaseLabels.includes(parsed.release_label) ? parsed.release_label : fallback.release_label;
-            const safeImpact = ['patch', 'minor', 'major'].includes(parsed.impact) ? parsed.impact : fallback.impact;
+            let safeImpact = ['patch', 'minor', 'major'].includes(parsed.impact) ? parsed.impact : fallback.impact;
             const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
             const parsedConfidence = Number(parsed.confidence);
             const safeConfidence = Number.isFinite(parsedConfidence)
@@ -293,6 +311,16 @@ jobs:
               ? parsed.reasoning.trim().slice(0, 600)
               : fallback.reasoning;
             const safeSummary = normalizeSummary(parsed.summary, fallback.summary);
+            const forceInternalAutomationTitle = (title) => {
+              const parsedTitle = String(title || '').trim().match(/^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s(.+)$/i);
+              const summary = parsedTitle ? String(parsedTitle[4] || 'update changes').trim() : normalizeTitleSummary(title);
+              return `chore(ci): ${summary}`;
+            };
+
+            if (internalAutomationOnly) {
+              safeLabel = 'release:internal';
+              safeImpact = 'patch';
+            }
 
             const allowedLabelsByType = {
               feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:compat']),
@@ -349,7 +377,10 @@ jobs:
               safeLabel = 'release:internal';
             }
 
-            const compatibleTitle = coerceTitleForReleaseLabel(safeTitle, safeLabel);
+            let compatibleTitle = coerceTitleForReleaseLabel(safeTitle, safeLabel);
+            if (internalAutomationOnly) {
+              compatibleTitle = forceInternalAutomationTitle(compatibleTitle);
+            }
 
             core.setOutput('status', suggestionSource);
             core.setOutput('suggested_title', compatibleTitle);
@@ -422,11 +453,7 @@ jobs:
               `- Risk focus: \`${process.env.RISK_SUMMARY || 'n/a'}\``,
               `- Key files: \`${process.env.KEY_FILES || 'n/a'}\``,
               '',
-              `Reasoning: ${process.env.REASONING || 'n/a'}`,
-              '',
-              'Auto-apply mode:',
-              '- Release label baseline is auto-managed by this workflow.',
-              '- Add label `ai:apply` to this PR, or set repo variable `AI_PR_AUTOFIX_ENABLED=true` to also auto-update the PR title.'
+              `Reasoning: ${process.env.REASONING || 'n/a'}`
             ].join('\n');
 
             const comments = await github.paginate(github.rest.issues.listComments, {
