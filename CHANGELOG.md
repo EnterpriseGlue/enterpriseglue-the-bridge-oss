@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.33](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.32...v0.4.33) (2026-03-06)
+
+
+### Bug Fixes
+
+* **ci:** rename reusable workflow secret to ci_token ([#149](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/149)) ([1af76df](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1af76dff6f9dec9fc444dcceb390021be3ecb80d))
+
 ## [0.4.32](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.31...v0.4.32) (2026-03-06)
 
 
