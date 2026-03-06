@@ -85,7 +85,7 @@ jobs:
           ls -la .artifacts/
 
       - name: Upload plugin-api artifact
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: plugin-api-package
           path: .artifacts/
@@ -304,14 +304,14 @@ jobs:
 
       - name: Upload backend coverage
         if: matrix.database == 'postgres'
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: backend-coverage
           path: backend/coverage
 
       - name: Upload frontend coverage
         if: matrix.database == 'postgres'
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: frontend-coverage
           path: frontend/coverage
@@ -356,7 +356,7 @@ jobs:
           docker save eg-local-frontend:pr | gzip -1 > eg-local-frontend-pr.tar.gz
 
       - name: Upload prebuilt images artifact
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ci-images
           path: |
@@ -586,7 +586,7 @@ jobs:
 
       - name: Upload scan artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-findings-${{ github.run_id }}
           path: |
