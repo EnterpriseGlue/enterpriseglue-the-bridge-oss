@@ -38,7 +38,7 @@
     "google-auth-library": "^10.5.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^7.0.12",
+    "nodemailer": "^8.0.1",
     "octokit": "^5.0.5",
     "oracledb": "^6.0.0",
     "pg": "^8.11.3",
