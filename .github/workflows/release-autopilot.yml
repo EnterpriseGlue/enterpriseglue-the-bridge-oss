@@ -32,8 +32,15 @@ jobs:
             const pr = context.payload.pull_request;
             const autopilotEnabled = String(process.env.AI_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
             const releaseAutopilotEnabled = String(process.env.RELEASE_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
+            const allowedAuthor = 'haryselman';
             if (!autopilotEnabled) {
               core.notice('AI_AUTOPILOT_ENABLED is false. Skipping autopilot merge.');
+              core.setOutput('should_enable', 'false');
+              return;
+            }
+
+            if (String(pr.user?.login || '').toLowerCase() !== allowedAuthor) {
+              core.notice(`PR author is not ${allowedAuthor}. Skipping auto-merge.`);
               core.setOutput('should_enable', 'false');
               return;
             }
