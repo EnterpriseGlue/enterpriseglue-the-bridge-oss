@@ -1,8 +1,10 @@
 name: PR Auto-Rebase Reusable
 
-# Reusable workflow: automatically rebase open PRs that become conflicting.
-# Handles lockfile-only conflicts by regenerating package-lock.json.
-# Skips Release Please PRs (they self-manage) and draft PRs.
+# Reusable workflow: automatically rebase open PRs that become stale or conflicting.
+# - Rebases BEHIND and CONFLICTING PRs onto main
+# - Handles lockfile-only conflicts by regenerating package-lock.json
+# - Auto-closes no-op PRs (empty diff vs main after rebase)
+# - Skips Release Please PRs (they self-manage) and draft PRs
 
 on:
   workflow_call:
@@ -17,17 +19,22 @@ on:
         required: false
         type: string
         default: 'github-actions[bot]'
+      auto_close_noop:
+        description: Automatically close PRs with no meaningful diff vs main after rebase
+        required: false
+        type: boolean
+        default: true
     secrets:
       push_token:
-        description: Token with contents:write permission to force-push rebased branches
+        description: Token with contents:write and pull-requests:write permission
         required: true
 
 permissions:
   contents: write
-  pull-requests: read
+  pull-requests: write
 
 jobs:
-  rebase-conflicting-prs:
+  rebase-stale-prs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
@@ -41,10 +48,11 @@ jobs:
         with:
           node-version-file: ${{ inputs.node_version_file }}
 
-      - name: Find and rebase conflicting PRs
+      - name: Find and rebase stale PRs
         env:
           GH_TOKEN: ${{ secrets.push_token }}
           SKIP_AUTHORS: ${{ inputs.skip_authors }}
+          AUTO_CLOSE_NOOP: ${{ inputs.auto_close_noop }}
         run: |
           set -euo pipefail
 
@@ -75,16 +83,22 @@ jobs:
           rebased=0
           skipped=0
           failed=0
+          closed=0
 
           while IFS=' ' read -r pr_number branch mergeable; do
             echo "──────────────────────────────────────"
             echo "PR #${pr_number} (${branch}): mergeable=${mergeable}"
 
-            # Skip PRs that don't need rebasing
-            if [ "$mergeable" != "CONFLICTING" ]; then
-              echo "  → Skipping: not conflicting"
-              skipped=$((skipped + 1))
-              continue
+            # Skip PRs that are already up-to-date and clean
+            if [ "$mergeable" != "CONFLICTING" ] && [ "$mergeable" != "UNKNOWN" ]; then
+              # Check if branch is behind main (needs rebase even without conflicts)
+              git fetch origin "$branch" 2>/dev/null || { echo "  → Skipping: cannot fetch"; skipped=$((skipped + 1)); continue; }
+              if git merge-base --is-ancestor origin/main "origin/${branch}" 2>/dev/null; then
+                echo "  → Skipping: already up-to-date with main"
+                skipped=$((skipped + 1))
+                continue
+              fi
+              echo "  → Branch is behind main, needs rebase"
             fi
 
             # Skip release-please branches
@@ -96,19 +110,16 @@ jobs:
 
             echo "  → Attempting rebase..."
 
-            # Fetch the branch
+            # Fetch the branch (may already be fetched from behind-check above)
             git fetch origin "$branch" 2>/dev/null || { echo "  ✗ Failed to fetch branch"; failed=$((failed + 1)); continue; }
 
             # Create a temporary local branch
             git checkout -B "rebase-tmp/${branch}" "origin/${branch}" 2>/dev/null || { echo "  ✗ Failed to checkout branch"; failed=$((failed + 1)); continue; }
 
             # Attempt rebase
+            rebase_ok=false
             if git rebase main 2>/dev/null; then
-              echo "  ✓ Rebased cleanly"
-              git push --force-with-lease origin "HEAD:${branch}"
-              echo "  ✓ Pushed"
-              echo "- **PR #${pr_number}** (\`${branch}\`): ✅ Rebased and pushed" >> "$GITHUB_STEP_SUMMARY"
-              rebased=$((rebased + 1))
+              rebase_ok=true
             else
               # Check if the only conflicting file is package-lock.json
               conflicting_files=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
@@ -121,10 +132,7 @@ jobs:
 
                 git add package-lock.json
                 if GIT_EDITOR=true git rebase --continue 2>/dev/null; then
-                  git push --force-with-lease origin "HEAD:${branch}"
-                  echo "  ✓ Lockfile conflict resolved, rebased and pushed"
-                  echo "- **PR #${pr_number}** (\`${branch}\`): ✅ Lockfile conflict resolved, rebased and pushed" >> "$GITHUB_STEP_SUMMARY"
-                  rebased=$((rebased + 1))
+                  rebase_ok=true
                 else
                   git rebase --abort 2>/dev/null || true
                   echo "  ✗ Rebase --continue failed after lockfile resolve"
@@ -139,13 +147,33 @@ jobs:
               fi
             fi
 
+            if [ "$rebase_ok" = true ]; then
+              # Check for no-op: if the diff vs main is empty (or lockfile-only), this PR is redundant
+              diff_vs_main=$(git diff --name-only main..HEAD -- ':!package-lock.json' 2>/dev/null || true)
+
+              if [ -z "$diff_vs_main" ] && [ "$AUTO_CLOSE_NOOP" = "true" ]; then
+                echo "  → No-op detected: no meaningful diff vs main after rebase"
+                gh pr close "$pr_number" \
+                  --comment "Auto-closed: after rebasing onto main, this PR has no meaningful changes remaining (all changes were already merged via other PRs)." \
+                  --delete-branch 2>/dev/null || true
+                echo "  ✓ Closed as no-op"
+                echo "- **PR #${pr_number}** (\`${branch}\`): 🗑️ Auto-closed — no-op (changes already on main)" >> "$GITHUB_STEP_SUMMARY"
+                closed=$((closed + 1))
+              else
+                git push --force-with-lease origin "HEAD:${branch}"
+                echo "  ✓ Rebased and pushed"
+                echo "- **PR #${pr_number}** (\`${branch}\`): ✅ Rebased and pushed" >> "$GITHUB_STEP_SUMMARY"
+                rebased=$((rebased + 1))
+              fi
+            fi
+
             # Return to main for next iteration
             git checkout main 2>/dev/null || true
 
           done <<< "$prs"
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Summary:** ${rebased} rebased, ${skipped} skipped, ${failed} failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Summary:** ${rebased} rebased, ${closed} closed (no-op), ${skipped} skipped, ${failed} failed" >> "$GITHUB_STEP_SUMMARY"
 
           echo "──────────────────────────────────────"
-          echo "Done: ${rebased} rebased, ${skipped} skipped, ${failed} failed"
+          echo "Done: ${rebased} rebased, ${closed} closed (no-op), ${skipped} skipped, ${failed} failed"
