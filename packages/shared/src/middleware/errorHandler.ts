@@ -156,9 +156,9 @@ export function errorHandler(
       error: {
         code: ErrorCode.VALIDATION_ERROR,
         message: 'Validation failed',
-        details: err.errors.map((e) => ({
-          path: e.path.join('.'),
-          message: e.message,
+        details: err.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
         })),
       },
     });

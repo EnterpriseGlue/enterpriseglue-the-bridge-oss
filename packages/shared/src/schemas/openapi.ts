@@ -432,7 +432,7 @@ registry.registerPath({
   responses: {
     200: {
       description: 'Active activity counts by activity ID',
-      content: { 'application/json': { schema: z.record(z.number()) } },
+      content: { 'application/json': { schema: z.record(z.string(), z.number()) } },
     },
   },
 });
@@ -792,7 +792,7 @@ registry.register('CreateBatchResponse', CreateBatchResponse)
 
 const CreateDeleteBatchRequest = z.object({
   processInstanceIds: z.array(z.string()).optional(),
-  processInstanceQuery: z.record(z.any()).optional(),
+  processInstanceQuery: z.record(z.string(), z.any()).optional(),
   deleteReason: z.string().optional(),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
@@ -803,7 +803,7 @@ registry.register('CreateDeleteBatchRequest', CreateDeleteBatchRequest)
 
 const CreateSuspendActivateBatchRequest = z.object({
   processInstanceIds: z.array(z.string()).optional(),
-  processInstanceQuery: z.record(z.any()).optional(),
+  processInstanceQuery: z.record(z.string(), z.any()).optional(),
   suspended: z.boolean().optional(),
 })
 registry.register('CreateSuspendActivateBatchRequest', CreateSuspendActivateBatchRequest)
@@ -974,7 +974,7 @@ registry.registerPath({
 
 // POST /mission-control-api/migration/active-sources
 const ActiveSourcesRequest = z.object({ processInstanceIds: z.array(z.string()) })
-const ActiveSourcesResponse = z.record(z.number())
+const ActiveSourcesResponse = z.record(z.string(), z.number())
 registry.register('ActiveSourcesRequest', ActiveSourcesRequest)
 registry.register('ActiveSourcesResponse', ActiveSourcesResponse)
 registry.registerPath({
@@ -1652,7 +1652,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/process-definitions/key/{key}/start',
-  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ variables: z.record(z.unknown()).optional(), businessKey: z.string().optional() }) } } } },
+  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ variables: z.record(z.string(), z.unknown()).optional(), businessKey: z.string().optional() }) } } } },
   responses: { 200: { description: 'Process instance started', content: { 'application/json': { schema: z.unknown() } } } },
 });
 
@@ -1692,7 +1692,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/process-instances/{id}/variables',
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({ modifications: z.record(z.unknown()) }) } } } },
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({ modifications: z.record(z.string(), z.unknown()) }) } } } },
   responses: { 204: { description: 'Variables modified' } },
 });
 
@@ -1737,7 +1737,7 @@ registry.registerPath({
   method: 'get',
   path: '/vcs-api/projects/uncommitted-status',
   request: { query: z.object({ projectIds: z.string() }) },
-  responses: { 200: { description: 'Batch uncommitted status', content: { 'application/json': { schema: z.object({ statuses: z.record(z.object({ hasUncommittedChanges: z.boolean(), dirtyFileCount: z.number() })) }) } } } },
+  responses: { 200: { description: 'Batch uncommitted status', content: { 'application/json': { schema: z.object({ statuses: z.record(z.string(), z.object({ hasUncommittedChanges: z.boolean(), dirtyFileCount: z.number() })) }) } } } },
 });
 
 // POST /vcs-api/projects/:projectId/commit

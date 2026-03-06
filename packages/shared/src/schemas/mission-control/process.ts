@@ -27,7 +27,7 @@ export const ProcessInstanceSchema = z.object({
 });
 
 // Variables schema
-export const VariablesSchema = z.record(z.object({ value: z.any(), type: z.string() }));
+export const VariablesSchema = z.record(z.string(), z.object({ value: z.any(), type: z.string() }));
 
 // Activity instance schema
 export const ActivityInstanceSchema = z.object({

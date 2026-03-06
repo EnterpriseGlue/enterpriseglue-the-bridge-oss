@@ -24,8 +24,8 @@ const authzCheckSchema = z.object({
   action: z.string().min(1),
   resourceType: z.string().optional(),
   resourceId: z.string().optional(),
-  userAttributes: z.record(z.unknown()).optional(),
-  resourceAttributes: z.record(z.unknown()).optional(),
+  userAttributes: z.record(z.string(), z.unknown()).optional(),
+  resourceAttributes: z.record(z.string(), z.unknown()).optional(),
 });
 
 const authzCheckBatchSchema = z.object({
@@ -40,7 +40,7 @@ const policyCreateSchema = z.object({
   effect: z.enum(['allow', 'deny']),
   resourceType: z.string().optional(),
   action: z.string().optional(),
-  conditions: z.record(z.unknown()).optional(),
+  conditions: z.record(z.string(), z.unknown()).optional(),
   priority: z.number().int().min(0).optional(),
 });
 
@@ -58,7 +58,7 @@ const ssoMappingCreateSchema = z.object({
 const ssoMappingUpdateSchema = ssoMappingCreateSchema.partial();
 
 const ssoMappingTestSchema = z.object({
-  claims: z.record(z.unknown()),
+  claims: z.record(z.string(), z.unknown()),
   providerId: z.string().min(1).optional(),
 });
 
