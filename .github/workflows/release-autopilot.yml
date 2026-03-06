@@ -18,9 +18,7 @@ concurrency:
 
 jobs:
   enable-automerge:
-    if: >-
-      github.event.pull_request.state == 'open' &&
-      (github.event.action != 'labeled' || github.actor != 'github-actions[bot]')
+    if: github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate autopilot eligibility
@@ -80,6 +78,7 @@ jobs:
 
       - name: Enable GitHub auto-merge
         if: steps.evaluate.outputs.should_enable == 'true'
+        continue-on-error: true
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
