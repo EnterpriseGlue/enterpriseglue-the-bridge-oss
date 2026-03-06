@@ -96,8 +96,8 @@ jobs:
             if grep -Eq '^(frontend/|packages/contracts/|package\.json|package-lock\.json)' <<< "$CHANGED_FILES"; then frontend_changed=true; ci_only=false; fi
             if grep -Eq '^(infra/docker/|infra/kubernetes/|scripts/smoke-images-local\.sh|backend/Dockerfile\.prod|frontend/Dockerfile\.prod)' <<< "$CHANGED_FILES"; then infra_changed=true; ci_only=false; fi
             if grep -Eq '^backend/src/shared/db/|^backend/src/shared/config/|^backend/src/modules/.*/.*(db|migration)|^backend/.+migration' <<< "$CHANGED_FILES"; then db_changed=true; ci_only=false; fi
-            # Files that don't need application tests: docs, workflow configs, markdown
-            if grep -Evq '^(docs/|README\.md|CHANGELOG\.md|\.github/|local-docs/)' <<< "$CHANGED_FILES"; then ci_only=false; fi
+            # Files that don't need application tests: docs, workflow configs, policies
+            if grep -Evq '^(docs/|README\.md|CHANGELOG\.md|CODE_OF_CONDUCT\.md|CONTRIBUTING\.md|LICENSE|SECURITY\.md|SUPPORT\.md|THIRD_PARTY_NOTICES\.md|third_party_licenses\.json|\.github/|local-docs/|\.sync/|\.windsurf/|\.vscode/|archive/)' <<< "$CHANGED_FILES"; then ci_only=false; fi
 
             run_tests=false
             run_postgres=false

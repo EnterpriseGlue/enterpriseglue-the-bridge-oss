@@ -60,7 +60,7 @@ jobs:
       # -- Trivy scans --------------------------------------------------------
 
       - name: Trivy scan backend image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.34.2
         with:
           image-ref: ${{ inputs.backend_image_ref }}
           format: 'json'
@@ -71,7 +71,7 @@ jobs:
           trivyignores: '.trivyignore'
 
       - name: Trivy scan frontend image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.34.2
         with:
           image-ref: ${{ inputs.frontend_image_ref }}
           format: 'json'
@@ -85,7 +85,7 @@ jobs:
 
       - name: Upload scan artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-nightly-${{ github.run_id }}
           path: |

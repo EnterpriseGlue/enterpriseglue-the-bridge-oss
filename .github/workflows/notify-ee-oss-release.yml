@@ -1,0 +1,34 @@
+name: Notify EE on OSS Release
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+jobs:
+  notify-ee:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch OSS release event to EE
+        env:
+          GH_TOKEN: ${{ secrets.OSS_EE_SYNC_TOKEN != '' && secrets.OSS_EE_SYNC_TOKEN || secrets.RELEASE_PLEASE_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "No OSS_EE_SYNC_TOKEN or RELEASE_PLEASE_TOKEN configured; skipping EE dispatch."
+            exit 0
+          fi
+
+          gh api repos/EnterpriseGlue/enterpriseglue-the-bridge-ee/dispatches \
+            -f event_type='oss-release-published' \
+            -F client_payload[oss_repo]="$GITHUB_REPOSITORY" \
+            -F client_payload[oss_tag]="$RELEASE_TAG" \
+            -F client_payload[oss_release_url]="$RELEASE_URL"
+
+          echo "Triggered EE OSS package sync for ${RELEASE_TAG}."

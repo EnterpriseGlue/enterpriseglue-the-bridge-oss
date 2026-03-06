@@ -199,7 +199,7 @@ jobs:
 
             const fallback = deterministicFallback(pr.title, pr.body || '', changedPaths);
             const safeTitle = typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim() : fallback.title;
-            const safeLabel = releaseLabels.includes(parsed.release_label) ? parsed.release_label : fallback.release_label;
+            let safeLabel = releaseLabels.includes(parsed.release_label) ? parsed.release_label : fallback.release_label;
             const safeImpact = ['patch', 'minor', 'major'].includes(parsed.impact) ? parsed.impact : fallback.impact;
             const safeConfidence = Number.isFinite(Number(parsed.confidence)) ? Number(parsed.confidence) : fallback.confidence;
             const safeReasoning = typeof parsed.reasoning === 'string' && parsed.reasoning.trim()
@@ -252,6 +252,15 @@ jobs:
               const bang = releaseLabel === 'release:breaking' ? '!' : '';
               return `${targetType}${rawScope || fallbackScope}${bang}: ${summary}`;
             };
+            const preliminaryTitle = coerceTitleForReleaseLabel(safeTitle, safeLabel);
+            const preliminaryTitleMatch = String(preliminaryTitle || '').trim().match(/^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s.+$/i);
+            const preliminaryType = preliminaryTitleMatch ? preliminaryTitleMatch[1].toLowerCase() : '';
+            const preliminaryIsBreaking = Boolean(preliminaryTitleMatch && preliminaryTitleMatch[3]);
+            const internalOnlyTypes = new Set(['ci', 'chore', 'build', 'test']);
+            if (!preliminaryIsBreaking && internalOnlyTypes.has(preliminaryType)) {
+              safeLabel = 'release:internal';
+            }
+
             const compatibleTitle = coerceTitleForReleaseLabel(safeTitle, safeLabel);
 
             core.setOutput('status', 'ok');
@@ -325,15 +334,21 @@ jobs:
         with:
           script: |
             const pr = context.payload.pull_request;
-            const labels = (pr.labels || []).map((l) => l.name);
+            const { data: freshPR } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+
+            const labels = (freshPR.labels || []).map((l) => l.name);
             const hasApplyLabel = labels.includes('ai:apply');
             const autofixEnabled = String(process.env.AUTOFIX_ENABLED || 'false').toLowerCase() === 'true';
             const shouldApplyTitle = autofixEnabled || hasApplyLabel;
             const allowForkAutofix = String(process.env.AUTOFIX_ALLOW_FORKS || 'false').toLowerCase() === 'true';
 
-            const isFork = Boolean(pr.head?.repo?.fork);
+            const isFork = Boolean(freshPR.head?.repo?.fork);
             const trustedAssociations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
-            const authorAssociation = String(pr.author_association || '').toUpperCase();
+            const authorAssociation = String(freshPR.author_association || '').toUpperCase();
 
             const releaseLabel = process.env.RELEASE_LABEL;
             const suggestedTitle = process.env.SUGGESTED_TITLE;
@@ -388,6 +403,44 @@ jobs:
               'release:internal'
             ];
             let effectiveReleaseLabel = releaseLabelPriority.find((label) => existingReleaseLabels.includes(label)) || releaseLabel;
+
+            const titleMatch = String(freshPR.title || '').match(/^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s.+$/i);
+            const titleType = titleMatch ? titleMatch[1].toLowerCase() : '';
+            const titleIsBreaking = Boolean(titleMatch && titleMatch[3]) || /breaking\s+change/i.test(String(freshPR.body || ''));
+            const internalOnlyTypes = new Set(['ci', 'chore', 'build', 'test']);
+
+            let targetReleaseLabel = releaseLabel && allowedReleaseLabels.has(releaseLabel)
+              ? releaseLabel
+              : (releaseLabelPriority.find((label) => existingReleaseLabels.includes(label)) || 'release:internal');
+
+            if (titleIsBreaking) {
+              targetReleaseLabel = 'release:breaking';
+            } else if (internalOnlyTypes.has(titleType)) {
+              targetReleaseLabel = 'release:internal';
+            }
+
+            await ensureLabelExists(targetReleaseLabel);
+            for (const label of existingReleaseLabels) {
+              if (label === targetReleaseLabel) continue;
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                name: label,
+              });
+            }
+
+            if (!existingReleaseLabels.includes(targetReleaseLabel)) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: [targetReleaseLabel],
+              });
+              core.notice(`Set release label: ${targetReleaseLabel}`);
+            }
+
+            effectiveReleaseLabel = targetReleaseLabel;
 
             const allowedLabelsByType = {
               feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:compat']),
@@ -446,37 +499,6 @@ jobs:
               return `${targetType}${scope}${bang}: ${summary}`;
             };
 
-            if (releaseLabel && allowedReleaseLabels.has(releaseLabel) && existingReleaseLabels.length === 0) {
-              await ensureLabelExists(releaseLabel);
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                labels: [releaseLabel],
-              });
-              core.notice(`Added release label: ${releaseLabel}`);
-            }
-
-            const hasOnlyInternalLabel = existingReleaseLabels.length === 1 && existingReleaseLabels[0] === 'release:internal';
-            const shouldUpgradeInternal = hasOnlyInternalLabel && releaseLabel && releaseLabel !== 'release:internal' && allowedReleaseLabels.has(releaseLabel);
-            if (shouldUpgradeInternal) {
-              await ensureLabelExists(releaseLabel);
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                name: 'release:internal',
-              });
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                labels: [releaseLabel],
-              });
-              effectiveReleaseLabel = releaseLabel;
-              core.notice(`Upgraded release label from release:internal to ${releaseLabel}`);
-            }
-
             if (!shouldApplyTitle) {
               core.notice('Title auto-apply disabled. Advisory mode for title updates.');
               return;
@@ -492,8 +514,8 @@ jobs:
               return;
             }
 
-            const desiredTitle = coerceTitleForReleaseLabel(suggestedTitle || pr.title, effectiveReleaseLabel);
-            if (desiredTitle && desiredTitle !== pr.title) {
+            const desiredTitle = coerceTitleForReleaseLabel(suggestedTitle || freshPR.title, effectiveReleaseLabel);
+            if (desiredTitle && desiredTitle !== freshPR.title) {
               await github.rest.pulls.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
