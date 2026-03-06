@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.31](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.30...v0.4.31) (2026-03-06)
+
+
+### Bug Fixes
+
+* **security:** address codeql incomplete multi-character sanitization ([#97](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/97)) ([15cb2b5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/15cb2b53b0a66eb28bbbb446d252028234857265))
+
 ## [0.4.30](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.29...v0.4.30) (2026-03-05)
 
 
