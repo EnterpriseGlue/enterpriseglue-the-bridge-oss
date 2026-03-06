@@ -18,7 +18,7 @@ export const ExternalTaskSchema = z.object({
   priority: z.number().optional(),
   suspended: z.boolean().optional(),
   tenantId: z.string().optional().nullable(),
-  variables: z.record(z.object({
+  variables: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string(),
   })).optional(),
@@ -41,7 +41,7 @@ export const FetchAndLockRequest = z.object({
     processDefinitionIdIn: z.array(z.string()).optional(),
     processDefinitionKey: z.string().optional(),
     processDefinitionKeyIn: z.array(z.string()).optional(),
-    processVariables: z.record(z.any()).optional(),
+    processVariables: z.record(z.string(), z.any()).optional(),
     withoutTenantId: z.boolean().optional(),
     tenantIdIn: z.array(z.string()).optional(),
   })),
@@ -49,11 +49,11 @@ export const FetchAndLockRequest = z.object({
 
 export const CompleteExternalTaskRequest = z.object({
   workerId: z.string(),
-  variables: z.record(z.object({
+  variables: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string().optional(),
   })).optional(),
-  localVariables: z.record(z.object({
+  localVariables: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string().optional(),
   })).optional(),
@@ -71,7 +71,7 @@ export const ExternalTaskBpmnErrorRequest = z.object({
   workerId: z.string(),
   errorCode: z.string(),
   errorMessage: z.string().optional(),
-  variables: z.record(z.object({
+  variables: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string().optional(),
   })).optional(),

@@ -1,4 +1,10 @@
 {
+  "@asteasolutions/zod-to-openapi@8.4.3": {
+    "licenses": "MIT",
+    "repository": "https://github.com/asteasolutions/zod-to-openapi",
+    "publisher": "Astea Solutions",
+    "email": "info@asteasolutions.com"
+  },
   "@kwsites/file-exists@1.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/kwsites/file-exists",
@@ -21,10 +27,27 @@
     "licenses": "MIT",
     "repository": "https://github.com/vercel/ms"
   },
+  "openapi3-ts@4.5.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/metadevpro/openapi3-ts",
+    "publisher": "Pedro J. Molina / Metadev"
+  },
   "simple-git@3.32.3": {
     "licenses": "MIT",
     "repository": "https://github.com/steveukx/git-js",
     "publisher": "Steve King",
     "email": "steve@mydev.co"
+  },
+  "yaml@2.8.2": {
+    "licenses": "ISC",
+    "repository": "https://github.com/eemeli/yaml",
+    "publisher": "Eemeli Aro",
+    "email": "eemeli@gmail.com"
+  },
+  "zod@4.3.6": {
+    "licenses": "MIT",
+    "repository": "https://github.com/colinhacks/zod",
+    "publisher": "Colin McDonnell",
+    "email": "zod@colinhacks.com"
   }
 }

@@ -22,7 +22,7 @@
     "db:cleanup-test-data": "tsx scripts/cleanup-test-data.ts"
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "^7.1.0",
+    "@asteasolutions/zod-to-openapi": "^8.4.3",
     "@azure/msal-node": "^5.0.6",
     "@gitbeaker/rest": "^43.8.0",
     "@node-saml/node-saml": "^5.1.0",
@@ -51,7 +51,7 @@
     "swagger-ui-express": "^5.0.0",
     "typeorm": "^0.3.28",
     "undici": "^7.18.2",
-    "zod": "^3.23.8"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@enterpriseglue/shared": "*",

@@ -160,7 +160,7 @@ router.post('/api/admin/email-configs', apiLimiter, requireAuth, requirePermissi
   } catch (error: any) {
     if (error instanceof AppError) throw error;
     if (error instanceof z.ZodError) {
-      throw Errors.validation('Validation failed', error.errors);
+      throw Errors.validation('Validation failed', error.issues);
     }
     logger.error('Create email config error:', error);
     throw Errors.internal('Failed to create email configuration');
@@ -218,7 +218,7 @@ router.patch('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePer
   } catch (error: any) {
     if (error instanceof AppError) throw error;
     if (error instanceof z.ZodError) {
-      throw Errors.validation('Validation failed', error.errors);
+      throw Errors.validation('Validation failed', error.issues);
     }
     logger.error('Update email config error:', error);
     throw Errors.internal('Failed to update email configuration');

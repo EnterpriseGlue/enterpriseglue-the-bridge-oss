@@ -1,8 +1,12 @@
 import { z } from 'zod';
 import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3 } from '@asteasolutions/zod-to-openapi';
 
-// Import Starbase schemas
-import {
+// Extend zod BEFORE loading schema modules — zod 4 requires this to run
+// before any schema is created so that .openapi() is available on instances.
+extendZodWithOpenApi(z);
+
+// Dynamic imports ensure schema modules evaluate AFTER extendZodWithOpenApi.
+const {
   ProjectSchema,
   CreateProjectRequest,
   RenameProjectRequest,
@@ -21,22 +25,20 @@ import {
   UpdateFolderRequest,
   ProjectContentsSchema,
   FolderDeletePreviewSchema,
-} from '@enterpriseglue/shared/schemas/starbase/index.js';
+} = await import('@enterpriseglue/shared/schemas/starbase/index.js');
 
-// Import Mission Control schemas
-import {
+const {
   EngineSchema,
   EngineSchemaRaw,
   SavedFilterSchema,
   SavedFilterSchemaRaw,
   BatchSchema,
-  ProcessDefinitionSchema as MissionControlProcessDefinitionSchema,
-  ProcessDefXmlSchema as MissionControlProcessDefXmlSchema,
-  ProcessInstanceSchema as MissionControlProcessInstanceSchema,
-  VariablesSchema as MissionControlVariablesSchema,
-  ActivityInstanceSchema as MissionControlActivityInstanceSchema,
+  ProcessDefinitionSchema: MissionControlProcessDefinitionSchema,
+  ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
+  ProcessInstanceSchema: MissionControlProcessInstanceSchema,
+  VariablesSchema: MissionControlVariablesSchema,
+  ActivityInstanceSchema: MissionControlActivityInstanceSchema,
   PreviewCountRequest,
-  // New schemas
   DeploymentSchema,
   DeploymentQueryParams,
   TaskSchema,
@@ -76,15 +78,13 @@ import {
   UserOperationLogQueryParams,
   MetricSchema,
   MetricsQueryParams,
-  // Modify/Restart
   ModificationInstructionSchema,
   ProcessInstanceModificationRequest,
   ProcessDefinitionModificationAsyncRequest,
   ProcessDefinitionRestartAsyncRequest,
-} from './mission-control/index.js';
+} = await import('./mission-control/index.js');
 
-// Import Git schemas
-import {
+const {
   RepositorySelectSchema,
   InitRepositoryRequestSchema,
   CloneRepositoryRequestSchema,
@@ -93,9 +93,7 @@ import {
   DeploymentResponseSchema,
   AcquireLockRequestSchema,
   LockResponseSchema,
-} from '@enterpriseglue/shared/schemas/git/index.js';
-
-extendZodWithOpenApi(z);
+} = await import('@enterpriseglue/shared/schemas/git/index.js');
 
 const registry = new OpenAPIRegistry();
 
@@ -432,7 +430,7 @@ registry.registerPath({
   responses: {
     200: {
       description: 'Active activity counts by activity ID',
-      content: { 'application/json': { schema: z.record(z.number()) } },
+      content: { 'application/json': { schema: z.record(z.string(), z.number()) } },
     },
   },
 });
@@ -792,7 +790,7 @@ registry.register('CreateBatchResponse', CreateBatchResponse)
 
 const CreateDeleteBatchRequest = z.object({
   processInstanceIds: z.array(z.string()).optional(),
-  processInstanceQuery: z.record(z.any()).optional(),
+  processInstanceQuery: z.record(z.string(), z.any()).optional(),
   deleteReason: z.string().optional(),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
@@ -803,7 +801,7 @@ registry.register('CreateDeleteBatchRequest', CreateDeleteBatchRequest)
 
 const CreateSuspendActivateBatchRequest = z.object({
   processInstanceIds: z.array(z.string()).optional(),
-  processInstanceQuery: z.record(z.any()).optional(),
+  processInstanceQuery: z.record(z.string(), z.any()).optional(),
   suspended: z.boolean().optional(),
 })
 registry.register('CreateSuspendActivateBatchRequest', CreateSuspendActivateBatchRequest)
@@ -974,7 +972,7 @@ registry.registerPath({
 
 // POST /mission-control-api/migration/active-sources
 const ActiveSourcesRequest = z.object({ processInstanceIds: z.array(z.string()) })
-const ActiveSourcesResponse = z.record(z.number())
+const ActiveSourcesResponse = z.record(z.string(), z.number())
 registry.register('ActiveSourcesRequest', ActiveSourcesRequest)
 registry.register('ActiveSourcesResponse', ActiveSourcesResponse)
 registry.registerPath({
@@ -1265,7 +1263,7 @@ registry.registerPath({
 // -----------------------------
 // Platform Admin API
 // -----------------------------
-import {
+const {
   EnvironmentTagSchema,
   CreateEnvironmentTagRequest,
   UpdateEnvironmentTagRequest,
@@ -1290,7 +1288,7 @@ import {
   UserSearchResultSchema,
   UserListItemSchema,
   SuccessResponseSchema,
-} from '@enterpriseglue/shared/schemas/platform-admin/index.js';
+} = await import('@enterpriseglue/shared/schemas/platform-admin/index.js');
 
 // Environment Tags
 registry.register('EnvironmentTag', EnvironmentTagSchema);
@@ -1652,7 +1650,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/process-definitions/key/{key}/start',
-  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ variables: z.record(z.unknown()).optional(), businessKey: z.string().optional() }) } } } },
+  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ variables: z.record(z.string(), z.unknown()).optional(), businessKey: z.string().optional() }) } } } },
   responses: { 200: { description: 'Process instance started', content: { 'application/json': { schema: z.unknown() } } } },
 });
 
@@ -1692,7 +1690,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/process-instances/{id}/variables',
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({ modifications: z.record(z.unknown()) }) } } } },
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({ modifications: z.record(z.string(), z.unknown()) }) } } } },
   responses: { 204: { description: 'Variables modified' } },
 });
 
@@ -1737,7 +1735,7 @@ registry.registerPath({
   method: 'get',
   path: '/vcs-api/projects/uncommitted-status',
   request: { query: z.object({ projectIds: z.string() }) },
-  responses: { 200: { description: 'Batch uncommitted status', content: { 'application/json': { schema: z.object({ statuses: z.record(z.object({ hasUncommittedChanges: z.boolean(), dirtyFileCount: z.number() })) }) } } } },
+  responses: { 200: { description: 'Batch uncommitted status', content: { 'application/json': { schema: z.object({ statuses: z.record(z.string(), z.object({ hasUncommittedChanges: z.boolean(), dirtyFileCount: z.number() })) }) } } } },
 });
 
 // POST /vcs-api/projects/:projectId/commit

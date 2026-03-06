@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 
 /**
  * Standard error codes for the application
@@ -156,7 +156,7 @@ export function errorHandler(
       error: {
         code: ErrorCode.VALIDATION_ERROR,
         message: 'Validation failed',
-        details: err.errors.map((e) => ({
+        details: err.issues.map((e: z.ZodIssue) => ({
           path: e.path.join('.'),
           message: e.message,
         })),

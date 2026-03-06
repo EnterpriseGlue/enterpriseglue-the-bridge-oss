@@ -39,7 +39,9 @@
     "ci:watch:trigger": "bash ./scripts/ci-watch.sh docker-images --trigger"
   },
   "dependencies": {
-    "simple-git": "^3.30.0"
+    "@asteasolutions/zod-to-openapi": "^8.4.3",
+    "simple-git": "^3.30.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0"

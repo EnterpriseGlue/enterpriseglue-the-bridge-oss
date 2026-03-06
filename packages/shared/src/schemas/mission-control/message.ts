@@ -25,19 +25,19 @@ export const CorrelateMessageRequest = z.object({
   tenantId: z.string().optional(),
   withoutTenantId: z.boolean().optional(),
   processInstanceId: z.string().optional(),
-  correlationKeys: z.record(z.object({
+  correlationKeys: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string().optional(),
   })).optional(),
-  localCorrelationKeys: z.record(z.object({
+  localCorrelationKeys: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string().optional(),
   })).optional(),
-  processVariables: z.record(z.object({
+  processVariables: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string().optional(),
   })).optional(),
-  processVariablesLocal: z.record(z.object({
+  processVariablesLocal: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string().optional(),
   })).optional(),
@@ -50,7 +50,7 @@ export const CorrelateMessageRequest = z.object({
 export const SignalEventSchema = z.object({
   name: z.string(),
   executionId: z.string().optional(),
-  variables: z.record(z.object({
+  variables: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string().optional(),
   })).optional(),

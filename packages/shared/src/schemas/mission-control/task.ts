@@ -34,7 +34,7 @@ export const TaskFormSchema = z.object({
     type: z.string(),
     defaultValue: z.any().optional().nullable(),
     validationConstraints: z.array(z.any()).optional(),
-    properties: z.record(z.any()).optional(),
+    properties: z.record(z.string(), z.any()).optional(),
   })).optional(),
 });
 
@@ -80,7 +80,7 @@ export const SetAssigneeRequest = z.object({
 });
 
 export const CompleteTaskRequest = z.object({
-  variables: z.record(z.object({
+  variables: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string().optional(),
   })).optional(),
@@ -88,7 +88,7 @@ export const CompleteTaskRequest = z.object({
 });
 
 export const TaskVariablesRequest = z.object({
-  modifications: z.record(z.object({
+  modifications: z.record(z.string(), z.object({
     value: z.any(),
     type: z.string().optional(),
   })).optional(),

@@ -29,7 +29,7 @@ export function validateBody<T extends z.ZodTypeAny>(schema: T) {
       if (error instanceof ZodError) {
         return res.status(400).json({
           error: 'Validation failed',
-          issues: error.errors.map(err => ({
+          issues: error.issues.map((err: z.ZodIssue) => ({
             path: err.path.join('.'),
             message: err.message,
             code: err.code,
@@ -62,7 +62,7 @@ export function validateQuery<T extends z.ZodTypeAny>(schema: T) {
       if (error instanceof ZodError) {
         return res.status(400).json({
           error: 'Invalid query parameters',
-          issues: error.errors.map(err => ({
+          issues: error.issues.map((err: z.ZodIssue) => ({
             path: err.path.join('.'),
             message: err.message,
             code: err.code,
@@ -89,13 +89,13 @@ export function validateQuery<T extends z.ZodTypeAny>(schema: T) {
 export function validateParams<T extends z.ZodTypeAny>(schema: T) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      req.params = schema.parse(req.params);
+      req.params = schema.parse(req.params) as any;
       next();
     } catch (error) {
       if (error instanceof ZodError) {
         return res.status(400).json({
           error: 'Invalid route parameters',
-          issues: error.errors.map(err => ({
+          issues: error.issues.map((err: z.ZodIssue) => ({
             path: err.path.join('.'),
             message: err.message,
             code: err.code,
@@ -138,7 +138,7 @@ export function validateResponse<T extends z.ZodTypeAny>(schema: T) {
           if (error instanceof ZodError) {
             return originalJson({
               error: 'Response validation failed (development only)',
-              issues: error.errors.map(err => ({
+              issues: error.issues.map((err: z.ZodIssue) => ({
                 path: err.path.join('.'),
                 message: err.message,
               })),

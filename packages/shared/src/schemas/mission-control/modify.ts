@@ -6,19 +6,19 @@ export const ModificationInstructionSchema = z.discriminatedUnion('type', [
     type: z.literal('startBeforeActivity'),
     activityId: z.string(),
     ancestorActivityInstanceId: z.string().optional(),
-    variables: z.record(z.any()).optional(),
+    variables: z.record(z.string(), z.any()).optional(),
   }),
   z.object({
     type: z.literal('startAfterActivity'),
     activityId: z.string(),
     ancestorActivityInstanceId: z.string().optional(),
-    variables: z.record(z.any()).optional(),
+    variables: z.record(z.string(), z.any()).optional(),
   }),
   z.object({
     type: z.literal('startTransition'),
     transitionId: z.string(),
     ancestorActivityInstanceId: z.string().optional(),
-    variables: z.record(z.any()).optional(),
+    variables: z.record(z.string(), z.any()).optional(),
   }),
   z.object({
     type: z.literal('cancel'),
@@ -40,7 +40,7 @@ export const ProcessInstanceModificationRequest = z.object({
 export const ProcessDefinitionModificationAsyncRequest = z.object({
   instructions: z.array(ModificationInstructionSchema).min(1),
   processInstanceIds: z.array(z.string()).optional(),
-  processInstanceQuery: z.record(z.any()).optional(),
+  processInstanceQuery: z.record(z.string(), z.any()).optional(),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
 })
@@ -48,7 +48,7 @@ export const ProcessDefinitionModificationAsyncRequest = z.object({
 // Async restart of completed instances by definition
 export const ProcessDefinitionRestartAsyncRequest = z.object({
   processInstanceIds: z.array(z.string()).optional(),
-  historicProcessInstanceQuery: z.record(z.any()).optional(),
+  historicProcessInstanceQuery: z.record(z.string(), z.any()).optional(),
   initialVariables: z.boolean().optional(),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
