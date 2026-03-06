@@ -10,6 +10,7 @@ on:
       - ready_for_review
       - labeled
       - unlabeled
+  merge_group:
 
 permissions:
   contents: read
@@ -25,7 +26,8 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             if (!pr) {
-              core.setFailed('No pull request payload found.');
+              // merge_group events have no PR payload — pass through
+              core.notice('No pull request context (merge_group). Skipping release policy check.');
               return;
             }
 
