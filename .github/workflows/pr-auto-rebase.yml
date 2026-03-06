@@ -1,132 +1,16 @@
 name: PR Auto-Rebase
 
-# Automatically rebase open PRs that become conflicting after a push to main.
-# Handles lockfile-only conflicts by regenerating package-lock.json.
-# Skips Release Please PRs (they self-manage) and draft PRs.
-
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
-permissions:
-  contents: write
-  pull-requests: read
 
 concurrency:
   group: pr-auto-rebase
   cancel-in-progress: false
 
 jobs:
-  rebase-conflicting-prs:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: '.nvmrc'
-
-      - name: Find and rebase conflicting PRs
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          echo "## PR Auto-Rebase Results" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          # List open, non-draft PRs
-          prs=$(gh pr list --state open --json number,headRefName,mergeable,isDraft,author \
-            --jq '.[] | select(.isDraft == false) | select(.author.login != "app/github-actions" and .author.login != "github-actions[bot]") | "\(.number) \(.headRefName) \(.mergeable)"')
-
-          if [ -z "$prs" ]; then
-            echo "No open non-draft PRs found."
-            echo "No open non-draft PRs to rebase." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          rebased=0
-          skipped=0
-          failed=0
-
-          while IFS=' ' read -r pr_number branch mergeable; do
-            echo "──────────────────────────────────────"
-            echo "PR #${pr_number} (${branch}): mergeable=${mergeable}"
-
-            # Skip PRs that don't need rebasing
-            if [ "$mergeable" != "CONFLICTING" ]; then
-              echo "  → Skipping: not conflicting"
-              skipped=$((skipped + 1))
-              continue
-            fi
-
-            # Skip release-please branches
-            if [[ "$branch" == release-please--* ]]; then
-              echo "  → Skipping: Release Please branch"
-              skipped=$((skipped + 1))
-              continue
-            fi
-
-            echo "  → Attempting rebase..."
-
-            # Fetch the branch
-            git fetch origin "$branch" 2>/dev/null || { echo "  ✗ Failed to fetch branch"; failed=$((failed + 1)); continue; }
-
-            # Create a temporary local branch
-            git checkout -B "rebase-tmp/${branch}" "origin/${branch}" 2>/dev/null || { echo "  ✗ Failed to checkout branch"; failed=$((failed + 1)); continue; }
-
-            # Attempt rebase
-            if git rebase main 2>/dev/null; then
-              echo "  ✓ Rebased cleanly"
-              git push --force-with-lease origin "HEAD:${branch}"
-              echo "  ✓ Pushed"
-              echo "- **PR #${pr_number}** (\`${branch}\`): ✅ Rebased and pushed" >> "$GITHUB_STEP_SUMMARY"
-              rebased=$((rebased + 1))
-            else
-              # Check if the only conflicting file is package-lock.json
-              conflicting_files=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
-              if [ "$conflicting_files" = "package-lock.json" ]; then
-                echo "  → Lockfile-only conflict, resolving..."
-
-                # Accept main's lockfile and regenerate
-                git checkout main -- package-lock.json
-                npm install --package-lock-only --no-audit --no-fund 2>/dev/null
-
-                git add package-lock.json
-                GIT_EDITOR=true git rebase --continue 2>/dev/null
-
-                if [ $? -eq 0 ]; then
-                  git push --force-with-lease origin "HEAD:${branch}"
-                  echo "  ✓ Lockfile conflict resolved, rebased and pushed"
-                  echo "- **PR #${pr_number}** (\`${branch}\`): ✅ Lockfile conflict resolved, rebased and pushed" >> "$GITHUB_STEP_SUMMARY"
-                  rebased=$((rebased + 1))
-                else
-                  git rebase --abort 2>/dev/null || true
-                  echo "  ✗ Rebase --continue failed after lockfile resolve"
-                  echo "- **PR #${pr_number}** (\`${branch}\`): ❌ Lockfile resolve succeeded but rebase failed" >> "$GITHUB_STEP_SUMMARY"
-                  failed=$((failed + 1))
-                fi
-              else
-                git rebase --abort 2>/dev/null || true
-                echo "  ✗ Non-lockfile conflicts: ${conflicting_files}"
-                echo "- **PR #${pr_number}** (\`${branch}\`): ⚠️ Skipped — non-lockfile conflicts require manual rebase" >> "$GITHUB_STEP_SUMMARY"
-                failed=$((failed + 1))
-              fi
-            fi
-
-            # Return to main for next iteration
-            git checkout main 2>/dev/null || true
-
-          done <<< "$prs"
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Summary:** ${rebased} rebased, ${skipped} skipped, ${failed} failed" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "──────────────────────────────────────"
-          echo "Done: ${rebased} rebased, ${skipped} skipped, ${failed} failed"
+  auto-rebase:
+    uses: ./.github/workflows/pr-auto-rebase-reusable.yml
+    secrets:
+      push_token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
