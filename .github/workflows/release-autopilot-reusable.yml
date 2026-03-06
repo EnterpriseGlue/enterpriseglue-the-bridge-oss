@@ -1,0 +1,109 @@
+name: PR Autopilot Reusable
+
+on:
+  workflow_call:
+    inputs:
+      ai_autopilot_enabled:
+        description: Whether AI autopilot is enabled
+        required: false
+        type: string
+        default: 'false'
+      release_autopilot_enabled:
+        description: Whether release PR autopilot is enabled
+        required: false
+        type: string
+        default: 'false'
+      allowed_author:
+        description: Human author allowed for feature PR autopilot
+        required: false
+        type: string
+        default: haryselman
+    secrets:
+      release_please_token:
+        required: true
+
+jobs:
+  enable-automerge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Evaluate autopilot eligibility
+        id: evaluate
+        uses: actions/github-script@v7
+        env:
+          AI_AUTOPILOT_ENABLED: ${{ inputs.ai_autopilot_enabled }}
+          RELEASE_AUTOPILOT_ENABLED: ${{ inputs.release_autopilot_enabled }}
+          ALLOWED_AUTHOR: ${{ inputs.allowed_author }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const autopilotEnabled = String(process.env.AI_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
+            const releaseAutopilotEnabled = String(process.env.RELEASE_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
+            const authorLogin = String(pr.user?.login || '').toLowerCase();
+            const prTitle = String(pr.title || '').toLowerCase();
+            const prHeadRef = String(pr.head?.ref || '').toLowerCase();
+            const allowedAuthor = String(process.env.ALLOWED_AUTHOR || 'haryselman').toLowerCase();
+            const isReleasePleaseBranch = (pr.head.ref || '').startsWith('release-please--branches--');
+            const isAllowedBotReleasePR = isReleasePleaseBranch && authorLogin.endsWith('[bot]');
+            const isDependabotAuthor = authorLogin.includes('dependabot');
+            const isTrivyActionBumpPR = prTitle.includes('aquasecurity/trivy-action') || prHeadRef.includes('aquasecurity/trivy-action');
+            const isAllowedDependabotTrivyPR = isDependabotAuthor && isTrivyActionBumpPR;
+            if (!autopilotEnabled) {
+              core.notice('AI_AUTOPILOT_ENABLED is false. Skipping autopilot merge.');
+              core.setOutput('should_enable', 'false');
+              return;
+            }
+
+            if (authorLogin !== allowedAuthor && !isAllowedBotReleasePR && !isAllowedDependabotTrivyPR) {
+              core.notice(`PR author is not ${allowedAuthor}, not an allowed release bot PR, and not a Dependabot Trivy-action bump PR. Skipping auto-merge.`);
+              core.setOutput('should_enable', 'false');
+              return;
+            }
+
+            if (pr.draft) {
+              core.notice('PR is still draft. Skipping auto-merge.');
+              core.setOutput('should_enable', 'false');
+              return;
+            }
+
+            const labels = (pr.labels || []).map((label) => label.name);
+
+            // Release Please PRs: opt-in (disabled by default)
+            const isReleasePleaseLabel = labels.includes('autorelease: pending') || labels.includes('autorelease: triggered');
+            const isReleasePR = isReleasePleaseBranch || isReleasePleaseLabel;
+
+            if (isReleasePR && !releaseAutopilotEnabled) {
+              core.notice('Release Please PR detected. Auto-merge is disabled by default (set RELEASE_AUTOPILOT_ENABLED=true to enable).');
+              core.setOutput('should_enable', 'false');
+              return;
+            }
+
+            // Feature PRs: eligible when they have a release:* label
+            const releaseLabels = new Set([
+              'release:breaking', 'release:feature', 'release:fix',
+              'release:security', 'release:docs', 'release:internal',
+              'release:deprecation', 'release:compat'
+            ]);
+            const hasReleaseLabel = labels.some((l) => releaseLabels.has(l));
+
+            if (!isReleasePR && !hasReleaseLabel) {
+              core.notice('PR has no release label yet. Auto-merge will activate once labeled.');
+              core.setOutput('should_enable', 'false');
+              return;
+            }
+
+            const prType = isReleasePR ? 'release' : 'feature';
+            core.setOutput('should_enable', 'true');
+            core.setOutput('pull_number', String(pr.number));
+            core.notice(`Autopilot enabled for ${prType} PR #${pr.number}. GitHub auto-merge will activate once all checks pass.`);
+
+      - name: Enable GitHub auto-merge
+        if: steps.evaluate.outputs.should_enable == 'true'
+        continue-on-error: true
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.release_please_token }}
+          pull-request-number: ${{ steps.evaluate.outputs.pull_number }}
+          merge-method: squash
