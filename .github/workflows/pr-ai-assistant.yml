@@ -59,6 +59,70 @@ jobs:
               return 'core';
             };
 
+            const analyzeChangeScope = (paths) => {
+              const bucketForPath = (path) => {
+                if (path.startsWith('.github/workflows/')) return 'ci';
+                if (path.startsWith('.github/')) return 'github';
+                if (path.startsWith('backend/')) return 'backend';
+                if (path.startsWith('frontend/')) return 'frontend';
+                if (path.startsWith('docs/') || path.endsWith('.md')) return 'docs';
+                if (path.startsWith('scripts/') || path.startsWith('docker-compose')) return 'ops';
+                return 'core';
+              };
+
+              const counts = new Map();
+              for (const path of paths) {
+                const bucket = bucketForPath(path);
+                counts.set(bucket, (counts.get(bucket) || 0) + 1);
+              }
+
+              const ordered = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+              const scopeSummary = ordered.slice(0, 3).map(([name, count]) => `${name} (${count})`).join(', ') || 'core';
+              const keyFiles = paths.slice(0, 5).join(', ') || 'n/a';
+
+              const risks = [];
+              if (counts.has('ci') || counts.has('github')) risks.push('workflow/release automation');
+              if (counts.has('backend')) risks.push('runtime behavior');
+              if (counts.has('frontend')) risks.push('UI behavior');
+              if (counts.has('ops')) risks.push('deployment/config');
+              const riskSummary = risks.join('; ') || 'low risk';
+
+              return { scopeSummary, riskSummary, keyFiles };
+            };
+
+            const buildFallbackSummary = (title, paths) => {
+              const scope = inferScope(paths);
+              const summaryBase = normalizeTitleSummary(title);
+              const topBuckets = [...new Set(paths.map((path) => {
+                if (path.startsWith('.github/workflows/')) return 'CI/workflows';
+                if (path.startsWith('.github/')) return 'GitHub automation';
+                if (path.startsWith('backend/')) return 'backend';
+                if (path.startsWith('frontend/')) return 'frontend';
+                if (path.startsWith('docs/') || path.endsWith('.md')) return 'documentation';
+                return 'core';
+              }))].slice(0, 3);
+
+              const areaSummary = topBuckets.length > 0 ? topBuckets.join(', ') : scope;
+              return [
+                `- ${summaryBase.charAt(0).toUpperCase()}${summaryBase.slice(1)}.`,
+                `- Main areas touched: ${areaSummary}.`,
+              ].join('\n');
+            };
+
+            const normalizeSummary = (summaryText, fallbackText) => {
+              const raw = String(summaryText || '').replace(/\\n/g, '\n').trim();
+              if (!raw) return fallbackText;
+
+              const lines = raw
+                .split('\n')
+                .map((line) => line.trim())
+                .filter(Boolean)
+                .slice(0, 5)
+                .map((line) => line.startsWith('- ') ? line : `- ${line.replace(/^[-*]\s*/, '')}`);
+
+              return lines.length > 0 ? lines.join('\n') : fallbackText;
+            };
+
             const deterministicFallback = (title, body, paths) => {
               const lowerTitle = String(title || '').toLowerCase();
               const lowerBody = String(body || '').toLowerCase();
@@ -108,13 +172,23 @@ jobs:
                 : normalizeTitleSummary(title);
               const bang = breaking ? '!' : '';
               const suggestedTitle = `${type}(${scope})${bang}: ${summary}`;
+              const confidence = breaking
+                ? 0.92
+                : security
+                  ? 0.84
+                  : docsOnly
+                    ? 0.86
+                    : (feature || fix)
+                      ? 0.74
+                      : 0.62;
 
               return {
                 title: suggestedTitle,
                 release_label: releaseLabel,
                 impact,
-                confidence: 0.55,
+                confidence,
                 reasoning: 'Fallback inference (keyword + file-path heuristic) was used.',
+                summary: buildFallbackSummary(title, paths),
               };
             };
 
@@ -130,6 +204,7 @@ jobs:
               const status = f.status;
               return `${f.filename} (${status}, +${f.additions}/-${f.deletions})`;
             }).join('\n');
+            const scopeInsight = analyzeChangeScope(changedPaths);
 
             if (!process.env.OPENAI_API_KEY) {
               core.notice('OPENAI_API_KEY is not configured. Using deterministic fallback suggestions.');
@@ -138,20 +213,26 @@ jobs:
               core.setOutput('suggested_title', fallback.title);
               core.setOutput('release_label', fallback.release_label);
               core.setOutput('impact', fallback.impact);
-              core.setOutput('confidence', String(fallback.confidence));
+              core.setOutput('confidence', fallback.confidence.toFixed(2));
               core.setOutput('reasoning', fallback.reasoning);
+              core.setOutput('summary', fallback.summary);
+              core.setOutput('scope_summary', scopeInsight.scopeSummary);
+              core.setOutput('risk_summary', scopeInsight.riskSummary);
+              core.setOutput('key_files', scopeInsight.keyFiles);
               return;
             }
 
             const systemPrompt = [
               'You are a release engineering assistant.',
-              'Return ONLY valid JSON with keys: title, release_label, impact, confidence, reasoning.',
+              'Return ONLY valid JSON with keys: title, release_label, impact, confidence, reasoning, summary.',
               'title must follow conventional format: type(scope): summary.',
+              'summary must be 2-4 concise bullet points for PR template use.',
               'Use a human, natural tone in the summary (short verb + object).',
               'Avoid robotic fillers like "update changes", "misc", or "various fixes".',
               'Prefer concrete verbs (add, refine, resolve, streamline, harden).',
               'Allowed release_label values: ' + releaseLabels.join(', ') + '.',
               'Allowed impact values: patch, minor, major.',
+              'confidence must be a number between 0 and 1.',
               'Use major only for clearly breaking changes.',
               'Keep summary concise (max 90 chars).',
             ].join(' ');
@@ -164,6 +245,7 @@ jobs:
             ].join('\n\n');
 
             let parsed;
+            let suggestionSource = 'ai';
             try {
               const response = await fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
@@ -195,16 +277,22 @@ jobs:
               core.warning(`AI suggestion failed: ${error.message}`);
               parsed = deterministicFallback(pr.title, pr.body || '', changedPaths);
               parsed.reasoning = `AI request failed; ${parsed.reasoning}`;
+              suggestionSource = 'fallback';
             }
 
             const fallback = deterministicFallback(pr.title, pr.body || '', changedPaths);
             const safeTitle = typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim() : fallback.title;
             let safeLabel = releaseLabels.includes(parsed.release_label) ? parsed.release_label : fallback.release_label;
             const safeImpact = ['patch', 'minor', 'major'].includes(parsed.impact) ? parsed.impact : fallback.impact;
-            const safeConfidence = Number.isFinite(Number(parsed.confidence)) ? Number(parsed.confidence) : fallback.confidence;
+            const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+            const parsedConfidence = Number(parsed.confidence);
+            const safeConfidence = Number.isFinite(parsedConfidence)
+              ? clamp(parsedConfidence, 0, 1)
+              : fallback.confidence;
             const safeReasoning = typeof parsed.reasoning === 'string' && parsed.reasoning.trim()
               ? parsed.reasoning.trim().slice(0, 600)
               : fallback.reasoning;
+            const safeSummary = normalizeSummary(parsed.summary, fallback.summary);
 
             const allowedLabelsByType = {
               feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:compat']),
@@ -263,12 +351,16 @@ jobs:
 
             const compatibleTitle = coerceTitleForReleaseLabel(safeTitle, safeLabel);
 
-            core.setOutput('status', 'ok');
+            core.setOutput('status', suggestionSource);
             core.setOutput('suggested_title', compatibleTitle);
             core.setOutput('release_label', safeLabel);
             core.setOutput('impact', safeImpact);
-            core.setOutput('confidence', String(safeConfidence));
+            core.setOutput('confidence', safeConfidence.toFixed(2));
             core.setOutput('reasoning', safeReasoning);
+            core.setOutput('summary', safeSummary);
+            core.setOutput('scope_summary', scopeInsight.scopeSummary);
+            core.setOutput('risk_summary', scopeInsight.riskSummary);
+            core.setOutput('key_files', scopeInsight.keyFiles);
 
       - name: Upsert PR assistant comment
         uses: actions/github-script@v7
@@ -278,20 +370,57 @@ jobs:
           IMPACT: ${{ steps.suggest.outputs.impact }}
           CONFIDENCE: ${{ steps.suggest.outputs.confidence }}
           REASONING: ${{ steps.suggest.outputs.reasoning }}
+          SUMMARY: ${{ steps.suggest.outputs.summary }}
+          SCOPE_SUMMARY: ${{ steps.suggest.outputs.scope_summary }}
+          RISK_SUMMARY: ${{ steps.suggest.outputs.risk_summary }}
+          KEY_FILES: ${{ steps.suggest.outputs.key_files }}
           STATUS: ${{ steps.suggest.outputs.status }}
         with:
           script: |
             const pr = context.payload.pull_request;
             const marker = '<!-- ai-pr-assistant -->';
+            const status = String(process.env.STATUS || '').toLowerCase();
+            const suggestedTitle = process.env.SUGGESTED_TITLE || 'n/a';
+            const suggestedReleaseLabel = process.env.RELEASE_LABEL || 'n/a';
+
+            const { data: freshPR } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            const currentLabels = (freshPR.labels || []).map((l) => l.name);
+            const releaseLabelPriority = [
+              'release:breaking',
+              'release:security',
+              'release:feature',
+              'release:fix',
+              'release:deprecation',
+              'release:compat',
+              'release:docs',
+              'release:internal'
+            ];
+            const currentReleaseLabel = releaseLabelPriority.find((label) => currentLabels.includes(label)) || '';
+
+            const hasActionableDiff =
+              (suggestedTitle && suggestedTitle !== freshPR.title) ||
+              (suggestedReleaseLabel && suggestedReleaseLabel !== 'n/a' && suggestedReleaseLabel !== currentReleaseLabel);
 
             const body = [
               marker,
-              '### AI PR Assistant',
+              '### PR Assistant',
               '',
-              `- Suggested title: \`${process.env.SUGGESTED_TITLE || 'n/a'}\``,
-              `- Suggested release label: \`${process.env.RELEASE_LABEL || 'n/a'}\``,
+              `- Suggested title: \`${suggestedTitle}\``,
+              `- Suggested release label: \`${suggestedReleaseLabel}\``,
               `- Suggested release impact: \`${process.env.IMPACT || 'n/a'}\``,
               `- Confidence: \`${process.env.CONFIDENCE || 'n/a'}\``,
+              '',
+              'Suggested PR summary (copy into PR template):',
+              `${process.env.SUMMARY || '- n/a'}`,
+              '',
+              'Scope snapshot:',
+              `- Areas: \`${process.env.SCOPE_SUMMARY || 'n/a'}\``,
+              `- Risk focus: \`${process.env.RISK_SUMMARY || 'n/a'}\``,
+              `- Key files: \`${process.env.KEY_FILES || 'n/a'}\``,
               '',
               `Reasoning: ${process.env.REASONING || 'n/a'}`,
               '',
@@ -308,6 +437,11 @@ jobs:
             });
 
             const existing = comments.find((c) => c.user?.type === 'Bot' && c.body?.includes(marker));
+            if (status !== 'fallback' && !hasActionableDiff) {
+              core.notice('Skipping PR assistant comment update: no actionable title/label deltas.');
+              return;
+            }
+
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
