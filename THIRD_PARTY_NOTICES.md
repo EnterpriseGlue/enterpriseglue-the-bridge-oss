@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-03-06T16:40:19.672Z
+Generated at: 2026-03-06T16:47:05.832Z
 
 Generated from:
 - third_party_licenses.json
@@ -13,7 +13,7 @@ Generated from:
 
 | License | Count |
 |---|---:|
-| MIT | 8 |
+| MIT | 7 |
 
 ## Dependency list
 
@@ -25,7 +25,6 @@ Generated from:
 | inferno-vnode-flags | 9.0.11 | MIT | https://github.com/infernojs/inferno | frontend |
 | inferno | 9.0.11 | MIT | https://github.com/infernojs/inferno | frontend |
 | ms | 2.1.3 | MIT | https://github.com/vercel/ms | root |
-| react-split-pane | 0.1.92 | MIT | https://github.com/tomkp/react-split-pane | frontend |
 | simple-git | 3.32.3 | MIT | https://github.com/steveukx/git-js | root |
 
 ---

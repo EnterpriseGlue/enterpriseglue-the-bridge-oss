@@ -3,7 +3,7 @@
  * Handles OAuth flow, token validation, and user provisioning
  */
 
-import { createRequire } from 'node:module';
+import * as msalNode from '@azure/msal-node';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -30,8 +30,7 @@ type AuthorizationUrlRequest = Record<string, any>;
 type AuthorizationCodeRequest = Record<string, any>;
 type ConfidentialClientApplication = any;
 
-const require = createRequire(import.meta.url);
-const msalNode = require('@azure/msal-node');
+// @azure/msal-node v5 supports ESM natively — no createRequire needed
 
 /**
  * Check if Microsoft Entra ID is configured
