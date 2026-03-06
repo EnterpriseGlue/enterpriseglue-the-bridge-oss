@@ -32,6 +32,8 @@
     "guard:plugin-api:current": "bash ./scripts/check-plugin-api-compat.sh current",
     "guard:plugin-api:next": "bash ./scripts/check-plugin-api-compat.sh next",
     "guard:plugin-boot:oss": "bash ./scripts/check-plugin-boot-mode.sh oss",
+    "licenses:update": "bash ./scripts/update-third-party-notices.sh",
+    "licenses:check": "bash ./scripts/update-third-party-notices.sh --check --strict",
     "plugin-api:pack": "mkdir -p ./.artifacts && cd packages/enterprise-plugin-api && npm pack && mv *.tgz ../../.artifacts/",
     "ci:watch": "bash ./scripts/ci-watch.sh",
     "ci:watch:trigger": "bash ./scripts/ci-watch.sh docker-images --trigger"

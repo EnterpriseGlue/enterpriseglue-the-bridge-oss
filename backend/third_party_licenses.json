@@ -3,2559 +3,1946 @@
     "licenses": "MIT",
     "repository": "https://github.com/asteasolutions/zod-to-openapi",
     "publisher": "Astea Solutions",
-    "email": "info@asteasolutions.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@asteasolutions/zod-to-openapi",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@asteasolutions/zod-to-openapi/LICENSE"
+    "email": "info@asteasolutions.com"
   },
   "@azure/msal-common@15.13.1": {
     "licenses": "MIT",
     "repository": "https://github.com/AzureAD/microsoft-authentication-library-for-js",
     "publisher": "Microsoft",
     "email": "nugetaad@microsoft.com",
-    "url": "https://www.microsoft.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@azure/msal-common",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@azure/msal-common/LICENSE"
+    "url": "https://www.microsoft.com"
   },
   "@azure/msal-node@3.8.2": {
     "licenses": "MIT",
     "repository": "https://github.com/AzureAD/microsoft-authentication-library-for-js",
     "publisher": "Microsoft",
     "email": "nugetaad@microsoft.com",
-    "url": "https://www.microsoft.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@azure/msal-node",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@azure/msal-node/LICENSE"
+    "url": "https://www.microsoft.com"
   },
   "@gitbeaker/core@43.8.0": {
     "licenses": "MIT",
     "repository": "https://github.com/jdalrymple/gitbeaker",
-    "publisher": "Justin Dalrymple",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@gitbeaker/core",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@gitbeaker/core/LICENSE.md"
+    "publisher": "Justin Dalrymple"
   },
   "@gitbeaker/requester-utils@43.8.0": {
     "licenses": "MIT",
     "repository": "https://github.com/jdalrymple/gitbeaker",
-    "publisher": "Justin Dalrymple",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@gitbeaker/requester-utils",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@gitbeaker/requester-utils/LICENSE.md"
+    "publisher": "Justin Dalrymple"
   },
   "@gitbeaker/rest@43.8.0": {
     "licenses": "MIT",
     "repository": "https://github.com/jdalrymple/gitbeaker",
-    "publisher": "Justin Dalrymple",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@gitbeaker/rest",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@gitbeaker/rest/LICENSE.md"
+    "publisher": "Justin Dalrymple"
   },
   "@isaacs/cliui@8.0.2": {
     "licenses": "ISC",
     "repository": "https://github.com/yargs/cliui",
     "publisher": "Ben Coe",
-    "email": "ben@npmjs.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@isaacs/cliui",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@isaacs/cliui/LICENSE.txt"
+    "email": "ben@npmjs.com"
   },
   "@kwsites/file-exists@1.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/kwsites/file-exists",
     "publisher": "Steve King",
-    "email": "steve@mydev.co",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@kwsites/file-exists",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@kwsites/file-exists/LICENSE"
+    "email": "steve@mydev.co"
   },
   "@kwsites/promise-deferred@1.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/kwsites/promise-deferred",
     "publisher": "Steve King",
-    "email": "steve@mydev.co",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@kwsites/promise-deferred",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@kwsites/promise-deferred/LICENSE"
+    "email": "steve@mydev.co"
+  },
+  "@node-saml/node-saml@5.1.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/node-saml/node-saml",
+    "publisher": "Henri Bergius",
+    "email": "henri.bergius@iki.fi",
+    "url": "http://bergie.iki.fi"
   },
   "@octokit/app@16.1.2": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/app.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/app",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/app/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/auth-app@8.1.2": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/auth-app.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-app",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-app/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/auth-oauth-app@9.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/auth-oauth-app.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-oauth-app",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-oauth-app/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/auth-oauth-device@8.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/auth-oauth-device.js",
     "publisher": "Gregor Martynus",
-    "url": "https://dev.to/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-oauth-device",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-oauth-device/LICENSE"
+    "url": "https://dev.to/gr2m"
   },
   "@octokit/auth-oauth-user@6.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/auth-oauth-user.js",
     "publisher": "Gregor Martynus",
-    "url": "https://dev.to/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-oauth-user",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-oauth-user/LICENSE"
+    "url": "https://dev.to/gr2m"
   },
   "@octokit/auth-token@6.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/auth-token.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-token",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-token/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/auth-unauthenticated@7.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/auth-unauthenticated.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-unauthenticated",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/auth-unauthenticated/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/core@7.0.6": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/core.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/core",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/core/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/endpoint@11.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/endpoint.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/endpoint",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/endpoint/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/graphql@9.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/graphql.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/graphql",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/graphql/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/oauth-app@8.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/oauth-app.js",
     "publisher": "Gregor Martynus",
-    "url": "https://twitter.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/oauth-app",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/oauth-app/LICENSE"
+    "url": "https://twitter.com/gr2m"
   },
   "@octokit/oauth-authorization-url@8.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/oauth-authorization-url.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/oauth-authorization-url",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/oauth-authorization-url/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/oauth-methods@6.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/oauth-methods.js",
     "publisher": "Gregor Martynus",
-    "url": "https://dev.to/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/oauth-methods",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/oauth-methods/LICENSE"
+    "url": "https://dev.to/gr2m"
   },
   "@octokit/openapi-types@27.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/openapi-types.ts",
     "publisher": "Gregor Martynus",
-    "url": "https://twitter.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/openapi-types",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/openapi-types/LICENSE"
+    "url": "https://twitter.com/gr2m"
   },
   "@octokit/openapi-webhooks-types@12.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/openapi-webhooks",
     "publisher": "wolfy1339",
-    "email": "webmaster@wolfy1339.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/openapi-webhooks-types",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/openapi-webhooks-types/LICENSE"
+    "email": "webmaster@wolfy1339.com"
   },
   "@octokit/plugin-paginate-graphql@6.0.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/octokit/plugin-paginate-graphql.js",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/plugin-paginate-graphql",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/plugin-paginate-graphql/LICENSE"
+    "repository": "https://github.com/octokit/plugin-paginate-graphql.js"
   },
   "@octokit/plugin-paginate-rest@14.0.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/octokit/plugin-paginate-rest.js",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/plugin-paginate-rest",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/plugin-paginate-rest/LICENSE"
+    "repository": "https://github.com/octokit/plugin-paginate-rest.js"
   },
   "@octokit/plugin-rest-endpoint-methods@17.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/plugin-rest-endpoint-methods.js",
     "publisher": "Gregor Martynus",
-    "url": "https://twitter.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/plugin-rest-endpoint-methods",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/plugin-rest-endpoint-methods/LICENSE"
+    "url": "https://twitter.com/gr2m"
   },
   "@octokit/plugin-retry@8.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/plugin-retry.js",
     "publisher": "Simon Grondin",
-    "url": "http://github.com/SGrondin",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/plugin-retry",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/plugin-retry/LICENSE"
+    "url": "http://github.com/SGrondin"
   },
   "@octokit/plugin-throttling@11.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/plugin-throttling.js",
     "publisher": "Simon Grondin",
-    "url": "http://github.com/SGrondin",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/plugin-throttling",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/plugin-throttling/LICENSE"
+    "url": "http://github.com/SGrondin"
   },
   "@octokit/request-error@7.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/request-error.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/request-error",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/request-error/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/request@10.0.7": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/request.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/request",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/request/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "@octokit/types@16.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/types.ts",
     "publisher": "Gregor Martynus",
-    "url": "https://twitter.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/types",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/types/LICENSE"
+    "url": "https://twitter.com/gr2m"
   },
   "@octokit/webhooks-methods@6.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/webhooks-methods.js",
     "publisher": "Gregor Martynus",
-    "url": "https://dev.to/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/webhooks-methods",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/webhooks-methods/LICENSE"
+    "url": "https://dev.to/gr2m"
   },
   "@octokit/webhooks@14.1.3": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/webhooks.js",
     "publisher": "Gregor Martynus",
-    "url": "https://twitter.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/webhooks",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/webhooks/LICENSE.md"
+    "url": "https://twitter.com/gr2m"
   },
   "@pkgjs/parseargs@0.11.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/pkgjs/parseargs",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@pkgjs/parseargs",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@pkgjs/parseargs/LICENSE"
+    "repository": "https://github.com/pkgjs/parseargs"
   },
   "@scarf/scarf@1.4.0": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/scarf-sh/scarf-js",
-    "publisher": "Scarf Systems",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@scarf/scarf",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@scarf/scarf/LICENSE"
+    "publisher": "Scarf Systems"
   },
   "@sqltools/formatter@1.2.5": {
     "licenses": "MIT",
-    "repository": "https://github.com/mtxr/vscode-sqltools",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@sqltools/formatter",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@sqltools/formatter/LICENSE"
+    "repository": "https://github.com/mtxr/vscode-sqltools"
   },
   "@stablelib/base64@1.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/StableLib/stablelib",
-    "publisher": "Dmitry Chestnykh",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@stablelib/base64",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@stablelib/base64/LICENSE"
+    "publisher": "Dmitry Chestnykh"
   },
   "@types/aws-lambda@8.10.159": {
     "licenses": "MIT",
-    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@types/aws-lambda",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@types/aws-lambda/LICENSE"
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped"
+  },
+  "@types/debug@4.1.12": {
+    "licenses": "MIT",
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped"
+  },
+  "@types/ms@2.1.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped"
+  },
+  "@types/node@20.19.22": {
+    "licenses": "MIT",
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped"
   },
   "@types/node@22.19.1": {
     "licenses": "MIT",
-    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/svix/node_modules/@types/node",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/svix/node_modules/@types/node/LICENSE"
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped"
+  },
+  "@types/qs@6.14.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped"
+  },
+  "@types/xml-encryption@1.2.4": {
+    "licenses": "MIT",
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped"
+  },
+  "@types/xml2js@0.4.14": {
+    "licenses": "MIT",
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped"
+  },
+  "@xmldom/is-dom-node@1.0.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/xmldom/is-dom-node",
+    "publisher": "Chris Barth",
+    "email": "chrisjbarth@hotmail.com"
+  },
+  "@xmldom/xmldom@0.8.11": {
+    "licenses": "MIT",
+    "repository": "https://github.com/xmldom/xmldom"
   },
   "abort-controller@3.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/mysticatea/abort-controller",
     "publisher": "Toru Nagashima",
-    "url": "https://github.com/mysticatea",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/abort-controller",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/abort-controller/LICENSE"
+    "url": "https://github.com/mysticatea"
   },
   "accepts@1.3.8": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/accepts",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/accepts",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/accepts/LICENSE"
+    "repository": "https://github.com/jshttp/accepts"
   },
   "agent-base@7.1.4": {
     "licenses": "MIT",
     "repository": "https://github.com/TooTallNate/proxy-agents",
     "publisher": "Nathan Rajlich",
     "email": "nathan@tootallnate.net",
-    "url": "http://n8.io/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/agent-base",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/agent-base/LICENSE"
+    "url": "http://n8.io/"
   },
   "ansi-regex@5.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/chalk/ansi-regex",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string-width-cjs/node_modules/ansi-regex",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string-width-cjs/node_modules/ansi-regex/license"
+    "url": "sindresorhus.com"
   },
   "ansi-regex@6.2.2": {
     "licenses": "MIT",
     "repository": "https://github.com/chalk/ansi-regex",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "https://sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ansi-regex",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ansi-regex/license"
+    "url": "https://sindresorhus.com"
   },
   "ansi-styles@4.3.0": {
     "licenses": "MIT",
     "repository": "https://github.com/chalk/ansi-styles",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/wrap-ansi-cjs/node_modules/ansi-styles",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/wrap-ansi-cjs/node_modules/ansi-styles/license"
+    "url": "sindresorhus.com"
   },
   "ansi-styles@6.2.3": {
     "licenses": "MIT",
     "repository": "https://github.com/chalk/ansi-styles",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "https://sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ansi-styles",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ansi-styles/license"
+    "url": "https://sindresorhus.com"
   },
   "ansis@4.2.0": {
     "licenses": "ISC",
     "repository": "https://github.com/webdiscus/ansis",
-    "publisher": "webdiscus",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ansis",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ansis/LICENSE"
+    "publisher": "webdiscus"
   },
   "app-root-path@3.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/inxilpro/node-app-root-path",
     "publisher": "Chris Morrell",
-    "email": "http://cmorrell.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/app-root-path",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/app-root-path/LICENSE"
+    "email": "http://cmorrell.com"
   },
   "archiver-utils@5.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/archiverjs/archiver-utils",
     "publisher": "Chris Talkington",
-    "url": "http://christalkington.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/archiver-utils",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/archiver-utils/LICENSE"
+    "url": "http://christalkington.com/"
   },
   "archiver@7.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/archiverjs/node-archiver",
     "publisher": "Chris Talkington",
-    "url": "http://christalkington.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/archiver",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/archiver/LICENSE"
+    "url": "http://christalkington.com/"
   },
   "array-flatten@1.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/blakeembrey/array-flatten",
     "publisher": "Blake Embrey",
     "email": "hello@blakeembrey.com",
-    "url": "http://blakeembrey.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/array-flatten",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/array-flatten/LICENSE"
+    "url": "http://blakeembrey.me"
   },
   "async@3.2.6": {
     "licenses": "MIT",
     "repository": "https://github.com/caolan/async",
-    "publisher": "Caolan McMahon",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/async",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/async/LICENSE"
+    "publisher": "Caolan McMahon"
   },
   "available-typed-arrays@1.0.7": {
     "licenses": "MIT",
     "repository": "https://github.com/inspect-js/available-typed-arrays",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/available-typed-arrays",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/available-typed-arrays/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "azure-devops-node-api@15.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/Microsoft/azure-devops-node-api",
-    "publisher": "Microsoft Corporation",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/azure-devops-node-api",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/azure-devops-node-api/LICENSE"
+    "publisher": "Microsoft Corporation"
   },
   "b4a@1.7.3": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/holepunchto/b4a",
-    "publisher": "Holepunch",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/b4a",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/b4a/LICENSE"
+    "publisher": "Holepunch"
   },
   "balanced-match@1.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/juliangruber/balanced-match",
     "publisher": "Julian Gruber",
     "email": "mail@juliangruber.com",
-    "url": "http://juliangruber.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/balanced-match",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/balanced-match/LICENSE.md"
+    "url": "http://juliangruber.com"
   },
   "bare-events@2.8.2": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/holepunchto/bare-events",
-    "publisher": "Holepunch",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bare-events",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bare-events/LICENSE"
+    "publisher": "Holepunch"
   },
   "base64-js@1.5.1": {
     "licenses": "MIT",
     "repository": "https://github.com/beatgammit/base64-js",
     "publisher": "T. Jameson Little",
-    "email": "t.jameson.little@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/base64-js",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/base64-js/LICENSE"
+    "email": "t.jameson.little@gmail.com"
   },
   "basic-auth@2.0.1": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/basic-auth",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/basic-auth",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/basic-auth/LICENSE"
+    "repository": "https://github.com/jshttp/basic-auth"
   },
   "bcryptjs@3.0.3": {
     "licenses": "BSD-3-Clause",
     "repository": "https://github.com/dcodeIO/bcrypt.js",
     "publisher": "Daniel Wirtz",
-    "email": "dcode@dcode.io",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bcryptjs",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bcryptjs/LICENSE"
+    "email": "dcode@dcode.io"
   },
   "before-after-hook@2.2.3": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/gr2m/before-after-hook",
-    "publisher": "Gregor Martynus",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/before-after-hook",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/before-after-hook/LICENSE"
+    "publisher": "Gregor Martynus"
   },
   "before-after-hook@4.0.0": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/gr2m/before-after-hook",
-    "publisher": "Gregor Martynus",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/core/node_modules/before-after-hook",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/@octokit/core/node_modules/before-after-hook/LICENSE"
+    "publisher": "Gregor Martynus"
   },
   "bignumber.js@9.3.1": {
     "licenses": "MIT",
     "repository": "https://github.com/MikeMcl/bignumber.js",
     "publisher": "Michael Mclaughlin",
-    "email": "M8ch88l@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bignumber.js",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bignumber.js/LICENCE.md"
+    "email": "M8ch88l@gmail.com"
   },
   "bitbucket@2.12.0": {
     "licenses": "MIT",
     "repository": "https://github.com/MunifTanjim/node-bitbucket",
     "publisher": "MunifTanjim",
-    "url": "https://muniftanjim.dev",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bitbucket",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bitbucket/LICENSE"
+    "url": "https://muniftanjim.dev"
   },
   "body-parser@1.20.4": {
     "licenses": "MIT",
-    "repository": "https://github.com/expressjs/body-parser",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/body-parser",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/body-parser/LICENSE"
+    "repository": "https://github.com/expressjs/body-parser"
   },
   "bottleneck@2.19.5": {
     "licenses": "MIT",
     "repository": "https://github.com/SGrondin/bottleneck",
-    "publisher": "Simon Grondin",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bottleneck",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bottleneck/LICENSE"
+    "publisher": "Simon Grondin"
   },
   "brace-expansion@2.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/juliangruber/brace-expansion",
     "publisher": "Julian Gruber",
     "email": "mail@juliangruber.com",
-    "url": "http://juliangruber.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/brace-expansion",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/brace-expansion/LICENSE"
+    "url": "http://juliangruber.com"
   },
   "buffer-crc32@1.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/brianloveswords/buffer-crc32",
     "publisher": "Brian J. Brennan",
-    "email": "brianloveswords@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/buffer-crc32",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/buffer-crc32/LICENSE"
+    "email": "brianloveswords@gmail.com"
   },
   "buffer-equal-constant-time@1.0.1": {
     "licenses": "BSD-3-Clause",
     "repository": "https://github.com/goinstant/buffer-equal-constant-time",
-    "publisher": "GoInstant Inc., a salesforce.com company",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/buffer-equal-constant-time",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/buffer-equal-constant-time/LICENSE.txt"
+    "publisher": "GoInstant Inc., a salesforce.com company"
   },
   "buffer@6.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/feross/buffer",
     "publisher": "Feross Aboukhadijeh",
     "email": "feross@feross.org",
-    "url": "https://feross.org",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/buffer",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/buffer/LICENSE"
+    "url": "https://feross.org"
   },
   "bytes@3.1.2": {
     "licenses": "MIT",
     "repository": "https://github.com/visionmedia/bytes.js",
     "publisher": "TJ Holowaychuk",
     "email": "tj@vision-media.ca",
-    "url": "http://tjholowaychuk.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bytes",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/bytes/LICENSE"
+    "url": "http://tjholowaychuk.com"
   },
   "call-bind-apply-helpers@1.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/call-bind-apply-helpers",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/call-bind-apply-helpers",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/call-bind-apply-helpers/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "call-bind@1.0.8": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/call-bind",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/call-bind",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/call-bind/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "call-bound@1.0.4": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/call-bound",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/call-bound",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/call-bound/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "cliui@8.0.1": {
     "licenses": "ISC",
     "repository": "https://github.com/yargs/cliui",
     "publisher": "Ben Coe",
-    "email": "ben@npmjs.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cliui",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cliui/LICENSE.txt"
+    "email": "ben@npmjs.com"
   },
   "color-convert@2.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/Qix-/color-convert",
     "publisher": "Heather Arthur",
-    "email": "fayearthur@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/color-convert",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/color-convert/LICENSE"
+    "email": "fayearthur@gmail.com"
   },
   "color-name@1.1.4": {
     "licenses": "MIT",
     "repository": "https://github.com/colorjs/color-name",
     "publisher": "DY",
-    "email": "dfcreative@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/color-name",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/color-name/LICENSE"
+    "email": "dfcreative@gmail.com"
   },
   "compress-commons@6.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/archiverjs/node-compress-commons",
     "publisher": "Chris Talkington",
-    "url": "http://christalkington.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/compress-commons",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/compress-commons/LICENSE"
+    "url": "http://christalkington.com/"
   },
   "content-disposition@0.5.4": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/content-disposition",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/content-disposition",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/content-disposition/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
   "content-type@1.0.5": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/content-type",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/content-type",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/content-type/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
   "cookie-parser@1.4.7": {
     "licenses": "MIT",
     "repository": "https://github.com/expressjs/cookie-parser",
     "publisher": "TJ Holowaychuk",
     "email": "tj@vision-media.ca",
-    "url": "http://tjholowaychuk.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cookie-parser",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cookie-parser/LICENSE"
+    "url": "http://tjholowaychuk.com"
   },
   "cookie-signature@1.0.6": {
     "licenses": "MIT",
     "repository": "https://github.com/visionmedia/node-cookie-signature",
     "publisher": "TJ Holowaychuk",
-    "email": "tj@learnboost.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cookie-signature",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cookie-signature/Readme.md"
+    "email": "tj@learnboost.com"
   },
   "cookie@0.7.2": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/cookie",
     "publisher": "Roman Shtylman",
-    "email": "shtylman@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cookie",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cookie/LICENSE"
+    "email": "shtylman@gmail.com"
   },
   "core-util-is@1.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/isaacs/core-util-is",
     "publisher": "Isaac Z. Schlueter",
     "email": "i@izs.me",
-    "url": "http://blog.izs.me/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/core-util-is",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/core-util-is/LICENSE"
+    "url": "http://blog.izs.me/"
   },
   "cors@2.8.5": {
     "licenses": "MIT",
     "repository": "https://github.com/expressjs/cors",
     "publisher": "Troy Goode",
     "email": "troygoode@gmail.com",
-    "url": "https://github.com/troygoode/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cors",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cors/LICENSE"
+    "url": "https://github.com/troygoode/"
   },
   "crc-32@1.2.2": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/SheetJS/js-crc32",
-    "publisher": "sheetjs",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/crc-32",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/crc-32/LICENSE"
+    "publisher": "sheetjs"
   },
   "crc32-stream@6.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/archiverjs/node-crc32-stream",
     "publisher": "Chris Talkington",
-    "url": "http://christalkington.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/crc32-stream",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/crc32-stream/LICENSE"
+    "url": "http://christalkington.com/"
   },
   "cross-spawn@7.0.6": {
     "licenses": "MIT",
     "repository": "https://github.com/moxystudio/node-cross-spawn",
     "publisher": "André Cruz",
-    "email": "andre@moxy.studio",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cross-spawn",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/cross-spawn/LICENSE"
+    "email": "andre@moxy.studio"
   },
-  "csrf@3.1.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/pillarjs/csrf",
-    "publisher": "Jonathan Ong",
-    "email": "me@jongleberry.com",
-    "url": "http://jongleberry.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csrf",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csrf/LICENSE"
-  },
-  "csurf@1.11.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/expressjs/csurf",
-    "publisher": "Jonathan Ong",
-    "email": "me@jongleberry.com",
-    "url": "http://jongleberry.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/LICENSE"
+  "csrf-csrf@4.0.3": {
+    "licenses": "ISC",
+    "repository": "https://github.com/Psifi-Solutions/csrf-csrf",
+    "publisher": "psibean"
   },
   "data-uri-to-buffer@4.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/TooTallNate/node-data-uri-to-buffer",
     "publisher": "Nathan Rajlich",
     "email": "nathan@tootallnate.net",
-    "url": "http://n8.io/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/data-uri-to-buffer",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/data-uri-to-buffer/README.md"
+    "url": "http://n8.io/"
   },
   "dayjs@1.11.19": {
     "licenses": "MIT",
     "repository": "https://github.com/iamkun/dayjs",
-    "publisher": "iamkun",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/dayjs",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/dayjs/LICENSE"
+    "publisher": "iamkun"
   },
   "debug@2.6.9": {
     "licenses": "MIT",
     "repository": "https://github.com/visionmedia/debug",
     "publisher": "TJ Holowaychuk",
-    "email": "tj@vision-media.ca",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/body-parser/node_modules/debug",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/body-parser/node_modules/debug/LICENSE"
+    "email": "tj@vision-media.ca"
   },
   "debug@4.4.3": {
     "licenses": "MIT",
     "repository": "https://github.com/debug-js/debug",
     "publisher": "Josh Junon",
-    "url": "https://github.com/qix-",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/debug",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/debug/LICENSE"
+    "url": "https://github.com/qix-"
   },
   "dedent@1.7.1": {
     "licenses": "MIT",
     "repository": "https://github.com/dmnd/dedent",
     "publisher": "Desmond Brand",
     "email": "dmnd@desmondbrand.com",
-    "url": "http://desmondbrand.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/dedent",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/dedent/LICENSE.md"
+    "url": "http://desmondbrand.com"
   },
   "deepmerge@4.3.1": {
     "licenses": "MIT",
-    "repository": "https://github.com/TehShrike/deepmerge",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/deepmerge",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/deepmerge/license.txt"
+    "repository": "https://github.com/TehShrike/deepmerge"
   },
   "define-data-property@1.1.4": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/define-data-property",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/define-data-property",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/define-data-property/LICENSE"
-  },
-  "depd@1.1.2": {
-    "licenses": "MIT",
-    "repository": "https://github.com/dougwilson/nodejs-depd",
-    "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/node_modules/depd",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/node_modules/depd/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "depd@2.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/dougwilson/nodejs-depd",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/depd",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/depd/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
   "des.js@1.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/indutny/des.js",
     "publisher": "Fedor Indutny",
-    "email": "fedor@indutny.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/des.js",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/des.js/README.md"
+    "email": "fedor@indutny.com"
   },
   "destroy@1.2.0": {
     "licenses": "MIT",
     "repository": "https://github.com/stream-utils/destroy",
     "publisher": "Jonathan Ong",
     "email": "me@jongleberry.com",
-    "url": "http://jongleberry.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/destroy",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/destroy/LICENSE"
+    "url": "http://jongleberry.com"
   },
   "dotenv@16.6.1": {
     "licenses": "BSD-2-Clause",
-    "repository": "https://github.com/motdotla/dotenv",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/typeorm/node_modules/dotenv",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/typeorm/node_modules/dotenv/LICENSE"
+    "repository": "https://github.com/motdotla/dotenv"
   },
   "dotenv@17.2.3": {
     "licenses": "BSD-2-Clause",
-    "repository": "https://github.com/motdotla/dotenv",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/dotenv",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/dotenv/LICENSE"
+    "repository": "https://github.com/motdotla/dotenv"
   },
   "dunder-proto@1.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/es-shims/dunder-proto",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/dunder-proto",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/dunder-proto/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "eastasianwidth@0.2.0": {
     "licenses": "MIT",
     "repository": "https://github.com/komagata/eastasianwidth",
-    "publisher": "Masaki Komagata",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/eastasianwidth",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/eastasianwidth/README.md"
+    "publisher": "Masaki Komagata"
   },
   "ecdsa-sig-formatter@1.0.11": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/Brightspace/node-ecdsa-sig-formatter",
-    "publisher": "D2L Corporation",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ecdsa-sig-formatter",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ecdsa-sig-formatter/LICENSE"
+    "publisher": "D2L Corporation"
   },
   "ee-first@1.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/jonathanong/ee-first",
     "publisher": "Jonathan Ong",
     "email": "me@jongleberry.com",
-    "url": "http://jongleberry.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ee-first",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ee-first/LICENSE"
+    "url": "http://jongleberry.com"
   },
   "emoji-regex@8.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/mathiasbynens/emoji-regex",
     "publisher": "Mathias Bynens",
-    "url": "https://mathiasbynens.be/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string-width-cjs/node_modules/emoji-regex",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string-width-cjs/node_modules/emoji-regex/LICENSE-MIT.txt"
+    "url": "https://mathiasbynens.be/"
   },
   "emoji-regex@9.2.2": {
     "licenses": "MIT",
     "repository": "https://github.com/mathiasbynens/emoji-regex",
     "publisher": "Mathias Bynens",
-    "url": "https://mathiasbynens.be/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/emoji-regex",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/emoji-regex/LICENSE-MIT.txt"
+    "url": "https://mathiasbynens.be/"
   },
   "encodeurl@1.0.2": {
     "licenses": "MIT",
-    "repository": "https://github.com/pillarjs/encodeurl",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/send/node_modules/encodeurl",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/send/node_modules/encodeurl/LICENSE"
+    "repository": "https://github.com/pillarjs/encodeurl"
   },
   "encodeurl@2.0.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/pillarjs/encodeurl",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/encodeurl",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/encodeurl/LICENSE"
+    "repository": "https://github.com/pillarjs/encodeurl"
   },
   "es-define-property@1.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/es-define-property",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/es-define-property",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/es-define-property/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "es-errors@1.3.0": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/es-errors",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/es-errors",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/es-errors/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "es-object-atoms@1.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/es-object-atoms",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/es-object-atoms",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/es-object-atoms/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "es6-promise@4.2.8": {
     "licenses": "MIT",
     "repository": "https://github.com/stefanpenner/es6-promise",
     "publisher": "Yehuda Katz, Tom Dale, Stefan Penner and contributors",
-    "url": "Conversion to ES6 API by Jake Archibald",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/es6-promise",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/es6-promise/LICENSE"
+    "url": "Conversion to ES6 API by Jake Archibald"
   },
   "escalade@3.2.0": {
     "licenses": "MIT",
     "repository": "https://github.com/lukeed/escalade",
     "publisher": "Luke Edwards",
     "email": "luke.edwards05@gmail.com",
-    "url": "https://lukeed.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/escalade",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/escalade/license"
+    "url": "https://lukeed.com"
   },
   "escape-html@1.0.3": {
     "licenses": "MIT",
-    "repository": "https://github.com/component/escape-html",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/escape-html",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/escape-html/LICENSE"
+    "repository": "https://github.com/component/escape-html"
   },
   "etag@1.8.1": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/etag",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/etag",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/etag/LICENSE"
+    "repository": "https://github.com/jshttp/etag"
   },
   "event-target-shim@5.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/mysticatea/event-target-shim",
-    "publisher": "Toru Nagashima",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/event-target-shim",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/event-target-shim/LICENSE"
+    "publisher": "Toru Nagashima"
   },
   "events-universal@1.0.1": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/holepunchto/events-universal",
-    "publisher": "Holepunch",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/events-universal",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/events-universal/LICENSE"
+    "publisher": "Holepunch"
   },
   "events@3.3.0": {
     "licenses": "MIT",
     "repository": "https://github.com/Gozala/events",
     "publisher": "Irakli Gozalishvili",
     "email": "rfobic@gmail.com",
-    "url": "http://jeditoolkit.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/events",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/events/LICENSE"
+    "url": "http://jeditoolkit.com"
   },
   "express-rate-limit@8.2.1": {
     "licenses": "MIT",
     "repository": "https://github.com/express-rate-limit/express-rate-limit",
     "publisher": "Nathan Friedly",
-    "url": "http://nfriedly.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/express-rate-limit",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/express-rate-limit/license.md"
+    "url": "http://nfriedly.com/"
   },
   "express@4.22.1": {
     "licenses": "MIT",
     "repository": "https://github.com/expressjs/express",
     "publisher": "TJ Holowaychuk",
-    "email": "tj@vision-media.ca",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/express",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/express/LICENSE"
+    "email": "tj@vision-media.ca"
   },
   "extend@3.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/justmoon/node-extend",
     "publisher": "Stefan Thomas",
     "email": "justmoon@members.fsf.org",
-    "url": "http://www.justmoon.net",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/extend",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/extend/LICENSE"
+    "url": "http://www.justmoon.net"
   },
   "fast-content-type-parse@3.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/fastify/fast-content-type-parse",
     "publisher": "Aras Abbasi",
-    "email": "aras.abbasi@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/fast-content-type-parse",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/fast-content-type-parse/LICENSE"
+    "email": "aras.abbasi@gmail.com"
   },
   "fast-fifo@1.3.2": {
     "licenses": "MIT",
     "repository": "https://github.com/mafintosh/fast-fifo",
     "publisher": "Mathias Buus",
-    "url": "@mafintosh",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/fast-fifo",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/fast-fifo/LICENSE"
+    "url": "@mafintosh"
   },
   "fast-sha256@1.3.0": {
     "licenses": "Unlicense",
     "repository": "https://github.com/dchest/fast-sha256-js",
-    "publisher": "Dmitry Chestnykh",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/fast-sha256",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/fast-sha256/LICENSE"
+    "publisher": "Dmitry Chestnykh"
   },
   "fetch-blob@3.2.0": {
     "licenses": "MIT",
     "repository": "https://github.com/node-fetch/fetch-blob",
     "publisher": "Jimmy Wärting",
     "email": "jimmy@warting.se",
-    "url": "https://jimmy.warting.se",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/fetch-blob",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/fetch-blob/LICENSE"
+    "url": "https://jimmy.warting.se"
   },
   "finalhandler@1.3.1": {
     "licenses": "MIT",
     "repository": "https://github.com/pillarjs/finalhandler",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/finalhandler",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/finalhandler/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
   "for-each@0.3.5": {
     "licenses": "MIT",
     "repository": "https://github.com/Raynos/for-each",
     "publisher": "Raynos",
-    "email": "raynos2@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/for-each",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/for-each/LICENSE"
+    "email": "raynos2@gmail.com"
   },
   "foreground-child@3.3.1": {
     "licenses": "ISC",
     "repository": "https://github.com/tapjs/foreground-child",
     "publisher": "Isaac Z. Schlueter",
     "email": "i@izs.me",
-    "url": "http://blog.izs.me/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/foreground-child",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/foreground-child/LICENSE"
+    "url": "http://blog.izs.me/"
   },
   "formdata-polyfill@4.0.10": {
     "licenses": "MIT",
     "repository": "git+https://jimmywarting@github.com/jimmywarting/FormData",
-    "publisher": "Jimmy Wärting",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/formdata-polyfill",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/formdata-polyfill/LICENSE"
+    "publisher": "Jimmy Wärting"
   },
   "forwarded@0.2.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/forwarded",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/forwarded",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/forwarded/LICENSE"
+    "repository": "https://github.com/jshttp/forwarded"
   },
   "fresh@0.5.2": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/fresh",
     "publisher": "TJ Holowaychuk",
     "email": "tj@vision-media.ca",
-    "url": "http://tjholowaychuk.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/fresh",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/fresh/LICENSE"
+    "url": "http://tjholowaychuk.com"
   },
   "function-bind@1.1.2": {
     "licenses": "MIT",
     "repository": "https://github.com/Raynos/function-bind",
     "publisher": "Raynos",
-    "email": "raynos2@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/function-bind",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/function-bind/LICENSE"
+    "email": "raynos2@gmail.com"
   },
   "gaxios@7.1.3": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/googleapis/google-cloud-node-core",
-    "publisher": "Google, LLC",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gaxios",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gaxios/LICENSE"
+    "publisher": "Google, LLC"
   },
   "gcp-metadata@8.1.2": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/googleapis/google-cloud-node-core",
-    "publisher": "Google LLC",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gcp-metadata",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gcp-metadata/LICENSE"
+    "publisher": "Google LLC"
   },
   "get-caller-file@2.0.5": {
     "licenses": "ISC",
     "repository": "https://github.com/stefanpenner/get-caller-file",
-    "publisher": "Stefan Penner",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/get-caller-file",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/get-caller-file/LICENSE.md"
+    "publisher": "Stefan Penner"
   },
   "get-intrinsic@1.3.0": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/get-intrinsic",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/get-intrinsic",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/get-intrinsic/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "get-proto@1.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/get-proto",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/get-proto",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/get-proto/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "glob@10.5.0": {
     "licenses": "ISC",
     "repository": "https://github.com/isaacs/node-glob",
     "publisher": "Isaac Z. Schlueter",
     "email": "i@izs.me",
-    "url": "https://blog.izs.me/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/glob",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/glob/LICENSE"
+    "url": "https://blog.izs.me/"
   },
   "google-auth-library@10.5.0": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/googleapis/google-auth-library-nodejs",
-    "publisher": "Google Inc.",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/google-auth-library",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/google-auth-library/LICENSE"
+    "publisher": "Google Inc."
   },
   "google-logging-utils@1.1.3": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/googleapis/google-cloud-node-core",
-    "publisher": "Google API Authors",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/google-logging-utils",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/google-logging-utils/LICENSE"
+    "publisher": "Google API Authors"
   },
   "gopd@1.2.0": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/gopd",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gopd",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gopd/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "graceful-fs@4.2.11": {
     "licenses": "ISC",
-    "repository": "https://github.com/isaacs/node-graceful-fs",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/graceful-fs",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/graceful-fs/LICENSE"
+    "repository": "https://github.com/isaacs/node-graceful-fs"
   },
   "gtoken@8.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/google/node-gtoken",
-    "publisher": "Google, LLC",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gtoken",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gtoken/LICENSE"
+    "publisher": "Google, LLC"
   },
   "has-property-descriptors@1.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/inspect-js/has-property-descriptors",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/has-property-descriptors",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/has-property-descriptors/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "has-symbols@1.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/inspect-js/has-symbols",
     "publisher": "Jordan Harband",
     "email": "ljharb@gmail.com",
-    "url": "http://ljharb.codes",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/has-symbols",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/has-symbols/LICENSE"
+    "url": "http://ljharb.codes"
   },
   "has-tostringtag@1.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/inspect-js/has-tostringtag",
     "publisher": "Jordan Harband",
     "email": "ljharb@gmail.com",
-    "url": "http://ljharb.codes",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/has-tostringtag",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/has-tostringtag/LICENSE"
+    "url": "http://ljharb.codes"
   },
   "hasown@2.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/inspect-js/hasOwn",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/hasown",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/hasown/LICENSE"
+    "email": "ljharb@gmail.com"
   },
-  "http-errors@1.7.3": {
+  "helmet@8.1.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/http-errors",
-    "publisher": "Jonathan Ong",
-    "email": "me@jongleberry.com",
-    "url": "http://jongleberry.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/node_modules/http-errors",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/node_modules/http-errors/LICENSE"
+    "repository": "https://github.com/helmetjs/helmet",
+    "publisher": "Adam Baldwin",
+    "email": "adam@npmjs.com",
+    "url": "https://evilpacket.net"
   },
   "http-errors@2.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/http-errors",
     "publisher": "Jonathan Ong",
     "email": "me@jongleberry.com",
-    "url": "http://jongleberry.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/http-errors",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/http-errors/LICENSE"
+    "url": "http://jongleberry.com"
   },
   "http-errors@2.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/http-errors",
     "publisher": "Jonathan Ong",
     "email": "me@jongleberry.com",
-    "url": "http://jongleberry.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/body-parser/node_modules/http-errors",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/body-parser/node_modules/http-errors/LICENSE"
+    "url": "http://jongleberry.com"
   },
   "https-proxy-agent@7.0.6": {
     "licenses": "MIT",
     "repository": "https://github.com/TooTallNate/proxy-agents",
     "publisher": "Nathan Rajlich",
     "email": "nathan@tootallnate.net",
-    "url": "http://n8.io/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/https-proxy-agent",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/https-proxy-agent/LICENSE"
+    "url": "http://n8.io/"
   },
   "iconv-lite@0.4.24": {
     "licenses": "MIT",
     "repository": "https://github.com/ashtuchkin/iconv-lite",
     "publisher": "Alexander Shtuchkin",
-    "email": "ashtuchkin@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/iconv-lite",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/iconv-lite/LICENSE"
+    "email": "ashtuchkin@gmail.com"
   },
   "ieee754@1.2.1": {
     "licenses": "BSD-3-Clause",
     "repository": "https://github.com/feross/ieee754",
     "publisher": "Feross Aboukhadijeh",
     "email": "feross@feross.org",
-    "url": "https://feross.org",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ieee754",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ieee754/LICENSE"
+    "url": "https://feross.org"
   },
   "inherits@2.0.4": {
     "licenses": "ISC",
-    "repository": "https://github.com/isaacs/inherits",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/inherits",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/inherits/LICENSE"
+    "repository": "https://github.com/isaacs/inherits"
   },
   "ip-address@10.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/beaugunderson/ip-address",
     "publisher": "Beau Gunderson",
     "email": "beau@beaugunderson.com",
-    "url": "https://beaugunderson.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ip-address",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ip-address/LICENSE"
+    "url": "https://beaugunderson.com/"
   },
   "ipaddr.js@1.9.1": {
     "licenses": "MIT",
     "repository": "https://github.com/whitequark/ipaddr.js",
     "publisher": "whitequark",
-    "email": "whitequark@whitequark.org",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ipaddr.js",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ipaddr.js/LICENSE"
+    "email": "whitequark@whitequark.org"
   },
   "is-callable@1.2.7": {
     "licenses": "MIT",
     "repository": "https://github.com/inspect-js/is-callable",
     "publisher": "Jordan Harband",
     "email": "ljharb@gmail.com",
-    "url": "http://ljharb.codes",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/is-callable",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/is-callable/LICENSE"
+    "url": "http://ljharb.codes"
   },
   "is-fullwidth-code-point@3.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/sindresorhus/is-fullwidth-code-point",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/is-fullwidth-code-point",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/is-fullwidth-code-point/license"
+    "url": "sindresorhus.com"
   },
   "is-plain-object@3.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/jonschlinkert/is-plain-object",
     "publisher": "Jon Schlinkert",
-    "url": "https://github.com/jonschlinkert",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/is-plain-object",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/is-plain-object/LICENSE"
+    "url": "https://github.com/jonschlinkert"
   },
   "is-stream@2.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/sindresorhus/is-stream",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "https://sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/is-stream",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/is-stream/license"
+    "url": "https://sindresorhus.com"
   },
   "is-typed-array@1.1.15": {
     "licenses": "MIT",
     "repository": "https://github.com/inspect-js/is-typed-array",
     "publisher": "Jordan Harband",
     "email": "ljharb@gmail.com",
-    "url": "http://ljharb.codes",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/is-typed-array",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/is-typed-array/LICENSE"
+    "url": "http://ljharb.codes"
   },
   "isarray@1.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/juliangruber/isarray",
     "publisher": "Julian Gruber",
     "email": "mail@juliangruber.com",
-    "url": "http://juliangruber.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/isarray",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/isarray/README.md"
+    "url": "http://juliangruber.com"
   },
   "isarray@2.0.5": {
     "licenses": "MIT",
     "repository": "https://github.com/juliangruber/isarray",
     "publisher": "Julian Gruber",
     "email": "mail@juliangruber.com",
-    "url": "http://juliangruber.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/to-buffer/node_modules/isarray",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/to-buffer/node_modules/isarray/LICENSE"
+    "url": "http://juliangruber.com"
   },
   "isexe@2.0.0": {
     "licenses": "ISC",
     "repository": "https://github.com/isaacs/isexe",
     "publisher": "Isaac Z. Schlueter",
     "email": "i@izs.me",
-    "url": "http://blog.izs.me/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/isexe",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/isexe/LICENSE"
+    "url": "http://blog.izs.me/"
   },
   "jackspeak@3.4.3": {
     "licenses": "BlueOak-1.0.0",
     "repository": "https://github.com/isaacs/jackspeak",
     "publisher": "Isaac Z. Schlueter",
-    "email": "i@izs.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/jackspeak",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/jackspeak/LICENSE.md"
+    "email": "i@izs.me"
   },
   "js-md4@0.3.2": {
     "licenses": "MIT",
     "repository": "https://github.com/emn178/js-md4",
     "publisher": "Chen, Yi-Cyuan",
-    "email": "emn178@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/js-md4",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/js-md4/LICENSE.txt"
+    "email": "emn178@gmail.com"
   },
   "json-bigint@1.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/sidorares/json-bigint",
     "publisher": "Andrey Sidorov",
-    "email": "sidorares@yandex.ru",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/json-bigint",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/json-bigint/LICENSE"
+    "email": "sidorares@yandex.ru"
   },
   "jsonwebtoken@9.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/auth0/node-jsonwebtoken",
-    "publisher": "auth0",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/jsonwebtoken",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/jsonwebtoken/LICENSE"
+    "publisher": "auth0"
   },
   "jwa@1.4.2": {
     "licenses": "MIT",
     "repository": "https://github.com/brianloveswords/node-jwa",
     "publisher": "Brian J. Brennan",
-    "email": "brianloveswords@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/jwa",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/jwa/LICENSE"
+    "email": "brianloveswords@gmail.com"
   },
   "jwa@2.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/brianloveswords/node-jwa",
     "publisher": "Brian J. Brennan",
-    "email": "brianloveswords@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gtoken/node_modules/jwa",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gtoken/node_modules/jwa/LICENSE"
+    "email": "brianloveswords@gmail.com"
   },
   "jws@3.2.3": {
     "licenses": "MIT",
     "repository": "https://github.com/brianloveswords/node-jws",
-    "publisher": "Brian J Brennan",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/jws",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/jws/LICENSE"
+    "publisher": "Brian J Brennan"
   },
   "jws@4.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/brianloveswords/node-jws",
-    "publisher": "Brian J Brennan",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gtoken/node_modules/jws",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gtoken/node_modules/jws/LICENSE"
+    "publisher": "Brian J Brennan"
   },
   "lazystream@1.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/jpommerening/node-lazystream",
     "publisher": "Jonas Pommerening",
     "email": "jonas.pommerening@gmail.com",
-    "url": "https://npmjs.org/~jpommerening",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lazystream",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lazystream/LICENSE"
+    "url": "https://npmjs.org/~jpommerening"
   },
   "lodash.includes@4.3.0": {
     "licenses": "MIT",
     "repository": "https://github.com/lodash/lodash",
     "publisher": "John-David Dalton",
     "email": "john.david.dalton@gmail.com",
-    "url": "http://allyoucanleet.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.includes",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.includes/LICENSE"
+    "url": "http://allyoucanleet.com/"
   },
   "lodash.isboolean@3.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/lodash/lodash",
     "publisher": "John-David Dalton",
     "email": "john.david.dalton@gmail.com",
-    "url": "http://allyoucanleet.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.isboolean",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.isboolean/LICENSE"
+    "url": "http://allyoucanleet.com/"
   },
   "lodash.isinteger@4.0.4": {
     "licenses": "MIT",
     "repository": "https://github.com/lodash/lodash",
     "publisher": "John-David Dalton",
     "email": "john.david.dalton@gmail.com",
-    "url": "http://allyoucanleet.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.isinteger",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.isinteger/LICENSE"
+    "url": "http://allyoucanleet.com/"
   },
   "lodash.isnumber@3.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/lodash/lodash",
     "publisher": "John-David Dalton",
     "email": "john.david.dalton@gmail.com",
-    "url": "http://allyoucanleet.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.isnumber",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.isnumber/LICENSE"
+    "url": "http://allyoucanleet.com/"
   },
   "lodash.isplainobject@4.0.6": {
     "licenses": "MIT",
     "repository": "https://github.com/lodash/lodash",
     "publisher": "John-David Dalton",
     "email": "john.david.dalton@gmail.com",
-    "url": "http://allyoucanleet.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.isplainobject",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.isplainobject/LICENSE"
+    "url": "http://allyoucanleet.com/"
   },
   "lodash.isstring@4.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/lodash/lodash",
     "publisher": "John-David Dalton",
     "email": "john.david.dalton@gmail.com",
-    "url": "http://allyoucanleet.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.isstring",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.isstring/LICENSE"
+    "url": "http://allyoucanleet.com/"
   },
   "lodash.once@4.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/lodash/lodash",
     "publisher": "John-David Dalton",
     "email": "john.david.dalton@gmail.com",
-    "url": "http://allyoucanleet.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.once",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash.once/LICENSE"
+    "url": "http://allyoucanleet.com/"
   },
   "lodash@4.17.23": {
     "licenses": "MIT",
     "repository": "https://github.com/lodash/lodash",
     "publisher": "John-David Dalton",
-    "email": "john.david.dalton@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lodash/LICENSE"
+    "email": "john.david.dalton@gmail.com"
   },
   "lru-cache@10.4.3": {
     "licenses": "ISC",
     "repository": "https://github.com/isaacs/node-lru-cache",
     "publisher": "Isaac Z. Schlueter",
-    "email": "i@izs.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lru-cache",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lru-cache/LICENSE"
+    "email": "i@izs.me"
   },
   "math-intrinsics@1.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/es-shims/math-intrinsics",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/math-intrinsics",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/math-intrinsics/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "media-typer@0.3.0": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/media-typer",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/media-typer",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/media-typer/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
   "merge-descriptors@1.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/sindresorhus/merge-descriptors",
     "publisher": "Jonathan Ong",
     "email": "me@jongleberry.com",
-    "url": "http://jongleberry.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/merge-descriptors",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/merge-descriptors/LICENSE"
+    "url": "http://jongleberry.com"
   },
   "methods@1.1.2": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/methods",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/methods",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/methods/LICENSE"
+    "repository": "https://github.com/jshttp/methods"
   },
   "mime-db@1.52.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/mime-db",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/mime-db",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/mime-db/LICENSE"
+    "repository": "https://github.com/jshttp/mime-db"
   },
   "mime-types@2.1.35": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/mime-types",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/mime-types",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/mime-types/LICENSE"
+    "repository": "https://github.com/jshttp/mime-types"
   },
   "mime@1.6.0": {
     "licenses": "MIT",
     "repository": "https://github.com/broofa/node-mime",
     "publisher": "Robert Kieffer",
     "email": "robert@broofa.com",
-    "url": "http://github.com/broofa",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/mime",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/mime/LICENSE"
+    "url": "http://github.com/broofa"
   },
   "minimalistic-assert@1.0.1": {
     "licenses": "ISC",
-    "repository": "https://github.com/calvinmetcalf/minimalistic-assert",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/minimalistic-assert",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/minimalistic-assert/LICENSE"
+    "repository": "https://github.com/calvinmetcalf/minimalistic-assert"
   },
-  "minimatch@5.1.6": {
-    "licenses": "ISC",
+  "minimatch@10.2.4": {
+    "licenses": "BlueOak-1.0.0",
     "repository": "https://github.com/isaacs/minimatch",
     "publisher": "Isaac Z. Schlueter",
     "email": "i@izs.me",
-    "url": "http://blog.izs.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/readdir-glob/node_modules/minimatch",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/readdir-glob/node_modules/minimatch/LICENSE"
-  },
-  "minimatch@9.0.5": {
-    "licenses": "ISC",
-    "repository": "https://github.com/isaacs/minimatch",
-    "publisher": "Isaac Z. Schlueter",
-    "email": "i@izs.me",
-    "url": "http://blog.izs.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/minimatch",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/minimatch/LICENSE"
+    "url": "http://blog.izs.me"
   },
   "minipass@7.1.2": {
     "licenses": "ISC",
     "repository": "https://github.com/isaacs/minipass",
     "publisher": "Isaac Z. Schlueter",
     "email": "i@izs.me",
-    "url": "http://blog.izs.me/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/minipass",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/minipass/LICENSE"
+    "url": "http://blog.izs.me/"
   },
   "morgan@1.10.1": {
     "licenses": "MIT",
-    "repository": "https://github.com/expressjs/morgan",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/morgan",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/morgan/LICENSE"
+    "repository": "https://github.com/expressjs/morgan"
   },
   "ms@2.0.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/zeit/ms",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/body-parser/node_modules/ms",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/body-parser/node_modules/ms/license.md"
+    "repository": "https://github.com/zeit/ms"
   },
   "ms@2.1.3": {
     "licenses": "MIT",
-    "repository": "https://github.com/vercel/ms",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ms",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/ms/license.md"
+    "repository": "https://github.com/vercel/ms"
   },
   "negotiator@0.6.3": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/negotiator",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/negotiator",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/negotiator/LICENSE"
+    "repository": "https://github.com/jshttp/negotiator"
   },
   "node-domexception@1.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/jimmywarting/node-domexception",
-    "publisher": "Jimmy Wärting",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/node-domexception",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/node-domexception/LICENSE"
+    "publisher": "Jimmy Wärting"
   },
   "node-fetch@2.7.0": {
     "licenses": "MIT",
     "repository": "https://github.com/bitinn/node-fetch",
-    "publisher": "David Frank",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/node-fetch",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/node-fetch/LICENSE.md"
+    "publisher": "David Frank"
   },
   "node-fetch@3.3.2": {
     "licenses": "MIT",
     "repository": "https://github.com/node-fetch/node-fetch",
-    "publisher": "David Frank",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gaxios/node_modules/node-fetch",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/gaxios/node_modules/node-fetch/LICENSE.md"
+    "publisher": "David Frank"
   },
   "nodemailer@7.0.12": {
     "licenses": "MIT-0",
     "repository": "https://github.com/nodemailer/nodemailer",
-    "publisher": "Andris Reinman",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/nodemailer",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/nodemailer/LICENSE"
+    "publisher": "Andris Reinman"
   },
   "normalize-path@3.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/jonschlinkert/normalize-path",
     "publisher": "Jon Schlinkert",
-    "url": "https://github.com/jonschlinkert",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/normalize-path",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/normalize-path/LICENSE"
+    "url": "https://github.com/jonschlinkert"
   },
   "object-assign@4.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/sindresorhus/object-assign",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/object-assign",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/object-assign/license"
+    "url": "sindresorhus.com"
   },
   "object-inspect@1.13.4": {
     "licenses": "MIT",
     "repository": "https://github.com/inspect-js/object-inspect",
     "publisher": "James Halliday",
     "email": "mail@substack.net",
-    "url": "http://substack.net",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/object-inspect",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/object-inspect/LICENSE"
+    "url": "http://substack.net"
   },
   "octokit@5.0.5": {
     "licenses": "MIT",
     "repository": "https://github.com/octokit/octokit.js",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/octokit",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/octokit/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "on-finished@2.3.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/on-finished",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/morgan/node_modules/on-finished",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/morgan/node_modules/on-finished/LICENSE"
+    "repository": "https://github.com/jshttp/on-finished"
   },
   "on-finished@2.4.1": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/on-finished",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/on-finished",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/on-finished/LICENSE"
+    "repository": "https://github.com/jshttp/on-finished"
   },
   "on-headers@1.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/on-headers",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/on-headers",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/on-headers/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
   "openapi3-ts@4.5.0": {
     "licenses": "MIT",
     "repository": "https://github.com/metadevpro/openapi3-ts",
-    "publisher": "Pedro J. Molina / Metadev",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/openapi3-ts",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/openapi3-ts/LICENSE"
+    "publisher": "Pedro J. Molina / Metadev"
+  },
+  "oracledb@6.10.0": {
+    "licenses": "(Apache-2.0 OR UPL-1.0)",
+    "repository": "https://github.com/oracle/node-oracledb",
+    "noticeFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/oracledb/NOTICE.txt"
   },
   "package-json-from-dist@1.0.1": {
     "licenses": "BlueOak-1.0.0",
     "repository": "https://github.com/isaacs/package-json-from-dist",
     "publisher": "Isaac Z. Schlueter",
     "email": "i@izs.me",
-    "url": "https://izs.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/package-json-from-dist",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/package-json-from-dist/LICENSE.md"
+    "url": "https://izs.me"
   },
   "parseurl@1.3.3": {
     "licenses": "MIT",
-    "repository": "https://github.com/pillarjs/parseurl",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/parseurl",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/parseurl/LICENSE"
+    "repository": "https://github.com/pillarjs/parseurl"
   },
   "path-key@3.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/sindresorhus/path-key",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/path-key",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/path-key/license"
+    "url": "sindresorhus.com"
   },
   "path-scurry@1.11.1": {
     "licenses": "BlueOak-1.0.0",
     "repository": "https://github.com/isaacs/path-scurry",
     "publisher": "Isaac Z. Schlueter",
     "email": "i@izs.me",
-    "url": "https://blog.izs.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/path-scurry",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/path-scurry/LICENSE.md"
+    "url": "https://blog.izs.me"
   },
   "path-to-regexp@0.1.12": {
     "licenses": "MIT",
-    "repository": "https://github.com/pillarjs/path-to-regexp",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/path-to-regexp",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/path-to-regexp/LICENSE"
+    "repository": "https://github.com/pillarjs/path-to-regexp"
   },
   "pg-cloudflare@1.2.7": {
     "licenses": "MIT",
-    "repository": "https://github.com/brianc/node-postgres",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-cloudflare",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-cloudflare/LICENSE"
+    "repository": "https://github.com/brianc/node-postgres"
   },
   "pg-connection-string@2.9.1": {
     "licenses": "MIT",
     "repository": "https://github.com/brianc/node-postgres",
     "publisher": "Blaine Bublitz",
     "email": "blaine@iceddev.com",
-    "url": "http://iceddev.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-connection-string",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-connection-string/LICENSE"
+    "url": "http://iceddev.com/"
   },
   "pg-int8@1.0.1": {
     "licenses": "ISC",
-    "repository": "https://github.com/charmander/pg-int8",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-int8",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-int8/LICENSE"
+    "repository": "https://github.com/charmander/pg-int8"
   },
   "pg-pool@3.10.1": {
     "licenses": "MIT",
     "repository": "https://github.com/brianc/node-postgres",
-    "publisher": "Brian M. Carlson",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-pool",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-pool/LICENSE"
+    "publisher": "Brian M. Carlson"
   },
   "pg-protocol@1.10.3": {
     "licenses": "MIT",
-    "repository": "https://github.com/brianc/node-postgres",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-protocol",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-protocol/LICENSE"
+    "repository": "https://github.com/brianc/node-postgres"
   },
   "pg-types@2.2.0": {
     "licenses": "MIT",
     "repository": "https://github.com/brianc/node-pg-types",
-    "publisher": "Brian M. Carlson",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-types",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg-types/README.md"
+    "publisher": "Brian M. Carlson"
   },
   "pg@8.16.3": {
     "licenses": "MIT",
     "repository": "https://github.com/brianc/node-postgres",
     "publisher": "Brian Carlson",
-    "email": "brian.m.carlson@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pg/LICENSE"
+    "email": "brian.m.carlson@gmail.com"
   },
   "pgpass@1.0.5": {
     "licenses": "MIT",
     "repository": "https://github.com/hoegaarden/pgpass",
     "publisher": "Hannes Hörl",
-    "email": "hannes.hoerl+pgpass@snowreporter.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pgpass",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/pgpass/README.md"
+    "email": "hannes.hoerl+pgpass@snowreporter.com"
   },
   "picomatch-browser@2.2.6": {
     "licenses": "MIT",
     "repository": "https://github.com/micromatch/picomatch",
     "publisher": "Jon Schlinkert",
-    "url": "https://github.com/jonschlinkert",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/picomatch-browser",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/picomatch-browser/LICENSE"
+    "url": "https://github.com/jonschlinkert"
   },
   "possible-typed-array-names@1.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/possible-typed-array-names",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/possible-typed-array-names",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/possible-typed-array-names/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "postgres-array@2.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/bendrucker/postgres-array",
     "publisher": "Ben Drucker",
     "email": "bvdrucker@gmail.com",
-    "url": "bendrucker.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/postgres-array",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/postgres-array/license"
+    "url": "bendrucker.me"
   },
   "postgres-bytea@1.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/bendrucker/postgres-bytea",
     "publisher": "Ben Drucker",
     "email": "bvdrucker@gmail.com",
-    "url": "bendrucker.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/postgres-bytea",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/postgres-bytea/license"
+    "url": "bendrucker.me"
   },
   "postgres-date@1.0.7": {
     "licenses": "MIT",
     "repository": "https://github.com/bendrucker/postgres-date",
     "publisher": "Ben Drucker",
     "email": "bvdrucker@gmail.com",
-    "url": "bendrucker.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/postgres-date",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/postgres-date/license"
+    "url": "bendrucker.me"
   },
   "postgres-interval@1.2.0": {
     "licenses": "MIT",
     "repository": "https://github.com/bendrucker/postgres-interval",
     "publisher": "Ben Drucker",
     "email": "bvdrucker@gmail.com",
-    "url": "bendrucker.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/postgres-interval",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/postgres-interval/license"
+    "url": "bendrucker.me"
   },
   "process-nextick-args@2.0.1": {
     "licenses": "MIT",
-    "repository": "https://github.com/calvinmetcalf/process-nextick-args",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/process-nextick-args",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/process-nextick-args/license.md"
+    "repository": "https://github.com/calvinmetcalf/process-nextick-args"
   },
   "process@0.11.10": {
     "licenses": "MIT",
     "repository": "https://github.com/shtylman/node-process",
     "publisher": "Roman Shtylman",
-    "email": "shtylman@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/process",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/process/LICENSE"
+    "email": "shtylman@gmail.com"
   },
   "proxy-addr@2.0.7": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/proxy-addr",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/proxy-addr",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/proxy-addr/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
-  "qs@6.14.1": {
+  "qs@6.15.0": {
     "licenses": "BSD-3-Clause",
-    "repository": "https://github.com/ljharb/qs",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/qs",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/qs/LICENSE.md"
+    "repository": "https://github.com/ljharb/qs"
   },
   "querystringify@2.2.0": {
     "licenses": "MIT",
     "repository": "https://github.com/unshiftio/querystringify",
-    "publisher": "Arnout Kazemier",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/querystringify",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/querystringify/LICENSE"
-  },
-  "random-bytes@1.0.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/crypto-utils/random-bytes",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/random-bytes",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/random-bytes/LICENSE"
+    "publisher": "Arnout Kazemier"
   },
   "range-parser@1.2.1": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/range-parser",
     "publisher": "TJ Holowaychuk",
     "email": "tj@vision-media.ca",
-    "url": "http://tjholowaychuk.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/range-parser",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/range-parser/LICENSE"
+    "url": "http://tjholowaychuk.com"
   },
   "rate-limiter-flexible@8.3.0": {
     "licenses": "ISC",
     "repository": "https://github.com/animir/node-rate-limiter-flexible",
     "publisher": "animir",
-    "email": "animirr@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/rate-limiter-flexible",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/rate-limiter-flexible/LICENSE.md"
+    "email": "animirr@gmail.com"
   },
   "raw-body@2.5.3": {
     "licenses": "MIT",
     "repository": "https://github.com/stream-utils/raw-body",
     "publisher": "Jonathan Ong",
     "email": "me@jongleberry.com",
-    "url": "http://jongleberry.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/raw-body",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/raw-body/LICENSE"
+    "url": "http://jongleberry.com"
   },
   "readable-stream@2.3.8": {
     "licenses": "MIT",
-    "repository": "https://github.com/nodejs/readable-stream",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lazystream/node_modules/readable-stream",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lazystream/node_modules/readable-stream/LICENSE"
+    "repository": "https://github.com/nodejs/readable-stream"
   },
   "readable-stream@4.7.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/nodejs/readable-stream",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/readable-stream",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/readable-stream/LICENSE"
+    "repository": "https://github.com/nodejs/readable-stream"
   },
   "readdir-glob@1.1.3": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/Yqnn/node-readdir-glob",
-    "publisher": "Yann Armelin",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/readdir-glob",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/readdir-glob/LICENSE"
+    "publisher": "Yann Armelin"
   },
   "reflect-metadata@0.2.2": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/rbuckton/reflect-metadata",
     "publisher": "Ron Buckton",
     "email": "ron.buckton@microsoft.com",
-    "url": "http://github.com/rbuckton",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/reflect-metadata",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/reflect-metadata/LICENSE"
+    "url": "http://github.com/rbuckton"
   },
   "require-directory@2.1.1": {
     "licenses": "MIT",
     "repository": "https://github.com/troygoode/node-require-directory",
     "publisher": "Troy Goode",
     "email": "troygoode@gmail.com",
-    "url": "http://github.com/troygoode/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/require-directory",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/require-directory/LICENSE"
+    "url": "http://github.com/troygoode/"
   },
   "requires-port@1.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/unshiftio/requires-port",
-    "publisher": "Arnout Kazemier",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/requires-port",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/requires-port/LICENSE"
+    "publisher": "Arnout Kazemier"
   },
   "resend@6.4.2": {
     "licenses": "MIT",
-    "repository": "https://github.com/resend/resend-node",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/resend",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/resend/LICENSE"
+    "repository": "https://github.com/resend/resend-node"
   },
   "rimraf@5.0.10": {
     "licenses": "ISC",
     "repository": "https://github.com/isaacs/rimraf",
     "publisher": "Isaac Z. Schlueter",
     "email": "i@izs.me",
-    "url": "http://blog.izs.me/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/rimraf",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/rimraf/LICENSE"
-  },
-  "rndm@1.2.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/crypto-utils/rndm",
-    "publisher": "Jonathan Ong",
-    "email": "me@jongleberry.com",
-    "url": "http://jongleberry.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/rndm",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/rndm/LICENSE"
+    "url": "http://blog.izs.me/"
   },
   "safe-buffer@5.1.2": {
     "licenses": "MIT",
     "repository": "https://github.com/feross/safe-buffer",
     "publisher": "Feross Aboukhadijeh",
     "email": "feross@feross.org",
-    "url": "http://feross.org",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lazystream/node_modules/safe-buffer",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lazystream/node_modules/safe-buffer/LICENSE"
+    "url": "http://feross.org"
   },
   "safe-buffer@5.2.1": {
     "licenses": "MIT",
     "repository": "https://github.com/feross/safe-buffer",
     "publisher": "Feross Aboukhadijeh",
     "email": "feross@feross.org",
-    "url": "https://feross.org",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/safe-buffer",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/safe-buffer/LICENSE"
+    "url": "https://feross.org"
   },
   "safer-buffer@2.1.2": {
     "licenses": "MIT",
     "repository": "https://github.com/ChALkeR/safer-buffer",
     "publisher": "Nikita Skovoroda",
     "email": "chalkerx@gmail.com",
-    "url": "https://github.com/ChALkeR",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/safer-buffer",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/safer-buffer/LICENSE"
+    "url": "https://github.com/ChALkeR"
+  },
+  "sax@1.4.4": {
+    "licenses": "BlueOak-1.0.0",
+    "repository": "https://github.com/isaacs/sax-js",
+    "publisher": "Isaac Z. Schlueter",
+    "email": "i@izs.me",
+    "url": "http://blog.izs.me/"
   },
   "semver@7.7.3": {
     "licenses": "ISC",
     "repository": "https://github.com/npm/node-semver",
-    "publisher": "GitHub Inc.",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/semver",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/semver/LICENSE"
+    "publisher": "GitHub Inc."
   },
   "send@0.19.0": {
     "licenses": "MIT",
     "repository": "https://github.com/pillarjs/send",
     "publisher": "TJ Holowaychuk",
-    "email": "tj@vision-media.ca",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/send",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/send/LICENSE"
+    "email": "tj@vision-media.ca"
   },
   "serve-static@1.16.2": {
     "licenses": "MIT",
     "repository": "https://github.com/expressjs/serve-static",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/serve-static",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/serve-static/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
   "set-function-length@1.2.2": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/set-function-length",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/set-function-length",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/set-function-length/LICENSE"
-  },
-  "setprototypeof@1.1.1": {
-    "licenses": "ISC",
-    "repository": "https://github.com/wesleytodd/setprototypeof",
-    "publisher": "Wes Todd",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/node_modules/setprototypeof",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/node_modules/setprototypeof/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "setprototypeof@1.2.0": {
     "licenses": "ISC",
     "repository": "https://github.com/wesleytodd/setprototypeof",
-    "publisher": "Wes Todd",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/setprototypeof",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/setprototypeof/LICENSE"
+    "publisher": "Wes Todd"
   },
   "sha.js@2.4.12": {
     "licenses": "(MIT AND BSD-3-Clause)",
     "repository": "https://github.com/crypto-browserify/sha.js",
     "publisher": "Dominic Tarr",
     "email": "dominic.tarr@gmail.com",
-    "url": "dominictarr.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/sha.js",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/sha.js/LICENSE"
+    "url": "dominictarr.com"
   },
   "shebang-command@2.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/kevva/shebang-command",
     "publisher": "Kevin Mårtensson",
     "email": "kevinmartensson@gmail.com",
-    "url": "github.com/kevva",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/shebang-command",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/shebang-command/license"
+    "url": "github.com/kevva"
   },
   "shebang-regex@3.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/sindresorhus/shebang-regex",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/shebang-regex",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/shebang-regex/license"
+    "url": "sindresorhus.com"
   },
   "side-channel-list@1.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/side-channel-list",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/side-channel-list",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/side-channel-list/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "side-channel-map@1.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/side-channel-map",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/side-channel-map",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/side-channel-map/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "side-channel-weakmap@1.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/side-channel-weakmap",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/side-channel-weakmap",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/side-channel-weakmap/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "side-channel@1.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/ljharb/side-channel",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/side-channel",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/side-channel/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "signal-exit@4.1.0": {
     "licenses": "ISC",
     "repository": "https://github.com/tapjs/signal-exit",
     "publisher": "Ben Coe",
-    "email": "ben@npmjs.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/signal-exit",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/signal-exit/LICENSE.txt"
+    "email": "ben@npmjs.com"
   },
   "simple-git@3.30.0": {
     "licenses": "MIT",
     "repository": "https://github.com/steveukx/git-js",
     "publisher": "Steve King",
-    "email": "steve@mydev.co",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/simple-git",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/simple-git/readme.md"
+    "email": "steve@mydev.co"
   },
   "split2@4.2.0": {
     "licenses": "ISC",
     "repository": "https://github.com/mcollina/split2",
     "publisher": "Matteo Collina",
-    "email": "hello@matteocollina.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/split2",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/split2/LICENSE"
+    "email": "hello@matteocollina.com"
   },
   "sql-highlight@6.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/scriptcoded/sql-highlight",
     "publisher": "Malcolm Nihlén",
-    "email": "malcolm.nihlen@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/sql-highlight",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/sql-highlight/LICENSE"
+    "email": "malcolm.nihlen@gmail.com"
   },
   "sql.js@1.13.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/sql-js/sql.js",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/sql.js",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/sql.js/LICENSE"
-  },
-  "statuses@1.5.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/jshttp/statuses",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/node_modules/statuses",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/node_modules/statuses/LICENSE"
+    "repository": "https://github.com/sql-js/sql.js"
   },
   "statuses@2.0.1": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/statuses",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/statuses",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/statuses/LICENSE"
+    "repository": "https://github.com/jshttp/statuses"
   },
   "statuses@2.0.2": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/statuses",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/body-parser/node_modules/statuses",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/body-parser/node_modules/statuses/LICENSE"
+    "repository": "https://github.com/jshttp/statuses"
   },
   "streamx@2.23.0": {
     "licenses": "MIT",
     "repository": "https://github.com/mafintosh/streamx",
     "publisher": "Mathias Buus",
-    "url": "@mafintosh",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/streamx",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/streamx/LICENSE"
+    "url": "@mafintosh"
+  },
+  "string_decoder@1.1.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/nodejs/string_decoder"
+  },
+  "string_decoder@1.3.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/nodejs/string_decoder"
   },
   "string-width@4.2.3": {
     "licenses": "MIT",
     "repository": "https://github.com/sindresorhus/string-width",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string-width-cjs",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string-width-cjs/license"
+    "url": "sindresorhus.com"
   },
   "string-width@5.1.2": {
     "licenses": "MIT",
     "repository": "https://github.com/sindresorhus/string-width",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "https://sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string-width",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string-width/license"
-  },
-  "string_decoder@1.1.1": {
-    "licenses": "MIT",
-    "repository": "https://github.com/nodejs/string_decoder",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lazystream/node_modules/string_decoder",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/lazystream/node_modules/string_decoder/LICENSE"
-  },
-  "string_decoder@1.3.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/nodejs/string_decoder",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string_decoder",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string_decoder/LICENSE"
+    "url": "https://sindresorhus.com"
   },
   "strip-ansi@6.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/chalk/strip-ansi",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string-width-cjs/node_modules/strip-ansi",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/string-width-cjs/node_modules/strip-ansi/license"
+    "url": "sindresorhus.com"
   },
   "strip-ansi@7.1.2": {
     "licenses": "MIT",
     "repository": "https://github.com/chalk/strip-ansi",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "https://sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/strip-ansi",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/strip-ansi/license"
+    "url": "https://sindresorhus.com"
   },
   "svix@1.76.1": {
     "licenses": "MIT",
     "repository": "https://github.com/svix/svix-libs",
-    "publisher": "svix",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/svix",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/svix/README.md"
+    "publisher": "svix"
   },
   "swagger-ui-dist@5.29.5": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/swagger-api/swagger-ui",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/swagger-ui-dist",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/swagger-ui-dist/LICENSE",
     "noticeFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/swagger-ui-dist/NOTICE"
   },
   "swagger-ui-express@5.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/scottie1984/swagger-ui-express",
     "publisher": "Stephen Scott",
-    "email": "scottie1984@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/swagger-ui-express",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/swagger-ui-express/LICENSE"
+    "email": "scottie1984@gmail.com"
   },
   "tar-stream@3.1.7": {
     "licenses": "MIT",
     "repository": "https://github.com/mafintosh/tar-stream",
     "publisher": "Mathias Buus",
-    "email": "mathiasbuus@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/tar-stream",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/tar-stream/LICENSE"
+    "email": "mathiasbuus@gmail.com"
   },
   "text-decoder@1.2.3": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/holepunchto/text-decoder",
-    "publisher": "Holepunch",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/text-decoder",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/text-decoder/LICENSE"
+    "publisher": "Holepunch"
   },
   "to-buffer@1.2.2": {
     "licenses": "MIT",
     "repository": "https://github.com/browserify/to-buffer",
     "publisher": "Mathias Buus",
-    "url": "@mafintosh",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/to-buffer",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/to-buffer/LICENSE"
+    "url": "@mafintosh"
   },
   "toad-cache@3.7.0": {
     "licenses": "MIT",
     "repository": "https://github.com/kibertoad/toad-cache",
     "publisher": "Igor Savin",
-    "email": "kibertoad@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/toad-cache",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/toad-cache/LICENSE"
-  },
-  "toidentifier@1.0.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/component/toidentifier",
-    "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/node_modules/toidentifier",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/csurf/node_modules/toidentifier/LICENSE"
+    "email": "kibertoad@gmail.com"
   },
   "toidentifier@1.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/component/toidentifier",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/toidentifier",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/toidentifier/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
   "tr46@0.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/Sebmaster/tr46.js",
     "publisher": "Sebastian Mayr",
-    "email": "npm@smayr.name",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/tr46"
+    "email": "npm@smayr.name"
   },
   "tslib@2.8.1": {
     "licenses": "0BSD",
     "repository": "https://github.com/Microsoft/tslib",
-    "publisher": "Microsoft Corp.",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/tslib",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/tslib/LICENSE.txt"
-  },
-  "tsscmp@1.0.6": {
-    "licenses": "MIT",
-    "repository": "https://github.com/suryagh/tsscmp",
-    "publisher": "suryagh",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/tsscmp",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/tsscmp/LICENSE"
+    "publisher": "Microsoft Corp."
   },
   "tunnel@0.0.6": {
     "licenses": "MIT",
     "repository": "https://github.com/koichik/node-tunnel",
     "publisher": "Koichi Kobayashi",
-    "email": "koichik@improvement.jp",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/tunnel",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/tunnel/LICENSE"
+    "email": "koichik@improvement.jp"
   },
   "type-is@1.6.18": {
     "licenses": "MIT",
-    "repository": "https://github.com/jshttp/type-is",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/type-is",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/type-is/LICENSE"
+    "repository": "https://github.com/jshttp/type-is"
   },
   "typed-array-buffer@1.0.3": {
     "licenses": "MIT",
     "repository": "https://github.com/inspect-js/typed-array-buffer",
     "publisher": "Jordan Harband",
-    "email": "ljharb@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/typed-array-buffer",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/typed-array-buffer/LICENSE"
+    "email": "ljharb@gmail.com"
   },
   "typed-rest-client@2.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/Microsoft/typed-rest-client",
-    "publisher": "Microsoft Corporation",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/typed-rest-client",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/typed-rest-client/LICENSE"
+    "publisher": "Microsoft Corporation"
   },
   "typeorm@0.3.28": {
     "licenses": "MIT",
     "repository": "https://github.com/typeorm/typeorm",
     "publisher": "TypeORM",
-    "email": "maintainers@typeorm.io",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/typeorm",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/typeorm/README.md"
+    "email": "maintainers@typeorm.io"
   },
-  "uid-safe@2.1.5": {
-    "licenses": "MIT",
-    "repository": "https://github.com/crypto-utils/uid-safe",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/uid-safe",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/uid-safe/LICENSE"
-  },
-  "underscore@1.13.7": {
+  "underscore@1.13.8": {
     "licenses": "MIT",
     "repository": "https://github.com/jashkenas/underscore",
     "publisher": "Jeremy Ashkenas",
-    "email": "jeremy@documentcloud.org",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/underscore",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/underscore/LICENSE"
+    "email": "jeremy@documentcloud.org"
   },
   "undici-types@6.21.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/nodejs/undici",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/undici-types",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/undici-types/LICENSE"
+    "repository": "https://github.com/nodejs/undici"
   },
   "undici@7.18.2": {
     "licenses": "MIT",
-    "repository": "https://github.com/nodejs/undici",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/undici",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/undici/LICENSE"
+    "repository": "https://github.com/nodejs/undici"
   },
   "universal-github-app-jwt@2.2.2": {
     "licenses": "MIT",
     "repository": "https://github.com/gr2m/universal-github-app-jwt",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/universal-github-app-jwt",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/universal-github-app-jwt/LICENSE"
+    "url": "https://github.com/gr2m"
   },
   "universal-user-agent@7.0.3": {
     "licenses": "ISC",
     "repository": "https://github.com/gr2m/universal-user-agent",
     "publisher": "Gregor Martynus",
-    "url": "https://github.com/gr2m",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/universal-user-agent",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/universal-user-agent/LICENSE.md"
+    "url": "https://github.com/gr2m"
   },
   "unpipe@1.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/stream-utils/unpipe",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/unpipe",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/unpipe/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
   "url-parse@1.5.10": {
     "licenses": "MIT",
     "repository": "https://github.com/unshiftio/url-parse",
-    "publisher": "Arnout Kazemier",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/url-parse",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/url-parse/LICENSE"
+    "publisher": "Arnout Kazemier"
   },
   "url-template@2.0.8": {
     "licenses": "BSD*",
     "repository": "https://github.com/bramstein/url-template",
     "publisher": "Bram Stein",
     "email": "b.l.stein@gmail.com",
-    "url": "http://www.bramstein.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/url-template",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/url-template/LICENSE"
+    "url": "http://www.bramstein.com"
   },
   "util-deprecate@1.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/TooTallNate/util-deprecate",
     "publisher": "Nathan Rajlich",
     "email": "nathan@tootallnate.net",
-    "url": "http://n8.io/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/util-deprecate",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/util-deprecate/LICENSE"
+    "url": "http://n8.io/"
   },
   "utils-merge@1.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/jaredhanson/utils-merge",
     "publisher": "Jared Hanson",
     "email": "jaredhanson@gmail.com",
-    "url": "http://www.jaredhanson.net/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/utils-merge",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/utils-merge/LICENSE"
+    "url": "http://www.jaredhanson.net/"
   },
   "uuid@10.0.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/uuidjs/uuid",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/svix/node_modules/uuid",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/svix/node_modules/uuid/LICENSE.md"
+    "repository": "https://github.com/uuidjs/uuid"
   },
   "uuid@11.1.0": {
     "licenses": "MIT",
-    "repository": "https://github.com/uuidjs/uuid",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/typeorm/node_modules/uuid",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/typeorm/node_modules/uuid/LICENSE.md"
+    "repository": "https://github.com/uuidjs/uuid"
   },
   "uuid@8.3.2": {
     "licenses": "MIT",
-    "repository": "https://github.com/uuidjs/uuid",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/uuid",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/uuid/LICENSE.md"
+    "repository": "https://github.com/uuidjs/uuid"
   },
   "vary@1.1.2": {
     "licenses": "MIT",
     "repository": "https://github.com/jshttp/vary",
     "publisher": "Douglas Christopher Wilson",
-    "email": "doug@somethingdoug.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/vary",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/vary/LICENSE"
+    "email": "doug@somethingdoug.com"
   },
   "web-streams-polyfill@3.3.3": {
     "licenses": "MIT",
     "repository": "https://github.com/MattiasBuelens/web-streams-polyfill",
     "publisher": "Mattias Buelens",
-    "email": "mattias@buelens.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/web-streams-polyfill",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/web-streams-polyfill/LICENSE"
+    "email": "mattias@buelens.com"
   },
   "webidl-conversions@3.0.1": {
     "licenses": "BSD-2-Clause",
     "repository": "https://github.com/jsdom/webidl-conversions",
     "publisher": "Domenic Denicola",
     "email": "d@domenic.me",
-    "url": "https://domenic.me/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/webidl-conversions",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/webidl-conversions/LICENSE.md"
+    "url": "https://domenic.me/"
   },
   "webmodeler-backend@0.1.0": {
     "licenses": "UNLICENSED",
-    "private": true,
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend"
+    "private": true
   },
   "whatwg-url@5.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/jsdom/whatwg-url",
     "publisher": "Sebastian Mayr",
-    "email": "github@smayr.name",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/whatwg-url",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/whatwg-url/LICENSE.txt"
+    "email": "github@smayr.name"
   },
   "which-typed-array@1.1.19": {
     "licenses": "MIT",
     "repository": "https://github.com/inspect-js/which-typed-array",
     "publisher": "Jordan Harband",
     "email": "ljharb@gmail.com",
-    "url": "http://ljharb.codes",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/which-typed-array",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/which-typed-array/LICENSE"
+    "url": "http://ljharb.codes"
   },
   "which@2.0.2": {
     "licenses": "ISC",
     "repository": "https://github.com/isaacs/node-which",
     "publisher": "Isaac Z. Schlueter",
     "email": "i@izs.me",
-    "url": "http://blog.izs.me",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/which",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/which/LICENSE"
+    "url": "http://blog.izs.me"
   },
   "wrap-ansi@7.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/chalk/wrap-ansi",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "https://sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/wrap-ansi-cjs",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/wrap-ansi-cjs/license"
+    "url": "https://sindresorhus.com"
   },
   "wrap-ansi@8.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/chalk/wrap-ansi",
     "publisher": "Sindre Sorhus",
     "email": "sindresorhus@gmail.com",
-    "url": "https://sindresorhus.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/wrap-ansi",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/wrap-ansi/license"
+    "url": "https://sindresorhus.com"
   },
   "xcase@2.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/encharm/xcase",
     "publisher": "Damian Kaczmarek",
-    "email": "damian@codecharm.co.uk",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/xcase",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/xcase/LICENSE"
+    "email": "damian@codecharm.co.uk"
+  },
+  "xml-crypto@6.1.2": {
+    "licenses": "MIT",
+    "repository": "https://github.com/node-saml/xml-crypto",
+    "publisher": "Yaron Naveh",
+    "email": "yaronn01@gmail.com",
+    "url": "http://webservices20.blogspot.com/"
+  },
+  "xml-encryption@3.1.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/auth0/node-xml-encryption",
+    "publisher": "Matias Woloski",
+    "url": "Auth0"
+  },
+  "xml2js@0.6.2": {
+    "licenses": "MIT",
+    "repository": "https://github.com/Leonidas-from-XIV/node-xml2js",
+    "publisher": "Marek Kubica",
+    "email": "marek@xivilization.net",
+    "url": "https://xivilization.net"
+  },
+  "xmlbuilder@11.0.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/oozcitak/xmlbuilder-js",
+    "publisher": "Ozgur Ozcitak",
+    "email": "oozcitak@gmail.com"
+  },
+  "xmlbuilder@15.1.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/oozcitak/xmlbuilder-js",
+    "publisher": "Ozgur Ozcitak",
+    "email": "oozcitak@gmail.com"
+  },
+  "xpath@0.0.32": {
+    "licenses": "MIT",
+    "repository": "https://github.com/goto100/xpath",
+    "publisher": "Cameron McCormack"
+  },
+  "xpath@0.0.33": {
+    "licenses": "MIT",
+    "repository": "https://github.com/goto100/xpath",
+    "publisher": "Cameron McCormack"
+  },
+  "xpath@0.0.34": {
+    "licenses": "MIT",
+    "repository": "https://github.com/goto100/xpath",
+    "publisher": "Cameron McCormack"
   },
   "xtend@4.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/Raynos/xtend",
     "publisher": "Raynos",
-    "email": "raynos2@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/xtend",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/xtend/LICENSE"
+    "email": "raynos2@gmail.com"
   },
   "y18n@5.0.8": {
     "licenses": "ISC",
     "repository": "https://github.com/yargs/y18n",
     "publisher": "Ben Coe",
-    "email": "bencoe@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/y18n",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/y18n/LICENSE"
+    "email": "bencoe@gmail.com"
   },
   "yaml@2.8.1": {
     "licenses": "ISC",
     "repository": "https://github.com/eemeli/yaml",
     "publisher": "Eemeli Aro",
-    "email": "eemeli@gmail.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/yaml",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/yaml/LICENSE"
+    "email": "eemeli@gmail.com"
   },
   "yargs-parser@21.1.1": {
     "licenses": "ISC",
     "repository": "https://github.com/yargs/yargs-parser",
     "publisher": "Ben Coe",
-    "email": "ben@npmjs.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/yargs-parser",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/yargs-parser/LICENSE.txt"
+    "email": "ben@npmjs.com"
   },
   "yargs@17.7.2": {
     "licenses": "MIT",
-    "repository": "https://github.com/yargs/yargs",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/yargs",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/yargs/LICENSE"
+    "repository": "https://github.com/yargs/yargs"
   },
   "zip-stream@6.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/archiverjs/node-zip-stream",
     "publisher": "Chris Talkington",
-    "url": "http://christalkington.com/",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/zip-stream",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/zip-stream/LICENSE"
+    "url": "http://christalkington.com/"
   },
   "zod@3.25.76": {
     "licenses": "MIT",
     "repository": "https://github.com/colinhacks/zod",
     "publisher": "Colin McDonnell",
-    "email": "zod@colinhacks.com",
-    "path": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/zod",
-    "licenseFile": "/Users/haryselman/Development/enterpriseglue/enterpriseglue-the-bridge-oss/backend/node_modules/zod/LICENSE"
+    "email": "zod@colinhacks.com"
   }
 }

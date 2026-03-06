@@ -49,8 +49,10 @@ async function loadJsonIfExists(jsonPath) {
 async function main() {
   const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRoot = path.resolve(scriptsDir, '..');
+  const failOnIncompatible = String(process.env.EG_FAIL_ON_LICENSE_INCOMPATIBLE || 'false').toLowerCase() === 'true';
 
   const sources = [
+    { name: 'root', file: path.join(repoRoot, 'third_party_licenses.json') },
     { name: 'backend', file: path.join(repoRoot, 'backend', 'third_party_licenses.json') },
     { name: 'frontend', file: path.join(repoRoot, 'frontend', 'third_party_licenses.json') },
   ];
@@ -124,7 +126,7 @@ async function main() {
     }
   }
 
-  const generatedAt = new Date().toISOString();
+  const generatedAt = String(process.env.EG_NOTICES_GENERATED_AT || '').trim() || new Date().toISOString();
 
   const lines = [];
   lines.push('# THIRD_PARTY_NOTICES');
@@ -198,13 +200,10 @@ async function main() {
   lines.push('How this file is generated:');
   lines.push('');
   lines.push('```sh');
-  lines.push('# backend');
-  lines.push('npx --yes license-checker --production --json --out third_party_licenses.json');
-  lines.push('# frontend');
-  lines.push('npx --yes license-checker --production --json --out third_party_licenses.json');
-  lines.push('');
   lines.push('# from repo root');
-  lines.push('node scripts/generate-third-party-notices.mjs');
+  lines.push('bash ./scripts/update-third-party-notices.sh');
+  lines.push('# strict check (fails on potential Apache-2.0 incompatibility)');
+  lines.push('bash ./scripts/update-third-party-notices.sh --check --strict');
   lines.push('```');
   lines.push('');
 
@@ -216,6 +215,21 @@ async function main() {
   if (dualCopyleftOption.length > 0) console.log(`Dual-licensed with copyleft option: ${dualCopyleftOption.length}`);
   if (copyleft.length > 0) console.log(`Copyleft-flagged: ${copyleft.length}`);
   if (unknown.length > 0) console.log(`Unknown license: ${unknown.length}`);
+
+  const alertSections = [];
+  if (dualCopyleftOption.length > 0) alertSections.push(`dual-licensed with copyleft option=${dualCopyleftOption.length}`);
+  if (copyleft.length > 0) alertSections.push(`copyleft-flagged=${copyleft.length}`);
+  if (unknown.length > 0) alertSections.push(`unknown=${unknown.length}`);
+
+  if (alertSections.length > 0) {
+    console.warn(`ALERT: Possible Apache-2.0 incompatibility requires review (${alertSections.join(', ')}).`);
+    console.warn('See THIRD_PARTY_NOTICES.md sections under "Review required" for package-level details.');
+  }
+
+  if (failOnIncompatible && alertSections.length > 0) {
+    console.error('Failing because EG_FAIL_ON_LICENSE_INCOMPATIBLE=true and potential Apache-2.0 incompatibilities were detected.');
+    process.exitCode = 2;
+  }
 }
 
 main().catch((err) => {

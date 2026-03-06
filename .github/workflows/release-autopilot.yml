@@ -33,17 +33,22 @@ jobs:
             const autopilotEnabled = String(process.env.AI_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
             const releaseAutopilotEnabled = String(process.env.RELEASE_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
             const authorLogin = String(pr.user?.login || '').toLowerCase();
+            const prTitle = String(pr.title || '').toLowerCase();
+            const prHeadRef = String(pr.head?.ref || '').toLowerCase();
             const allowedAuthor = 'haryselman';
             const isReleasePleaseBranch = (pr.head.ref || '').startsWith('release-please--branches--');
             const isAllowedBotReleasePR = isReleasePleaseBranch && authorLogin.endsWith('[bot]');
+            const isDependabotAuthor = authorLogin.includes('dependabot');
+            const isTrivyActionBumpPR = prTitle.includes('aquasecurity/trivy-action') || prHeadRef.includes('aquasecurity/trivy-action');
+            const isAllowedDependabotTrivyPR = isDependabotAuthor && isTrivyActionBumpPR;
             if (!autopilotEnabled) {
               core.notice('AI_AUTOPILOT_ENABLED is false. Skipping autopilot merge.');
               core.setOutput('should_enable', 'false');
               return;
             }
 
-            if (authorLogin !== allowedAuthor && !isAllowedBotReleasePR) {
-              core.notice(`PR author is not ${allowedAuthor} and not an allowed release bot PR. Skipping auto-merge.`);
+            if (authorLogin !== allowedAuthor && !isAllowedBotReleasePR && !isAllowedDependabotTrivyPR) {
+              core.notice(`PR author is not ${allowedAuthor}, not an allowed release bot PR, and not a Dependabot Trivy-action bump PR. Skipping auto-merge.`);
               core.setOutput('should_enable', 'false');
               return;
             }

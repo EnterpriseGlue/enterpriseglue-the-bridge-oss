@@ -1,0 +1,220 @@
+name: Third-Party Notices
+
+on:
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - backend/package.json
+      - backend/package-lock.json
+      - frontend/package.json
+      - frontend/package-lock.json
+      - scripts/generate-third-party-notices.mjs
+      - scripts/update-third-party-notices.sh
+      - third_party_licenses.json
+      - backend/third_party_licenses.json
+      - frontend/third_party_licenses.json
+      - THIRD_PARTY_NOTICES.md
+      - .github/workflows/third-party-notices.yml
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify-third-party-notices:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify third-party notices and Apache-2.0 compatibility
+        id: verify
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          bash ./scripts/update-third-party-notices.sh --check --strict 2>&1 | tee third-party-notices.log
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: third-party-notices-${{ github.run_id }}
+          path: third-party-notices.log
+          if-no-files-found: warn
+
+      - name: Fail if verification failed
+        if: steps.verify.outcome == 'failure'
+        run: |
+          echo "Third-party notices check failed. See logs for details."
+          exit 1
+
+  refresh-third-party-notices:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Refresh third-party notices and enforce strict compatibility
+        id: refresh
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          bash ./scripts/update-third-party-notices.sh --strict 2>&1 | tee third-party-notices-refresh.log
+
+      - name: Upload refresh log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: third-party-notices-refresh-${{ github.run_id }}
+          path: third-party-notices-refresh.log
+          if-no-files-found: warn
+
+      - name: Create or update compliance alert issue
+        if: steps.refresh.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '⚠️ Third-party license compatibility alert';
+            const label = 'compliance';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const body = [
+              'The third-party notices refresh workflow failed.',
+              '',
+              `Run: ${runUrl}`,
+              '',
+              'Possible reasons:',
+              '- potential Apache-2.0 compatibility issues were detected (strict mode)',
+              '- generation script failed while refreshing notice artifacts',
+              '',
+              'Please inspect the workflow logs/artifact and update dependencies or notices as needed.',
+            ].join('\n');
+
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+              });
+            } catch {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+                color: 'fbca04',
+                description: 'Dependency/license compliance alerts',
+              });
+            }
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: label,
+              state: 'open',
+              creator: 'github-actions[bot]',
+              per_page: 20,
+            });
+
+            const existing = issues.find((i) => i.title === title);
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: [label],
+              });
+            }
+
+      - name: Close resolved compliance alert issue
+        if: steps.refresh.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '⚠️ Third-party license compatibility alert';
+            const label = 'compliance';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: label,
+              state: 'open',
+              creator: 'github-actions[bot]',
+              per_page: 20,
+            });
+
+            const existing = issues.find((i) => i.title === title);
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: 'closed',
+                state_reason: 'completed',
+                body: `${existing.body || ''}\n\n---\n✅ Resolved on refresh run: ${runUrl}`,
+              });
+            }
+
+      - name: Create PR with refreshed notice artifacts
+        if: steps.refresh.outcome == 'success'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(compliance): refresh third-party license notices"
+          title: "chore(compliance): refresh third-party license notices"
+          body: |
+            Automated refresh of third-party notice artifacts.
+
+            Generated by:
+            - `bash ./scripts/update-third-party-notices.sh --strict`
+          branch: chore/refresh-third-party-notices
+          delete-branch: true
+          labels: |
+            dependencies
+            release:internal
+          add-paths: |
+            third_party_licenses.json
+            backend/third_party_licenses.json
+            frontend/third_party_licenses.json
+            THIRD_PARTY_NOTICES.md
+
+      - name: Fail if refresh failed
+        if: steps.refresh.outcome == 'failure'
+        run: |
+          echo "Third-party notices refresh failed. See logs for details."
+          exit 1

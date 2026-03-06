@@ -6,44 +6,10 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    allow:
+      - dependency-name: aquasecurity/trivy-action
     commit-message:
       prefix: "chore(ci)"
-    labels:
-      - "dependencies"
-      - "release:internal"
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday
-    commit-message:
-      prefix: "chore(deps)"
-    labels:
-      - "dependencies"
-      - "release:internal"
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: docker
-    directory: /backend
-    schedule:
-      interval: weekly
-      day: monday
-    commit-message:
-      prefix: "chore(deps)"
-    labels:
-      - "dependencies"
-      - "release:internal"
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: docker
-    directory: /frontend
-    schedule:
-      interval: weekly
-      day: monday
-    commit-message:
-      prefix: "chore(deps)"
     labels:
       - "dependencies"
       - "release:internal"

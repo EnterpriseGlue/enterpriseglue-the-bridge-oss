@@ -2,9 +2,10 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-01-24T12:36:11.342Z
+Generated at: 2026-03-06T14:59:43.796Z
 
 Generated from:
+- third_party_licenses.json
 - backend/third_party_licenses.json
 - frontend/third_party_licenses.json
 
@@ -12,16 +13,17 @@ Generated from:
 
 | License | Count |
 |---|---:|
+| (Apache-2.0 OR UPL-1.0) | 1 |
 | (MIT AND BSD-3-Clause) | 1 |
 | (MPL-2.0 OR Apache-2.0) | 1 |
 | 0BSD | 1 |
-| Apache-2.0 | 35 |
-| BlueOak-1.0.0 | 3 |
+| Apache-2.0 | 36 |
+| BlueOak-1.0.0 | 5 |
 | BSD-2-Clause | 3 |
 | BSD-3-Clause | 15 |
 | BSD* | 1 |
-| ISC | 66 |
-| MIT | 532 |
+| ISC | 64 |
+| MIT | 549 |
 | MIT-0 | 1 |
 | MIT* | 14 |
 | OFL-1.1 | 9 |
@@ -50,28 +52,28 @@ Generated from:
 | @bpmn-io/diagram-js-ui | 0.2.3 | MIT | https://github.com/bpmn-io/diagram-js-ui | frontend |
 | @bpmn-io/dmn-variable-resolver | 0.7.0 | MIT |  | frontend |
 | @bpmn-io/draggle | 4.1.2 | MIT | https://github.com/bpmn-io/draggle | frontend |
-| @bpmn-io/element-template-chooser | 2.0.0 | MIT | https://github.com/bpmn-io/element-template-chooser | frontend |
+| @bpmn-io/element-template-chooser | 2.1.0 | MIT | https://github.com/bpmn-io/element-template-chooser | frontend |
 | @bpmn-io/element-template-icon-renderer | 1.0.0 | MIT | https://github.com/bpmn-io/element-template-icon-renderer | frontend |
-| @bpmn-io/element-templates-validator | 2.13.0 | MIT | https://github.com/bpmn-io/element-templates-validator | frontend |
-| @bpmn-io/extract-process-variables | 1.0.1 | MIT | https://github.com/bpmn-io/extract-process-variables | frontend |
-| @bpmn-io/feel-editor | 1.12.0 | MIT | https://github.com/bpmn-io/feel-editor | frontend |
-| @bpmn-io/feel-lint | 1.4.0 | MIT | https://github.com/bpmn-io/feel-lint | frontend |
-| @bpmn-io/feel-lint | 2.1.0 | MIT | https://github.com/bpmn-io/feel-lint | frontend |
+| @bpmn-io/element-templates-validator | 2.17.0 | MIT | https://github.com/bpmn-io/element-templates-validator | frontend |
+| @bpmn-io/extract-process-variables | 2.0.0 | MIT | https://github.com/bpmn-io/extract-process-variables | frontend |
+| @bpmn-io/feel-editor | 2.2.0 | MIT | https://github.com/bpmn-io/feel-editor | frontend |
+| @bpmn-io/feel-lint | 3.1.0 | MIT | https://github.com/bpmn-io/feel-lint | frontend |
+| @bpmn-io/feelin | 6.1.0 | MIT | https://github.com/bpmn-io/feelin | frontend |
 | @bpmn-io/form-js-carbon-styles | 1.17.0 | MIT* | https://github.com/bpmn-io/form-js | frontend |
 | @bpmn-io/form-js-editor | 1.17.0 | MIT* | https://github.com/bpmn-io/form-js | frontend |
 | @bpmn-io/form-js-playground | 1.17.0 | MIT* | https://github.com/bpmn-io/form-js | frontend |
 | @bpmn-io/form-js-viewer | 1.17.0 | MIT* | https://github.com/bpmn-io/form-js | frontend |
 | @bpmn-io/form-js | 1.17.0 | MIT* | https://github.com/bpmn-io/form-js | frontend |
 | @bpmn-io/form-variable-provider | 1.3.0 | MIT | https://github.com/bpmn-io/form-variable-provider | frontend |
-| @bpmn-io/lang-feel | 2.4.0 | MIT | https://github.com/bpmn-io/lang-feel | frontend |
-| @bpmn-io/lezer-feel | 1.9.0 | MIT | https://github.com/bpmn-io/lezer-feel | frontend |
-| @bpmn-io/moddle-utils | 0.2.1 | MIT | https://github.com/bpmn-io/moddle-utils | frontend |
-| @bpmn-io/properties-panel | 3.33.0 | MIT | https://github.com/bpmn-io/properties-panel | frontend |
-| @bpmn-io/variable-resolver | 1.3.6 | MIT |  | frontend |
-| @camunda/element-templates-json-schema | 0.19.0 | MIT | https://github.com/camunda/element-templates-json-schema | frontend |
+| @bpmn-io/lang-feel | 3.0.0 | MIT | https://github.com/bpmn-io/lang-feel | frontend |
+| @bpmn-io/lezer-feel | 2.1.0 | MIT | https://github.com/bpmn-io/lezer-feel | frontend |
+| @bpmn-io/moddle-utils | 0.3.0 | MIT | https://github.com/bpmn-io/moddle-utils | frontend |
+| @bpmn-io/properties-panel | 3.38.0 | MIT | https://github.com/bpmn-io/properties-panel | frontend |
+| @bpmn-io/variable-resolver | 1.4.0 | MIT |  | frontend |
+| @camunda/element-templates-json-schema | 0.20.0 | MIT | https://github.com/camunda/element-templates-json-schema | frontend |
 | @camunda/example-data-properties-provider | 1.2.1 | MIT |  | frontend |
 | @camunda/feel-builtins | 0.2.0 | MIT | https://github.com/camunda/feel-builtins | frontend |
-| @camunda/zeebe-element-templates-json-schema | 0.31.1 | MIT | https://github.com/camunda/element-templates-json-schema | frontend |
+| @camunda/zeebe-element-templates-json-schema | 0.36.0 | MIT | https://github.com/camunda/element-templates-json-schema | frontend |
 | @carbon/charts-react | 1.27.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon-charts | frontend |
 | @carbon/charts | 1.27.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon-charts | frontend |
 | @carbon/colors | 11.42.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon | frontend |
@@ -79,6 +81,7 @@ Generated from:
 | @carbon/grid | 11.45.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon | frontend |
 | @carbon/icon-helpers | 10.68.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon | frontend |
 | @carbon/icons-react | 11.69.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon | frontend |
+| @carbon/icons | 11.74.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon | frontend |
 | @carbon/layout | 11.43.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon | frontend |
 | @carbon/motion | 11.37.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon | frontend |
 | @carbon/react | 1.93.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon | frontend |
@@ -87,14 +90,14 @@ Generated from:
 | @carbon/type | 11.49.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon | frontend |
 | @carbon/utilities | 0.11.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon | frontend |
 | @carbon/utils-position | 1.3.0 | MIT | https://github.com/carbon-design-system/carbon-utils-position | frontend |
-| @codemirror/autocomplete | 6.19.0 | MIT | https://github.com/codemirror/autocomplete | frontend |
-| @codemirror/commands | 6.9.0 | MIT | https://github.com/codemirror/commands | frontend |
+| @codemirror/autocomplete | 6.20.0 | MIT | https://github.com/codemirror/autocomplete | frontend |
+| @codemirror/commands | 6.10.2 | MIT | https://github.com/codemirror/commands | frontend |
 | @codemirror/lang-json | 6.0.2 | MIT | https://github.com/codemirror/lang-json | frontend |
-| @codemirror/language | 6.11.3 | MIT | https://github.com/codemirror/language | frontend |
-| @codemirror/lint | 6.9.0 | MIT | https://github.com/codemirror/lint | frontend |
+| @codemirror/language | 6.12.1 | MIT | https://github.com/codemirror/language | frontend |
+| @codemirror/lint | 6.9.3 | MIT | https://github.com/codemirror/lint | frontend |
 | @codemirror/search | 6.5.11 | MIT | https://github.com/codemirror/search | frontend |
-| @codemirror/state | 6.5.2 | MIT | https://github.com/codemirror/state | frontend |
-| @codemirror/view | 6.38.6 | MIT | https://github.com/codemirror/view | frontend |
+| @codemirror/state | 6.5.4 | MIT | https://github.com/codemirror/state | frontend |
+| @codemirror/view | 6.39.12 | MIT | https://github.com/codemirror/view | frontend |
 | @emotion/babel-plugin | 11.13.5 | MIT | https://github.com/emotion-js/emotion/tree/main/packages/babel-plugin | frontend |
 | @emotion/cache | 11.14.0 | MIT | https://github.com/emotion-js/emotion/tree/main/packages/cache | frontend |
 | @emotion/hash | 0.9.2 | MIT | https://github.com/emotion-js/emotion/tree/main/packages/hash | frontend |
@@ -132,14 +135,15 @@ Generated from:
 | @jridgewell/resolve-uri | 3.1.2 | MIT | https://github.com/jridgewell/resolve-uri | frontend |
 | @jridgewell/sourcemap-codec | 1.5.5 | MIT | https://github.com/jridgewell/sourcemaps | frontend |
 | @jridgewell/trace-mapping | 0.3.31 | MIT | https://github.com/jridgewell/sourcemaps | frontend |
-| @kwsites/file-exists | 1.1.1 | MIT | https://github.com/kwsites/file-exists | backend |
-| @kwsites/promise-deferred | 1.1.1 | MIT | https://github.com/kwsites/promise-deferred | backend |
-| @lezer/common | 1.3.0 | MIT | https://github.com/lezer-parser/common | frontend |
-| @lezer/highlight | 1.2.2 | MIT | https://github.com/lezer-parser/highlight | frontend |
+| @kwsites/file-exists | 1.1.1 | MIT | https://github.com/kwsites/file-exists | backend, root |
+| @kwsites/promise-deferred | 1.1.1 | MIT | https://github.com/kwsites/promise-deferred | backend, root |
+| @lezer/common | 1.5.1 | MIT | https://github.com/lezer-parser/common | frontend |
+| @lezer/highlight | 1.2.3 | MIT | https://github.com/lezer-parser/highlight | frontend |
 | @lezer/json | 1.0.3 | MIT | https://github.com/lezer-parser/json | frontend |
-| @lezer/lr | 1.4.2 | MIT | https://github.com/lezer-parser/lr | frontend |
-| @lezer/markdown | 1.5.0 | MIT | https://github.com/lezer-parser/markdown | frontend |
+| @lezer/lr | 1.4.8 | MIT | https://github.com/lezer-parser/lr | frontend |
+| @lezer/markdown | 1.6.3 | MIT | https://github.com/lezer-parser/markdown | frontend |
 | @marijn/find-cluster-break | 1.0.2 | MIT | https://github.com/marijnh/find-cluster-break | frontend |
+| @node-saml/node-saml | 5.1.0 | MIT | https://github.com/node-saml/node-saml | backend |
 | @octokit/app | 16.1.2 | MIT | https://github.com/octokit/app.js | backend |
 | @octokit/auth-app | 8.1.2 | MIT | https://github.com/octokit/auth-app.js | backend |
 | @octokit/auth-oauth-app | 9.0.3 | MIT | https://github.com/octokit/auth-oauth-app.js | backend |
@@ -207,15 +211,23 @@ Generated from:
 | @types/d3-transition | 3.0.9 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/d3-zoom | 3.0.8 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/d3 | 7.4.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
+| @types/debug | 4.1.12 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | backend |
 | @types/geojson | 7946.0.16 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
+| @types/ms | 2.1.0 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | backend |
+| @types/node | 20.19.22 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | backend |
 | @types/node | 22.19.1 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | backend |
 | @types/parse-json | 4.0.2 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
+| @types/qs | 6.14.0 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | backend |
 | @types/react | 19.2.2 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/topojson-client | 3.1.5 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/topojson-server | 3.0.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/topojson-simplify | 3.0.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/topojson-specification | 1.0.5 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
 | @types/topojson | 3.2.6 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | frontend |
+| @types/xml-encryption | 1.2.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | backend |
+| @types/xml2js | 0.4.14 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped | backend |
+| @xmldom/is-dom-node | 1.0.1 | MIT | https://github.com/xmldom/is-dom-node | backend |
+| @xmldom/xmldom | 0.8.11 | MIT | https://github.com/xmldom/xmldom | backend |
 | abort-controller | 3.0.0 | MIT | https://github.com/mysticatea/abort-controller | backend |
 | accepts | 1.3.8 | MIT | https://github.com/jshttp/accepts | backend |
 | agent-base | 7.1.4 | MIT | https://github.com/TooTallNate/proxy-agents | backend |
@@ -250,15 +262,17 @@ Generated from:
 | bottleneck | 2.19.5 | MIT | https://github.com/SGrondin/bottleneck | backend |
 | bpmn-js-bpmnlint | 0.23.0 | MIT | https://github.com/bpmn-io/bpmn-js-bpmnlint | frontend |
 | bpmn-js-color-picker | 0.7.2 | MIT | https://github.com/bpmn-io/bpmn-js-color-picker | frontend |
-| bpmn-js-create-append-anything | 1.0.1 | MIT | https://github.com/bpmn-io/bpmn-js-create-append-anything | frontend |
-| bpmn-js-element-templates | 2.15.0 | MIT | https://github.com/bpmn-io/bpmn-js-element-templates | frontend |
+| bpmn-js-create-append-anything | 1.1.0 | MIT | https://github.com/bpmn-io/bpmn-js-create-append-anything | frontend |
+| bpmn-js-element-templates | 2.19.0 | MIT | https://github.com/bpmn-io/bpmn-js-element-templates | frontend |
 | bpmn-js-executable-fix | 0.2.1 | MIT | https://github.com/bpmn-io/bpmn-js-executable-fix | frontend |
-| bpmn-js-properties-panel | 5.42.3 | MIT | https://github.com/bpmn-io/bpmn-js-properties-panel | frontend |
-| bpmn-js | 18.7.0 | MIT* | https://github.com/bpmn-io/bpmn-js | frontend |
+| bpmn-js-native-copy-paste | 0.1.0 | MIT | https://github.com/nikku/bpmn-js-native-copy-paste | frontend |
+| bpmn-js-properties-panel | 5.50.1 | MIT | https://github.com/bpmn-io/bpmn-js-properties-panel | frontend |
+| bpmn-js | 18.12.0 | MIT* | https://github.com/bpmn-io/bpmn-js | frontend |
+| bpmn-moddle | 10.0.0 | MIT | https://github.com/bpmn-io/bpmn-moddle | frontend |
 | bpmn-moddle | 9.0.4 | MIT | https://github.com/bpmn-io/bpmn-moddle | frontend |
-| bpmnlint-plugin-camunda-compat | 2.44.0 | MIT | https://github.com/camunda/bpmnlint-plugin-camunda-compat | frontend |
+| bpmnlint-plugin-camunda-compat | 2.47.0 | MIT | https://github.com/camunda/bpmnlint-plugin-camunda-compat | frontend |
 | bpmnlint-utils | 1.1.1 | MIT | https://github.com/bpmn-io/bpmnlint-utils | frontend |
-| bpmnlint | 11.6.1 | MIT | https://github.com/bpmn-io/bpmnlint | frontend |
+| bpmnlint | 11.10.0 | MIT | https://github.com/bpmn-io/bpmnlint | frontend |
 | brace-expansion | 2.0.2 | MIT | https://github.com/juliangruber/brace-expansion | backend |
 | buffer-crc32 | 1.0.0 | MIT | https://github.com/brianloveswords/buffer-crc32 | backend |
 | buffer-equal-constant-time | 1.0.1 | BSD-3-Clause | https://github.com/goinstant/buffer-equal-constant-time | backend |
@@ -268,10 +282,10 @@ Generated from:
 | call-bind | 1.0.8 | MIT | https://github.com/ljharb/call-bind | backend |
 | call-bound | 1.0.4 | MIT | https://github.com/ljharb/call-bound | backend |
 | callsites | 3.1.0 | MIT | https://github.com/sindresorhus/callsites | frontend |
-| camunda-bpmn-js-behaviors | 1.11.2 | MIT | https://github.com/camunda/camunda-bpmn-js-behaviors | frontend |
-| camunda-bpmn-js | 5.14.2 | MIT | https://github.com/camunda/camunda-bpmn-js | frontend |
+| camunda-bpmn-js-behaviors | 1.14.0 | MIT | https://github.com/camunda/camunda-bpmn-js-behaviors | frontend |
+| camunda-bpmn-js | 5.18.0 | MIT | https://github.com/camunda/camunda-bpmn-js | frontend |
 | camunda-bpmn-moddle | 7.0.1 | MIT | https://github.com/camunda/camunda-bpmn-moddle | frontend |
-| camunda-dmn-js | 3.5.0 | MIT | https://github.com/camunda/camunda-dmn-js | frontend |
+| camunda-dmn-js | 3.6.0 | MIT | https://github.com/camunda/camunda-dmn-js | frontend |
 | camunda-dmn-moddle | 1.3.0 | MIT | https://github.com/camunda/camunda-dmn-moddle | frontend |
 | chokidar | 4.0.3 | MIT | https://github.com/paulmillr/chokidar | frontend |
 | class-variance-authority | 0.7.1 | Apache-2.0 | https://github.com/joe-bell/cva | frontend |
@@ -309,10 +323,9 @@ Generated from:
 | crc32-stream | 6.0.0 | MIT | https://github.com/archiverjs/node-crc32-stream | backend |
 | crelt | 1.0.6 | MIT | https://github.com/marijnh/crelt | frontend |
 | cross-spawn | 7.0.6 | MIT | https://github.com/moxystudio/node-cross-spawn | backend |
-| csrf | 3.1.0 | MIT | https://github.com/pillarjs/csrf | backend |
+| csrf-csrf | 4.0.3 | ISC | https://github.com/Psifi-Solutions/csrf-csrf | backend |
 | css.escape | 1.5.1 | MIT | https://github.com/mathiasbynens/CSS.escape | frontend |
 | csstype | 3.1.3 | MIT | https://github.com/frenic/csstype | frontend |
-| csurf | 1.11.0 | MIT | https://github.com/expressjs/csurf | backend |
 | d3-array | 2.12.1 | BSD-3-Clause | https://github.com/d3/d3-array | frontend |
 | d3-array | 3.2.4 | ISC | https://github.com/d3/d3-array | frontend |
 | d3-axis | 3.0.0 | ISC | https://github.com/d3/d3-axis | frontend |
@@ -354,29 +367,30 @@ Generated from:
 | date-fns | 4.1.0 | MIT | https://github.com/date-fns/date-fns | frontend |
 | dayjs | 1.11.19 | MIT | https://github.com/iamkun/dayjs | backend |
 | debug | 2.6.9 | MIT | https://github.com/visionmedia/debug | backend |
-| debug | 4.4.3 | MIT | https://github.com/debug-js/debug | backend, frontend |
+| debug | 4.4.3 | MIT | https://github.com/debug-js/debug | backend, frontend, root |
 | dedent | 1.7.1 | MIT | https://github.com/dmnd/dedent | backend |
 | deepmerge | 4.3.1 | MIT | https://github.com/TehShrike/deepmerge | backend |
 | define-data-property | 1.1.4 | MIT | https://github.com/ljharb/define-data-property | backend |
 | delaunator | 5.0.1 | ISC | https://github.com/mapbox/delaunator | frontend |
-| depd | 1.1.2 | MIT | https://github.com/dougwilson/nodejs-depd | backend |
 | depd | 2.0.0 | MIT | https://github.com/dougwilson/nodejs-depd | backend |
 | des.js | 1.1.0 | MIT | https://github.com/indutny/des.js | backend |
 | destroy | 1.2.0 | MIT | https://github.com/stream-utils/destroy | backend |
-| diagram-js-direct-editing | 3.2.0 | MIT | https://github.com/bpmn-io/diagram-js-direct-editing | frontend |
+| diagram-js-direct-editing | 3.3.0 | MIT | https://github.com/bpmn-io/diagram-js-direct-editing | frontend |
 | diagram-js-grid | 1.1.0 | MIT | https://github.com/bpmn-io/diagram-js-grid | frontend |
+| diagram-js-grid | 2.0.0 | MIT | https://github.com/bpmn-io/diagram-js-grid | frontend |
 | diagram-js-minimap | 5.2.0 | MIT | https://github.com/bpmn-io/diagram-js-minimap | frontend |
 | diagram-js-origin | 1.4.0 | MIT | https://github.com/bpmn-io/diagram-js-origin | frontend |
-| diagram-js | 15.4.0 | MIT | https://github.com/bpmn-io/diagram-js | frontend |
+| diagram-js | 15.9.0 | MIT | https://github.com/bpmn-io/diagram-js | frontend |
 | didi | 10.2.2 | MIT | https://github.com/nikku/didi | frontend |
-| dmn-js-boxed-expression | 17.4.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
-| dmn-js-decision-table | 17.4.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
-| dmn-js-drd | 17.4.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
-| dmn-js-literal-expression | 17.4.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
+| didi | 11.0.0 | MIT | https://github.com/nikku/didi | frontend |
+| dmn-js-boxed-expression | 17.6.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
+| dmn-js-decision-table | 17.6.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
+| dmn-js-drd | 17.6.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
+| dmn-js-literal-expression | 17.6.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
 | dmn-js-properties-panel | 3.8.0 | MIT | https://github.com/bpmn-io/dmn-js-properties-panel | frontend |
-| dmn-js-shared | 17.4.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
-| dmn-js | 17.4.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
-| dmn-moddle | 11.0.0 | MIT | https://github.com/bpmn-io/dmn-moddle | frontend |
+| dmn-js-shared | 17.6.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
+| dmn-js | 17.6.0 | MIT* | https://github.com/bpmn-io/dmn-js | frontend |
+| dmn-moddle | 12.0.1 | MIT | https://github.com/bpmn-io/dmn-moddle | frontend |
 | dom-iterator | 1.0.2 | MIT | https://github.com/MatthewMueller/dom-iterator | frontend |
 | domify | 1.4.2 | MIT | https://github.com/sindresorhus/domify | frontend |
 | domify | 2.0.0 | MIT | https://github.com/sindresorhus/domify | frontend |
@@ -412,8 +426,7 @@ Generated from:
 | fast-content-type-parse | 3.0.0 | MIT | https://github.com/fastify/fast-content-type-parse | backend |
 | fast-fifo | 1.3.2 | MIT | https://github.com/mafintosh/fast-fifo | backend |
 | fast-sha256 | 1.3.0 | Unlicense | https://github.com/dchest/fast-sha256-js | backend |
-| feelers | 1.4.0 | MIT | https://github.com/skaiir | frontend |
-| feelin | 3.2.0 | MIT | https://github.com/nikku/feelin | frontend |
+| feelers | 1.5.1 | MIT | https://github.com/skaiir | frontend |
 | feelin | 4.6.0 | MIT | https://github.com/nikku/feelin | frontend |
 | fetch-blob | 3.2.0 | MIT | https://github.com/node-fetch/fetch-blob | backend |
 | file-drops | 0.6.2 | MIT | https://github.com/nikku/file-drops | frontend |
@@ -444,16 +457,16 @@ Generated from:
 | has-symbols | 1.1.0 | MIT | https://github.com/inspect-js/has-symbols | backend |
 | has-tostringtag | 1.0.2 | MIT | https://github.com/inspect-js/has-tostringtag | backend |
 | hasown | 2.0.2 | MIT | https://github.com/inspect-js/hasOwn | backend, frontend |
+| helmet | 8.1.0 | MIT | https://github.com/helmetjs/helmet | backend |
 | hoist-non-react-statics | 3.3.2 | BSD-3-Clause | https://github.com/mridgway/hoist-non-react-statics | frontend |
 | htm | 3.1.1 | Apache-2.0 | https://github.com/developit/htm | frontend |
 | html-to-image | 1.11.11 | MIT | https://github.com/bubkoo/html-to-image | frontend |
-| http-errors | 1.7.3 | MIT | https://github.com/jshttp/http-errors | backend |
 | http-errors | 2.0.0 | MIT | https://github.com/jshttp/http-errors | backend |
 | http-errors | 2.0.1 | MIT | https://github.com/jshttp/http-errors | backend |
 | https-proxy-agent | 7.0.6 | MIT | https://github.com/TooTallNate/proxy-agents | backend |
 | iconv-lite | 0.4.24 | MIT | https://github.com/ashtuchkin/iconv-lite | backend |
 | iconv-lite | 0.6.3 | MIT | https://github.com/ashtuchkin/iconv-lite | frontend |
-| ids | 1.0.5 | MIT | https://github.com/bpmn-io/ids | frontend |
+| ids | 3.0.1 | MIT | https://github.com/bpmn-io/ids | frontend |
 | ieee754 | 1.2.1 | BSD-3-Clause | https://github.com/feross/ieee754 | backend |
 | immutable | 5.1.4 | MIT | https://github.com/immutable-js/immutable-js | frontend |
 | import-fresh | 3.3.1 | MIT | https://github.com/sindresorhus/import-fresh | frontend |
@@ -515,19 +528,22 @@ Generated from:
 | mime-types | 2.1.35 | MIT | https://github.com/jshttp/mime-types | backend |
 | mime | 1.6.0 | MIT | https://github.com/broofa/node-mime | backend |
 | min-dash | 4.2.3 | MIT | https://github.com/bpmn-io/min-dash | frontend |
+| min-dash | 5.0.0 | MIT | https://github.com/bpmn-io/min-dash | frontend |
 | min-dom | 4.2.1 | MIT | https://github.com/bpmn-io/min-dom | frontend |
 | min-dom | 5.1.1 | MIT | https://github.com/bpmn-io/min-dom | frontend |
+| min-dom | 5.2.0 | MIT | https://github.com/bpmn-io/min-dom | frontend |
 | minimalistic-assert | 1.0.1 | ISC | https://github.com/calvinmetcalf/minimalistic-assert | backend |
-| minimatch | 5.1.6 | ISC | https://github.com/isaacs/minimatch | backend |
-| minimatch | 9.0.5 | ISC | https://github.com/isaacs/minimatch | backend |
+| minimatch | 10.2.4 | BlueOak-1.0.0 | https://github.com/isaacs/minimatch | backend |
 | minipass | 7.1.2 | ISC | https://github.com/isaacs/minipass | backend |
 | mitt | 3.0.1 | MIT | https://github.com/developit/mitt | frontend |
 | moddle-xml | 11.0.0 | MIT | https://github.com/bpmn-io/moddle-xml | frontend |
+| moddle-xml | 12.0.0 | MIT | https://github.com/bpmn-io/moddle-xml | frontend |
 | moddle | 7.2.0 | MIT | https://github.com/bpmn-io/moddle | frontend |
+| moddle | 8.0.0 | MIT | https://github.com/bpmn-io/moddle | frontend |
 | morgan | 1.10.1 | MIT | https://github.com/expressjs/morgan | backend |
 | mri | 1.2.0 | MIT | https://github.com/lukeed/mri | frontend |
 | ms | 2.0.0 | MIT | https://github.com/zeit/ms | backend |
-| ms | 2.1.3 | MIT | https://github.com/vercel/ms | backend, frontend |
+| ms | 2.1.3 | MIT | https://github.com/vercel/ms | backend, frontend, root |
 | negotiator | 0.6.3 | MIT | https://github.com/jshttp/negotiator | backend |
 | node-domexception | 1.0.0 | MIT | https://github.com/jimmywarting/node-domexception | backend |
 | node-fetch | 2.7.0 | MIT | https://github.com/bitinn/node-fetch | backend |
@@ -543,11 +559,12 @@ Generated from:
 | on-headers | 1.1.0 | MIT | https://github.com/jshttp/on-headers | backend |
 | openapi3-ts | 4.5.0 | MIT | https://github.com/metadevpro/openapi3-ts | backend |
 | opencollective-postinstall | 2.0.3 | MIT | https://github.com/opencollective/opencollective-postinstall | frontend |
+| oracledb | 6.10.0 | (Apache-2.0 OR UPL-1.0) | https://github.com/oracle/node-oracledb | backend |
 | package-json-from-dist | 1.0.1 | BlueOak-1.0.0 | https://github.com/isaacs/package-json-from-dist | backend |
 | parent-module | 1.0.1 | MIT | https://github.com/sindresorhus/parent-module | frontend |
 | parse-json | 5.2.0 | MIT | https://github.com/sindresorhus/parse-json | frontend |
 | parseurl | 1.3.3 | MIT | https://github.com/pillarjs/parseurl | backend |
-| path-intersection | 3.1.0 | MIT | https://github.com/bpmn-io/path-intersection | frontend |
+| path-intersection | 4.1.0 | MIT | https://github.com/bpmn-io/path-intersection | frontend |
 | path-key | 3.1.1 | MIT | https://github.com/sindresorhus/path-key | backend |
 | path-parse | 1.0.7 | MIT | https://github.com/jbgutierrez/path-parse | frontend |
 | path-scurry | 1.11.1 | BlueOak-1.0.0 | https://github.com/isaacs/path-scurry | backend |
@@ -563,7 +580,7 @@ Generated from:
 | pgpass | 1.0.5 | MIT | https://github.com/hoegaarden/pgpass | backend |
 | picocolors | 1.1.1 | ISC | https://github.com/alexeyraspopov/picocolors | frontend |
 | picomatch-browser | 2.2.6 | MIT | https://github.com/micromatch/picomatch | backend |
-| pluralize | 7.0.0 | MIT | https://github.com/blakeembrey/pluralize | frontend |
+| pluralize | 8.0.0 | MIT | https://github.com/blakeembrey/pluralize | frontend |
 | possible-typed-array-names | 1.1.0 | MIT | https://github.com/ljharb/possible-typed-array-names | backend |
 | postgres-array | 2.0.0 | MIT | https://github.com/bendrucker/postgres-array | backend |
 | postgres-bytea | 1.0.0 | MIT | https://github.com/bendrucker/postgres-bytea | backend |
@@ -575,9 +592,8 @@ Generated from:
 | process | 0.11.10 | MIT | https://github.com/shtylman/node-process | backend |
 | prop-types | 15.8.1 | MIT | https://github.com/facebook/prop-types | frontend |
 | proxy-addr | 2.0.7 | MIT | https://github.com/jshttp/proxy-addr | backend |
-| qs | 6.14.1 | BSD-3-Clause | https://github.com/ljharb/qs | backend |
+| qs | 6.15.0 | BSD-3-Clause | https://github.com/ljharb/qs | backend |
 | querystringify | 2.2.0 | MIT | https://github.com/unshiftio/querystringify | backend |
-| random-bytes | 1.0.0 | MIT | https://github.com/crypto-utils/random-bytes | backend |
 | range-parser | 1.2.1 | MIT | https://github.com/jshttp/range-parser | backend |
 | rate-limiter-flexible | 8.3.0 | ISC | https://github.com/animir/node-rate-limiter-flexible | backend |
 | raw-body | 2.5.3 | MIT | https://github.com/stream-utils/raw-body | backend |
@@ -606,25 +622,24 @@ Generated from:
 | resolve-from | 4.0.0 | MIT | https://github.com/sindresorhus/resolve-from | frontend |
 | resolve | 1.22.11 | MIT | https://github.com/browserify/resolve | frontend |
 | rimraf | 5.0.10 | ISC | https://github.com/isaacs/rimraf | backend |
-| rndm | 1.2.0 | MIT | https://github.com/crypto-utils/rndm | backend |
 | robust-predicates | 3.0.2 | Unlicense | https://github.com/mourner/robust-predicates | frontend |
 | rw | 1.3.3 | BSD-3-Clause | https://github.com/mbostock/rw | frontend |
 | safe-buffer | 5.1.2 | MIT | https://github.com/feross/safe-buffer | backend |
 | safe-buffer | 5.2.1 | MIT | https://github.com/feross/safe-buffer | backend |
 | safer-buffer | 2.1.2 | MIT | https://github.com/ChALkeR/safer-buffer | backend, frontend |
 | sass | 1.93.2 | MIT | https://github.com/sass/dart-sass | frontend |
+| sax | 1.4.4 | BlueOak-1.0.0 | https://github.com/isaacs/sax-js | backend |
 | saxen | 10.0.0 | MIT | https://github.com/nikku/saxen | frontend |
+| saxen | 11.0.2 | MIT | https://github.com/nikku/saxen | frontend |
 | scheduler | 0.27.0 | MIT | https://github.com/facebook/react | frontend |
-| selection-ranges | 3.0.3 | MIT | https://github.com/nikku/selection-ranges | frontend |
-| selection-ranges | 4.0.3 | MIT | https://github.com/nikku/selection-ranges | frontend |
-| selection-update | 0.1.2 | MIT | https://github.com/nikku/selection-update | frontend |
+| selection-ranges | 4.1.1 | MIT | https://github.com/nikku/selection-ranges | frontend |
+| selection-update | 1.1.1 | MIT | https://github.com/nikku/selection-update | frontend |
 | semver-compare | 1.0.0 | MIT | https://github.com/substack/semver-compare | frontend |
 | semver | 7.7.3 | ISC | https://github.com/npm/node-semver | backend, frontend |
 | send | 0.19.0 | MIT | https://github.com/pillarjs/send | backend |
 | serve-static | 1.16.2 | MIT | https://github.com/expressjs/serve-static | backend |
 | set-cookie-parser | 2.7.2 | MIT | https://github.com/nfriedly/set-cookie-parser | frontend |
 | set-function-length | 1.2.2 | MIT | https://github.com/ljharb/set-function-length | backend |
-| setprototypeof | 1.1.1 | ISC | https://github.com/wesleytodd/setprototypeof | backend |
 | setprototypeof | 1.2.0 | ISC | https://github.com/wesleytodd/setprototypeof | backend |
 | sha.js | 2.4.12 | (MIT AND BSD-3-Clause) | https://github.com/crypto-browserify/sha.js | backend |
 | shebang-command | 2.0.0 | MIT | https://github.com/kevva/shebang-command | backend |
@@ -634,14 +649,13 @@ Generated from:
 | side-channel-weakmap | 1.0.2 | MIT | https://github.com/ljharb/side-channel-weakmap | backend |
 | side-channel | 1.1.0 | MIT | https://github.com/ljharb/side-channel | backend |
 | signal-exit | 4.1.0 | ISC | https://github.com/tapjs/signal-exit | backend |
-| simple-git | 3.30.0 | MIT | https://github.com/steveukx/git-js | backend |
+| simple-git | 3.30.0 | MIT | https://github.com/steveukx/git-js | backend, root |
 | simple-swizzle | 0.2.4 | MIT | https://github.com/qix-/node-simple-swizzle | frontend |
 | source-map-js | 1.2.1 | BSD-3-Clause | https://github.com/7rulnik/source-map-js | frontend |
 | source-map | 0.5.7 | BSD-3-Clause | https://github.com/mozilla/source-map | frontend |
 | split2 | 4.2.0 | ISC | https://github.com/mcollina/split2 | backend |
 | sql-highlight | 6.1.0 | MIT | https://github.com/scriptcoded/sql-highlight | backend |
 | sql.js | 1.13.0 | MIT | https://github.com/sql-js/sql.js | backend |
-| statuses | 1.5.0 | MIT | https://github.com/jshttp/statuses | backend |
 | statuses | 2.0.1 | MIT | https://github.com/jshttp/statuses | backend |
 | statuses | 2.0.2 | MIT | https://github.com/jshttp/statuses | backend |
 | streamx | 2.23.0 | MIT | https://github.com/mafintosh/streamx | backend |
@@ -658,29 +672,27 @@ Generated from:
 | swagger-ui-dist | 5.29.5 | Apache-2.0 | https://github.com/swagger-api/swagger-ui | backend |
 | swagger-ui-express | 5.0.1 | MIT | https://github.com/scottie1984/swagger-ui-express | backend |
 | tabbable | 6.2.0 | MIT | https://github.com/focus-trap/tabbable | frontend |
-| table-js | 9.2.0 | MIT | https://github.com/bpmn-io/table-js | frontend |
+| table-js | 9.4.0 | MIT | https://github.com/bpmn-io/table-js | frontend |
 | tailwind-merge | 3.4.0 | MIT | https://github.com/dcastil/tailwind-merge | frontend |
 | tar-stream | 3.1.7 | MIT | https://github.com/mafintosh/tar-stream | backend |
 | text-decoder | 1.2.3 | Apache-2.0 | https://github.com/holepunchto/text-decoder | backend |
 | ticky | 1.0.1 | MIT | https://github.com/bevacqua/ticky | frontend |
 | tiny-glob | 0.2.9 | MIT | https://github.com/terkelg/tiny-glob | frontend |
 | tiny-svg | 3.1.3 | MIT | https://github.com/bpmn-io/tiny-svg | frontend |
+| tiny-svg | 4.1.4 | MIT | https://github.com/bpmn-io/tiny-svg | frontend |
 | to-buffer | 1.2.2 | MIT | https://github.com/browserify/to-buffer | backend |
 | toad-cache | 3.7.0 | MIT | https://github.com/kibertoad/toad-cache | backend |
 | toggle-selection | 1.0.6 | MIT | https://github.com/sudodoki/toggle-selection | frontend |
-| toidentifier | 1.0.0 | MIT | https://github.com/component/toidentifier | backend |
 | toidentifier | 1.0.1 | MIT | https://github.com/component/toidentifier | backend |
 | topojson-client | 3.1.0 | ISC | https://github.com/topojson/topojson-client | frontend |
 | tr46 | 0.0.3 | MIT | https://github.com/Sebmaster/tr46.js | backend |
 | tslib | 2.8.1 | 0BSD | https://github.com/Microsoft/tslib | backend, frontend |
-| tsscmp | 1.0.6 | MIT | https://github.com/suryagh/tsscmp | backend |
 | tunnel | 0.0.6 | MIT | https://github.com/koichik/node-tunnel | backend |
 | type-is | 1.6.18 | MIT | https://github.com/jshttp/type-is | backend |
 | typed-array-buffer | 1.0.3 | MIT | https://github.com/inspect-js/typed-array-buffer | backend |
 | typed-rest-client | 2.1.0 | MIT | https://github.com/Microsoft/typed-rest-client | backend |
 | typeorm | 0.3.28 | MIT | https://github.com/typeorm/typeorm | backend |
-| uid-safe | 2.1.5 | MIT | https://github.com/crypto-utils/uid-safe | backend |
-| underscore | 1.13.7 | MIT | https://github.com/jashkenas/underscore | backend |
+| underscore | 1.13.8 | MIT | https://github.com/jashkenas/underscore | backend |
 | undici-types | 6.21.0 | MIT | https://github.com/nodejs/undici | backend |
 | undici | 7.18.2 | MIT | https://github.com/nodejs/undici | backend |
 | universal-github-app-jwt | 2.2.2 | MIT | https://github.com/gr2m/universal-github-app-jwt | backend |
@@ -691,7 +703,8 @@ Generated from:
 | util-deprecate | 1.0.2 | MIT | https://github.com/TooTallNate/util-deprecate | backend |
 | utils-merge | 1.0.1 | MIT | https://github.com/jaredhanson/utils-merge | backend |
 | uuid | 10.0.0 | MIT | https://github.com/uuidjs/uuid | backend |
-| uuid | 11.1.0 | MIT | https://github.com/uuidjs/uuid | backend, frontend |
+| uuid | 11.1.0 | MIT | https://github.com/uuidjs/uuid | backend |
+| uuid | 13.0.0 | MIT | https://github.com/uuidjs/uuid | frontend |
 | uuid | 8.3.2 | MIT | https://github.com/uuidjs/uuid | backend |
 | vary | 1.1.2 | MIT | https://github.com/jshttp/vary | backend |
 | w3c-keyname | 2.2.8 | MIT | https://github.com/marijnh/w3c-keyname | frontend |
@@ -704,6 +717,14 @@ Generated from:
 | wrap-ansi | 7.0.0 | MIT | https://github.com/chalk/wrap-ansi | backend |
 | wrap-ansi | 8.1.0 | MIT | https://github.com/chalk/wrap-ansi | backend |
 | xcase | 2.0.1 | MIT | https://github.com/encharm/xcase | backend |
+| xml-crypto | 6.1.2 | MIT | https://github.com/node-saml/xml-crypto | backend |
+| xml-encryption | 3.1.0 | MIT | https://github.com/auth0/node-xml-encryption | backend |
+| xml2js | 0.6.2 | MIT | https://github.com/Leonidas-from-XIV/node-xml2js | backend |
+| xmlbuilder | 11.0.1 | MIT | https://github.com/oozcitak/xmlbuilder-js | backend |
+| xmlbuilder | 15.1.1 | MIT | https://github.com/oozcitak/xmlbuilder-js | backend |
+| xpath | 0.0.32 | MIT | https://github.com/goto100/xpath | backend |
+| xpath | 0.0.33 | MIT | https://github.com/goto100/xpath | backend |
+| xpath | 0.0.34 | MIT | https://github.com/goto100/xpath | backend |
 | xtend | 4.0.2 | MIT | https://github.com/Raynos/xtend | backend |
 | y18n | 5.0.8 | ISC | https://github.com/yargs/y18n | backend |
 | yaml | 1.10.2 | ISC | https://github.com/eemeli/yaml | frontend |
@@ -721,11 +742,8 @@ Generated from:
 How this file is generated:
 
 ```sh
-# backend
-npx --yes license-checker --production --json --out third_party_licenses.json
-# frontend
-npx --yes license-checker --production --json --out third_party_licenses.json
-
 # from repo root
-node scripts/generate-third-party-notices.mjs
+bash ./scripts/update-third-party-notices.sh
+# strict check (fails on potential Apache-2.0 incompatibility)
+bash ./scripts/update-third-party-notices.sh --check --strict
 ```
