@@ -25,7 +25,7 @@
     "access": "restricted"
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "^7.1.0",
+    "@asteasolutions/zod-to-openapi": "^8.4.3",
     "@gitbeaker/rest": "^43.8.0",
     "azure-devops-node-api": "^15.1.1",
     "bcryptjs": "^3.0.3",

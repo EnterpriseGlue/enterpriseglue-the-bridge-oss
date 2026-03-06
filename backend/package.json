@@ -22,7 +22,7 @@
     "db:cleanup-test-data": "tsx scripts/cleanup-test-data.ts"
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "^7.1.0",
+    "@asteasolutions/zod-to-openapi": "^8.4.3",
     "@azure/msal-node": "^3.8.1",
     "@gitbeaker/rest": "^43.8.0",
     "@node-saml/node-saml": "^5.1.0",
