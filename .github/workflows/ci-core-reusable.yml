@@ -24,7 +24,7 @@ on:
         required: true
         type: string
     secrets:
-      github_token:
+      ci_token:
         description: GitHub token for private package install and Docker build args
         required: false
 
@@ -148,7 +148,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.github_token }}
+          NODE_AUTH_TOKEN: ${{ secrets.ci_token }}
 
       - name: Install DB driver for matrix database
         if: matrix.database == 'oracle'
@@ -278,7 +278,7 @@ jobs:
             --pull \
             --cache-from type=gha,scope=ci-smoke-backend \
             --cache-to type=gha,mode=max,scope=ci-smoke-backend \
-            --build-arg NODE_AUTH_TOKEN=${{ secrets.github_token }} \
+            --build-arg NODE_AUTH_TOKEN=${{ secrets.ci_token }} \
             -f backend/Dockerfile.prod \
             -t eg-local-backend:pr \
             .
@@ -289,7 +289,7 @@ jobs:
             --pull \
             --cache-from type=gha,scope=ci-smoke-frontend \
             --cache-to type=gha,mode=max,scope=ci-smoke-frontend \
-            --build-arg NODE_AUTH_TOKEN=${{ secrets.github_token }} \
+            --build-arg NODE_AUTH_TOKEN=${{ secrets.ci_token }} \
             -f frontend/Dockerfile.prod \
             --build-arg API_BASE_URL= \
             -t eg-local-frontend:pr \
