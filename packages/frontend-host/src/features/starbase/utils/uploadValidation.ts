@@ -8,18 +8,49 @@ function toXmlText(xml: Document | string): string {
 }
 
 function extractRootTagName(xmlText: string): string | null {
-  const withoutComments = xmlText.replace(/<!--[\s\S]*?-->/g, '')
-  const withoutDeclaration = withoutComments.replace(/^\s*<\?xml[\s\S]*?\?>\s*/i, '')
-  const openTag = withoutDeclaration.match(/^<([A-Za-z_][\w.-]*(?::[A-Za-z_][\w.-]*)?)(\s[^>]*)?(\/?)>/)
-  if (!openTag) return null
+  let cursor = 0
 
-  const rootTag = openTag[1]
-  const isSelfClosing = openTag[3] === '/'
-  if (isSelfClosing) return rootTag.toLowerCase()
+  while (cursor < xmlText.length) {
+    const lt = xmlText.indexOf('<', cursor)
+    if (lt === -1) return null
 
-  const escapedRootTag = rootTag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const closeTagPattern = new RegExp(`<\\s*\\/\\s*${escapedRootTag}\\s*>`, 'i')
-  return closeTagPattern.test(withoutDeclaration) ? rootTag.toLowerCase() : null
+    if (xmlText.startsWith('<!--', lt)) {
+      const end = xmlText.indexOf('-->', lt + 4)
+      if (end === -1) return null
+      cursor = end + 3
+      continue
+    }
+
+    if (xmlText.startsWith('<?xml', lt) || xmlText.startsWith('<?XML', lt)) {
+      const end = xmlText.indexOf('?>', lt + 2)
+      if (end === -1) return null
+      cursor = end + 2
+      continue
+    }
+
+    if (xmlText.startsWith('<!', lt) || xmlText.startsWith('</', lt)) {
+      const end = xmlText.indexOf('>', lt + 2)
+      if (end === -1) return null
+      cursor = end + 1
+      continue
+    }
+
+    const openTag = xmlText.slice(lt).match(/^<([A-Za-z_][\w.-]*(?::[A-Za-z_][\w.-]*)?)(\s[^>]*)?(\/?)>/)
+    if (!openTag) {
+      cursor = lt + 1
+      continue
+    }
+
+    const rootTag = openTag[1]
+    const isSelfClosing = openTag[3] === '/'
+    if (isSelfClosing) return rootTag.toLowerCase()
+
+    const escapedRootTag = rootTag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const closeTagPattern = new RegExp(`<\\s*\\/\\s*${escapedRootTag}\\s*>`, 'i')
+    return closeTagPattern.test(xmlText) ? rootTag.toLowerCase() : null
+  }
+
+  return null
 }
 
 export function detectCamundaEngine(xml: Document | string) {
