@@ -29,7 +29,7 @@ interface FolderRow {
 const r = Router();
 
 r.get('/starbase-api/projects/:projectId/engine-deployments', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
 
@@ -62,7 +62,8 @@ r.get('/starbase-api/projects/:projectId/engine-deployments', apiLimiter, requir
 }));
 
 r.get('/starbase-api/projects/:projectId/files/:fileId/deployments', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, fileId } = req.params;
+  const projectId = String(req.params.projectId);
+  const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
   const scanLimit = Math.min(5000, Math.max(1, parseInt(String(req.query.scanLimit || '1000'), 10) || 1000));
@@ -211,7 +212,8 @@ r.get('/starbase-api/projects/:projectId/files/:fileId/deployments', apiLimiter,
 }));
 
 r.get('/starbase-api/projects/:projectId/files/:fileId/deployments/history', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, fileId } = req.params;
+  const projectId = String(req.params.projectId);
+  const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit || '200'), 10) || 200));
   const scanLimit = Math.min(20000, Math.max(1, parseInt(String(req.query.scanLimit || '5000'), 10) || 5000));
@@ -354,7 +356,7 @@ r.get('/starbase-api/projects/:projectId/files/:fileId/deployments/history', api
 }));
 
 r.get('/starbase-api/projects/:projectId/engine-deployments/latest', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const scanLimit = Math.min(20000, Math.max(1, parseInt(String(req.query.limit || '5000'), 10) || 5000));
 

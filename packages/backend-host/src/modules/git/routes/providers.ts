@@ -65,7 +65,7 @@ router.get('/git-api/providers', apiLimiter, requireAuth, asyncHandler(async (re
  * Get a specific Git provider
  */
 router.get('/git-api/providers/:id', apiLimiter, requireAuth, validateParams(providerIdSchema), asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const dataSource = await getDataSource();
   const providerRepo = dataSource.getRepository(GitProvider);
 
@@ -145,7 +145,7 @@ router.get('/git-api/admin/providers', apiLimiter, requireAuth, requirePermissio
  * Same middleware order as GET: requireAuth first, then requirePlatformAdmin.
  */
 router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.GIT_PROVIDER_MANAGE }), validateParams(providerIdSchema), validateBody(updateProviderSchema), asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const {
     isActive,
     customBaseUrl,
@@ -209,7 +209,7 @@ router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requirePermi
  * List repositories from a Git provider for the authenticated user
  */
 router.get('/git-api/providers/:id/repos', apiLimiter, requireAuth, validateParams(providerIdSchema), asyncHandler(async (req: Request, res: Response) => {
-  const { id: providerId } = req.params;
+  const providerId = String(req.params.id);
   const userId = req.user?.userId;
   
   if (!userId) {

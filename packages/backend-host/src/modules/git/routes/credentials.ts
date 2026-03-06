@@ -95,7 +95,7 @@ router.get('/git-api/credentials', apiLimiter, requireAuth, asyncHandler(async (
  */
 router.get('/git-api/credentials/:providerId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const { providerId } = req.params;
+  const providerId = String(req.params.providerId);
   
   const credential = await credentialService.getCredential(userId, providerId);
   
@@ -131,7 +131,7 @@ router.post('/git-api/credentials', apiLimiter, requireAuth, validateBody(saveCr
  */
 router.patch('/git-api/credentials/:credentialId', apiLimiter, requireAuth, validateParams(credentialIdParamsSchema), validateBody(renameCredentialSchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const { credentialId } = req.params;
+  const credentialId = String(req.params.credentialId);
   const { name } = req.body;
   
   const success = await credentialService.renameCredential(userId, credentialId, name);
@@ -149,7 +149,7 @@ router.patch('/git-api/credentials/:credentialId', apiLimiter, requireAuth, vali
  */
 router.delete('/git-api/credentials/:providerId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const { providerId } = req.params;
+  const providerId = String(req.params.providerId);
   
   await credentialService.deleteCredential(userId, providerId);
   res.status(204).send();
@@ -161,7 +161,7 @@ router.delete('/git-api/credentials/:providerId', apiLimiter, requireAuth, async
  */
 router.get('/git-api/credentials/:providerId/validate', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const { providerId } = req.params;
+  const providerId = String(req.params.providerId);
   
   const isValid = await credentialService.hasValidCredentials(userId, providerId);
   res.json({ valid: isValid });
@@ -173,7 +173,7 @@ router.get('/git-api/credentials/:providerId/validate', apiLimiter, requireAuth,
  */
 router.get('/git-api/credentials/:credentialId/namespaces', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const { credentialId } = req.params;
+  const credentialId = String(req.params.credentialId);
   
   const namespaces = await credentialService.getNamespaces(userId, credentialId);
   res.json(namespaces);
@@ -186,7 +186,7 @@ router.get('/git-api/credentials/:credentialId/namespaces', apiLimiter, requireA
  * Get OAuth configuration for a provider
  */
 router.get('/git-api/oauth/:providerId/config', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { providerId } = req.params;
+  const providerId = String(req.params.providerId);
   
   const oauthConfig = await oauthService.getOAuthConfig(providerId);
   res.json(oauthConfig);
@@ -198,7 +198,7 @@ router.get('/git-api/oauth/:providerId/config', apiLimiter, requireAuth, asyncHa
  */
 router.get('/git-api/oauth/:providerId/authorize', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const { providerId } = req.params;
+  const providerId = String(req.params.providerId);
   
   // Build redirect URI
   const baseUrl = config.frontendUrl;
@@ -213,7 +213,7 @@ router.get('/git-api/oauth/:providerId/authorize', apiLimiter, requireAuth, asyn
 }));
 
 router.get('/git-api/oauth/:providerId/authorize/redirect', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const safeProviderId = parseProviderId(req.params.providerId);
+  const safeProviderId = parseProviderId(String(req.params.providerId));
   if (!safeProviderId) {
     throw Errors.validation('Invalid providerId');
   }
@@ -317,7 +317,7 @@ router.post('/git-api/oauth/callback', apiLimiter, requireAuth, asyncHandler(asy
  */
 router.post('/git-api/oauth/:providerId/refresh', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const { providerId } = req.params;
+  const providerId = String(req.params.providerId);
   
   // Get current credential
   const credential = await credentialService.getCredential(userId, providerId);

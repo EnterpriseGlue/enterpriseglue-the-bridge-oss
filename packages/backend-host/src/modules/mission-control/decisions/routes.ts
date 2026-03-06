@@ -209,28 +209,32 @@ r.get('/mission-control-api/decision-definitions', requireEngineReadOrWrite({ en
 // Get decision definition by ID
 r.get('/mission-control-api/decision-definitions/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await fetchDecisionDefinition(engineId, req.params.id);
+  const definitionId = String(req.params.id);
+  const data = await fetchDecisionDefinition(engineId, definitionId);
   res.json(data);
 }));
 
 // Get decision definition XML
 r.get('/mission-control-api/decision-definitions/:id/xml', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await fetchDecisionDefinitionXml(engineId, req.params.id);
+  const definitionId = String(req.params.id);
+  const data = await fetchDecisionDefinitionXml(engineId, definitionId);
   res.json(data);
 }));
 
 // Evaluate decision
 r.post('/mission-control-api/decision-definitions/:id/evaluate', requireEngineReadOrWrite({ engineIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await evaluateDecisionById(engineId, req.params.id, req.body);
+  const definitionId = String(req.params.id);
+  const data = await evaluateDecisionById(engineId, definitionId, req.body);
   res.json(data);
 }));
 
 // Evaluate decision by key
 r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireEngineReadOrWrite({ engineIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await evaluateDecisionByKey(engineId, req.params.key, req.body);
+  const definitionKey = String(req.params.key);
+  const data = await evaluateDecisionByKey(engineId, definitionKey, req.body);
   res.json(data);
 }));
 

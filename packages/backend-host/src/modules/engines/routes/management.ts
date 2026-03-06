@@ -79,7 +79,7 @@ router.get(
   validateParams(engineIdSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const userId = req.user!.userId;
 
       // Check if user has access to view members
@@ -109,7 +109,7 @@ router.post(
   validateBody(addMemberSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const { email, role } = req.body;
       const granterId = req.user!.userId;
 
@@ -187,7 +187,8 @@ router.patch(
   validateBody(updateMemberRoleSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId, userId: targetUserId } = req.params;
+      const engineId = String(req.params.engineId);
+      const targetUserId = String(req.params.userId);
       const { role: newRole } = req.body;
       const requesterId = req.user!.userId;
 
@@ -227,7 +228,8 @@ router.delete(
   validateParams(userIdSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId, userId: targetUserId } = req.params;
+      const engineId = String(req.params.engineId);
+      const targetUserId = String(req.params.userId);
       const requesterId = req.user!.userId;
 
       // Check if requester has permission
@@ -270,7 +272,7 @@ router.post(
   validateBody(assignDelegateSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const { email } = req.body;
       const ownerId = req.user!.userId;
 
@@ -319,7 +321,7 @@ router.post(
   validateBody(z.object({ newOwnerEmail: z.string().email() })),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const { newOwnerEmail } = req.body;
       const currentOwnerId = req.user!.userId;
 
@@ -362,7 +364,7 @@ router.post(
   validateBody(setEnvironmentSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const { environmentTagId } = req.body;
       const userId = req.user!.userId;
 
@@ -393,7 +395,7 @@ router.post(
   validateBody(setLockedSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const { locked } = req.body;
       const userId = req.user!.userId;
 
@@ -442,7 +444,7 @@ router.get(
   validateParams(engineIdSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const userId = req.user!.userId;
 
       if (!(await canViewEngine(req, engineId))) {
@@ -495,7 +497,7 @@ router.post(
   validateBody(z.object({ projectId: z.string().uuid() })),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const { projectId } = req.body;
       const userId = req.user!.userId;
 
@@ -525,7 +527,7 @@ router.get(
   validateParams(engineIdSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const userId = req.user!.userId;
 
       const canManage = await canManageEngine(req, engineId);
@@ -552,7 +554,8 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     try {
-      const { engineId, requestId } = req.params;
+      const engineId = String(req.params.engineId);
+      const requestId = String(req.params.requestId);
       const userId = req.user!.userId;
 
       const canManage = await canManageEngine(req, engineId);
@@ -580,7 +583,8 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     try {
-      const { engineId, requestId } = req.params;
+      const engineId = String(req.params.engineId);
+      const requestId = String(req.params.requestId);
       const userId = req.user!.userId;
 
       const canManage = await canManageEngine(req, engineId);
@@ -608,7 +612,8 @@ router.delete(
   requireAuth,
   asyncHandler(async (req, res) => {
     try {
-      const { engineId, projectId } = req.params;
+      const engineId = String(req.params.engineId);
+      const projectId = String(req.params.projectId);
       const userId = req.user!.userId;
 
       const canManage = await canManageEngine(req, engineId);

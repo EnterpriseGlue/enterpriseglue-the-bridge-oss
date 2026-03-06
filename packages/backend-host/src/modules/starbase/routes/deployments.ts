@@ -24,7 +24,8 @@ r.get('/starbase-api/deployments', apiLimiter, requireAuth, requireEngineAccess(
 // Get deployment by ID
 r.get('/starbase-api/deployments/:id', apiLimiter, requireAuth, requireEngineAccess({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await fetchDeploymentById(engineId, req.params.id);
+  const deploymentId = String(req.params.id);
+  const data = await fetchDeploymentById(engineId, deploymentId);
   res.json(data);
 }));
 
@@ -32,14 +33,16 @@ r.get('/starbase-api/deployments/:id', apiLimiter, requireAuth, requireEngineAcc
 r.delete('/starbase-api/deployments/:id', apiLimiter, requireAuth, requireEngineDeployer({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const cascade = req.query.cascade === 'true';
-  await removeDeployment(engineId, req.params.id, cascade);
+  const deploymentId = String(req.params.id);
+  await removeDeployment(engineId, deploymentId, cascade);
   res.status(204).end();
 }));
 
 // Get process definition diagram
 r.get('/starbase-api/process-definitions/:id/diagram', apiLimiter, requireAuth, requireEngineAccess({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await fetchProcessDefinitionDiagram(engineId, req.params.id);
+  const processDefinitionId = String(req.params.id);
+  const data = await fetchProcessDefinitionDiagram(engineId, processDefinitionId);
   res.json(data);
 }));
 

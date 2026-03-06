@@ -30,12 +30,12 @@ export function auditLog(action: string, resourceType?: string) {
       // Only log on successful responses (2xx)
       if (res.statusCode >= 200 && res.statusCode < 300) {
         // Extract resource ID from response or params
-        const resourceId =
+        const resourceId = (
           data?.id ||
           req.params.id ||
           req.params.projectId ||
           req.params.fileId ||
-          req.params.folderId;
+          req.params.folderId) as string | undefined;
 
         // Log the audit entry
         const isPlatformAdmin = req.user?.platformRole === 'admin';
@@ -75,11 +75,11 @@ export function auditLog(action: string, resourceType?: string) {
 export function auditRequest(action: string, resourceType?: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const resourceId =
+      const resourceId = (
         req.params.id ||
         req.params.projectId ||
         req.params.fileId ||
-        req.params.folderId;
+        req.params.folderId) as string | undefined;
 
       const isPlatformAdmin = req.user?.platformRole === 'admin';
       const originalUrl = String(req.originalUrl || '');

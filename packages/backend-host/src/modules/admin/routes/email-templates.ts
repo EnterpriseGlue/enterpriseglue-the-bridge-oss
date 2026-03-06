@@ -107,7 +107,7 @@ router.get('/api/admin/email-templates', apiLimiter, requireAuth, requirePermiss
  * Get a single email template (platform admin only)
  */
 router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const dataSource = await getDataSource();
   const templateRepo = dataSource.getRepository(EmailTemplate);
 
@@ -129,7 +129,7 @@ router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePer
  */
 router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), validateBody(updateTemplateSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const body = req.body;
     const dataSource = await getDataSource();
     const templateRepo = dataSource.getRepository(EmailTemplate);
@@ -180,7 +180,7 @@ router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireP
  * Reset an email template to default (platform admin only)
  */
 router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const dataSource = await getDataSource();
   const templateRepo = dataSource.getRepository(EmailTemplate);
   const now = Date.now();
@@ -458,7 +458,7 @@ router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, req
  * Preview an email template with sample data (platform admin only)
  */
 router.post('/api/admin/email-templates/:id/preview', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const { variables } = req.body as { variables?: Record<string, string> };
   const dataSource = await getDataSource();
   const templateRepo = dataSource.getRepository(EmailTemplate);

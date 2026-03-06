@@ -5,6 +5,7 @@
     "moduleResolution": "NodeNext",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
+    "types": ["node"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -21,6 +22,6 @@
     "outDir": "dist",
     "declaration": true
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "../shared/src/types/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

@@ -50,7 +50,9 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   app.disable('x-powered-by');
 
   // Trust proxy for correct req.ip behind reverse proxies
-  app.set('trust proxy', config.trustProxy);
+  // Express 5 requires a number for hop-count (string '1' would be treated as an IP address)
+  const trustProxyValue = /^\d+$/.test(config.trustProxy) ? Number(config.trustProxy) : config.trustProxy;
+  app.set('trust proxy', trustProxyValue);
 
   // Security headers
   app.use(helmet({

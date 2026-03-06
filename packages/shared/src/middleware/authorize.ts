@@ -145,7 +145,7 @@ export function authorize(options: AuthorizeOptions) {
             action: 'authz.access.denied',
             userId,
             resourceType: req.baseUrl || req.path,
-            resourceId: req.params.id || req.params.projectId || req.params.engineId,
+            resourceId: (req.params.id || req.params.projectId || req.params.engineId) as string | undefined,
             details: { failures, path: req.path, method: req.method },
             ipAddress: req.headers['x-forwarded-for'] as string || req.socket?.remoteAddress,
             userAgent: req.headers['user-agent'],

@@ -77,7 +77,7 @@ router.get('/api/audit/logs', requireAuth, requirePermission({ permission: Platf
  * Get audit logs for specific user
  */
 router.get('/api/audit/logs/user/:userId', requireAuth, requirePermission({ permission: PlatformPermissions.AUDIT_VIEW }), asyncHandler(async (req, res) => {
-  const { userId } = req.params;
+  const userId = String(req.params.userId);
   const limit = parseInt(req.query.limit as string) || 100;
 
   const logs = await getUserAuditLogs(userId, limit);
@@ -90,7 +90,8 @@ router.get('/api/audit/logs/user/:userId', requireAuth, requirePermission({ perm
  * Get audit logs for specific resource
  */
 router.get('/api/audit/logs/resource/:resourceType/:resourceId', requireAuth, requirePermission({ permission: PlatformPermissions.AUDIT_VIEW }), asyncHandler(async (req, res) => {
-  const { resourceType, resourceId } = req.params;
+  const resourceType = String(req.params.resourceType);
+  const resourceId = String(req.params.resourceId);
   const limit = parseInt(req.query.limit as string) || 50;
 
   const logs = await getResourceAuditLogs(resourceType, resourceId, limit);

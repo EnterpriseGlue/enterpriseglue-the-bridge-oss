@@ -222,7 +222,7 @@ function sanitizeBpmnXml(xml: string): string {
  * ✨ Migrated to TypeORM
  */
 r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   
   if (!(await AuthorizationService.verifyProjectAccess(projectId, userId))) {
@@ -262,7 +262,7 @@ r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, asyncH
  * ✨ Migrated to TypeORM
  */
 r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(projectIdParamSchema), validateBody(createFileBodySchema), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   
   const canEditProject = await projectMemberService.hasRole(
@@ -351,7 +351,7 @@ r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileO
  * ✨ Migrated to TypeORM
  */
 r.get('/starbase-api/files/:fileId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { fileId } = req.params;
+  const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   
   if (!(await AuthorizationService.verifyFileAccess(fileId, userId))) {
@@ -400,7 +400,7 @@ r.get('/starbase-api/files/:fileId', apiLimiter, requireAuth, asyncHandler(async
  * ✨ Migrated to TypeORM
  */
 r.get('/starbase-api/files/:fileId/download', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { fileId } = req.params;
+  const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
 
   if (!(await AuthorizationService.verifyFileAccess(fileId, userId))) {
@@ -427,7 +427,7 @@ r.get('/starbase-api/files/:fileId/download', apiLimiter, requireAuth, asyncHand
  * ✨ Migrated to TypeORM
  */
 r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(fileIdParamSchema), validateBody(updateFileBodySchema), asyncHandler(async (req: Request, res: Response) => {
-  const { fileId } = req.params;
+  const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   
   const { xml: xmlBody2, prevUpdatedAt } = req.body;
@@ -502,7 +502,7 @@ r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimi
  * Restore a single file from a deployed commit/version snapshot
  */
 r.post('/starbase-api/files/:fileId/restore-from-commit', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(fileIdParamSchema), validateBody(restoreFromCommitBodySchema), asyncHandler(async (req: Request, res: Response) => {
-  const { fileId } = req.params;
+  const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   const { commitId: rawCommitId, fileVersionNumber } = req.body as { commitId?: string; fileVersionNumber?: number };
 
@@ -627,7 +627,7 @@ r.post('/starbase-api/files/:fileId/restore-from-commit', apiLimiter, requireAut
  * ✨ Migrated to TypeORM
  */
 r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(fileIdParamSchema), validateBody(patchFileBodySchema), asyncHandler(async (req: Request, res: Response) => {
-  const { fileId } = req.params;
+  const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   
   const { name, folderId } = req.body;
@@ -709,7 +709,7 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(f
  * ✨ Migrated to TypeORM
  */
 r.delete('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const { fileId } = req.params;
+  const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
 
   const dataSource = await getDataSource();

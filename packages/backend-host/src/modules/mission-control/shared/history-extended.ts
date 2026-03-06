@@ -50,7 +50,8 @@ r.get('/mission-control-api/history/decisions', validateQuery(HistoricDecisionQu
 // Get historic decision instance inputs
 r.get('/mission-control-api/history/decisions/:id/inputs', asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await listHistoricDecisionInputs(engineId, req.params.id);
+  const decisionId = String(req.params.id);
+  const data = await listHistoricDecisionInputs(engineId, decisionId);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
   res.json(redacted);
 }));
@@ -58,7 +59,8 @@ r.get('/mission-control-api/history/decisions/:id/inputs', asyncHandler(async (r
 // Get historic decision instance outputs
 r.get('/mission-control-api/history/decisions/:id/outputs', asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await listHistoricDecisionOutputs(engineId, req.params.id);
+  const decisionId = String(req.params.id);
+  const data = await listHistoricDecisionOutputs(engineId, decisionId);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
   res.json(redacted);
 }));

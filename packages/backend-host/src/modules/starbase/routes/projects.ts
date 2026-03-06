@@ -390,7 +390,7 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
  * ✨ Migrated to TypeORM
  */
 r.patch('/starbase-api/projects/:projectId', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(renameProjectBodySchema), requireProjectRole(MANAGE_ROLES), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const { name } = req.body;
   const trimmed = name.trim();
 
@@ -407,7 +407,7 @@ r.patch('/starbase-api/projects/:projectId', apiLimiter, requireAuth, validatePa
  * ✨ Migrated to TypeORM
  */
 r.delete('/starbase-api/projects/:projectId', apiLimiter, requireAuth, requireProjectRole(OWNER_ROLES), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
 
   // Delete project and all its resources using cascade delete service
   await CascadeDeleteService.deleteProject(projectId);
@@ -423,7 +423,7 @@ r.delete('/starbase-api/projects/:projectId', apiLimiter, requireAuth, requirePr
  * ✨ Migrated to TypeORM
  */
 r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth, requireProjectRole(VIEW_ROLES), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
 
   const dataSource = await getDataSource();
   const engineProjectAccessRepo = dataSource.getRepository(EngineProjectAccess);

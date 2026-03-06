@@ -73,7 +73,8 @@ r.get('/mission-control-api/process-definitions', asyncHandler(async (req: Reque
 r.get('/mission-control-api/process-definitions/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await getProcessDefinitionById(engineId, req.params.id)
+    const definitionId = String(req.params.id)
+    const data = await getProcessDefinitionById(engineId, definitionId)
     res.json(data)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process definition')
@@ -83,7 +84,8 @@ r.get('/mission-control-api/process-definitions/:id', asyncHandler(async (req: R
 r.get('/mission-control-api/process-definitions/:id/xml', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await getProcessDefinitionXmlById(engineId, req.params.id)
+    const definitionId = String(req.params.id)
+    const data = await getProcessDefinitionXmlById(engineId, definitionId)
     res.json(data)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process definition XML')
@@ -105,7 +107,8 @@ r.get('/mission-control-api/process-definitions/resolve', asyncHandler(async (re
 r.get('/mission-control-api/process-definitions/:id/active-activity-counts', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const counts = await getActiveActivityCounts(engineId, req.params.id)
+    const definitionId = String(req.params.id)
+    const counts = await getActiveActivityCounts(engineId, definitionId)
     res.json(counts)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load active activity counts')
@@ -117,7 +120,8 @@ r.get('/mission-control-api/process-definitions/:id/active-activity-counts', asy
 r.get('/mission-control-api/process-definitions/:id/activity-counts-by-state', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const result = await getActivityCountsByState(engineId, req.params.id)
+    const definitionId = String(req.params.id)
+    const result = await getActivityCountsByState(engineId, definitionId)
     res.json(result)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load activity counts by state')
@@ -150,7 +154,8 @@ r.get('/mission-control-api/process-instances', asyncHandler(async (req: Request
 r.get('/mission-control-api/process-instances/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await getProcessInstanceById(engineId, req.params.id)
+    const instanceId = String(req.params.id)
+    const data = await getProcessInstanceById(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
     res.json(redacted)
   } catch (e: any) {
@@ -161,7 +166,8 @@ r.get('/mission-control-api/process-instances/:id', asyncHandler(async (req: Req
 r.get('/mission-control-api/process-instances/:id/variables', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await getProcessInstanceVariables(engineId, req.params.id)
+    const instanceId = String(req.params.id)
+    const data = await getProcessInstanceVariables(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
     res.json(redacted)
   } catch (e: any) {
@@ -172,7 +178,8 @@ r.get('/mission-control-api/process-instances/:id/variables', asyncHandler(async
 r.get('/mission-control-api/process-instances/:id/history/activity-instances', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await listProcessInstanceActivityHistory(engineId, req.params.id)
+    const instanceId = String(req.params.id)
+    const data = await listProcessInstanceActivityHistory(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
     res.json(redacted)
   } catch (e: any) {
@@ -183,7 +190,8 @@ r.get('/mission-control-api/process-instances/:id/history/activity-instances', a
 r.get('/mission-control-api/process-instances/:id/jobs', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await listProcessInstanceJobs(engineId, req.params.id)
+    const instanceId = String(req.params.id)
+    const data = await listProcessInstanceJobs(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'errors')
     res.json(redacted)
   } catch (e: any) {
@@ -195,7 +203,8 @@ r.get('/mission-control-api/process-instances/:id/jobs', asyncHandler(async (req
 r.get('/mission-control-api/history/process-instances/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await getHistoricProcessInstanceById(engineId, req.params.id)
+    const instanceId = String(req.params.id)
+    const data = await getHistoricProcessInstanceById(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
     res.json(redacted)
   } catch (e: any) {
@@ -218,7 +227,8 @@ r.get('/mission-control-api/history/process-instances', asyncHandler(async (req:
 r.get('/mission-control-api/process-instances/:id/incidents', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await listProcessInstanceIncidents(engineId, req.params.id)
+    const instanceId = String(req.params.id)
+    const data = await listProcessInstanceIncidents(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'errors')
     res.json(redacted)
   } catch (e: any) {
@@ -244,7 +254,8 @@ r.get('/mission-control-api/history/variable-instances', asyncHandler(async (req
 r.put('/mission-control-api/process-instances/:id/suspend', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    await suspendProcessInstanceById(engineId, req.params.id)
+    const instanceId = String(req.params.id)
+    await suspendProcessInstanceById(engineId, instanceId)
     res.status(204).end()
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to suspend instance')
@@ -254,7 +265,8 @@ r.put('/mission-control-api/process-instances/:id/suspend', asyncHandler(async (
 r.put('/mission-control-api/process-instances/:id/activate', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    await activateProcessInstanceById(engineId, req.params.id)
+    const instanceId = String(req.params.id)
+    await activateProcessInstanceById(engineId, instanceId)
     res.status(204).end()
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to activate instance')
@@ -264,7 +276,8 @@ r.put('/mission-control-api/process-instances/:id/activate', asyncHandler(async 
 r.delete('/mission-control-api/process-instances/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    await deleteProcessInstanceById(engineId, req.params.id)
+    const instanceId = String(req.params.id)
+    await deleteProcessInstanceById(engineId, instanceId)
     res.status(204).end()
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to delete instance')
@@ -276,7 +289,8 @@ r.delete('/mission-control-api/process-instances/:id', asyncHandler(async (req: 
 r.get('/mission-control-api/process-instances/:id/failed-external-tasks', asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await listFailedExternalTasks(engineId, req.params.id)
+    const instanceId = String(req.params.id)
+    const data = await listFailedExternalTasks(engineId, instanceId)
     res.json(data)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load external tasks')
@@ -287,7 +301,8 @@ r.get('/mission-control-api/process-instances/:id/failed-external-tasks', asyncH
 r.post('/mission-control-api/process-instances/:id/retry', validateBody(retrySchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    await retryProcessInstanceFailures(engineId, req.params.id, req.body || {})
+    const instanceId = String(req.params.id)
+    await retryProcessInstanceFailures(engineId, instanceId, req.body || {})
     res.status(204).end()
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to retry')

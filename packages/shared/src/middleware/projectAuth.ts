@@ -46,7 +46,7 @@ export function requireProjectRole(
       let projectId: string | undefined;
       
       if (projectIdFrom === 'params') {
-        projectId = req.params[projectIdKey];
+        projectId = req.params[projectIdKey] as string | undefined;
       } else if (projectIdFrom === 'body') {
         projectId = req.body?.[projectIdKey];
       } else if (projectIdFrom === 'query') {
@@ -94,7 +94,7 @@ export function requireProjectAccess(
       let projectId: string | undefined;
       
       if (projectIdFrom === 'params') {
-        projectId = req.params[projectIdKey];
+        projectId = req.params[projectIdKey] as string | undefined;
       } else if (projectIdFrom === 'body') {
         projectId = req.body?.[projectIdKey];
       } else if (projectIdFrom === 'query') {
@@ -139,7 +139,7 @@ export function requireFileAccess(
 
       let fileId: string | undefined;
       if (fileIdFrom === 'params') {
-        fileId = req.params[fileIdKey];
+        fileId = req.params[fileIdKey] as string | undefined;
       } else if (fileIdFrom === 'query') {
         const queryVal = req.query[fileIdKey];
         fileId = typeof queryVal === 'string' ? queryVal : undefined;
@@ -180,7 +180,7 @@ export function requireFileEditAccess(
         throw Errors.unauthorized('Authentication required');
       }
 
-      const fileId = req.params[fileIdKey];
+      const fileId = req.params[fileIdKey] as string | undefined;
       if (!fileId) {
         throw Errors.validation(`${fileIdKey} is required`);
       }
@@ -242,7 +242,7 @@ export function requireEngineRole(
       let engineId: string | undefined;
 
       if (engineIdFrom === 'params') {
-        engineId = req.params[engineIdKey];
+        engineId = req.params[engineIdKey] as string | undefined;
       } else if (engineIdFrom === 'body') {
         engineId = req.body?.[engineIdKey];
       } else if (engineIdFrom === 'query') {

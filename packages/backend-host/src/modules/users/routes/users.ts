@@ -94,7 +94,8 @@ router.post('/api/users', requireAuth, requirePermission({ permission: PlatformP
  * ✨ Migrated to TypeORM
  */
 router.get('/api/users/:id', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
-  const user = await userService.getUser(req.params.id);
+  const userId = String(req.params.id);
+  const user = await userService.getUser(userId);
   res.json(user);
 }));
 
@@ -105,7 +106,8 @@ router.get('/api/users/:id', requireAuth, requirePermission({ permission: Platfo
  * ✨ Uses validation middleware
  */
 router.put('/api/users/:id', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), validateBody(updateUserSchema), asyncHandler(async (req, res) => {
-  const user = await userService.updateUser(req.params.id, req.body);
+  const userId = String(req.params.id);
+  const user = await userService.updateUser(userId, req.body);
   res.json(user);
 }));
 
@@ -115,7 +117,7 @@ router.put('/api/users/:id', requireAuth, requirePermission({ permission: Platfo
  * ✨ Migrated to TypeORM
  */
 router.delete('/api/users/:id', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
 
   if (id === req.user!.userId) {
     throw Errors.validation('Cannot delete your own account');
@@ -131,7 +133,8 @@ router.delete('/api/users/:id', requireAuth, requirePermission({ permission: Pla
  * ✨ Migrated to TypeORM
  */
 router.post('/api/users/:id/unlock', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
-  await userService.unlockUser(req.params.id);
+  const userId = String(req.params.id);
+  await userService.unlockUser(userId);
   res.json({ message: 'User account unlocked successfully' });
 }));
 

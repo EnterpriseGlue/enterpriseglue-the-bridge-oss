@@ -176,7 +176,7 @@ async function buildPathForFile(folderId: string | null, fileName: string): Prom
  * ✨ Migrated to TypeORM
  */
 r.get('/starbase-api/projects/:projectId/contents', apiLimiter, requireAuth, requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const folderId = typeof req.query?.folderId === 'string' ? String(req.query.folderId) : null;
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
@@ -234,7 +234,7 @@ r.get('/starbase-api/projects/:projectId/contents', apiLimiter, requireAuth, req
  * ✨ Migrated to TypeORM
  */
 r.get('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
   
@@ -252,7 +252,7 @@ r.get('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, requ
  * ✨ Migrated to TypeORM
  */
 r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(createFolderBodySchema), requireProjectRole(EDIT_ROLES), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const { name, parentFolderId } = req.body;
   const parentFolderIdStr = parentFolderId || null;
@@ -296,7 +296,7 @@ r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, val
  * ✨ Migrated to TypeORM
  */
 r.patch('/starbase-api/folders/:folderId', apiLimiter, requireAuth, validateParams(folderIdParamSchema), validateBody(renameFolderBodySchema), asyncHandler(async (req: Request, res: Response) => {
-  const { folderId } = req.params;
+  const folderId = String(req.params.folderId);
   const userId = req.user!.userId;
   const { name, parentFolderId } = req.body;
   const now = unixTimestamp();
@@ -360,7 +360,7 @@ r.patch('/starbase-api/folders/:folderId', apiLimiter, requireAuth, validatePara
  * ✨ Migrated to TypeORM
  */
 r.get('/starbase-api/folders/:folderId/delete-preview', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { folderId } = req.params;
+  const folderId = String(req.params.folderId);
   const userId = req.user!.userId;
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
@@ -422,7 +422,7 @@ r.get('/starbase-api/folders/:folderId/delete-preview', apiLimiter, requireAuth,
  * ✨ Migrated to TypeORM
  */
 r.delete('/starbase-api/folders/:folderId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { folderId } = req.params;
+  const folderId = String(req.params.folderId);
   const userId = req.user!.userId;
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
@@ -459,7 +459,7 @@ r.delete('/starbase-api/folders/:folderId', apiLimiter, requireAuth, asyncHandle
  * ✨ Migrated to TypeORM
  */
 r.get('/starbase-api/folders/:folderId/download', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { folderId } = req.params;
+  const folderId = String(req.params.folderId);
   const userId = req.user!.userId;
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
@@ -522,7 +522,7 @@ r.get('/starbase-api/folders/:folderId/download', apiLimiter, requireAuth, async
  * ✨ Migrated to TypeORM
  */
 r.get('/starbase-api/projects/:projectId/download', apiLimiter, requireAuth, requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
 
   const dataSource = await getDataSource();
   const fileRepo = dataSource.getRepository(File);

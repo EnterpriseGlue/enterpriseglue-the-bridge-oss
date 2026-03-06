@@ -56,7 +56,15 @@ export function validateBody<T extends z.ZodTypeAny>(schema: T) {
 export function validateQuery<T extends z.ZodTypeAny>(schema: T) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      req.query = schema.parse(req.query) as any;
+      const parsed = schema.parse(req.query);
+      // Express 5: req.query is a getter-only property on the prototype;
+      // override with an own data property so downstream code sees the parsed value.
+      Object.defineProperty(req, 'query', {
+        value: parsed as any,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
       next();
     } catch (error) {
       if (error instanceof ZodError) {

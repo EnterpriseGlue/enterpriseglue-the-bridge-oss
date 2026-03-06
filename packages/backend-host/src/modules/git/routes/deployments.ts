@@ -159,7 +159,7 @@ router.get('/git-api/deployments', apiLimiter, requireAuth, asyncHandler(async (
  * List deployments for a project (REST style)
  */
 router.get('/git-api/projects/:projectId/deployments', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const limit = parseInt(req.query.limit as string) || 50;
 
   const canRead = await projectMemberService.hasAccess(projectId, req.user!.userId);
@@ -175,7 +175,7 @@ router.get('/git-api/projects/:projectId/deployments', apiLimiter, requireAuth, 
  * Get deployment details
  */
 router.get('/git-api/deployments/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
 
   const dataSource = await getDataSource();
   const deploymentRepo = dataSource.getRepository(GitDeployment);

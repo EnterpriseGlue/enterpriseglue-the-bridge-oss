@@ -214,7 +214,8 @@ router.put('/api/authz/policies/:id', apiLimiter, requireAuth, validateParams(id
       throw Errors.adminRequired();
     }
 
-    await policyService.updatePolicy(req.params.id, req.body);
+    const policyId = String(req.params.id);
+    await policyService.updatePolicy(policyId, req.body);
     res.json({ success: true });
   } catch (error: any) {
     logger.error('Update policy error:', error);
@@ -232,7 +233,8 @@ router.delete('/api/authz/policies/:id', apiLimiter, requireAuth, validateParams
       throw Errors.adminRequired();
     }
 
-    await policyService.deletePolicy(req.params.id);
+    const policyId = String(req.params.id);
+    await policyService.deletePolicy(policyId);
     res.status(204).send();
   } catch (error: any) {
     logger.error('Delete policy error:', error);
@@ -300,7 +302,8 @@ router.put('/api/authz/sso-mappings/:id', apiLimiter, requireAuth, validateParam
       throw Errors.adminRequired();
     }
 
-    await ssoClaimsMappingService.updateMapping(req.params.id, req.body);
+    const mappingId = String(req.params.id);
+    await ssoClaimsMappingService.updateMapping(mappingId, req.body);
     res.json({ success: true });
   } catch (error: any) {
     logger.error('Update SSO mapping error:', error);
@@ -318,7 +321,8 @@ router.delete('/api/authz/sso-mappings/:id', apiLimiter, requireAuth, validatePa
       throw Errors.adminRequired();
     }
 
-    await ssoClaimsMappingService.deleteMapping(req.params.id);
+    const mappingId = String(req.params.id);
+    await ssoClaimsMappingService.deleteMapping(mappingId);
     res.status(204).send();
   } catch (error: any) {
     logger.error('Delete SSO mapping error:', error);

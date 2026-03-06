@@ -30,21 +30,24 @@ r.get('/mission-control-api/process-instances', requireEngineReadOrWrite({ engin
 // Get process instance by ID
 r.get('/mission-control-api/process-instances/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
-  const data = await getProcessInstance(engineId, req.params.id)
+  const instanceId = String(req.params.id)
+  const data = await getProcessInstance(engineId, instanceId)
   res.json(data)
 }))
 
 // Get process instance variables
 r.get('/mission-control-api/process-instances/:id/variables', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
-  const data = await getProcessInstanceVariables(engineId, req.params.id)
+  const instanceId = String(req.params.id)
+  const data = await getProcessInstanceVariables(engineId, instanceId)
   res.json(data)
 }))
 
 // Get activity instances for a process instance
 r.get('/mission-control-api/process-instances/:id/activity-instances', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
-  const data = await getActivityInstances(engineId, req.params.id)
+  const instanceId = String(req.params.id)
+  const data = await getActivityInstances(engineId, instanceId)
   res.json(data)
 }))
 
@@ -52,7 +55,8 @@ r.get('/mission-control-api/process-instances/:id/activity-instances', requireEn
 r.delete('/mission-control-api/process-instances/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const { skipCustomListeners, skipIoMappings, deleteReason } = req.query as { skipCustomListeners?: string; skipIoMappings?: string; deleteReason?: string }
   const engineId = (req as any).engineId as string
-  await deleteProcessInstance(engineId, req.params.id, {
+  const instanceId = String(req.params.id)
+  await deleteProcessInstance(engineId, instanceId, {
     skipCustomListeners: skipCustomListeners === 'true',
     skipIoMappings: skipIoMappings === 'true',
     deleteReason: deleteReason?.trim() || undefined,
@@ -65,7 +69,8 @@ r.post('/mission-control-api/process-instances/:id/variables', requireEngineRead
   const { modifications } = req.body || {}
   if (!modifications) throw Errors.validation('modifications required')
   const engineId = (req as any).engineId as string
-  await modifyProcessInstanceVariables(engineId, req.params.id, modifications)
+  const instanceId = String(req.params.id)
+  await modifyProcessInstanceVariables(engineId, instanceId, modifications)
   res.status(204).end()
 }))
 

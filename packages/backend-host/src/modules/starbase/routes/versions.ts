@@ -21,7 +21,7 @@ const r = Router();
  * List versions for a file (seed an initial version if none)
  */
 r.get('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validateParams(fileIdParamSchema), requireFileAccess(), asyncHandler(async (req: Request, res: Response) => {
-  const { fileId } = req.params;
+  const fileId = String(req.params.fileId);
   const dataSource = await getDataSource();
   const versionRepo = dataSource.getRepository(Version);
   const fileRepo = dataSource.getRepository(File);
@@ -68,7 +68,8 @@ r.get('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validateP
  * Very simple compare endpoint placeholder
  */
 r.get('/starbase-api/versions/:versionId/compare/:otherVersionId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { versionId, otherVersionId } = req.params;
+  const versionId = String(req.params.versionId);
+  const otherVersionId = String(req.params.otherVersionId);
   const userId = req.user!.userId;
   const dataSource = await getDataSource();
   const versionRepo = dataSource.getRepository(Version);

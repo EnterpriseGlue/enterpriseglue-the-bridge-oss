@@ -18,7 +18,7 @@ const r = Router();
  * List comments for a file (seed a couple if none)
  */
 r.get('/starbase-api/files/:fileId/comments', apiLimiter, requireAuth, validateParams(fileIdParamSchema), requireFileAccess(), asyncHandler(async (req: Request, res: Response) => {
-  const { fileId } = req.params;
+  const fileId = String(req.params.fileId);
   const dataSource = await getDataSource();
   const commentRepo = dataSource.getRepository(Comment);
 

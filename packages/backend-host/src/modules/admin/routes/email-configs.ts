@@ -76,7 +76,7 @@ router.get('/api/admin/email-configs', apiLimiter, requireAuth, requirePermissio
  */
 router.get('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const dataSource = await getDataSource();
     const configRepo = dataSource.getRepository(EmailSendConfig);
 
@@ -173,7 +173,7 @@ router.post('/api/admin/email-configs', apiLimiter, requireAuth, requirePermissi
  */
 router.patch('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const body = updateConfigSchema.parse(req.body);
     const dataSource = await getDataSource();
     const configRepo = dataSource.getRepository(EmailSendConfig);
@@ -231,7 +231,7 @@ router.patch('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePer
  */
 router.delete('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const dataSource = await getDataSource();
     const configRepo = dataSource.getRepository(EmailSendConfig);
 
@@ -272,7 +272,7 @@ router.delete('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePe
  */
 router.post('/api/admin/email-configs/:id/set-default', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const dataSource = await getDataSource();
     const configRepo = dataSource.getRepository(EmailSendConfig);
     const now = Date.now();
@@ -302,7 +302,7 @@ router.post('/api/admin/email-configs/:id/set-default', apiLimiter, requireAuth,
  */
 router.post('/api/admin/email-configs/:id/test', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const { toEmail } = req.body as { toEmail?: string };
     
     if (!toEmail) {

@@ -87,13 +87,14 @@ router.put(
   validateBody(updateEnvTagSchema),
   asyncHandler(async (req, res) => {
     try {
-      await environmentTagService.update(req.params.id, req.body);
+      const envTagId = String(req.params.id);
+      await environmentTagService.update(envTagId, req.body);
       
       await logAudit({
         action: 'admin.environment.update',
         userId: req.user!.userId,
         resourceType: 'environment_tag',
-        resourceId: req.params.id,
+        resourceId: envTagId,
         details: req.body,
         ipAddress: req.headers['x-forwarded-for'] as string || req.socket?.remoteAddress,
         userAgent: req.headers['user-agent'],
@@ -117,13 +118,14 @@ router.delete(
   validateParams(z.object({ id: z.string() })),
   asyncHandler(async (req, res) => {
     try {
-      await environmentTagService.delete(req.params.id);
+      const envTagId = String(req.params.id);
+      await environmentTagService.delete(envTagId);
       
       await logAudit({
         action: 'admin.environment.delete',
         userId: req.user!.userId,
         resourceType: 'environment_tag',
-        resourceId: req.params.id,
+        resourceId: envTagId,
         ipAddress: req.headers['x-forwarded-for'] as string || req.socket?.remoteAddress,
         userAgent: req.headers['user-agent'],
       });

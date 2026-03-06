@@ -137,7 +137,7 @@ router.get('/git-api/repositories/:id', apiLimiter, requireAuth, asyncHandler(as
  * Delete a repository (removes from database, keeps remote)
  */
 router.delete('/git-api/repositories/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const userId = req.user!.userId;
   const dataSource = await getDataSource();
   const gitRepoRepo = dataSource.getRepository(GitRepository);

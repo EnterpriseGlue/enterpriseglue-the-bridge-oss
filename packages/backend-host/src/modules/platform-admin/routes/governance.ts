@@ -157,7 +157,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { projectId } = req.params;
+      const projectId = String(req.params.projectId);
       const { userId, reason } = req.body;
 
       await projectMemberService.addMember(projectId, userId, 'owner', req.user!.userId);
@@ -191,7 +191,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { projectId } = req.params;
+      const projectId = String(req.params.projectId);
       const { userId, reason } = req.body;
 
       await projectMemberService.addMember(projectId, userId, 'delegate', req.user!.userId);
@@ -225,7 +225,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const { userId, reason } = req.body;
 
       await engineService.transferOwnership(engineId, userId);
@@ -259,7 +259,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { engineId } = req.params;
+      const engineId = String(req.params.engineId);
       const { userId, reason } = req.body;
       const adminUserId = req.user!.userId;
 

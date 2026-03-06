@@ -1,16 +1,4 @@
 {
-  "inferno-vnode-flags@9.0.11": {
-    "licenses": "MIT",
-    "repository": "https://github.com/infernojs/inferno",
-    "publisher": "Dominic Gannaway",
-    "email": "dg@domgan.com"
-  },
-  "inferno@9.0.11": {
-    "licenses": "MIT",
-    "repository": "https://github.com/infernojs/inferno",
-    "publisher": "Dominic Gannaway",
-    "email": "dg@domgan.com"
-  },
   "webmodeler-frontend@0.1.0": {
     "licenses": "UNLICENSED",
     "private": true

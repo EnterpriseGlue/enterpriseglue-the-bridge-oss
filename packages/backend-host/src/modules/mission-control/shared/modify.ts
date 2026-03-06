@@ -22,21 +22,24 @@ r.use('/mission-control-api', requireAuth, requireEngineDeployer({ engineIdFrom:
 // POST /mission-control-api/process-instances/:id/modify (sync)
 r.post('/mission-control-api/process-instances/:id/modify', validateBody(ProcessInstanceModificationRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
-  await modifyProcessInstance(engineId, req.params.id, req.body)
+  const instanceId = String(req.params.id)
+  await modifyProcessInstance(engineId, instanceId, req.body)
   res.status(204).end()
 }))
 
 // POST /mission-control-api/process-definitions/:id/modification/execute-async (batch)
 r.post('/mission-control-api/process-definitions/:id/modification/execute-async', validateBody(ProcessDefinitionModificationAsyncRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
-  const { batchId, camundaBatchId } = await modifyProcessDefinitionAsync(engineId, req.params.id, req.body)
+  const definitionId = String(req.params.id)
+  const { batchId, camundaBatchId } = await modifyProcessDefinitionAsync(engineId, definitionId, req.body)
   res.status(201).json({ id: batchId, camundaBatchId, type: 'MODIFY_INSTANCES' })
 }))
 
 // POST /mission-control-api/process-definitions/:id/restart/execute-async (batch)
 r.post('/mission-control-api/process-definitions/:id/restart/execute-async', validateBody(ProcessDefinitionRestartAsyncRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
-  const { batchId, camundaBatchId } = await restartProcessDefinitionAsync(engineId, req.params.id, req.body)
+  const definitionId = String(req.params.id)
+  const { batchId, camundaBatchId } = await restartProcessDefinitionAsync(engineId, definitionId, req.body)
   res.status(201).json({ id: batchId, camundaBatchId, type: 'RESTART_INSTANCES' })
 }))
 

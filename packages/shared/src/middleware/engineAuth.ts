@@ -38,7 +38,15 @@ function stripEngineId(req: Request, engineIdKey: string) {
 
   const query = req.query as Record<string, unknown> | undefined;
   if (query && Object.prototype.hasOwnProperty.call(query, engineIdKey)) {
-    delete query[engineIdKey];
+    const cleaned = { ...query };
+    delete cleaned[engineIdKey];
+    // Express 5: req.query is a getter-only property; override with own data property
+    Object.defineProperty(req, 'query', {
+      value: cleaned,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
   }
 }
 

@@ -21,7 +21,8 @@ r.get('/mission-control-api/metrics', validateQuery(MetricsQueryParams.partial()
 // Get specific metric by name
 r.get('/mission-control-api/metrics/:name', validateQuery(MetricsQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await getMetric(engineId, req.params.name, req.query);
+  const metricName = String(req.params.name);
+  const data = await getMetric(engineId, metricName, req.query);
   res.json(data);
 }));
 

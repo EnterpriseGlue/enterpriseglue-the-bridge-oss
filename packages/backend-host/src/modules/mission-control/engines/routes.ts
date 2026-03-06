@@ -142,7 +142,8 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, validateBody(createEn
 r.get('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
-  const engine = await engineRepo.findOneBy({ id: req.params.id })
+  const engineId = String(req.params.id)
+  const engine = await engineRepo.findOneBy({ id: engineId })
   if (!engine) throw Errors.notFound('Engine')
   if (!(await canViewEngine(req, String(engine.id)))) throw Errors.forbidden()
 
@@ -157,7 +158,8 @@ r.get('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async
 r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(engineIdParamSchema), validateBody(updateEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
-  const existing = await engineRepo.findOneBy({ id: req.params.id })
+  const engineId = String(req.params.id)
+  const existing = await engineRepo.findOneBy({ id: engineId })
   if (!existing) throw Errors.notFound('Engine')
   if (!(await canManageEngine(req, String(existing.id)))) throw Errors.forbidden()
 
@@ -173,8 +175,8 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
     environmentTagId: req.body.environmentTagId || null,
     updatedAt: now,
   }
-  await engineRepo.update({ id: req.params.id }, updates)
-  const updated = await engineRepo.findOneBy({ id: req.params.id })
+  await engineRepo.update({ id: engineId }, updates)
+  const updated = await engineRepo.findOneBy({ id: engineId })
   if (!updated) throw Errors.notFound('Engine')
   res.json(updated)
 }))
@@ -182,10 +184,11 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
 r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
-  const existing = await engineRepo.findOneBy({ id: req.params.id })
+  const engineId = String(req.params.id)
+  const existing = await engineRepo.findOneBy({ id: engineId })
   if (!existing) throw Errors.notFound('Engine')
   if (!(await canManageEngine(req, String(existing.id)))) throw Errors.forbidden()
-  await engineRepo.delete({ id: req.params.id })
+  await engineRepo.delete({ id: engineId })
   res.status(204).end()
 }))
 
@@ -194,7 +197,8 @@ r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, asyncHandler
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const healthRepo = dataSource.getRepository(EngineHealth)
-  const eng = await engineRepo.findOneBy({ id: req.params.id })
+  const engineId = String(req.params.id)
+  const eng = await engineRepo.findOneBy({ id: engineId })
   if (!eng) throw Errors.notFound('Engine')
 
   if (!(await canManageEngine(req, String(eng.id)))) throw Errors.forbidden()
@@ -215,7 +219,7 @@ r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, asyncHandler
     if (r.ok) {
       status = 'connected'
       try { const data: any = await r.json(); version = data?.version || null } catch { version = null }
-      await engineRepo.update({ id: req.params.id }, { version: version || null, updatedAt: Date.now() })
+      await engineRepo.update({ id: engineId }, { version: version || null, updatedAt: Date.now() })
       const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message: null, checkedAt: Date.now() }
       await healthRepo.insert(rec)
       return res.json({ status, latencyMs, version, checkedAt: rec.checkedAt })
@@ -242,10 +246,11 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, asyncHandle
   const engineRepo = dataSource.getRepository(Engine)
   const healthRepo = dataSource.getRepository(EngineHealth)
   // Check authorization (skip for __env__ which is public)
-  if (req.params.id !== '__env__' && !(await canViewEngine(req, req.params.id))) {
+  const engineId = String(req.params.id)
+  if (engineId !== '__env__' && !(await canViewEngine(req, engineId))) {
     throw Errors.forbidden()
   }
-  if (req.params.id === '__env__') {
+  if (engineId === '__env__') {
     const baseUrl = process.env.CAMUNDA_BASE_URL || 'http://localhost:8080/engine-rest'
     const started = Date.now()
     try {
@@ -264,10 +269,10 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, asyncHandle
     }
   }
   // Select all then sort in memory
-  const rows = await healthRepo.find({ where: { engineId: req.params.id } })
+  const rows = await healthRepo.find({ where: { engineId } })
   if (rows.length === 0) {
     // Auto-ping once if no health yet
-    const eng = await engineRepo.findOneBy({ id: req.params.id })
+    const eng = await engineRepo.findOneBy({ id: engineId })
     if (eng) {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (eng.username) {
@@ -348,7 +353,8 @@ r.post('/engines-api/saved-filters', apiLimiter, requireAuth, validateBody(creat
 r.get('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
-  const filter = await filterRepo.findOneBy({ id: req.params.id })
+  const filterId = String(req.params.id)
+  const filter = await filterRepo.findOneBy({ id: filterId })
   if (!filter) throw Errors.notFound('Saved filter')
 
   if (!(await canViewEngine(req, String(filter.engineId)))) throw Errors.forbidden()
@@ -359,7 +365,8 @@ r.get('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(as
 r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, validateParams(engineIdParamSchema), validateBody(updateSavedFilterBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
-  const existing = await filterRepo.findOneBy({ id: req.params.id })
+  const filterId = String(req.params.id)
+  const existing = await filterRepo.findOneBy({ id: filterId })
   if (!existing) throw Errors.notFound('Saved filter')
   if (!(await canViewEngine(req, String(existing.engineId)))) throw Errors.forbidden()
 
@@ -376,8 +383,8 @@ r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, validateParams(
     completed: req.body.completed,
     canceled: req.body.canceled,
   }
-  await filterRepo.update({ id: req.params.id }, updates)
-  const updated = await filterRepo.findOneBy({ id: req.params.id })
+  await filterRepo.update({ id: filterId }, updates)
+  const updated = await filterRepo.findOneBy({ id: filterId })
   if (!updated) throw Errors.notFound('Saved filter')
   res.json({ ...updated, defKeys: JSON.parse(updated.defKeys || '[]') })
 }))
@@ -385,10 +392,11 @@ r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, validateParams(
 r.delete('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
-  const existing = await filterRepo.findOneBy({ id: req.params.id })
+  const filterId = String(req.params.id)
+  const existing = await filterRepo.findOneBy({ id: filterId })
   if (!existing) throw Errors.notFound('Saved filter')
   if (!(await canViewEngine(req, String(existing.engineId)))) throw Errors.forbidden()
-  await filterRepo.delete({ id: req.params.id })
+  await filterRepo.delete({ id: filterId })
   res.status(204).end()
 }))
 

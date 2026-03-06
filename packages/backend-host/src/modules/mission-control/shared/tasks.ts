@@ -46,56 +46,64 @@ r.get('/mission-control-api/tasks/count', validateQuery(TaskQueryParams.partial(
 // Get task by ID
 r.get('/mission-control-api/tasks/:id', asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await getTaskById(engineId, req.params.id);
+  const taskId = String(req.params.id);
+  const data = await getTaskById(engineId, taskId);
   res.json(data);
 }));
 
 // Get task variables
 r.get('/mission-control-api/tasks/:id/variables', asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await getTaskVariablesById(engineId, req.params.id);
+  const taskId = String(req.params.id);
+  const data = await getTaskVariablesById(engineId, taskId);
   res.json(data);
 }));
 
 // Update task variables
 r.put('/mission-control-api/tasks/:id/variables', validateBody(TaskVariablesRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await updateTaskVariablesById(engineId, req.params.id, req.body);
+  const taskId = String(req.params.id);
+  const data = await updateTaskVariablesById(engineId, taskId, req.body);
   res.json(data);
 }));
 
 // Get task form
 r.get('/mission-control-api/tasks/:id/form', asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await getTaskFormById(engineId, req.params.id);
+  const taskId = String(req.params.id);
+  const data = await getTaskFormById(engineId, taskId);
   res.json(data);
 }));
 
 // Claim task
 r.post('/mission-control-api/tasks/:id/claim', validateBody(ClaimTaskRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  await claimTaskById(engineId, req.params.id, req.body);
+  const taskId = String(req.params.id);
+  await claimTaskById(engineId, taskId, req.body);
   res.status(204).end();
 }));
 
 // Unclaim task
 r.post('/mission-control-api/tasks/:id/unclaim', asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  await unclaimTaskById(engineId, req.params.id);
+  const taskId = String(req.params.id);
+  await unclaimTaskById(engineId, taskId);
   res.status(204).end();
 }));
 
 // Set task assignee
 r.post('/mission-control-api/tasks/:id/assignee', validateBody(SetAssigneeRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  await setTaskAssigneeById(engineId, req.params.id, req.body);
+  const taskId = String(req.params.id);
+  await setTaskAssigneeById(engineId, taskId, req.body);
   res.status(204).end();
 }));
 
 // Complete task
 r.post('/mission-control-api/tasks/:id/complete', validateBody(CompleteTaskRequest.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await completeTaskById(engineId, req.params.id, req.body);
+  const taskId = String(req.params.id);
+  const data = await completeTaskById(engineId, taskId, req.body);
   res.json(data || {});
 }));
 

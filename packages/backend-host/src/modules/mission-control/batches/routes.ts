@@ -152,8 +152,9 @@ r.put('/mission-control-api/batches/:id/suspended', requireEngineReadOrWrite({ e
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string
-  const row = await batchRepo.findOne({ where: { id: req.params.id, engineId } })
-  if (!row) throw Errors.notFound('Batch', req.params.id)
+  const batchId = String(req.params.id)
+  const row = await batchRepo.findOne({ where: { id: batchId, engineId } })
+  if (!row) throw Errors.notFound('Batch', batchId)
   if (!row.camundaBatchId) throw Errors.validation('Batch has no camundaBatchId')
   if (String(row.camundaBatchId).startsWith('local-')) {
     throw Errors.validation('Batch does not support suspension control')
@@ -176,7 +177,7 @@ r.put('/mission-control-api/batches/:id/suspended', requireEngineReadOrWrite({ e
       ? 'RUNNING'
       : row.status
 
-  await batchRepo.update({ id: req.params.id }, {
+  await batchRepo.update({ id: batchId }, {
     metadata: JSON.stringify(meta),
     status: nextStatus,
     updatedAt: Date.now(),
@@ -190,16 +191,17 @@ r.get('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFro
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string
-  let row = await batchRepo.findOne({ where: { id: req.params.id, engineId } })
-  if (!row) throw Errors.notFound('Batch', req.params.id)
+  const batchId = String(req.params.id)
+  let row = await batchRepo.findOne({ where: { id: batchId, engineId } })
+  if (!row) throw Errors.notFound('Batch', batchId)
   let engine: any = null
   let stats: any = null
   let failedJobs: any[] = []
   if (row.camundaBatchId) {
-    try { engine = await fetchBatchInfo(engineId, row.camundaBatchId) } catch (e) { logger.debug('Failed to fetch batch info from engine', { batchId: req.params.id, error: e }) }
+    try { engine = await fetchBatchInfo(engineId, row.camundaBatchId) } catch (e) { logger.debug('Failed to fetch batch info from engine', { batchId, error: e }) }
     try {
       stats = await fetchBatchStatistics(engineId, row.camundaBatchId)
-    } catch (e) { logger.debug('Failed to fetch batch statistics from engine', { batchId: req.params.id, error: e }) }
+    } catch (e) { logger.debug('Failed to fetch batch statistics from engine', { batchId, error: e }) }
 
     const seedDefId = (engine?.seedJobDefinitionId ?? row.seedJobDefinitionId) as string | undefined
     const monitorDefId = (engine?.monitorJobDefinitionId ?? row.monitorJobDefinitionId) as string | undefined
@@ -227,12 +229,12 @@ r.get('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFro
           remainingJobs: 0,
           completedJobs: typeof totalJobs === 'number' ? Math.max(0, totalJobs - failedCount) : undefined,
         }
-      } catch (e) { logger.debug('Failed to fetch failed batch jobs', { batchId: req.params.id, error: e }) }
+      } catch (e) { logger.debug('Failed to fetch failed batch jobs', { batchId, error: e }) }
     } else {
       // Even when stats exist, we still want failed job details (but only for the batch job definitions)
       try {
         failedJobs = await fetchFailedBatchJobs()
-      } catch (e) { logger.debug('Failed to fetch failed batch jobs', { batchId: req.params.id, error: e }) }
+      } catch (e) { logger.debug('Failed to fetch failed batch jobs', { batchId, error: e }) }
     }
   }
   // Synthesize statistics for completed batches if engine has already GC'd stats
@@ -268,14 +270,14 @@ r.get('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFro
     (outStats.failedJobs ?? 0) === 0 &&
     (outStats.remainingJobs ?? 0) === 0
   ) {
-    await batchRepo.update({ id: req.params.id }, {
+    await batchRepo.update({ id: batchId }, {
       status: 'COMPLETED',
       failedJobs: 0,
       remainingJobs: 0,
       lastError: null,
       updatedAt: Date.now(),
     })
-    const refreshed = await batchRepo.findOne({ where: { id: req.params.id } })
+    const refreshed = await batchRepo.findOne({ where: { id: batchId } })
     row = refreshed || row
   }
   
@@ -288,7 +290,7 @@ r.get('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFro
     typeof outStats.completedJobs === 'number' &&
     outStats.completedJobs > 0
   ) {
-    await batchRepo.update({ id: req.params.id }, {
+    await batchRepo.update({ id: batchId }, {
       status: 'COMPLETED',
       completedJobs: outStats.completedJobs,
       failedJobs: 0,
@@ -297,7 +299,7 @@ r.get('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFro
       completedAt: Date.now(),
       updatedAt: Date.now(),
     })
-    const refreshed = await batchRepo.findOne({ where: { id: req.params.id } })
+    const refreshed = await batchRepo.findOne({ where: { id: batchId } })
     row = refreshed || row
   }
   
@@ -308,15 +310,16 @@ r.get('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFro
     const errorMsg = failedJobs.length > 0
       ? failedJobs[0].exceptionMessage
       : (typeof total === 'number' ? `${failed} of ${total} jobs failed` : `${failed} job(s) failed`)
-    await batchRepo.update({ id: req.params.id }, { 
+    await batchRepo.update({ id: batchId }, { 
       status: 'FAILED', 
       failedJobs: failed,
       completedJobs: completed || 0,
+      remainingJobs: remaining || 0,
       lastError: errorMsg,
       updatedAt: Date.now() 
     })
     // Refresh row
-    const updatedRow = await batchRepo.findOne({ where: { id: req.params.id } })
+    const updatedRow = await batchRepo.findOne({ where: { id: batchId } })
     row = updatedRow || row
     batchError = errorMsg
   } else if (failedJobs.length > 0 && !row!.lastError) {
@@ -350,7 +353,7 @@ r.get('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineIdFro
     try {
       const meta = JSON.parse(row.metadata)
       if (typeof meta?.suspended === 'boolean') suspended = meta.suspended
-    } catch (e) { logger.debug('Failed to parse batch metadata', { batchId: req.params.id, error: e }) }
+    } catch (e) { logger.debug('Failed to parse batch metadata', { batchId: String(req.params.id), error: e }) }
   }
 
   const redacted = await piiRedactionService.redactPayload(req, {
@@ -367,13 +370,14 @@ r.delete('/mission-control-api/batches/:id', requireEngineReadOrWrite({ engineId
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string
-  const row = await batchRepo.findOne({ where: { id: req.params.id, engineId } })
-  if (!row) throw Errors.notFound('Batch', req.params.id)
+  const batchId = String(req.params.id)
+  const row = await batchRepo.findOne({ where: { id: batchId, engineId } })
+  if (!row) throw Errors.notFound('Batch', batchId)
   if (row.camundaBatchId) {
-    try { await deleteBatch(engineId, row.camundaBatchId) } catch (e) { logger.debug('Failed to delete batch from engine (best-effort)', { batchId: req.params.id, error: e }) }
+    try { await deleteBatch(engineId, row.camundaBatchId) } catch (e) { logger.debug('Failed to delete batch from engine (best-effort)', { batchId, error: e }) }
   }
   const now = Date.now()
-  await batchRepo.update({ id: req.params.id }, { status: 'CANCELED', updatedAt: now })
+  await batchRepo.update({ id: batchId }, { status: 'CANCELED', updatedAt: now })
   res.status(204).end()
 }))
 
@@ -384,15 +388,16 @@ r.delete('/mission-control-api/batches/:id/record', requireEngineReadOrWrite({ e
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string
-  const row = await batchRepo.findOne({ where: { id: req.params.id, engineId } })
-  if (!row) throw Errors.notFound('Batch', req.params.id)
+  const batchId = String(req.params.id)
+  const row = await batchRepo.findOne({ where: { id: batchId, engineId } })
+  if (!row) throw Errors.notFound('Batch', batchId)
   
   const st = String(row.status || '').toUpperCase()
   if (!['COMPLETED', 'FAILED', 'CANCELED'].includes(st)) {
     throw Errors.validation('Can only delete completed, failed, or canceled batches')
   }
   
-  await batchRepo.delete({ id: req.params.id })
+  await batchRepo.delete({ id: batchId })
   res.status(204).end()
 }))
 

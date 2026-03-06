@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-03-06T19:48:40.771Z
+Generated at: 2026-03-06T23:12:23.977Z
 
 Generated from:
 - third_party_licenses.json
@@ -14,7 +14,7 @@ Generated from:
 | License | Count |
 |---|---:|
 | ISC | 1 |
-| MIT | 10 |
+| MIT | 8 |
 
 ## Dependency list
 
@@ -24,8 +24,6 @@ Generated from:
 | @kwsites/file-exists | 1.1.1 | MIT | https://github.com/kwsites/file-exists | root |
 | @kwsites/promise-deferred | 1.1.1 | MIT | https://github.com/kwsites/promise-deferred | root |
 | debug | 4.4.3 | MIT | https://github.com/debug-js/debug | root |
-| inferno-vnode-flags | 9.0.11 | MIT | https://github.com/infernojs/inferno | frontend |
-| inferno | 9.0.11 | MIT | https://github.com/infernojs/inferno | frontend |
 | ms | 2.1.3 | MIT | https://github.com/vercel/ms | root |
 | openapi3-ts | 4.5.0 | MIT | https://github.com/metadevpro/openapi3-ts | root |
 | simple-git | 3.32.3 | MIT | https://github.com/steveukx/git-js | root |

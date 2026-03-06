@@ -62,7 +62,7 @@ router.post('/git-api/locks', apiLimiter, requireAuth, validateBody(AcquireLockR
  * Release a lock
  */
 router.delete('/git-api/locks/:lockId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { lockId } = req.params;
+  const lockId = String(req.params.lockId);
   const userId = req.user!.userId;
 
   const lock = await lockManager.getLockRecord(lockId);
@@ -123,7 +123,7 @@ router.get('/git-api/locks', apiLimiter, requireAuth, asyncHandler(async (req: R
  * Send heartbeat to extend lock
  */
 router.put('/git-api/locks/:lockId/heartbeat', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { lockId } = req.params;
+  const lockId = String(req.params.lockId);
 
   const userId = req.user!.userId;
   const lock = await lockManager.getLockRecord(lockId);

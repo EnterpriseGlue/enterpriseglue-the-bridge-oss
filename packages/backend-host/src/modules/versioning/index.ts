@@ -123,7 +123,7 @@ router.get('/vcs-api/projects/uncommitted-status', apiLimiter, requireAuth, asyn
  * Otherwise, all files in the project are committed.
  */
 router.post('/vcs-api/projects/:projectId/commit', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(commitBodySchema), requireProjectRole(EDIT_ROLES), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const { message, fileIds, hotfixFromCommitId, hotfixFromFileVersion } = req.body;
 
@@ -205,7 +205,7 @@ router.post('/vcs-api/projects/:projectId/commit', apiLimiter, requireAuth, vali
  * POST /vcs-api/projects/:projectId/publish
  */
 router.post('/vcs-api/projects/:projectId/publish', apiLimiter, requireAuth, requireProjectRole(EDIT_ROLES), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
 
   if (!(await vcsService.ensureInitialized())) {
@@ -237,7 +237,7 @@ router.post('/vcs-api/projects/:projectId/publish', apiLimiter, requireAuth, req
  * GET /vcs-api/projects/:projectId/commits
  */
 router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const { branch: branchType = 'all', fileId } = req.query as { branch?: 'draft' | 'main' | 'all', fileId?: string };
 
@@ -484,7 +484,7 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
  * GET /vcs-api/projects/:projectId/status
  */
 router.get('/vcs-api/projects/:projectId/status', apiLimiter, requireAuth, requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
 
   if (!(await vcsService.ensureInitialized())) {
@@ -534,7 +534,7 @@ router.get('/vcs-api/projects/:projectId/status', apiLimiter, requireAuth, requi
  * GET /vcs-api/projects/:projectId/uncommitted-files
  */
 router.get('/vcs-api/projects/:projectId/uncommitted-files', apiLimiter, requireAuth, requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.params;
+  const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const baseline = String(req.query?.baseline || 'main').toLowerCase();
 
@@ -577,7 +577,8 @@ router.get('/vcs-api/projects/:projectId/uncommitted-files', apiLimiter, require
  * GET /vcs-api/projects/:projectId/commits/:commitId/files
  */
 router.get('/vcs-api/projects/:projectId/commits/:commitId/files', apiLimiter, requireAuth, requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, commitId } = req.params;
+  const projectId = String(req.params.projectId);
+  const commitId = String(req.params.commitId);
   const userId = req.user!.userId;
 
   if (!(await vcsService.ensureInitialized())) {
@@ -598,7 +599,8 @@ router.get('/vcs-api/projects/:projectId/commits/:commitId/files', apiLimiter, r
  * POST /vcs-api/projects/:projectId/commits/:commitId/restore
  */
 router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter, requireAuth, requireProjectRole(EDIT_ROLES), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId, commitId } = req.params;
+  const projectId = String(req.params.projectId);
+  const commitId = String(req.params.commitId);
   const userId = req.user!.userId;
 
   if (!(await vcsService.ensureInitialized())) {

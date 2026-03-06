@@ -43,35 +43,40 @@ r.get('/mission-control-api/external-tasks', validateQuery(ExternalTaskQueryPara
 // Complete external task
 r.post('/mission-control-api/external-tasks/:id/complete', validateBody(CompleteExternalTaskRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  await completeTask(engineId, req.params.id, req.body);
+  const taskId = String(req.params.id);
+  await completeTask(engineId, taskId, req.body);
   res.status(204).end();
 }));
 
 // Handle external task failure
 r.post('/mission-control-api/external-tasks/:id/failure', validateBody(ExternalTaskFailureRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  await failTask(engineId, req.params.id, req.body);
+  const taskId = String(req.params.id);
+  await failTask(engineId, taskId, req.body);
   res.status(204).end();
 }));
 
 // Handle external task BPMN error
 r.post('/mission-control-api/external-tasks/:id/bpmnError', validateBody(ExternalTaskBpmnErrorRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  await bpmnErrorTask(engineId, req.params.id, req.body);
+  const taskId = String(req.params.id);
+  await bpmnErrorTask(engineId, taskId, req.body);
   res.status(204).end();
 }));
 
 // Extend external task lock
 r.post('/mission-control-api/external-tasks/:id/extendLock', validateBody(ExtendLockRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  await extendTaskLock(engineId, req.params.id, req.body);
+  const taskId = String(req.params.id);
+  await extendTaskLock(engineId, taskId, req.body);
   res.status(204).end();
 }));
 
 // Unlock external task
 r.post('/mission-control-api/external-tasks/:id/unlock', asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  await unlockTask(engineId, req.params.id);
+  const taskId = String(req.params.id);
+  await unlockTask(engineId, taskId);
   res.status(204).end();
 }));
 

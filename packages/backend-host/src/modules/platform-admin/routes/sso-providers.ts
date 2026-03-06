@@ -119,7 +119,8 @@ router.get(
   validateParams(providerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
-      const provider = await ssoProviderService.getProvider(req.params.id);
+      const providerId = String(req.params.id);
+      const provider = await ssoProviderService.getProvider(providerId);
       if (!provider) {
         throw Errors.providerNotFound();
       }
@@ -174,18 +175,19 @@ router.put(
   validateBody(updateProviderSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
-      const existing = await ssoProviderService.getProvider(req.params.id);
+      const providerId = String(req.params.id);
+      const existing = await ssoProviderService.getProvider(providerId);
       if (!existing) {
         throw Errors.providerNotFound();
       }
 
-      await ssoProviderService.updateProvider(req.params.id, req.body);
+      await ssoProviderService.updateProvider(providerId, req.body);
 
       await logAudit({
         action: 'sso.provider.update',
         userId: req.user!.userId,
         resourceType: 'sso_provider',
-        resourceId: req.params.id,
+        resourceId: providerId,
         details: { name: req.body.name || existing.name },
       });
 
@@ -209,18 +211,19 @@ router.delete(
   validateParams(providerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
-      const existing = await ssoProviderService.getProvider(req.params.id);
+      const providerId = String(req.params.id);
+      const existing = await ssoProviderService.getProvider(providerId);
       if (!existing) {
         throw Errors.providerNotFound();
       }
 
-      await ssoProviderService.deleteProvider(req.params.id);
+      await ssoProviderService.deleteProvider(providerId);
 
       await logAudit({
         action: 'sso.provider.delete',
         userId: req.user!.userId,
         resourceType: 'sso_provider',
-        resourceId: req.params.id,
+        resourceId: providerId,
         details: { name: existing.name, type: existing.type },
       });
 
@@ -244,19 +247,20 @@ router.post(
   validateParams(providerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
-      const existing = await ssoProviderService.getProvider(req.params.id);
+      const providerId = String(req.params.id);
+      const existing = await ssoProviderService.getProvider(providerId);
       if (!existing) {
         throw Errors.providerNotFound();
       }
 
       const newEnabled = !existing.enabled;
-      await ssoProviderService.toggleProvider(req.params.id, newEnabled);
+      await ssoProviderService.toggleProvider(providerId, newEnabled);
 
       await logAudit({
         action: newEnabled ? 'sso.provider.enable' : 'sso.provider.disable',
         userId: req.user!.userId,
         resourceType: 'sso_provider',
-        resourceId: req.params.id,
+        resourceId: providerId,
         details: { name: existing.name },
       });
 

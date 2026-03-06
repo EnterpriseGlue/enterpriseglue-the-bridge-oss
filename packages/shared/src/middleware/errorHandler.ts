@@ -1,4 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
+import type { ParamsFlatDictionary, RequestHandler } from 'express-serve-static-core';
+import type { ParsedQs } from 'qs';
 import { z, ZodError } from 'zod';
 
 /**
@@ -183,10 +185,16 @@ export function errorHandler(
  * Async route handler wrapper to catch errors
  * Usage: router.get('/path', asyncHandler(async (req, res) => { ... }))
  */
-export function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<any>
-) {
-  return (req: Request, res: Response, next: NextFunction) => {
+export function asyncHandler<
+  P = ParamsFlatDictionary,
+  ResBody = any,
+  ReqBody = any,
+  ReqQuery = ParsedQs,
+  Locals extends Record<string, any> = Record<string, any>
+>(
+  fn: (req: Request<P, ResBody, ReqBody, ReqQuery, Locals>, res: Response<ResBody, Locals>, next: NextFunction) => Promise<any>
+): RequestHandler<P, ResBody, ReqBody, ReqQuery, Locals> {
+  return (req: Request<P, ResBody, ReqBody, ReqQuery, Locals>, res: Response<ResBody, Locals>, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 }

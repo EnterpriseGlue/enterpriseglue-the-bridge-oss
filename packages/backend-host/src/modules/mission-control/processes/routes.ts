@@ -210,21 +210,24 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
 // Get process definition by ID
 r.get('/mission-control-api/process-definitions/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
-  const data = await getProcessDefinition(engineId, req.params.id)
+  const definitionId = String(req.params.id)
+  const data = await getProcessDefinition(engineId, definitionId)
   res.json(data)
 }))
 
 // Get process definition XML
 r.get('/mission-control-api/process-definitions/:id/xml', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
-  const data = await getProcessDefinitionXml(engineId, req.params.id)
+  const definitionId = String(req.params.id)
+  const data = await getProcessDefinitionXml(engineId, definitionId)
   res.json(data)
 }))
 
 // Get process definition statistics (activity instance counts)
 r.get('/mission-control-api/process-definitions/key/:key/statistics', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
-  const data = await getProcessDefinitionStatistics(engineId, req.params.key)
+  const definitionKey = String(req.params.key)
+  const data = await getProcessDefinitionStatistics(engineId, definitionKey)
   res.json(data)
 }))
 
@@ -232,7 +235,8 @@ r.get('/mission-control-api/process-definitions/key/:key/statistics', requireEng
 r.post('/mission-control-api/process-definitions/key/:key/start', requireEngineReadOrWrite({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const { variables, businessKey } = req.body || {}
   const engineId = (req as any).engineId as string
-  const data = await startProcessInstance(engineId, req.params.key, { variables, businessKey })
+  const definitionKey = String(req.params.key)
+  const data = await startProcessInstance(engineId, definitionKey, { variables, businessKey })
   res.json(data)
 }))
 

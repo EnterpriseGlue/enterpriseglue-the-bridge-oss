@@ -92,7 +92,7 @@ router.get(
   requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can search users' }),
   asyncHandler(async (req, res) => {
     try {
-      const { projectId } = req.params;
+      const projectId = String(req.params.projectId);
       const q = typeof req.query?.q === 'string' ? String(req.query.q).trim() : '';
 
       if (q.length < 2) {
@@ -141,7 +141,8 @@ router.put(
   requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can manage deploy permissions' }),
   asyncHandler(async (req, res) => {
     try {
-      const { projectId, userId: targetUserId } = req.params;
+      const projectId = String(req.params.projectId);
+      const targetUserId = String(req.params.userId);
       const requesterId = req.user!.userId;
       const { allowed } = req.body as { allowed: boolean };
 
@@ -201,7 +202,7 @@ router.get(
   validateParams(projectIdSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { projectId } = req.params;
+      const projectId = String(req.params.projectId);
       const userId = req.user!.userId;
 
       // Check if user has access to project
@@ -254,7 +255,7 @@ router.post(
   requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can add members' }),
   asyncHandler(async (req, res) => {
     try {
-      const { projectId } = req.params;
+      const projectId = String(req.params.projectId);
       const { email, role, roles } = req.body as { email: string; role?: ProjectRole; roles?: ProjectRole[] };
       const inviterId = req.user!.userId;
 
@@ -340,7 +341,8 @@ router.patch(
   requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can update roles' }),
   asyncHandler(async (req, res) => {
     try {
-      const { projectId, userId: targetUserId } = req.params;
+      const projectId = String(req.params.projectId);
+      const targetUserId = String(req.params.userId);
       const { role, roles } = req.body as { role?: ProjectRole; roles?: ProjectRole[] };
       const requesterId = req.user!.userId;
 
@@ -391,7 +393,8 @@ router.delete(
   validateParams(memberIdSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { projectId, userId: targetUserId } = req.params;
+      const projectId = String(req.params.projectId);
+      const targetUserId = String(req.params.userId);
       const requesterId = req.user!.userId;
 
       // Check if requester has permission (owner or delegate, or removing self)
@@ -437,7 +440,7 @@ router.post(
   validateBody(z.object({ newOwnerId: z.string().uuid() })),
   asyncHandler(async (req, res) => {
     try {
-      const { projectId } = req.params;
+      const projectId = String(req.params.projectId);
       const { newOwnerId } = req.body;
       const currentOwnerId = req.user!.userId;
 
@@ -473,7 +476,7 @@ router.get(
   validateParams(projectIdSchema),
   asyncHandler(async (req, res) => {
     try {
-      const { projectId } = req.params;
+      const projectId = String(req.params.projectId);
       const userId = req.user!.userId;
 
       const membership = await projectMemberService.getMembership(projectId, userId);
