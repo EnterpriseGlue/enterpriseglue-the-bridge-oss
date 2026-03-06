@@ -29,10 +29,10 @@ export function validateBody<T extends z.ZodTypeAny>(schema: T) {
       if (error instanceof ZodError) {
         return res.status(400).json({
           error: 'Validation failed',
-          issues: error.issues.map((issue: z.ZodIssue) => ({
-            path: issue.path.join('.'),
-            message: issue.message,
-            code: issue.code,
+          issues: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message,
+            code: err.code,
           })),
         });
       }
@@ -62,10 +62,10 @@ export function validateQuery<T extends z.ZodTypeAny>(schema: T) {
       if (error instanceof ZodError) {
         return res.status(400).json({
           error: 'Invalid query parameters',
-          issues: error.issues.map((issue: z.ZodIssue) => ({
-            path: issue.path.join('.'),
-            message: issue.message,
-            code: issue.code,
+          issues: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message,
+            code: err.code,
           })),
         });
       }
@@ -89,16 +89,16 @@ export function validateQuery<T extends z.ZodTypeAny>(schema: T) {
 export function validateParams<T extends z.ZodTypeAny>(schema: T) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      req.params = schema.parse(req.params) as any;
+      req.params = schema.parse(req.params);
       next();
     } catch (error) {
       if (error instanceof ZodError) {
         return res.status(400).json({
           error: 'Invalid route parameters',
-          issues: error.issues.map((issue: z.ZodIssue) => ({
-            path: issue.path.join('.'),
-            message: issue.message,
-            code: issue.code,
+          issues: error.errors.map(err => ({
+            path: err.path.join('.'),
+            message: err.message,
+            code: err.code,
           })),
         });
       }
@@ -138,9 +138,9 @@ export function validateResponse<T extends z.ZodTypeAny>(schema: T) {
           if (error instanceof ZodError) {
             return originalJson({
               error: 'Response validation failed (development only)',
-              issues: error.issues.map((issue: z.ZodIssue) => ({
-                path: issue.path.join('.'),
-                message: issue.message,
+              issues: error.errors.map(err => ({
+                path: err.path.join('.'),
+                message: err.message,
               })),
             });
           }

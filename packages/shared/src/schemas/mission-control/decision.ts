@@ -51,13 +51,13 @@ export const DecisionDefinitionQueryParams = z.object({
 });
 
 export const EvaluateDecisionRequest = z.object({
-  variables: z.record(z.string(), z.object({
+  variables: z.record(z.object({
     value: z.any(),
     type: z.string().optional(),
   })),
 });
 
-export const DecisionEvaluationResultSchema = z.array(z.record(z.string(), z.object({
+export const DecisionEvaluationResultSchema = z.array(z.record(z.object({
   value: z.any(),
   type: z.string(),
 })));
