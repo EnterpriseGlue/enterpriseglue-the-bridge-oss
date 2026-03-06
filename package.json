@@ -40,11 +40,11 @@
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.4.3",
-    "simple-git": "^3.30.0",
+    "simple-git": "^3.32.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@playwright/test": "^1.53.0"
+    "@playwright/test": "^1.58.2"
   },
   "overrides": {
     "@types/express": "4.17.25",
