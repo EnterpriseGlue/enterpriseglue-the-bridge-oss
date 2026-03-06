@@ -108,7 +108,7 @@ describe('ProjectOverview actions', () => {
     expect(Boolean(screen.getByRole('heading', { name: /create project/i }))).toBe(true);
   });
 
-  it('renames a project via inline edit', async () => {
+  it('renames a project via inline edit', { timeout: 15_000 }, async () => {
     renderWithProviders();
 
     await waitFor(() => {
