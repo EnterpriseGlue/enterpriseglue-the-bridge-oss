@@ -1,0 +1,552 @@
+name: CI Core Reusable
+
+on:
+  workflow_call:
+    inputs:
+      run_tests:
+        description: Whether CI test-related lanes should run
+        required: true
+        type: boolean
+      run_smoke:
+        description: Whether image smoke lane should run
+        required: true
+        type: boolean
+      run_smoke_exposed:
+        description: Whether exposed backend smoke lane should run
+        required: true
+        type: boolean
+      run_security_scan:
+        description: Whether security PR scan lane should run
+        required: true
+        type: boolean
+      test_databases:
+        description: JSON array of databases for test matrix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  compose-render:
+    runs-on: ubuntu-latest
+    if: inputs.run_tests
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Validate compose render for dev DB overlays
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMPOSE_DIR="infra/docker/compose"
+          ENV_EXAMPLES_DIR="infra/docker/env/examples"
+          cp "$ENV_EXAMPLES_DIR/docker.postgres.env.example" .env.docker
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.mysql.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.mysql.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mysql.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.mssql.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.mssql.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mssql.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.oracle.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.oracle.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.spanner.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.spanner.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.spanner.yml" config >/dev/null
+
+      - name: Validate compose render for image deployment overlays
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMPOSE_DIR="infra/docker/compose"
+          ENV_EXAMPLES_DIR="infra/docker/env/examples"
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/images.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/images.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/images.oracle.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/images.oracle.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" config >/dev/null
+
+      - name: Validate backend exposure overlay wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMPOSE_DIR="infra/docker/compose"
+          ENV_EXAMPLES_DIR="infra/docker/env/examples"
+          cp "$ENV_EXAMPLES_DIR/production.env.example" .env.production
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/production.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/production.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
+          EG_BACKEND_ENV_FILE=./infra/docker/env/examples/images.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/images.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
+
+  test:
+    runs-on: ubuntu-latest
+    if: inputs.run_tests
+    strategy:
+      fail-fast: false
+      matrix:
+        database: ${{ fromJSON(inputs.test_databases) }}
+    permissions:
+      contents: read
+      packages: read
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      oracle:
+        image: gvenzl/oracle-xe:21-slim-faststart
+        env:
+          ORACLE_PASSWORD: oracle123
+          APP_USER: main
+          APP_USER_PASSWORD: oracle123
+        ports:
+          - 1521:1521
+        options: >-
+          --health-cmd="healthcheck.sh"
+          --health-interval=20s
+          --health-timeout=10s
+          --health-retries=20
+          --health-start-period=60s
+    env:
+      NODE_ENV: test
+      DATABASE_TYPE: ${{ matrix.database }}
+      JWT_SECRET: test-secret-please-change-00000000000000
+      CAMUNDA_BASE_URL: http://localhost:9080/engine-rest
+      POSTGRES_HOST: ${{ matrix.database == 'postgres' && 'localhost' || '' }}
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${{ matrix.database == 'postgres' && 'postgres' || '' }}
+      POSTGRES_PASSWORD: ${{ matrix.database == 'postgres' && 'postgres' || '' }}
+      POSTGRES_DATABASE: ${{ matrix.database == 'postgres' && 'postgres' || '' }}
+      POSTGRES_SCHEMA: main
+      POSTGRES_SSL_REJECT_UNAUTHORIZED: false
+      ORACLE_HOST: ${{ matrix.database == 'oracle' && 'localhost' || '' }}
+      ORACLE_PORT: 1521
+      ORACLE_USER: ${{ matrix.database == 'oracle' && 'main' || '' }}
+      ORACLE_PASSWORD: ${{ matrix.database == 'oracle' && 'oracle123' || '' }}
+      ORACLE_SERVICE_NAME: ${{ matrix.database == 'oracle' && 'XEPDB1' || '' }}
+      ORACLE_SCHEMA: ${{ matrix.database == 'oracle' && 'MAIN' || '' }}
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: '@enterpriseglue'
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install DB driver for matrix database
+        if: matrix.database == 'oracle'
+        run: npm -w backend install --no-save oracledb
+
+      - name: Get Playwright version
+        if: matrix.database == 'postgres'
+        id: pw-version
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        if: matrix.database == 'postgres'
+        uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps
+
+      - name: Install Playwright OS deps only
+        if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps
+
+      - name: Build OSS packages
+        run: |
+          npm --prefix packages/shared run build
+          npm --prefix packages/backend-host run build
+
+      - name: Build backend
+        run: npm --prefix backend run build:skip-generate
+
+      - name: Create PostgreSQL schema
+        if: matrix.database == 'postgres'
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
+
+      - name: Sync database schema
+        run: npm --prefix backend run db:schema:sync
+
+      - name: Run unit tests
+        if: matrix.database == 'postgres'
+        run: npm run test:unit
+
+      - name: Run integration tests
+        if: matrix.database == 'postgres'
+        run: npm run test:integration
+
+      - name: Run Oracle backend smoke
+        if: matrix.database == 'oracle'
+        run: |
+          npm --prefix backend run start:compiled &
+          for i in {1..45}; do
+            if curl -sf http://localhost:8787/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://localhost:8787/health >/dev/null
+
+      - name: Start Camunda mock server
+        if: matrix.database == 'postgres'
+        run: |
+          npx --yes @stoplight/prism-cli mock local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json -p 9080 &
+
+      - name: Start backend
+        if: matrix.database == 'postgres'
+        run: npm --prefix backend run start:compiled &
+
+      - name: Start frontend
+        if: matrix.database == 'postgres'
+        run: npm --prefix frontend run dev -- --host 0.0.0.0 --port 5173 &
+
+      - name: Wait for services
+        if: matrix.database == 'postgres'
+        run: |
+          for i in {1..45}; do
+            if curl -sf http://localhost:8787/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://localhost:8787/health >/dev/null
+          curl -sf http://localhost:5173/login >/dev/null
+
+      - name: Run smoke e2e
+        if: matrix.database == 'postgres'
+        run: npm run test:e2e:smoke
+
+      - name: Cleanup test data
+        if: always() && matrix.database == 'postgres'
+        continue-on-error: true
+        run: npm --prefix backend run db:cleanup-test-data
+
+      - name: Upload backend coverage
+        if: matrix.database == 'postgres'
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: backend-coverage
+          path: backend/coverage
+
+      - name: Upload frontend coverage
+        if: matrix.database == 'postgres'
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+
+  build-ci-images:
+    runs-on: ubuntu-latest
+    if: inputs.run_tests
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image once
+        run: |
+          docker buildx build --load \
+            --pull \
+            --cache-from type=gha,scope=ci-smoke-backend \
+            --cache-to type=gha,mode=max,scope=ci-smoke-backend \
+            --build-arg NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }} \
+            -f backend/Dockerfile.prod \
+            -t eg-local-backend:pr \
+            .
+
+      - name: Build frontend image once
+        run: |
+          docker buildx build --load \
+            --pull \
+            --cache-from type=gha,scope=ci-smoke-frontend \
+            --cache-to type=gha,mode=max,scope=ci-smoke-frontend \
+            --build-arg NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }} \
+            -f frontend/Dockerfile.prod \
+            --build-arg API_BASE_URL= \
+            -t eg-local-frontend:pr \
+            .
+
+      - name: Export local images
+        run: |
+          docker save eg-local-backend:pr | gzip -1 > eg-local-backend-pr.tar.gz
+          docker save eg-local-frontend:pr | gzip -1 > eg-local-frontend-pr.tar.gz
+
+      - name: Upload prebuilt images artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: ci-images
+          path: |
+            eg-local-backend-pr.tar.gz
+            eg-local-frontend-pr.tar.gz
+
+  smoke-postgres-image-deploy:
+    runs-on: ubuntu-latest
+    needs: build-ci-images
+    if: inputs.run_tests && inputs.run_smoke
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download prebuilt images artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ci-images
+
+      - name: Load prebuilt images
+        run: |
+          gunzip -c eg-local-backend-pr.tar.gz | docker load
+          gunzip -c eg-local-frontend-pr.tar.gz | docker load
+
+      - name: Prepare image deployment env file
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "NODE_ENV=production"
+            echo "BACKEND_IMAGE=eg-local-backend"
+            echo "FRONTEND_IMAGE=eg-local-frontend"
+            echo "IMAGE_TAG=pr"
+            echo "EG_BACKEND_ENV_FILE=./.env.images.ci"
+            echo "API_PORT=8787"
+            echo "FRONTEND_HOST_PORT=8080"
+            echo "FRONTEND_URL=http://localhost:8080"
+            echo "EXPOSE_BACKEND=false"
+            echo "BACKEND_HOST_PORT=8787"
+            echo "DATABASE_TYPE=postgres"
+            echo "POSTGRES_SCHEMA=main"
+            echo "POSTGRES_USER=enterpriseglue"
+            echo "POSTGRES_PASSWORD=enterpriseglue"
+            echo "POSTGRES_DB=enterpriseglue"
+            echo "POSTGRES_HOST=db"
+            echo "POSTGRES_PORT=5432"
+            echo "POSTGRES_DATABASE=enterpriseglue"
+            echo "POSTGRES_SSL=false"
+            echo "POSTGRES_SSL_REJECT_UNAUTHORIZED=false"
+            echo "JWT_SECRET=test_secret_for_ci_release_images_only_please_change"
+            echo "ADMIN_EMAIL=admin@enterpriseglue.ai"
+            echo "ADMIN_PASSWORD=change_me_change_me"
+            echo "ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            echo "GIT_REPOS_PATH=./data/repos"
+            echo "GIT_DEFAULT_BRANCH=main"
+            echo "API_BASE_URL="
+          } > .env.images.ci
+
+      - name: Start image deployment stack
+        run: |
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
+
+      - name: Wait for frontend and backend health
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMPOSE_DIR="infra/docker/compose"
+          for i in {1..45}; do
+            if curl -sf http://localhost:8080/login >/dev/null && curl -sf http://localhost:8080/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://localhost:8080/login >/dev/null
+          curl -sf http://localhost:8080/health >/dev/null
+          docker compose --project-directory . --env-file .env.images.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" exec -T backend node -e "require('http').get('http://127.0.0.1:'+(process.env.API_PORT||'8787')+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));"
+
+      - name: Dump stack logs on failure
+        if: failure()
+        run: |
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" logs --no-color --tail=200 backend frontend db
+
+      - name: Stop image deployment stack
+        if: always()
+        run: |
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" down -v
+
+  smoke-postgres-image-deploy-exposed:
+    runs-on: ubuntu-latest
+    needs: build-ci-images
+    if: inputs.run_tests && inputs.run_smoke_exposed
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download prebuilt images artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ci-images
+
+      - name: Load prebuilt images
+        run: |
+          gunzip -c eg-local-backend-pr.tar.gz | docker load
+          gunzip -c eg-local-frontend-pr.tar.gz | docker load
+
+      - name: Prepare image deployment env file (backend exposed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "NODE_ENV=production"
+            echo "BACKEND_IMAGE=eg-local-backend"
+            echo "FRONTEND_IMAGE=eg-local-frontend"
+            echo "IMAGE_TAG=pr"
+            echo "EG_BACKEND_ENV_FILE=./.env.images.exposed.ci"
+            echo "API_PORT=8787"
+            echo "FRONTEND_HOST_PORT=8080"
+            echo "FRONTEND_URL=http://localhost:8080"
+            echo "EXPOSE_BACKEND=true"
+            echo "BACKEND_HOST_PORT=8787"
+            echo "DATABASE_TYPE=postgres"
+            echo "POSTGRES_SCHEMA=main"
+            echo "POSTGRES_USER=enterpriseglue"
+            echo "POSTGRES_PASSWORD=enterpriseglue"
+            echo "POSTGRES_DB=enterpriseglue"
+            echo "POSTGRES_HOST=db"
+            echo "POSTGRES_PORT=5432"
+            echo "POSTGRES_DATABASE=enterpriseglue"
+            echo "POSTGRES_SSL=false"
+            echo "POSTGRES_SSL_REJECT_UNAUTHORIZED=false"
+            echo "JWT_SECRET=test_secret_for_ci_release_images_only_please_change"
+            echo "ADMIN_EMAIL=admin@enterpriseglue.ai"
+            echo "ADMIN_PASSWORD=change_me_change_me"
+            echo "ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            echo "GIT_REPOS_PATH=./data/repos"
+            echo "GIT_DEFAULT_BRANCH=main"
+            echo "API_BASE_URL="
+          } > .env.images.exposed.ci
+
+      - name: Start image deployment stack (backend exposed)
+        run: |
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.exposed.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" up -d
+
+      - name: Wait for frontend and backend direct health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in {1..60}; do
+            if curl -sf http://localhost:8080/health >/dev/null && curl -sf http://localhost:8787/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://localhost:8080/health >/dev/null
+          curl -sf http://localhost:8787/health >/dev/null
+
+      - name: Dump stack logs on failure (backend exposed)
+        if: failure()
+        run: |
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.exposed.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" logs --no-color --tail=200 backend frontend db
+
+      - name: Stop image deployment stack (backend exposed)
+        if: always()
+        run: |
+          COMPOSE_DIR="infra/docker/compose"
+          docker compose --project-directory . --env-file .env.images.exposed.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" down -v
+
+  security-pr-scan:
+    runs-on: ubuntu-latest
+    needs: build-ci-images
+    if: inputs.run_tests && inputs.run_security_scan
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download prebuilt images artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ci-images
+
+      - name: Load prebuilt images
+        run: |
+          gunzip -c eg-local-backend-pr.tar.gz | docker load
+          gunzip -c eg-local-frontend-pr.tar.gz | docker load
+
+      - name: Trivy scan backend image
+        uses: aquasecurity/trivy-action@0.34.2
+        with:
+          image-ref: 'eg-local-backend:pr'
+          format: 'json'
+          output: 'backend-trivy.json'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
+          scanners: 'vuln'
+          trivyignores: '.trivyignore'
+
+      - name: Trivy scan frontend image
+        if: ${{ !cancelled() }}
+        uses: aquasecurity/trivy-action@0.34.2
+        with:
+          image-ref: 'eg-local-frontend:pr'
+          format: 'json'
+          output: 'frontend-trivy.json'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
+          scanners: 'vuln'
+          trivyignores: '.trivyignore'
+
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-findings-${{ github.run_id }}
+          path: |
+            backend-trivy.json
+            frontend-trivy.json
+          if-no-files-found: warn
+
+      - name: Security scan summary
+        if: always()
+        run: |
+          echo "## Security Scan Results" >> "$GITHUB_STEP_SUMMARY"
+          for img in backend frontend; do
+            file="${img}-trivy.json"
+            if [ -f "$file" ]; then
+              total=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' "$file")
+              critical=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "CRITICAL")] | length' "$file")
+              high=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "HIGH")] | length' "$file")
+              medium=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "MEDIUM")] | length' "$file")
+              low=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "LOW")] | length' "$file")
+              echo "### ${img}" >> "$GITHUB_STEP_SUMMARY"
+              echo "| Severity | Count |" >> "$GITHUB_STEP_SUMMARY"
+              echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+              echo "| Critical | ${critical} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| High | ${high} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| Medium | ${medium} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| Low | ${low} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| **Total** | **${total}** |" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
