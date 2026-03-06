@@ -216,7 +216,7 @@ jobs:
 
       - name: Create or update security issue
         if: steps.evaluate.outputs.total != '0' || steps.expiry.outputs.has_expired == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const title = '🔒 Nightly Security Drift: vulnerabilities detected';
@@ -295,7 +295,7 @@ jobs:
 
       - name: Close resolved security issue
         if: steps.evaluate.outputs.total == '0' && steps.expiry.outputs.has_expired != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const title = '🔒 Nightly Security Drift: vulnerabilities detected';

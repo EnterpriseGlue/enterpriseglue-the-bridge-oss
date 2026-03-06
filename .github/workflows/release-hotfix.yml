@@ -51,7 +51,7 @@ jobs:
 
       - name: Resolve release outputs
         id: resolve
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           PRS_JSON: ${{ steps.release_auto.outputs.prs || steps.release_forced.outputs.prs || '[]' }}
           PR_JSON: ${{ steps.release_auto.outputs.pr || steps.release_forced.outputs.pr || '{}' }}

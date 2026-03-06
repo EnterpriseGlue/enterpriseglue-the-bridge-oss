@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Generate AI suggestions (title + release label + impact)
         id: suggest
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}
@@ -394,7 +394,7 @@ jobs:
             core.setOutput('key_files', scopeInsight.keyFiles);
 
       - name: Upsert PR assistant comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           SUGGESTED_TITLE: ${{ steps.suggest.outputs.suggested_title }}
           RELEASE_LABEL: ${{ steps.suggest.outputs.release_label }}
@@ -486,7 +486,7 @@ jobs:
             }
 
       - name: Auto-apply title and label (optional)
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           AUTOFIX_ENABLED: ${{ vars.AI_PR_AUTOFIX_ENABLED || 'false' }}
           AUTOFIX_ALLOW_FORKS: ${{ vars.AI_PR_AUTOFIX_ALLOW_FORKS || 'false' }}
