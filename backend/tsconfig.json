@@ -21,8 +21,6 @@
       "@enterpriseglue/backend-host/*": ["../packages/backend-host/src/*"],
       "@modules/*": ["../packages/backend-host/src/modules/*"],
       "@vitest/expect": ["./node_modules/@vitest/expect/dist/index.d.ts"],
-      "@azure/msal-common": ["./node_modules/@azure/msal-common/lib/types/index.d.ts"],
-      "@azure/msal-common/*": ["./node_modules/@azure/msal-common/lib/types/*"],
       "@enterpriseglue/enterprise-plugin-api": ["../packages/enterprise-plugin-api/src/index.d.ts"],
       "@enterpriseglue/enterprise-plugin-api/backend": ["../packages/enterprise-plugin-api/src/backend.d.ts"],
       "@enterpriseglue/enterprise-plugin-api/frontend": ["../packages/enterprise-plugin-api/src/frontend.d.ts"]
