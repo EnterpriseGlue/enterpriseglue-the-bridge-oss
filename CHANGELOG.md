@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.40](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.39...v0.4.40) (2026-03-07)
+
+
+### Bug Fixes
+
+* **ci:** add run_e2e input to skip e2e smoke for EE ([#178](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/178)) ([03855e2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/03855e222ae5a6bf3e5606767a2702bf0cbe4bfb))
+
 ## [0.4.39](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.38...v0.4.39) (2026-03-07)
 
 
