@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.4.35](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.34...v0.4.35) (2026-03-07)
+
+
+### Bug Fixes
+
+* **ci:** add actions:read permission to CodeQL workflow ([#168](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/168)) ([d4019dd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d4019dd7e3d4ad3847848b65bd009fdcf05fcdd5))
+
 ## [0.4.34](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.4.33...v0.4.34) (2026-03-07)
 
 
