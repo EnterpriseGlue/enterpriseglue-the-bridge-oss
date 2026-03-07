@@ -1,16 +1,16 @@
 /**
  * HTTP Interceptor
  * Intercepts fetch requests to handle authentication and token refresh
- * 
+ *
  * Unified Tenant Routing (Option A):
  * - All tenant-scoped API calls are automatically prefixed with /t/:tenantSlug
  * - OSS uses /t/default/* paths
  * - EE uses /t/:actualTenantSlug/* paths
  */
 
-import { USER_KEY } from '../constants/storageKeys';
-import { getErrorMessageFromResponse } from '../shared/api/apiErrorUtils';
-import { config } from '../config';
+import { USER_KEY } from '../constants/storageKeys.js';
+import { getErrorMessageFromResponse } from '../shared/api/apiErrorUtils.js';
+import { config } from '../config.js';
 
 const API_BASE_URL = '/api';
 const DEFAULT_TENANT_SLUG = 'default';
@@ -54,12 +54,12 @@ function getTenantSlugFromPathname(pathname: string): string {
 function isTenantScopedUrl(url: string): boolean {
   // Already has tenant prefix
   if (url.startsWith('/t/')) return false;
-  
+
   // Check if it's a platform-level API (no prefix needed)
-  if (PLATFORM_API_PREFIXES.some(prefix => url.startsWith(prefix))) return false;
-  
+  if (PLATFORM_API_PREFIXES.some((prefix) => url.startsWith(prefix))) return false;
+
   // Check if it's a tenant-scoped API
-  return TENANT_SCOPED_API_PREFIXES.some(prefix => url.startsWith(prefix));
+  return TENANT_SCOPED_API_PREFIXES.some((prefix) => url.startsWith(prefix));
 }
 
 /**
@@ -67,7 +67,7 @@ function isTenantScopedUrl(url: string): boolean {
  */
 function addTenantPrefix(url: string): string {
   if (!isTenantScopedUrl(url)) return url;
-  
+
   const tenantSlug = getTenantSlugFromPathname(window.location.pathname);
   return `/t/${encodeURIComponent(tenantSlug)}${url}`;
 }
@@ -156,7 +156,7 @@ function onTokenRefreshed(success: boolean): void {
 function handleAuthFailure(): void {
   // Clear local user data (tokens are in httpOnly cookies, cleared server-side on logout)
   localStorage.removeItem(USER_KEY);
-  
+
   // Only redirect if not already on login page
   const loginPath = getTenantLoginPath(window.location.pathname);
   if (window.location.pathname !== loginPath) {
@@ -205,7 +205,7 @@ function isPublicRoute(): boolean {
     '/password-reset',
     '/resend-verification',
   ];
-  if (publicRoutes.some(route => pathname.startsWith(route))) return true;
+  if (publicRoutes.some((route) => pathname.startsWith(route))) return true;
   return /^\/t\/[^/]+\/(login|verify-email|reset-password|forgot-password|password-reset|resend-verification)(?:\/|$)/.test(pathname);
 }
 
@@ -220,11 +220,11 @@ export async function interceptedFetch(
   // Add tenant prefix to tenant-scoped URLs
   const prefixedUrl = addTenantPrefix(url);
   const requestUrl = applyApiBaseUrl(prefixedUrl);
-  
+
   // Don't intercept auth endpoints (login, refresh, logout)
-  const isAuthEndpoint = prefixedUrl.includes('/auth/login') || 
-                         prefixedUrl.includes('/auth/refresh') || 
-                         prefixedUrl.includes('/auth/logout');
+  const isAuthEndpoint = ['/auth/login', '/auth/refresh', '/auth/logout'].some((path) =>
+    prefixedUrl.includes(path),
+  );
 
   // Don't intercept on public routes - let them handle 401s naturally
   const onPublicRoute = isPublicRoute();
@@ -246,13 +246,13 @@ export async function interceptedFetch(
     if (!isRefreshing) {
       // Start refresh process
       isRefreshing = true;
-      
+
       const success = await refreshAccessToken();
       isRefreshing = false;
-      
+
       // Notify all waiting requests
       onTokenRefreshed(success);
-      
+
       if (success) {
         // After refresh the accessToken cookie changed; get a fresh CSRF token
         // by making a lightweight GET that goes through CSRF middleware.
@@ -280,7 +280,7 @@ export async function interceptedFetch(
           resolve(ok);
         });
       });
-      
+
       if (success) {
         // Rebuild headers with fresh CSRF token after refresh
         const retryHeaders = new Headers(getAuthHeaders());
