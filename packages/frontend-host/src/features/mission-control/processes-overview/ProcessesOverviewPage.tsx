@@ -663,6 +663,8 @@ export default function ProcessesOverviewPage() {
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         <SplitPane
           direction="vertical"
+          dividerClassName="eg-split-divider"
+          dividerSize={5}
           onResize={(sizes) => handleSplitChange(sizes[0])}
           style={{ 
             position: 'absolute',

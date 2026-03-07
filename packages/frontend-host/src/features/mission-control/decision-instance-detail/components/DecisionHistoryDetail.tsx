@@ -355,6 +355,8 @@ export default function DecisionHistoryDetail() {
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         <SplitPane
           direction="vertical"
+          dividerClassName="eg-split-divider"
+          dividerSize={5}
           className={styles.splitPane}
         >
         <Pane defaultSize="60%" minSize={200} style={{ overflow: 'hidden' }}>

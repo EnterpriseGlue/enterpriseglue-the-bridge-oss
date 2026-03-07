@@ -318,7 +318,7 @@ build_frontend() {
 
 start_backend() {
   log "Starting backend on :$BACKEND_PORT"
-  (cd "$BACKEND_DIR" && nohup node dist/server.js > server.log 2>&1 &)
+  (cd "$BACKEND_DIR" && nohup node dist/backend/src/server.js > server.log 2>&1 &)
 }
 
 start_frontend() {

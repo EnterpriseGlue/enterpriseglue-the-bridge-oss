@@ -1,0 +1,100 @@
+/* React Split Pane v3 divider styles */
+.split-pane-divider,
+.Resizer,
+.SplitPane .Resizer,
+.eg-split-divider {
+  background: var(--cds-border-strong-02, #6f6f6f) !important;
+  opacity: 1;
+  z-index: 1;
+  box-sizing: border-box;
+  transition: background 0.15s ease;
+}
+
+.split-pane-divider:hover,
+.Resizer:hover,
+.SplitPane .Resizer:hover,
+.eg-split-divider:hover {
+  background: var(--cds-border-interactive, #4589ff) !important;
+}
+
+/* Vertical direction = panes stacked top/bottom, divider is a horizontal bar */
+.split-pane-divider.vertical,
+.Resizer.vertical,
+.eg-split-divider.vertical {
+  flex: 0 0 5px !important;
+  height: 5px !important;
+  margin: 0;
+  border-top: 1px solid var(--cds-border-subtle-01, #c6c6c6);
+  border-bottom: 1px solid var(--cds-border-subtle-01, #c6c6c6);
+  cursor: row-resize;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.split-pane-divider.vertical:hover,
+.Resizer.vertical:hover,
+.eg-split-divider.vertical:hover {
+  background: var(--cds-border-interactive, #4589ff) !important;
+}
+
+.split-pane-divider.vertical::after,
+.Resizer.vertical::after,
+.eg-split-divider.vertical::after {
+  content: '';
+  width: 32px;
+  height: 3px;
+  background: var(--cds-border-strong-02, #525252);
+  border-radius: 2px;
+}
+
+.split-pane-divider.vertical:hover::after,
+.Resizer.vertical:hover::after,
+.eg-split-divider.vertical:hover::after {
+  background: var(--cds-icon-on-color, #fff) !important;
+}
+
+/* Horizontal direction = panes side by side, divider is a vertical bar */
+.split-pane-divider.horizontal,
+.Resizer.horizontal,
+.eg-split-divider.horizontal {
+  flex: 0 0 5px !important;
+  width: 5px !important;
+  margin: 0;
+  border-left: 1px solid var(--cds-border-subtle-01, #c6c6c6);
+  border-right: 1px solid var(--cds-border-subtle-01, #c6c6c6);
+  cursor: col-resize;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.split-pane-divider.horizontal:hover,
+.Resizer.horizontal:hover,
+.eg-split-divider.horizontal:hover {
+  background: var(--cds-border-interactive, #4589ff) !important;
+}
+
+.split-pane-divider.horizontal::after,
+.Resizer.horizontal::after,
+.eg-split-divider.horizontal::after {
+  content: '';
+  width: 3px;
+  height: 32px;
+  background: var(--cds-border-strong-02, #525252);
+  border-radius: 2px;
+}
+
+.split-pane-divider.horizontal:hover::after,
+.Resizer.horizontal:hover::after,
+.eg-split-divider.horizontal:hover::after {
+  background: var(--cds-icon-on-color, #fff) !important;
+}
+
+.split-pane-divider[aria-disabled='true'],
+.Resizer.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

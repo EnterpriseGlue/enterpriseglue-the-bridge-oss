@@ -6,6 +6,7 @@ import '@carbon/styles/css/styles.css'
 import './styles/carbon-overrides.css'
 import './styles/theme.css'
 import './styles/pro-sidebar.css'
+import './styles/split-pane.css'
 
 // Feature Flags
 import { FeatureFlagsProvider } from './contexts/FeatureFlagsContext'

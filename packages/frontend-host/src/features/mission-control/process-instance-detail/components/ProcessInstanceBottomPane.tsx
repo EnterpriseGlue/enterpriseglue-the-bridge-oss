@@ -156,6 +156,8 @@ export function ProcessInstanceBottomPane({
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         <SplitPane
           direction="horizontal"
+          dividerClassName="eg-split-divider"
+          dividerSize={5}
           onResize={(sizes) => onVerticalSplitChange(sizes[0])}
           className={styles.splitPane}
         >

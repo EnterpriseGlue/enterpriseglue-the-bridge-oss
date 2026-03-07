@@ -86,8 +86,8 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   }
 
   // Check if account is locked
-  if (user.lockedUntil && user.lockedUntil > Date.now()) {
-    const unlockTime = new Date(user.lockedUntil).toISOString();
+  if (user.lockedUntil && Number(user.lockedUntil) > Date.now()) {
+    const unlockTime = new Date(Number(user.lockedUntil)).toISOString();
     await logAudit({
       tenantId: req.tenant?.tenantId,
       userId: user.id,
@@ -107,7 +107,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
 
   if (!isValidPassword) {
     // Increment failed login attempts
-    const failedAttempts = (user.failedLoginAttempts || 0) + 1;
+    const failedAttempts = (Number(user.failedLoginAttempts) || 0) + 1;
     let lockedUntil: number | null = null;
 
     // Lock account after 5 failed attempts for 15 minutes

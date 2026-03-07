@@ -433,8 +433,10 @@ export default function Decisions() {
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
       <SplitPane
         direction="vertical"
+        dividerClassName="eg-split-divider"
+        dividerSize={5}
         onResize={(sizes) => handleSplitChange(sizes[0])}
-        style={{ 
+        style={{
           marginTop: 'var(--spacing-0)', 
           position: 'relative',
           marginLeft: '0',
