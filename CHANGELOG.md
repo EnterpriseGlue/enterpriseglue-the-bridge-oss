@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.5.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.5.1...v0.5.2) (2026-03-07)
+
+
+### Bug Fixes
+
+* **frontend-host:** resolve httpInterceptor lint issues ([#188](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/188)) ([63d638c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/63d638c02e5fb7f39b4609fe587f229968af0260))
+
 ## [0.5.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.5.0...v0.5.1) (2026-03-07)
 
 
