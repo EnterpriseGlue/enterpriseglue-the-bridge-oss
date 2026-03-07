@@ -19,6 +19,11 @@ on:
         description: Whether security PR scan lane should run
         required: true
         type: boolean
+      run_e2e:
+        description: Whether e2e smoke tests should run in the test job
+        required: false
+        type: boolean
+        default: true
       test_databases:
         description: JSON array of databases for test matrix
         required: true
@@ -170,24 +175,24 @@ jobs:
           npm --prefix backend install --no-save oracledb
 
       - name: Get Playwright version
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && inputs.run_e2e
         id: pw-version
         run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
-        if: matrix.database == 'postgres'
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        if: matrix.database == 'postgres' && inputs.run_e2e
+        uses: actions/cache@v4
         id: pw-cache
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
 
       - name: Install Playwright browsers
-        if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit != 'true'
+        if: matrix.database == 'postgres' && inputs.run_e2e && steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
       - name: Install Playwright OS deps only
-        if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit == 'true'
+        if: matrix.database == 'postgres' && inputs.run_e2e && steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps
 
       - name: Build local packages
@@ -236,7 +241,7 @@ jobs:
           curl -sf http://localhost:8787/health >/dev/null
 
       - name: Start Camunda mock server
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && inputs.run_e2e
         run: |
           MOCK_SPEC="local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json"
           if [ -f "$MOCK_SPEC" ]; then
@@ -246,15 +251,15 @@ jobs:
           fi
 
       - name: Start backend
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && inputs.run_e2e
         run: npm --prefix backend run start:compiled &
 
       - name: Start frontend
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && inputs.run_e2e
         run: npm --prefix frontend run dev -- --host 0.0.0.0 --port 5173 &
 
       - name: Wait for services
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && inputs.run_e2e
         run: |
           for i in {1..45}; do
             if curl -sf http://localhost:8787/health >/dev/null; then
@@ -266,11 +271,11 @@ jobs:
           curl -sf http://localhost:5173/login >/dev/null
 
       - name: Run smoke e2e
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && inputs.run_e2e
         run: npm run test:e2e:smoke
 
       - name: Cleanup test data
-        if: always() && matrix.database == 'postgres'
+        if: always() && matrix.database == 'postgres' && inputs.run_e2e
         continue-on-error: true
         run: npm --prefix backend run db:cleanup-test-data
 
