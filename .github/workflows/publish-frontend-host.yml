@@ -56,6 +56,10 @@ jobs:
       - name: Validate package contents
         run: npm pack --dry-run
 
+      - name: Verify exports point to dist
+        run: |
+          node -e "const pkg=require('./package.json'); const exp=pkg.exports?.['./*']; if (!exp || exp.default !== './dist/*.js' || exp.types !== './dist/*.d.ts') { console.error('ERROR: exports for ./* must point to dist/*.js and dist/*.d.ts'); process.exit(1); }"
+
       - name: Verify not already published
         id: check
         continue-on-error: true
