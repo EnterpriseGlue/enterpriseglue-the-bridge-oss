@@ -237,6 +237,7 @@ jobs:
         run: |
           npm --prefix packages/shared run build
           npm --prefix packages/backend-host run build
+          npm run build:frontend-host
 
       - name: Build backend
         run: npm --prefix backend run build:skip-generate

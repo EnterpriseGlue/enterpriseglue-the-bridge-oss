@@ -20,6 +20,7 @@
     "deploy:openshift:skip-health": "SKIP_EXTERNAL_HEALTHCHECK=true bash ./scripts/deploy-openshift.sh",
     "deploy:localhost": "bash ./scripts/deploy-localhost.sh",
     "build": "ENV_FILE=.local/docker/env/docker.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.docker; EG_BACKEND_ENV_FILE=\"$ENV_FILE\" docker compose --project-directory . --env-file \"$ENV_FILE\" -f infra/docker/compose/docker-compose.yml build",
+    "build:frontend-host": "npm run --prefix packages/frontend-host build",
     "typecheck": "npm --prefix backend run typecheck && npm --prefix frontend run typecheck",
     "test:unit": "npm --prefix backend run test:unit && npm --prefix frontend run test:unit",
     "test:integration": "npm --prefix backend run test:integration",

@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/frontend-host",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "OSS frontend host for EnterpriseGlue — routes, enterprise loader, extension registry, and feature components",
   "license": "AGPL-3.0-or-later",
   "repository": {
@@ -29,20 +29,16 @@
     "assets/**/*"
   ],
   "exports": {
-    "./*": "./src/*",
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "./styles/*": "./dist/styles/*",
     "./assets/*": "./assets/*"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
-    "access": "restricted",
-    "exports": {
-      "./*": {
-        "types": "./dist/*.d.ts",
-        "default": "./dist/*.js"
-      },
-      "./styles/*": "./dist/styles/*",
-      "./assets/*": "./assets/*"
-    }
+    "access": "restricted"
   },
   "devDependencies": {
     "typescript": "~5.9.3",
