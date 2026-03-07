@@ -181,15 +181,19 @@ jobs:
         if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps
 
-      - name: Build OSS packages
+      - name: Build local packages
         run: |
-          # Conditionally build monorepo packages (OSS has these; EE does not)
-          if [ -f packages/shared/package.json ]; then
-            npm --prefix packages/shared run build
-          fi
-          if [ -f packages/backend-host/package.json ]; then
-            npm --prefix packages/backend-host run build
-          fi
+          # Auto-discover and build any packages/*/ that have a "build" script.
+          # OSS: packages/shared, packages/backend-host
+          # EE:  packages/enterprise-backend, packages/enterprise-frontend
+          for pkg in packages/*/package.json; do
+            [ -f "$pkg" ] || continue
+            dir="$(dirname "$pkg")"
+            if node -e "const p=require('./${pkg}'); process.exit(p.scripts?.build ? 0 : 1)" 2>/dev/null; then
+              echo "Building $dir ..."
+              npm --prefix "$dir" run build
+            fi
+          done
 
       - name: Build backend
         run: npm --prefix backend run build:skip-generate
