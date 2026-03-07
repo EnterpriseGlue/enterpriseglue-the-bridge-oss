@@ -95,7 +95,7 @@ jobs:
         if: >-
           !(github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true')
           && steps.check.outcome != 'success'
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
         with:
           token: ${{ secrets.EE_DISPATCH_TOKEN }}
           repository: EnterpriseGlue/enterpriseglue-the-bridge-ee
