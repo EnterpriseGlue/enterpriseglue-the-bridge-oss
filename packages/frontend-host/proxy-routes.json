@@ -1,0 +1,18 @@
+{
+  "proxyPatterns": [
+    "^/t/[^/]+/api",
+    "^/t/[^/]+/engines-api",
+    "^/t/[^/]+/starbase-api",
+    "^/t/[^/]+/mission-control-api",
+    "^/t/[^/]+/git-api",
+    "^/t/[^/]+/vcs-api",
+    "^/t/[^/]+/health",
+    "/api",
+    "/engines-api",
+    "/starbase-api",
+    "/mission-control-api",
+    "/git-api",
+    "/vcs-api",
+    "/health"
+  ]
+}

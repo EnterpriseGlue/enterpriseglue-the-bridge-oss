@@ -26,6 +26,7 @@
     "src/**/*.svg",
     "src/**/*.png",
     "src/**/*.d.ts",
+    "proxy-routes.json",
     "assets/**/*"
   ],
   "exports": {
@@ -33,6 +34,7 @@
       "types": "./dist/*.d.ts",
       "default": "./dist/*.js"
     },
+    "./proxy-routes.json": "./proxy-routes.json",
     "./styles/*": "./dist/styles/*",
     "./assets/*": "./assets/*"
   },
