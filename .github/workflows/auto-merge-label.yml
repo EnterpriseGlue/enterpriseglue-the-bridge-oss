@@ -29,9 +29,14 @@ jobs:
           script: |
             const labels = (context.payload.pull_request.labels || []).map(label => label.name);
             const hasLabel = labels.includes('auto-merge');
-            core.setOutput('should_enable', hasLabel ? 'true' : 'false');
+            const author = context.payload.pull_request.user?.login;
+            const allowedAuthors = new Set(['haryselman', 'dependabot[bot]']);
+            const isAllowedAuthor = author && allowedAuthors.has(author);
+            core.setOutput('should_enable', hasLabel && isAllowedAuthor ? 'true' : 'false');
             if (!hasLabel) {
               core.notice('auto-merge label not present; skipping.');
+            } else if (!isAllowedAuthor) {
+              core.notice(`auto-merge disabled for author ${author}; only haryselman or dependabot[bot] allowed.`);
             }
 
       - name: Enable GitHub auto-merge
