@@ -150,15 +150,21 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ci_token }}
 
+      - name: Install backend dependencies
+        run: |
+          # EE: backend/ is standalone (not a workspace) and has its own lock file
+          # OSS: backend/ is a workspace, already installed by root npm ci
+          if [ -f backend/package-lock.json ]; then
+            npm ci --prefix backend
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ci_token }}
+
       - name: Install DB driver for matrix database
         if: matrix.database == 'oracle'
         run: |
-          # Use workspace flag if 'backend' workspace exists, otherwise install at root
-          if npm -w backend --version >/dev/null 2>&1; then
-            npm -w backend install --no-save oracledb
-          else
-            npm install --no-save oracledb
-          fi
+          # Install oracledb in backend — use --prefix since backend may not be a workspace
+          npm --prefix backend install --no-save oracledb
 
       - name: Get Playwright version
         if: matrix.database == 'postgres'
