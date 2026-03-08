@@ -5,6 +5,7 @@ import type {
   Variable,
   VariableHistoryEntry,
   ActivityInstance,
+  ExecutionDetails,
   Incident,
   Job,
   ExternalTask,
@@ -44,6 +45,23 @@ export async function getProcessInstanceVariableHistory(instanceId: string, vari
 
 export async function getProcessInstanceActivityHistory(instanceId: string, engineId?: string): Promise<ActivityInstance[]> {
   return apiClient.get<ActivityInstance[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/history/activity-instances`, engineId), undefined, { credentials: 'include' })
+}
+
+export async function getProcessInstanceExecutionDetails(
+  instanceId: string,
+  params: {
+    activityInstanceId: string
+    executionId?: string | null
+    taskId?: string | null
+  },
+  engineId?: string
+): Promise<ExecutionDetails> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('activityInstanceId', params.activityInstanceId)
+  if (params.executionId) searchParams.set('executionId', params.executionId)
+  if (params.taskId) searchParams.set('taskId', params.taskId)
+  const basePath = `/mission-control-api/process-instances/${instanceId}/execution-details?${searchParams.toString()}`
+  return apiClient.get<ExecutionDetails>(withEngineId(basePath, engineId), undefined, { credentials: 'include' })
 }
 
 export async function getProcessInstanceIncidents(instanceId: string, engineId?: string): Promise<Incident[]> {

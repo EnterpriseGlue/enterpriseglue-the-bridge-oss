@@ -177,6 +177,11 @@ export type BpmnIconVisual = {
   kind: 'marker' | 'shape'
 }
 
+export type BpmnLoopMarkerVisual = {
+  iconClass: string
+  label: 'Loop' | 'Sequential multi-instance' | 'Parallel multi-instance'
+}
+
 export const resolveBpmnMarkerIconClassFromElement = (el: any): string | null => {
   if (!el) return null
 
@@ -207,6 +212,29 @@ export const resolveBpmnMarkerIconClassFromElement = (el: any): string | null =>
     default:
       return null
   }
+}
+
+export const resolveBpmnLoopMarkerVisualFromElement = (el: any): BpmnLoopMarkerVisual | null => {
+  if (!el) return null
+
+  const bo = el?.businessObject || el
+  const loopCharacteristics = bo?.loopCharacteristics
+  const loopTypeRaw = (loopCharacteristics?.$type || '') as string
+  if (!loopTypeRaw) return null
+
+  const loopType = stripBpmnPrefix(loopTypeRaw)
+
+  if (loopType === 'MultiInstanceLoopCharacteristics') {
+    return loopCharacteristics?.isSequential
+      ? { iconClass: 'bpmn-icon-sequential-mi-marker', label: 'Sequential multi-instance' }
+      : { iconClass: 'bpmn-icon-parallel-mi-marker', label: 'Parallel multi-instance' }
+  }
+
+  if (loopType === 'StandardLoopCharacteristics') {
+    return { iconClass: 'bpmn-icon-loop-marker', label: 'Loop' }
+  }
+
+  return null
 }
 
 export const resolveBpmnMarkerIconClassFallbackFromActivityType = (activityType?: string) => {
@@ -287,6 +315,24 @@ export const createBpmnIconVisualResolver = (getBpmnElementById?: GetBpmnElement
     const resolved: BpmnIconVisual = marker
       ? { iconClass: marker, kind: 'marker' }
       : { iconClass: shape, kind: 'shape' }
+
+    const bpmnTypeRaw = (el?.businessObject?.$type || el?.type || '') as string
+    if (bpmnTypeRaw) cache.set(activityId, resolved)
+
+    return resolved
+  }
+}
+
+export const createBpmnLoopMarkerVisualResolver = (getBpmnElementById?: GetBpmnElementById) => {
+  const cache = new Map<string, BpmnLoopMarkerVisual | null>()
+
+  return (activityId: string): BpmnLoopMarkerVisual | null => {
+    if (!activityId) return null
+
+    if (cache.has(activityId)) return cache.get(activityId) || null
+
+    const el = getBpmnElementById?.(activityId)
+    const resolved = resolveBpmnLoopMarkerVisualFromElement(el)
 
     const bpmnTypeRaw = (el?.businessObject?.$type || el?.type || '') as string
     if (bpmnTypeRaw) cache.set(activityId, resolved)

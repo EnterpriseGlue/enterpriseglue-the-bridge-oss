@@ -36,15 +36,18 @@ interface ProcessInstanceBottomPaneProps {
   verticalSplitSize: number | string
   onVerticalSplitChange: (size: number) => void
   activityPanelProps: {
+    instanceId: string
+    engineId?: string
     actQ: { isLoading: boolean; data?: any }
     sortedActs: any[]
     processName?: string
     incidentActivityIds: Set<string>
-    execCounts: Map<string, number>
     clickableActivityIds: Set<string>
     bpmnRef?: React.MutableRefObject<any>
     selectedActivityId: string | null
     setSelectedActivityId: (id: string | null) => void
+    selectedActivityInstanceId: string | null
+    setSelectedActivityInstanceId: (id: string | null) => void
     selectedActivityName: string
     fmt: (ts?: string | null) => string
     isModMode: boolean
@@ -53,6 +56,7 @@ interface ProcessInstanceBottomPaneProps {
     setShowTokenPassCounts: (show: boolean) => void
     onActivityHover?: (activityId: string | null) => void
     onHistoryContextChange?: (ctx: any | null) => void
+    onNavigateToProcessInstance?: (instanceId: string) => void
     rightTab: 'variables' | 'io'
     setRightTab: (tab: 'variables' | 'io') => void
     varsQ: { isLoading: boolean; data?: Record<string, { value: any; type: string }> }

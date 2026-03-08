@@ -306,6 +306,7 @@ export default function ProcessInstanceDetailPage() {
   const [terminateConfirmOpen, setTerminateConfirmOpen] = React.useState(false)
   const [hoveredActivityId, setHoveredActivityId] = React.useState<string | null>(null)
   const [historyContext, setHistoryContext] = React.useState<any | null>(null)
+  const [selectedActivityInstanceId, setSelectedActivityInstanceId] = React.useState<string | null>(null)
 
   const [addVariableOpen, setAddVariableOpen] = React.useState(false)
   const [addVariableName, setAddVariableName] = React.useState('')
@@ -454,10 +455,13 @@ export default function ProcessInstanceDetailPage() {
 
   const selectedNodeVariables = React.useMemo(() => {
     if (!selectedActivityId) return null
+    if (selectedActivityInstanceId) {
+      return (histVarsQ.data || []).filter((v: any) => v?.activityInstanceId === selectedActivityInstanceId)
+    }
     const ids = new Set(activityIdToInstances.get(selectedActivityId) || [])
     if (!ids.size) return []
     return (histVarsQ.data || []).filter((v: any) => v?.activityInstanceId && ids.has(v.activityInstanceId))
-  }, [selectedActivityId, histVarsQ.data, activityIdToInstances])
+  }, [selectedActivityId, selectedActivityInstanceId, histVarsQ.data, activityIdToInstances])
 
   const globalVariableHistoryTargetsByName = React.useMemo(() => {
     const out: Record<string, VariableHistoryTarget> = {}
@@ -503,9 +507,9 @@ export default function ProcessInstanceDetailPage() {
   }
 
   const selectedDecisionInstanceQ = useQuery<HistoricDecisionInstanceLite | null>({
-    queryKey: ['mission-control', 'selected-decision', instanceId, selectedActivityId, selectedNodeMeta?.decisionRef || ''],
+    queryKey: ['mission-control', 'selected-decision', instanceId, selectedActivityId, selectedActivityInstanceId, selectedNodeMeta?.decisionRef || ''],
     queryFn: async () => {
-      if (!instanceId || (!selectedActivityId && !selectedNodeMeta?.decisionRef)) return null
+      if (!instanceId || (!selectedActivityId && !selectedActivityInstanceId && !selectedNodeMeta?.decisionRef)) return null
       const params = new URLSearchParams()
       params.set('processInstanceId', instanceId)
       params.set('sortBy', 'evaluationTime')
@@ -516,18 +520,22 @@ export default function ProcessInstanceDetailPage() {
 
       let candidates: HistoricDecisionInstanceLite[] = []
 
+      if (selectedActivityInstanceId) {
+        candidates = all.filter((d: HistoricDecisionInstanceLite) => d.activityInstanceId === selectedActivityInstanceId)
+      }
+
       if (selectedActivityId) {
-        candidates = all.filter((d) => d.activityId === selectedActivityId)
+        candidates = candidates.length > 0 ? candidates : all.filter((d: HistoricDecisionInstanceLite) => d.activityId === selectedActivityId)
       }
 
       if ((!candidates || candidates.length === 0) && selectedNodeMeta?.decisionRef) {
-        candidates = all.filter((d) => d.decisionDefinitionKey === selectedNodeMeta.decisionRef)
+        candidates = all.filter((d: HistoricDecisionInstanceLite) => d.decisionDefinitionKey === selectedNodeMeta.decisionRef)
       }
 
       if (!candidates || candidates.length === 0) return null
       return candidates[0]
     },
-    enabled: !!instanceId && (!!selectedActivityId || !!selectedNodeMeta?.decisionRef),
+    enabled: !!instanceId && (!!selectedActivityId || !!selectedNodeMeta?.decisionRef || !!selectedActivityInstanceId),
   })
 
   const selectedDecisionInstance = selectedDecisionInstanceQ.data || null
@@ -584,16 +592,6 @@ export default function ProcessInstanceDetailPage() {
     }
   }, [viewerApi, xmlQ.data, actQ.data, incidentsQ.data, isModMode, modPlan, applyOverlays])
 
-  const execCounts = React.useMemo(() => {
-    // Count activity executions only for the current instance
-    const map = new Map<string, number>()
-    for (const a of sortedActs || []) {
-      const id = a.activityId || 'unknown'
-      map.set(id, (map.get(id) || 0) + 1)
-    }
-    return map
-  }, [sortedActs])
-
 
   function fmt(ts?: string|null) {
     if (!ts) return '--'
@@ -634,13 +632,20 @@ export default function ProcessInstanceDetailPage() {
       if (el.waypoints) return
       const id = el.businessObject.id || el.id
       if (!id) return
+      setSelectedActivityInstanceId(null)
       setSelectedActivityId(id)
     }
     eventBus.on('element.click', handler)
     return () => {
       eventBus.off('element.click', handler)
     }
-  }, [isModMode])
+  }, [isModMode, setSelectedActivityId])
+
+  React.useEffect(() => {
+    if (!selectedActivityId && selectedActivityInstanceId) {
+      setSelectedActivityInstanceId(null)
+    }
+  }, [selectedActivityId, selectedActivityInstanceId])
 
   const incidentCount = (incidentsQ.data || []).length
   const showIncidentBanner = incidentCount > 0
@@ -922,15 +927,18 @@ export default function ProcessInstanceDetailPage() {
           verticalSplitSize={verticalSplitSize}
           onVerticalSplitChange={handleVerticalSplitChange}
           activityPanelProps={{
+            instanceId,
+            engineId: selectedEngineId,
             actQ,
             sortedActs,
             processName: defName,
             incidentActivityIds,
-            execCounts,
             clickableActivityIds,
             bpmnRef,
             selectedActivityId,
             setSelectedActivityId,
+            selectedActivityInstanceId,
+            setSelectedActivityInstanceId,
             selectedActivityName,
             fmt,
             isModMode,
@@ -939,6 +947,7 @@ export default function ProcessInstanceDetailPage() {
             setShowTokenPassCounts,
             onActivityHover: (id) => setHoveredActivityId(id),
             onHistoryContextChange: (ctx) => setHistoryContext(ctx),
+            onNavigateToProcessInstance: (calledInstanceId: string) => tenantNavigate(`/mission-control/processes/instances/${calledInstanceId}`),
             rightTab,
             setRightTab,
             varsQ,

@@ -2,7 +2,19 @@
  * Mission Control shared service
  */
 
-import { camundaDelete, camundaGet, camundaPost, camundaPut, setJobDuedate, getExternalTasks, setExternalTaskRetries } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import {
+  camundaDelete,
+  camundaGet,
+  camundaPost,
+  camundaPut,
+  setJobDuedate,
+  getExternalTasks,
+  setExternalTaskRetries,
+  getHistoricVariableInstances,
+  getHistoricTaskInstances,
+  getHistoricDecisionInstances,
+  getUserOperationLog,
+} from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 
 export async function listProcessDefinitions(engineId: string, params: { key?: string; nameLike?: string; latest?: string }) {
   const { key, nameLike, latest } = params
@@ -418,6 +430,62 @@ export async function listProcessInstanceActivityHistory(engineId: string, id: s
     firstResult += page.length
   }
   return all
+}
+
+export async function getProcessInstanceExecutionDetails(
+  engineId: string,
+  processInstanceId: string,
+  params: {
+    activityInstanceId: string
+    executionId?: string | null
+    taskId?: string | null
+  }
+) {
+  const { activityInstanceId, executionId, taskId } = params
+
+  const [variables, tasks, decisions, userOperations] = await Promise.all([
+    getHistoricVariableInstances<any[]>(engineId, {
+      processInstanceId,
+      activityInstanceIdIn: [activityInstanceId],
+      sortBy: 'instanceId',
+      sortOrder: 'desc',
+    }).catch(() => []),
+    getHistoricTaskInstances<any[]>(engineId, {
+      processInstanceId,
+      activityInstanceIdIn: [activityInstanceId],
+      sortBy: 'startTime',
+      sortOrder: 'desc',
+      maxResults: 20,
+    }).catch(() => []),
+    getHistoricDecisionInstances<any[]>(engineId, {
+      processInstanceId,
+      activityInstanceIdIn: [activityInstanceId],
+      sortBy: 'evaluationTime',
+      sortOrder: 'desc',
+      maxResults: 20,
+    }).catch(() => []),
+    executionId
+      ? getUserOperationLog<any[]>(engineId, {
+          processInstanceId,
+          executionId,
+          sortBy: 'timestamp',
+          sortOrder: 'desc',
+          maxResults: 20,
+        }).catch(() => [])
+      : Promise.resolve([]),
+  ])
+
+  const filteredTasks = taskId ? (tasks || []).filter((task: any) => String(task?.id || '') === String(taskId)) : (tasks || [])
+
+  return {
+    activityInstanceId,
+    executionId: executionId || null,
+    taskId: taskId || null,
+    variables: variables || [],
+    tasks: filteredTasks || [],
+    decisions: decisions || [],
+    userOperations: userOperations || [],
+  }
 }
 
 export async function listProcessInstanceJobs(engineId: string, id: string) {

@@ -12,6 +12,7 @@ import {
   getProcessInstanceById,
   getProcessInstanceVariables,
   listProcessInstanceActivityHistory,
+  getProcessInstanceExecutionDetails,
   listProcessInstanceJobs,
   getHistoricProcessInstanceById,
   listHistoricProcessInstances,
@@ -41,6 +42,12 @@ const retrySchema = z.object({
   externalTaskIds: z.array(z.string()).optional(),
   dueDate: z.string().optional(),
   retries: z.number().int().min(0).optional(),
+})
+
+const executionDetailsQuerySchema = z.object({
+  activityInstanceId: z.string().min(1),
+  executionId: z.string().optional(),
+  taskId: z.string().optional(),
 })
 
 const r = Router()
@@ -188,6 +195,19 @@ r.get('/mission-control-api/process-instances/:id/history/activity-instances', a
     res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load activity instances history')
+  }
+}))
+
+r.get('/mission-control-api/process-instances/:id/execution-details', validateQuery(executionDetailsQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const engineId = (req as any).engineId as string
+    const instanceId = String(req.params.id)
+    const query = req.query as z.infer<typeof executionDetailsQuerySchema>
+    const data = await getProcessInstanceExecutionDetails(engineId, instanceId, query)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'history')
+    res.json(redacted)
+  } catch (e: any) {
+    throw Errors.internal(e?.message || 'Failed to load execution details')
   }
 }))
 

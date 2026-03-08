@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import missionControlRouter from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission_control.js';
-import { getProcessInstanceVariableHistory } from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
+import {
+  getProcessInstanceVariableHistory,
+  getProcessInstanceExecutionDetails,
+} from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -26,18 +29,27 @@ vi.mock('@enterpriseglue/shared/services/pii/PiiRedactionService.js', () => ({
 
 vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js', () => ({
   listProcessDefinitions: vi.fn().mockResolvedValue([]),
-  getProcessDefinitionById: vi.fn().mockResolvedValue(null),
-  getProcessDefinitionXmlById: vi.fn().mockResolvedValue(null),
-  resolveProcessDefinition: vi.fn().mockResolvedValue(null),
+  getProcessDefinitionById: vi.fn().mockResolvedValue({}),
+  getProcessDefinitionXmlById: vi.fn().mockResolvedValue({ bpmn20Xml: '' }),
+  resolveProcessDefinition: vi.fn().mockResolvedValue({}),
   getActiveActivityCounts: vi.fn().mockResolvedValue({}),
   getActivityCountsByState: vi.fn().mockResolvedValue({}),
   previewProcessInstanceCount: vi.fn().mockResolvedValue({ count: 0 }),
   listProcessInstancesDetailed: vi.fn().mockResolvedValue([]),
-  getProcessInstanceById: vi.fn().mockResolvedValue(null),
+  getProcessInstanceById: vi.fn().mockResolvedValue({}),
   getProcessInstanceVariables: vi.fn().mockResolvedValue({}),
   listProcessInstanceActivityHistory: vi.fn().mockResolvedValue([]),
+  getProcessInstanceExecutionDetails: vi.fn().mockResolvedValue({
+    activityInstanceId: 'act-inst-1',
+    executionId: 'exec-1',
+    taskId: 'task-1',
+    variables: [{ id: 'var-1', name: 'approvalReason', type: 'String', value: 'Need manager sign-off' }],
+    tasks: [],
+    decisions: [],
+    userOperations: [],
+  }),
   listProcessInstanceJobs: vi.fn().mockResolvedValue([]),
-  getHistoricProcessInstanceById: vi.fn().mockResolvedValue(null),
+  getHistoricProcessInstanceById: vi.fn().mockResolvedValue({}),
   listHistoricProcessInstances: vi.fn().mockResolvedValue([]),
   getProcessInstanceVariableHistory: vi.fn().mockResolvedValue([]),
   listHistoricVariableInstances: vi.fn().mockResolvedValue([]),
@@ -98,5 +110,24 @@ describe('mission-control shared mission_control routes', () => {
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({ error: 'Invalid query parameters' });
     expect(getProcessInstanceVariableHistory).not.toHaveBeenCalled();
+  });
+
+  it('returns lazy execution details for a process instance activity instance', async () => {
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/pi1/execution-details')
+      .query({ activityInstanceId: 'act-inst-1', executionId: 'exec-1', taskId: 'task-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      activityInstanceId: 'act-inst-1',
+      executionId: 'exec-1',
+      taskId: 'task-1',
+      variables: [{ id: 'var-1', name: 'approvalReason' }],
+    });
+    expect(getProcessInstanceExecutionDetails).toHaveBeenCalledWith('engine-1', 'pi1', {
+      activityInstanceId: 'act-inst-1',
+      executionId: 'exec-1',
+      taskId: 'task-1',
+    });
   });
 });

@@ -1,22 +1,25 @@
 import React from 'react'
 import type { HistoricDecisionInstanceLite, DecisionIo, VariableHistoryTarget } from './types'
-import { createBpmnIconVisualResolver } from '../../../../utils/bpmnIconResolver'
-import { ActivityHistoryPanel } from './ActivityHistoryPanel'
+import { createBpmnIconVisualResolver, createBpmnLoopMarkerVisualResolver } from '../../../../utils/bpmnIconResolver'
+import { ExecutionTrailPanel } from './ExecutionTrailPanel'
 import { ActivityDetailsPanel } from './ActivityDetailsPanel'
 import { ModificationPlanPanel } from './ModificationPlanPanel'
 import { buildActivityGroups, buildHistoryContext } from './activityDetailUtils'
 
 interface ActivityDetailPanelProps {
+  instanceId: string
+  engineId?: string
   // Activity history data
   actQ: { isLoading: boolean; data?: any }
   sortedActs: any[]
   processName?: string
   incidentActivityIds: Set<string>
-  execCounts: Map<string, number>
   clickableActivityIds: Set<string>
   bpmnRef?: React.MutableRefObject<any>
   selectedActivityId: string | null
   setSelectedActivityId: (id: string | null) => void
+  selectedActivityInstanceId: string | null
+  setSelectedActivityInstanceId: (id: string | null) => void
   selectedActivityName: string
   fmt: (ts?: string | null) => string
   isModMode: boolean
@@ -26,6 +29,7 @@ interface ActivityDetailPanelProps {
   onActivityClick?: (activityId: string) => void
   onActivityHover?: (activityId: string | null) => void
   onHistoryContextChange?: (ctx: any | null) => void
+  onNavigateToProcessInstance?: (instanceId: string) => void
   
   // Right panel tab state
   rightTab: 'variables' | 'io'
@@ -77,15 +81,18 @@ interface ActivityDetailPanelProps {
  * Split into two sections: Instance History (left) and Variables/IO (right)
  */
 export function ActivityDetailPanel({
+  instanceId,
+  engineId,
   actQ,
   sortedActs,
   processName,
   incidentActivityIds,
-  execCounts,
   clickableActivityIds,
   bpmnRef,
   selectedActivityId,
   setSelectedActivityId,
+  selectedActivityInstanceId,
+  setSelectedActivityInstanceId,
   selectedActivityName,
   fmt,
   isModMode,
@@ -95,6 +102,7 @@ export function ActivityDetailPanel({
   onActivityClick,
   onActivityHover,
   onHistoryContextChange,
+  onNavigateToProcessInstance,
   rightTab,
   setRightTab,
   varsQ,
@@ -129,14 +137,18 @@ export function ActivityDetailPanel({
   applyBusy,
   onExitModificationMode,
 }: ActivityDetailPanelProps) {
-  const resolveBpmnIconVisual = React.useMemo(() => {
-    const getBpmnElementById = (activityId: string) => {
-      const reg = bpmnRef?.current?.get?.('elementRegistry')
-      return reg?.get?.(activityId)
-    }
-
-    return createBpmnIconVisualResolver(getBpmnElementById)
+  const getBpmnElementById = React.useCallback((activityId: string) => {
+    const reg = bpmnRef?.current?.get?.('elementRegistry')
+    return reg?.get?.(activityId)
   }, [bpmnRef])
+
+  const resolveBpmnIconVisual = React.useMemo(() => {
+    return createBpmnIconVisualResolver(getBpmnElementById)
+  }, [getBpmnElementById])
+
+  const resolveBpmnLoopMarkerVisual = React.useMemo(() => {
+    return createBpmnLoopMarkerVisualResolver(getBpmnElementById)
+  }, [getBpmnElementById])
 
   const groupedActivities = React.useMemo(
     () => buildActivityGroups({
@@ -144,37 +156,37 @@ export function ActivityDetailPanel({
       incidentActivityIds,
       clickableActivityIds,
       selectedActivityId,
-      execCounts,
       bpmnRef,
     }),
-    [sortedActs, incidentActivityIds, clickableActivityIds, selectedActivityId, execCounts, bpmnRef]
+    [sortedActs, incidentActivityIds, clickableActivityIds, selectedActivityId, bpmnRef]
   )
 
   return [
-    <ActivityHistoryPanel
+    <ExecutionTrailPanel
       key="history"
+      instanceId={instanceId}
+      engineId={engineId}
       actQ={actQ}
       sortedActs={sortedActs}
       processName={processName}
-      incidentActivityIds={incidentActivityIds}
-      execCounts={execCounts}
-      clickableActivityIds={clickableActivityIds}
       selectedActivityId={selectedActivityId}
       setSelectedActivityId={setSelectedActivityId}
+      selectedActivityInstanceId={selectedActivityInstanceId}
+      setSelectedActivityInstanceId={setSelectedActivityInstanceId}
       fmt={fmt}
       isModMode={isModMode}
       moveSourceActivityId={moveSourceActivityId}
-      activeActivityIds={activeActivityIds}
       showTokenPassCounts={showTokenPassCounts}
       setShowTokenPassCounts={setShowTokenPassCounts}
       modPlan={modPlan}
       onActivityClick={onActivityClick}
       onActivityHover={onActivityHover}
       onHistoryContextChange={onHistoryContextChange}
-      onMoveToHere={onMoveToHere}
       execGroups={groupedActivities}
       resolveBpmnIconVisual={resolveBpmnIconVisual}
+      resolveBpmnLoopMarkerVisual={resolveBpmnLoopMarkerVisual}
       buildHistoryContext={buildHistoryContext}
+      onNavigateToProcessInstance={onNavigateToProcessInstance}
     />,
     <div key="details" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {isModMode ? (
@@ -206,6 +218,7 @@ export function ActivityDetailPanel({
             setRightTab={setRightTab}
             varsQ={varsQ}
             selectedActivityId={selectedActivityId}
+            selectedActivityInstanceId={selectedActivityInstanceId}
             selectedActivityName={selectedActivityName}
             selectedNodeVariables={selectedNodeVariables}
             globalVariableHistoryTargetsByName={globalVariableHistoryTargetsByName}

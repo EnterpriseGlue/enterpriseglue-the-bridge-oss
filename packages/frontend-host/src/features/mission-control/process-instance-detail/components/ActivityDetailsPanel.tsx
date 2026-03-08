@@ -15,6 +15,7 @@ export interface ActivityDetailsPanelProps {
   setRightTab: (tab: 'variables' | 'io') => void
   varsQ: { isLoading: boolean; data?: Record<string, { value: any; type: string }> }
   selectedActivityId: string | null
+  selectedActivityInstanceId: string | null
   selectedActivityName: string
   selectedNodeVariables: any[] | null
   globalVariableHistoryTargetsByName: Record<string, VariableHistoryTarget>
@@ -40,6 +41,7 @@ export function ActivityDetailsPanel({
   setRightTab,
   varsQ,
   selectedActivityId,
+  selectedActivityInstanceId,
   selectedActivityName,
   selectedNodeVariables,
   globalVariableHistoryTargetsByName,
@@ -85,14 +87,22 @@ export function ActivityDetailsPanel({
                     <Tile style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
                       <div style={{ marginBottom: 'var(--spacing-2)' }}>
                         <div style={{ fontWeight: 'var(--font-weight-semibold)' }}>Local variables</div>
-                        <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>Values captured specifically for {selectedActivityName || selectedActivityId}. These are historic snapshots and cannot be edited.</div>
+                        <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>
+                          {selectedActivityInstanceId
+                            ? `Values captured for the selected execution of ${selectedActivityName || selectedActivityId}. These are historic snapshots and cannot be edited.`
+                            : `Values captured specifically for ${selectedActivityName || selectedActivityId}. These are historic snapshots and cannot be edited.`}
+                        </div>
                       </div>
                       {(selectedNodeVariables && selectedNodeVariables.length > 0) ? (
                         <div style={{ overflow: 'auto', flex: 1 }}>
                           <LocalVariablesTable data={selectedNodeVariables || []} status={status} openVariableHistory={openVariableHistory} />
                         </div>
                       ) : (
-                        <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>The selected node has no local variables.</div>
+                        <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
+                          {selectedActivityInstanceId
+                            ? 'The selected execution has no local variables.'
+                            : 'The selected node has no local variables.'}
+                        </div>
                       )}
                     </Tile>
 
@@ -136,7 +146,7 @@ export function ActivityDetailsPanel({
                       <div style={{ marginBottom: 'var(--spacing-2)' }}>
                         <div style={{ fontWeight: 'var(--font-weight-semibold)' }}>Decision Inputs</div>
                         <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>
-                          Inputs to decision evaluation
+                          {selectedActivityInstanceId ? 'Inputs to the selected decision evaluation.' : 'Inputs to decision evaluation'}
                         </div>
                       </div>
                       {decisionInputs.length > 0 ? (
@@ -152,7 +162,7 @@ export function ActivityDetailsPanel({
                       <div style={{ marginBottom: 'var(--spacing-2)' }}>
                         <div style={{ fontWeight: 'var(--font-weight-semibold)' }}>Decision Outputs</div>
                         <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>
-                          Result of decision evaluation
+                          {selectedActivityInstanceId ? 'Result of the selected decision evaluation.' : 'Result of decision evaluation'}
                         </div>
                       </div>
                       {decisionOutputs.length > 0 ? (
@@ -213,6 +223,12 @@ export function ActivityDetailsPanel({
               </div>
 
               <div style={{ overflow: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingRight: 'var(--spacing-1)' }}>
+                {selectedActivityInstanceId && (
+                  <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>
+                    I/O mappings are defined on the BPMN activity and shared across executions. The selected execution remains in context for related variables and decision results.
+                  </div>
+                )}
+
                 {selectedActivityId && (
                   <div style={{ display: 'flex', gap: 'var(--spacing-3)', flex: 1, minHeight: 0 }}>
                     <Tile style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
@@ -247,7 +263,7 @@ export function ActivityDetailsPanel({
 
                 {!selectedActivityId && (
                   <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic', textAlign: 'center', padding: 'var(--spacing-6)' }}>
-                    Select a flow node from the Instance History to view its I/O mappings.
+                    Select a flow node from the Execution Trail to view its I/O mappings.
                   </div>
                 )}
               </div>

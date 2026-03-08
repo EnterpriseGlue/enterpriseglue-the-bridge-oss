@@ -331,6 +331,9 @@ build_frontend() {
   else
     log "Frontend dependencies already installed (offline mode)"
   fi
+
+  build_shared
+  build_frontend_host
   
   build_shared
   build_frontend_host

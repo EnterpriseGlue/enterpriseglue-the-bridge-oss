@@ -3,8 +3,10 @@ import { Button } from '@carbon/react'
 import { Pause, Play, TrashCan, Copy, Renew } from '@carbon/icons-react'
 import styles from '../styles/InstanceDetail.module.css'
 import { WrenchIcon } from './Icons'
+import { formatDurationMs } from './activityDetailUtils'
 
 type HistoryContext = {
+  kind?: 'group' | 'execution'
   activityName?: string
   statusLabel?: string
   startTime?: string | null
@@ -88,10 +90,7 @@ export function InstanceInfoBar({
                       </>
                     )
                   }
-                  const totalSeconds = Math.floor(ms / 1000)
-                  const minutes = Math.floor(totalSeconds / 60)
-                  const seconds = totalSeconds % 60
-                  const duration = minutes <= 0 ? `${seconds}s` : `${minutes}m ${seconds}s`
+                  const duration = formatDurationMs(ms, historyContext.startTime, historyContext.endTime)
                   return (
                     <>
                       <span className={styles.badge}>Start</span>

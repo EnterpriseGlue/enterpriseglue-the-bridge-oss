@@ -2,8 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getProcessInstanceVariables,
   getProcessInstanceVariableHistory,
+  getProcessInstanceExecutionDetails,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
-import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
+import {
+  camundaGet,
+  getHistoricVariableInstances,
+  getHistoricTaskInstances,
+  getHistoricDecisionInstances,
+  getUserOperationLog,
+} from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   camundaGet: vi.fn(),
@@ -13,6 +20,10 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   setJobDuedate: vi.fn(),
   getExternalTasks: vi.fn(),
   setExternalTaskRetries: vi.fn(),
+  getHistoricVariableInstances: vi.fn(),
+  getHistoricTaskInstances: vi.fn(),
+  getHistoricDecisionInstances: vi.fn(),
+  getUserOperationLog: vi.fn(),
 }));
 
 describe('mission-control-service', () => {
@@ -116,5 +127,41 @@ describe('mission-control-service', () => {
         revision: null,
       }),
     ]);
+  });
+
+  it('aggregates lazy execution details and filters tasks by taskId when provided', async () => {
+    vi.mocked(getHistoricVariableInstances).mockResolvedValueOnce([
+      { id: 'var-1', name: 'approvalReason', value: 'Need manager sign-off', type: 'String' },
+    ] as any);
+    vi.mocked(getHistoricTaskInstances).mockResolvedValueOnce([
+      { id: 'task-1', name: 'Approve request', assignee: 'demo' },
+      { id: 'task-2', name: 'Ignore me', assignee: 'demo' },
+    ] as any);
+    vi.mocked(getHistoricDecisionInstances).mockResolvedValueOnce([
+      { id: 'decision-1', decisionDefinitionKey: 'risk-check' },
+    ] as any);
+    vi.mocked(getUserOperationLog).mockResolvedValueOnce([
+      { id: 'op-1', operationType: 'ModifyVariable', property: 'approvalReason' },
+    ] as any);
+
+    const result = await getProcessInstanceExecutionDetails('engine-1', 'proc-1', {
+      activityInstanceId: 'act-inst-1',
+      executionId: 'exec-1',
+      taskId: 'task-1',
+    });
+
+    expect(result).toEqual({
+      activityInstanceId: 'act-inst-1',
+      executionId: 'exec-1',
+      taskId: 'task-1',
+      variables: [{ id: 'var-1', name: 'approvalReason', value: 'Need manager sign-off', type: 'String' }],
+      tasks: [{ id: 'task-1', name: 'Approve request', assignee: 'demo' }],
+      decisions: [{ id: 'decision-1', decisionDefinitionKey: 'risk-check' }],
+      userOperations: [{ id: 'op-1', operationType: 'ModifyVariable', property: 'approvalReason' }],
+    });
+    expect(getHistoricVariableInstances).toHaveBeenCalledWith('engine-1', expect.objectContaining({ processInstanceId: 'proc-1', activityInstanceIdIn: ['act-inst-1'] }));
+    expect(getHistoricTaskInstances).toHaveBeenCalledWith('engine-1', expect.objectContaining({ processInstanceId: 'proc-1', activityInstanceIdIn: ['act-inst-1'] }));
+    expect(getHistoricDecisionInstances).toHaveBeenCalledWith('engine-1', expect.objectContaining({ processInstanceId: 'proc-1', activityInstanceIdIn: ['act-inst-1'] }));
+    expect(getUserOperationLog).toHaveBeenCalledWith('engine-1', expect.objectContaining({ processInstanceId: 'proc-1', executionId: 'exec-1' }));
   });
 });

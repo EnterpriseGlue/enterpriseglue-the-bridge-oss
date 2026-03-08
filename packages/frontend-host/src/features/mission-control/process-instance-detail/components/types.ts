@@ -18,6 +18,52 @@ export type HistoricDecisionInstanceLite = {
   activityInstanceId?: string | null
 }
 
+export type HistoricVariableInstanceLite = {
+  id: string
+  name: string
+  type?: string | null
+  value?: any
+  createTime?: string | null
+  activityInstanceId?: string | null
+  executionId?: string | null
+  taskId?: string | null
+}
+
+export type HistoricTaskInstanceLite = {
+  id: string
+  name?: string | null
+  assignee?: string | null
+  owner?: string | null
+  startTime?: string | null
+  endTime?: string | null
+  deleteReason?: string | null
+  taskDefinitionKey?: string | null
+  activityInstanceId?: string | null
+  executionId?: string | null
+}
+
+export type UserOperationLogEntryLite = {
+  id: string
+  operationType?: string | null
+  entityType?: string | null
+  property?: string | null
+  orgValue?: string | null
+  newValue?: string | null
+  annotation?: string | null
+  timestamp?: string | null
+  userId?: string | null
+}
+
+export type ExecutionDetails = {
+  activityInstanceId: string
+  executionId?: string | null
+  taskId?: string | null
+  variables: HistoricVariableInstanceLite[]
+  tasks: HistoricTaskInstanceLite[]
+  decisions: HistoricDecisionInstanceLite[]
+  userOperations: UserOperationLogEntryLite[]
+}
+
 export type ProcessDefinition = {
   id: string
   key: string
@@ -32,6 +78,14 @@ export type ActivityInstance = {
   startTime?: string
   endTime?: string
   activityType?: string
+  activityInstanceId?: string | null
+  parentActivityInstanceId?: string | null
+  executionId?: string | null
+  calledProcessInstanceId?: string | null
+  taskId?: string | null
+  durationInMillis?: number | null
+  canceled?: boolean
+  completeScope?: boolean
 }
 
 export type Variable = {

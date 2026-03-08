@@ -1,10 +1,18 @@
 import React from 'react'
 
-type GroupedActivity = {
+type HistorySummary = {
+  startTs: number | null
+  endTs: number | null
+  durationMs: number | null
+}
+
+export type ExecutionTrailGroup = {
+  kind: 'group'
+  groupKey: string
   activityId: string
   activityName: string
   activityType: string
-  instances: any[]
+  instances: ExecutionTrailInstance[]
   active: boolean
   hasIncident: boolean
   isClickable: boolean
@@ -12,23 +20,85 @@ type GroupedActivity = {
   totalExecCount: number
   statusLabel: string
   statusType: string
+  depth: number
+  hasNestedChildren: boolean
+  isExpandable: boolean
   _sort: {
-    endKey: number
     startKey: number
+    endKey: number
     typeRank: number
-    activeSort: number
     stableIndex: number
   }
-  _summary: {
-    startTs: number | null
-    endTs: number | null
-    durationMs: number | null
+  _summary: HistorySummary
+}
+
+export type ExecutionTrailInstance = {
+  kind: 'execution'
+  key: string
+  id: string
+  activityInstanceId: string
+  parentActivityInstanceId: string | null
+  activityId: string
+  activityName: string
+  activityType: string
+  executionId: string | null
+  calledProcessInstanceId: string | null
+  taskId: string | null
+  startTime: string | null
+  endTime: string | null
+  durationMs: number | null
+  active: boolean
+  hasIncident: boolean
+  isClickable: boolean
+  isSelected: boolean
+  statusLabel: string
+  statusType: string
+  depth: number
+  children: ExecutionTrailGroup[]
+  _sort: {
+    startKey: number
+    endKey: number
+    stableIndex: number
   }
+  _summary: HistorySummary
+}
+
+type RawExecution = {
+  id: string
+  activityInstanceId: string
+  parentActivityInstanceId: string | null
+  activityId: string
+  activityName: string
+  activityType: string
+  executionId: string | null
+  calledProcessInstanceId: string | null
+  taskId: string | null
+  startTime: string | null
+  endTime: string | null
+  durationMs: number | null
+  active: boolean
+  hasIncident: boolean
+  stableIndex: number
 }
 
 export function buildHistoryContext(g: any) {
   if (!g) return null
+  if (g.kind === 'execution') {
+    return {
+      kind: 'execution' as const,
+      activityId: g.activityId,
+      activityName: g.activityName,
+      startTime: g.startTime || null,
+      endTime: g.endTime || null,
+      durationMs: g.durationMs ?? null,
+      executions: 1,
+      statusLabel: g.statusLabel,
+      activityInstanceId: g.activityInstanceId || null,
+      executionId: g.executionId || null,
+    }
+  }
   return {
+    kind: 'group' as const,
     activityId: g.activityId,
     activityName: g.activityName,
     startTime: g._summary?.startTs ? new Date(g._summary.startTs).toISOString() : null,
@@ -45,6 +115,50 @@ function parseTs(ts?: string | null) {
   if (!ts) return null
   const v = new Date(ts).getTime()
   return Number.isFinite(v) ? v : null
+}
+
+function getDurationMs(durationInMillis?: unknown, startTime?: string | null, endTime?: string | null) {
+  if (typeof durationInMillis === 'number') {
+    if (Number.isFinite(durationInMillis) && durationInMillis >= 0) return durationInMillis
+  } else if (typeof durationInMillis === 'string' && durationInMillis.trim() !== '') {
+    const numeric = Number(durationInMillis)
+    if (Number.isFinite(numeric) && numeric >= 0) return numeric
+  }
+
+  const startTs = parseTs(startTime)
+  const endTs = endTime ? parseTs(endTime) : Date.now()
+  if (startTs === null || endTs === null) return null
+  return Math.max(0, endTs - startTs)
+}
+
+function sortableTs(value: number | null, fallback: number) {
+  return value === null ? fallback : value
+}
+
+export function formatDurationMs(durationMs?: number | null, startTime?: string | null, endTime?: string | null) {
+  const resolved = getDurationMs(durationMs, startTime, endTime)
+  if (resolved === null || !Number.isFinite(resolved) || resolved < 0) return ''
+  if (resolved < 1000) return `${Math.floor(resolved)} ms`
+
+  const totalSeconds = Math.floor(resolved / 1000)
+  if (totalSeconds < 60) return `${totalSeconds} sec`
+
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  if (totalMinutes < 60) {
+    const seconds = totalSeconds % 60
+    return seconds > 0 ? `${totalMinutes} min ${seconds} sec` : `${totalMinutes} min`
+  }
+
+  const totalHours = Math.floor(totalMinutes / 60)
+  if (totalHours < 24) {
+    const minutes = totalMinutes % 60
+    return minutes > 0 ? `${totalHours} hr ${String(minutes).padStart(2, '0')} min` : `${totalHours} hr`
+  }
+
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+  if (hours > 0) return `${days} day${days === 1 ? '' : 's'} ${hours} hr`
+  return days === 1 ? '1 day' : `${days} days`
 }
 
 function getTypeRank(activityId: string, activityType?: string, bpmnRef?: React.MutableRefObject<any>) {
@@ -70,96 +184,180 @@ function getTypeRank(activityId: string, activityType?: string, bpmnRef?: React.
   return 50
 }
 
+function sortExecutions(a: RawExecution, b: RawExecution) {
+  const aStart = sortableTs(parseTs(a.startTime), Number.POSITIVE_INFINITY)
+  const bStart = sortableTs(parseTs(b.startTime), Number.POSITIVE_INFINITY)
+  if (aStart !== bStart) return aStart - bStart
+
+  const aEnd = sortableTs(parseTs(a.endTime), Number.POSITIVE_INFINITY)
+  const bEnd = sortableTs(parseTs(b.endTime), Number.POSITIVE_INFINITY)
+  if (aEnd !== bEnd) return aEnd - bEnd
+
+  if (a.stableIndex !== b.stableIndex) return a.stableIndex - b.stableIndex
+  return (a.activityName || a.activityId).localeCompare(b.activityName || b.activityId)
+}
+
 export function buildActivityGroups({
   sortedActs,
   incidentActivityIds,
   clickableActivityIds,
   selectedActivityId,
-  execCounts,
   bpmnRef,
 }: {
   sortedActs: any[]
   incidentActivityIds: Set<string>
   clickableActivityIds: Set<string>
   selectedActivityId: string | null
-  execCounts: Map<string, number>
   bpmnRef?: React.MutableRefObject<any>
-}): GroupedActivity[] {
-  const map = new Map<string, any[]>()
-  const firstSeenIndex = new Map<string, number>()
+}): ExecutionTrailGroup[] {
+  const rawExecutions: RawExecution[] = []
+  const knownInstanceIds = new Set<string>()
 
-  for (const a of sortedActs || []) {
-    const id = a?.activityId
-    if (!id) continue
-    if (!map.has(id)) {
-      map.set(id, [])
-      firstSeenIndex.set(id, firstSeenIndex.size)
+  for (const [index, activity] of (sortedActs || []).entries()) {
+    const activityId = activity?.activityId
+    const activityInstanceId = String(activity?.activityInstanceId || activity?.id || `${activityId || 'activity'}-${index}`)
+    const entry: RawExecution = {
+      id: String(activity?.id || activityInstanceId),
+      activityInstanceId,
+      parentActivityInstanceId: activity?.parentActivityInstanceId ? String(activity.parentActivityInstanceId) : null,
+      activityId: String(activityId || ''),
+      activityName: String(activity?.activityName || activityId || activity?.activityType || 'Unnamed activity'),
+      activityType: String(activity?.activityType || ''),
+      executionId: activity?.executionId ? String(activity.executionId) : null,
+      calledProcessInstanceId: activity?.calledProcessInstanceId ? String(activity.calledProcessInstanceId) : null,
+      taskId: activity?.taskId ? String(activity.taskId) : null,
+      startTime: activity?.startTime || null,
+      endTime: activity?.endTime || null,
+      durationMs: getDurationMs(activity?.durationInMillis, activity?.startTime, activity?.endTime),
+      active: !activity?.endTime && !(activity as any)?.canceled,
+      hasIncident: !!activityId && incidentActivityIds.has(String(activityId)),
+      stableIndex: index,
     }
-    map.get(id)!.push(a)
+    rawExecutions.push(entry)
+    knownInstanceIds.add(activityInstanceId)
   }
 
-  const groups = Array.from(map.entries()).map(([activityId, instances]) => {
-    const first = instances[0] || {}
-    const active = instances.some((i: any) => !i?.endTime)
-    const hasIncident = incidentActivityIds.has(activityId)
-    const isClickable = clickableActivityIds.has(activityId)
-    const isSelected = selectedActivityId === activityId
-    const totalExecCount = execCounts.get(activityId) || instances.length || 1
+  const childrenByParent = new Map<string, RawExecution[]>()
+  const rootKey = '__execution_trail_root__'
 
-    const statusLabel = hasIncident ? 'INCIDENT' : active ? 'ACTIVE' : 'COMPLETED'
-    const statusType = hasIncident ? 'red' : active ? 'green' : 'cool-gray'
+  for (const execution of rawExecutions) {
+    if (!execution.activityId) continue
+    const resolvedParent = execution.parentActivityInstanceId && knownInstanceIds.has(execution.parentActivityInstanceId)
+      ? execution.parentActivityInstanceId
+      : rootKey
+    const siblings = childrenByParent.get(resolvedParent) || []
+    siblings.push(execution)
+    childrenByParent.set(resolvedParent, siblings)
+  }
 
-    const activeSort = active ? Number.POSITIVE_INFINITY : 0
-    const endKey = active
-      ? Number.POSITIVE_INFINITY
-      : Math.max(
-          ...instances.map((i: any) => {
-            const end = parseTs(i?.endTime)
-            const start = parseTs(i?.startTime)
-            return end ?? start ?? 0
-          })
-        )
-    const startKey = Math.min(
-      ...instances.map((i: any) => {
-        const start = parseTs(i?.startTime)
-        const end = parseTs(i?.endTime)
-        return start ?? end ?? Number.POSITIVE_INFINITY
-      })
-    )
-    const typeRank = getTypeRank(activityId, first?.activityType, bpmnRef)
-    const stableIndex = firstSeenIndex.get(activityId) ?? 0
+  const buildGroupsForParent = (parentKey: string, depth: number): ExecutionTrailGroup[] => {
+    const children = [...(childrenByParent.get(parentKey) || [])].sort(sortExecutions)
+    const grouped = new Map<string, RawExecution[]>()
 
-    return {
-      activityId,
-      activityName: first?.activityName || activityId,
-      activityType: first?.activityType || '',
-      instances,
-      active,
-      hasIncident,
-      isClickable,
-      isSelected,
-      totalExecCount,
-      statusLabel,
-      statusType,
-      _sort: { endKey, startKey, typeRank, activeSort, stableIndex },
-      _summary: {
-        startTs: Number.isFinite(startKey) ? startKey : null,
-        endTs: Number.isFinite(endKey) ? endKey : null,
-        durationMs:
-          Number.isFinite(startKey) && Number.isFinite(endKey) && endKey !== Number.POSITIVE_INFINITY
-            ? Math.max(0, endKey - startKey)
-            : null,
-      },
+    for (const child of children) {
+      const groupKey = `${parentKey}::${child.activityId}`
+      const list = grouped.get(groupKey) || []
+      list.push(child)
+      grouped.set(groupKey, list)
     }
-  })
 
-  groups.sort((a, b) => {
-    if (a._sort.endKey !== b._sort.endKey) return a._sort.endKey - b._sort.endKey
-    if (a._sort.startKey !== b._sort.startKey) return a._sort.startKey - b._sort.startKey
-    if (a._sort.typeRank !== b._sort.typeRank) return a._sort.typeRank - b._sort.typeRank
-    if (a._sort.stableIndex !== b._sort.stableIndex) return a._sort.stableIndex - b._sort.stableIndex
-    return (a.activityName || a.activityId).localeCompare(b.activityName || b.activityId)
-  })
+    const groups: ExecutionTrailGroup[] = Array.from(grouped.entries()).map(([groupKey, executions]) => {
+      const sortedExecutions = [...executions].sort(sortExecutions)
+      const first = sortedExecutions[0]
 
-  return groups
+      const instances: ExecutionTrailInstance[] = sortedExecutions.map((execution) => {
+        const childGroups = buildGroupsForParent(execution.activityInstanceId, depth + 1)
+        const statusLabel = execution.hasIncident ? 'INCIDENT' : execution.active ? 'ACTIVE' : 'COMPLETED'
+        const statusType = execution.hasIncident ? 'red' : execution.active ? 'green' : 'cool-gray'
+        const startTs = parseTs(execution.startTime)
+        const endTs = parseTs(execution.endTime)
+
+        return {
+          kind: 'execution' as const,
+          key: execution.activityInstanceId,
+          id: execution.id,
+          activityInstanceId: execution.activityInstanceId,
+          parentActivityInstanceId: execution.parentActivityInstanceId,
+          activityId: execution.activityId,
+          activityName: execution.activityName,
+          activityType: execution.activityType,
+          executionId: execution.executionId,
+          calledProcessInstanceId: execution.calledProcessInstanceId,
+          taskId: execution.taskId,
+          startTime: execution.startTime,
+          endTime: execution.endTime,
+          durationMs: execution.durationMs,
+          active: execution.active,
+          hasIncident: execution.hasIncident,
+          isClickable: clickableActivityIds.has(execution.activityId),
+          isSelected: selectedActivityId === execution.activityId,
+          statusLabel,
+          statusType,
+          depth: depth + 1,
+          children: childGroups,
+          _sort: {
+            startKey: sortableTs(startTs, Number.POSITIVE_INFINITY),
+            endKey: sortableTs(endTs, execution.active ? Number.POSITIVE_INFINITY : Number.POSITIVE_INFINITY),
+            stableIndex: execution.stableIndex,
+          },
+          _summary: {
+            startTs,
+            endTs,
+            durationMs: execution.durationMs,
+          },
+        }
+      })
+
+      const active = instances.some((instance) => instance.active)
+      const hasIncident = instances.some((instance) => instance.hasIncident)
+      const hasNestedChildren = instances.some((instance) => instance.children.length > 0)
+      const startKey = Math.min(...instances.map((instance) => sortableTs(instance._summary.startTs, Number.POSITIVE_INFINITY)))
+      const completedEndTimes = instances
+        .map((instance) => instance._summary.endTs)
+        .filter((value): value is number => value !== null)
+      const endKey = completedEndTimes.length > 0 ? Math.max(...completedEndTimes) : null
+
+      return {
+        kind: 'group' as const,
+        groupKey,
+        activityId: first.activityId,
+        activityName: first.activityName,
+        activityType: first.activityType,
+        instances,
+        active,
+        hasIncident,
+        isClickable: clickableActivityIds.has(first.activityId),
+        isSelected: selectedActivityId === first.activityId,
+        totalExecCount: instances.length,
+        statusLabel: hasIncident ? 'INCIDENT' : active ? 'ACTIVE' : 'COMPLETED',
+        statusType: hasIncident ? 'red' : active ? 'green' : 'cool-gray',
+        depth,
+        hasNestedChildren,
+        isExpandable: instances.length > 1 || hasNestedChildren,
+        _sort: {
+          startKey,
+          endKey: active ? Number.POSITIVE_INFINITY : sortableTs(endKey, Number.POSITIVE_INFINITY),
+          typeRank: getTypeRank(first.activityId, first.activityType, bpmnRef),
+          stableIndex: first.stableIndex,
+        },
+        _summary: {
+          startTs: Number.isFinite(startKey) ? startKey : null,
+          endTs: active ? null : endKey,
+          durationMs: instances.length === 1 ? instances[0].durationMs : null,
+        },
+      }
+    })
+
+    groups.sort((a, b) => {
+      if (a._sort.startKey !== b._sort.startKey) return a._sort.startKey - b._sort.startKey
+      if (a._sort.endKey !== b._sort.endKey) return a._sort.endKey - b._sort.endKey
+      if (a._sort.typeRank !== b._sort.typeRank) return a._sort.typeRank - b._sort.typeRank
+      if (a._sort.stableIndex !== b._sort.stableIndex) return a._sort.stableIndex - b._sort.stableIndex
+      return (a.activityName || a.activityId).localeCompare(b.activityName || b.activityId)
+    })
+
+    return groups
+  }
+
+  return buildGroupsForParent(rootKey, 0)
 }
