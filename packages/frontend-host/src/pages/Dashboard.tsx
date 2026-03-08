@@ -177,6 +177,8 @@ export default function Dashboard() {
 
   const maxState = Math.max(instanceStates.active, instanceStates.incidents, instanceStates.suspended, instanceStates.completed, instanceStates.canceled, 1)
   const fileTypes = statsQuery.data?.fileTypes || { bpmn: 0, dmn: 0, form: 0 }
+  const totalFiles = statsQuery.data?.totalFiles || 0
+  const hasFilesToReport = totalFiles > 0
   const maxFile = Math.max(fileTypes.bpmn, fileTypes.dmn, fileTypes.form, 1)
 
   return (
@@ -297,18 +299,17 @@ export default function Dashboard() {
       {/* Charts Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
         {/* File Structure */}
-        <Tile style={chartTileStyle}>
-          <h4 style={{ margin: '0 0 1rem', fontSize: '0.875rem', fontWeight: 600 }}>File Structure</h4>
-          {fileTypes.bpmn > 0 && <SimpleBar label="BPMN" value={fileTypes.bpmn} max={maxFile} color="#0f62fe" />}
-          {fileTypes.dmn > 0 && <SimpleBar label="DMN" value={fileTypes.dmn} max={maxFile} color="#8a3ffc" />}
-          {fileTypes.form > 0 && <SimpleBar label="Form" value={fileTypes.form} max={maxFile} color="#ff832b" />}
-          {fileTypes.bpmn === 0 && fileTypes.dmn === 0 && fileTypes.form === 0 && (
-            <div style={{ textAlign: 'center', color: 'var(--cds-text-secondary)', padding: '1rem' }}>No files yet</div>
-          )}
-          <div style={{ marginTop: '1rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>
-            Total: {statsQuery.data?.totalFiles || 0} files
-          </div>
-        </Tile>
+        {hasFilesToReport && (
+          <Tile style={chartTileStyle}>
+            <h4 style={{ margin: '0 0 1rem', fontSize: '0.875rem', fontWeight: 600 }}>File Structure</h4>
+            {fileTypes.bpmn > 0 && <SimpleBar label="BPMN" value={fileTypes.bpmn} max={maxFile} color="#0f62fe" />}
+            {fileTypes.dmn > 0 && <SimpleBar label="DMN" value={fileTypes.dmn} max={maxFile} color="#8a3ffc" />}
+            {fileTypes.form > 0 && <SimpleBar label="Form" value={fileTypes.form} max={maxFile} color="#ff832b" />}
+            <div style={{ marginTop: '1rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>
+              Total: {totalFiles} files
+            </div>
+          </Tile>
+        )}
 
         {/* Process States */}
         {ctx?.canViewProcessData && (
