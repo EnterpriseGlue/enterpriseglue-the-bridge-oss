@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.7.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.6.1...v0.7.0) (2026-03-08)
+
+
+### Features
+
+* **mission-control:** extend instance history detail ([#201](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/201)) ([bba23ff](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bba23ffc4e248d28951af9cf6ef37657ab077ad4))
+
 ## [0.6.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.6.0...v0.6.1) (2026-03-08)
 
 
