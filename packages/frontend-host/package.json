@@ -42,6 +42,9 @@
     "registry": "https://npm.pkg.github.com",
     "access": "restricted"
   },
+  "dependencies": {
+    "@enterpriseglue/shared": "*"
+  },
   "devDependencies": {
     "typescript": "~5.9.3",
     "vite": "^7.3.1"

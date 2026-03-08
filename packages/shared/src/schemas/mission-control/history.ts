@@ -170,6 +170,7 @@ export const VariableHistoryEntrySchema = z.object({
 
 export const VariableHistoryQueryParams = z.object({
   variableInstanceId: z.string(),
+  engineId: z.string().optional(),
 });
 
 export const HistoricVariableQueryParams = z.object({

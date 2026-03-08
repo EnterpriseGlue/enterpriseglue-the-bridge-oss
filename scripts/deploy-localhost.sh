@@ -46,6 +46,7 @@ done
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
+SHARED_DIR="$ROOT_DIR/packages/shared"
 FRONTEND_HOST_DIR="$ROOT_DIR/packages/frontend-host"
 
 BACKEND_PORT=${API_PORT:-8787}
@@ -78,6 +79,10 @@ clean_build_artifacts() {
   if [[ -d "$FRONTEND_DIR/dist" ]]; then
     log "Removing frontend/dist"
     rm -rf "$FRONTEND_DIR/dist"
+  fi
+  if [[ -d "$SHARED_DIR/dist" ]]; then
+    log "Removing packages/shared/dist"
+    rm -rf "$SHARED_DIR/dist"
   fi
   if [[ -d "$FRONTEND_HOST_DIR/dist" ]]; then
     log "Removing packages/frontend-host/dist"
@@ -309,6 +314,11 @@ build_backend() {
   (cd "$BACKEND_DIR" && npm run build:skip-generate)
 }
 
+build_shared() {
+  log "Building shared package"
+  (cd "$SHARED_DIR" && npm run build)
+}
+
 build_frontend_host() {
   log "Building frontend host package"
   (cd "$FRONTEND_HOST_DIR" && npm run build)
@@ -322,6 +332,7 @@ build_frontend() {
     log "Frontend dependencies already installed (offline mode)"
   fi
   
+  build_shared
   build_frontend_host
   
   log "Building frontend (vite build)"

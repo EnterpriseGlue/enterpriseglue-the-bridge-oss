@@ -100,7 +100,12 @@ const {
 const registry = new OpenAPIRegistry();
 
 const HealthSchema = z.object({ status: z.literal('ok') });
+const InvalidQueryParametersResponseSchema = z.object({
+  error: z.literal('Invalid query parameters'),
+  issues: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
+});
 registry.register('Health', HealthSchema);
+registry.register('InvalidQueryParametersResponse', InvalidQueryParametersResponseSchema);
 registry.registerPath({
   method: 'get',
   path: '/health',
@@ -502,6 +507,7 @@ registry.registerPath({
   },
   responses: {
     200: { description: 'Variable history timeline for a process instance variable', content: { 'application/json': { schema: z.array(VariableHistoryEntrySchema) } } },
+    400: { description: 'Invalid query parameters', content: { 'application/json': { schema: InvalidQueryParametersResponseSchema } } },
   },
 });
 
