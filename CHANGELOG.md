@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.6.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.5.4...v0.6.0) (2026-03-08)
+
+
+### Features
+
+* **mission-control:** add process variable history modal ([#196](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/196)) ([46112fe](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/46112fe6322a50659c48a91c75fe9fe46468754e))
+
 ## [0.5.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.5.3...v0.5.4) (2026-03-07)
 
 
