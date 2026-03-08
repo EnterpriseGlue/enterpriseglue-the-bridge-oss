@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.7.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.7.0...v0.7.1) (2026-03-08)
+
+
+### Bug Fixes
+
+* **frontend:** align process overview duration formatting ([#203](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/203)) ([fc32aaf](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fc32aaf4414e5e040848852d14dcd4904a232daf))
+
 ## [0.7.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.6.1...v0.7.0) (2026-03-08)
 
 
