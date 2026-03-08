@@ -432,6 +432,61 @@ export async function listHistoricProcessInstances(engineId: string, params: any
   return camundaGet<any[]>(engineId, '/history/process-instance', params)
 }
 
+export async function getProcessInstanceVariableHistory(engineId: string, processInstanceId: string, variableInstanceId: string) {
+  const details = await camundaGet<any[]>(engineId, '/history/detail', {
+    processInstanceId,
+    variableInstanceId,
+    variableUpdates: true,
+  })
+
+  const rows = Array.isArray(details)
+    ? details
+        .map((entry: any) => ({
+          id: String(entry?.id || `${variableInstanceId}-${entry?.time || ''}-${entry?.revision || ''}`),
+          variableInstanceId: String(entry?.variableInstanceId || variableInstanceId),
+          variableName: String(entry?.variableName || ''),
+          value: entry?.value,
+          type: entry?.variableType || entry?.type || null,
+          time: entry?.time || null,
+          activityInstanceId: entry?.activityInstanceId || null,
+          executionId: entry?.executionId || null,
+          taskId: entry?.taskId || null,
+          revision: typeof entry?.revision === 'number' ? entry.revision : null,
+          serializerName: entry?.serializerName || null,
+        }))
+        .sort((a: any, b: any) => {
+          const aTime = a.time ? new Date(a.time).getTime() : 0
+          const bTime = b.time ? new Date(b.time).getTime() : 0
+          if (bTime !== aTime) return bTime - aTime
+          return (b.revision || 0) - (a.revision || 0)
+        })
+    : []
+
+  if (rows.length > 0) {
+    return rows
+  }
+
+  const snapshot = await camundaGet<any>(engineId, `/history/variable-instance/${encodeURIComponent(variableInstanceId)}`)
+
+  if (!snapshot?.id) {
+    return []
+  }
+
+  return [{
+    id: String(snapshot.id),
+    variableInstanceId: String(snapshot.id),
+    variableName: String(snapshot.name || ''),
+    value: snapshot.value,
+    type: snapshot.type || null,
+    time: snapshot.createTime || null,
+    activityInstanceId: snapshot.activityInstanceId || null,
+    executionId: snapshot.executionId || null,
+    taskId: snapshot.taskId || null,
+    revision: null,
+    serializerName: null,
+  }]
+}
+
 export async function listHistoricVariableInstances(engineId: string, params: any) {
   return camundaGet<any[]>(engineId, '/history/variable-instance', params)
 }

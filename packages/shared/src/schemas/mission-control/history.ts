@@ -154,6 +154,24 @@ export const HistoricTaskQueryParams = z.object({
   maxResults: z.number().optional(),
 });
 
+export const VariableHistoryEntrySchema = z.object({
+  id: z.string(),
+  variableInstanceId: z.string(),
+  variableName: z.string(),
+  value: z.any(),
+  type: z.string().optional().nullable(),
+  time: z.string().optional().nullable(),
+  activityInstanceId: z.string().optional().nullable(),
+  executionId: z.string().optional().nullable(),
+  taskId: z.string().optional().nullable(),
+  revision: z.number().optional().nullable(),
+  serializerName: z.string().optional().nullable(),
+});
+
+export const VariableHistoryQueryParams = z.object({
+  variableInstanceId: z.string(),
+});
+
 export const HistoricVariableQueryParams = z.object({
   variableName: z.string().optional(),
   variableNameLike: z.string().optional(),
@@ -242,9 +260,11 @@ export const UserOperationLogQueryParams = z.object({
 // Types
 export type HistoricTaskInstance = z.infer<typeof HistoricTaskInstanceSchema>;
 export type HistoricVariableInstance = z.infer<typeof HistoricVariableInstanceSchema>;
+export type VariableHistoryEntry = z.infer<typeof VariableHistoryEntrySchema>;
 export type HistoricDecisionInstance = z.infer<typeof HistoricDecisionInstanceSchema>;
 export type UserOperationLogEntry = z.infer<typeof UserOperationLogEntrySchema>;
 export type HistoricTaskQueryParams = z.infer<typeof HistoricTaskQueryParams>;
+export type VariableHistoryQueryParams = z.infer<typeof VariableHistoryQueryParams>;
 export type HistoricVariableQueryParams = z.infer<typeof HistoricVariableQueryParams>;
 export type HistoricDecisionQueryParams = z.infer<typeof HistoricDecisionQueryParams>;
 export type UserOperationLogQueryParams = z.infer<typeof UserOperationLogQueryParams>;

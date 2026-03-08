@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getProcessInstance,
   getProcessInstanceVariables,
+  getProcessInstanceVariableHistory,
   getProcessInstanceActivityHistory,
   getProcessInstanceIncidents,
   getProcessInstanceJobs,
@@ -88,6 +89,32 @@ describe('processInstances API', () => {
         { credentials: 'include' }
       );
       expect(result).toEqual(mockVariables);
+    });
+  });
+
+  describe('getProcessInstanceVariableHistory', () => {
+    it('gets variable history and appends engineId to the query string', async () => {
+      const mockHistory = [
+        {
+          id: 'detail-1',
+          variableInstanceId: 'var-1',
+          variableName: 'amount',
+          value: 100,
+          type: 'Integer',
+          time: '2026-03-08T10:00:00.000Z',
+          revision: 1,
+        },
+      ];
+      vi.mocked(apiClient.get).mockResolvedValue(mockHistory);
+
+      const result = await getProcessInstanceVariableHistory('pi1', 'var-1', 'engine-1');
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/mission-control-api/process-instances/pi1/variable-history?variableInstanceId=var-1&engineId=engine-1',
+        undefined,
+        { credentials: 'include' }
+      );
+      expect(result).toEqual(mockHistory);
     });
   });
 

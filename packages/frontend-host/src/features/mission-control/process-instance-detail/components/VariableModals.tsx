@@ -1,7 +1,32 @@
 import React from 'react'
-import { Modal, Select, SelectItem, TextInput, TextArea, InlineNotification } from '@carbon/react'
+import { DataTable, InlineNotification, Modal, Select, SelectItem, Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, TableRow, Tag, TextArea, TextInput } from '@carbon/react'
+import type { VariableHistoryEntry, VariableHistoryTarget } from './types'
 
 const VAR_TYPES = ['String', 'Boolean', 'Integer', 'Long', 'Double', 'Object', 'Json'] as const
+
+const getScopeTagType = (scope: VariableHistoryTarget['scope']): 'blue' | 'teal' => scope === 'global' ? 'blue' : 'teal'
+const getTypeTagType = (): 'purple' => 'purple'
+const getActivityTagType = (): 'cyan' => 'cyan'
+
+const stringifyValue = (value: any) => {
+  if (value !== null && value !== undefined && typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+
+  return String(value ?? '')
+}
+
+const formatTimestamp = (value?: string | null) => {
+  if (!value) return '—'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
 
 interface EditVariableModalProps {
   editingVarKey: string | null
@@ -81,6 +106,119 @@ export function EditVariableModal({
             subtitle={editVarError}
             onCloseButtonClick={() => setEditVarError(null)}
           />
+        ) : null}
+      </div>
+    </Modal>
+  )
+}
+
+interface VariableHistoryModalProps {
+  target: VariableHistoryTarget | null
+  entries: VariableHistoryEntry[]
+  isLoading: boolean
+  error: string | null
+  onClose: () => void
+}
+
+export function VariableHistoryModal({
+  target,
+  entries,
+  isLoading,
+  error,
+  onClose,
+}: VariableHistoryModalProps) {
+  if (!target) return null
+
+  const headers = [
+    { key: 'time', header: 'Time' },
+    { key: 'value', header: 'Value' },
+    { key: 'type', header: 'Type' },
+    { key: 'activityInstanceId', header: 'Activity instance' },
+    { key: 'revision', header: 'Revision' },
+  ]
+
+  const rows = (entries || []).map((entry, index) => ({
+    id: entry.id || `${entry.variableInstanceId}-${index}`,
+    time: formatTimestamp(entry.time),
+    value: stringifyValue(entry.value),
+    type: entry.type || '—',
+    activityInstanceId: entry.activityInstanceId || '—',
+    revision: entry.revision ?? '—',
+  }))
+
+  return (
+    <Modal
+      open={!!target}
+      modalHeading={`Variable history: ${target.variableName}`}
+      passiveModal
+      size="lg"
+      onRequestClose={onClose}
+    >
+      <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
+        <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
+          <Tag type={getScopeTagType(target.scope)}>{target.scope === 'global' ? 'Global' : 'Local'}</Tag>
+          {target.currentType ? <Tag type={getTypeTagType()}>{target.currentType}</Tag> : null}
+          {target.activityInstanceId ? <Tag type={getActivityTagType()}>{target.activityInstanceId}</Tag> : null}
+        </div>
+
+        <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
+          Current value: {stringifyValue(target.currentValue)}
+        </div>
+
+        {!target.variableInstanceId ? (
+          <InlineNotification
+            lowContrast
+            kind="warning"
+            title="History unavailable"
+            subtitle="No historic variable instance was found for this variable."
+          />
+        ) : null}
+
+        {error ? (
+          <InlineNotification
+            lowContrast
+            kind="error"
+            title="Failed to load variable history"
+            subtitle={error}
+          />
+        ) : null}
+
+        {isLoading ? <div>Loading history…</div> : null}
+
+        {!isLoading && !error && target.variableInstanceId ? (
+          rows.length > 0 ? (
+            <DataTable rows={rows} headers={headers as any} size="xs">
+              {({ rows: dataRows, headers, getTableProps, getHeaderProps, getRowProps }) => (
+                <TableContainer>
+                  <Table {...getTableProps()} size="xs">
+                    <TableHead>
+                      <TableRow>
+                        {headers.map((header: any) => {
+                          const { key, ...headerProps } = getHeaderProps({ header })
+                          return <TableHeader key={key} {...headerProps}>{header.header}</TableHeader>
+                        })}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {dataRows.map((row: any) => {
+                        const rowProps = getRowProps({ row })
+                        const { key, ...otherRowProps } = rowProps
+                        return (
+                          <TableRow key={key} {...otherRowProps}>
+                            {row.cells.map((cell: any) => (
+                              <TableCell key={cell.id}>{cell.value}</TableCell>
+                            ))}
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </DataTable>
+          ) : (
+            <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>No variable updates were found.</div>
+          )
         ) : null}
       </div>
     </Modal>

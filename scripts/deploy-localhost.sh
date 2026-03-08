@@ -46,6 +46,7 @@ done
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
+FRONTEND_HOST_DIR="$ROOT_DIR/packages/frontend-host"
 
 BACKEND_PORT=${API_PORT:-8787}
 FRONTEND_PORT=5173
@@ -77,6 +78,10 @@ clean_build_artifacts() {
   if [[ -d "$FRONTEND_DIR/dist" ]]; then
     log "Removing frontend/dist"
     rm -rf "$FRONTEND_DIR/dist"
+  fi
+  if [[ -d "$FRONTEND_HOST_DIR/dist" ]]; then
+    log "Removing packages/frontend-host/dist"
+    rm -rf "$FRONTEND_HOST_DIR/dist"
   fi
   # Clean Vite cache (if exists outside node_modules)
   if [[ -d "$FRONTEND_DIR/.vite" ]]; then
@@ -304,6 +309,11 @@ build_backend() {
   (cd "$BACKEND_DIR" && npm run build:skip-generate)
 }
 
+build_frontend_host() {
+  log "Building frontend host package"
+  (cd "$FRONTEND_HOST_DIR" && npm run build)
+}
+
 build_frontend() {
   if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
     log "Installing frontend deps (including devDependencies for build)"
@@ -311,6 +321,8 @@ build_frontend() {
   else
     log "Frontend dependencies already installed (offline mode)"
   fi
+  
+  build_frontend_host
   
   log "Building frontend (vite build)"
   (cd "$FRONTEND_DIR" && npm run build)

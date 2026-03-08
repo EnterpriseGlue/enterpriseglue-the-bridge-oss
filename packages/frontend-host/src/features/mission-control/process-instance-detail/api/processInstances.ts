@@ -3,6 +3,7 @@ export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 import type {
   ProcessDefinition,
   Variable,
+  VariableHistoryEntry,
   ActivityInstance,
   Incident,
   Job,
@@ -35,6 +36,10 @@ export async function getProcessInstance(instanceId: string, engineId?: string):
 
 export async function getProcessInstanceVariables(instanceId: string, engineId?: string): Promise<Record<string, Variable>> {
   return apiClient.get<Record<string, Variable>>(withEngineId(`/mission-control-api/process-instances/${instanceId}/variables`, engineId), undefined, { credentials: 'include' })
+}
+
+export async function getProcessInstanceVariableHistory(instanceId: string, variableInstanceId: string, engineId?: string): Promise<VariableHistoryEntry[]> {
+  return apiClient.get<VariableHistoryEntry[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/variable-history?variableInstanceId=${encodeURIComponent(variableInstanceId)}`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function getProcessInstanceActivityHistory(instanceId: string, engineId?: string): Promise<ActivityInstance[]> {

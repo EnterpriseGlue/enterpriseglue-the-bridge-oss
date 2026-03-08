@@ -32,7 +32,8 @@ import {
   DEFAULT_SPLIT_SIZE,
   DEFAULT_VERTICAL_SPLIT_SIZE,
 } from './components/utils'
-import type { DecisionIo, HistoricDecisionInstanceLite } from './components/types'
+import { getProcessInstanceVariableHistory } from './api/processInstances'
+import type { DecisionIo, HistoricDecisionInstanceLite, VariableHistoryTarget } from './components/types'
 import { ProcessInstanceDiagramPane } from './components/ProcessInstanceDiagramPane'
 import { ProcessInstanceBottomPane } from './components/ProcessInstanceBottomPane'
 import { ProcessInstanceModals } from './components/ProcessInstanceModals'
@@ -171,6 +172,19 @@ export default function ProcessInstanceDetailPage() {
     closeVariableEditor,
     submitVariableEdit,
   } = variableEditor
+  const [variableHistoryTarget, setVariableHistoryTarget] = React.useState<VariableHistoryTarget | null>(null)
+  const openVariableHistory = React.useCallback((target: VariableHistoryTarget) => {
+    setVariableHistoryTarget(target)
+  }, [])
+  const closeVariableHistory = React.useCallback(() => {
+    setVariableHistoryTarget(null)
+  }, [])
+  const variableHistoryQ = useQuery({
+    queryKey: ['mission-control', 'variable-history', instanceId, selectedEngineId, variableHistoryTarget?.variableInstanceId],
+    queryFn: () => getProcessInstanceVariableHistory(instanceId!, variableHistoryTarget!.variableInstanceId!, selectedEngineId),
+    enabled: !!instanceId && !!selectedEngineId && !!variableHistoryTarget?.variableInstanceId,
+    retry: false,
+  })
 
   // 4. Retry Logic Hook
   const retry = useInstanceRetry({
@@ -444,6 +458,43 @@ export default function ProcessInstanceDetailPage() {
     if (!ids.size) return []
     return (histVarsQ.data || []).filter((v: any) => v?.activityInstanceId && ids.has(v.activityInstanceId))
   }, [selectedActivityId, histVarsQ.data, activityIdToInstances])
+
+  const globalVariableHistoryTargetsByName = React.useMemo(() => {
+    const out: Record<string, VariableHistoryTarget> = {}
+    const histVars = histVarsQ.data || []
+    const hasExecutionScope = histVars.some((entry: any) => entry?.executionId !== undefined && entry?.executionId !== null)
+
+    for (const entry of histVars) {
+      if (!entry?.name || out[entry.name]) continue
+      if (hasExecutionScope && String(entry?.executionId ?? '') !== instanceId) continue
+      out[entry.name] = {
+        variableInstanceId: entry.id || null,
+        variableName: entry.name,
+        scope: 'global',
+        activityInstanceId: entry.activityInstanceId || null,
+        currentType: entry.type || null,
+        currentValue: entry.value,
+      }
+    }
+
+    for (const [name, meta] of Object.entries(varsQ.data || {})) {
+      if (out[name]) continue
+      out[name] = {
+        variableInstanceId: null,
+        variableName: name,
+        scope: 'global',
+        activityInstanceId: null,
+        currentType: (meta as any)?.type ?? null,
+        currentValue: (meta as any)?.value,
+      }
+    }
+
+    return out
+  }, [histVarsQ.data, instanceId, varsQ.data])
+
+  const variableHistoryError = variableHistoryQ.error
+    ? getUiErrorMessage(variableHistoryQ.error, 'Failed to load variable history')
+    : null
 
   const withEngineId = (path: string) => {
     if (!selectedEngineId) return path
@@ -892,9 +943,11 @@ export default function ProcessInstanceDetailPage() {
             setRightTab,
             varsQ,
             selectedNodeVariables,
+            globalVariableHistoryTargetsByName,
             shouldShowDecisionPanel,
             status,
             openVariableEditor,
+            openVariableHistory,
             showAlert,
             onAddVariable: openAddVariableModal,
             onBulkUploadVariables: openBulkUploadModal,
@@ -950,6 +1003,11 @@ export default function ProcessInstanceDetailPage() {
         setEditVarError={setEditVarError}
         closeVariableEditor={closeVariableEditor}
         submitVariableEdit={submitVariableEdit}
+        variableHistoryTarget={variableHistoryTarget}
+        variableHistoryEntries={variableHistoryQ.data || []}
+        variableHistoryLoading={variableHistoryQ.isLoading}
+        variableHistoryError={variableHistoryError}
+        closeVariableHistory={closeVariableHistory}
         addVariableOpen={addVariableOpen}
         addVariableName={addVariableName}
         addVariableType={addVariableType}

@@ -12,6 +12,19 @@ import {
   TableCell,
   TableContainer,
 } from '@carbon/react'
+import type { VariableHistoryTarget } from './types'
+
+const stringifyValue = (value: any) => {
+  if (value !== null && value !== undefined && typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+
+  return String(value ?? '')
+}
 
 /**
  * Table component for local (activity-scoped) variables
@@ -19,33 +32,39 @@ import {
 export function LocalVariablesTable({ 
   data, 
   status, 
-  openVariableEditor 
+  openVariableEditor,
+  openVariableHistory,
 }: { 
   data: any[]
   status?: string
-  openVariableEditor?: (name: string, value: any) => void 
+  openVariableEditor?: (name: string, value: any) => void
+  openVariableHistory?: (target: VariableHistoryTarget) => void
 }) {
+  const copyToClipboard = (text: string) => {
+    try {
+      void navigator.clipboard?.writeText(text)
+    } catch {}
+  }
+
   const headers = [
     { key: 'name', header: 'Name' },
     { key: 'value', header: 'Value' },
     { key: 'type', header: 'Type' },
     { key: 'activityInstanceId', header: 'Activity instance' },
+    { key: 'actions', header: '' },
   ]
 
   const rows = (data || []).map((v: any, idx: number) => {
     const type = v?.type || (v?.value !== null && v?.value !== undefined ? typeof v.value : 'Unknown')
-    const value = v?.value !== null && v?.value !== undefined && typeof v.value === 'object'
-      ? (() => {
-          try { return JSON.stringify(v.value) } catch { return String(v.value) }
-        })()
-      : String(v?.value ?? '')
+    const value = stringifyValue(v?.value)
     const activityInstanceId = v?.activityInstanceId || '—'
     return {
-      id: `${v?.name || 'var'}-${activityInstanceId}-${idx}`,
+      id: String(v?.id || `${v?.name || 'var'}-${activityInstanceId}-${idx}`),
       name: v?.name || '—',
       value,
       type,
       activityInstanceId,
+      actions: '',
     }
   })
 
@@ -73,11 +92,42 @@ export function LocalVariablesTable({
               {dataRows.map((row: any) => {
                 const rowProps = getRowProps({ row })
                 const { key, ...otherRowProps } = rowProps
+                const rawVar = (data || []).find((item: any, idx: number) => String(item?.id || `${item?.name || 'var'}-${item?.activityInstanceId || '—'}-${idx}`) === row.id)
+                const rawValue = rawVar?.value
+                const valueToCopy = stringifyValue(rawValue)
                 return (
                   <TableRow key={key} {...otherRowProps}>
-                    {row.cells.map((cell: any) => (
-                      <TableCell key={cell.id}>{cell.value}</TableCell>
-                    ))}
+                    {row.cells.map((cell: any) => {
+                      if (cell.info.header === 'actions') {
+                        return (
+                          <TableCell key={cell.id} style={{ width: '1%', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                            <OverflowMenu
+                              size="xs"
+                              aria-label={`Actions for ${row.id}`}
+                              iconDescription=""
+                              wrapperClasses="eg-no-tooltip"
+                              flipped
+                            >
+                              <OverflowMenuItem
+                                itemText="History"
+                                onClick={() => openVariableHistory?.({
+                                  variableInstanceId: rawVar?.id || null,
+                                  variableName: rawVar?.name || row.name,
+                                  scope: 'local',
+                                  activityInstanceId: rawVar?.activityInstanceId || null,
+                                  currentType: rawVar?.type || row.type,
+                                  currentValue: rawVar?.value,
+                                })}
+                              />
+                              <OverflowMenuItem itemText="Copy name" onClick={() => copyToClipboard(String(row.name))} />
+                              <OverflowMenuItem itemText="Copy value" onClick={() => copyToClipboard(valueToCopy)} />
+                            </OverflowMenu>
+                          </TableCell>
+                        )
+                      }
+
+                      return <TableCell key={cell.id}>{cell.value}</TableCell>
+                    })}
                   </TableRow>
                 )
               })}
@@ -95,11 +145,15 @@ export function LocalVariablesTable({
 export function GlobalVariablesTable({ 
   data, 
   status, 
-  openVariableEditor 
+  openVariableEditor,
+  openVariableHistory,
+  historyTargetsByName,
 }: { 
   data: Record<string, any>
   status?: string
-  openVariableEditor?: (name: string, value: any) => void 
+  openVariableEditor?: (name: string, value: any) => void
+  openVariableHistory?: (target: VariableHistoryTarget) => void
+  historyTargetsByName?: Record<string, VariableHistoryTarget>
 }) {
   const copyToClipboard = (text: string) => {
     try {
@@ -115,11 +169,7 @@ export function GlobalVariablesTable({
   ]
 
   const baseRows = Object.entries(data || {}).map(([k, v]: any) => {
-    const value = v?.value !== null && v?.value !== undefined && typeof v.value === 'object'
-      ? (() => {
-          try { return JSON.stringify(v.value) } catch { return String(v.value) }
-        })()
-      : String(v?.value ?? '')
+    const value = stringifyValue(v?.value)
 
     return {
       id: k,
@@ -164,9 +214,15 @@ export function GlobalVariablesTable({
                       if (cell.info.header === 'actions') {
                         const rawVar = (data as any)?.[row.id]
                         const rawValue = rawVar?.value
-                        const valueToCopy = rawValue !== null && rawValue !== undefined && typeof rawValue === 'object'
-                          ? (() => { try { return JSON.stringify(rawValue) } catch { return String(rawValue) } })()
-                          : String(rawValue ?? '')
+                        const valueToCopy = stringifyValue(rawValue)
+                        const historyTarget = historyTargetsByName?.[row.id] || {
+                          variableInstanceId: null,
+                          variableName: row.id,
+                          scope: 'global' as const,
+                          activityInstanceId: null,
+                          currentType: rawVar?.type || row.type,
+                          currentValue: rawVar?.value,
+                        }
 
                         return (
                           <TableCell key={cell.id} style={{ width: '1%', whiteSpace: 'nowrap', textAlign: 'right' }}>
@@ -183,6 +239,7 @@ export function GlobalVariablesTable({
                                   onClick={() => openVariableEditor?.(row.id, (data as any)?.[row.id])}
                                 />
                               ) : null}
+                              <OverflowMenuItem itemText="History" onClick={() => openVariableHistory?.(historyTarget)} />
                               <OverflowMenuItem itemText="Copy name" onClick={() => copyToClipboard(String(row.id))} />
                               <OverflowMenuItem itemText="Copy value" onClick={() => copyToClipboard(valueToCopy)} />
                             </OverflowMenu>

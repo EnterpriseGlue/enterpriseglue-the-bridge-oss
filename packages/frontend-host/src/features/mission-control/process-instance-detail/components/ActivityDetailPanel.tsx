@@ -1,5 +1,5 @@
 import React from 'react'
-import type { HistoricDecisionInstanceLite, DecisionIo } from './types'
+import type { HistoricDecisionInstanceLite, DecisionIo, VariableHistoryTarget } from './types'
 import { createBpmnIconVisualResolver } from '../../../../utils/bpmnIconResolver'
 import { ActivityHistoryPanel } from './ActivityHistoryPanel'
 import { ActivityDetailsPanel } from './ActivityDetailsPanel'
@@ -34,9 +34,11 @@ interface ActivityDetailPanelProps {
   // Variables data
   varsQ: { isLoading: boolean; data?: Record<string, { value: any; type: string }> }
   selectedNodeVariables: any[] | null
+  globalVariableHistoryTargetsByName: Record<string, VariableHistoryTarget>
   shouldShowDecisionPanel: boolean
   status: string
   openVariableEditor: (name: string, value: any) => void
+  openVariableHistory: (target: VariableHistoryTarget) => void
   showAlert: (message: string, kind?: 'info' | 'warning' | 'error', title?: string) => void
   onAddVariable?: () => void
   onBulkUploadVariables?: () => void
@@ -97,9 +99,11 @@ export function ActivityDetailPanel({
   setRightTab,
   varsQ,
   selectedNodeVariables,
+  globalVariableHistoryTargetsByName,
   shouldShowDecisionPanel,
   status,
   openVariableEditor,
+  openVariableHistory,
   showAlert,
   onAddVariable,
   onBulkUploadVariables,
@@ -204,9 +208,11 @@ export function ActivityDetailPanel({
             selectedActivityId={selectedActivityId}
             selectedActivityName={selectedActivityName}
             selectedNodeVariables={selectedNodeVariables}
+            globalVariableHistoryTargetsByName={globalVariableHistoryTargetsByName}
             shouldShowDecisionPanel={shouldShowDecisionPanel}
             status={status}
             openVariableEditor={openVariableEditor}
+            openVariableHistory={openVariableHistory}
             showAlert={showAlert}
             onAddVariable={onAddVariable}
             onBulkUploadVariables={onBulkUploadVariables}

@@ -70,9 +70,11 @@ const {
   SetJobDefinitionSuspensionStateRequest,
   HistoricTaskInstanceSchema,
   HistoricVariableInstanceSchema,
+  VariableHistoryEntrySchema,
   HistoricDecisionInstanceSchema,
   UserOperationLogEntrySchema,
   HistoricTaskQueryParams,
+  VariableHistoryQueryParams,
   HistoricVariableQueryParams,
   HistoricDecisionQueryParams,
   UserOperationLogQueryParams,
@@ -488,6 +490,18 @@ registry.registerPath({
   request: { params: z.object({ id: z.string() }) },
   responses: {
     200: { description: 'Process instance variables', content: { 'application/json': { schema: MissionControlVariablesSchema } } },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/mission-control-api/process-instances/{id}/variable-history',
+  request: {
+    params: z.object({ id: z.string() }),
+    query: VariableHistoryQueryParams,
+  },
+  responses: {
+    200: { description: 'Variable history timeline for a process instance variable', content: { 'application/json': { schema: z.array(VariableHistoryEntrySchema) } } },
   },
 });
 
@@ -1082,6 +1096,7 @@ registry.registerPath({ method: 'put', path: '/mission-control-api/job-definitio
 // Extended History
 registry.register('HistoricTaskInstance', HistoricTaskInstanceSchema);
 registry.register('HistoricVariableInstance', HistoricVariableInstanceSchema);
+registry.register('VariableHistoryEntry', VariableHistoryEntrySchema);
 registry.register('HistoricDecisionInstance', HistoricDecisionInstanceSchema);
 registry.register('UserOperationLogEntry', UserOperationLogEntrySchema);
 registry.registerPath({ method: 'get', path: '/mission-control-api/history/tasks', request: { query: HistoricTaskQueryParams.partial() }, responses: { 200: { description: 'Historic task instances', content: { 'application/json': { schema: z.array(HistoricTaskInstanceSchema) } } } } });

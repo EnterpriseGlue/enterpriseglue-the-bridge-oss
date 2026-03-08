@@ -1,6 +1,7 @@
 import React from 'react'
 import AlertModal from '../../../../shared/components/AlertModal'
-import { EditVariableModal, AddVariableModal, BulkUploadVariablesModal } from './VariableModals'
+import { EditVariableModal, AddVariableModal, BulkUploadVariablesModal, VariableHistoryModal } from './VariableModals'
+import type { VariableHistoryEntry, VariableHistoryTarget } from './types'
 import {
   IncidentDetailsModal,
   ModificationIntroModal,
@@ -24,6 +25,11 @@ interface ProcessInstanceModalsProps {
   setEditVarError: (value: string | null) => void
   closeVariableEditor: () => void
   submitVariableEdit: () => void
+  variableHistoryTarget: VariableHistoryTarget | null
+  variableHistoryEntries: VariableHistoryEntry[]
+  variableHistoryLoading: boolean
+  variableHistoryError: string | null
+  closeVariableHistory: () => void
   // Add variable
   addVariableOpen: boolean
   addVariableName: string
@@ -94,6 +100,11 @@ export function ProcessInstanceModals({
   setEditVarError,
   closeVariableEditor,
   submitVariableEdit,
+  variableHistoryTarget,
+  variableHistoryEntries,
+  variableHistoryLoading,
+  variableHistoryError,
+  closeVariableHistory,
   addVariableOpen,
   addVariableName,
   addVariableType,
@@ -157,6 +168,14 @@ export function ProcessInstanceModals({
         setEditVarError={setEditVarError}
         closeVariableEditor={closeVariableEditor}
         submitVariableEdit={submitVariableEdit}
+      />
+
+      <VariableHistoryModal
+        target={variableHistoryTarget}
+        entries={variableHistoryEntries}
+        isLoading={variableHistoryLoading}
+        error={variableHistoryError}
+        onClose={closeVariableHistory}
       />
 
       <AddVariableModal

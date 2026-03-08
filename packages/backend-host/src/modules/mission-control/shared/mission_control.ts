@@ -15,6 +15,7 @@ import {
   listProcessInstanceJobs,
   getHistoricProcessInstanceById,
   listHistoricProcessInstances,
+  getProcessInstanceVariableHistory,
   listHistoricVariableInstances,
   listProcessInstanceIncidents,
   suspendProcessInstanceById,
@@ -24,13 +25,16 @@ import {
   retryProcessInstanceFailures,
 } from './mission-control-service.js'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
-import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
+import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireEngineReadOrWrite } from '@enterpriseglue/shared/middleware/engineAuth.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 
 // Validation schemas
 const previewCountSchema = z.object({}).passthrough()
+const variableHistoryQuerySchema = z.object({
+  variableInstanceId: z.string().min(1),
+}).passthrough()
 
 const retrySchema = z.object({
   jobIds: z.array(z.string()).optional(),
@@ -221,6 +225,19 @@ r.get('/mission-control-api/history/process-instances', asyncHandler(async (req:
     res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load historic process instances')
+  }
+}))
+
+r.get('/mission-control-api/process-instances/:id/variable-history', validateQuery(variableHistoryQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const engineId = (req as any).engineId as string
+    const instanceId = String(req.params.id)
+    const { variableInstanceId } = req.query as { variableInstanceId: string }
+    const data = await getProcessInstanceVariableHistory(engineId, instanceId, variableInstanceId)
+    const redacted = await piiRedactionService.redactPayload(req, data, 'history')
+    res.json(redacted)
+  } catch (e: any) {
+    throw Errors.internal(e?.message || 'Failed to load variable history')
   }
 }))
 

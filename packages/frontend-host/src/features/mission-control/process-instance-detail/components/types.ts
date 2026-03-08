@@ -35,10 +35,39 @@ export type ActivityInstance = {
 }
 
 export type Variable = {
+  id?: string
   name: string
   type: string
   value: any
   valueInfo?: any
+  processInstanceId?: string | null
+  executionId?: string | null
+  activityInstanceId?: string | null
+  taskId?: string | null
+  createTime?: string | null
+}
+
+export type VariableHistoryEntry = {
+  id: string
+  variableInstanceId: string
+  variableName: string
+  value: any
+  type?: string | null
+  time?: string | null
+  activityInstanceId?: string | null
+  executionId?: string | null
+  taskId?: string | null
+  revision?: number | null
+  serializerName?: string | null
+}
+
+export type VariableHistoryTarget = {
+  variableInstanceId?: string | null
+  variableName: string
+  scope: 'global' | 'local'
+  activityInstanceId?: string | null
+  currentType?: string | null
+  currentValue?: any
 }
 
 export type Incident = {

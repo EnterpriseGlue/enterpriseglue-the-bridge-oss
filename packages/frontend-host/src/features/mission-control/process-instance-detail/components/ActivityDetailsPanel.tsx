@@ -8,7 +8,7 @@ import {
   DecisionInputsTable,
   DecisionOutputsTable,
 } from './TableComponents'
-import type { HistoricDecisionInstanceLite, DecisionIo } from './types'
+import type { HistoricDecisionInstanceLite, DecisionIo, VariableHistoryTarget } from './types'
 
 export interface ActivityDetailsPanelProps {
   rightTab: 'variables' | 'io'
@@ -17,9 +17,11 @@ export interface ActivityDetailsPanelProps {
   selectedActivityId: string | null
   selectedActivityName: string
   selectedNodeVariables: any[] | null
+  globalVariableHistoryTargetsByName: Record<string, VariableHistoryTarget>
   shouldShowDecisionPanel: boolean
   status: string
   openVariableEditor: (name: string, value: any) => void
+  openVariableHistory: (target: VariableHistoryTarget) => void
   showAlert: (message: string, kind?: 'info' | 'warning' | 'error', title?: string) => void
   onAddVariable?: () => void
   onBulkUploadVariables?: () => void
@@ -40,9 +42,11 @@ export function ActivityDetailsPanel({
   selectedActivityId,
   selectedActivityName,
   selectedNodeVariables,
+  globalVariableHistoryTargetsByName,
   shouldShowDecisionPanel,
   status,
   openVariableEditor,
+  openVariableHistory,
   showAlert,
   onAddVariable,
   onBulkUploadVariables,
@@ -85,7 +89,7 @@ export function ActivityDetailsPanel({
                       </div>
                       {(selectedNodeVariables && selectedNodeVariables.length > 0) ? (
                         <div style={{ overflow: 'auto', flex: 1 }}>
-                          <LocalVariablesTable data={selectedNodeVariables || []} status={status} />
+                          <LocalVariablesTable data={selectedNodeVariables || []} status={status} openVariableHistory={openVariableHistory} />
                         </div>
                       ) : (
                         <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>The selected node has no local variables.</div>
@@ -99,7 +103,7 @@ export function ActivityDetailsPanel({
                       </div>
                       {varsQ.data && Object.keys(varsQ.data).length > 0 ? (
                         <div style={{ overflow: 'auto', flex: 1 }}>
-                          <GlobalVariablesTable data={varsQ.data} status={status} openVariableEditor={openVariableEditor} />
+                          <GlobalVariablesTable data={varsQ.data} status={status} openVariableEditor={openVariableEditor} openVariableHistory={openVariableHistory} historyTargetsByName={globalVariableHistoryTargetsByName} />
                         </div>
                       ) : (
                         <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>No global variables are present.</div>
@@ -170,7 +174,7 @@ export function ActivityDetailsPanel({
                     </div>
                     {varsQ.data && Object.keys(varsQ.data).length > 0 ? (
                       <div style={{ overflow: 'auto', flex: 1 }}>
-                        <GlobalVariablesTable data={varsQ.data} status={status} openVariableEditor={openVariableEditor} />
+                        <GlobalVariablesTable data={varsQ.data} status={status} openVariableEditor={openVariableEditor} openVariableHistory={openVariableHistory} historyTargetsByName={globalVariableHistoryTargetsByName} />
                       </div>
                     ) : (
                       <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>No global variables are present.</div>

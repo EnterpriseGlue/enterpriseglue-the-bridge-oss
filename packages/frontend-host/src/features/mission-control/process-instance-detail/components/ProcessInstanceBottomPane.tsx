@@ -4,6 +4,7 @@ import { Button } from '@carbon/react'
 import styles from '../styles/InstanceDetail.module.css'
 import { InstanceInfoBar } from './InstanceInfoBar'
 import { ActivityDetailPanel } from './ActivityDetailPanel'
+import type { VariableHistoryTarget } from './types'
 
 interface ProcessInstanceBottomPaneProps {
   historyContext: any | null
@@ -56,9 +57,11 @@ interface ProcessInstanceBottomPaneProps {
     setRightTab: (tab: 'variables' | 'io') => void
     varsQ: { isLoading: boolean; data?: Record<string, { value: any; type: string }> }
     selectedNodeVariables: any[] | null
+    globalVariableHistoryTargetsByName: Record<string, VariableHistoryTarget>
     shouldShowDecisionPanel: boolean
     status: string
     openVariableEditor: (name: string, value: any) => void
+    openVariableHistory: (target: VariableHistoryTarget) => void
     showAlert: (message: string, kind?: 'info' | 'warning' | 'error', title?: string) => void
     onAddVariable?: () => void
     onBulkUploadVariables?: () => void
