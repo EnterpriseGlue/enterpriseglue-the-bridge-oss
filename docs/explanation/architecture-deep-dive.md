@@ -71,10 +71,10 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-  subgraph Docker Compose
+  subgraph "Docker Compose"
     db[(Postgres)]
     backend[Backend API]
-    frontend[Frontend (Nginx)]
+    frontend["Frontend (Nginx)"]
   end
   frontend --> backend
   backend --> db
