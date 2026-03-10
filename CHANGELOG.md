@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.7.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.7.5...v0.7.6) (2026-03-10)
+
+
+### Bug Fixes
+
+* **docs:** render architecture mermaid diagram ([#215](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/215)) ([a6bc799](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/a6bc799597c0e0e40fadd83e091707c1b3fac69f))
+
 ## [0.7.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.7.4...v0.7.5) (2026-03-10)
 
 
