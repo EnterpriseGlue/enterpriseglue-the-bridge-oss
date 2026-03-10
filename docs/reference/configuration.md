@@ -16,7 +16,7 @@ Legacy fallback support:
 
 Launcher and validation scripts:
 - `dev.sh` / `down.sh` select DB overlays from `infra/docker/compose/` (`docker-compose.<db>.yml`) and env files.
-- `scripts/db-preflight.sh` validates DB-specific env requirements and can install missing DB drivers.
+- `scripts/db-preflight.sh` validates DB-specific env requirements and can install a missing DB driver into local `node_modules`.
 
 ### Core Settings
 - `API_PORT`: backend port (default 8787)
@@ -73,7 +73,7 @@ Database support is provided via TypeORM adapters and driver packages:
 - **MySQL**: `mysql2`
 
 Notes:
-- In Docker dev, backend startup also checks/install the selected DB driver package.
+- In Docker dev, backend startup also checks/install the selected DB driver package into local `node_modules`.
 - For host runs, use `scripts/db-preflight.sh` before backend startup.
 
 See for detailed settings:
@@ -97,6 +97,7 @@ Primary sources:
 
 In Docker compose, `API_BASE_URL` is mapped to `VITE_API_BASE_URL` for frontend runtime.
 For production same-origin routing through Nginx, leave `API_BASE_URL` empty.
+For source-built Docker images, `API_BASE_URL` is consumed at frontend image build time. In published-image mode, use `API_UPSTREAM` only for runtime proxy changes.
 
 ### Feature Flags
 The UI is gated by `VITE_FEATURE_*` flags (see `frontend/.env.example`), such as:

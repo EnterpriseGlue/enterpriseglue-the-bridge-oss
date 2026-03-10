@@ -65,6 +65,17 @@ type AccessRequest = {
 }
 type UserSearchItem = { id: string; email: string; firstName?: string | null; lastName?: string | null }
 
+function getDockerLoopbackSuggestion(raw: string): string | null {
+  try {
+    const parsed = new URL(raw)
+    if (!/^(localhost|127\.\d+\.\d+\.\d+|::1|\[::1\])$/.test(parsed.hostname)) return null
+    parsed.hostname = 'host.docker.internal'
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
 function roleLabel(role: EngineRole): string {
   return role.charAt(0).toUpperCase() + role.slice(1)
 }
@@ -102,6 +113,7 @@ export default function Engines() {
 
   const TYPE_ITEMS = React.useMemo(() => ([{ id: 'camunda7', label: 'Camunda 7' }, { id: 'operaton', label: 'Operaton (Camunda 7 fork)' }]), [])
   const AUTH_ITEMS = React.useMemo(() => ([{ id: 'basic', label: 'Basic Auth (Username/Password)' }, { id: 'bearer', label: 'Bearer Token (SSO/OAuth2)' }]), [])
+  const dockerLoopbackSuggestion = React.useMemo(() => getDockerLoopbackSuggestion(String(form.baseUrl || '').trim()), [form.baseUrl])
 
   // Fetch environment tags (read-only, used by engine owners/delegates too)
   const envTagsQ = useQuery({ queryKey: ['engines', 'environment-tags'], queryFn: () => apiClient.get<any[]>('/engines-api/environment-tags', undefined, { credentials: 'include' }) })
@@ -633,6 +645,15 @@ export default function Engines() {
           onChange={(e) => setForm((f: any) => ({ ...f, baseUrl: (e.target as any).value }))}
           disabled={createM.isPending || updateM.isPending}
         />
+        {dockerLoopbackSuggestion && (
+          <InlineNotification
+            lowContrast
+            kind="warning"
+            title="Docker runtime warning"
+            subtitle={`If EnterpriseGlue is running in Docker and your engine is running on your host machine, localhost points to the container. Use ${dockerLoopbackSuggestion} instead.`}
+            hideCloseButton
+          />
+        )}
         <Dropdown
           id="eng-type"
           titleText="Type"

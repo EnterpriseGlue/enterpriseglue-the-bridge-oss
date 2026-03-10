@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express'
+import { existsSync } from 'fs'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { z } from 'zod'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
@@ -27,6 +28,36 @@ const isLocalOrPrivate = (raw: string): boolean => {
     if (!host.includes('.') || host === 'host.docker.internal' || host.endsWith('.local')) return true
     return false
   } catch { return false }
+}
+
+const isLoopbackHost = (raw: string): boolean => {
+  try {
+    const host = new URL(raw).hostname
+    return /^(localhost|127\.\d+\.\d+\.\d+|::1|\[::1\])$/.test(host)
+  } catch {
+    return false
+  }
+}
+
+const isDockerRuntime = (): boolean => {
+  if (process.env.EG_RUNTIME_MODE === 'docker') return true
+  return existsSync('/.dockerenv')
+}
+
+const getDockerHostSuggestion = (raw: string): string => {
+  try {
+    const rewritten = new URL(raw)
+    rewritten.hostname = 'host.docker.internal'
+    return rewritten.toString()
+  } catch {
+    return 'http://host.docker.internal:8080/engine-rest'
+  }
+}
+
+const getDockerLoopbackEngineError = (raw?: string): string | null => {
+  if (!raw || !isDockerRuntime() || !isLoopbackHost(raw)) return null
+  const suggested = getDockerHostSuggestion(raw)
+  return `This EnterpriseGlue instance is running in Docker. Engine URLs using localhost or 127.0.0.1 point to the container itself. Use ${suggested} instead.`
 }
 
 const baseUrlSchema = z.string().min(1).url().refine(
@@ -116,6 +147,10 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, validateBody(createEn
   const engineRepo = dataSource.getRepository(Engine)
   const now = Date.now()
   const id = generateId()
+  const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
+  if (dockerLoopbackError) {
+    return res.status(400).json({ error: dockerLoopbackError, field: 'baseUrl' })
+  }
   // Set tenantId from request context (OSS: default-tenant-id, EE: actual tenant)
   const tenantId = req.tenant?.tenantId || null
   const payload = {
@@ -162,6 +197,10 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
   const existing = await engineRepo.findOneBy({ id: engineId })
   if (!existing) throw Errors.notFound('Engine')
   if (!(await canManageEngine(req, String(existing.id)))) throw Errors.forbidden()
+  const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
+  if (dockerLoopbackError) {
+    return res.status(400).json({ error: dockerLoopbackError, field: 'baseUrl' })
+  }
 
   const now = Date.now()
   const updates: any = {

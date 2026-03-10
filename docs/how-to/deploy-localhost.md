@@ -1,12 +1,12 @@
-# Localhost Deployment (First-time install)
+# Localhost Deployment (Host-Based Production-Style Run)
 
-Summary: Run a production-style build locally using the `deploy-localhost.sh` script.
+Summary: Run a host-based production-style build locally using the `deploy-localhost.sh` script.
 
 Audience: Developers and architects.
 
 ## When to use this
 - You want a local “production-style” build (compiled backend + built frontend preview).
-- You are not using Docker, or want to validate the production build pipeline locally.
+- You are not using Docker Compose, or want to validate the production build pipeline locally.
 
 ## Prerequisites
 - Node.js (LTS recommended)
@@ -40,10 +40,12 @@ bash ./scripts/deploy-localhost.sh --full --first-time
 
 This will:
 - Validate required backend/frontend env vars
+- Install workspace dependencies from the repo root lockfile when they are missing
+- Install a missing DB driver into local `node_modules` when required by `DATABASE_TYPE`
 - Build backend (`backend/dist`)
 - Build frontend (`frontend/dist`)
 - Start backend and frontend preview services
-- Apply database migrations automatically on backend startup (using your `backend/.env` settings)
+- Run database migrations before startup (using your `backend/.env` settings)
 
 If email verification is enabled, configure `RESEND_API_KEY` to receive verification links or set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` for the seeded admin account.
 
@@ -58,8 +60,9 @@ Use this for faster rebuilds when dependencies are already installed.
 ## What the script does
 - Stops any running services on backend/frontend ports (defaults: `8787` and `5173`)
 - Validates backend and frontend environment variables
+- Uses the repo root `package-lock.json` when the repo is installed as an npm workspace
 - Builds backend and frontend
-- Starts backend (`node dist/src/server.js`) and frontend preview (`npm run preview`)
+- Starts backend (`node dist/backend/src/server.js`) and frontend preview (`npm run preview`)
 - Verifies health (`/health`)
 
 ## Database migrations

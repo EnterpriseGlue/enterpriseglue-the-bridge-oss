@@ -53,7 +53,7 @@ npm run dev -- --db spanner
 What happens automatically:
 - `dev.sh` creates `.local/docker/env/docker.<db>.env` from `infra/docker/env/examples/docker.<db>.env.example` when missing.
 - `scripts/db-preflight.sh` validates required DB env variables.
-- Missing DB driver packages are installed automatically for local development.
+- Missing DB driver packages are installed into local `node_modules` automatically for local development.
 - Matching compose overlay is selected from `infra/docker/compose/` (`docker-compose.<db>.yml`).
 
 ## Steps (Production)
@@ -92,13 +92,14 @@ Published images:
    cp infra/docker/env/examples/images.oracle.env.example .local/docker/env/images.oracle.env
    ```
 2. `BACKEND_IMAGE` and `FRONTEND_IMAGE` default to the published GHCR images. Set `IMAGE_TAG` to `latest` or a specific version.
-3. Start from images:
+3. Keep `API_BASE_URL` empty for same-origin mode. In published-image mode, `API_BASE_URL` is baked into the frontend image at build time; use `API_UPSTREAM` only when the runtime Nginx proxy must target a different backend host.
+4. Start from images:
    ```bash
    npm run prod:images:postgres
    # or
    npm run prod:images:oracle
    ```
-4. Roll back by changing `IMAGE_TAG` to a previous working tag and re-running the same command.
+5. Roll back by changing `IMAGE_TAG` to a previous working tag and re-running the same command.
 
 ## Stop the stack
 ```bash
@@ -130,5 +131,5 @@ npm run prod:images:oracle:down
 
 ## Non-Docker local deployment
 For a localhost deployment (build + preview) using the production-style script, see:
-- [Localhost Deployment (First-time install)](deploy-localhost.md)
+- [Localhost Deployment (Host-Based Production-Style Run)](deploy-localhost.md)
   - First-time installs should use `--first-time` to apply migrations.

@@ -57,7 +57,7 @@ npm run dev -- --db spanner
 
 Behavior:
 - On first run for a DB, `.local/docker/env/docker.<db>.env` is auto-created from `infra/docker/env/examples/docker.<db>.env.example`.
-- `dev.sh` runs `scripts/db-preflight.sh` to validate env requirements and install missing DB drivers.
+- `dev.sh` runs `scripts/db-preflight.sh` to validate env requirements and install a missing DB driver into local `node_modules` when needed.
 - Docker compose automatically includes the matching DB overlay from `infra/docker/compose/` (`docker-compose.<db>.yml`).
 
 ## Production (Docker Compose)
@@ -89,6 +89,7 @@ Use this mode when you want to run exactly what CI published:
    - `BACKEND_IMAGE`
    - `FRONTEND_IMAGE`
    - `IMAGE_TAG` (`sha-<commit>` or `vX.Y.Z`)
+   - Leave `API_BASE_URL` empty for same-origin mode. In published-image mode, `API_BASE_URL` is already baked into the frontend image build; use `API_UPSTREAM` only to change the runtime proxy target.
 3. Start stack from images:
    ```bash
    npm run prod:images:postgres
@@ -97,7 +98,7 @@ Use this mode when you want to run exactly what CI published:
    ```
 4. Roll back by changing only `IMAGE_TAG` and re-running the same command.
 
-Admin credentials come from the active env file (`.local/docker/env/docker.env` for dev, `.local/docker/env/production.env` for prod).
+Admin credentials come from the active env file (`.local/docker/env/docker.env` for dev, `.local/docker/env/production.env` for source-built prod, `.local/docker/env/images.*.env` for published-image mode, or `.env` for the standalone self-host file).
 Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
 
 ## OpenShift deployment assets

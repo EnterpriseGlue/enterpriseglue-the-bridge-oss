@@ -48,6 +48,8 @@ BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 SHARED_DIR="$ROOT_DIR/packages/shared"
 FRONTEND_HOST_DIR="$ROOT_DIR/packages/frontend-host"
+ROOT_NODE_MODULES_DIR="$ROOT_DIR/node_modules"
+ROOT_LOCKFILE="$ROOT_DIR/package-lock.json"
 
 BACKEND_PORT=${API_PORT:-8787}
 FRONTEND_PORT=5173
@@ -60,6 +62,11 @@ error() { echo "[deploy] ❌ $*"; exit 1; }
 
 clean_build_artifacts() {
   log "🧹 Cleaning build artifacts for full rebuild..."
+
+  if [[ -f "$ROOT_LOCKFILE" ]] && [[ -d "$ROOT_NODE_MODULES_DIR" ]]; then
+    log "Removing node_modules"
+    rm -rf "$ROOT_NODE_MODULES_DIR"
+  fi
   
   # Clean backend
   if [[ -d "$BACKEND_DIR/node_modules" ]]; then
@@ -275,6 +282,12 @@ kill_port() {
   fi
 }
 
+package_is_resolvable() {
+  local dir="$1"
+  local pkg="$2"
+  (cd "$dir" && node -e "require.resolve(process.argv[1]);" "$pkg") >/dev/null 2>&1
+}
+
 npm_install_with_lockfile() {
   local dir="$1"
   local prefer_online="${2:-false}"
@@ -283,20 +296,33 @@ npm_install_with_lockfile() {
     prefer_flag="--prefer-online"
   fi
 
-  if [[ -f "$dir/package-lock.json" ]]; then
+  if [[ -f "$ROOT_LOCKFILE" ]]; then
+    (cd "$ROOT_DIR" && npm ci --include=dev --no-audit --no-fund $prefer_flag)
+  elif [[ -f "$dir/package-lock.json" ]]; then
     (cd "$dir" && npm ci --no-audit --no-fund $prefer_flag)
   else
-    (cd "$dir" && npm install --include=dev --no-audit --no-fund $prefer_flag)
+    (cd "$dir" && npm install --include=dev --no-audit --no-fund --package-lock=false $prefer_flag)
   fi
 }
 
 build_backend() {
-  local MSAL_DIST="$BACKEND_DIR/node_modules/@azure/msal-node/dist/index.d.ts"
-  if [[ ! -d "$BACKEND_DIR/node_modules" ]]; then
+  if [[ -f "$ROOT_LOCKFILE" ]]; then
+    if [[ ! -d "$ROOT_NODE_MODULES_DIR" ]]; then
+      log "Installing workspace deps from root lockfile"
+      npm_install_with_lockfile "$BACKEND_DIR"
+    elif ! package_is_resolvable "$BACKEND_DIR" "@azure/msal-node/package.json"; then
+      warn "Workspace deps appear incomplete (missing @azure/msal-node). Cleaning cache and reinstalling..."
+      rm -rf "$ROOT_NODE_MODULES_DIR"
+      (cd "$ROOT_DIR" && npm cache clean --force)
+      npm_install_with_lockfile "$BACKEND_DIR" "true"
+    else
+      log "Workspace dependencies already installed (offline mode)"
+    fi
+  elif [[ ! -d "$BACKEND_DIR/node_modules" ]]; then
     log "Installing backend deps (including devDependencies for build)"
     npm_install_with_lockfile "$BACKEND_DIR"
-  elif [[ ! -f "$MSAL_DIST" ]]; then
-    warn "Backend deps appear incomplete (missing @azure/msal-node dist). Cleaning cache and reinstalling..."
+  elif ! package_is_resolvable "$BACKEND_DIR" "@azure/msal-node/package.json"; then
+    warn "Backend deps appear incomplete (missing @azure/msal-node). Cleaning cache and reinstalling..."
     rm -rf "$BACKEND_DIR/node_modules"
     (cd "$BACKEND_DIR" && npm cache clean --force)
     npm_install_with_lockfile "$BACKEND_DIR" "true"
@@ -325,7 +351,19 @@ build_frontend_host() {
 }
 
 build_frontend() {
-  if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+  if [[ -f "$ROOT_LOCKFILE" ]]; then
+    if [[ ! -d "$ROOT_NODE_MODULES_DIR" ]]; then
+      log "Installing workspace deps from root lockfile"
+      npm_install_with_lockfile "$FRONTEND_DIR"
+    elif ! package_is_resolvable "$FRONTEND_DIR" "vite/package.json"; then
+      warn "Workspace deps appear incomplete (missing vite). Cleaning cache and reinstalling..."
+      rm -rf "$ROOT_NODE_MODULES_DIR"
+      (cd "$ROOT_DIR" && npm cache clean --force)
+      npm_install_with_lockfile "$FRONTEND_DIR" "true"
+    else
+      log "Workspace dependencies already installed (offline mode)"
+    fi
+  elif [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
     log "Installing frontend deps (including devDependencies for build)"
     npm_install_with_lockfile "$FRONTEND_DIR"
   else
@@ -334,10 +372,7 @@ build_frontend() {
 
   build_shared
   build_frontend_host
-  
-  build_shared
-  build_frontend_host
-  
+
   log "Building frontend (vite build)"
   (cd "$FRONTEND_DIR" && npm run build)
 }

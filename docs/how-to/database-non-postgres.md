@@ -18,7 +18,7 @@ npm run dev -- --db spanner
 What the launcher does automatically:
 1. Creates `.local/docker/env/docker.<db>.env` from `infra/docker/env/examples/docker.<db>.env.example` if missing.
 2. Runs `scripts/db-preflight.sh` to validate required environment variables.
-3. Installs a missing DB driver package (`mysql2`, `mssql`, `oracledb`, `@google-cloud/spanner`).
+3. Installs a missing DB driver package (`mysql2`, `mssql`, `oracledb`, `@google-cloud/spanner`) into local `node_modules` when needed.
 4. Loads matching compose overlay from `infra/docker/compose/` (`docker-compose.<db>.yml`) and starts the stack.
 
 Stop the selected stack:

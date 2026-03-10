@@ -64,22 +64,39 @@ require_var() {
   fi
 }
 
+postgres_schema() {
+  if [[ -n "${POSTGRES_SCHEMA:-}" ]]; then
+    printf '%s' "${POSTGRES_SCHEMA}"
+    return 0
+  fi
+
+  if [[ -n "${POSTGRES_URL:-}" ]]; then
+    node -e "try { const url = new URL(process.argv[1]); process.stdout.write(url.searchParams.get('schema') || ''); } catch {}" "${POSTGRES_URL}"
+  fi
+}
+
 check_env_requirements() {
   case "$DB_TYPE" in
     postgres)
-      require_var POSTGRES_HOST
-      require_var POSTGRES_USER
-      require_var POSTGRES_PASSWORD
-      require_var POSTGRES_DATABASE
-      if [[ "${POSTGRES_SCHEMA:-}" == "public" ]]; then
+      if [[ -z "${POSTGRES_URL:-}" ]]; then
+        require_var POSTGRES_HOST
+        require_var POSTGRES_USER
+        require_var POSTGRES_PASSWORD
+        require_var POSTGRES_DATABASE
+      fi
+      local POSTGRES_SCHEMA_VALUE
+      POSTGRES_SCHEMA_VALUE="$(postgres_schema)"
+      if [[ -z "$POSTGRES_SCHEMA_VALUE" || "$POSTGRES_SCHEMA_VALUE" == "public" ]]; then
         fail "POSTGRES_SCHEMA cannot be public for schema mode."
       fi
       ;;
     oracle)
-      require_var ORACLE_HOST
       require_var ORACLE_USER
       require_var ORACLE_PASSWORD
-      if [[ -z "${ORACLE_SERVICE_NAME:-}" && -z "${ORACLE_SID:-}" ]]; then
+      if [[ -z "${ORACLE_CONNECTION_STRING:-}" ]]; then
+        require_var ORACLE_HOST
+      fi
+      if [[ -z "${ORACLE_CONNECTION_STRING:-}" && -z "${ORACLE_SERVICE_NAME:-}" && -z "${ORACLE_SID:-}" ]]; then
         fail "Either ORACLE_SERVICE_NAME or ORACLE_SID is required for Oracle."
       fi
       ;;
@@ -131,11 +148,11 @@ install_driver_if_missing() {
   fi
 
   if [[ "$AUTO_INSTALL_DRIVERS" != "true" ]]; then
-    fail "Missing DB driver $PKG in backend. Install with: npm --prefix backend install --include=dev --no-audit --no-fund $PKG"
+    fail "Missing DB driver $PKG in backend. Install with: npm --prefix backend install --include=dev --no-audit --no-fund --no-save --package-lock=false $PKG"
   fi
 
   log "Installing missing DB driver: $PKG"
-  npm --prefix "$BACKEND_DIR" install --include=dev --no-audit --no-fund --no-save "$PKG"
+  npm --prefix "$BACKEND_DIR" install --include=dev --no-audit --no-fund --no-save --package-lock=false "$PKG"
 }
 
 oracle_native_check() {

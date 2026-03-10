@@ -93,14 +93,14 @@ via dedicated backend environment variables.
 ## Dev launcher behavior
 - `npm run dev` defaults to Postgres and can auto-create `.local/docker/env/docker.env` from `infra/docker/env/examples/docker.postgres.env.example`.
 - `npm run dev -- --db <db>` uses `.local/docker/env/docker.<db>.env` and auto-creates it from `infra/docker/env/examples/docker.<db>.env.example` if missing.
-- `scripts/db-preflight.sh` validates required DB variables and installs missing DB driver packages.
+- `scripts/db-preflight.sh` validates required DB variables and installs missing DB driver packages into local `node_modules`.
 
 ## Frontend
 | Variable | Required | Default | Notes |
 | --- | --- | --- | --- |
-| API_BASE_URL | No | empty in prod | Preferred compose-level env alias for API origin |
+| API_BASE_URL | No | empty in prod | Preferred compose-level env alias for API origin; consumed at frontend image build time |
 | VITE_API_BASE_URL | No | mapped from `API_BASE_URL` | Frontend runtime variable exposed by Vite |
-| API_UPSTREAM | No | `backend:${API_PORT}` | Frontend Nginx upstream override |
+| API_UPSTREAM | No | `backend:${API_PORT}` | Frontend Nginx runtime upstream override |
 | VITE_FEATURE_* | No | true | Feature flags per module |
 
 ## Git & Encryption

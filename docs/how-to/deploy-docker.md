@@ -36,7 +36,7 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
    - If using `--db mysql` (or others) and `.local/docker/env/docker.<db>.env` is missing, it is created from `infra/docker/env/examples/docker.<db>.env.example`.
 3. `dev.sh` runs `scripts/db-preflight.sh` before compose startup to:
    - validate required DB env vars for the selected `DATABASE_TYPE`
-   - install missing DB driver package when needed
+   - install a missing DB driver into local `node_modules` when needed
    - fail fast with actionable errors (for example Oracle Instant Client guidance)
 4. Configure ports in one place if needed:
    - `API_PORT` (backend container port)
@@ -48,6 +48,7 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 5. Set `API_BASE_URL` only if you need an explicit API origin. Leave empty to use relative `/api` calls through the Nginx proxy.
 6. Optional: set `API_UPSTREAM` if the frontend Nginx proxy should point at a custom backend host (defaults to `backend:${API_PORT}`).
 7. Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
+8. `API_BASE_URL` is consumed at frontend image build time. In Docker dev, `npm run dev` rebuilds the frontend image, so changes take effect on restart.
 
 ## Configuration (Production)
 1. Prepare local env directory and copy production template:
@@ -57,6 +58,7 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 3. Set `FRONTEND_HOST_PORT` and keep `FRONTEND_URL` in sync with that public URL.
 4. Keep `API_BASE_URL` empty for default same-origin behavior (Nginx proxy). Set it only if frontend must call a different API origin.
 5. Optional: set `API_UPSTREAM` to point the frontend Nginx proxy at a different backend host.
+6. `API_BASE_URL` is consumed at frontend image build time, so changing it requires rebuilding the frontend image with `npm run prod`.
 
 ## Configuration (Production from published images)
 1. Copy one image env template:
@@ -72,6 +74,7 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
    - oracle: `EG_BACKEND_ENV_FILE=./.local/docker/env/images.oracle.env`
 4. Keep `API_BASE_URL` empty for same-origin behavior.
 5. Optional: set `API_UPSTREAM` to point the frontend Nginx proxy at a different backend host.
+6. In published-image mode, `API_BASE_URL` is already baked into the published frontend image and is not re-read at container start. Use `API_UPSTREAM` only for runtime proxy changes, or rebuild the frontend image if you need a different browser-visible API origin.
 
 Key defaults:
 - Dev frontend: `http://localhost:5173`
@@ -125,13 +128,13 @@ npm run prod:images:oracle:down
 ## Volumes
 Docker creates persistent volumes for:
 - `postgres_data` (database)
-- `backend_node_modules` (dev only)
+- `workspace_node_modules` (dev only)
 - `git_repos` (server-side git repositories)
 
 ## Notes
 - Dev compose exposes PostgreSQL on `POSTGRES_HOST_PORT`; production does not expose the DB port by default.
 - Production compose does not publish backend port by default; call backend through frontend origin (`/api`, `/starbase-api`, `/mission-control-api`, `/engines-api`, `/git-api`, `/vcs-api`).
-- For a host-based production-style run, see `scripts/deploy-localhost.sh`.
+- For a host-based production-style run outside Docker Compose, see `scripts/deploy-localhost.sh`.
 - If email verification is enabled, configure `RESEND_API_KEY` to receive verification links.
 
 ## Troubleshooting

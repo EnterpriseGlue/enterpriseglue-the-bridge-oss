@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import { existsSync } from 'fs';
 import enginesRouter from '../../../../../packages/backend-host/src/modules/mission-control/engines/routes.js';
 import { engineService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+
+vi.mock('fs', () => ({
+  existsSync: vi.fn(() => false),
+}));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -85,5 +90,17 @@ describe('mission-control engines routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ id: 'e1', name: 'Engine 1' });
     expect((engineService as any).hasEngineAccess).toHaveBeenCalled();
+  });
+
+  it('rejects localhost engine URLs when running in Docker', async () => {
+    (existsSync as any).mockReturnValue(true);
+
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({ name: 'Docker local engine', baseUrl: 'http://localhost:8080/engine-rest', type: 'operaton' });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ field: 'baseUrl' });
+    expect(String(response.body.error || '')).toContain('host.docker.internal:8080/engine-rest');
   });
 });
