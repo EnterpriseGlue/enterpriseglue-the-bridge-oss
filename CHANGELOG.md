@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.7.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.7.2...v0.7.3) (2026-03-10)
+
+
+### Bug Fixes
+
+* **mission-control:** expand mock-backed docker smoke coverage ([#209](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/209)) ([6ef02a8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6ef02a8ffa82e47d36bda4533e8990b8f1711748))
+
 ## [0.7.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.7.1...v0.7.2) (2026-03-09)
 
 
