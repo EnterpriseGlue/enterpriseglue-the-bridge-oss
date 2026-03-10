@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.7.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.7.4...v0.7.5) (2026-03-10)
+
+
+### Bug Fixes
+
+* **infra:** align docker improvement docs and deploy ([#213](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/213)) ([bef971b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bef971ba75057edb1b8540203b188ba84b0ba53d))
+
 ## [0.7.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.7.3...v0.7.4) (2026-03-10)
 
 
