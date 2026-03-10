@@ -30,7 +30,7 @@
     "test:e2e:smoke:mission-control": "playwright test --config test/e2e/playwright.config.ts --grep @mission-control",
     "test:e2e:smoke:postgres:images": "bash ./scripts/e2e-smoke-postgres-images.sh",
     "test:e2e:smoke:oracle:images": "bash ./scripts/e2e-smoke-oracle.sh",
-    "mock-camunda:harvest": "node test/e2e/mock-camunda/harvest.mjs",
+    "mock-camunda:harvest": "bash ./scripts/mock-camunda-harvest.sh",
     "mock-camunda:normalize": "node test/e2e/mock-camunda/normalize.mjs",
     "mock-camunda:adapt": "node test/e2e/mock-camunda/adapt-normalized.mjs",
     "mock-camunda:prepare": "npm run mock-camunda:harvest && npm run mock-camunda:normalize",

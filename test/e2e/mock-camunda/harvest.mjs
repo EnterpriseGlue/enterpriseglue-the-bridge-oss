@@ -1,4 +1,3 @@
-import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 function parseArgs(argv) {
@@ -458,17 +457,11 @@ async function main() {
     warnings,
   }
 
-  await mkdir(options.outputDir, { recursive: true })
-  const timestamp = new Date().toISOString().replace(/[.:]/g, '-')
-  const outputPath = path.join(options.outputDir, `mission-control-harvest-${timestamp}.json`)
-  const latestPath = path.join(options.outputDir, 'latest.json')
   const body = JSON.stringify(snapshot, null, 2)
-  await writeFile(outputPath, body)
-  await writeFile(latestPath, body)
 
-  console.log(JSON.stringify({
-    outputPath,
-    latestPath,
+  console.error(JSON.stringify({
+    outputPath: process.env.MOCK_CAMUNDA_OUTPUT_PATH || null,
+    latestPath: process.env.MOCK_CAMUNDA_LATEST_PATH || null,
     summary: snapshot.summary,
     candidates: {
       parallel: snapshot.candidates.parallel.map((item) => item.processInstanceId),
@@ -476,6 +469,7 @@ async function main() {
       loop: snapshot.candidates.loop.map((item) => item.processInstanceId),
     },
   }, null, 2))
+  process.stdout.write(`${body}\n`)
 }
 
 main().catch((error) => {

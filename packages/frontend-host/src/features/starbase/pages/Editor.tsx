@@ -28,6 +28,8 @@ import { ProjectAccessError, isProjectAccessError } from '../components/ProjectA
 import { useSelectedEngine } from '../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../stores/engineSelectorStore'
 import { useToast } from '../../../shared/notifications/ToastProvider'
+import { toSafeInternalPath } from '../../../utils/safeNavigation'
+import { replaceAndReloadToInternalPath } from '../../../utils/redirect'
 
 type FolderBreadcrumb = {
   id: string
@@ -133,6 +135,10 @@ export default function Editor() {
   const cleanEditorPath = React.useMemo(
     () => (fileId ? `/starbase/editor/${encodeURIComponent(sanitizePathParam(String(fileId)))}` : '/starbase'),
     [fileId]
+  )
+  const safeEditorTenantPath = React.useMemo(
+    () => toSafeInternalPath(toTenantPath(cleanEditorPath), toTenantPath('/starbase')),
+    [cleanEditorPath, toTenantPath]
   )
   const fileQ = useQuery({
     queryKey: ['file', fileId],
@@ -1036,7 +1042,7 @@ export default function Editor() {
         title: isHotfix ? 'Hotfix mode started' : 'Deployed snapshot restored',
         subtitle: isHotfix ? 'Your draft now contains the deployed version. Edit and save a new version when ready.' : 'Now editing the deployed baseline in your draft.',
       })
-      window.location.assign(toTenantPath(cleanEditorPath))
+      replaceAndReloadToInternalPath(safeEditorTenantPath, toTenantPath('/starbase'))
     },
     onError: (error) => {
       const parsed = parseApiError(error, 'Failed to restore deployed snapshot')
@@ -1081,8 +1087,8 @@ export default function Editor() {
     setHotfixContext(null)
     // Reload file from server to restore original draft
     queryClient.invalidateQueries({ queryKey: ['file', fileId] })
-    window.location.assign(toTenantPath(cleanEditorPath))
-  }, [fileId, queryClient, toTenantPath, cleanEditorPath])
+    replaceAndReloadToInternalPath(safeEditorTenantPath, toTenantPath('/starbase'))
+  }, [fileId, queryClient, safeEditorTenantPath, toTenantPath])
 
   const handleBackToDraft = React.useCallback(() => {
     viewModeImportedRef.current = false
