@@ -24,9 +24,10 @@ Audience: Developers and architects.
 - [Configuration Matrix](reference/configuration-matrix.md)
 - [Auth and SSO Setup](how-to/auth-sso.md)
 
-## Architecture & Modules
-- [Platform Modules Overview](explanation/platform-modules.md)
-- [Architecture Deep Dive](explanation/architecture-deep-dive.md)
+## Architecture
+- [Architecture Overview](architecture/00-architecture-overview.md)
+- [Logical Architecture](architecture/02-oss-logical-architecture.md)
+- [Authorization and Access Control](architecture/09-oss-authorization-access-control-model.md)
 
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)
