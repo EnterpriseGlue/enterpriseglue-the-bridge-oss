@@ -27,6 +27,7 @@ import { apiClient } from '../../../../shared/api/client'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import styles from '../../process-instance-detail/styles/InstanceDetail.module.css'
 import { SplitPane, Pane } from 'react-split-pane'
+import { LoadingState } from '../../../shared/components/LoadingState'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -404,7 +405,7 @@ export default function DecisionHistoryDetail() {
                 <div style={{ fontSize: 'var(--text-12)', marginTop: 'var(--spacing-1)' }}>{String(xmlQ.error)}</div>
               </div>
             ) : xmlQ.data ? (
-              <React.Suspense fallback={<div style={{ padding: 'var(--spacing-4)', color: 'var(--color-text-tertiary)' }}>Loading decision table...</div>}>
+              <React.Suspense fallback={<LoadingState message="Loading decision table..." />}>
                 <DMNDrdMini
                   xml={(xmlQ.data as string) || ''}
                   preferDecisionTable
@@ -721,7 +722,7 @@ export default function DecisionHistoryDetail() {
               </Button>
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-              <React.Suspense fallback={<div style={{ padding: 'var(--spacing-4)', color: 'var(--color-text-tertiary)' }}>Loading diagram...</div>}>
+              <React.Suspense fallback={<LoadingState message="Loading diagram..." />}>
                 <DMNDrdMini xml={(xmlQ.data as string) || ''} />
               </React.Suspense>
             </div>

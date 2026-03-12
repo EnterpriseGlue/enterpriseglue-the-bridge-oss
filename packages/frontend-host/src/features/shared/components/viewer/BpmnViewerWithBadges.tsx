@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback } from 'react'
 import { createCountBadge, getBadgePosition } from './viewerUtils'
 import { BADGE_STYLES } from './viewerConstants'
 import type { InstanceState } from './viewerConstants'
+import { SmallLoadingState } from '../LoadingState'
 
 const Viewer = React.lazy(() => import('../Viewer'))
 
@@ -122,11 +123,7 @@ export function BpmnViewerWithBadges({
 
   return (
     <React.Suspense
-      fallback={
-        <div style={{ padding: 'var(--spacing-2)', fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>
-          Loading diagram...
-        </div>
-      }
+      fallback={<SmallLoadingState message="Loading diagram..." />}
     >
       <Viewer xml={xml} onReady={handleReady} onDiagramReset={handleDiagramReset} />
     </React.Suspense>

@@ -1,6 +1,7 @@
 import React from 'react'
 import type { ElementLinkInfo } from '../../../shared/components/viewer/viewerTypes'
 import styles from '../styles/InstanceDetail.module.css'
+import { LoadingState } from '../../../shared/components/LoadingState'
 
 const Viewer = React.lazy(() => import('../../../shared/components/Viewer'))
 
@@ -24,7 +25,7 @@ export function ProcessInstanceDiagramPane({
       <div className={styles.diagramContainer}>
         {xml && (
           <React.Suspense
-            fallback={<div style={{ padding: 'var(--spacing-3)', color: 'var(--color-text-tertiary)' }}>Loading diagram...</div>}
+            fallback={<LoadingState message="Loading diagram..." />}
           >
             <Viewer
               key={instanceId}

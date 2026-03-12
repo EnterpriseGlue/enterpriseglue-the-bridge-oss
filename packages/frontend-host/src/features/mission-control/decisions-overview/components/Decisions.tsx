@@ -20,6 +20,7 @@ import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../../stores/engineSelectorStore'
 import { apiClient } from '../../../../shared/api/client'
 import styles from './Decisions.module.css'
+import { LoadingState } from '../../../shared/components/LoadingState'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -469,7 +470,7 @@ export default function Decisions() {
               <div style={{ fontSize: 'var(--text-12)', marginTop: 'var(--spacing-1)' }}>{String(xmlQ.error)}</div>
             </div>
           ) : (
-            <React.Suspense fallback={<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-tertiary)', background: 'var(--color-bg-primary)', zIndex: 10 }}>Loading decision table...</div>}>
+            <React.Suspense fallback={<LoadingState message="Loading decision table..." />}>
               <DMNDrdMini
                 xml={(xmlQ.data as string) || ''}
                 preferDecisionTable

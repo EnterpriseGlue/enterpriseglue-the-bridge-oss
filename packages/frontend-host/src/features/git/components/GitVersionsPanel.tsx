@@ -5,10 +5,11 @@
 
 import React, { useState, lazy, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Modal, Button, InlineNotification, InlineLoading, ProgressIndicator, ProgressStep, Toggle, Dropdown } from '@carbon/react';
+import { Modal, Button, InlineNotification, ProgressIndicator, ProgressStep, Toggle, Dropdown } from '@carbon/react';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate';
+import { LoadingState } from '../../shared/components/LoadingState';
 
 // Lazy load the viewers
 const Viewer = lazy(() => import('../../shared/components/Viewer'));
@@ -825,9 +826,7 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
         <div style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
           {/* Loading state */}
           {snapshotsQuery.isLoading && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <InlineLoading description="Loading version..." />
-            </div>
+            <LoadingState message="Loading version..." />
           )}
 
           {/* Error states */}
@@ -871,11 +870,7 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
           {/* Diagram Viewer */}
           {previewXml && fileType === 'bpmn' && (
             <div style={{ flex: 1, position: 'relative', background: 'var(--color-bg-primary)' }}>
-              <Suspense fallback={
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                  <InlineLoading description="Loading diagram viewer..." />
-                </div>
-              }>
+              <Suspense fallback={<LoadingState message="Loading diagram viewer..." />}>
                 <Viewer xml={previewXml} />
               </Suspense>
             </div>
@@ -884,11 +879,7 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
           {/* DMN Viewer */}
           {previewXml && fileType === 'dmn' && (
             <div style={{ flex: 1, position: 'relative', background: 'var(--color-bg-primary)' }}>
-              <Suspense fallback={
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                  <InlineLoading description="Loading DMN viewer..." />
-                </div>
-              }>
+              <Suspense fallback={<LoadingState message="Loading DMN viewer..." />}>
                 <DMNDrdMini xml={previewXml} preferDecisionTable />
               </Suspense>
             </div>

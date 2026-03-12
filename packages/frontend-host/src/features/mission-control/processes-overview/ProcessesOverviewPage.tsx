@@ -28,6 +28,7 @@ import { EngineAccessError, isEngineAccessError } from '../shared/components/Eng
 import { apiClient } from '../../../shared/api/client'
 import { useSelectedEngine } from '../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../stores/engineSelectorStore'
+import { LoadingState } from '../../shared/components/LoadingState'
 
 const SPLIT_PANE_STORAGE_KEY = 'processes-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '75%'
@@ -683,7 +684,7 @@ export default function ProcessesOverviewPage() {
             <div style={{ color: 'var(--color-text-tertiary)', position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-base)' }}>To see a Diagram, select a single Version</div>
           )}
           {currentKey && selectedVersion !== null && xmlQ.data && (
-            <React.Suspense fallback={<div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-tertiary)', background: 'var(--color-bg-primary)', zIndex: 10 }}>Loading diagram...</div>}>
+            <React.Suspense fallback={<LoadingState message="Loading diagram..." />}>
               <Viewer 
                 key={`${defIdForVersion || currentKey}-${selectedVersion || 'all'}`}
                 xml={xmlQ.data as string} 

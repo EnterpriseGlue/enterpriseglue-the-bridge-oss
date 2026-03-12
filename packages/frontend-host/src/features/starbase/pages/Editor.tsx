@@ -32,6 +32,7 @@ import { useToast } from '../../../shared/notifications/ToastProvider'
 import { toSafeInternalPath } from '../../../utils/safeNavigation'
 import { replaceAndReloadToInternalPath } from '../../../utils/redirect'
 import { canDeployProject, type ProjectEngineAccessData } from '../utils/deployEligibility'
+import { LoadingState } from '../../shared/components/LoadingState'
 
 type FolderBreadcrumb = {
   id: string
@@ -1519,7 +1520,7 @@ export default function Editor() {
             }}
           />
         ) : (
-          <React.Suspense fallback={<div style={{ padding: 'var(--spacing-4)' }}>Loading DMN…</div>}>
+          <React.Suspense fallback={<LoadingState message="Loading DMN..." />}>
             <div style={{ height: '100%', background: 'var(--color-bg-primary)' }}>
               <DMNCanvas
                 key={f.id}
@@ -1584,7 +1585,7 @@ export default function Editor() {
               <Button kind="ghost" size="sm" onClick={() => setDmnEvaluateOpen(false)}>Close</Button>
             </div>
             <div style={{ flex: 1, overflow: 'auto' }}>
-              <React.Suspense fallback={<div style={{ padding: 'var(--spacing-4)' }}>Loading…</div>}>
+              <React.Suspense fallback={<LoadingState message="Loading evaluate panel..." />}>
                 <DMNEvaluatePanel
                   decisionKey={decisionKey}
                   onEvaluate={(vars) => evaluateMutation.mutate(vars)}

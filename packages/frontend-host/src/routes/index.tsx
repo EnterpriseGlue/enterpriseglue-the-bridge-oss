@@ -6,33 +6,34 @@ import { extensions, isMultiTenantEnabled } from '../enterprise/extensionRegistr
 
 // Shared components
 import LayoutWithProSidebar from '../features/shared/components/LayoutWithProSidebar'
+import { PageLoadingState } from '../features/shared/components/LoadingState'
 
 // Starbase pages
-import ProjectOverview from '../features/starbase/pages/ProjectOverview'
-import ProjectDetail from '../features/starbase/pages/ProjectDetail'
-import Editor from '../features/starbase/pages/Editor'
+const ProjectOverview = React.lazy(() => import('../features/starbase/pages/ProjectOverview'))
+const ProjectDetail = React.lazy(() => import('../features/starbase/pages/ProjectDetail'))
+const Editor = React.lazy(() => import('../features/starbase/pages/Editor'))
 
 // Mission Control pages
-import MissionControlBridge from '../features/mission-control/pages/MissionControlBridge'
-import EnginesPage from '../features/mission-control/engines/EnginesPage'
+const MissionControlBridge = React.lazy(() => import('../features/mission-control/pages/MissionControlBridge'))
+const EnginesPage = React.lazy(() => import('../features/mission-control/engines/EnginesPage'))
 
 // Mission Control components
-import ProcessesOverviewPage from '../features/mission-control/processes-overview/ProcessesOverviewPage'
-import ProcessInstanceDetailPage from '../features/mission-control/process-instance-detail/ProcessInstanceDetailPage'
-import Decisions from '../features/mission-control/decisions-overview/components/Decisions'
-import DecisionHistoryDetail from '../features/mission-control/decision-instance-detail/components/DecisionHistoryDetail'
-import BatchesPage from '../features/mission-control/batches/BatchesPage'
-import NewDeleteBatch from '../features/mission-control/batches/components/NewDeleteBatch'
-import NewSuspendBatch from '../features/mission-control/batches/components/NewSuspendBatch'
-import NewActivateBatch from '../features/mission-control/batches/components/NewActivateBatch'
-import NewRetriesBatch from '../features/mission-control/batches/components/NewRetriesBatch'
-import MigrationWizardPage from '../features/mission-control/migration-wizard/MigrationWizardPage'
+const ProcessesOverviewPage = React.lazy(() => import('../features/mission-control/processes-overview/ProcessesOverviewPage'))
+const ProcessInstanceDetailPage = React.lazy(() => import('../features/mission-control/process-instance-detail/ProcessInstanceDetailPage'))
+const Decisions = React.lazy(() => import('../features/mission-control/decisions-overview/components/Decisions'))
+const DecisionHistoryDetail = React.lazy(() => import('../features/mission-control/decision-instance-detail/components/DecisionHistoryDetail'))
+const BatchesPage = React.lazy(() => import('../features/mission-control/batches/BatchesPage'))
+const NewDeleteBatch = React.lazy(() => import('../features/mission-control/batches/components/NewDeleteBatch'))
+const NewSuspendBatch = React.lazy(() => import('../features/mission-control/batches/components/NewSuspendBatch'))
+const NewActivateBatch = React.lazy(() => import('../features/mission-control/batches/components/NewActivateBatch'))
+const NewRetriesBatch = React.lazy(() => import('../features/mission-control/batches/components/NewRetriesBatch'))
+const MigrationWizardPage = React.lazy(() => import('../features/mission-control/migration-wizard/MigrationWizardPage'))
 
 // Platform Admin pages
-import PlatformSettingsPage from '../features/platform-admin/pages/PlatformSettingsPage'
-import SsoMappings from '../features/platform-admin/pages/SsoMappings'
-import AuthzPolicies from '../features/platform-admin/pages/AuthzPolicies'
-import AuthzAuditLog from '../features/platform-admin/pages/AuthzAuditLog'
+const PlatformSettingsPage = React.lazy(() => import('../features/platform-admin/pages/PlatformSettingsPage'))
+const SsoMappings = React.lazy(() => import('../features/platform-admin/pages/SsoMappings'))
+const AuthzPolicies = React.lazy(() => import('../features/platform-admin/pages/AuthzPolicies'))
+const AuthzAuditLog = React.lazy(() => import('../features/platform-admin/pages/AuthzAuditLog'))
 
 // EE-only pages (rendered via ExtensionPage)
 import { ExtensionPage } from '../enterprise/ExtensionSlot'
@@ -54,14 +55,14 @@ import Signup from '../pages/Signup'
 import AcceptInvite from '../pages/AcceptInvite'
 
 // Admin pages
-import AuditLogViewer from '../pages/AuditLogViewer'
-import UserManagement from '../pages/admin/UserManagement'
+const AuditLogViewer = React.lazy(() => import('../pages/AuditLogViewer'))
+const UserManagement = React.lazy(() => import('../pages/admin/UserManagement'))
 
 // Dashboard
 import Dashboard from '../pages/Dashboard'
 
 // Git OAuth
-import OAuthCallback from '../features/git/pages/OAuthCallback'
+const OAuthCallback = React.lazy(() => import('../features/git/pages/OAuthCallback'))
 
 // Settings (GitConnections page removed — Git connections now live at project level)
 
@@ -97,6 +98,14 @@ function MissionControlRoleGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function LazyRoute({ children, message = 'Loading page...' }: { children: React.ReactNode; message?: string }) {
+  return (
+    <React.Suspense fallback={<PageLoadingState message={message} />}>
+      {children}
+    </React.Suspense>
+  )
+}
+
 /**
  * Creates protected child routes that are shared between root (/) and tenant (/t/:tenantSlug) layouts
  * @param isRootLevel - true for root routes (uses "/" prefix), false for tenant routes (no prefix)
@@ -113,7 +122,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/settings`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          <PlatformSettingsPage />
+          <LazyRoute message="Loading settings...">
+            <PlatformSettingsPage />
+          </LazyRoute>
         </ProtectedRoute>
       )
     }] : []),
@@ -121,7 +132,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/sso-mappings`, 
       element: (
         <ProtectedRoute requireAdmin>
-          <SsoMappings />
+          <LazyRoute message="Loading SSO mappings...">
+            <SsoMappings />
+          </LazyRoute>
         </ProtectedRoute>
       )
     },
@@ -129,7 +142,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/policies`, 
       element: (
         <ProtectedRoute requireAdmin>
-          <AuthzPolicies />
+          <LazyRoute message="Loading policies...">
+            <AuthzPolicies />
+          </LazyRoute>
         </ProtectedRoute>
       )
     },
@@ -137,7 +152,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/authz-audit`, 
       element: (
         <ProtectedRoute requireAdmin>
-          <AuthzAuditLog />
+          <LazyRoute message="Loading audit log...">
+            <AuthzAuditLog />
+          </LazyRoute>
         </ProtectedRoute>
       )
     },
@@ -155,7 +172,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/audit-logs`,
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          <AuditLogViewer />
+          <LazyRoute message="Loading audit logs...">
+            <AuditLogViewer />
+          </LazyRoute>
         </ProtectedRoute>
       )
     }] : []),
@@ -224,7 +243,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/users`, 
       element: (
         <ProtectedRoute requireAdmin>
-          <UserManagement />
+          <LazyRoute message="Loading users...">
+            <UserManagement />
+          </LazyRoute>
         </ProtectedRoute>
       )
     }] : []),
@@ -232,7 +253,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/users`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
-          {isRootLevel ? <UserManagement /> : <ExtensionPage name="tenant-users-page" />}
+          {isRootLevel ? <LazyRoute message="Loading users..."><UserManagement /></LazyRoute> : <ExtensionPage name="tenant-users-page" />}
         </ProtectedRoute>
       )
     }] : []),
@@ -252,7 +273,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}starbase`, 
       element: (
         <FeatureFlagGuard flag="starbase" fallback={<Navigate to={fallbackPath} replace />}>
-          <ProjectOverview />
+          <LazyRoute message="Loading projects...">
+            <ProjectOverview />
+          </LazyRoute>
         </FeatureFlagGuard>
       )
     },
@@ -260,7 +283,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}starbase/*`, 
       element: (
         <FeatureFlagGuard flag="starbase" fallback={<Navigate to={fallbackPath} replace />}>
-          <ProjectOverview />
+          <LazyRoute message="Loading projects...">
+            <ProjectOverview />
+          </LazyRoute>
         </FeatureFlagGuard>
       )
     },
@@ -268,7 +293,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}starbase/project/:projectId`, 
       element: (
         <FeatureFlagGuard flag="starbase" fallback={<Navigate to={fallbackPath} replace />}>
-          <ProjectDetail />
+          <LazyRoute message="Loading project...">
+            <ProjectDetail />
+          </LazyRoute>
         </FeatureFlagGuard>
       )
     },
@@ -276,7 +303,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}starbase/editor/:fileId`, 
       element: (
         <FeatureFlagGuard flag="starbase" fallback={<Navigate to={fallbackPath} replace />}>
-          <Editor />
+          <LazyRoute message="Loading editor...">
+            <Editor />
+          </LazyRoute>
         </FeatureFlagGuard>
       )
     },
@@ -287,7 +316,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <MissionControlBridge />
+            <LazyRoute message="Loading Mission Control...">
+              <MissionControlBridge />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -297,7 +328,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl.processes" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <ProcessesOverviewPage />
+            <LazyRoute message="Loading processes...">
+              <ProcessesOverviewPage />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -307,7 +340,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl.processes" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <ProcessInstanceDetailPage />
+            <LazyRoute message="Loading process instance...">
+              <ProcessInstanceDetailPage />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -317,7 +352,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <BatchesPage />
+            <LazyRoute message="Loading batches...">
+              <BatchesPage />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -327,7 +364,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <BatchesPage />
+            <LazyRoute message="Loading batches...">
+              <BatchesPage />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -337,7 +376,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <NewDeleteBatch />
+            <LazyRoute message="Loading batch form...">
+              <NewDeleteBatch />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -347,7 +388,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <NewSuspendBatch />
+            <LazyRoute message="Loading batch form...">
+              <NewSuspendBatch />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -357,7 +400,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <NewActivateBatch />
+            <LazyRoute message="Loading batch form...">
+              <NewActivateBatch />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -367,7 +412,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <NewRetriesBatch />
+            <LazyRoute message="Loading batch form...">
+              <NewRetriesBatch />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -377,7 +424,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <MigrationWizardPage />
+            <LazyRoute message="Loading migration wizard...">
+              <MigrationWizardPage />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -387,7 +436,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl.decisions" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <Decisions />
+            <LazyRoute message="Loading decisions...">
+              <Decisions />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -397,7 +448,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl.decisions" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <DecisionHistoryDetail />
+            <LazyRoute message="Loading decision history...">
+              <DecisionHistoryDetail />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -407,7 +460,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       element: (
         <FeatureFlagGuard flag="missionControl" fallback={<Navigate to={fallbackPath} replace />}>
           <MissionControlRoleGuard>
-            <MissionControlBridge />
+            <LazyRoute message="Loading Mission Control...">
+              <MissionControlBridge />
+            </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
       )
@@ -418,7 +473,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}engines`, 
       element: (
         <FeatureFlagGuard flag="engines" fallback={<Navigate to={fallbackPath} replace />}>
-          <ExtensionPage name="engines-page" fallback={<EnginesPage />} />
+          <ExtensionPage name="engines-page" fallback={<LazyRoute message="Loading engines..."><EnginesPage /></LazyRoute>} />
         </FeatureFlagGuard>
       )
     },
@@ -453,7 +508,9 @@ export function getPublicRoutes(): RouteObject[] {
       path: '/git/oauth/callback', 
       element: (
         <ProtectedRoute>
-          <OAuthCallback />
+          <LazyRoute message="Loading callback...">
+            <OAuthCallback />
+          </LazyRoute>
         </ProtectedRoute>
       )
     },

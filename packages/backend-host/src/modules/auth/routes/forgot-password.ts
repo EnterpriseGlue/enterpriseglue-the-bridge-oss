@@ -159,7 +159,7 @@ router.get('/api/auth/verify-reset-token', apiLimiter, passwordResetVerifyLimite
   const { token } = req.query;
 
   if (!token || typeof token !== 'string') {
-    throw Errors.validation('Token is required');
+    return res.status(400).json({ error: 'Token is required' });
   }
 
   const dataSource = await getDataSource();
