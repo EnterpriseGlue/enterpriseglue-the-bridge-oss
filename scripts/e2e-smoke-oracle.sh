@@ -80,6 +80,30 @@ wait_for_http() {
   done
 }
 
+run_playwright_smoke() {
+  if [[ -n "${PLAYWRIGHT_RUNNER_IMAGE:-}" ]]; then
+    log "Running Playwright smoke in container image $PLAYWRIGHT_RUNNER_IMAGE"
+    docker run --rm \
+      --network host \
+      --ipc host \
+      --user "$(id -u):$(id -g)" \
+      -e CI="${CI:-true}" \
+      -e HOME=/tmp \
+      -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+      -e PLAYWRIGHT_BASE_URL \
+      -e E2E_API_BASE_URL \
+      -e E2E_SEED_USER \
+      -e E2E_USER \
+      -e E2E_PASSWORD \
+      -v "$ROOT_DIR:/work" \
+      -w /work \
+      "$PLAYWRIGHT_RUNNER_IMAGE" \
+      bash -lc "npm run test:e2e:smoke"
+  else
+    npm run test:e2e:smoke
+  fi
+}
+
 cleanup() {
   set +e
   FRONTEND_HOST_PORT="$FRONTEND_PORT" FRONTEND_URL="http://localhost:$FRONTEND_PORT" EG_BACKEND_ENV_FILE="$ENV_FILE" \
@@ -124,7 +148,7 @@ main() {
   E2E_SEED_USER=false \
   E2E_USER="$admin_email" \
   E2E_PASSWORD="$admin_password" \
-  npm run test:e2e:smoke
+  run_playwright_smoke
 
   log "Oracle container E2E smoke tests passed"
 }

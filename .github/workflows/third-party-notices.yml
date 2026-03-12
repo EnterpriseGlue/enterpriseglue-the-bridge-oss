@@ -42,6 +42,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
       - name: Verify third-party notices and Apache-2.0 compatibility
         id: verify
@@ -83,6 +85,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
       - name: Refresh third-party notices and enforce strict compatibility
         id: refresh

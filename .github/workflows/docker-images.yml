@@ -137,15 +137,14 @@ jobs:
       - name: Install dependencies
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
         run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
 
       - name: Run Mission Control Playwright smoke on Postgres images
         env:
           EG_POSTGRES_IMAGE_ENV_FILE: ./.env.images.ci
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLAYWRIGHT_RUNNER_IMAGE: mcr.microsoft.com/playwright:v1.58.2-jammy
         run: npm run test:e2e:smoke:postgres:images -- --env-file ./.env.images.ci --project-name enterpriseglue-postgres-image-smoke
 
       - name: Upload Mission Control smoke failure artifacts

@@ -118,6 +118,40 @@ wait_for_container_health() {
   done
 }
 
+run_playwright_smoke() {
+  if [[ -n "${PLAYWRIGHT_RUNNER_IMAGE:-}" ]]; then
+    log "Running Playwright smoke in container image $PLAYWRIGHT_RUNNER_IMAGE"
+    docker run --rm \
+      --network host \
+      --ipc host \
+      --user "$(id -u):$(id -g)" \
+      -e CI="${CI:-true}" \
+      -e HOME=/tmp \
+      -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+      -e PLAYWRIGHT_BASE_URL \
+      -e E2E_API_BASE_URL \
+      -e CAMUNDA_BASE_URL \
+      -e POSTGRES_HOST \
+      -e POSTGRES_PORT \
+      -e POSTGRES_USER \
+      -e POSTGRES_PASSWORD \
+      -e POSTGRES_DATABASE \
+      -e POSTGRES_SCHEMA \
+      -e POSTGRES_SSL \
+      -e ADMIN_EMAIL \
+      -e ADMIN_PASSWORD \
+      -e E2E_ADMIN_EMAIL \
+      -e E2E_ADMIN_PASSWORD \
+      -e E2E_REQUIRE_MISSION_CONTROL_MOCK \
+      -v "$ROOT_DIR:/work" \
+      -w /work \
+      "$PLAYWRIGHT_RUNNER_IMAGE" \
+      bash -lc "npm run test:e2e:smoke:mission-control"
+  else
+    npm run test:e2e:smoke:mission-control
+  fi
+}
+
 collect_failure_artifacts() {
   mkdir -p "$ARTIFACT_DIR"
   FRONTEND_HOST_PORT="$FRONTEND_PORT" \
@@ -209,7 +243,7 @@ main() {
   E2E_ADMIN_EMAIL="$admin_email" \
   E2E_ADMIN_PASSWORD="$admin_password" \
   E2E_REQUIRE_MISSION_CONTROL_MOCK=true \
-  npm run test:e2e:smoke:mission-control
+  run_playwright_smoke
 
   log "Mission Control image smoke tests passed"
 }
