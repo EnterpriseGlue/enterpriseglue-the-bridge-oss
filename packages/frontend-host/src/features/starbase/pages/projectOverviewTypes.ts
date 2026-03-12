@@ -1,4 +1,11 @@
-export type ProjectMember = { userId: string; firstName: string | null; lastName: string | null; role: string }
+export type ProjectMember = {
+  userId: string
+  firstName: string | null
+  lastName: string | null
+  role: string
+  roles?: string[]
+  deployAllowed?: boolean | null
+}
 
 export type Project = {
   id: string
@@ -13,7 +20,16 @@ export type Project = {
 }
 
 export type EngineAccessData = {
-  accessedEngines: { engineId: string; engineName: string; grantedAt: number; autoApproved: boolean }[]
+  accessedEngines: {
+    engineId: string
+    engineName: string
+    grantedAt: number
+    autoApproved: boolean
+    baseUrl?: string
+    environment?: { name: string; color: string }
+    health?: { status: string; latencyMs?: number }
+    manualDeployAllowed?: boolean
+  }[]
   pendingRequests: { requestId: string; engineId: string; engineName: string; requestedAt: number }[]
   availableEngines: { id: string; name: string }[]
 }

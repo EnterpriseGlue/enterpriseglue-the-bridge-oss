@@ -11,6 +11,7 @@ import ProjectOverview from '@src/features/starbase/pages/ProjectOverview';
 vi.mock('@src/features/git/components', () => ({
   CreateOnlineProjectModal: ({ open }: { open: boolean }) =>
     open ? <h2>Create Project</h2> : null,
+  DeployDialog: () => null,
 }));
 
 vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({

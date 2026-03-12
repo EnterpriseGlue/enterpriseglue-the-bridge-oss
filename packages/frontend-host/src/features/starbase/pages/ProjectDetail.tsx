@@ -36,7 +36,7 @@ import { ErrorState } from '../../shared/components'
 import { ProjectAccessError, isProjectAccessError } from '../components/ProjectAccessError'
 import { validateAndUploadFile } from '../utils/uploadValidation'
 import { useInlineRename } from '../hooks/useInlineRename'
-import { SyncModal } from '../../git/components'
+import { DeployDialog, SyncModal } from '../../git/components'
 import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
@@ -49,6 +49,7 @@ import { ProjectMembersModal } from './components/ProjectMembersModal'
 import { ProjectMembersManagementModals } from './components/ProjectMembersManagementModals'
 import { ProjectDetailHeader } from './components/ProjectDetailHeader'
 import { downloadBlob, toSafeDownloadFilename } from '../../../utils/safeDom'
+import { canDeployProject, type ProjectEngineAccessData } from '../utils/deployEligibility'
 
 // Import extracted utilities and components
 import {
@@ -362,6 +363,14 @@ export default function ProjectDetail() {
     return out
   }, [allFolders, moveModal.data, folderId])
 
+  const moveDisabledSet = React.useMemo(() => {
+    return new Set(
+      moveOptions
+        .filter((option) => option.id !== 'ROOT' && option.disabled)
+        .map((option) => String(option.id))
+    )
+  }, [moveOptions])
+
   const nameFromList = projectsQ.data?.find((p: Project) => p.id === projectId)?.name
   const projectName = (location.state && location.state.name) ?? cachedName ?? nameFromList ?? (projectsQ.isLoading ? 'Loading...' : 'Project')
 
@@ -419,15 +428,10 @@ export default function ProjectDetail() {
   })
 
   // Engine access query
-  type EngineAccessData = {
-    accessedEngines: { engineId: string; engineName: string; grantedAt: number; autoApproved: boolean }[]
-    pendingRequests: { requestId: string; engineId: string; engineName: string; requestedAt: number }[]
-    availableEngines: { id: string; name: string }[]
-  }
   const engineAccessQ = useQuery({
     queryKey: ['project-engine-access', projectId],
-    queryFn: () => apiClient.get<EngineAccessData>(`/starbase-api/projects/${projectId}/engine-access`),
-    enabled: engineAccessOpen && !!projectId,
+    queryFn: () => apiClient.get<ProjectEngineAccessData>(`/starbase-api/projects/${projectId}/engine-access`),
+    enabled: !!projectId,
   })
 
   // Engine access request mutation
@@ -462,24 +466,8 @@ export default function ProjectDetail() {
   
   // Check if user can deploy based on their role and defaultDeployRoles setting
   const canDeployByRole = React.useMemo(() => {
-    const defaultDeployRoles = platformSettings?.defaultDeployRoles ?? ['owner', 'delegate', 'operator', 'deployer']
-    const membership = myMembershipQ.data
-    if (!membership) return false
-    
-    const userRoles = Array.isArray(membership.roles) && membership.roles.length > 0 
-      ? membership.roles 
-      : [membership.role]
-    
-    // Check if any of the user's roles is in defaultDeployRoles
-    const hasDeployRole = userRoles.some((role: ProjectRole) => defaultDeployRoles.includes(role))
-    
-    // Editors can deploy if they have explicit deploy permission
-    if (!hasDeployRole && membership.role === 'editor' && membership.deployAllowed) {
-      return true
-    }
-    
-    return hasDeployRole
-  }, [platformSettings?.defaultDeployRoles, myMembershipQ.data])
+    return canDeployProject(myMembershipQ.data, engineAccessQ.data, platformSettings?.defaultDeployRoles)
+  }, [engineAccessQ.data, myMembershipQ.data, platformSettings?.defaultDeployRoles])
 
   const roleOptions = React.useMemo<ProjectRole[]>(() => {
     const isOwner = myRoles.includes('owner')
@@ -628,6 +616,7 @@ export default function ProjectDetail() {
   async function submitDeleteFile(file: FileItem) {
     if (!projectId) return
     try {
+      setBusy(true)
       await apiClient.delete(`/starbase-api/files/${file.id}`)
       deleteFileModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
@@ -635,12 +624,15 @@ export default function ProjectDetail() {
     } catch (e: any) {
       const parsed = parseApiError(e, 'Failed to delete file')
       showToast({ kind: 'error', title: 'Failed to delete file', subtitle: parsed.message })
+    } finally {
+      setBusy(false)
     }
   }
 
   async function submitDeleteFolder(folder: FolderSummary) {
     if (!projectId) return
     try {
+      setBusy(true)
       await apiClient.delete(`/starbase-api/folders/${folder.id}`)
       deleteFolderModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
@@ -648,12 +640,15 @@ export default function ProjectDetail() {
     } catch (e: any) {
       const parsed = parseApiError(e, 'Failed to delete folder')
       showToast({ kind: 'error', title: 'Failed to delete folder', subtitle: parsed.message })
+    } finally {
+      setBusy(false)
     }
   }
 
   async function submitMoveFile(file: FileItem, targetId: string | null) {
     if (!projectId) return
     try {
+      setBusy(true)
       await apiClient.patch(`/starbase-api/files/${file.id}`, { folderId: targetId })
       moveModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
@@ -663,12 +658,15 @@ export default function ProjectDetail() {
     } catch (e: any) {
       const parsed = parseApiError(e, 'Failed to move file')
       showToast({ kind: 'error', title: 'Failed to move file', subtitle: parsed.message })
+    } finally {
+      setBusy(false)
     }
   }
 
   async function submitMoveFolder(folder: FolderSummary, targetId: string | null) {
     if (!projectId) return
     try {
+      setBusy(true)
       await apiClient.patch(`/starbase-api/folders/${folder.id}`, { parentFolderId: targetId })
       moveModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
@@ -678,6 +676,8 @@ export default function ProjectDetail() {
     } catch (e: any) {
       const parsed = parseApiError(e, 'Failed to move folder')
       showToast({ kind: 'error', title: 'Failed to move folder', subtitle: parsed.message })
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -891,6 +891,8 @@ export default function ProjectDetail() {
               }}
               onCreateFolder={() => newFolderModal.openModal()}
               onMoveItem={(file) => {
+                setAllFolders(null)
+                setMoveTarget(folderId ?? 'ROOT')
                 if (file.type === 'folder') {
                   moveModal.openModal({ id: file.id, name: file.name, type: 'folder' })
                 } else {
@@ -906,7 +908,9 @@ export default function ProjectDetail() {
                     .then((preview: any) => {
                       deleteFolderModal.openModal({ id: file.id, name: file.name, preview })
                     })
-                    .catch(() => {})
+                    .catch(() => {
+                      deleteFolderModal.openModal({ id: file.id, name: file.name })
+                    })
                 } else {
                   deleteFileModal.openModal(file)
                 }
@@ -983,6 +987,122 @@ export default function ProjectDetail() {
             </Button>
             <Button kind="primary" onClick={submitCreateFolder} disabled={busy || !newFolderName.trim()}>
               Create
+            </Button>
+          </ModalFooter>
+        </ComposedModal>
+
+        <ConfirmDeleteModal
+          open={deleteFileModal.isOpen && !!deleteFileModal.data}
+          title="Delete file"
+          description={
+            deleteFileModal.data
+              ? `You're about to delete the file "${deleteFileModal.data.name}".`
+              : ''
+          }
+          dangerLabel={busy ? 'Deleting...' : 'Delete file'}
+          busy={busy}
+          onCancel={deleteFileModal.closeModal}
+          onConfirm={() => {
+            if (deleteFileModal.data) return submitDeleteFile(deleteFileModal.data)
+          }}
+        />
+
+        <ConfirmDeleteModal
+          open={deleteFolderModal.isOpen && !!deleteFolderModal.data}
+          title="Delete folder"
+          description={
+            deleteFolderModal.data
+              ? `You're about to delete the folder "${deleteFolderModal.data.name}"${
+                  deleteFolderModal.data.preview
+                    ? ` and its contents (${deleteFolderModal.data.preview.folderCount} folders, ${deleteFolderModal.data.preview.fileCount} files)`
+                    : ''
+                }.`
+              : ''
+          }
+          dangerLabel={busy ? 'Deleting...' : 'Delete folder'}
+          busy={busy}
+          onCancel={deleteFolderModal.closeModal}
+          onConfirm={() => {
+            if (!deleteFolderModal.data) return
+            return submitDeleteFolder({
+              id: deleteFolderModal.data.id,
+              name: deleteFolderModal.data.name,
+              parentFolderId: null,
+            })
+          }}
+        />
+
+        <ComposedModal
+          open={moveModal.isOpen}
+          size="sm"
+          onClose={() => {
+            moveModal.closeModal()
+            setMoveTarget('ROOT')
+            setAllFolders(null)
+          }}
+        >
+          <ModalHeader
+            label={undefined}
+            title={`Move ${moveModal.data?.type === 'folder' ? 'folder' : 'file'}`}
+            closeModal={() => {
+              moveModal.closeModal()
+              setMoveTarget('ROOT')
+              setAllFolders(null)
+            }}
+          />
+          <ModalBody>
+            {moveModal.data && (
+              <div style={{ marginBottom: 'var(--spacing-5)' }}>
+                {`Select a destination for "${moveModal.data.name}".`}
+              </div>
+            )}
+            {moveModal.isOpen && projectId && !allFolders && (
+              <FolderLoader projectId={projectId} onLoaded={setAllFolders} />
+            )}
+            {moveModal.isOpen && allFolders && folderId && (
+              <CurrentPath allFolders={allFolders} folderId={folderId} projectName={projectName} />
+            )}
+            {moveModal.isOpen && allFolders && (
+              <TreePicker
+                allFolders={allFolders}
+                value={moveTarget}
+                onChange={setMoveTarget}
+                disabledSet={moveDisabledSet}
+                projectName={projectName}
+              />
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              kind="secondary"
+              onClick={() => {
+                moveModal.closeModal()
+                setMoveTarget('ROOT')
+                setAllFolders(null)
+              }}
+              disabled={busy}
+            >
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              onClick={() => {
+                if (!moveModal.data) return
+                const targetId = moveTarget === 'ROOT' ? null : moveTarget
+                if (moveModal.data.type === 'folder') {
+                  return submitMoveFolder(
+                    { id: moveModal.data.id, name: moveModal.data.name, parentFolderId: null },
+                    targetId
+                  )
+                }
+                const selectedFile = items.find((item) => item.id === moveModal.data?.id)
+                if (selectedFile) {
+                  return submitMoveFile(selectedFile, targetId)
+                }
+              }}
+              disabled={busy || !moveModal.data}
+            >
+              {busy ? 'Moving...' : 'Move'}
             </Button>
           </ModalFooter>
         </ComposedModal>
@@ -1081,6 +1201,19 @@ export default function ProjectDetail() {
           setSelectedEngineForRequest={setSelectedEngineForRequest}
           requestEngineAccessM={requestEngineAccessM}
         />
+
+        {projectId && (
+          <DeployDialog
+            projectId={projectId}
+            fileIds={selectedAtOpen}
+            open={deployModal.isOpen}
+            onClose={() => {
+              deployModal.closeModal()
+              setSelectedAtOpen([])
+              setSelectedFolderAtOpen(null)
+            }}
+          />
+        )}
 
         {/* Project Git Connection Settings */}
         {projectId && (

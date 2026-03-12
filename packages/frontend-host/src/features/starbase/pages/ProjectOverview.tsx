@@ -1,6 +1,6 @@
 import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   DataTableSkeleton,
 } from '@carbon/react'
@@ -19,8 +19,10 @@ import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformS
 import { ProjectOverviewTable } from './components/ProjectOverviewTable'
 import { ProjectOverviewBulkSyncModal } from './components/ProjectOverviewBulkSyncModal'
 import { ProjectOverviewModals } from './components/ProjectOverviewModals'
+import { DeployDialog } from '../../git/components'
 import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
 import type { Project, ProjectMember, EngineAccessData, SyncDirection, BulkSyncResult } from './projectOverviewTypes'
+import { canDeployProject } from '../utils/deployEligibility'
 import styles from './ProjectOverview.module.css'
  
 
@@ -91,11 +93,31 @@ export default function ProjectOverview() {
     staleTime: 30 * 1000,
   })
 
+  const membershipQueries = useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: ['project-members', projectId, 'me'],
+      queryFn: () => apiClient.get<ProjectMember | null>(`/starbase-api/projects/${projectId}/members/me`),
+      enabled: !!projectId,
+      staleTime: 60 * 1000,
+    })),
+  })
+
+  const engineAccessQueries = useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: ['project-engine-access', projectId],
+      queryFn: () => apiClient.get<EngineAccessData>(`/starbase-api/projects/${projectId}/engine-access`),
+      enabled: !!projectId,
+      staleTime: 30 * 1000,
+    })),
+  })
+
   const [deleteProject, setDeleteProject] = React.useState<Project | null>(null)
   const [batchDeleteIds, setBatchDeleteIds] = React.useState<string[] | null>(null)
   const [batchCancelSelection, setBatchCancelSelection] = React.useState<null | (() => void)>(null)
   const [disconnectProject, setDisconnectProject] = React.useState<Project | null>(null)
   const [busy, setBusy] = React.useState(false)
+  const [deployProjectId, setDeployProjectId] = React.useState<string | null>(null)
+  const [deployCancelSelection, setDeployCancelSelection] = React.useState<null | (() => void)>(null)
   const createOnlineModal = useModal()
   const [onlineProjectContext, setOnlineProjectContext] = React.useState<{ id: string; name: string } | null>(null)
   const [engineAccessOpen, setEngineAccessOpen] = React.useState(false)
@@ -240,6 +262,20 @@ export default function ProjectOverview() {
     return q.data.filter(p => !needle || p.name.toLowerCase().includes(needle))
   }, [q.data, query])
 
+  const deployableProjectIdsSet = React.useMemo(() => {
+    const ids = new Set<string>()
+    projectIds.forEach((projectId, index) => {
+      if (canDeployProject(
+        membershipQueries[index]?.data,
+        engineAccessQueries[index]?.data,
+        platformSettings?.defaultDeployRoles
+      )) {
+        ids.add(projectId)
+      }
+    })
+    return ids
+  }, [engineAccessQueries, membershipQueries, platformSettings?.defaultDeployRoles, projectIds])
+
   const engineAccessQ = useQuery({
     queryKey: ['project-engine-access', engineAccessProject?.id],
     queryFn: () => apiClient.get<EngineAccessData>(`/starbase-api/projects/${engineAccessProject?.id}/engine-access`),
@@ -358,10 +394,15 @@ export default function ProjectOverview() {
             setBulkSyncIds(ids)
             setIsBulkSyncOpen(true)
           }}
+          onBatchDeploy={(projectId, cancelSelection) => {
+            setDeployProjectId(projectId)
+            setDeployCancelSelection(() => cancelSelection)
+          }}
           onBatchDelete={(ids, cancelSelection) => {
             setBatchCancelSelection(() => cancelSelection)
             setBatchDeleteIds(ids)
           }}
+          deployableProjectIdsSet={deployableProjectIdsSet}
           onDownloadProject={(project) => {
             apiClient.getBlob(`/starbase-api/projects/${project.id}/download`)
               .then((blob: Blob) => {
@@ -431,6 +472,22 @@ export default function ProjectOverview() {
         setSelectedEngineForRequest={setSelectedEngineForRequest}
         requestEngineAccessM={requestEngineAccessM}
       />
+
+      {deployProjectId && (
+        <DeployDialog
+          projectId={deployProjectId}
+          open={!!deployProjectId}
+          onClose={() => {
+            setDeployProjectId(null)
+            setDeployCancelSelection(null)
+          }}
+          onDeploySuccess={() => {
+            deployCancelSelection?.()
+            setDeployProjectId(null)
+            setDeployCancelSelection(null)
+          }}
+        />
+      )}
 
       {/* Project Git Settings modal (new project-level connection) */}
       {gitSettingsProjectId && (

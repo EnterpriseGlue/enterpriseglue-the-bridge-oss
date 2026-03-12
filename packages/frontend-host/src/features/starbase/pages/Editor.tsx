@@ -16,7 +16,7 @@ import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import type { File as StarbaseFile } from '../../../shared/api/types'
 import { buildProjectFileIndex, resolveLinkedFile, type ProjectFileMeta } from '../utils/linkResolution'
-import { FolderLoader, CurrentPath, TreePicker, type FolderSummary } from '../components/project-detail'
+import { FolderLoader, CurrentPath, TreePicker, type FolderSummary, type ProjectMember } from '../components/project-detail'
 import { useElementLinkOverlay } from '../hooks/useElementLinkOverlay'
 import { getElementLinkInfo, updateElementLink, clearElementLink } from '../utils/bpmnLinking'
 const DMNCanvas = React.lazy(() => import('../components/DMNCanvas'))
@@ -24,12 +24,14 @@ const DMNDrdMini = React.lazy(() => import('../components/DMNDrdMini'))
 const DMNEvaluatePanel = React.lazy(() => import('../components/DMNEvaluatePanel'))
 // Properties panel is provided by camunda-bpmn-js and mounted by Canvas
 import { DeployButton, GitVersionsPanel } from '../../git/components'
+import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { ProjectAccessError, isProjectAccessError } from '../components/ProjectAccessError'
 import { useSelectedEngine } from '../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../stores/engineSelectorStore'
 import { useToast } from '../../../shared/notifications/ToastProvider'
 import { toSafeInternalPath } from '../../../utils/safeNavigation'
 import { replaceAndReloadToInternalPath } from '../../../utils/redirect'
+import { canDeployProject, type ProjectEngineAccessData } from '../utils/deployEligibility'
 
 type FolderBreadcrumb = {
   id: string
@@ -540,6 +542,29 @@ export default function Editor() {
   // DMN evaluate mutation
   const selectedEngineId = useSelectedEngine()
   const setSelectedEngineId = useEngineSelectorStore((s) => s.setSelectedEngineId)
+  const { data: platformSettings } = usePlatformSyncSettings()
+
+  const deployMembershipQ = useQuery({
+    queryKey: ['project-members', fileQ.data?.projectId, 'me'],
+    queryFn: () => apiClient.get<ProjectMember | null>(`/starbase-api/projects/${fileQ.data?.projectId}/members/me`),
+    enabled: !!fileQ.data?.projectId,
+    staleTime: 60 * 1000,
+  })
+
+  const deployEngineAccessQ = useQuery({
+    queryKey: ['project-engine-access', fileQ.data?.projectId],
+    queryFn: () => apiClient.get<ProjectEngineAccessData>(`/starbase-api/projects/${fileQ.data?.projectId}/engine-access`),
+    enabled: !!fileQ.data?.projectId,
+    staleTime: 30 * 1000,
+  })
+
+  const canDeployCurrentFile = React.useMemo(() => {
+    return canDeployProject(
+      deployMembershipQ.data,
+      deployEngineAccessQ.data,
+      platformSettings?.defaultDeployRoles
+    )
+  }, [deployEngineAccessQ.data, deployMembershipQ.data, platformSettings?.defaultDeployRoles])
 
   const engineDeploymentsLatestQ = useQuery({
     queryKey: ['engine-deployments', fileQ.data?.projectId, 'latest'],
@@ -1319,11 +1344,10 @@ export default function Editor() {
           </div>
 
           {/* Canvas controls - center, fixed relative to header */}
-          {modelerReady && (
+          {overlayOpen && (
             <div
               style={{
-                position: 'absolute',
-                left: '50%',
+                position: 'fixed',
                 top: '50%',
                 transform: 'translate(-50%, -50%)',
                 pointerEvents: 'auto',
@@ -1336,7 +1360,9 @@ export default function Editor() {
             <div style={{ fontSize: 'var(--text-12)', color: saving === 'error' ? 'var(--color-error)' : 'var(--color-text-tertiary)' }}>
               {saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : saving === 'error' ? 'Save failed' : ''}
             </div>
-            <DeployButton projectId={f.projectId} fileIds={[f.id]} size="sm" kind="ghost" onDeploySuccess={handleDeploySuccess} />
+            {canDeployCurrentFile && (
+              <DeployButton projectId={f.projectId} fileIds={[f.id]} size="sm" kind="ghost" onDeploySuccess={handleDeploySuccess} />
+            )}
             {missionControlTarget && (
               <Button kind="ghost" size="sm" renderIcon={Launch} onClick={handleGoToMissionControl}>
                 Mission Control
@@ -1386,7 +1412,9 @@ export default function Editor() {
             <div style={{ fontSize: 'var(--text-12)', color: saving === 'error' ? 'var(--color-error)' : 'var(--color-text-tertiary)' }}>
               {saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : saving === 'error' ? 'Save failed' : ''}
             </div>
-            <DeployButton projectId={f.projectId} fileIds={[f.id]} size="sm" kind="ghost" onDeploySuccess={handleDeploySuccess} />
+            {canDeployCurrentFile && (
+              <DeployButton projectId={f.projectId} fileIds={[f.id]} size="sm" kind="ghost" onDeploySuccess={handleDeploySuccess} />
+            )}
             {missionControlTarget && (
               <Button kind="ghost" size="sm" renderIcon={Launch} onClick={handleGoToMissionControl}>
                 Mission Control

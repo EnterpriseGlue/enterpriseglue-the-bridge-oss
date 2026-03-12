@@ -18,7 +18,7 @@ import {
   OverflowMenu,
   OverflowMenuItem,
 } from '@carbon/react'
-import { Add, TrashCan, Renew, Commit } from '@carbon/icons-react'
+import { Add, TrashCan, Renew, Commit, CloudUpload } from '@carbon/icons-react'
 import { GitProviderIcon } from '../../../shared/components/GitProviderIcon'
 import { StarbaseTableShell } from '../../components/StarbaseTableShell'
 import { getAvatarColor, getInitials } from '../../../../shared/utils/avatar'
@@ -80,7 +80,9 @@ interface ProjectOverviewTableProps {
   onOpenProject: (project: Project) => void
   onOpenNewProject: () => void
   onBulkSync: (ids: string[], cancelSelection: () => void) => void
+  onBatchDeploy: (projectId: string, cancelSelection: () => void) => void
   onBatchDelete: (ids: string[], cancelSelection: () => void) => void
+  deployableProjectIdsSet: Set<string>
   onDownloadProject: (project: Project) => void
   onConnectEngines: (project: Project) => void
   onConnectGit: (project: Project) => void
@@ -106,7 +108,9 @@ export const ProjectOverviewTable = ({
   onOpenProject,
   onOpenNewProject,
   onBulkSync,
+  onBatchDeploy,
   onBatchDelete,
+  deployableProjectIdsSet,
   onDownloadProject,
   onConnectEngines,
   onConnectGit,
@@ -156,6 +160,19 @@ export const ProjectOverviewTable = ({
                 }}
               >
                 Sync to Git
+              </TableBatchAction>
+            )}
+            {selectedRows.length === 1 && deployableProjectIdsSet.has(String(selectedRows[0]?.id)) && (
+              <TableBatchAction
+                renderIcon={CloudUpload}
+                onClick={() => {
+                  const selectedProjectId = String(selectedRows[0]?.id || '')
+                  if (!selectedProjectId) return
+                  const batchProps = getBatchActionProps()
+                  onBatchDeploy(selectedProjectId, batchProps.onCancel)
+                }}
+              >
+                Deploy
               </TableBatchAction>
             )}
             <TableBatchAction

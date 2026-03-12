@@ -23,6 +23,7 @@ vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
 vi.mock('@src/features/git/components', () => ({
   CreateOnlineProjectModal: ({ open }: { open: boolean }) =>
     open ? <h2>Create Project</h2> : null,
+  DeployDialog: () => null,
 }));
 
 vi.mock('@src/features/starbase/components/project-detail/EngineAccessModal', () => ({
@@ -87,6 +88,47 @@ describe('ProjectOverview actions', () => {
           projectName = body.name;
         }
         return HttpResponse.json({ id: 'project-1', name: projectName });
+      }),
+      http.patch('/t/default/starbase-api/projects/:projectId', async ({ request }) => {
+        const body = (await request.json()) as { name?: string };
+        if (body?.name) {
+          projectName = body.name;
+        }
+        return HttpResponse.json({ id: 'project-1', name: projectName });
+      }),
+      http.get('/starbase-api/projects/project-1/members/me', () => {
+        return HttpResponse.json({
+          userId: 'user-1',
+          firstName: 'Alpha',
+          lastName: 'User',
+          role: 'owner',
+          roles: ['owner'],
+          deployAllowed: true,
+        });
+      }),
+      http.get('/starbase-api/projects/project-1/engine-access', () => {
+        return HttpResponse.json({
+          accessedEngines: [{ engineId: 'engine-1', engineName: 'Dev Engine' }],
+          pendingRequests: [],
+          availableEngines: [],
+        });
+      }),
+      http.get('/t/default/starbase-api/projects/project-1/members/me', () => {
+        return HttpResponse.json({
+          userId: 'user-1',
+          firstName: 'Alpha',
+          lastName: 'User',
+          role: 'owner',
+          roles: ['owner'],
+          deployAllowed: true,
+        });
+      }),
+      http.get('/t/default/starbase-api/projects/project-1/engine-access', () => {
+        return HttpResponse.json({
+          accessedEngines: [{ engineId: 'engine-1', engineName: 'Dev Engine' }],
+          pendingRequests: [],
+          availableEngines: [],
+        });
       })
     );
   });
