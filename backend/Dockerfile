@@ -11,7 +11,8 @@ COPY --chown=node:node packages/enterprise-plugin-api/package.json packages/ente
 COPY --chown=node:node packages/frontend-host/package.json packages/frontend-host/
 COPY --chown=node:node frontend/package.json frontend/
 
-RUN npm ci -w backend -w packages/shared -w packages/backend-host \
+RUN apk upgrade --no-cache zlib \
+    && npm ci -w backend -w packages/shared -w packages/backend-host \
     --include=dev --no-audit --no-fund
 
 COPY --chown=node:node backend backend

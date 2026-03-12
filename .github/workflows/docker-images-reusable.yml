@@ -222,6 +222,11 @@ jobs:
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
             node --input-type=module -e "import fs from 'fs'; const candidates=['./dist/shared/db/adapters/index.js','./dist/src/shared/db/adapters/index.js','./dist/packages/shared/src/db/adapters/index.js']; const adapterPath=candidates.find(p=>fs.existsSync(p)); if(!adapterPath){console.error('No adapters/index.js found');process.exit(1)} const { createAdapter } = await import(adapterPath); const adapter=createAdapter('spanner'); const options=adapter.getDataSourceOptions(); if(options.type!=='spanner'){process.exit(1)} console.log('spanner runtime contract ok');"
 
+          docker run --rm --entrypoint '' \
+            "${COMMON_ENV[@]}" \
+            "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" \
+            node --input-type=module -e "import fs from 'fs'; const paths=['/usr/bin/npm','/usr/bin/npx','/usr/lib/node_modules/npm']; const found=paths.filter((p)=>fs.existsSync(p)); const db=fs.existsSync('/lib/apk/db/installed') ? fs.readFileSync('/lib/apk/db/installed','utf8') : ''; if(found.length || db.includes('P:npm\n')){console.error('npm must not be present in final backend image', { found, hasNpmPackage: db.includes('P:npm\n') }); process.exit(1)} console.log('backend runtime contract ok: npm absent');"
+
       - name: Promote backend latest tag
         if: steps.meta.outputs.publish_latest == 'true'
         run: |

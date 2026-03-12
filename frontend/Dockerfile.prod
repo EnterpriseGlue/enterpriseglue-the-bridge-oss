@@ -14,7 +14,7 @@ COPY packages/backend-host/package.json packages/backend-host/
 COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY backend/package.json backend/
 
-RUN apk upgrade --no-cache \
+RUN apk upgrade --no-cache zlib \
     && apk add --no-cache busybox-static \
     && npm ci -w frontend --include=dev --no-audit --no-fund
 
