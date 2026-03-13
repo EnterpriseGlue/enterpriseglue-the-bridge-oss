@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.1...v0.8.2) (2026-03-13)
+
+
+### Bug Fixes
+
+* **backend:** fix cancelled node-filter instance mismatch ([#238](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/238)) ([f62dc73](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f62dc73f01f832c73acd75e0b3784e6fb36577ac))
+
 ## [0.8.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.0...v0.8.1) (2026-03-13)
 
 
