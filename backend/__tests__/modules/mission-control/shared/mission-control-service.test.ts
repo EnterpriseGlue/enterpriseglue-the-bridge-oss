@@ -1,9 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  getProcessInstanceVariables,
-  getProcessInstanceVariableHistory,
-  getProcessInstanceExecutionDetails,
-} from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import {
   camundaGet,
   getHistoricVariableInstances,
@@ -11,6 +6,11 @@ import {
   getHistoricDecisionInstances,
   getUserOperationLog,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
+
+let getActivityCountsByState: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getActivityCountsByState;
+let getProcessInstanceVariables: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceVariables;
+let getProcessInstanceVariableHistory: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceVariableHistory;
+let getProcessInstanceExecutionDetails: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceExecutionDetails;
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   camundaGet: vi.fn(),
@@ -27,6 +27,15 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
 }));
 
 describe('mission-control-service', () => {
+  beforeAll(async () => {
+    ({
+      getActivityCountsByState,
+      getProcessInstanceVariables,
+      getProcessInstanceVariableHistory,
+      getProcessInstanceExecutionDetails,
+    } = await import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js'));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -127,6 +136,29 @@ describe('mission-control-service', () => {
         revision: null,
       }),
     ]);
+  });
+
+  it('deduplicates canceled badge counts by process instance per activity', async () => {
+    vi.mocked(camundaGet).mockImplementation(async (_engineId: string, path: string) => {
+      if (path === '/process-definition/def-1/statistics') return [] as any;
+      if (path === '/process-instance') return [] as any;
+      if (path === '/history/activity-instance') {
+        return [
+          { activityId: 'approveInvoice', processInstanceId: 'proc-1' },
+          { activityId: 'approveInvoice', processInstanceId: 'proc-1' },
+          { activityId: 'approveInvoice', processInstanceId: 'proc-2' },
+          { activityId: 'archiveInvoice', processInstanceId: 'proc-3' },
+        ] as any;
+      }
+      return [] as any;
+    });
+
+    const result = await getActivityCountsByState('engine-1', 'def-1');
+
+    expect(result.canceled).toEqual({
+      approveInvoice: 2,
+      archiveInvoice: 1,
+    });
   });
 
   it('aggregates lazy execution details and filters tasks by taskId when provided', async () => {

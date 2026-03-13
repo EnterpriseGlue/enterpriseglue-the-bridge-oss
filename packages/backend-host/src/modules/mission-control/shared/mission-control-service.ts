@@ -126,9 +126,27 @@ export async function getActivityCountsByState(engineId: string, definitionId: s
     if (activeAtAct > 0) result.active[actId] = activeAtAct
   }
 
+  const canceledSeenByActivity = new Map<string, Set<string>>()
   for (const a of canceledItems || []) {
     const actId = a.activityId
     if (!actId) continue
+
+    const processInstanceId = typeof a?.processInstanceId === 'string' && a.processInstanceId
+      ? a.processInstanceId
+      : null
+
+    if (!processInstanceId) {
+      result.canceled[actId] = (result.canceled[actId] || 0) + 1
+      continue
+    }
+
+    let seen = canceledSeenByActivity.get(actId)
+    if (!seen) {
+      seen = new Set<string>()
+      canceledSeenByActivity.set(actId, seen)
+    }
+    if (seen.has(processInstanceId)) continue
+    seen.add(processInstanceId)
     result.canceled[actId] = (result.canceled[actId] || 0) + 1
   }
 
