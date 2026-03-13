@@ -36,6 +36,6 @@ COPY --from=build /repo/frontend/dist /usr/share/nginx/html
 COPY --from=build --chmod=755 /repo/frontend/nginx-entrypoint.sh /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["nginx", "-e", "stderr", "-c", "/etc/nginx/nginx.conf", "-g", "daemon off;"]
 
 EXPOSE 8080
