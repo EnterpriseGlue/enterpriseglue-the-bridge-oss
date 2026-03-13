@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.7.11](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.7.10...v0.7.11) (2026-03-13)
+
+
+### Bug Fixes
+
+* **frontend:** handle nginx error log permissions in k8s ([#231](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/231)) ([0647d67](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0647d67738afed7137fe34361248457ce0fb7001))
+
 ## [0.7.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.7.9...v0.7.10) (2026-03-13)
 
 
