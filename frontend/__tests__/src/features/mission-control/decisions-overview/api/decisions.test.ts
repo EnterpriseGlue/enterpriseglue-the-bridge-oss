@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  buildDecisionHistoryQuery,
   listDecisionDefinitions,
   fetchDecisionDefinition,
   listDecisionInstances,
@@ -252,6 +253,58 @@ describe('decisions API', () => {
       const result = await listDecisionHistory(new URLSearchParams());
 
       expect(result[0]).toEqual(mockHistory[0]);
+    });
+  });
+
+  describe('buildDecisionHistoryQuery', () => {
+    it('filters all selected versions by decision requirements key and keeps root-only history', () => {
+      const params = buildDecisionHistoryQuery({
+        engineId: 'eng-1',
+        decisionRequirementsDefinitionKey: 'invoiceBusinessDecisions',
+        rootDecisionInstancesOnly: true,
+        sortBy: 'evaluationTime',
+        sortOrder: 'desc',
+        maxResults: 50,
+      });
+
+      expect(params.get('engineId')).toBe('eng-1');
+      expect(params.get('decisionRequirementsDefinitionKey')).toBe('invoiceBusinessDecisions');
+      expect(params.get('decisionDefinitionId')).toBeNull();
+      expect(params.get('decisionDefinitionKey')).toBeNull();
+      expect(params.get('decisionRequirementsDefinitionId')).toBeNull();
+      expect(params.get('rootDecisionInstancesOnly')).toBe('true');
+      expect(params.get('sortBy')).toBe('evaluationTime');
+      expect(params.get('sortOrder')).toBe('desc');
+      expect(params.get('maxResults')).toBe('50');
+    });
+
+    it('filters a specific version by decision requirements id and keeps root-only history', () => {
+      const params = buildDecisionHistoryQuery({
+        engineId: 'eng-1',
+        decisionRequirementsDefinitionId: 'invoiceBusinessDecisions:9:def456',
+        rootDecisionInstancesOnly: true,
+      });
+
+      expect(params.get('engineId')).toBe('eng-1');
+      expect(params.get('decisionRequirementsDefinitionId')).toBe('invoiceBusinessDecisions:9:def456');
+      expect(params.get('decisionDefinitionId')).toBeNull();
+      expect(params.get('decisionDefinitionKey')).toBeNull();
+      expect(params.get('decisionRequirementsDefinitionKey')).toBeNull();
+      expect(params.get('rootDecisionInstancesOnly')).toBe('true');
+    });
+
+    it('uses root-only history only when no decision filter is selected', () => {
+      const params = buildDecisionHistoryQuery({
+        engineId: 'eng-1',
+        rootDecisionInstancesOnly: true,
+      });
+
+      expect(params.get('engineId')).toBe('eng-1');
+      expect(params.get('decisionDefinitionId')).toBeNull();
+      expect(params.get('decisionDefinitionKey')).toBeNull();
+      expect(params.get('decisionRequirementsDefinitionId')).toBeNull();
+      expect(params.get('decisionRequirementsDefinitionKey')).toBeNull();
+      expect(params.get('rootDecisionInstancesOnly')).toBe('true');
     });
   });
 });

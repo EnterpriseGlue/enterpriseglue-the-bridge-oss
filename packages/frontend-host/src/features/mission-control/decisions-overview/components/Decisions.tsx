@@ -7,7 +7,7 @@ import {
 } from '@carbon/react'
 import { Launch } from '@carbon/icons-react'
 import { BreadcrumbBar } from '../../../shared/components/BreadcrumbBar'
-import { listDecisionDefinitions, fetchDecisionDefinitionDmnXml, listDecisionHistory, type DecisionHistoryEntry } from '../api/decisions'
+import { buildDecisionHistoryQuery, listDecisionDefinitions, fetchDecisionDefinitionDmnXml, listDecisionHistory, type DecisionHistoryEntry } from '../api/decisions'
 import { SplitPane, Pane } from 'react-split-pane'
 import { useSearchParams, useLocation } from 'react-router-dom'
 import { sanitizePathParam } from '../../../../shared/utils/sanitize'
@@ -47,6 +47,8 @@ type DecisionDef = {
   name?: string | null
   version: number
   versionTag?: string | null
+  decisionRequirementsDefinitionId?: string | null
+  decisionRequirementsDefinitionKey?: string | null
 }
 
 export default function Decisions() {
@@ -207,6 +209,11 @@ export default function Decisions() {
     return (defsQ.data || []).find((x) => x.key === currentKey && x.version === selectedVersion) || null
   }, [defsQ.data, currentKey, selectedVersion])
 
+  const selectedDefinitionDef: DecisionDef | null = React.useMemo(() => {
+    if (!selectedDefinition) return null
+    return ((defsQ.data || []) as DecisionDef[]).find((x) => x.id === selectedDefinition.id) || null
+  }, [defsQ.data, selectedDefinition])
+
   const xmlQ = useQuery({
     queryKey: ['mission-control', 'decision-xml', currentDef?.id, selectedEngineId],
     queryFn: async () => {
@@ -221,21 +228,25 @@ export default function Decisions() {
   const failedOnly = selectedStates.some(s => s.id === 'failed')
 
   const historyQ = useQuery({
-    queryKey: ['mission-control', 'decision-history', currentDef?.id, evaluatedOnly, failedOnly, maxResults, dateFrom, dateTo, timeFrom, timeTo, selectedEngineId],
+    queryKey: ['mission-control', 'decision-history', currentKey || null, currentDef?.id || null, currentDef?.decisionRequirementsDefinitionId || null, selectedDefinitionDef?.decisionRequirementsDefinitionKey || null, evaluatedOnly, failedOnly, maxResults, dateFrom, dateTo, timeFrom, timeTo, selectedEngineId],
     queryFn: async () => {
-      const params = new URLSearchParams()
-      if (selectedEngineId) params.set('engineId', selectedEngineId)
-      if (currentDef?.id) params.set('decisionDefinitionId', currentDef.id)
-      params.set('rootDecisionInstancesOnly', 'true')
-      params.set('sortBy', 'evaluationTime')
-      params.set('sortOrder', 'desc')
-      params.set('maxResults', String(maxResults))
-
       const evaluatedAfter = toIso(dateFrom, timeFrom, 'from')
       const evaluatedBefore = toIso(dateTo, timeTo, 'to')
-      if (evaluatedAfter) params.set('evaluatedAfter', evaluatedAfter)
-      if (evaluatedBefore) params.set('evaluatedBefore', evaluatedBefore)
-
+      const historyScopeDef = currentDef || selectedDefinitionDef
+      const params = buildDecisionHistoryQuery({
+        engineId: selectedEngineId || undefined,
+        decisionRequirementsDefinitionId: currentDef?.decisionRequirementsDefinitionId || undefined,
+        decisionRequirementsDefinitionKey:
+          currentDef?.decisionRequirementsDefinitionId
+            ? undefined
+            : (historyScopeDef?.decisionRequirementsDefinitionKey || undefined),
+        evaluatedAfter: evaluatedAfter || undefined,
+        evaluatedBefore: evaluatedBefore || undefined,
+        rootDecisionInstancesOnly: true,
+        sortBy: 'evaluationTime',
+        sortOrder: 'desc',
+        maxResults,
+      })
       return listDecisionHistory(params)
     },
     enabled: !!selectedEngineId,
