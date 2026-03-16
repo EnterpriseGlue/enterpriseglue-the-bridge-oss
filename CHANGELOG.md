@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.4...v0.8.5) (2026-03-16)
+
+
+### Bug Fixes
+
+* **starbase:** improve linked file create and DMN decision flows ([#245](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/245)) ([b7b26ca](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b7b26ca873ef50312313f74fd5d8c76a697a640f))
+
 ## [0.8.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.3...v0.8.4) (2026-03-16)
 
 
