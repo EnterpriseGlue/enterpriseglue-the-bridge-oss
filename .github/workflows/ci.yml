@@ -259,11 +259,11 @@ jobs:
         run: npm --prefix backend run db:schema:sync
 
       - name: Run unit tests
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: npm run test:unit
 
       - name: Run integration tests
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: npm run test:integration
 
       - name: Run Oracle backend smoke
@@ -279,20 +279,20 @@ jobs:
           curl -sf http://localhost:8787/health >/dev/null
 
       - name: Start Camunda mock server
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: |
           npx --yes @stoplight/prism-cli mock local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json -p 9080 &
 
       - name: Start backend
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: npm --prefix backend run start:compiled &
 
       - name: Start frontend
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: npm --prefix frontend run dev -- --host 0.0.0.0 --port 5173 &
 
       - name: Wait for services
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: |
           for i in {1..45}; do
             if curl -sf http://localhost:8787/health >/dev/null; then
@@ -304,23 +304,23 @@ jobs:
           curl -sf http://localhost:5173/login >/dev/null
 
       - name: Run smoke e2e
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: npm run test:e2e:smoke
 
       - name: Cleanup test data
-        if: always() && matrix.database == 'postgres'
+        if: always() && matrix.database == 'postgres' && github.event_name != 'merge_group'
         continue-on-error: true
         run: npm --prefix backend run db:cleanup-test-data
 
       - name: Upload backend coverage
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: backend-coverage
           path: backend/coverage
 
       - name: Upload frontend coverage
-        if: matrix.database == 'postgres'
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: frontend-coverage

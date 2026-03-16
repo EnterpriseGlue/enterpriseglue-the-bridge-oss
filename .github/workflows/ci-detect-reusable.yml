@@ -216,7 +216,9 @@ jobs:
           fi
 
           # merge_group: the PR already passed full CI — run a lighter validation
-          # Skip Oracle (slow, already validated on PR) and smoke-exposed
+          # Keep fast static/build/image smoke validation on the queued SHA, but
+          # skip duplicate PR-only lanes such as Oracle, plugin compatibility,
+          # plugin packaging, and security scanning.
           if [ "${EVENT_NAME}" = "merge_group" ]; then
             echo "run_tests=true" >> "$GITHUB_OUTPUT"
             echo "run_postgres=true" >> "$GITHUB_OUTPUT"
@@ -224,9 +226,9 @@ jobs:
             echo "run_smoke=true" >> "$GITHUB_OUTPUT"
             echo 'test_databases=["postgres"]' >> "$GITHUB_OUTPUT"
             echo "run_boundary_guards=true" >> "$GITHUB_OUTPUT"
-            echo "run_plugin_checks=true" >> "$GITHUB_OUTPUT"
-            echo "run_plugin_package=$ENABLE_PLUGIN_PACKAGE" >> "$GITHUB_OUTPUT"
-            echo "run_security_scan=true" >> "$GITHUB_OUTPUT"
+            echo "run_plugin_checks=false" >> "$GITHUB_OUTPUT"
+            echo "run_plugin_package=false" >> "$GITHUB_OUTPUT"
+            echo "run_security_scan=false" >> "$GITHUB_OUTPUT"
             echo "run_smoke_exposed=false" >> "$GITHUB_OUTPUT"
             echo "changed_files_count=merge-queue" >> "$GITHUB_OUTPUT"
             exit 0
