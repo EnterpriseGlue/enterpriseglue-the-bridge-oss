@@ -21,23 +21,39 @@ describe('logger', () => {
     debugSpy.mockRestore();
   });
 
+  function expectTimestampPrefix(value: unknown) {
+    expect(value).toMatch(/^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]$/);
+  }
+
   it('calls console.log for info', () => {
     logger.info('test info');
-    expect(infoSpy).toHaveBeenCalledWith('test info');
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    const [timestamp, message] = infoSpy.mock.calls[0];
+    expectTimestampPrefix(timestamp);
+    expect(message).toBe('test info');
   });
 
   it('calls console.warn for warn', () => {
     logger.warn('test warn');
-    expect(warnSpy).toHaveBeenCalledWith('test warn');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const [timestamp, message] = warnSpy.mock.calls[0];
+    expectTimestampPrefix(timestamp);
+    expect(message).toBe('test warn');
   });
 
   it('calls console.error for error', () => {
     logger.error('test error');
-    expect(errorSpy).toHaveBeenCalledWith('test error');
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [timestamp, message] = errorSpy.mock.calls[0];
+    expectTimestampPrefix(timestamp);
+    expect(message).toBe('test error');
   });
 
   it('calls console.debug for debug', () => {
     logger.debug('test debug');
-    expect(debugSpy).toHaveBeenCalledWith('test debug');
+    expect(debugSpy).toHaveBeenCalledTimes(1);
+    const [timestamp, message] = debugSpy.mock.calls[0];
+    expectTimestampPrefix(timestamp);
+    expect(message).toBe('test debug');
   });
 });

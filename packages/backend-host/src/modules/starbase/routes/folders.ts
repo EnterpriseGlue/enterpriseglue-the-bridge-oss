@@ -54,12 +54,27 @@ function rowString(row: any, key: string): string | null {
   return v == null ? null : String(v)
 }
 
- function ensureFileExtension(name: string, type: string | null | undefined): string {
-   const t = String(type || '').trim()
-   if (!t) return name
-   const ext = `.${t}`
-   return name.endsWith(ext) ? name : `${name}${ext}`
- }
+function ensureFileExtension(name: string, type: string | null | undefined): string {
+  const t = String(type || '').trim()
+  if (!t) return name
+  const ext = `.${t}`
+  return name.endsWith(ext) ? name : `${name}${ext}`
+}
+
+function sanitizeArchivePathSegment(name: string, fallback: string): string {
+  const cleaned = String(name || '')
+    .replace(/[\u0000-\u001F\u007F]/g, '_')
+    .replace(/[\\/]/g, '_')
+    .replace(/[:*?"<>|]/g, '_')
+    .trim()
+    .slice(0, 200)
+
+  if (!cleaned || cleaned === '.' || cleaned === '..') {
+    return fallback
+  }
+
+  return cleaned
+}
 
 function toFolderSummary(row: any) {
   return { id: String(row.id), name: String(row.name), parentFolderId: rowString(row, 'parent_folder_id') }
@@ -153,7 +168,7 @@ async function collectSubtree(rootId: string): Promise<{ folders: string[]; file
  * ✨ Migrated to TypeORM
  */
 async function buildPathForFile(folderId: string | null, fileName: string): Promise<string> {
-  const parts: string[] = [fileName];
+  const parts: string[] = [sanitizeArchivePathSegment(fileName, 'file')];
   let current = folderId;
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
@@ -165,7 +180,7 @@ async function buildPathForFile(folderId: string | null, fileName: string): Prom
     });
     
     if (!row) break;
-    parts.unshift(String(row.name));
+    parts.unshift(sanitizeArchivePathSegment(String(row.name), 'folder'));
     current = row.parentFolderId || null;
   }
   return parts.join('/');

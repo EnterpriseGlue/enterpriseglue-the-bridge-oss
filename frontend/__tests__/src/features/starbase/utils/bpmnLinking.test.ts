@@ -271,6 +271,46 @@ describe('bpmnLinking', () => {
       );
     });
 
+    it('inherits the linked file name when a call activity name is empty', () => {
+      const element = { businessObject: { $type: 'bpmn:CallActivity', name: '   ' } };
+
+      updateElementLink(modeler, element, {
+        linkType: 'process',
+        targetKey: 'process-2',
+        fileId: 'file-2',
+        fileName: 'Process B',
+        inheritNameIfEmpty: true,
+      });
+
+      expect(modeling.updateProperties).toHaveBeenCalledWith(
+        element,
+        expect.objectContaining({
+          calledElement: 'process-2',
+          name: 'Process B',
+          extensionElements: expect.any(Object),
+        })
+      );
+    });
+
+    it('does not overwrite an existing call activity name when inheriting on link', () => {
+      const element = { businessObject: { $type: 'bpmn:CallActivity', name: 'Existing Call Activity' } };
+
+      updateElementLink(modeler, element, {
+        linkType: 'process',
+        targetKey: 'process-2',
+        fileId: 'file-2',
+        fileName: 'Process B',
+        inheritNameIfEmpty: true,
+      });
+
+      expect(modeling.updateProperties).toHaveBeenCalledWith(
+        element,
+        expect.not.objectContaining({
+          name: 'Process B',
+        })
+      );
+    });
+
     it('updates decision link with decisionRef', () => {
       const element = { businessObject: { $type: 'bpmn:BusinessRuleTask' } };
 

@@ -419,6 +419,10 @@ export default function Login() {
     return trimmed;
   })();
 
+  useEffect(() => {
+    document.title = brandTitle;
+  }, [brandTitle]);
+
   return (
     <div style={{
       display: 'flex',

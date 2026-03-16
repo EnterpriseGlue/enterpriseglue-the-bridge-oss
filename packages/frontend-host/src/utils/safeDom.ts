@@ -10,6 +10,31 @@ export function toSafeDownloadFilename(value: unknown, fallback: string): string
   return cleaned || fallback || 'download';
 }
 
+export function toSafeDownloadFilenameWithExtension(
+  value: unknown,
+  extension: string,
+  fallbackBase = 'download',
+): string {
+  const normalizedExtension = String(extension || '').trim().replace(/^\.+/, '').toLowerCase();
+  const safeFallbackBase = String(fallbackBase || 'download').trim() || 'download';
+
+  if (!normalizedExtension) {
+    return toSafeDownloadFilename(value, safeFallbackBase);
+  }
+
+  const fallback = `${safeFallbackBase}.${normalizedExtension}`;
+  const raw = typeof value === 'string' ? value.trim() : '';
+  let filename = raw || fallback;
+
+  if (/\.(bpmn|dmn|form|xml)$/i.test(filename)) {
+    filename = filename.replace(/\.(bpmn|dmn|form|xml)$/i, `.${normalizedExtension}`);
+  } else {
+    filename = `${filename}.${normalizedExtension}`;
+  }
+
+  return toSafeDownloadFilename(filename, fallback);
+}
+
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

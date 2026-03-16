@@ -29,6 +29,10 @@ function getCalledElement(bo: any): string | null {
   )
 }
 
+function getElementName(bo: any): string | null {
+  return bo?.name || bo?.get?.('name') || null
+}
+
 function getStarbaseProperty(bo: any, name: string): string | null {
   const extensionElements = bo?.extensionElements || bo?.get?.('extensionElements')
   const values: any[] = extensionElements?.values || []
@@ -107,7 +111,13 @@ function setPropertyValue(moddle: any, properties: any, name: string, value: str
 export function updateElementLink(
   modeler: any,
   element: any,
-  payload: { linkType: LinkType; targetKey: string; fileId: string; fileName: string }
+  payload: {
+    linkType: LinkType
+    targetKey: string
+    fileId: string
+    fileName: string
+    inheritNameIfEmpty?: boolean
+  }
 ) {
   if (!modeler || !element) return
   const modeling = modeler.get('modeling')
@@ -120,10 +130,15 @@ export function updateElementLink(
   extensionElements.values = values
 
   const linkProps: Record<string, any> = { extensionElements }
+  const currentName = typeof getElementName(bo) === 'string' ? String(getElementName(bo)).trim() : ''
+  const nextName = typeof payload.fileName === 'string' ? payload.fileName.trim() : ''
   if (payload.linkType === 'process') {
     linkProps.calledElement = payload.targetKey
   } else {
     linkProps['camunda:decisionRef'] = payload.targetKey
+  }
+  if (payload.inheritNameIfEmpty && !currentName && nextName) {
+    linkProps.name = nextName
   }
 
   modeling.updateProperties(element, linkProps)

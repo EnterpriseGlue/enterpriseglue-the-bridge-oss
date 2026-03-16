@@ -1,6 +1,6 @@
 import React from 'react'
 import { apiClient } from '../../../shared/api/client'
-import { downloadBlob, toSafeDownloadFilename } from '../../../utils/safeDom'
+import { downloadBlob, toSafeDownloadFilenameWithExtension } from '../../../utils/safeDom'
 
 interface FileMenuProps {
   fileId: string | undefined
@@ -37,7 +37,7 @@ export default function FileMenu({
       const xml = String((data && data.xml) || '')
       const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' })
       const ext = fileType === 'dmn' ? 'dmn' : 'bpmn'
-      const safeName = toSafeDownloadFilename(`${displayFileName || 'diagram'}.${ext}`, `diagram.${ext}`)
+      const safeName = toSafeDownloadFilenameWithExtension(displayFileName || fileName || 'diagram', ext, 'diagram')
       downloadBlob(blob, safeName)
     } catch {}
     setMenuOpen(false)

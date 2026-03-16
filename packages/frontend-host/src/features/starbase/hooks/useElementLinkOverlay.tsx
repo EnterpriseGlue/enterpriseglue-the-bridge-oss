@@ -13,8 +13,13 @@ export interface UseElementLinkOverlayProps {
   linkedLabel: string | null
   linkTypeLabel: string
   canOpen: boolean
+  canCreateProcess?: boolean
+  createProcessDisabled?: boolean
+  createActionLabel?: string
+  onTriggerClick?: () => void
   onLink: () => void
   onOpen: () => void
+  onCreateProcess?: () => void
   onUnlink: () => void
 }
 
@@ -23,38 +28,44 @@ function OverlayContent({
   linkedLabel,
   linkTypeLabel,
   canOpen,
+  canCreateProcess,
+  createProcessDisabled,
+  createActionLabel,
+  onTriggerClick,
   onLink,
   onOpen,
+  onCreateProcess,
   onUnlink,
 }: Omit<UseElementLinkOverlayProps, 'modeler' | 'elementId' | 'visible'>) {
   const [unlinkHover, setUnlinkHover] = React.useState(false)
   const showUnlink = status !== 'unlinked'
   const showOpen = status === 'linked' && canOpen
+  const showCreateProcess = status === 'unlinked' && Boolean(canCreateProcess && onCreateProcess)
   const statusLabel =
     status === 'linked'
       ? `Linked ${linkTypeLabel}`
       : status === 'missing'
         ? `Missing ${linkTypeLabel} link`
         : `No ${linkTypeLabel} linked`
+  const pillStyle: React.CSSProperties = {
+    height: 26,
+    minWidth: 34,
+    padding: '0 8px',
+    borderRadius: 999,
+    background: 'var(--cds-link-01, #0f62fe)',
+    color: '#ffffff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+    border: 'none',
+  }
 
   return (
     <Toggletip align="bottom">
-      <ToggletipButton label="Link file">
-        <div
-          style={{
-            height: 26,
-            minWidth: 34,
-            padding: '0 8px',
-            borderRadius: 999,
-            background: 'var(--cds-link-01, #0f62fe)',
-            color: '#ffffff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-          }}
-        >
+      <ToggletipButton label="Link file" onMouseDownCapture={onTriggerClick}>
+        <div style={pillStyle}>
           <Link size={14} style={{ color: '#ffffff', fill: '#ffffff' }} />
           {status === 'missing' && <WarningAltFilled size={12} style={{ color: '#ffffff', fill: '#ffffff' }} />}
         </div>
@@ -70,11 +81,6 @@ function OverlayContent({
             )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
-            {showOpen && (
-              <Button size="sm" kind="primary" onClick={onOpen} style={{ width: '100%' }}>
-                Open
-              </Button>
-            )}
             <Button
               size="sm"
               kind="primary"
@@ -83,6 +89,22 @@ function OverlayContent({
             >
               {status === 'unlinked' ? 'Link' : 'Change'}
             </Button>
+            {showCreateProcess && (
+              <Button
+                size="sm"
+                kind="primary"
+                onClick={onCreateProcess}
+                disabled={createProcessDisabled}
+                style={{ width: '100%' }}
+              >
+                {createActionLabel || 'Create process'}
+              </Button>
+            )}
+            {showOpen && (
+              <Button size="sm" kind="primary" onClick={onOpen} style={{ width: '100%' }}>
+                Open
+              </Button>
+            )}
             {showUnlink && (
               <Button
                 size="sm"
@@ -115,32 +137,80 @@ export function useElementLinkOverlay({
   linkedLabel,
   linkTypeLabel,
   canOpen,
+  canCreateProcess,
+  createProcessDisabled,
+  createActionLabel,
+  onTriggerClick,
   onLink,
   onOpen,
+  onCreateProcess,
   onUnlink,
 }: UseElementLinkOverlayProps) {
   const overlayKeyRef = React.useRef<string | null>(null)
   const rootRef = React.useRef<Root | null>(null)
   const overlaysRef = React.useRef<any>(null)
+  const hostRef = React.useRef<HTMLDivElement | null>(null)
+  const renderOverlayRef = React.useRef<() => void>(() => {})
+
+  const clear = React.useCallback(() => {
+    if (overlayKeyRef.current && overlaysRef.current) {
+      try {
+        overlaysRef.current.remove(overlayKeyRef.current)
+      } catch {}
+    }
+    overlayKeyRef.current = null
+
+    if (rootRef.current) {
+      try {
+        rootRef.current.unmount()
+      } catch {}
+      rootRef.current = null
+    }
+
+    hostRef.current = null
+  }, [])
+
+  const renderOverlay = React.useCallback(() => {
+    if (!rootRef.current) return
+    rootRef.current.render(
+      <OverlayContent
+        status={status}
+        linkedLabel={linkedLabel}
+        linkTypeLabel={linkTypeLabel}
+        canOpen={canOpen}
+        canCreateProcess={canCreateProcess}
+        createProcessDisabled={createProcessDisabled}
+        createActionLabel={createActionLabel}
+        onTriggerClick={onTriggerClick}
+        onLink={onLink}
+        onOpen={onOpen}
+        onCreateProcess={onCreateProcess}
+        onUnlink={onUnlink}
+      />
+    )
+  }, [
+    status,
+    linkedLabel,
+    linkTypeLabel,
+    canOpen,
+    canCreateProcess,
+    createProcessDisabled,
+    createActionLabel,
+    onTriggerClick,
+    onLink,
+    onOpen,
+    onCreateProcess,
+    onUnlink,
+  ])
+
+  React.useEffect(() => {
+    renderOverlayRef.current = renderOverlay
+    renderOverlay()
+  }, [renderOverlay])
 
   React.useEffect(() => {
     let cancelled = false
     let removeImportListener: (() => void) | null = null
-    const clear = () => {
-      if (overlayKeyRef.current && overlaysRef.current) {
-        try {
-          overlaysRef.current.remove(overlayKeyRef.current)
-        } catch {}
-      }
-      overlayKeyRef.current = null
-
-      if (rootRef.current) {
-        try {
-          rootRef.current.unmount()
-        } catch {}
-        rootRef.current = null
-      }
-    }
 
     const attach = (attempt: number) => {
       if (cancelled) return
@@ -169,32 +239,27 @@ export function useElementLinkOverlay({
         return
       }
 
-      overlaysRef.current = overlays
       clear()
+      overlaysRef.current = overlays
 
       const host = document.createElement('div')
       host.style.pointerEvents = 'auto'
       host.style.transform = 'translate(-50%, 0)'
+      host.style.display = 'flex'
+      host.style.flexDirection = 'column'
+      host.style.alignItems = 'center'
+      host.style.gap = '8px'
 
       const stop = (e: Event) => {
         e.stopPropagation()
       }
       host.addEventListener('pointerdown', stop)
       host.addEventListener('mousedown', stop)
+      hostRef.current = host
 
       const root = createRoot(host)
-      root.render(
-        <OverlayContent
-          status={status}
-          linkedLabel={linkedLabel}
-          linkTypeLabel={linkTypeLabel}
-          canOpen={canOpen}
-          onLink={onLink}
-          onOpen={onOpen}
-          onUnlink={onUnlink}
-        />
-      )
       rootRef.current = root
+      renderOverlayRef.current()
 
       const width = Number(element.width || 0)
       const height = Number(element.height || 0)
@@ -246,12 +311,6 @@ export function useElementLinkOverlay({
     modeler,
     elementId,
     visible,
-    status,
-    linkedLabel,
-    linkTypeLabel,
-    canOpen,
-    onLink,
-    onOpen,
-    onUnlink,
+    clear,
   ])
 }

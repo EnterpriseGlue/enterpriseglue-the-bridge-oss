@@ -49,7 +49,7 @@ import { ProjectContentsTable } from './components/ProjectContentsTable'
 import { ProjectMembersModal } from './components/ProjectMembersModal'
 import { ProjectMembersManagementModals } from './components/ProjectMembersManagementModals'
 import { ProjectDetailHeader } from './components/ProjectDetailHeader'
-import { downloadBlob, toSafeDownloadFilename } from '../../../utils/safeDom'
+import { downloadBlob, toSafeDownloadFilename, toSafeDownloadFilenameWithExtension } from '../../../utils/safeDom'
 import { canDeployProject, type ProjectEngineAccessData } from '../utils/deployEligibility'
 
 // Import extracted utilities and components
@@ -378,11 +378,11 @@ export default function ProjectDetail() {
         ? `${projectCountsFromList.foldersCount ?? 0} folders, ${projectCountsFromList.filesCount ?? 0} files`
         : 'Loading...')
 
-  async function downloadFile(fileId: string, name: string) {
+  async function downloadFile(fileId: string, name: string, type: Exclude<FileItem['type'], 'folder'>) {
     try {
       const blob = await apiClient.getBlob(`/starbase-api/files/${encodeURIComponent(fileId)}/download`)
       if (!blob || blob.size === 0) return
-      const safeName = toSafeDownloadFilename(name, 'file')
+      const safeName = toSafeDownloadFilenameWithExtension(name, type, 'file')
       downloadBlob(blob, safeName)
     } catch {
       // noop for now
@@ -896,7 +896,10 @@ export default function ProjectDetail() {
                   moveModal.openModal({ id: file.id, name: file.name, type: 'file' })
                 }
               }}
-              onDownloadFile={(file) => downloadFile(file.id, file.name)}
+              onDownloadFile={(file) => {
+                if (file.type === 'folder') return
+                downloadFile(file.id, file.name, file.type)
+              }}
               onDownloadFolder={(file) => downloadFolder(file.id, file.name)}
               onDeleteItem={(file) => {
                 if (file.type === 'folder') {

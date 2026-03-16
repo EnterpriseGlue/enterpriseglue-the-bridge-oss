@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { toSafeDownloadFilename, toSafeHttpUrl, toSafeImageSrc, downloadBlob } from '@src/utils/safeDom';
+import { toSafeDownloadFilename, toSafeDownloadFilenameWithExtension, toSafeHttpUrl, toSafeImageSrc, downloadBlob } from '@src/utils/safeDom';
 
 describe('safeDom utils', () => {
   describe('toSafeDownloadFilename', () => {
@@ -59,6 +59,25 @@ describe('safeDom utils', () => {
       // Slashes and asterisks are replaced with underscores, not removed
       expect(toSafeDownloadFilename('///', 'fallback')).toBe('___');
       expect(toSafeDownloadFilename('***', 'fallback')).toBe('___');
+    });
+  });
+
+  describe('toSafeDownloadFilenameWithExtension', () => {
+    it('appends the required extension when it is missing', () => {
+      expect(toSafeDownloadFilenameWithExtension('Process Diagram', 'bpmn', 'diagram')).toBe('Process_Diagram.bpmn');
+    });
+
+    it('preserves the required extension when it is already present', () => {
+      expect(toSafeDownloadFilenameWithExtension('Decision Table.dmn', 'dmn', 'diagram')).toBe('Decision_Table.dmn');
+    });
+
+    it('replaces xml with the required extension', () => {
+      expect(toSafeDownloadFilenameWithExtension('Process.xml', 'bpmn', 'diagram')).toBe('Process.bpmn');
+    });
+
+    it('sanitizes slashes while preserving the required extension', () => {
+      expect(toSafeDownloadFilenameWithExtension('Folder/Process', 'bpmn', 'diagram')).toBe('Folder_Process.bpmn');
+      expect(toSafeDownloadFilenameWithExtension('Folder\\Decision', 'dmn', 'diagram')).toBe('Folder_Decision.dmn');
     });
   });
 

@@ -1,7 +1,7 @@
 import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
@@ -87,6 +87,21 @@ function renderWithProviders() {
 }
 
 describe('LayoutWithProSidebar notifications', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    document.title = 'EnterpriseGlue'
+  })
+
+  it('uses the branded header title text for the browser page title', async () => {
+    window.localStorage.setItem('eg.platformBranding.v1', JSON.stringify({ logoTitle: 'OneJOP' }))
+
+    renderWithProviders()
+
+    await waitFor(() => {
+      expect(document.title).toBe('OneJOP')
+    })
+  })
+
   it('opens notifications panel and shows empty state', async () => {
     server.use(
       http.get('/t/default/api/notifications', () =>

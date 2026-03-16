@@ -8,6 +8,7 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { registerRoutes } from './routes/index.js';
 
 interface CreateAppOptions {
@@ -83,7 +84,14 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   }));
 
   // Logging
-  app.use(morgan('dev'));
+  app.use(morgan('dev', {
+    stream: {
+      write: (message: string) => {
+        const line = String(message || '').trim();
+        if (line) logger.info(line);
+      },
+    },
+  }));
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: false, limit: '2mb' }));
   app.use((req, _res, next) => {

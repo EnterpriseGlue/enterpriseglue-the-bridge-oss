@@ -1,12 +1,18 @@
 import 'reflect-metadata';
 import { DataSource, Repository, EntityTarget, ObjectLiteral } from 'typeorm';
 import { getAdapter, DatabaseAdapter } from './adapters/index.js';
+import { TimestampedTypeOrmLogger } from './TimestampedTypeOrmLogger.js';
+import { logger } from '../utils/logger.js';
 
 // Get the database adapter based on configuration
 const adapter: DatabaseAdapter = getAdapter();
 
-// Create DataSource using adapter configuration
-export const AppDataSource = new DataSource(adapter.getDataSourceOptions());
+const dataSourceOptions = adapter.getDataSourceOptions();
+
+export const AppDataSource = new DataSource({
+  ...dataSourceOptions,
+  logger: new TimestampedTypeOrmLogger(),
+});
 
 // Export adapter for use in other modules
 export { adapter };
@@ -17,7 +23,7 @@ export async function getDataSource(): Promise<DataSource> {
   if (!initialized) {
     await AppDataSource.initialize();
     initialized = true;
-    console.log('✅ TypeORM DataSource initialized');
+    logger.info('✅ TypeORM DataSource initialized');
   }
   return AppDataSource;
 }

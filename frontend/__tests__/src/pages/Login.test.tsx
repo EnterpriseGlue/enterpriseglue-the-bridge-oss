@@ -34,6 +34,7 @@ vi.mock('@src/shared/api/client', () => ({
 describe('Login', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    document.title = 'EnterpriseGlue';
     (apiClient.get as any).mockImplementation((url: string) => {
       if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
       if (url === '/api/auth/branding') return Promise.resolve({ ssoAutoRedirectSingleProvider: false });
@@ -72,5 +73,30 @@ describe('Login', () => {
       email: 'user@example.com',
       password: 'Password123!',
     });
+  });
+
+  it('uses the branded header title text for the browser page title', async () => {
+    (apiClient.get as any).mockImplementation((url: string) => {
+      if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
+      if (url === '/api/auth/branding') return Promise.resolve({ logoTitle: 'OneJOP', ssoAutoRedirectSingleProvider: false });
+      return Promise.resolve({});
+    });
+
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={qc}>
+        <ToastProvider>
+          <MemoryRouter initialEntries={['/login']}>
+            <Login />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('OneJOP')).toBeDefined();
+    expect(document.title).toBe('OneJOP');
   });
 });

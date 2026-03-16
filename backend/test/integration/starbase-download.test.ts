@@ -42,6 +42,31 @@ describe('Starbase project download', () => {
     expect(response.headers['content-type']).toContain('application/zip');
   });
 
+  it('sanitizes slashes in zipped project file names', async () => {
+    const slashProject = await seedProject(userId, `${prefix}-slash-project`);
+    projectIds.push(slashProject.id);
+
+    const slashFile = await seedFile(slashProject.id, 'Link 2 BPMN / file', 'bpmn', '<definitions />');
+    fileIds.push(slashFile.id);
+
+    const response = await request(app)
+      .get(`/t/default/starbase-api/projects/${slashProject.id}/download`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        res.on('end', () => callback(null, Buffer.concat(chunks)));
+        res.on('error', callback);
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/zip');
+    expect(Buffer.isBuffer(response.body)).toBe(true);
+    expect(response.body.includes(Buffer.from('Link 2 BPMN _ file.bpmn'))).toBe(true);
+    expect(response.body.includes(Buffer.from('Link 2 BPMN / file.bpmn'))).toBe(false);
+  });
+
   it('returns 204 when project has no files', async () => {
     const emptyProject = await seedProject(userId, `${prefix}-empty-project`);
     projectIds.push(emptyProject.id);

@@ -401,6 +401,7 @@ export default function LayoutWithProSidebar() {
 
   const customLogoUrl = brandingQuery.data?.logoUrl
   const customLogoTitle = brandingQuery.data?.logoTitle
+  const effectiveBrandTitle = typeof customLogoTitle === 'string' && customLogoTitle.trim() ? customLogoTitle.trim() : 'EnterpriseGlue'
   const logoScale = brandingQuery.data?.logoScale ?? 100
   const scaledLogoHeight = Math.round(16 * (logoScale / 100))
   const safeCustomLogoSrc = (() => {
@@ -486,6 +487,10 @@ export default function LayoutWithProSidebar() {
       }
     }
   }, [faviconUrl])
+
+  useEffect(() => {
+    document.title = effectiveBrandTitle
+  }, [effectiveBrandTitle])
   
   // Inject custom font CSS when titleFontUrl changes
   useEffect(() => {
@@ -682,7 +687,7 @@ export default function LayoutWithProSidebar() {
                       position: 'relative',
                       top: `${titleVerticalOffset}px`,
                     }}>
-                      {customLogoTitle || 'EnterpriseGlue'}
+                      {effectiveBrandTitle}
                     </span>
                   )}
                 </span>

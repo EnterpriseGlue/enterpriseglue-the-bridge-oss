@@ -20,6 +20,7 @@ import type { FolderSummary, ProjectMember } from '../components/project-detail/
 import { FolderLoader, CurrentPath, TreePicker } from '../components/project-detail/FolderTreeHelpers'
 import { useElementLinkOverlay } from '../hooks/useElementLinkOverlay'
 import { getElementLinkInfo, updateElementLink, clearElementLink } from '../utils/bpmnLinking'
+import { buildLinkedDecisionCreationPayload, buildLinkedProcessCreationPayload, getCreateLinkedProcessName } from '../utils/processCreation'
 const DMNCanvas = React.lazy(() => import('../components/DMNCanvas'))
 const DMNDrdMini = React.lazy(() => import('../components/DMNDrdMini'))
 const DMNEvaluatePanel = React.lazy(() => import('../components/DMNEvaluatePanel'))
@@ -196,6 +197,7 @@ export default function Editor() {
   const [linkModalOpen, setLinkModalOpen] = React.useState(false)
   const [linkSelectedFileId, setLinkSelectedFileId] = React.useState<string | null>(null)
   const [linkModalError, setLinkModalError] = React.useState<string | null>(null)
+  const [creatingLinkedProcess, setCreatingLinkedProcess] = React.useState(false)
   const [allFolders, setAllFolders] = React.useState<FolderSummary[] | null>(null)
   const lastFocusRef = React.useRef<HTMLElement | null>(null)
 
@@ -258,6 +260,7 @@ export default function Editor() {
     setLinkModalOpen(false)
     setLinkSelectedFileId(null)
     setLinkModalError(null)
+    setCreatingLinkedProcess(false)
     updatedAtRef.current = null
     appliedInitialHistoryRef.current = false
     ignoreDirtyUntilRef.current = 0
@@ -358,6 +361,13 @@ export default function Editor() {
   const linkTypeLabel = elementLinkInfo?.linkType === 'decision' ? 'decision' : 'process'
   const linkedLabel = resolvedLink?.name ?? elementLinkInfo?.fileName ?? null
   const canOpenLinked = Boolean(resolvedLink)
+  const createLinkedProcessName = React.useMemo(
+    () => getCreateLinkedProcessName(selectedElement, elementLinkInfo?.linkType ?? null),
+    [selectedElement, elementLinkInfo?.linkType, lastEditedAt]
+  )
+  const createActionLabel = elementLinkInfo?.linkType === 'decision' ? 'Create decision' : 'Create process'
+  const currentProjectId = fileQ.data?.projectId ?? null
+  const currentFolderId = fileQ.data?.folderId ?? null
 
   const openLinkedFile = React.useCallback(() => {
     if (!resolvedLink) return
@@ -429,6 +439,21 @@ export default function Editor() {
     [filteredLinkFiles, linkSelectedFileId]
   )
 
+  const completeInlineLabelEditing = React.useCallback(() => {
+    if (!modelerRef.current) return
+    try {
+      const directEditing = modelerRef.current.get?.('directEditing')
+      if (!directEditing) return
+      if (typeof directEditing.isActive === 'function' && !directEditing.isActive()) return
+      if (typeof directEditing.complete === 'function') {
+        directEditing.complete()
+      }
+      window.setTimeout(() => {
+        setLastEditedAt(Date.now())
+      }, 0)
+    } catch {}
+  }, [])
+
   useElementLinkOverlay({
     modeler: modelerRef.current,
     elementId: elementLinkInfo?.elementId ?? null,
@@ -437,8 +462,13 @@ export default function Editor() {
     linkedLabel,
     linkTypeLabel,
     canOpen: canOpenLinked,
+    canCreateProcess: Boolean(createLinkedProcessName),
+    createProcessDisabled: creatingLinkedProcess,
+    createActionLabel,
+    onTriggerClick: completeInlineLabelEditing,
     onLink: openLinkModal,
     onOpen: openLinkedFile,
+    onCreateProcess: handleCreateLinkedFile,
     onUnlink: unlinkElement,
   })
 
@@ -1037,6 +1067,113 @@ export default function Editor() {
     }
   }, [fileIdForSave, queryClient])
 
+  async function saveLinkUpdate(historyLabel: string, errorMessage: string): Promise<boolean> {
+    try {
+      setSaving('saving')
+      const { xml } = await modelerRef.current.saveXML({ format: true })
+      await saveXmlWithRetry(xml)
+      xmlHistory.addSnapshot(xml, historyLabel)
+      setSaving('saved')
+      setTimeout(() => setSaving('idle'), 1500)
+      queryClient.invalidateQueries({ queryKey: ['file', fileId] })
+      if (currentProjectId) {
+        queryClient.invalidateQueries({ queryKey: ['starbase', 'project-files', currentProjectId] })
+        queryClient.invalidateQueries({ queryKey: ['contents', currentProjectId] })
+      }
+      return true
+    } catch {
+      setSaving('error')
+      setTimeout(() => setSaving('idle'), 3000)
+      setLinkModalError(errorMessage)
+      return false
+    }
+  }
+
+  async function handleCreateLinkedFile(): Promise<void> {
+    if (!elementLinkInfo || !selectedElement || !modelerRef.current) return
+    if (!currentProjectId) return
+    const linkedFileName = createLinkedProcessName
+    if (!linkedFileName) return
+
+    const isDecision = elementLinkInfo.linkType === 'decision'
+    const payload = isDecision
+      ? buildLinkedDecisionCreationPayload(linkedFileName)
+      : buildLinkedProcessCreationPayload(linkedFileName)
+    const createTitle = isDecision ? 'Decision created' : 'Process created'
+    const createErrorTitle = isDecision ? 'Failed to create decision' : 'Failed to create process'
+    const createSavedError = isDecision
+      ? 'Decision created, but the link could not be saved automatically.'
+      : 'Process created, but the link could not be saved automatically.'
+    const historyLabel = isDecision ? 'Decision created and linked' : 'Process created and linked'
+
+    try {
+      setCreatingLinkedProcess(true)
+      setLinkModalError(null)
+
+      const created = await apiClient.post<{ id?: string; name?: string; bpmnProcessId?: string | null; dmnDecisionId?: string | null }>(
+        `/starbase-api/projects/${currentProjectId}/files`,
+        {
+          name: payload.fileName,
+          type: isDecision ? 'dmn' : 'bpmn',
+          folderId: currentFolderId,
+          xml: payload.xml,
+        }
+      )
+
+      const createdFileId = created?.id ? String(created.id) : ''
+      const targetKey = isDecision
+        ? (created?.dmnDecisionId ? String(created.dmnDecisionId) : payload.targetKey)
+        : (created?.bpmnProcessId ? String(created.bpmnProcessId) : payload.targetKey)
+      if (!createdFileId || !targetKey) {
+        throw new Error('Created linked file metadata is incomplete')
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['starbase', 'project-files', currentProjectId] })
+      await queryClient.invalidateQueries({ queryKey: ['contents', currentProjectId] })
+
+      updateElementLink(modelerRef.current, selectedElement, {
+        linkType: elementLinkInfo.linkType,
+        targetKey,
+        fileId: createdFileId,
+        fileName: created?.name ? String(created.name) : payload.fileName,
+      })
+
+      const saved = await saveLinkUpdate(historyLabel, createSavedError)
+
+      if (!saved) {
+        notify({
+          kind: 'warning',
+          title: createTitle,
+          subtitle: createSavedError,
+        })
+        return
+      }
+
+      notify({
+        kind: 'success',
+        title: createTitle,
+        subtitle: `${payload.fileName} was created and linked.`,
+      })
+      tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(createdFileId))}`, {
+        state: {
+          fromEditor: {
+            fileId: fileId ? String(fileId) : null,
+            fileName: fileQ.data?.name ?? null,
+          },
+        },
+      })
+    } catch (error) {
+      const parsed = parseApiError(error, createErrorTitle)
+      notify({
+        kind: 'error',
+        title: createErrorTitle,
+        subtitle: parsed.message,
+      })
+    } finally {
+      setCreatingLinkedProcess(false)
+    }
+  }
+
   const restoreFromDeploymentMutation = useMutation({
     mutationFn: async () => {
       if (!fileId) throw new Error('Missing fileId')
@@ -1190,8 +1327,6 @@ export default function Editor() {
     updatedAtRef.current = f.updatedAt
   }
 
-  const showPropertiesParent = overlayOpen ? propEl : undefined
-
   const handleLinkSubmit = async () => {
     if (!elementLinkInfo || !selectedElement || !modelerRef.current) return
     const target = selectedLinkFile
@@ -1208,23 +1343,16 @@ export default function Editor() {
       targetKey,
       fileId: target.id,
       fileName: target.name,
+      inheritNameIfEmpty: true,
     })
 
-    try {
-      setSaving('saving')
-      const { xml } = await modelerRef.current.saveXML({ format: true })
-      await saveXmlWithRetry(xml)
-      xmlHistory.addSnapshot(xml, 'Link updated')
-      setSaving('saved')
-      setTimeout(() => setSaving('idle'), 1500)
+    const saved = await saveLinkUpdate('Link updated', 'Failed to save link. Please try again.')
+    if (saved) {
       setLinkModalOpen(false)
-      queryClient.invalidateQueries({ queryKey: ['file', fileId] })
-    } catch {
-      setSaving('error')
-      setTimeout(() => setSaving('idle'), 3000)
-      setLinkModalError('Failed to save link. Please try again.')
     }
   }
+
+  const showPropertiesParent = overlayOpen ? propEl : undefined
 
   return (
     <div

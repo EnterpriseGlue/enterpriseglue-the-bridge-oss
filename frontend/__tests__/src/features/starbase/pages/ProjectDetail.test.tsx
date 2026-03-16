@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectDetail from '@src/features/starbase/pages/ProjectDetail'
 import { apiClient } from '@src/shared/api/client'
 
+let projectFileName = 'Alpha.bpmn'
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
   return {
@@ -52,7 +54,7 @@ vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
 }))
 
 vi.mock('@src/features/starbase/pages/components/ProjectContentsTable', () => ({
-  ProjectContentsTable: ({ items, onDeleteItem, onMoveItem }: any) => (
+  ProjectContentsTable: ({ items, onDeleteItem, onMoveItem, onDownloadFile }: any) => (
     <div>
       <div>{items[0]?.name}</div>
       <button type="button" onClick={() => onDeleteItem(items[0])}>
@@ -60,6 +62,9 @@ vi.mock('@src/features/starbase/pages/components/ProjectContentsTable', () => ({
       </button>
       <button type="button" onClick={() => onMoveItem(items[0])}>
         Trigger move
+      </button>
+      <button type="button" onClick={() => onDownloadFile(items[0])}>
+        Trigger download
       </button>
     </div>
   ),
@@ -124,6 +129,7 @@ function renderWithProviders() {
 describe('ProjectDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    projectFileName = 'Alpha.bpmn'
 
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
       if (url === '/starbase-api/projects') {
@@ -143,7 +149,7 @@ describe('ProjectDetail', () => {
           files: [
             {
               id: 'file-1',
-              name: 'Alpha.bpmn',
+              name: projectFileName,
               type: 'bpmn',
               createdBy: 'user-1',
               updatedBy: 'user-1',
@@ -218,5 +224,59 @@ describe('ProjectDetail', () => {
 
     expect(await screen.findByText(/move file/i)).toBeDefined()
     expect(await screen.findByText(/select a destination for "Alpha\.bpmn"\./i)).toBeDefined()
+  })
+
+  it('downloads BPMN files with the bpmn extension when the file name has no extension', async () => {
+    projectFileName = 'Alpha'
+    vi.mocked(apiClient.getBlob).mockResolvedValue(new Blob(['<definitions />'], { type: 'application/xml' }))
+    ;(globalThis.URL as any).createObjectURL = vi.fn(() => 'blob:mock')
+    ;(globalThis.URL as any).revokeObjectURL = vi.fn()
+
+    let downloadedFilename = ''
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloadedFilename = this.download
+    })
+
+    renderWithProviders()
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha')).toBeDefined()
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: /trigger download/i }))
+
+    await waitFor(() => {
+      expect(apiClient.getBlob).toHaveBeenCalledWith('/starbase-api/files/file-1/download')
+      expect(downloadedFilename).toBe('Alpha.bpmn')
+    })
+
+    clickSpy.mockRestore()
+  })
+
+  it('sanitizes slashes in downloaded BPMN filenames instead of producing a folder-like path', async () => {
+    projectFileName = 'Team/Alpha'
+    vi.mocked(apiClient.getBlob).mockResolvedValue(new Blob(['<definitions />'], { type: 'application/xml' }))
+    ;(globalThis.URL as any).createObjectURL = vi.fn(() => 'blob:mock')
+    ;(globalThis.URL as any).revokeObjectURL = vi.fn()
+
+    let downloadedFilename = ''
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloadedFilename = this.download
+    })
+
+    renderWithProviders()
+
+    await waitFor(() => {
+      expect(screen.getByText('Team/Alpha')).toBeDefined()
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: /trigger download/i }))
+
+    await waitFor(() => {
+      expect(apiClient.getBlob).toHaveBeenCalledWith('/starbase-api/files/file-1/download')
+      expect(downloadedFilename).toBe('Team_Alpha.bpmn')
+    })
+
+    clickSpy.mockRestore()
   })
 })
