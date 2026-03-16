@@ -1873,7 +1873,7 @@
     "licenses": "MIT",
     "repository": "git+https://github.com/nodejs/undici.git"
   },
-  "undici@7.22.0": {
+  "undici@7.24.4": {
     "licenses": "MIT",
     "repository": "git+https://github.com/nodejs/undici.git"
   },

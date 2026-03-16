@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-03-09T22:32:23.989Z
+Generated at: 2026-03-16T17:13:49.311Z
 
 Generated from:
 - third_party_licenses.json
@@ -672,7 +672,7 @@ Generated from:
 | typeorm | 0.3.28 | MIT | https://github.com/typeorm/typeorm.git | backend, frontend, packages/frontend-host, packages/shared |
 | underscore | 1.13.8 | MIT | git://github.com/jashkenas/underscore.git | backend, frontend, packages/frontend-host, packages/shared |
 | undici-types | 7.18.2 | MIT | git+https://github.com/nodejs/undici.git | backend |
-| undici | 7.22.0 | MIT | git+https://github.com/nodejs/undici.git | backend, frontend, packages/frontend-host, packages/shared |
+| undici | 7.24.4 | MIT | git+https://github.com/nodejs/undici.git | backend, frontend, packages/frontend-host, packages/shared |
 | universal-github-app-jwt | 2.2.2 | MIT | github:gr2m/universal-github-app-jwt | backend, frontend, packages/frontend-host, packages/shared |
 | universal-user-agent | 7.0.3 | ISC | github:gr2m/universal-user-agent | backend, frontend, packages/frontend-host, packages/shared |
 | unpipe | 1.0.0 | MIT | stream-utils/unpipe | backend, frontend, packages/frontend-host, packages/shared |
