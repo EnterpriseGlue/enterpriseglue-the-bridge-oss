@@ -170,6 +170,7 @@ export class VcsBranchService {
         id: generateId(),
         branchId: targetBranchId,
         projectId: file.projectId,
+        mainFileId: file.mainFileId,
         folderId: file.folderId,
         name: file.name,
         type: file.type,

@@ -33,6 +33,7 @@ export interface WorkingFileInfo {
   id: string;
   branchId: string;
   projectId: string;
+  mainFileId: string | null;
   folderId: string | null;
   name: string;
   type: string;
@@ -78,6 +79,7 @@ export function mapWorkingFile(row: any): WorkingFileInfo {
     id: row.id,
     branchId: row.branchId,
     projectId: row.projectId,
+    mainFileId: row.mainFileId ?? null,
     folderId: row.folderId,
     name: row.name,
     type: row.type,

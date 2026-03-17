@@ -595,27 +595,16 @@ class RemoteGitService {
         continue;
       }
       
-      // Content changed - update VCS
-      await vcsService.saveFile(
-        mainBranch.id,
-        projectId,
-        existingVcsFile?.id || null,
-        baseFileName,
-        fileType,
-        file.content,
-        folderId
-      );
-      
-      // Update or create in the main Starbase files table
+      let mainFileId: string;
       if (matchingFile) {
         await fileRepo.update({ id: matchingFile.id }, {
           xml: file.content,
           updatedAt: unixTimestamp(),
         });
+        mainFileId = String(matchingFile.id);
         
         logger.info('Updated main DB file', { fileId: matchingFile.id, fileName: baseFileName, folderPath });
       } else {
-        // Create new file in main DB with proper folder
         const now = unixTimestamp();
         const newFileId = generateId();
         await fileRepo.insert({
@@ -628,9 +617,21 @@ class RemoteGitService {
           createdAt: now,
           updatedAt: now,
         });
+        mainFileId = newFileId;
         
         logger.info('Created new file in main DB from remote', { fileId: newFileId, fileName: baseFileName, folderPath, folderId });
       }
+
+      await vcsService.saveFile(
+        mainBranch.id,
+        projectId,
+        existingVcsFile?.id || null,
+        baseFileName,
+        fileType,
+        file.content,
+        folderId,
+        mainFileId
+      );
       
       filesActuallyChanged++;
       logger.info('Pulled file with changes', { 

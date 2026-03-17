@@ -49,11 +49,12 @@ export async function syncFileCreate(
     await vcsService.saveFile(
       branch.id,
       projectId,
-      null, // new file, no existing ID in VCS
+      null,
       name,
       type,
       content,
-      folderId
+      folderId,
+      fileId
     );
     
     logger.debug('File synced to VCS', { projectId, fileId, branchId: branch.id });
@@ -81,20 +82,15 @@ export async function syncFileUpdate(
     // Get user's branch
     const branch = await vcsService.getUserBranch(projectId, userId);
     
-    // Find existing VCS file by matching the main file ID pattern
-    // For now, we'll create/update based on name matching in the branch
-    const existingFiles = await vcsService.getFiles(branch.id, folderId);
-    const existingFile = existingFiles.find(f => f.name === name && f.type === type);
-    
-    // Save/update file in VCS
     await vcsService.saveFile(
       branch.id,
       projectId,
-      existingFile?.id || null,
+      null,
       name,
       type,
       content,
-      folderId
+      folderId,
+      fileId
     );
     
     logger.debug('File update synced to VCS', { projectId, fileId, branchId: branch.id });
@@ -120,9 +116,9 @@ export async function syncFileDelete(
     // Get user's branch
     const branch = await vcsService.getUserBranch(projectId, userId);
     
-    // Find the VCS file
     const existingFiles = await vcsService.getFiles(branch.id, folderId);
-    const existingFile = existingFiles.find(f => f.name === name && f.type === type);
+    const existingFile = existingFiles.find(f => f.mainFileId === fileId)
+      ?? existingFiles.find(f => f.name === name && f.type === type);
     
     if (existingFile) {
       await vcsService.deleteFile(existingFile.id);

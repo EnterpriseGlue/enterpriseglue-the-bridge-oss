@@ -27,6 +27,7 @@ const DMNEvaluatePanel = React.lazy(() => import('../components/DMNEvaluatePanel
 // Properties panel is provided by camunda-bpmn-js and mounted by Canvas
 import DeployButton from '../../git/components/DeployButton'
 import GitVersionsPanel from '../../git/components/GitVersionsPanel'
+import { useGitRepository } from '../../git/hooks/useGitRepository'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { ProjectAccessError, isProjectAccessError } from '../components/ProjectAccessError'
 import { useSelectedEngine } from '../../../components/EngineSelector'
@@ -187,6 +188,7 @@ export default function Editor() {
   const [saving, setSaving] = React.useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const updatedAtRef = React.useRef<number | null>(null)
   const [lastEditedAt, setLastEditedAt] = React.useState<number | null>(null)
+  const [lastEditedAtHydrated, setLastEditedAtHydrated] = React.useState(false)
   const [localDirty, setLocalDirty] = React.useState(false)
   const [decisionKey, setDecisionKey] = React.useState<string | undefined>(undefined)
   const [historyPanelOpen, setHistoryPanelOpen] = React.useState(false)
@@ -255,6 +257,8 @@ export default function Editor() {
     modelerRef.current = null
     setModelerReady(false)
     setSaving('idle')
+    setLastEditedAtHydrated(false)
+    setLastEditedAt(null)
     setLocalDirty(false)
     setHistoryPanelOpen(false)
     setLinkModalOpen(false)
@@ -474,6 +478,9 @@ export default function Editor() {
 
   // Persistent XML history for undo/redo across page refreshes
   const xmlHistory = useXmlHistory(fileId)
+  const gitRepositoryQ = useGitRepository(fileQ.data?.projectId)
+  const hasGitRepository = Boolean(gitRepositoryQ.data)
+  const versioningModeResolved = !fileQ.data?.projectId || gitRepositoryQ.isSuccess || gitRepositoryQ.isError
   
   // Query for uncommitted changes status
   const uncommittedQ = useQuery({
@@ -482,13 +489,16 @@ export default function Editor() {
       `/vcs-api/projects/${fileQ.data?.projectId}/uncommitted-files`,
       { baseline: 'draft' }
     ),
-    enabled: !!fileQ.data?.projectId,
+    enabled: !!fileQ.data?.projectId && hasGitRepository,
     refetchInterval: 30000, // Refresh every 30 seconds
   })
   
-  const hasUncommittedChanges = uncommittedQ.data?.hasUncommittedChanges ?? false
+  const hasUncommittedChanges = hasGitRepository ? (uncommittedQ.data?.hasUncommittedChanges ?? false) : false
   const fileIsUncommitted = Boolean(
-    fileId && Array.isArray(uncommittedQ.data?.uncommittedFileIds) && uncommittedQ.data!.uncommittedFileIds.includes(fileId)
+    hasGitRepository &&
+      fileId &&
+      Array.isArray(uncommittedQ.data?.uncommittedFileIds) &&
+      uncommittedQ.data!.uncommittedFileIds.includes(fileId)
   )
 
   const isAutoCommitMessage = React.useCallback((message: string | null | undefined) => {
@@ -510,14 +520,16 @@ export default function Editor() {
       const nonAuto = commits.filter((commit: any) => !isAutoCommitMessage(commit?.message))
       return nonAuto.length > 0 ? nonAuto[0] : null
     },
-    enabled: !!fileQ.data?.projectId && !!fileId,
+    enabled: !!fileQ.data?.projectId && !!fileId && hasGitRepository,
     staleTime: 10_000,
     refetchOnMount: 'always',
   })
   const hasUnsavedVersion = Boolean(
-    // Only show "Unsaved version" once the user has actually edited the diagram.
-    // We persist lastEditedAt in sessionStorage so this also survives navigation.
-    (localDirty || fileIsUncommitted) && typeof lastEditedAt === 'number'
+    typeof lastEditedAt === 'number' && (
+      localDirty ||
+      fileIsUncommitted ||
+      !hasGitRepository
+    )
   )
 
   // Restore lastEditedAt across navigation within the same browser session.
@@ -528,13 +540,19 @@ export default function Editor() {
       const parsed = raw ? Number(raw) : NaN
       if (Number.isFinite(parsed)) {
         setLastEditedAt(parsed)
+      } else {
+        setLastEditedAt(null)
       }
-    } catch {}
+    } catch {
+      setLastEditedAt(null)
+    } finally {
+      setLastEditedAtHydrated(true)
+    }
   }, [lastEditedAtStorageKey])
 
   // Persist lastEditedAt updates so the Versions panel can show "Edited X ago" after navigation.
   React.useEffect(() => {
-    if (!lastEditedAtStorageKey) return
+    if (!lastEditedAtStorageKey || !lastEditedAtHydrated) return
     try {
       if (typeof lastEditedAt === 'number' && Number.isFinite(lastEditedAt)) {
         sessionStorage.setItem(lastEditedAtStorageKey, String(lastEditedAt))
@@ -542,7 +560,7 @@ export default function Editor() {
         sessionStorage.removeItem(lastEditedAtStorageKey)
       }
     } catch {}
-  }, [lastEditedAt, lastEditedAtStorageKey])
+  }, [lastEditedAt, lastEditedAtHydrated, lastEditedAtStorageKey])
 
   // Open overlay automatically in Implement tab (hook must be before any early return)
   React.useEffect(() => {
@@ -1174,6 +1192,44 @@ export default function Editor() {
     }
   }
 
+  const prepareVersionSave = React.useCallback(async () => {
+    try {
+      ignoreDirtyUntilRef.current = Date.now() + 2000
+      if ((window as any).__autosaveTimer) {
+        clearTimeout((window as any).__autosaveTimer)
+        ;(window as any).__autosaveTimer = null
+      }
+
+      if (!modelerRef.current) return
+
+      setSaving('saving')
+      let xml: string
+      try {
+        const saved = await modelerRef.current.saveXML({ format: true })
+        xml = saved?.xml
+      } catch {
+        const saved = await modelerRef.current.saveXML()
+        xml = saved?.xml
+      }
+      if (!xml) throw new Error('Failed to read XML from modeler')
+
+      await saveXmlWithRetry(xml)
+      setSaving('saved')
+      setTimeout(() => setSaving('idle'), 1500)
+      queryClient.invalidateQueries({ queryKey: ['uncommitted-files', fileQ.data?.projectId] })
+    } catch (e) {
+      setSaving('error')
+      setTimeout(() => setSaving('idle'), 3000)
+      throw e
+    }
+  }, [fileQ.data?.projectId, queryClient, saveXmlWithRetry])
+
+  const handleVersionSaveSuccess = React.useCallback(() => {
+    ignoreDirtyUntilRef.current = Date.now() + 500
+    setLocalDirty(false)
+    setLastEditedAt(null)
+  }, [])
+
   const restoreFromDeploymentMutation = useMutation({
     mutationFn: async () => {
       if (!fileId) throw new Error('Missing fileId')
@@ -1733,7 +1789,9 @@ export default function Editor() {
               <Button kind="ghost" size="sm" onClick={() => setVersionsPanelOpen(false)}>Close</Button>
             </div>
             <div style={{ flex: 1, overflow: 'auto', background: 'var(--cds-layer-01, #ffffff)' }}>
-              {f.projectId ? (
+              {!versioningModeResolved ? (
+                <LoadingState message="Loading versions..." />
+              ) : f.projectId ? (
                 <GitVersionsPanel
                   projectId={f.projectId}
                   fileId={fileId}
@@ -1741,6 +1799,9 @@ export default function Editor() {
                   fileType={f.type as 'bpmn' | 'dmn'}
                   hasUnsavedVersion={hasUnsavedVersion}
                   lastEditedAt={lastEditedAt}
+                  saveMode={hasGitRepository ? 'git' : 'local'}
+                  beforeVersionSave={prepareVersionSave}
+                  onVersionSaveSuccess={handleVersionSaveSuccess}
                 />
               ) : null}
             </div>
@@ -2050,47 +2111,13 @@ export default function Editor() {
         }}
         projectId={f.projectId}
         fileId={fileId}
+        saveMode={hasGitRepository ? 'git' : 'local'}
         defaultMessage={editorMode === 'hotfix' && hotfixContext?.fromFileVersion ? `Hotfix from v${hotfixContext.fromFileVersion}` : undefined}
         hotfixFromCommitId={editorMode === 'hotfix' ? hotfixContext?.fromCommitId ?? undefined : undefined}
         hotfixFromFileVersion={editorMode === 'hotfix' ? hotfixContext?.fromFileVersion ?? undefined : undefined}
-        beforeSubmit={async () => {
-          try {
-            // Suppress any modeler churn while we flush/save/commit.
-            ignoreDirtyUntilRef.current = Date.now() + 2000
-            if ((window as any).__autosaveTimer) {
-              clearTimeout((window as any).__autosaveTimer)
-              ;(window as any).__autosaveTimer = null
-            }
-
-            if (!modelerRef.current) return
-
-            setSaving('saving')
-            let xml: string
-            try {
-              const saved = await modelerRef.current.saveXML({ format: true })
-              xml = saved?.xml
-            } catch {
-              const saved = await modelerRef.current.saveXML()
-              xml = saved?.xml
-            }
-            if (!xml) throw new Error('Failed to read XML from modeler')
-
-            await saveXmlWithRetry(xml)
-            setSaving('saved')
-            setTimeout(() => setSaving('idle'), 1500)
-            // Invalidate uncommitted-files query so project page shows updated status
-            queryClient.invalidateQueries({ queryKey: ['uncommitted-files', f.projectId] })
-          } catch (e) {
-            setSaving('error')
-            setTimeout(() => setSaving('idle'), 3000)
-            throw e
-          }
-        }}
+        beforeSubmit={prepareVersionSave}
         onSuccess={() => {
-          // Suppress any immediate post-commit modeler churn from showing as a new unsaved version.
-          ignoreDirtyUntilRef.current = Date.now() + 500
-          setLocalDirty(false)
-          setLastEditedAt(null)
+          handleVersionSaveSuccess()
           // Clear hotfix context after successful commit
           if (editorMode === 'hotfix' && fileId) {
             try { sessionStorage.removeItem(`hotfix-context-${fileId}`) } catch {}

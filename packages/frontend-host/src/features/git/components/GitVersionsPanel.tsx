@@ -22,6 +22,9 @@ interface GitVersionsPanelProps {
   fileType?: 'bpmn' | 'dmn';
   hasUnsavedVersion?: boolean;
   lastEditedAt?: number | null;
+  saveMode?: 'git' | 'local';
+  beforeVersionSave?: () => Promise<void>;
+  onVersionSaveSuccess?: () => void;
 }
 
 interface VcsCommit {
@@ -39,8 +42,21 @@ interface VcsCommit {
   hotfixFromFileVersion?: number | null;
 }
 
-const MANUAL_SOURCES = new Set(['manual', 'restore']);
+interface LocalVersion {
+  id: string;
+  author?: string;
+  message?: string;
+  createdAt: number;
+}
+
+interface LocalVersionDetail extends LocalVersion {
+  fileId: string;
+  xml: string;
+}
+
+const MANUAL_SOURCES = new Set(['manual', 'restore', 'file-save']);
 const ENGINE_ACCESS_ROLES = new Set(['owner', 'delegate', 'operator', 'deployer']);
+const AUTO_SAVE_BEFORE_RESTORE_MESSAGE = 'Auto-saved before restore';
 
 function isManualCommit(commit: VcsCommit): boolean {
   return MANUAL_SOURCES.has(commit.source ?? 'manual');
@@ -256,7 +272,11 @@ function getMissionControlTarget(row: LatestDeploymentByFile, fileType: 'bpmn' |
   };
 }
 
-export default function GitVersionsPanel({ projectId, fileId, fileName, fileType = 'bpmn', hasUnsavedVersion, lastEditedAt }: GitVersionsPanelProps) {
+function normalizeTimestamp(value: number): number {
+  return value > 1_000_000_000_000 ? value : value * 1000;
+}
+
+export default function GitVersionsPanel({ projectId, fileId, fileName, fileType = 'bpmn', hasUnsavedVersion, lastEditedAt, saveMode = 'git', beforeVersionSave, onVersionSaveSuccess }: GitVersionsPanelProps) {
   const queryClient = useQueryClient();
   const { tenantNavigate } = useTenantNavigate();
   const [selectedCommit, setSelectedCommit] = useState<VcsCommit | null>(null);
@@ -268,22 +288,44 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
 
   // Fetch VCS commit history filtered to this specific file
   const commitsQuery = useQuery({
-    queryKey: ['vcs', 'commits', projectId, fileId],
+    queryKey: ['versions-panel', saveMode, projectId, fileId],
     queryFn: async () => {
-      // Use fileId to only get commits that affected this file
+      if (saveMode === 'local') {
+        if (!fileId) return { commits: [] as VcsCommit[] };
+        const versions = await apiClient.get<LocalVersion[]>(`/starbase-api/files/${fileId}/versions`);
+        const filteredVersions = (Array.isArray(versions) ? versions : []).filter((version) => {
+          return !(String(version.author || '') === 'system' && String(version.message || '').trim() === 'Initial import');
+        });
+        return {
+          commits: filteredVersions.map((version): VcsCommit => ({
+            id: version.id,
+            branchId: 'local',
+            message: String(version.message || 'Version'),
+            userId: String(version.author || 'unknown'),
+            createdAt: normalizeTimestamp(Number(version.createdAt || 0)),
+            hash: version.id,
+            source: 'manual',
+            isRemote: false,
+            versionNumber: undefined,
+            fileVersionNumber: undefined,
+            hotfixFromCommitId: undefined,
+            hotfixFromFileVersion: undefined,
+          })),
+        };
+      }
+
       const params: Record<string, string> = { branch: 'all' };
       if (fileId) params.fileId = fileId;
       const data = await apiClient.get<{ commits: VcsCommit[] }>(
         `/vcs-api/projects/${projectId}/commits`,
         params
       );
-      
-      // Always filter out internal auto-generated merge/sync commits
+
       const filteredCommits = data.commits.filter(commit => !isAutoCommitMessage(commit.message));
-      
+
       return { commits: filteredCommits };
     },
-    enabled: !!projectId,
+    enabled: saveMode === 'local' ? !!fileId : !!projectId,
     staleTime: 10000, // 10 seconds
     refetchInterval: 30000, // Refresh every 30 seconds
   });
@@ -296,7 +338,7 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
 
   const hasEngineAccess = React.useMemo(() => {
     const engines = Array.isArray(enginesQuery.data) ? enginesQuery.data : [];
-    return engines.some((engine) => ENGINE_ACCESS_ROLES.has(String(engine?.myRole || '')));
+    return saveMode === 'git' && engines.some((engine) => ENGINE_ACCESS_ROLES.has(String(engine?.myRole || '')));
   }, [enginesQuery.data]);
 
   const deploymentsQuery = useQuery({
@@ -317,20 +359,98 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
   const snapshotsQuery = useQuery({
     queryKey: ['vcs', 'commit-files', projectId, selectedCommit?.id],
     queryFn: async () => {
+      if (saveMode === 'local') {
+        if (!fileId || !selectedCommit?.id) {
+          return { files: [] as FileSnapshot[] };
+        }
+        const version = await apiClient.get<LocalVersionDetail>(
+          `/starbase-api/files/${fileId}/versions/${selectedCommit.id}`
+        );
+        return {
+          files: [{
+            id: version.id,
+            name: fileName || 'Version',
+            type: fileType,
+            content: version.xml,
+            changeType: 'modified',
+          }],
+        };
+      }
       return apiClient.get<{ files: FileSnapshot[] }>(
         `/vcs-api/projects/${projectId}/commits/${selectedCommit!.id}/files`
       );
     },
-    enabled: !!selectedCommit && previewOpen,
+    enabled: !!selectedCommit && previewOpen && (saveMode === 'local' ? !!fileId : !!projectId),
   });
 
   // Restore mutation
+  const autoSaveBeforeRestore = React.useCallback(async () => {
+    if (!hasUnsavedVersion) return;
+    if (!beforeVersionSave) {
+      throw new Error('Unable to preserve unsaved changes before restore');
+    }
+
+    await beforeVersionSave();
+
+    if (saveMode === 'local') {
+      if (!fileId) throw new Error('Missing fileId for local pre-restore save');
+      await apiClient.post(`/starbase-api/files/${fileId}/versions`, {
+        message: AUTO_SAVE_BEFORE_RESTORE_MESSAGE,
+      });
+      queryClient.invalidateQueries({ queryKey: ['versions', fileId] });
+      queryClient.invalidateQueries({ queryKey: ['versions-panel', 'local', projectId, fileId] });
+    } else {
+      const body: { message: string; fileIds?: string[] } = { message: AUTO_SAVE_BEFORE_RESTORE_MESSAGE };
+      if (fileId) {
+        body.fileIds = [fileId];
+      }
+      await apiClient.post(`/vcs-api/projects/${projectId}/commit`, body);
+      queryClient.setQueryData(
+        ['uncommitted-files', projectId, 'draft'],
+        (prev: any) => {
+          if (!prev) return prev;
+          const prevIds = Array.isArray(prev.uncommittedFileIds) ? prev.uncommittedFileIds : [];
+          const nextIds = fileId ? prevIds.filter((id: any) => id !== fileId) : [];
+          return {
+            ...prev,
+            uncommittedFileIds: nextIds,
+            hasUncommittedChanges: nextIds.length > 0,
+          };
+        }
+      );
+      queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['uncommitted-files', projectId, 'draft'] });
+    }
+
+    onVersionSaveSuccess?.();
+  }, [beforeVersionSave, fileId, hasUnsavedVersion, onVersionSaveSuccess, projectId, queryClient, saveMode]);
+
   const restoreMutation = useMutation({
     mutationFn: async (commitId: string) => {
+      await autoSaveBeforeRestore();
+      if (saveMode === 'local') {
+        if (!fileId) throw new Error('Missing fileId for local restore');
+        return apiClient.post(`/starbase-api/files/${fileId}/versions/${commitId}/restore`);
+      }
       return apiClient.post(`/vcs-api/projects/${projectId}/commits/${commitId}/restore`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', projectId] });
+      if (saveMode === 'local') {
+        if (fileId) {
+          queryClient.invalidateQueries({ queryKey: ['versions', fileId] });
+          queryClient.invalidateQueries({ queryKey: ['versions-panel', 'local', projectId, fileId] });
+          try {
+            sessionStorage.removeItem(`starbase:lastEditedAt:${fileId}`);
+          } catch {}
+        }
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', projectId] });
+        if (fileId) {
+          try {
+            sessionStorage.removeItem(`starbase:lastEditedAt:${fileId}`);
+          } catch {}
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ['file'] });
       setPreviewOpen(false);
       setSelectedCommit(null);
@@ -519,7 +639,7 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
     handleJumpToCommit(commit, event);
   }, [handleOpenMissionControl, handleJumpToCommit]);
 
-  const showDeploymentUi = hasEngineAccess;
+  const showDeploymentUi = saveMode === 'git' && hasEngineAccess;
 
   if (commitsQuery.isLoading) {
     return <div style={{ padding: 'var(--spacing-4)', fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>Loading versions...</div>;
@@ -568,9 +688,9 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
   const latestIndex = Math.max(visibleCommits.length - 1, 0);
 
   const showUnsavedStep = Boolean(hasUnsavedVersion);
-  // If we have an unsaved version, that step should be the current (half-circle) step.
-  // If everything is saved, we set currentIndex to one-past-the-end so all saved versions render as complete (checkmark).
-  const currentIndex = visibleCommits.length;
+  // If we have an unsaved version, that step should be the current step.
+  // Otherwise keep the latest saved version current so older versions remain previewable.
+  const currentIndex = showUnsavedStep ? visibleCommits.length : latestIndex;
 
   if (commitsForDisplay.length === 0) {
     return (
@@ -725,7 +845,14 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
                 key={commit.id}
                 className={isPreviewable ? 'git-versions-step-previewable' : 'git-versions-step-nonpreviewable'}
                 label={(
-                  <span style={{ display: 'inline-flex', flexDirection: 'column', gap: '4px' }}>
+                  <span
+                    style={{ display: 'inline-flex', flexDirection: 'column', gap: '4px', cursor: isPreviewable ? 'pointer' : 'default' }}
+                    onClick={isPreviewable ? (event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleCommitClick(commit);
+                    } : undefined}
+                  >
                     <span className="git-versions-step-title">
                       {commit.fileVersionNumber ? `v${commit.fileVersionNumber} — ` : (commit.versionNumber ? `v${commit.versionNumber} — ` : '')}{commit.message}
                     </span>
@@ -813,15 +940,13 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
       {/* Preview Modal with Diagram Viewer */}
       <Modal
         open={previewOpen}
-        onRequestClose={handleClosePreview}
         modalHeading={selectedCommit ? `Version: ${selectedCommit.message}` : 'Version Preview'}
         modalLabel={selectedCommit ? formatTimeExact(selectedCommit.createdAt) : ''}
         primaryButtonText={restoreMutation.isPending ? 'Restoring...' : 'Restore this version'}
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={restoreMutation.isPending || !previewXml}
+        secondaryButtonText="Close"
         onRequestSubmit={handleRestore}
-        size="lg"
-        passiveModal={false}
+        onRequestClose={handleClosePreview}
+        primaryButtonDisabled={restoreMutation.isPending || !previewXml}
       >
         <div style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
           {/* Loading state */}

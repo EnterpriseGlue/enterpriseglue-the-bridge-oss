@@ -9,6 +9,7 @@ interface CommitModalProps {
   onClose: () => void
   projectId: string
   fileId?: string // If provided, only commit this file
+  saveMode?: 'git' | 'local'
   onSuccess?: () => void
   beforeSubmit?: () => void | Promise<void>
   defaultMessage?: string
@@ -16,7 +17,7 @@ interface CommitModalProps {
   hotfixFromFileVersion?: number
 }
 
-export default function CommitModal({ open, onClose, projectId, fileId, onSuccess, beforeSubmit, defaultMessage, hotfixFromCommitId, hotfixFromFileVersion }: CommitModalProps) {
+export default function CommitModal({ open, onClose, projectId, fileId, saveMode = 'git', onSuccess, beforeSubmit, defaultMessage, hotfixFromCommitId, hotfixFromFileVersion }: CommitModalProps) {
   const [message, setMessage] = React.useState('')
 
   // Pre-fill message from defaultMessage when modal opens
@@ -31,42 +32,59 @@ export default function CommitModal({ open, onClose, projectId, fileId, onSucces
   
   const commitMutation = useMutation({
     mutationFn: async (commitMessage: string) => {
-      const body: { message: string; fileIds?: string[]; hotfixFromCommitId?: string; hotfixFromFileVersion?: number } = { message: commitMessage }
-      if (fileId) {
-        body.fileIds = [fileId]
-      }
-      if (hotfixFromCommitId) body.hotfixFromCommitId = hotfixFromCommitId
-      if (typeof hotfixFromFileVersion === 'number') body.hotfixFromFileVersion = hotfixFromFileVersion
-      
       try {
+        if (saveMode === 'local') {
+          if (!fileId) {
+            throw new Error('Missing fileId for local version save')
+          }
+
+          return await apiClient.post<{ id?: string }>(
+            `/starbase-api/files/${fileId}/versions`,
+            { message: commitMessage }
+          )
+        }
+
+        const body: { message: string; fileIds?: string[]; hotfixFromCommitId?: string; hotfixFromFileVersion?: number } = { message: commitMessage }
+        if (fileId) {
+          body.fileIds = [fileId]
+        }
+        if (hotfixFromCommitId) body.hotfixFromCommitId = hotfixFromCommitId
+        if (typeof hotfixFromFileVersion === 'number') body.hotfixFromFileVersion = hotfixFromFileVersion
+
         return await apiClient.post<{ commitId?: string }>(`/vcs-api/projects/${projectId}/commit`, body)
       } catch (error) {
-        const parsed = parseApiError(error, 'Commit failed')
-        throw new Error(parsed.message || 'Commit failed')
+        const parsed = parseApiError(error, saveMode === 'local' ? 'Save failed' : 'Commit failed')
+        throw new Error(parsed.message || (saveMode === 'local' ? 'Save failed' : 'Commit failed'))
       }
     },
     onSuccess: () => {
       setMessage('')
-      // Optimistically clear uncommitted state to avoid UI briefly showing an "Unsaved version"
-      // right after a successful commit.
-      queryClient.setQueryData(
-        ['uncommitted-files', projectId, 'draft'],
-        (prev: any) => {
-          if (!prev) return prev
-          const prevIds = Array.isArray(prev.uncommittedFileIds) ? prev.uncommittedFileIds : []
-          const nextIds = fileId ? prevIds.filter((id: any) => id !== fileId) : []
-          return {
-            ...prev,
-            uncommittedFileIds: nextIds,
-            hasUncommittedChanges: nextIds.length > 0,
+      if (saveMode === 'git') {
+        queryClient.setQueryData(
+          ['uncommitted-files', projectId, 'draft'],
+          (prev: any) => {
+            if (!prev) return prev
+            const prevIds = Array.isArray(prev.uncommittedFileIds) ? prev.uncommittedFileIds : []
+            const nextIds = fileId ? prevIds.filter((id: any) => id !== fileId) : []
+            return {
+              ...prev,
+              uncommittedFileIds: nextIds,
+              hasUncommittedChanges: nextIds.length > 0,
+            }
           }
-        }
-      )
+        )
+      }
       // Let the caller clear any local dirty/edited state before we trigger refetches.
       onSuccess?.()
-      // Invalidate VCS commits query to refresh the versions panel
-      queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', projectId] })
-      queryClient.invalidateQueries({ queryKey: ['uncommitted-files', projectId, 'draft'] })
+      if (saveMode === 'local') {
+        if (fileId) {
+          queryClient.invalidateQueries({ queryKey: ['versions', fileId] })
+          queryClient.invalidateQueries({ queryKey: ['versions-panel', 'local', projectId, fileId] })
+        }
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', projectId] })
+        queryClient.invalidateQueries({ queryKey: ['uncommitted-files', projectId, 'draft'] })
+      }
       onClose()
     },
   })
