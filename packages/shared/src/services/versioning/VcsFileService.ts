@@ -5,7 +5,6 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { WorkingFile } from '@enterpriseglue/shared/db/entities/WorkingFile.js';
 import { File as MainFile } from '@enterpriseglue/shared/db/entities/File.js';
-import { IsNull } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { WorkingFileInfo, hashContent, mapWorkingFile, normalizeFolderId } from './vcs-types.js';
@@ -21,56 +20,92 @@ export class VcsFileService {
     name: string,
     type: string,
     content: string,
-    folderId?: string | null
+    folderId?: string | null,
+    mainFileId?: string | null
   ): Promise<WorkingFileInfo> {
     const dataSource = await getDataSource();
     const fileRepo = dataSource.getRepository(WorkingFile);
     const now = Date.now();
     const contentHash = hashContent(content);
+    const normalizedFolderId = folderId ?? null;
+    const normalizedMainFileId = mainFileId ?? null;
 
-    if (!fileId) {
-      const normalizedFolderId = folderId ?? null;
+    if (!fileId && normalizedMainFileId) {
+      const existingByMainFileId = await fileRepo.findOne({
+        where: {
+          branchId,
+          projectId,
+          mainFileId: normalizedMainFileId,
+        },
+      });
 
+      if (existingByMainFileId) {
+        fileId = existingByMainFileId.id;
+      }
+    }
+
+    if (!fileId && normalizedMainFileId) {
+      const qb = fileRepo.createQueryBuilder('wf')
+        .where('wf.branchId = :branchId', { branchId })
+        .andWhere('wf.projectId = :projectId', { projectId })
+        .andWhere('wf.mainFileId IS NULL')
+        .andWhere('wf.name = :name', { name })
+        .andWhere('wf.type = :type', { type })
+        .andWhere('wf.isDeleted = :isDeleted', { isDeleted: false });
+
+      if (normalizedFolderId === null) {
+        qb.andWhere('(wf.folderId IS NULL OR wf.folderId = :empty)', { empty: '' });
+      } else {
+        qb.andWhere('wf.folderId = :folderId', { folderId: normalizedFolderId });
+      }
+
+      const existingLegacy = await qb.orderBy('wf.updatedAt', 'DESC').getOne();
+      if (existingLegacy) {
+        fileId = existingLegacy.id;
+      }
+    }
+
+    if (!fileId && !normalizedMainFileId) {
       const qb = fileRepo.createQueryBuilder('wf')
         .where('wf.branchId = :branchId', { branchId })
         .andWhere('wf.projectId = :projectId', { projectId })
         .andWhere('wf.name = :name', { name })
         .andWhere('wf.type = :type', { type })
         .andWhere('wf.isDeleted = :isDeleted', { isDeleted: false });
-      
+
       if (normalizedFolderId === null) {
         qb.andWhere('(wf.folderId IS NULL OR wf.folderId = :empty)', { empty: '' });
       } else {
         qb.andWhere('wf.folderId = :folderId', { folderId: normalizedFolderId });
       }
-      
-      const existing = await qb.orderBy('wf.updatedAt', 'DESC').getOne();
 
+      const existing = await qb.orderBy('wf.updatedAt', 'DESC').getOne();
       if (existing) {
         fileId = existing.id;
       }
     }
 
     if (fileId) {
-      // Update existing file
       await fileRepo.update({ id: fileId }, {
+        mainFileId: normalizedMainFileId,
         name,
+        type,
         content,
         contentHash,
-        folderId: folderId ?? null,
+        folderId: normalizedFolderId,
         updatedAt: now,
       });
-      
+
       const updated = await fileRepo.findOne({ where: { id: fileId } });
       return mapWorkingFile(updated!);
     } else {
-      // Create new file
       const newFileId = generateId();
       const newFile = {
         id: newFileId,
         branchId,
         projectId,
-        folderId: folderId ?? null,
+        mainFileId: normalizedMainFileId,
+        folderId: normalizedFolderId,
         name,
         type,
         content,
@@ -147,11 +182,21 @@ export class VcsFileService {
     
     const now = Date.now();
     
-    // Build map of VCS files by folder+name+type
-    const vcsFileMap = new Map(
-      vcsFiles.map(f => [`${normalizeFolderId(f.folderId)}:${f.name}:${f.type}`, f])
-    );
+    const vcsFileMap = new Map<string, WorkingFile>();
+    const legacyVcsFileMap = new Map<string, WorkingFile>();
+    for (const file of vcsFiles) {
+      if (typeof file.mainFileId === 'string' && file.mainFileId) {
+        vcsFileMap.set(file.mainFileId, file);
+        continue;
+      }
+      const legacyKey = `${normalizeFolderId(file.folderId)}:${file.name}:${file.type}`;
+      const current = legacyVcsFileMap.get(legacyKey);
+      if (!current || Number(file.updatedAt || 0) > Number(current.updatedAt || 0)) {
+        legacyVcsFileMap.set(legacyKey, file);
+      }
+    }
     const dbFileKeys = new Set<string>();
+    const dbFileIds = new Set<string>();
     
     // Collect batch operations instead of sequential awaits
     const updatePromises: Promise<any>[] = [];
@@ -160,15 +205,25 @@ export class VcsFileService {
     for (const dbFile of dbFiles) {
       const key = `${normalizeFolderId((dbFile as any).folderId)}:${dbFile.name}:${dbFile.type}`;
       dbFileKeys.add(key);
-      const existingVcsFile = vcsFileMap.get(key);
+      dbFileIds.add(String((dbFile as any).id));
+      const existingVcsFile = vcsFileMap.get(String((dbFile as any).id)) ?? legacyVcsFileMap.get(key);
       const content = String((dbFile as any).xml || '');
       const contentHash = hashContent(content);
       const normalizedFolderId = normalizeFolderId((dbFile as any).folderId);
-      
+
       if (existingVcsFile) {
         const existingFolderId = normalizeFolderId(existingVcsFile.folderId);
-        if (existingVcsFile.contentHash !== contentHash || existingFolderId !== normalizedFolderId) {
+        if (
+          existingVcsFile.contentHash !== contentHash ||
+          existingFolderId !== normalizedFolderId ||
+          existingVcsFile.name !== dbFile.name ||
+          existingVcsFile.type !== dbFile.type ||
+          existingVcsFile.mainFileId !== String((dbFile as any).id)
+        ) {
           updatePromises.push(workingFileRepo.update({ id: existingVcsFile.id }, {
+            mainFileId: String((dbFile as any).id),
+            name: dbFile.name,
+            type: dbFile.type,
             content,
             contentHash,
             folderId: (dbFile as any).folderId || '',
@@ -180,6 +235,7 @@ export class VcsFileService {
           id: generateId(),
           branchId,
           projectId,
+          mainFileId: String((dbFile as any).id),
           folderId: (dbFile as any).folderId || '',
           name: dbFile.name,
           type: dbFile.type,
@@ -193,9 +249,16 @@ export class VcsFileService {
     }
 
     // Mark deleted files
-    for (const [key, vcsFile] of vcsFileMap.entries()) {
-      if (!dbFileKeys.has(key)) {
-        updatePromises.push(workingFileRepo.update({ id: vcsFile.id }, { isDeleted: true, updatedAt: now }));
+    for (const vcsFile of vcsFiles) {
+      if (vcsFile.mainFileId) {
+        if (!dbFileIds.has(String(vcsFile.mainFileId))) {
+          updatePromises.push(workingFileRepo.update({ id: vcsFile.id }, { isDeleted: true, updatedAt: now }));
+        }
+      } else {
+        const key = `${normalizeFolderId(vcsFile.folderId)}:${vcsFile.name}:${vcsFile.type}`;
+        if (!dbFileKeys.has(key)) {
+          updatePromises.push(workingFileRepo.update({ id: vcsFile.id }, { isDeleted: true, updatedAt: now }));
+        }
       }
     }
 

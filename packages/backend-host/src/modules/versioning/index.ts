@@ -166,12 +166,17 @@ router.post('/vcs-api/projects/:projectId/commit', apiLimiter, requireAuth, vali
         file.name,
         file.type,
         file.xml,
-        file.folderId
+        file.folderId,
+        file.id
       );
     }
 
     // Create the commit
-    const commitOptions: { hotfixFromCommitId?: string; hotfixFromFileVersion?: number } = {};
+    const commitOptions: { source?: string; hotfixFromCommitId?: string; hotfixFromFileVersion?: number; fileIds?: string[] } = {};
+    if (validatedFileIds && validatedFileIds.length > 0) {
+      commitOptions.source = 'file-save';
+      commitOptions.fileIds = validatedFileIds.map((id: string) => String(id));
+    }
     if (hotfixFromCommitId) commitOptions.hotfixFromCommitId = hotfixFromCommitId;
     if (typeof hotfixFromFileVersion === 'number') commitOptions.hotfixFromFileVersion = hotfixFromFileVersion;
     const commit = await vcsService.commit(
@@ -310,6 +315,19 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
 
         const commitIds = commits.map((c: any) => String(c.id));
         const affectedCommitIds = new Set<string>();
+        const existingVersionCount = await fileCommitVersionRepo.count({ where: { fileId } });
+        const versionMap = new Map<string, number>();
+
+        if (commitIds.length > 0) {
+          const versionRows = await fileCommitVersionRepo.find({
+            where: { fileId, commitId: In(commitIds) },
+            select: ['commitId', 'versionNumber']
+          });
+
+          for (const row of versionRows as Array<{ commitId: string; versionNumber: number }>) {
+            versionMap.set(String(row.commitId), Number(row.versionNumber));
+          }
+        }
 
         if (commitIds.length > 0) {
           const snapshotRepo = dataSource.getRepository(FileSnapshot);
@@ -336,79 +354,67 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
           }
         }
 
-        const filteredCommits = commits.filter((c: any) => affectedCommitIds.has(String(c.id)));
+        const filteredCommits = commits.filter((c: any) => {
+          const commitId = String(c.id);
+          if (versionMap.has(commitId)) {
+            return true;
+          }
+          if (String(c.source ?? 'manual') === 'file-save') {
+            return false;
+          }
+          return affectedCommitIds.has(commitId);
+        });
 
         // Ensure file_commit_versions is populated for this file.
         try {
-          // First, find the latest user-visible commit that affected this file.
-          // If file_commit_versions already contains that commit, we can skip the full backfill.
-          const commitRepo = dataSource.getRepository(Commit);
+          if (existingVersionCount === 0) {
+            type FileCommitHistoryRow = { id: string; createdAt: number; message: string | null };
+            const commitRepo = dataSource.getRepository(Commit);
 
-          // Build query for commits with file snapshots matching the file
-          const buildFileCommitsQuery = (order: 'DESC' | 'ASC', limit?: number) => {
-            const qb = commitRepo.createQueryBuilder('c')
-              .select(['c.id', 'c.createdAt', 'c.message'])
-              .innerJoin(FileSnapshot, 'fs', 'fs.commitId = c.id')
-              .where('c.projectId = :projectId', { projectId })
-              .andWhere('fs.name = :name', { name })
-              .andWhere('fs.type = :type', { type })
-              .andWhere('fs.changeType <> :unchanged', { unchanged: 'unchanged' });
+            const buildFileCommitsQuery = (order: 'DESC' | 'ASC') => {
+              const qb = commitRepo.createQueryBuilder('c')
+                .select(['c.id', 'c.createdAt', 'c.message'])
+                .innerJoin(FileSnapshot, 'fs', 'fs.commitId = c.id')
+                .where('c.projectId = :projectId', { projectId })
+                .andWhere('(c.source IS NULL OR c.source <> :fileSaveSource)', { fileSaveSource: 'file-save' })
+                .andWhere('fs.name = :name', { name })
+                .andWhere('fs.type = :type', { type })
+                .andWhere('fs.changeType <> :unchanged', { unchanged: 'unchanged' });
 
-            if (normalizedFolderId === null) {
-              qb.andWhere(new Brackets(qb2 => {
-                qb2.where('fs.folderId IS NULL')
-                   .orWhere("fs.folderId = ''");
-              }));
-            } else {
-              qb.andWhere('fs.folderId = :folderId', { folderId: normalizedFolderId });
-            }
+              if (normalizedFolderId === null) {
+                qb.andWhere(new Brackets(qb2 => {
+                  qb2.where('fs.folderId IS NULL')
+                     .orWhere("fs.folderId = ''");
+                }));
+              } else {
+                qb.andWhere('fs.folderId = :folderId', { folderId: normalizedFolderId });
+              }
 
-            qb.groupBy('c.id').addGroupBy('c.createdAt').addGroupBy('c.message')
-              .orderBy('c.createdAt', order);
+              qb.groupBy('c.id').addGroupBy('c.createdAt').addGroupBy('c.message')
+                .orderBy('c.createdAt', order);
 
-            if (limit) {
-              qb.limit(limit);
-            }
+              return qb;
+            };
 
-            return qb;
-          };
+            const allRowsAsc = await buildFileCommitsQuery('ASC').getMany() as FileCommitHistoryRow[];
+            const rowsToNumber = allRowsAsc.filter((row: FileCommitHistoryRow) => !isAutoCommit(row.message));
 
-          const latestCandidates = await buildFileCommitsQuery('DESC', 10).getMany();
-          const latest = latestCandidates.find((r) => !isAutoCommit(r.message));
-
-          if (!latest) {
-            await fileCommitVersionRepo.delete({ fileId });
-          } else {
-            const existingLatest = await fileCommitVersionRepo.findOne({
-              where: { fileId, commitId: String(latest.id) }
-            });
-
-            // Also check if entry count matches expected non-auto commit count
-            let needsBackfill = !existingLatest;
-            if (!needsBackfill) {
-              const allRowsForCount = await buildFileCommitsQuery('ASC').getMany();
-              const expectedCount = allRowsForCount.filter((r) => !isAutoCommit(r.message)).length;
-              const actualCount = await fileCommitVersionRepo.count({ where: { fileId } });
-              needsBackfill = actualCount !== expectedCount;
-            }
-
-            if (needsBackfill) {
-              // Full backfill: rebuild sequential v1..vN (oldest->newest), excluding auto commits.
-              const allRowsAsc = await buildFileCommitsQuery('ASC').getMany();
-              const rowsToNumber = allRowsAsc.filter((r) => !isAutoCommit(r.message));
-
-              await dataSource.transaction(async (manager) => {
+            if (rowsToNumber.length > 0) {
+              await dataSource.transaction(async (manager: any) => {
                 await manager.delete(FileCommitVersion, { fileId });
-                if (rowsToNumber.length > 0) {
-                  const values = rowsToNumber.map((r, idx) => ({
-                    projectId,
-                    fileId,
-                    commitId: String(r.id),
-                    versionNumber: idx + 1,
-                    createdAt: Number(r.createdAt),
-                  }));
-                  await manager.insert(FileCommitVersion, values as any);
-                }
+                const values = rowsToNumber.map((row: FileCommitHistoryRow, idx: number) => ({
+                  projectId,
+                  fileId,
+                  commitId: String(row.id),
+                  versionNumber: idx + 1,
+                  createdAt: Number(row.createdAt),
+                }));
+                await manager.insert(FileCommitVersion, values as any);
+              });
+
+              versionMap.clear();
+              rowsToNumber.forEach((row: FileCommitHistoryRow, idx: number) => {
+                versionMap.set(String(row.id), idx + 1);
               });
             }
           }
@@ -419,8 +425,7 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
         // Read DB-backed file version numbers for returned commits
         // Only non-auto commits get version numbers (auto-commits are filtered by frontend)
         const nonAutoCommits = filteredCommits.filter((c: any) => !isAutoCommit(c.message));
-        const versionMap = new Map<string, number>();
-        if (nonAutoCommits.length > 0) {
+        if (versionMap.size === 0 && nonAutoCommits.length > 0) {
           const versionRows = await fileCommitVersionRepo.find({
             where: { fileId, commitId: In(nonAutoCommits.map((c: any) => String(c.id))) },
             select: ['commitId', 'versionNumber']
@@ -433,7 +438,7 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
 
         // If DB doesn't cover all non-auto commits, use computed sequential numbers exclusively
         // to avoid collisions between DB numbers (with gaps) and fallback numbers.
-        if (versionMap.size < nonAutoCommits.length) {
+        if (existingVersionCount === 0 && versionMap.size < nonAutoCommits.length) {
           versionMap.clear();
           const ascByCreatedAt = [...nonAutoCommits].sort((a, b) => a.createdAt - b.createdAt);
           ascByCreatedAt.forEach((commit: any, index) => {
@@ -649,7 +654,8 @@ router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter
         file.name,
         file.type,
         file.xml,
-        file.folderId
+        file.folderId,
+        file.id
       );
     }
 

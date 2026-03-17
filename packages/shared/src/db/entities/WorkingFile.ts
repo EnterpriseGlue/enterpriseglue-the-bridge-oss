@@ -5,12 +5,16 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('working_files_branch_idx', ['branchId'])
 @Index('working_files_project_idx', ['projectId'])
 @Index('working_files_folder_idx', ['folderId'])
+@Index('working_files_main_file_idx', ['mainFileId'])
 export class WorkingFile extends AppBaseEntity {
   @Column({ name: 'branch_id', type: 'text' })
   branchId!: string;
 
   @Column({ name: 'project_id', type: 'text' })
   projectId!: string;
+
+  @Column({ name: 'main_file_id', type: 'text', nullable: true })
+  mainFileId!: string | null;
 
   @Column({ name: 'folder_id', type: 'text', nullable: true })
   folderId!: string | null;

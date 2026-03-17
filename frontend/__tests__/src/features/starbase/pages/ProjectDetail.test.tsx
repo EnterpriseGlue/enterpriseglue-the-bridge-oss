@@ -54,11 +54,20 @@ vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
 }))
 
 vi.mock('@src/features/starbase/pages/components/ProjectContentsTable', () => ({
-  ProjectContentsTable: ({ items, onDeleteItem, onMoveItem, onDownloadFile }: any) => (
+  ProjectContentsTable: ({ items, onDeleteItem, onMoveItem, onDownloadFile, setBatchDeleteIds, setBatchCancelSelection }: any) => (
     <div>
       <div>{items[0]?.name}</div>
       <button type="button" onClick={() => onDeleteItem(items[0])}>
         Trigger delete
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setBatchDeleteIds([items[0].id])
+          setBatchCancelSelection(() => () => {})
+        }}
+      >
+        Trigger batch delete
       </button>
       <button type="button" onClick={() => onMoveItem(items[0])}>
         Trigger move
@@ -278,5 +287,25 @@ describe('ProjectDetail', () => {
     })
 
     clickSpy.mockRestore()
+  })
+
+  it('confirms and executes batch delete from selected items', async () => {
+    vi.mocked(apiClient.delete).mockResolvedValue(undefined as any)
+
+    renderWithProviders()
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha.bpmn')).toBeDefined()
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: /trigger batch delete/i }))
+
+    expect(await screen.findByText(/you're about to delete 1 selected item\./i)).toBeDefined()
+
+    await userEvent.click(screen.getByRole('button', { name: /delete selected/i }))
+
+    await waitFor(() => {
+      expect(apiClient.delete).toHaveBeenCalledWith('/starbase-api/files/file-1')
+    })
   })
 })

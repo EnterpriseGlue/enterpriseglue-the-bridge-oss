@@ -253,10 +253,16 @@ export default function ProjectDetail() {
         await apiClient.delete(url)
       }
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
+      showToast({
+        kind: 'success',
+        title: batchDeleteIds.length === 1 ? 'Item deleted' : 'Items deleted',
+      })
       batchCancelSelection?.()
       setBatchDeleteIds(null)
       setBatchCancelSelection(null)
-    } catch {
+    } catch (e: any) {
+      const parsed = parseApiError(e, 'Failed to delete selected items')
+      showToast({ kind: 'error', title: 'Failed to delete selected items', subtitle: parsed.message })
     } finally {
       setBusy(false)
     }
@@ -990,6 +996,24 @@ export default function ProjectDetail() {
             </Button>
           </ModalFooter>
         </ComposedModal>
+
+        <ConfirmDeleteModal
+          open={!!batchDeleteIds?.length}
+          title="Delete selected items"
+          description={
+            batchDeleteIds?.length
+              ? `You're about to delete ${batchDeleteIds.length} selected item${batchDeleteIds.length === 1 ? '' : 's'}.`
+              : ''
+          }
+          dangerLabel={busy ? 'Deleting...' : 'Delete selected'}
+          busy={busy}
+          onCancel={() => {
+            batchCancelSelection?.()
+            setBatchDeleteIds(null)
+            setBatchCancelSelection(null)
+          }}
+          onConfirm={handleBatchDelete}
+        />
 
         <ConfirmDeleteModal
           open={deleteFileModal.isOpen && !!deleteFileModal.data}

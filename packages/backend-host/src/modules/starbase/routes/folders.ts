@@ -25,23 +25,11 @@ import { projectIdParamSchema, folderIdParamSchema, createFolderBodySchema, rena
 // Auto-commit helper for folder operations
 async function autoCommitFolderChange(projectId: string, userId: string, message: string): Promise<void> {
   try {
-    const dataSource = await getDataSource()
-    const fileRepo = dataSource.getRepository(File)
     const branch = await vcsService.getUserBranch(projectId, userId)
-    
-    // Get all files in project to save to VCS
-    const projectFiles = await fileRepo.findBy({ projectId })
-    
-    // Save files to VCS working_files
-    for (const file of projectFiles) {
-      await vcsService.saveFile(branch.id, projectId, null, file.name, file.type, file.xml, file.folderId)
-    }
-    
-    // Create auto-commit
+    await vcsService.syncFromMainDb(projectId, userId, branch.id)
     await vcsService.commit(branch.id, userId, message, { source: 'system' })
     logger.info('Auto-committed folder change', { projectId, userId, message })
   } catch (error) {
-    // Don't fail the main operation if VCS auto-commit fails
     logger.error('Failed to auto-commit folder change', { projectId, userId, error })
   }
 }

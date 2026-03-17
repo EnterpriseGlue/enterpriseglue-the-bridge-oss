@@ -16,7 +16,7 @@ import { IsNull } from 'typeorm';
 import { AuthorizationService } from '@enterpriseglue/shared/services/authorization.js';
 import { ResourceService } from '@enterpriseglue/shared/services/resources.js';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
-import { syncFileUpdate } from '@enterpriseglue/shared/services/versioning/index.js';
+import { syncFileDelete, syncFileUpdate } from '@enterpriseglue/shared/services/versioning/index.js';
 import { extractBpmnProcessId, extractDmnDecisionId, updateStarbaseFileNameInXml } from '@enterpriseglue/shared/utils/starbase-xml.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { fileOperationsLimiter, apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
@@ -644,7 +644,7 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(f
 
   const projectResult = await fileRepo.findOne({
     where: { id: fileId },
-    select: ['projectId', 'name']
+    select: ['projectId', 'name', 'type', 'folderId', 'xml']
   });
   if (!projectResult) {
     throw Errors.notFound('File');
@@ -662,8 +662,19 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(f
   const updates: any = { updatedAt: now };
   if (newName !== undefined) updates.name = newName;
   if (folderId !== undefined) updates.folderId = folderId === null ? null : String(folderId);
+  const nextFolderId = folderId !== undefined ? (folderId === null ? null : String(folderId)) : (projectResult.folderId ?? null);
 
   await fileRepo.update({ id: fileId }, updates);
+
+  syncFileUpdate(
+    projectResult.projectId,
+    userId,
+    fileId,
+    newName ?? projectResult.name,
+    projectResult.type,
+    String(projectResult.xml || ''),
+    nextFolderId
+  ).catch(() => {});
 
   if (newName !== undefined && newName !== projectResult.name) {
     const linkedFiles = await fileRepo.find({
@@ -716,7 +727,7 @@ r.delete('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsL
   const fileRepo = dataSource.getRepository(File);
   const projectResult = await fileRepo.findOne({
     where: { id: fileId },
-    select: ['projectId']
+    select: ['projectId', 'name', 'type', 'folderId']
   });
   if (!projectResult) {
     throw Errors.notFound('File');
@@ -732,6 +743,15 @@ r.delete('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsL
 
   // Delete file and all its associated data using cascade delete service
   await CascadeDeleteService.deleteFile(fileId);
+
+  syncFileDelete(
+    projectResult.projectId,
+    userId,
+    fileId,
+    projectResult.name,
+    projectResult.type,
+    projectResult.folderId ?? null
+  ).catch(() => {});
   
   res.status(204).end();
 }));

@@ -18,6 +18,7 @@ export default function VersionsPanel({ fileId }: { fileId: string }) {
   if (q.isLoading) return <p>Loading versions…</p>
   if (q.isError) return <p>Failed to load versions.</p>
   if (!q.data || q.data.length === 0) return <p>No versions yet.</p>
+
   return (
     <div>
       <h3 style={{ marginTop: 0 }}>Versions</h3>

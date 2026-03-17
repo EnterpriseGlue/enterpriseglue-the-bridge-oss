@@ -4,16 +4,21 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireFileAccess } from '@enterpriseglue/shared/middleware/projectAuth.js';
-import { validateParams } from '@enterpriseglue/shared/middleware/validate.js';
+import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Version } from '@enterpriseglue/shared/db/entities/Version.js';
 import { File } from '@enterpriseglue/shared/db/entities/File.js';
 import { AuthorizationService } from '@enterpriseglue/shared/services/authorization.js';
-import { unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
+import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
+import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js';
+import { unixTimestamp, unixTimestampMs } from '@enterpriseglue/shared/utils/id.js';
 
 const fileIdParamSchema = z.object({ fileId: z.string().uuid() });
 const versionIdParamSchema = z.object({ fileId: z.string().uuid(), versionId: z.string().uuid() });
+const createVersionBodySchema = z.object({
+  message: z.string().max(500).optional(),
+});
 
 const r = Router();
 
@@ -56,12 +61,138 @@ r.get('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validateP
     order: { createdAt: 'DESC' },
   });
   
-  res.json(rows.map((row) => ({
+  res.json(rows.map((row: Version) => ({
     id: row.id,
     author: row.author || 'unknown',
     message: row.message || '',
     createdAt: Number(row.createdAt),
   })));
+}));
+
+r.post('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validateParams(fileIdParamSchema), validateBody(createVersionBodySchema), requireFileAccess(), asyncHandler(async (req: Request, res: Response) => {
+  const fileId = String(req.params.fileId);
+  const userId = req.user!.userId;
+  const dataSource = await getDataSource();
+  const versionRepo = dataSource.getRepository(Version);
+  const fileRepo = dataSource.getRepository(File);
+  const file = await fileRepo.findOne({
+    where: { id: fileId },
+    select: ['id', 'projectId', 'xml'],
+  });
+
+  if (!file) {
+    throw Errors.notFound('File');
+  }
+
+  const canEditFile = await projectMemberService.hasRole(String(file.projectId), userId, EDIT_ROLES);
+  if (!canEditFile) {
+    throw Errors.notFound('File');
+  }
+
+  const now = unixTimestampMs();
+  const message = String(req.body?.message || '').trim();
+  const id = generateId();
+
+  await versionRepo.insert({
+    id,
+    fileId,
+    author: userId,
+    message,
+    xml: file.xml,
+    createdAt: now,
+  });
+
+  res.status(201).json({
+    id,
+    author: userId,
+    message,
+    createdAt: now,
+  });
+}));
+
+r.get('/starbase-api/files/:fileId/versions/:versionId', apiLimiter, requireAuth, validateParams(versionIdParamSchema), requireFileAccess(), asyncHandler(async (req: Request, res: Response) => {
+  const fileId = String(req.params.fileId);
+  const versionId = String(req.params.versionId);
+  const dataSource = await getDataSource();
+  const versionRepo = dataSource.getRepository(Version);
+
+  const row = await versionRepo.findOne({
+    where: { id: versionId, fileId },
+    select: ['id', 'fileId', 'author', 'message', 'xml', 'createdAt'],
+  });
+
+  if (!row) {
+    throw Errors.notFound('Version');
+  }
+
+  res.json({
+    id: row.id,
+    fileId: row.fileId,
+    author: row.author || 'unknown',
+    message: row.message || '',
+    xml: row.xml,
+    createdAt: Number(row.createdAt),
+  });
+}));
+
+r.post('/starbase-api/files/:fileId/versions/:versionId/restore', apiLimiter, requireAuth, validateParams(versionIdParamSchema), requireFileAccess(), asyncHandler(async (req: Request, res: Response) => {
+  const fileId = String(req.params.fileId);
+  const versionId = String(req.params.versionId);
+  const userId = req.user!.userId;
+  const dataSource = await getDataSource();
+  const versionRepo = dataSource.getRepository(Version);
+  const fileRepo = dataSource.getRepository(File);
+
+  const [file, version] = await Promise.all([
+    fileRepo.findOne({
+      where: { id: fileId },
+      select: ['id', 'projectId'],
+    }),
+    versionRepo.findOne({
+      where: { id: versionId, fileId },
+      select: ['id', 'fileId', 'message', 'xml'],
+    }),
+  ]);
+
+  if (!file) {
+    throw Errors.notFound('File');
+  }
+
+  if (!version) {
+    throw Errors.notFound('Version');
+  }
+
+  const canEditFile = await projectMemberService.hasRole(String(file.projectId), userId, EDIT_ROLES);
+  if (!canEditFile) {
+    throw Errors.notFound('File');
+  }
+
+  const updatedAt = unixTimestamp();
+  const versionCreatedAt = unixTimestampMs();
+
+  await fileRepo.update(
+    { id: fileId },
+    {
+      xml: version.xml,
+      updatedAt,
+    }
+  );
+
+  await versionRepo.insert({
+    id: generateId(),
+    fileId,
+    author: userId,
+    message: `Restored from ${String(version.message || '').trim() || `version ${versionId.substring(0, 8)}`}`,
+    xml: version.xml,
+    createdAt: versionCreatedAt,
+  });
+
+  res.json({
+    restored: true,
+    fileId,
+    versionId,
+    updatedAt,
+  });
 }));
 
 /**

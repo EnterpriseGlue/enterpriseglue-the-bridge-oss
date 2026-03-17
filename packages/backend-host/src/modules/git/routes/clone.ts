@@ -397,7 +397,8 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
             file.name,
             file.type,
             file.xml,
-            file.folderId
+            file.folderId,
+            file.id
           );
         }
 

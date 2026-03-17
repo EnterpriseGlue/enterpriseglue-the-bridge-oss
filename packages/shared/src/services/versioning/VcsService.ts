@@ -80,9 +80,10 @@ export class VcsService {
     name: string,
     type: string,
     content: string,
-    folderId?: string | null
+    folderId?: string | null,
+    mainFileId?: string | null
   ): Promise<WorkingFileInfo> {
-    return vcsFileService.saveFile(branchId, projectId, fileId, name, type, content, folderId);
+    return vcsFileService.saveFile(branchId, projectId, fileId, name, type, content, folderId, mainFileId);
   }
 
   async getFiles(branchId: string, folderId?: string | null): Promise<WorkingFileInfo[]> {
@@ -102,7 +103,7 @@ export class VcsService {
   }
 
   // Commit operations - delegate to VcsCommitService
-  async commit(branchId: string, userId: string, message: string, options?: { isRemote?: boolean; source?: string; hotfixFromCommitId?: string; hotfixFromFileVersion?: number }): Promise<CommitInfo> {
+  async commit(branchId: string, userId: string, message: string, options?: { isRemote?: boolean; source?: string; hotfixFromCommitId?: string; hotfixFromFileVersion?: number; fileIds?: string[] }): Promise<CommitInfo> {
     return vcsCommitService.commit(branchId, userId, message, options);
   }
 

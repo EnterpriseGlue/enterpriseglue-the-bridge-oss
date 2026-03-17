@@ -14,11 +14,19 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { CommitInfo, hashContent, mapCommit, normalizeFolderId } from './vcs-types.js';
 
+type VcsCommitOptions = {
+  isRemote?: boolean;
+  source?: string;
+  hotfixFromCommitId?: string;
+  hotfixFromFileVersion?: number;
+  fileIds?: string[];
+};
+
 export class VcsCommitService {
   /**
    * Create a commit from current working files
    */
-  async commit(branchId: string, userId: string, message: string, options?: { isRemote?: boolean; source?: string; hotfixFromCommitId?: string; hotfixFromFileVersion?: number }): Promise<CommitInfo> {
+  async commit(branchId: string, userId: string, message: string, options?: VcsCommitOptions): Promise<CommitInfo> {
     const dataSource = await getDataSource();
     const branchRepo = dataSource.getRepository(Branch);
     const commitRepo = dataSource.getRepository(Commit);
@@ -159,7 +167,7 @@ export class VcsCommitService {
     logger.info('Commit created', { commitId, branchId, userId, message });
     
     // Persist file version numbers for non-auto commits
-    await this.updateFileCommitVersionsOnCommit(branch.projectId, commitId, message, now);
+    await this.updateFileCommitVersionsOnCommit(branch.projectId, commitId, message, now, options?.fileIds ?? null);
     
     return mapCommit(commit);
   }
@@ -257,8 +265,27 @@ export class VcsCommitService {
    */
   async commitHasFile(commitId: string, fileId: string): Promise<boolean> {
     const dataSource = await getDataSource();
+    const commitRepo = dataSource.getRepository(Commit);
+    const versionRepo = dataSource.getRepository(FileCommitVersion);
     const mainFileRepo = dataSource.getRepository(MainFile);
     const snapshotRepo = dataSource.getRepository(FileSnapshot);
+
+    const explicitVersion = await versionRepo.findOne({
+      where: { fileId, commitId },
+      select: ['commitId']
+    });
+    if (explicitVersion) {
+      return true;
+    }
+
+    const commitRow = await commitRepo.findOne({
+      where: { id: commitId },
+      select: ['source']
+    });
+    if (commitRow?.source === 'file-save') {
+      logger.debug('commitHasFile skipped snapshot fallback for file-scoped save', { commitId, fileId });
+      return false;
+    }
     
     const mainFile = await mainFileRepo.findOne({
       where: { id: fileId },
@@ -299,6 +326,23 @@ export class VcsCommitService {
     const dataSource = await getDataSource();
     const mainFileRepo = dataSource.getRepository(MainFile);
     const commitRepo = dataSource.getRepository(Commit);
+
+    const explicitRow = await commitRepo.createQueryBuilder('c')
+      .innerJoin(FileCommitVersion, 'fv', 'fv.commitId = c.id')
+      .where('c.projectId = :projectId', { projectId })
+      .andWhere('fv.fileId = :fileId', { fileId })
+      .select(['c.id AS id', 'c.message AS message', 'c.createdAt AS "createdAt"'])
+      .orderBy('c.createdAt', 'DESC')
+      .limit(1)
+      .getRawOne();
+
+    if (explicitRow) {
+      return {
+        id: String(explicitRow.id),
+        message: String(explicitRow.message || ''),
+        createdAt: Number(explicitRow.createdAt || 0),
+      };
+    }
     
     const mainFile = await mainFileRepo.findOne({
       where: { id: fileId },
@@ -315,6 +359,7 @@ export class VcsCommitService {
     const qb = commitRepo.createQueryBuilder('c')
       .innerJoin(FileSnapshot, 'fs', 'fs.commitId = c.id')
       .where('c.projectId = :projectId', { projectId })
+      .andWhere('(c.source IS NULL OR c.source <> :fileSaveSource)', { fileSaveSource: 'file-save' })
       .andWhere('fs.name = :name', { name })
       .andWhere('fs.type = :type', { type })
       .andWhere('fs.changeType != :unchanged', { unchanged: 'unchanged' });
@@ -441,7 +486,8 @@ export class VcsCommitService {
     projectId: string,
     commitId: string,
     message: string,
-    createdAt: number
+    createdAt: number,
+    explicitFileIds?: string[] | null
   ): Promise<void> {
     const msgLower = (message || '').toLowerCase();
     if (
@@ -457,6 +503,55 @@ export class VcsCommitService {
       const snapshotRepo = dataSource.getRepository(FileSnapshot);
       const mainFileRepo = dataSource.getRepository(MainFile);
       const versionRepo = dataSource.getRepository(FileCommitVersion);
+      const normalizedExplicitFileIds = Array.isArray(explicitFileIds)
+        ? Array.from(new Set(explicitFileIds.map((id) => String(id)).filter(Boolean)))
+        : [];
+
+      if (normalizedExplicitFileIds.length > 0) {
+        const scopedFiles = await mainFileRepo.find({
+          where: { projectId, id: In(normalizedExplicitFileIds) },
+          select: ['id']
+        });
+        const scopedFileIds = scopedFiles.map((file) => String(file.id));
+
+        if (scopedFileIds.length === 0) {
+          return;
+        }
+
+        const maxVersionsByFileId = new Map<string, number>();
+        const maxVersionRows = await versionRepo.createQueryBuilder('v')
+          .select(['v.fileId AS "fileId"', 'COALESCE(MAX(v.versionNumber), 0) AS "maxVersion"'])
+          .where('v.fileId IN (:...fileIds)', { fileIds: scopedFileIds })
+          .groupBy('v.fileId')
+          .getRawMany();
+
+        for (const row of maxVersionRows) {
+          maxVersionsByFileId.set(String(row.fileId), Number(row.maxVersion));
+        }
+
+        const insertValues = scopedFileIds.map((fileId) => {
+          const nextVersionNumber = (maxVersionsByFileId.get(fileId) ?? 0) + 1;
+          maxVersionsByFileId.set(fileId, nextVersionNumber);
+          return {
+            projectId,
+            fileId,
+            commitId,
+            versionNumber: nextVersionNumber,
+            createdAt,
+          };
+        });
+
+        if (insertValues.length > 0) {
+          await versionRepo.createQueryBuilder()
+            .insert()
+            .values(insertValues)
+            .orIgnore()
+            .execute();
+        }
+
+        logger.debug('Updated file_commit_versions on explicit file-scoped commit', { projectId, commitId, affectedFiles: scopedFileIds.length });
+        return;
+      }
 
       // Include ALL committed files (even unchanged) so every explicit save
       // gets a FileCommitVersion row. This is critical for deployments: the
