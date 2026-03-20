@@ -61,4 +61,30 @@ describe('AuthProvider', () => {
 
     expect(localStorage.getItem(USER_KEY)).toBeNull();
   });
+
+  it('syncs authenticated user state from storage events across tabs', async () => {
+    const { authService } = await import('@src/services/auth');
+    (authService.getMe as any).mockRejectedValue(new Error('Not authenticated'));
+    (authService.refreshToken as any).mockRejectedValue(new Error('Not authenticated'));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const syncedUser = { id: 'user-2', email: 'synced@example.com' };
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: USER_KEY,
+        newValue: JSON.stringify(syncedUser),
+      }));
+    });
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(true);
+      expect(result.current.user?.email).toBe('synced@example.com');
+    });
+  });
 });

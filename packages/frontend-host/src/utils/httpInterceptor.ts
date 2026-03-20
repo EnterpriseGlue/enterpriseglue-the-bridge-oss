@@ -180,14 +180,15 @@ async function refreshAccessToken(): Promise<boolean> {
     if (!response.ok) {
       const message = await getErrorMessageFromResponse(response);
       console.warn('Token refresh failed:', message);
-      handleAuthFailure();
+      if (response.status === 401 || response.status === 403) {
+        handleAuthFailure();
+      }
       return false;
     }
 
     return true;
   } catch (error) {
     console.error('Token refresh failed:', error);
-    handleAuthFailure();
     return false;
   }
 }

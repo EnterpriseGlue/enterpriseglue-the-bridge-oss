@@ -16,7 +16,7 @@ interface ProtectedRouteProps {
  * Redirects admin users to setup wizard if platform not configured
  */
 export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck = false }: ProtectedRouteProps) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   const [setupChecked, setSetupChecked] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
@@ -37,7 +37,7 @@ export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck 
   const isExemptPath = setupExemptPaths.some(p => effectivePathname.includes(p));
 
   useEffect(() => {
-    if (!isAuthenticated || !canManagePlatformSettings || skipSetupCheck || isExemptPath) {
+    if (isLoading || !isAuthenticated || !canManagePlatformSettings || skipSetupCheck || isExemptPath) {
       setSetupChecked(true);
       return;
     }
@@ -56,7 +56,15 @@ export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck 
     };
 
     checkSetup();
-  }, [isAuthenticated, canManagePlatformSettings, skipSetupCheck, isExemptPath]);
+  }, [isLoading, isAuthenticated, canManagePlatformSettings, skipSetupCheck, isExemptPath]);
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <InlineLoading description="Loading..." />
+      </div>
+    );
+  }
 
   // Not authenticated - redirect to login
   if (!isAuthenticated) {

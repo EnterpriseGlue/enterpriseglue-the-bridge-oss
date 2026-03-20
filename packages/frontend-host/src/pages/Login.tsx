@@ -135,7 +135,7 @@ function makeLogoObjectUrl(raw: unknown): string | null {
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { notify } = useToast();
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
@@ -262,6 +262,17 @@ export default function Login() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (isAuthLoading || !isAuthenticated) return;
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('error')) return;
+
+    const fallback = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : '/';
+    const fromRaw = (location.state as any)?.from?.pathname;
+    navigate(toSafeInternalPath(fromRaw, fallback), { replace: true });
+  }, [isAuthLoading, isAuthenticated, location.search, location.state, navigate, tenantSlug]);
 
   // Handle OAuth error messages (success now redirects directly to root)
   useEffect(() => {

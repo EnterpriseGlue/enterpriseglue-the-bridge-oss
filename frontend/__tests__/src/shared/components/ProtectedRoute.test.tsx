@@ -26,12 +26,27 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-const mockUseAuth = async (state: { user: any; isAuthenticated: boolean }) => {
+const mockUseAuth = async (state: { user: any; isAuthenticated: boolean; isLoading?: boolean }) => {
   const { useAuth } = await import('@src/shared/hooks/useAuth');
-  (useAuth as any).mockReturnValue(state);
+  (useAuth as any).mockReturnValue({ isLoading: false, ...state });
 };
 
 describe('ProtectedRoute', () => {
+  it('shows loading state while auth bootstrap is still running', async () => {
+    await mockUseAuth({ user: null, isAuthenticated: false, isLoading: true });
+
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <ProtectedRoute>
+          <div>Secret</div>
+        </ProtectedRoute>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Navigate:/login')).not.toBeInTheDocument();
+  });
+
   it('redirects unauthenticated users to login', async () => {
     await mockUseAuth({ user: null, isAuthenticated: false });
 

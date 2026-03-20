@@ -5,6 +5,8 @@
 
 import { useEffect, useRef } from 'react';
 
+const LAST_ACTIVITY_KEY = 'eg.auth.lastActivityAt';
+
 interface UseActivityMonitorOptions {
   /**
    * Inactivity timeout in milliseconds
@@ -46,6 +48,24 @@ export function useActivityMonitor({
   const timeoutIdRef = useRef<number | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
 
+  const syncActivity = (timestamp: number) => {
+    try {
+      localStorage.setItem(LAST_ACTIVITY_KEY, String(timestamp));
+    } catch {
+    }
+  };
+
+  const scheduleTimeout = (timestamp: number) => {
+    if (timeoutIdRef.current) {
+      clearTimeout(timeoutIdRef.current);
+    }
+    lastActivityRef.current = timestamp;
+    timeoutIdRef.current = window.setTimeout(() => {
+      console.log('User inactive for', timeoutMs / 1000 / 60, 'minutes - triggering logout');
+      onInactive();
+    }, timeoutMs);
+  };
+
   useEffect(() => {
     if (!enabled) {
       // Clear any existing timeout when disabled
@@ -60,19 +80,9 @@ export function useActivityMonitor({
      * Reset the inactivity timer
      */
     const resetTimer = () => {
-      // Clear existing timeout
-      if (timeoutIdRef.current) {
-        clearTimeout(timeoutIdRef.current);
-      }
-
-      // Update last activity timestamp
-      lastActivityRef.current = Date.now();
-
-      // Set new timeout
-      timeoutIdRef.current = window.setTimeout(() => {
-        console.log('User inactive for', timeoutMs / 1000 / 60, 'minutes - triggering logout');
-        onInactive();
-      }, timeoutMs);
+      const now = Date.now();
+      scheduleTimeout(now);
+      syncActivity(now);
     };
 
     /**
@@ -86,20 +96,33 @@ export function useActivityMonitor({
       }
     };
 
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== LAST_ACTIVITY_KEY) return;
+      const timestamp = Number(event.newValue);
+      if (!Number.isFinite(timestamp) || timestamp <= lastActivityRef.current) return;
+      scheduleTimeout(timestamp);
+    };
+
     // Events that indicate user activity
     const events = [
       'mousedown',
       'mousemove',
       'keydown',
+      'pointerdown',
+      'wheel',
       'scroll',
       'touchstart',
       'click',
+      'focus',
     ];
 
     // Add event listeners
     events.forEach((event) => {
       window.addEventListener(event, handleActivity, { passive: true });
     });
+
+    document.addEventListener('visibilitychange', handleActivity);
+    window.addEventListener('storage', handleStorage);
 
     // Initialize timer
     resetTimer();
@@ -112,6 +135,8 @@ export function useActivityMonitor({
       events.forEach((event) => {
         window.removeEventListener(event, handleActivity);
       });
+      document.removeEventListener('visibilitychange', handleActivity);
+      window.removeEventListener('storage', handleStorage);
     };
   }, [enabled, onInactive, timeoutMs]);
 
@@ -119,16 +144,13 @@ export function useActivityMonitor({
    * Manually reset the activity timer
    */
   const resetActivityTimer = () => {
-    if (timeoutIdRef.current) {
-      clearTimeout(timeoutIdRef.current);
-    }
-    lastActivityRef.current = Date.now();
+    const now = Date.now();
+    scheduleTimeout(now);
+    syncActivity(now);
     
-    if (enabled) {
-      timeoutIdRef.current = window.setTimeout(() => {
-        console.log('User inactive - triggering logout');
-        onInactive();
-      }, timeoutMs);
+    if (!enabled && timeoutIdRef.current) {
+      clearTimeout(timeoutIdRef.current);
+      timeoutIdRef.current = null;
     }
   };
 

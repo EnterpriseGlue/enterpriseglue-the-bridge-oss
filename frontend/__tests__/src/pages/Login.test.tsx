@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -9,10 +9,23 @@ import Login from '@src/pages/Login';
 import { apiClient } from '@src/shared/api/client';
 
 const loginMock = vi.fn().mockResolvedValue(undefined);
+const navigateMock = vi.fn();
+const authState = {
+  isAuthenticated: false,
+  isLoading: false,
+};
 
 vi.mock('@src/shared/hooks/useAuth', () => ({
-  useAuth: () => ({ login: loginMock }),
+  useAuth: () => ({ login: loginMock, ...authState }),
 }));
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
 
 vi.mock('@src/shared/api/client', () => ({
   ApiError: class ApiError extends Error {
@@ -35,6 +48,8 @@ describe('Login', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     document.title = 'EnterpriseGlue';
+    authState.isAuthenticated = false;
+    authState.isLoading = false;
     (apiClient.get as any).mockImplementation((url: string) => {
       if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
       if (url === '/api/auth/branding') return Promise.resolve({ ssoAutoRedirectSingleProvider: false });
@@ -98,5 +113,27 @@ describe('Login', () => {
 
     expect(await screen.findByText('OneJOP')).toBeDefined();
     expect(document.title).toBe('OneJOP');
+  });
+
+  it('redirects authenticated users away from the login page', async () => {
+    authState.isAuthenticated = true;
+
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={qc}>
+        <ToastProvider>
+          <MemoryRouter initialEntries={['/login']}>
+            <Login />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith('/', { replace: true });
+    });
   });
 });

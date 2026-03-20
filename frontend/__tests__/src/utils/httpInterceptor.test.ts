@@ -189,10 +189,11 @@ describe('httpInterceptor', () => {
         expect(window.location.href).toBe('/t/default/login');
       });
 
-      it('handles refresh network error', async () => {
+      it('preserves auth state on refresh network error', async () => {
         localStorage.setItem(USER_KEY, JSON.stringify({ id: 'user-1' }));
 
         const first401 = new Response(null, { status: 401 });
+        const initialHref = window.location.href;
 
         vi.spyOn(globalThis, 'fetch')
           .mockResolvedValueOnce(first401)
@@ -200,8 +201,8 @@ describe('httpInterceptor', () => {
 
         await interceptedFetch('/api/data');
 
-        expect(localStorage.getItem(USER_KEY)).toBeNull();
-        expect(window.location.href).toBe('/t/default/login');
+        expect(localStorage.getItem(USER_KEY)).toBe(JSON.stringify({ id: 'user-1' }));
+        expect(window.location.href).toBe(initialHref);
       });
 
       it('does not redirect if already on login page', async () => {

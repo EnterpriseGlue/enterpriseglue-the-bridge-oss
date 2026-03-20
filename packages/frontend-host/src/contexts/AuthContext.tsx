@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { authService } from '../services/auth';
 import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
+import { ApiError } from '../shared/api/client';
 import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest } from '../shared/types/auth';
 import { USER_KEY } from '../constants/storageKeys';
 
@@ -26,10 +27,40 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const readStoredUser = (raw: string | null): User | null => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as User;
+  } catch {
+    return null;
+  }
+};
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const persistUser = useCallback((nextUser: User | null) => {
+    setUser(nextUser);
+    try {
+      if (nextUser) {
+        localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+      } else {
+        localStorage.removeItem(USER_KEY);
+      }
+    } catch {
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== USER_KEY) return;
+      setUser(readStoredUser(event.newValue));
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   /**
    * Load user from localStorage and validate token
@@ -44,8 +75,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           clearAuth();
           return;
         }
-        setUser(user);
-        localStorage.setItem(USER_KEY, JSON.stringify(user));
+        persistUser(user);
       } catch (error) {
         // No valid session (401) or network error - try refresh
         try {
@@ -55,8 +85,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             clearAuth();
             return;
           }
-          setUser(user);
-          localStorage.setItem(USER_KEY, JSON.stringify(user));
+          persistUser(user);
         } catch {
           // No valid session, user needs to login
           clearAuth();
@@ -73,9 +102,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
    * Clear authentication data
    */
   const clearAuth = useCallback(() => {
-    setUser(null);
-    localStorage.removeItem(USER_KEY);
-  }, []);
+    persistUser(null);
+  }, [persistUser]);
 
   /**
    * Login with email and password
@@ -91,12 +119,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     // Store user info locally (tokens are in httpOnly cookies set by the server)
-    localStorage.setItem(USER_KEY, JSON.stringify(response.user));
-
-    setUser(response.user);
+    persistUser(response.user);
 
     return response;
-  }, [clearAuth]);
+  }, [clearAuth, persistUser]);
 
   /**
    * Logout and clear session
@@ -120,10 +146,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Update user must_reset_password flag
     if (user) {
       const updatedUser = { ...user, mustResetPassword: false };
-      setUser(updatedUser);
-      localStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
+      persistUser(updatedUser);
     }
-  }, [user]);
+  }, [persistUser, user]);
 
   /**
    * Change password
@@ -142,13 +167,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         clearAuth();
         return;
       }
-      setUser(user);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      persistUser(user);
     } catch (error) {
       console.error('Failed to refresh user:', error);
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        clearAuth();
+      }
       throw error;
     }
-  }, []);
+  }, [clearAuth, persistUser]);
 
   /**
    * Proactive token refresh - check every minute and refresh if needed
@@ -162,7 +189,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await authService.refreshToken();
       } catch (error) {
         console.error('Proactive token refresh failed:', error);
-        await logout();
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          await logout();
+        }
       }
     };
 
