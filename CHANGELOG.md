@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.8...v0.8.9) (2026-03-20)
+
+
+### Bug Fixes
+
+* **frontend:** improve auth session persistence ([#254](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/254)) ([4d6270d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4d6270da0a4d18348356da285f604f37786aff3a))
+
 ## [0.8.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.7...v0.8.8) (2026-03-20)
 
 
