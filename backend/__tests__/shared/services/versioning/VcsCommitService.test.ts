@@ -4,6 +4,7 @@ import { Commit } from '@enterpriseglue/shared/db/entities/Commit.js';
 import { FileSnapshot } from '@enterpriseglue/shared/db/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
 import { File as MainFile } from '@enterpriseglue/shared/db/entities/File.js';
+import { WorkingFile } from '@enterpriseglue/shared/db/entities/WorkingFile.js';
 import { VcsCommitService } from '@enterpriseglue/shared/services/versioning/VcsCommitService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -115,6 +116,70 @@ describe('VcsCommitService', () => {
     expect(mainFileRepo.findOne).not.toHaveBeenCalled();
   });
 
+  it('keeps snapshots for distinct main files separate even when legacy keys match', async () => {
+    const snapshotQb = {
+      leftJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      getRawMany: vi.fn().mockResolvedValue([
+        {
+          id: 'snapshot-a',
+          mainFileId: 'file-a',
+          name: 'Invoice',
+          type: 'bpmn',
+          content: '<a />',
+          changeType: 'modified',
+          folderId: null,
+          workingUpdatedAt: 10,
+        },
+        {
+          id: 'snapshot-b',
+          mainFileId: 'file-b',
+          name: 'Invoice',
+          type: 'bpmn',
+          content: '<b />',
+          changeType: 'modified',
+          folderId: null,
+          workingUpdatedAt: 20,
+        },
+      ]),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === FileSnapshot) {
+          return { createQueryBuilder: vi.fn().mockReturnValue(snapshotQb) };
+        }
+        if (entity === WorkingFile) {
+          return {};
+        }
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const service = new VcsCommitService();
+    await expect(service.getCommitSnapshots('commit-1')).resolves.toEqual([
+      {
+        id: 'snapshot-a',
+        mainFileId: 'file-a',
+        folderId: null,
+        name: 'Invoice',
+        type: 'bpmn',
+        content: '<a />',
+        changeType: 'modified',
+      },
+      {
+        id: 'snapshot-b',
+        mainFileId: 'file-b',
+        folderId: null,
+        name: 'Invoice',
+        type: 'bpmn',
+        content: '<b />',
+        changeType: 'modified',
+      },
+    ]);
+  });
+
   it('falls back to legacy snapshot history when no explicit file versions exist', async () => {
     const explicitQb = {
       innerJoin: vi.fn().mockReturnThis(),
@@ -169,7 +234,7 @@ describe('VcsCommitService', () => {
     });
     expect(mainFileRepo.findOne).toHaveBeenCalledWith({
       where: { id: 'file-1' },
-      select: ['name', 'type', 'folderId']
+      select: ['id', 'name', 'type', 'folderId']
     });
   });
 });

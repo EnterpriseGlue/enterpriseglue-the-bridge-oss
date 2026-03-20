@@ -12,7 +12,7 @@ import { Folder } from '@enterpriseglue/shared/db/entities/Folder.js';
 import { Commit } from '@enterpriseglue/shared/db/entities/Commit.js';
 import { FileSnapshot } from '@enterpriseglue/shared/db/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
-import { IsNull } from 'typeorm';
+import { Brackets, IsNull } from 'typeorm';
 import { AuthorizationService } from '@enterpriseglue/shared/services/authorization.js';
 import { ResourceService } from '@enterpriseglue/shared/services/resources.js';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
@@ -560,14 +560,20 @@ r.post('/starbase-api/files/:fileId/restore-from-commit', apiLimiter, requireAut
 
   const qb = snapshotRepo.createQueryBuilder('fs')
     .where('fs.commitId = :commitId', { commitId })
-    .andWhere('fs.name = :name', { name: String(fileRow.name) })
-    .andWhere('fs.type = :type', { type: String(fileRow.type) });
+    .andWhere(new Brackets((where) => {
+      where.where('fs.mainFileId = :fileId', { fileId });
+      where.orWhere(new Brackets((legacy) => {
+        legacy.where('fs.mainFileId IS NULL')
+          .andWhere('fs.name = :name', { name: String(fileRow.name) })
+          .andWhere('fs.type = :type', { type: String(fileRow.type) });
 
-  if (fileRow.folderId === null || typeof fileRow.folderId === 'undefined') {
-    qb.andWhere('(fs.folderId IS NULL OR fs.folderId = :empty)', { empty: '' });
-  } else {
-    qb.andWhere('fs.folderId = :folderId', { folderId: String(fileRow.folderId) });
-  }
+        if (fileRow.folderId === null || typeof fileRow.folderId === 'undefined') {
+          legacy.andWhere('(fs.folderId IS NULL OR fs.folderId = :empty)', { empty: '' });
+        } else {
+          legacy.andWhere('fs.folderId = :folderId', { folderId: String(fileRow.folderId) });
+        }
+      }));
+    }));
 
   const snapshots = await qb.getMany();
   if (snapshots.length === 0) {

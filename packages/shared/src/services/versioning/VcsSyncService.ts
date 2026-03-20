@@ -182,11 +182,21 @@ export class VcsSyncService {
     
     const lastCommitSnapshots = await snapshotRepo.find({ where: { commitId: baselineCommitId } });
     
+    const snapshotsByMainFileId = new Map<string, Set<string>>();
     const snapshotsByKey = new Map<string, Set<string>>();
     for (const s of lastCommitSnapshots) {
-      const key = `${normalizeFolderId((s as any).folderId)}:${(s as any).name}:${(s as any).type}`;
       const hash = (s as any).contentHash;
       if (typeof hash !== 'string' || !hash) continue;
+
+      const snapshotMainFileId = (s as any).mainFileId ? String((s as any).mainFileId) : null;
+      if (snapshotMainFileId) {
+        const set = snapshotsByMainFileId.get(snapshotMainFileId) ?? new Set<string>();
+        set.add(hash);
+        snapshotsByMainFileId.set(snapshotMainFileId, set);
+        continue;
+      }
+
+      const key = `${normalizeFolderId((s as any).folderId)}:${(s as any).name}:${(s as any).type}`;
       const set = snapshotsByKey.get(key) ?? new Set<string>();
       set.add(hash);
       snapshotsByKey.set(key, set);
@@ -197,7 +207,7 @@ export class VcsSyncService {
     
     for (const file of currentFiles) {
       const key = `${normalizeFolderId((file as any).folderId)}:${file.name}:${file.type}`;
-      const snapshotHashes = snapshotsByKey.get(key);
+      const snapshotHashes = snapshotsByMainFileId.get(String((file as any).id)) ?? snapshotsByKey.get(key);
       
       const currentHash = hashContent((file as any).xml || '');
       

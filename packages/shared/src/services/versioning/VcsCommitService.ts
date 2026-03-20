@@ -9,7 +9,7 @@ import { WorkingFile } from '@enterpriseglue/shared/db/entities/WorkingFile.js';
 import { FileSnapshot } from '@enterpriseglue/shared/db/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
 import { File as MainFile } from '@enterpriseglue/shared/db/entities/File.js';
-import { In, IsNull, Not } from 'typeorm';
+import { Brackets, In } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { CommitInfo, hashContent, mapCommit, normalizeFolderId } from './vcs-types.js';
@@ -21,6 +21,23 @@ type VcsCommitOptions = {
   hotfixFromFileVersion?: number;
   fileIds?: string[];
 };
+
+function buildSnapshotKey(folderId: string | null | undefined, name: string, type: string): string {
+  return `${normalizeFolderId(folderId ?? null)}:${String(name)}:${String(type)}`;
+}
+
+function resolveSnapshotFileId(
+  snapshot: { mainFileId?: string | null; folderId?: string | null; name: string; type: string },
+  validFileIds: Set<string>,
+  fileByKey: Map<string, string>
+): string | null {
+  const directFileId = snapshot.mainFileId ? String(snapshot.mainFileId) : null;
+  if (directFileId && validFileIds.has(directFileId)) {
+    return directFileId;
+  }
+
+  return fileByKey.get(buildSnapshotKey(snapshot.folderId ?? null, snapshot.name, snapshot.type)) ?? null;
+}
 
 export class VcsCommitService {
   /**
@@ -148,6 +165,7 @@ export class VcsCommitService {
         id: generateId(),
         commitId,
         workingFileId: file.id,
+        mainFileId: file.mainFileId ?? null,
         folderId: file.folderId,
         name: file.name,
         type: file.type,
@@ -193,6 +211,8 @@ export class VcsCommitService {
    */
   async getCommitSnapshots(commitId: string): Promise<{
     id: string;
+    mainFileId: string | null;
+    folderId: string | null;
     name: string;
     type: string;
     content: string | null;
@@ -207,6 +227,7 @@ export class VcsCommitService {
       .where('fs.commitId = :commitId', { commitId })
       .select([
         'fs.id AS id',
+        'fs.mainFileId AS "mainFileId"',
         'fs.name AS name',
         'fs.type AS type',
         'fs.content AS content',
@@ -227,7 +248,9 @@ export class VcsCommitService {
     };
 
     for (const s of snapshots) {
-      const key = `${s.name}::${s.type}::${s.folderId ?? ''}`;
+      const key = s.mainFileId
+        ? `main:${String(s.mainFileId)}`
+        : buildSnapshotKey(s.folderId ?? null, s.name, s.type);
       const current = bestByKey.get(key);
       if (!current) {
         bestByKey.set(key, s);
@@ -253,6 +276,8 @@ export class VcsCommitService {
 
     return [...bestByKey.values()].map(s => ({
       id: s.id,
+      mainFileId: s.mainFileId ? String(s.mainFileId) : null,
+      folderId: s.folderId ?? null,
       name: s.name,
       type: s.type,
       content: s.content,
@@ -289,7 +314,7 @@ export class VcsCommitService {
     
     const mainFile = await mainFileRepo.findOne({
       where: { id: fileId },
-      select: ['name', 'type', 'folderId']
+      select: ['id', 'name', 'type', 'folderId']
     });
     
     if (!mainFile) {
@@ -303,14 +328,20 @@ export class VcsCommitService {
     const qb = snapshotRepo.createQueryBuilder('fs')
       .select(['fs.changeType'])
       .where('fs.commitId = :commitId', { commitId })
-      .andWhere('fs.name = :name', { name })
-      .andWhere('fs.type = :type', { type });
-    
-    if (normalizedFolderId === null) {
-      qb.andWhere('(fs.folderId IS NULL OR fs.folderId = :empty)', { empty: '' });
-    } else {
-      qb.andWhere('fs.folderId = :folderId', { folderId: normalizedFolderId });
-    }
+      .andWhere(new Brackets((where) => {
+        where.where('fs.mainFileId = :fileId', { fileId });
+        where.orWhere(new Brackets((legacy) => {
+          legacy.where('fs.mainFileId IS NULL')
+            .andWhere('fs.name = :name', { name })
+            .andWhere('fs.type = :type', { type });
+
+          if (normalizedFolderId === null) {
+            legacy.andWhere('(fs.folderId IS NULL OR fs.folderId = :empty)', { empty: '' });
+          } else {
+            legacy.andWhere('fs.folderId = :folderId', { folderId: normalizedFolderId });
+          }
+        }));
+      }));
     
     const snapshots = await qb.getMany();
 
@@ -346,7 +377,7 @@ export class VcsCommitService {
     
     const mainFile = await mainFileRepo.findOne({
       where: { id: fileId },
-      select: ['name', 'type', 'folderId']
+      select: ['id', 'name', 'type', 'folderId']
     });
 
     if (!mainFile) {
@@ -360,15 +391,21 @@ export class VcsCommitService {
       .innerJoin(FileSnapshot, 'fs', 'fs.commitId = c.id')
       .where('c.projectId = :projectId', { projectId })
       .andWhere('(c.source IS NULL OR c.source <> :fileSaveSource)', { fileSaveSource: 'file-save' })
-      .andWhere('fs.name = :name', { name })
-      .andWhere('fs.type = :type', { type })
+      .andWhere(new Brackets((where) => {
+        where.where('fs.mainFileId = :fileId', { fileId });
+        where.orWhere(new Brackets((legacy) => {
+          legacy.where('fs.mainFileId IS NULL')
+            .andWhere('fs.name = :name', { name })
+            .andWhere('fs.type = :type', { type });
+
+          if (normalizedFolderId === null) {
+            legacy.andWhere('(fs.folderId IS NULL OR fs.folderId = :empty)', { empty: '' });
+          } else {
+            legacy.andWhere('fs.folderId = :folderId', { folderId: normalizedFolderId });
+          }
+        }));
+      }))
       .andWhere('fs.changeType != :unchanged', { unchanged: 'unchanged' });
-    
-    if (normalizedFolderId === null) {
-      qb.andWhere('(fs.folderId IS NULL OR fs.folderId = :empty)', { empty: '' });
-    } else {
-      qb.andWhere('fs.folderId = :folderId', { folderId: normalizedFolderId });
-    }
     
     const row = await qb
       .select(['c.id AS id', 'c.message AS message', 'c.createdAt AS "createdAt"'])
@@ -408,17 +445,27 @@ export class VcsCommitService {
 
     const baselineCommitId = mainBranch.headCommitId;
 
+    const previousSnapshotsByMainFileId = new Map<string, Set<string>>();
     const previousSnapshotsByKey = new Map<string, Set<string>>();
     if (baselineCommitId) {
       const lastCommitSnapshots = await snapshotRepo.find({
         where: { commitId: baselineCommitId },
-        select: ['folderId', 'name', 'type', 'contentHash']
+        select: ['mainFileId', 'folderId', 'name', 'type', 'contentHash']
       });
 
       for (const s of lastCommitSnapshots) {
-        const key = `${normalizeFolderId(s.folderId)}:${String(s.name)}:${String(s.type)}`;
         const hash = s.contentHash;
         if (typeof hash !== 'string' || !hash) continue;
+
+        if (s.mainFileId) {
+          const fileId = String(s.mainFileId);
+          const set = previousSnapshotsByMainFileId.get(fileId) ?? new Set<string>();
+          set.add(hash);
+          previousSnapshotsByMainFileId.set(fileId, set);
+          continue;
+        }
+
+        const key = buildSnapshotKey(s.folderId, String(s.name), String(s.type));
         const set = previousSnapshotsByKey.get(key) ?? new Set<string>();
         set.add(hash);
         previousSnapshotsByKey.set(key, set);
@@ -448,8 +495,10 @@ export class VcsCommitService {
     for (const file of currentFiles) {
       const contentHash = hashContent((file as any).xml || '');
 
-      const key = `${normalizeFolderId((file as any).folderId)}:${String((file as any).name)}:${String((file as any).type)}`;
-      const prevHashes = baselineCommitId ? previousSnapshotsByKey.get(key) : undefined;
+      const key = buildSnapshotKey((file as any).folderId, String((file as any).name), String((file as any).type));
+      const prevHashes = baselineCommitId
+        ? (previousSnapshotsByMainFileId.get(String((file as any).id)) ?? previousSnapshotsByKey.get(key))
+        : undefined;
 
       let changeType: string;
       if (!baselineCommitId) changeType = 'added';
@@ -461,6 +510,7 @@ export class VcsCommitService {
         id: generateId(),
         commitId,
         workingFileId: file.id,
+        mainFileId: String((file as any).id),
         folderId: (file as any).folderId,
         name: file.name,
         type: file.type,
@@ -561,7 +611,7 @@ export class VcsCommitService {
       // previous version instead of the newly saved one.
       const affectedSnapshots = await snapshotRepo.find({
         where: { commitId },
-        select: ['name', 'type', 'folderId', 'changeType']
+        select: ['mainFileId', 'name', 'type', 'folderId', 'changeType']
       });
 
       if (affectedSnapshots.length === 0) {
@@ -573,20 +623,17 @@ export class VcsCommitService {
         where: { projectId },
         select: ['id', 'name', 'type', 'folderId']
       });
+      const validFileIds = new Set(allProjectFiles.map((file) => String(file.id)));
       const fileByKey = new Map<string, string>();
       for (const f of allProjectFiles) {
-        const fid = normalizeFolderId((f as any).folderId);
-        fileByKey.set(`${fid}:${f.name}:${f.type}`, f.id);
+        fileByKey.set(buildSnapshotKey((f as any).folderId, f.name, f.type), f.id);
       }
 
-      // Batch: load all existing max versions for affected files
-      const matchedFileIds: string[] = [];
-      for (const snapshot of affectedSnapshots) {
-        const nfid = normalizeFolderId(snapshot.folderId);
-        const key = `${nfid}:${snapshot.name}:${snapshot.type}`;
-        const fileId = fileByKey.get(key);
-        if (fileId) matchedFileIds.push(fileId);
-      }
+      const matchedFileIds = Array.from(new Set(
+        affectedSnapshots
+          .map((snapshot) => resolveSnapshotFileId(snapshot, validFileIds, fileByKey))
+          .filter((fileId): fileId is string => typeof fileId === 'string' && fileId.length > 0)
+      ));
 
       const maxVersionsByFileId = new Map<string, number>();
       if (matchedFileIds.length > 0) {
@@ -600,13 +647,7 @@ export class VcsCommitService {
         }
       }
 
-      // Batch insert version rows
-      for (const snapshot of affectedSnapshots) {
-        const nfid = normalizeFolderId(snapshot.folderId);
-        const key = `${nfid}:${snapshot.name}:${snapshot.type}`;
-        const fileId = fileByKey.get(key);
-        if (!fileId) continue;
-
+      for (const fileId of matchedFileIds) {
         const maxVersion = maxVersionsByFileId.get(fileId) ?? 0;
         const nextVersionNumber = maxVersion + 1;
         maxVersionsByFileId.set(fileId, nextVersionNumber);

@@ -113,6 +113,8 @@ export class VcsService {
 
   async getCommitSnapshots(commitId: string): Promise<{
     id: string;
+    mainFileId: string | null;
+    folderId: string | null;
     name: string;
     type: string;
     content: string | null;

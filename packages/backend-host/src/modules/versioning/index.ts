@@ -292,7 +292,7 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
       const mainFileRepo = mainDataSource.getRepository(File);
       const fileRow = await mainFileRepo.findOne({
         where: { id: fileId },
-        select: ['name', 'type', 'folderId']
+        select: ['id', 'name', 'type', 'folderId']
       });
       const fileRows = fileRow ? [fileRow] : [];
 
@@ -334,18 +334,24 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
           const qb = snapshotRepo.createQueryBuilder('fs')
             .select('fs.commitId', 'commitId')
             .where('fs.commitId IN (:...commitIds)', { commitIds })
-            .andWhere('fs.name = :name', { name })
-            .andWhere('fs.type = :type', { type })
-            .andWhere('fs.changeType <> :unchanged', { unchanged: 'unchanged' });
+            .andWhere(new Brackets((where) => {
+              where.where('fs.mainFileId = :fileId', { fileId });
+              where.orWhere(new Brackets((legacy) => {
+                legacy.where('fs.mainFileId IS NULL')
+                  .andWhere('fs.name = :name', { name })
+                  .andWhere('fs.type = :type', { type });
 
-          if (normalizedFolderId === null) {
-            qb.andWhere(new Brackets(qb2 => {
-              qb2.where('fs.folderId IS NULL')
-                 .orWhere("fs.folderId = ''");
-            }));
-          } else {
-            qb.andWhere('fs.folderId = :folderId', { folderId: normalizedFolderId });
-          }
+                if (normalizedFolderId === null) {
+                  legacy.andWhere(new Brackets(qb2 => {
+                    qb2.where('fs.folderId IS NULL')
+                      .orWhere("fs.folderId = ''");
+                  }));
+                } else {
+                  legacy.andWhere('fs.folderId = :folderId', { folderId: normalizedFolderId });
+                }
+              }));
+            }))
+            .andWhere('fs.changeType <> :unchanged', { unchanged: 'unchanged' });
 
           const affectedRows = await qb.groupBy('fs.commitId').getRawMany();
 
@@ -377,18 +383,24 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
                 .innerJoin(FileSnapshot, 'fs', 'fs.commitId = c.id')
                 .where('c.projectId = :projectId', { projectId })
                 .andWhere('(c.source IS NULL OR c.source <> :fileSaveSource)', { fileSaveSource: 'file-save' })
-                .andWhere('fs.name = :name', { name })
-                .andWhere('fs.type = :type', { type })
-                .andWhere('fs.changeType <> :unchanged', { unchanged: 'unchanged' });
+                .andWhere(new Brackets((where) => {
+                  where.where('fs.mainFileId = :fileId', { fileId });
+                  where.orWhere(new Brackets((legacy) => {
+                    legacy.where('fs.mainFileId IS NULL')
+                      .andWhere('fs.name = :name', { name })
+                      .andWhere('fs.type = :type', { type });
 
-              if (normalizedFolderId === null) {
-                qb.andWhere(new Brackets(qb2 => {
-                  qb2.where('fs.folderId IS NULL')
-                     .orWhere("fs.folderId = ''");
-                }));
-              } else {
-                qb.andWhere('fs.folderId = :folderId', { folderId: normalizedFolderId });
-              }
+                    if (normalizedFolderId === null) {
+                      legacy.andWhere(new Brackets(qb2 => {
+                        qb2.where('fs.folderId IS NULL')
+                           .orWhere("fs.folderId = ''");
+                      }));
+                    } else {
+                      legacy.andWhere('fs.folderId = :folderId', { folderId: normalizedFolderId });
+                    }
+                  }));
+                }))
+                .andWhere('fs.changeType <> :unchanged', { unchanged: 'unchanged' });
 
               qb.groupBy('c.id').addGroupBy('c.createdAt').addGroupBy('c.message')
                 .orderBy('c.createdAt', order);
@@ -625,13 +637,23 @@ router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter
 
     // Update each file in the main files table with the snapshot content
     for (const snapshot of snapshots) {
-      // Find the file by name and project (since working file IDs may not match)
-      const existingFiles = await fileRepo.find({
-        where: { projectId, name: snapshot.name }
-      });
-      
-      if (existingFiles.length > 0 && snapshot.content) {
-        await fileRepo.update({ id: existingFiles[0].id }, {
+      let targetFileId: string | null = snapshot.mainFileId ? String(snapshot.mainFileId) : null;
+
+      if (!targetFileId) {
+        const existingFile = await fileRepo.findOne({
+          where: {
+            projectId,
+            name: snapshot.name,
+            type: snapshot.type,
+            folderId: snapshot.folderId === null ? IsNull() : snapshot.folderId,
+          },
+          select: ['id'],
+        });
+        targetFileId = existingFile?.id ? String(existingFile.id) : null;
+      }
+
+      if (targetFileId && snapshot.content) {
+        await fileRepo.update({ id: targetFileId }, {
           xml: snapshot.content,
           updatedAt: Date.now()
         });

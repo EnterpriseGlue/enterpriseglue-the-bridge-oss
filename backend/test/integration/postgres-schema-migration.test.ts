@@ -55,16 +55,17 @@ async function cleanupSchemas(...targetSchemas: string[]) {
 describe('Postgres schema auto-migration', () => {
   const targetSchema = `schema_migrate_${Date.now()}`;
   const mixedTargetSchema = `schema_mixed_${Date.now()}`;
+  const versioningDriftSchema = `schema_versioning_drift_${Date.now()}`;
   const seedPrefix = `schema_migrate_${Math.random().toString(36).slice(2, 8)}`;
 
   beforeEach(async () => {
     applyBaseEnv('main');
     vi.resetModules();
-    await cleanupSchemas(targetSchema, mixedTargetSchema);
+    await cleanupSchemas(targetSchema, mixedTargetSchema, versioningDriftSchema);
   });
 
   afterAll(async () => {
-    await cleanupSchemas(targetSchema, mixedTargetSchema);
+    await cleanupSchemas(targetSchema, mixedTargetSchema, versioningDriftSchema);
 
     // Restore main schema so other integration tests still find main.users
     applyBaseEnv('main');
@@ -188,6 +189,124 @@ describe('Postgres schema auto-migration', () => {
         "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' AND table_type = 'BASE TABLE'"
       );
       expect(mainTables.rows.length).toBe(0);
+    } finally {
+      await verifyPool.end();
+    }
+  });
+
+  it('repairs critical versioning schema drift even when migrations are already recorded', async () => {
+    applyBaseEnv(versioningDriftSchema);
+    vi.resetModules();
+
+    const { runMigrations } = await import('@enterpriseglue/shared/db/run-migrations.js');
+    const { closeDataSource } = await import('@enterpriseglue/shared/db/data-source.js');
+
+    try {
+      await runMigrations();
+    } finally {
+      await closeDataSource();
+    }
+
+    const pool = await createPool();
+    const projectId = `${seedPrefix}-project`;
+    const fileId = `${seedPrefix}-file`;
+    const workingFileId = `${seedPrefix}-working-file`;
+    const commitId = `${seedPrefix}-commit`;
+    const snapshotId = `${seedPrefix}-snapshot`;
+    const branchId = `${seedPrefix}-branch`;
+    const now = Date.now();
+
+    try {
+      await pool.query(
+        `INSERT INTO ${quoteIdentifier(versioningDriftSchema)}.${quoteIdentifier('projects')}
+          (id, name, owner_id, tenant_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [projectId, `${seedPrefix}-project`, `${seedPrefix}-owner`, null, now, now]
+      );
+
+      await pool.query(
+        `INSERT INTO ${quoteIdentifier(versioningDriftSchema)}.${quoteIdentifier('files')}
+          (id, project_id, folder_id, name, type, xml, bpmn_process_id, dmn_decision_id, created_by, updated_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [fileId, projectId, null, 'Invoice', 'bpmn', '<bpmn />', null, null, null, null, now, now]
+      );
+
+      await pool.query(
+        `INSERT INTO ${quoteIdentifier(versioningDriftSchema)}.${quoteIdentifier('working_files')}
+          (id, branch_id, project_id, main_file_id, folder_id, name, type, content, content_hash, is_deleted, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [workingFileId, branchId, projectId, fileId, null, 'Invoice', 'bpmn', '<bpmn />', 'hash-1', false, now, now]
+      );
+
+      await pool.query(
+        `INSERT INTO ${quoteIdentifier(versioningDriftSchema)}.${quoteIdentifier('file_snapshots')}
+          (id, commit_id, working_file_id, main_file_id, folder_id, name, type, content, content_hash, change_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [snapshotId, commitId, workingFileId, fileId, null, 'Invoice', 'bpmn', '<bpmn />', 'hash-1', 'modified']
+      );
+
+      await pool.query(`ALTER TABLE ${quoteIdentifier(versioningDriftSchema)}.${quoteIdentifier('file_snapshots')} DROP COLUMN main_file_id`);
+      await pool.query(`ALTER TABLE ${quoteIdentifier(versioningDriftSchema)}.${quoteIdentifier('working_files')} DROP COLUMN main_file_id`);
+    } finally {
+      await pool.end();
+    }
+
+    applyBaseEnv(versioningDriftSchema);
+    vi.resetModules();
+
+    const { runMigrations: runMigrationsNext } = await import('@enterpriseglue/shared/db/run-migrations.js');
+    const { closeDataSource: closeDataSourceNext } = await import('@enterpriseglue/shared/db/data-source.js');
+
+    try {
+      await runMigrationsNext();
+    } finally {
+      await closeDataSourceNext();
+    }
+
+    const verifyPool = await createPool();
+    try {
+      const columnsResult = await verifyPool.query(
+        `SELECT table_name, column_name
+           FROM information_schema.columns
+          WHERE table_schema = $1
+            AND table_name IN ('working_files', 'file_snapshots')
+            AND column_name = 'main_file_id'
+          ORDER BY table_name`,
+        [versioningDriftSchema]
+      );
+      expect(columnsResult.rows).toEqual([
+        { table_name: 'file_snapshots', column_name: 'main_file_id' },
+        { table_name: 'working_files', column_name: 'main_file_id' },
+      ]);
+
+      const indexesResult = await verifyPool.query(
+        `SELECT indexname
+           FROM pg_indexes
+          WHERE schemaname = $1
+            AND indexname IN ('working_files_main_file_idx', 'file_snapshots_main_file_idx')
+          ORDER BY indexname`,
+        [versioningDriftSchema]
+      );
+      expect(indexesResult.rows).toEqual([
+        { indexname: 'file_snapshots_main_file_idx' },
+        { indexname: 'working_files_main_file_idx' },
+      ]);
+
+      const workingFileResult = await verifyPool.query(
+        `SELECT main_file_id
+           FROM ${quoteIdentifier(versioningDriftSchema)}.${quoteIdentifier('working_files')}
+          WHERE id = $1`,
+        [workingFileId]
+      );
+      expect(workingFileResult.rows[0]?.main_file_id).toBe(fileId);
+
+      const snapshotResult = await verifyPool.query(
+        `SELECT main_file_id
+           FROM ${quoteIdentifier(versioningDriftSchema)}.${quoteIdentifier('file_snapshots')}
+          WHERE id = $1`,
+        [snapshotId]
+      );
+      expect(snapshotResult.rows[0]?.main_file_id).toBe(fileId);
     } finally {
       await verifyPool.end();
     }

@@ -233,7 +233,7 @@ describe('versioning routes', () => {
     expect(response.body.commits.find((commit: any) => commit.id === 'commit-other')).toBeUndefined();
     expect(fileFindOne).toHaveBeenCalledWith({
       where: { id: fileId },
-      select: ['name', 'type', 'folderId']
+      select: ['id', 'name', 'type', 'folderId']
     });
     expect(fileCommitVersionCount).toHaveBeenCalledWith({ where: { fileId } });
     expect(fileCommitVersionFind).toHaveBeenCalled();

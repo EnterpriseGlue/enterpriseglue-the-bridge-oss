@@ -1,4 +1,4 @@
-import { QueryRunner } from 'typeorm';
+import { In, IsNull, QueryRunner, TableColumn, TableIndex } from 'typeorm';
 import { getDataSource, adapter } from './data-source.js';
 import { EnvironmentTag } from './entities/EnvironmentTag.js';
 import { PlatformSettings } from './entities/PlatformSettings.js';
@@ -10,6 +10,9 @@ import { SsoProvider } from './entities/SsoProvider.js';
 import { RefreshToken } from './entities/RefreshToken.js';
 import { GitProvider } from './entities/GitProvider.js';
 import { GitCredential } from './entities/GitCredential.js';
+import { File } from './entities/File.js';
+import { WorkingFile } from './entities/WorkingFile.js';
+import { FileSnapshot } from './entities/FileSnapshot.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -33,6 +36,32 @@ export async function ensureSchemaExists(schemaName: string): Promise<void> {
 }
 
 const quoteIdentifier = (value: string): string => `"${value.replace(/"/g, '""')}"`;
+
+function buildTableRef(schema: string | undefined, name: string): string {
+  const normalizedName = String(name);
+  const source = normalizedName.includes('.')
+    ? normalizedName
+    : (schema ? `${schema}.${normalizedName}` : normalizedName);
+
+  return source
+    .split('.')
+    .filter((part) => part.length > 0)
+    .map((part) => quoteIdentifier(part))
+    .join('.');
+}
+
+function normalizeNullableText(value: string | null | undefined): string | null {
+  if (value === null || typeof value === 'undefined') {
+    return null;
+  }
+
+  const normalized = String(value);
+  return normalized.length > 0 ? normalized : null;
+}
+
+function buildVersioningIdentityKey(projectId: string, folderId: string | null | undefined, name: string, type: string): string {
+  return `${projectId}:${normalizeNullableText(folderId) ?? ''}:${name}:${type}`;
+}
 
 function findSchemaObjectConflicts(sourceNames: string[], targetNames: string[]): string[] {
   const targetNameSet = new Set(targetNames);
@@ -156,6 +185,166 @@ async function autoMigratePostgresSchema(queryRunner: QueryRunner, schemaName: s
   }
 }
 
+async function ensureCriticalVersioningSchemaIntegrity(queryRunner: QueryRunner): Promise<void> {
+  const integrityActions: string[] = [];
+
+  const workingFilesTable = await queryRunner.getTable('working_files');
+  const fileSnapshotsTable = await queryRunner.getTable('file_snapshots');
+
+  if (!workingFilesTable || !fileSnapshotsTable) {
+    throw new Error('Critical versioning tables are missing after migration startup');
+  }
+
+  if (!workingFilesTable.columns.some((column) => column.name === 'main_file_id')) {
+    integrityActions.push('added working_files.main_file_id');
+    await queryRunner.addColumn(workingFilesTable, new TableColumn({
+      name: 'main_file_id',
+      type: 'text',
+      isNullable: true,
+    }));
+  }
+
+  if (!fileSnapshotsTable.columns.some((column) => column.name === 'main_file_id')) {
+    integrityActions.push('added file_snapshots.main_file_id');
+    await queryRunner.addColumn(fileSnapshotsTable, new TableColumn({
+      name: 'main_file_id',
+      type: 'text',
+      isNullable: true,
+    }));
+  }
+
+  const refreshedWorkingFilesTable = await queryRunner.getTable('working_files');
+  const refreshedFileSnapshotsTable = await queryRunner.getTable('file_snapshots');
+
+  if (!refreshedWorkingFilesTable || !refreshedFileSnapshotsTable) {
+    throw new Error('Critical versioning tables could not be reloaded after schema repair');
+  }
+
+  if (!refreshedWorkingFilesTable.indices.some((index) => index.name === 'working_files_main_file_idx')) {
+    integrityActions.push('created working_files_main_file_idx');
+    await queryRunner.createIndex(refreshedWorkingFilesTable, new TableIndex({
+      name: 'working_files_main_file_idx',
+      columnNames: ['main_file_id'],
+    }));
+  }
+
+  if (!refreshedFileSnapshotsTable.indices.some((index) => index.name === 'file_snapshots_main_file_idx')) {
+    integrityActions.push('created file_snapshots_main_file_idx');
+    await queryRunner.createIndex(refreshedFileSnapshotsTable, new TableIndex({
+      name: 'file_snapshots_main_file_idx',
+      columnNames: ['main_file_id'],
+    }));
+  }
+
+  const manager = queryRunner.manager;
+  const fileRepo = manager.getRepository(File);
+  const workingFileRepo = manager.getRepository(WorkingFile);
+  const fileSnapshotRepo = manager.getRepository(FileSnapshot);
+
+  const workingFilesMissingMainFileId = await workingFileRepo.find({
+    where: { mainFileId: IsNull() },
+    select: ['id', 'projectId', 'folderId', 'name', 'type'],
+  });
+
+  if (workingFilesMissingMainFileId.length > 0) {
+    const projectIds = [...new Set(workingFilesMissingMainFileId.map((file) => String(file.projectId)).filter((value) => value.length > 0))];
+    const mainFiles = projectIds.length > 0
+      ? await fileRepo.find({
+          where: { projectId: In(projectIds) },
+          select: ['id', 'projectId', 'folderId', 'name', 'type'],
+        })
+      : [];
+
+    const fileIdByKey = new Map<string, string>();
+    for (const mainFile of mainFiles) {
+      fileIdByKey.set(
+        buildVersioningIdentityKey(String(mainFile.projectId), mainFile.folderId, String(mainFile.name), String(mainFile.type)),
+        String(mainFile.id)
+      );
+    }
+
+    let repairedWorkingFiles = 0;
+    for (const workingFile of workingFilesMissingMainFileId) {
+      const resolvedMainFileId = fileIdByKey.get(
+        buildVersioningIdentityKey(String(workingFile.projectId), workingFile.folderId, String(workingFile.name), String(workingFile.type))
+      );
+      if (!resolvedMainFileId) {
+        continue;
+      }
+
+      await workingFileRepo.update({ id: String(workingFile.id) }, { mainFileId: resolvedMainFileId });
+      repairedWorkingFiles += 1;
+    }
+
+    if (repairedWorkingFiles > 0) {
+      integrityActions.push(`backfilled ${repairedWorkingFiles} working_files.main_file_id value(s)`);
+    }
+  }
+
+  const fileSnapshotsMissingMainFileId = await fileSnapshotRepo.find({
+    where: { mainFileId: IsNull() },
+    select: ['id', 'workingFileId'],
+  });
+
+  if (fileSnapshotsMissingMainFileId.length > 0) {
+    const workingFileIds = [...new Set(fileSnapshotsMissingMainFileId.map((snapshot) => String(snapshot.workingFileId)).filter((value) => value.length > 0))];
+    const workingFiles = workingFileIds.length > 0
+      ? await workingFileRepo.find({
+          where: { id: In(workingFileIds) },
+          select: ['id', 'mainFileId'],
+        })
+      : [];
+
+    const mainFileIdByWorkingFileId = new Map<string, string>();
+    for (const workingFile of workingFiles) {
+      if (!workingFile.mainFileId) {
+        continue;
+      }
+      mainFileIdByWorkingFileId.set(String(workingFile.id), String(workingFile.mainFileId));
+    }
+
+    let repairedSnapshots = 0;
+    for (const snapshot of fileSnapshotsMissingMainFileId) {
+      const resolvedMainFileId = mainFileIdByWorkingFileId.get(String(snapshot.workingFileId));
+      if (!resolvedMainFileId) {
+        continue;
+      }
+
+      await fileSnapshotRepo.update({ id: String(snapshot.id) }, { mainFileId: resolvedMainFileId });
+      repairedSnapshots += 1;
+    }
+
+    if (repairedSnapshots > 0) {
+      integrityActions.push(`backfilled ${repairedSnapshots} file_snapshots.main_file_id value(s)`);
+    }
+  }
+
+  const verifiedWorkingFilesTable = await queryRunner.getTable('working_files');
+  const verifiedFileSnapshotsTable = await queryRunner.getTable('file_snapshots');
+  const integrityIssues: string[] = [];
+
+  if (!verifiedWorkingFilesTable?.columns.some((column) => column.name === 'main_file_id')) {
+    integrityIssues.push('working_files.main_file_id missing');
+  }
+  if (!verifiedFileSnapshotsTable?.columns.some((column) => column.name === 'main_file_id')) {
+    integrityIssues.push('file_snapshots.main_file_id missing');
+  }
+  if (!verifiedWorkingFilesTable?.indices.some((index) => index.name === 'working_files_main_file_idx')) {
+    integrityIssues.push('working_files_main_file_idx missing');
+  }
+  if (!verifiedFileSnapshotsTable?.indices.some((index) => index.name === 'file_snapshots_main_file_idx')) {
+    integrityIssues.push('file_snapshots_main_file_idx missing');
+  }
+
+  if (integrityIssues.length > 0) {
+    throw new Error(`Critical versioning schema integrity check failed: ${integrityIssues.join(', ')}`);
+  }
+
+  if (integrityActions.length > 0) {
+    console.warn(`  ⚠️  Reconciled critical versioning schema drift (${integrityActions.join('; ')})`);
+  }
+}
+
 /**
  * Run database migrations using TypeORM
  * Database-agnostic implementation supporting PostgreSQL, Oracle, MySQL, SQL Server, Spanner
@@ -222,6 +411,7 @@ export async function runMigrations() {
         );
         await dataSource.synchronize();
       }
+
     } finally {
       await queryRunner.release();
     }
@@ -231,6 +421,13 @@ export async function runMigrations() {
     if (pendingMigrations) {
       console.log('  Running pending migrations...');
       await dataSource.runMigrations();
+    }
+
+    const integrityRunner = dataSource.createQueryRunner();
+    try {
+      await ensureCriticalVersioningSchemaIntegrity(integrityRunner);
+    } finally {
+      await integrityRunner.release();
     }
     
     console.log('✅ Database migrations complete');
