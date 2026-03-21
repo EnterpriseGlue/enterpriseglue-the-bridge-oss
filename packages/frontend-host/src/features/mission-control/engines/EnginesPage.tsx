@@ -22,14 +22,8 @@ import {
   TableRow,
   OverflowMenu,
   OverflowMenuItem,
-  ComposedModal,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  ComboBox,
-  Loading,
 } from '@carbon/react'
-import { Add, Chip, UserMultiple, Close, Checkmark } from '@carbon/icons-react'
+import { Add, Chip } from '@carbon/icons-react'
 import FormModal from '../../../components/FormModal'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout'
 import { useModal } from '../../../shared/hooks/useModal'
@@ -39,31 +33,6 @@ import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
 import { apiClient } from '../../../shared/api/client'
 import EngineMembersModal from './components/EngineMembersModal'
- 
-
-// Types for engine members
-type EngineRole = 'owner' | 'delegate' | 'operator' | 'deployer'
-type EngineMember = {
-  id: string
-  engineId: string
-  userId: string
-  role: EngineRole
-  grantedById?: string | null
-  grantedAt: number
-  user?: { id: string; email: string; firstName?: string | null; lastName?: string | null } | null
-}
-type AccessRequest = {
-  id: string
-  projectId: string
-  engineId: string
-  requestedById: string
-  requestedRole: EngineRole
-  status: 'pending' | 'approved' | 'denied'
-  createdAt: number
-  project?: { id: string; name: string } | null
-  requestedBy?: { id: string; email: string; firstName?: string | null; lastName?: string | null } | null
-}
-type UserSearchItem = { id: string; email: string; firstName?: string | null; lastName?: string | null }
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -73,20 +42,6 @@ function getDockerLoopbackSuggestion(raw: string): string | null {
     return parsed.toString()
   } catch {
     return null
-  }
-}
-
-function roleLabel(role: EngineRole): string {
-  return role.charAt(0).toUpperCase() + role.slice(1)
-}
-
-function tagTypeForRole(role: EngineRole): any {
-  switch (role) {
-    case 'owner': return 'red'
-    case 'delegate': return 'magenta'
-    case 'operator': return 'teal'
-    case 'deployer': return 'blue'
-    default: return 'gray'
   }
 }
 
@@ -105,11 +60,6 @@ export default function Engines() {
   // Engine members panel state
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [selectedEngine, setSelectedEngine] = React.useState<any | null>(null)
-  const addMemberModal = useModal()
-  const [memberEmail, setMemberEmail] = React.useState('')
-  const [memberRole, setMemberRole] = React.useState<EngineRole>('operator')
-  const [memberUserSearch, setMemberUserSearch] = React.useState('')
-  const [selectedMemberUser, setSelectedMemberUser] = React.useState<UserSearchItem | null>(null)
 
   const TYPE_ITEMS = React.useMemo(() => ([{ id: 'camunda7', label: 'Camunda 7' }, { id: 'operaton', label: 'Operaton (Camunda 7 fork)' }]), [])
   const AUTH_ITEMS = React.useMemo(() => ([{ id: 'basic', label: 'Basic Auth (Username/Password)' }, { id: 'bearer', label: 'Bearer Token (SSO/OAuth2)' }]), [])
@@ -202,86 +152,6 @@ export default function Engines() {
     return r === 'owner' || r === 'delegate' || r === 'admin'
   }
 
-  // Engine members queries & mutations
-  const membersQ = useQuery({
-    queryKey: ['engine-members', selectedEngine?.id],
-    queryFn: () => apiClient.get<EngineMember[]>(`/engines-api/engines/${selectedEngine?.id}/members`, undefined, { credentials: 'include' }),
-    enabled: membersOpen && !!selectedEngine?.id,
-  })
-
-  const accessRequestsQ = useQuery({
-    queryKey: ['engine-access-requests', selectedEngine?.id],
-    queryFn: () => apiClient.get<AccessRequest[]>(`/engines-api/engines/${selectedEngine?.id}/access-requests`, undefined, { credentials: 'include' }),
-    enabled: membersOpen && !!selectedEngine?.id && canManageEngine(selectedEngine),
-  })
-
-  const userSearchQ = useQuery({
-    queryKey: ['admin', 'users', 'search', memberUserSearch.trim()],
-    queryFn: () => {
-      const q = memberUserSearch.trim()
-      if (q.length < 2) return Promise.resolve([] as UserSearchItem[])
-      return apiClient.get<UserSearchItem[]>(`/api/admin/users/search?q=${encodeURIComponent(q)}`, undefined, { credentials: 'include' })
-    },
-    enabled: addMemberModal.isOpen && memberUserSearch.trim().length >= 2,
-    staleTime: 30 * 1000,
-  })
-
-  const addMemberM = useMutation({
-    mutationFn: (data: { email: string; role: EngineRole }) =>
-      apiClient.post<any>(`/engines-api/engines/${selectedEngine?.id}/members`, data, { credentials: 'include' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['engine-members', selectedEngine?.id] })
-      addMemberModal.closeModal()
-      setMemberEmail('')
-      setMemberRole('operator')
-      setMemberUserSearch('')
-      setSelectedMemberUser(null)
-      notify({ kind: 'success', title: 'Member added successfully' })
-    },
-    onError: (e: any) => notify({ kind: 'error', title: 'Failed to add member', subtitle: getUiErrorMessage(e, 'Failed to add member') }),
-  })
-
-  const removeMemberM = useMutation({
-    mutationFn: (userId: string) =>
-      apiClient.delete(`/engines-api/engines/${selectedEngine?.id}/members/${userId}`, { credentials: 'include' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['engine-members', selectedEngine?.id] })
-      notify({ kind: 'success', title: 'Member removed' })
-    },
-    onError: (e: any) => notify({ kind: 'error', title: 'Failed to remove member', subtitle: getUiErrorMessage(e, 'Failed to remove member') }),
-  })
-
-  const updateMemberRoleM = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: EngineRole }) =>
-      apiClient.patch<void>(`/engines-api/engines/${selectedEngine?.id}/members/${userId}`, { role }, { credentials: 'include' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['engine-members', selectedEngine?.id] })
-      notify({ kind: 'success', title: 'Role updated' })
-    },
-    onError: (e: any) => notify({ kind: 'error', title: 'Failed to update role', subtitle: getUiErrorMessage(e, 'Failed to update role') }),
-  })
-
-  const approveRequestM = useMutation({
-    mutationFn: (requestId: string) =>
-      apiClient.post<void>(`/engines-api/engines/${selectedEngine?.id}/access-requests/${requestId}/approve`, {}, { credentials: 'include' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['engine-access-requests', selectedEngine?.id] })
-      qc.invalidateQueries({ queryKey: ['engine-members', selectedEngine?.id] })
-      notify({ kind: 'success', title: 'Access request approved' })
-    },
-    onError: (e: any) => notify({ kind: 'error', title: 'Failed to approve request', subtitle: getUiErrorMessage(e, 'Failed to approve request') }),
-  })
-
-  const denyRequestM = useMutation({
-    mutationFn: (requestId: string) =>
-      apiClient.post<void>(`/engines-api/engines/${selectedEngine?.id}/access-requests/${requestId}/deny`, {}, { credentials: 'include' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['engine-access-requests', selectedEngine?.id] })
-      notify({ kind: 'success', title: 'Access request denied' })
-    },
-    onError: (e: any) => notify({ kind: 'error', title: 'Failed to deny request', subtitle: getUiErrorMessage(e, 'Failed to deny request') }),
-  })
-
   function openMembersPanel(engine: any) {
     setSelectedEngine(engine)
     setMembersOpen(true)
@@ -290,11 +160,6 @@ export default function Engines() {
   function closeMembersPanel() {
     setMembersOpen(false)
     setSelectedEngine(null)
-  }
-
-  function submitAddMember() {
-    if (!memberEmail.trim()) return
-    addMemberM.mutate({ email: memberEmail.trim(), role: memberRole })
   }
 
   const tableHeaders = React.useMemo(

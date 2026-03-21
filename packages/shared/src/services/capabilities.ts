@@ -6,6 +6,10 @@ import { permissionService, PlatformPermissions, ProjectPermissions, EnginePermi
 import type { UserCapabilities } from '@enterpriseglue/shared/contracts/auth';
 import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
 
+function normalizeRoleValue(role?: string | null): 'admin' | 'user' {
+  return role === 'admin' ? 'admin' : 'user';
+}
+
 export interface BuildUserCapabilitiesInput {
   userId: string;
   platformRole?: string | null;
@@ -15,7 +19,7 @@ export async function buildUserCapabilities({
   userId,
   platformRole,
 }: BuildUserCapabilitiesInput): Promise<UserCapabilities> {
-  const normalizedPlatformRole = platformRole || 'user';
+  const normalizedPlatformRole = normalizeRoleValue(platformRole);
 
   const [
     canManageUsers,

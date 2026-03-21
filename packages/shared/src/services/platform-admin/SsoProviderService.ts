@@ -6,13 +6,18 @@
  */
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import type { LegacyPlatformRole, PlatformRole as SharedPlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
 import { SsoProvider } from '@enterpriseglue/shared/db/entities/SsoProvider.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 export type SsoProviderType = 'microsoft' | 'google' | 'saml' | 'oidc';
-export type PlatformRole = 'admin' | 'developer' | 'user';
+export type PlatformRole = SharedPlatformRole;
+
+function normalizeRoleValue(role?: string | null): PlatformRole {
+  return role === 'admin' ? 'admin' : 'user';
+}
 
 export interface CreateSsoProviderInput {
   name: string;
@@ -44,7 +49,7 @@ export interface CreateSsoProviderInput {
   
   // Provisioning
   autoProvision?: boolean;
-  defaultRole?: PlatformRole;
+  defaultRole?: LegacyPlatformRole;
 }
 
 export interface UpdateSsoProviderInput extends Partial<CreateSsoProviderInput> {
@@ -248,7 +253,7 @@ class SsoProviderServiceClass {
       
       // Provisioning
       autoProvision: input.autoProvision ?? true,
-      defaultRole: input.defaultRole || 'user',
+      defaultRole: normalizeRoleValue(input.defaultRole || 'user'),
       
       createdAt: now,
       updatedAt: now,
@@ -322,7 +327,7 @@ class SsoProviderServiceClass {
     
     // Provisioning
     if (input.autoProvision !== undefined) updates.autoProvision = input.autoProvision;
-    if (input.defaultRole !== undefined) updates.defaultRole = input.defaultRole;
+    if (input.defaultRole !== undefined) updates.defaultRole = normalizeRoleValue(input.defaultRole);
 
     await providerRepo.update({ id }, updates);
   }
@@ -390,7 +395,7 @@ class SsoProviderServiceClass {
       buttonColor: p.buttonColor,
       displayOrder: p.displayOrder,
       autoProvision: p.autoProvision,
-      defaultRole: p.defaultRole,
+      defaultRole: normalizeRoleValue(p.defaultRole),
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
       hasClientSecret: !!p.clientSecretEnc,

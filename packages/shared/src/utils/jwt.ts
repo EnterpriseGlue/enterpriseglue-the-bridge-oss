@@ -12,7 +12,9 @@ export interface JwtPayload {
   userId: string;
   email: string;
   platformRole: PlatformRole;
-  type: 'access' | 'refresh';
+  type: 'access' | 'refresh' | 'onboarding';
+  invitationId?: string;
+  tenantSlug?: string;
 }
 
 /**
@@ -44,6 +46,21 @@ export function generateRefreshToken(user: User | any): string {
 
   return jwt.sign(payload, config.jwtSecret, {
     expiresIn: config.jwtRefreshTokenExpires,
+  });
+}
+
+export function generateOnboardingToken(payload: { userId: string; email: string; platformRole?: PlatformRole; invitationId: string; tenantSlug: string }): string {
+  const tokenPayload: JwtPayload = {
+    userId: payload.userId,
+    email: payload.email,
+    platformRole: payload.platformRole || 'user',
+    type: 'onboarding',
+    invitationId: payload.invitationId,
+    tenantSlug: payload.tenantSlug,
+  };
+
+  return jwt.sign(tokenPayload, config.jwtSecret, {
+    expiresIn: config.jwtAccessTokenExpires,
   });
 }
 

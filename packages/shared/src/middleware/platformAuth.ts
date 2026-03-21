@@ -1,6 +1,6 @@
 /**
  * Platform Authorization Middleware
- * Handles platform-level role checks (admin, developer, user)
+ * Handles platform-level role checks (admin, user)
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -39,7 +39,7 @@ export function requirePlatformAdmin(req: Request, res: Response, next: NextFunc
 
 /**
  * Require specific platform role(s)
- * Usage: requirePlatformRole('admin', 'developer')
+ * Usage: requirePlatformRole('admin', 'user')
  */
 export function requirePlatformRole(...allowedRoles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {

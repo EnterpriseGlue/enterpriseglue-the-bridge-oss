@@ -15,7 +15,7 @@ import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
 export interface AuthorizeOptions {
   /**
    * Platform level roles to check
-   * e.g., ['admin'] or ['admin', 'developer']
+   * e.g., ['admin'] or ['admin', 'user']
    */
   platformRoles?: string[];
 
@@ -172,11 +172,6 @@ export const auth = {
    * Require platform admin
    */
   platformAdmin: () => authorize({ platformRoles: ['admin'] }),
-
-  /**
-   * Require platform admin or developer
-   */
-  platformDeveloper: () => authorize({ platformRoles: ['admin', 'developer'] }),
 
   /**
    * Require project owner

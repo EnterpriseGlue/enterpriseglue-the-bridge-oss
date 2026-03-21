@@ -49,10 +49,10 @@ describe('saml service - provisionSamlUser', () => {
 
     (ssoProviderService.getProvider as unknown as Mock).mockResolvedValue({
       id: 'provider-saml-1',
-      defaultRole: 'developer',
+      defaultRole: 'user',
     });
 
-    (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('developer');
+    (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('user');
 
     const userInfo: SamlUserInfo = {
       email: 'saml-user@example.com',

@@ -3,10 +3,12 @@ import request from 'supertest';
 import express from 'express';
 import membersRouter from '../../../../../packages/backend-host/src/modules/starbase/routes/members.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
+import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -14,7 +16,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
-    req.user = { userId: 'owner-1' };
+    req.user = { userId: 'owner-1', email: 'owner@example.com' };
     req.tenant = { tenantId: null };
     next();
   },
@@ -51,6 +53,25 @@ vi.mock('@enterpriseglue/shared/constants/roles.js', () => ({
 
 vi.mock('@enterpriseglue/shared/services/email/index.js', () => ({
   sendInvitationEmail: vi.fn(),
+  getEmailConfigForTenant: vi.fn(),
+}));
+
+vi.mock('@enterpriseglue/shared/services/invitations.js', () => ({
+  invitationService: {
+    createInvitation: vi.fn().mockResolvedValue({
+      invitationId: 'inv-1',
+      inviteUrl: 'http://localhost:5173/t/default/invite/token-1',
+      oneTimePassword: 'RevealMe123!',
+      emailSent: false,
+    }),
+    isLocalLoginDisabled: vi.fn().mockResolvedValue(false),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/UserService.js', () => ({
+  userService: {
+    createPendingUser: vi.fn().mockResolvedValue({ id: 'pending-1', email: 'nonexistent@example.com' }),
+  },
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js', () => ({
@@ -75,6 +96,93 @@ describe('starbase members routes', () => {
     app.use(membersRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
+    (getEmailConfigForTenant as unknown as Mock).mockResolvedValue(null);
+  });
+
+  it('returns project member invite capabilities', async () => {
+    const { invitationService } = await import('@enterpriseglue/shared/services/invitations.js');
+    (getEmailConfigForTenant as unknown as Mock).mockResolvedValue({ provider: 'smtp' });
+    (invitationService.isLocalLoginDisabled as Mock).mockResolvedValue(true);
+
+    const response = await request(app)
+      .get('/starbase-api/projects/00000000-0000-0000-0000-000000000001/members/capabilities');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ssoRequired: true, emailConfigured: true });
+  });
+
+  it('returns direct-add mode for an existing non-member user lookup', async () => {
+    const userRepo = {
+      createQueryBuilder: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        getOne: vi.fn().mockResolvedValue({ id: 'target-1', email: 'target@example.com', firstName: 'Target', lastName: 'User', passwordHash: 'hash' }),
+      }),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === User) return userRepo;
+        if (entity === ProjectMember) return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+
+    const { projectMemberService } = await import('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js');
+    (projectMemberService.getMembership as Mock).mockResolvedValueOnce(null);
+
+    const response = await request(app)
+      .get('/starbase-api/projects/00000000-0000-0000-0000-000000000001/members/lookup')
+      .query({ email: 'target@example.com' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      mode: 'direct-add',
+      user: {
+        id: 'target-1',
+        email: 'target@example.com',
+        firstName: 'Target',
+        lastName: 'User',
+      },
+    });
+  });
+
+  it('returns existing-member mode for an existing project member lookup', async () => {
+    const userRepo = {
+      createQueryBuilder: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        getOne: vi.fn().mockResolvedValue({ id: 'target-1', email: 'target@example.com', firstName: 'Target', lastName: 'User', passwordHash: 'hash' }),
+      }),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === User) return userRepo;
+        if (entity === ProjectMember) return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+
+    const { projectMemberService } = await import('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js');
+    (projectMemberService.getMembership as Mock).mockResolvedValueOnce({ role: 'viewer', roles: ['viewer'] });
+
+    const response = await request(app)
+      .get('/starbase-api/projects/00000000-0000-0000-0000-000000000001/members/lookup')
+      .query({ email: 'target@example.com' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      mode: 'existing-member',
+      user: {
+        id: 'target-1',
+        email: 'target@example.com',
+        firstName: 'Target',
+        lastName: 'User',
+      },
+    });
   });
 
   it('adds existing user as project member and logs audit', async () => {
@@ -82,7 +190,7 @@ describe('starbase members routes', () => {
       createQueryBuilder: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
-        getOne: vi.fn().mockResolvedValue({ id: 'target-1', email: 'target@example.com' }),
+        getOne: vi.fn().mockResolvedValue({ id: 'target-1', email: 'target@example.com', passwordHash: 'hash' }),
       }),
     };
     const memberRepo = { find: vi.fn().mockResolvedValue([]) };
@@ -91,7 +199,8 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
         if (entity === ProjectMember) return memberRepo;
-        return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
 
@@ -111,7 +220,7 @@ describe('starbase members routes', () => {
     }));
   });
 
-  it('rejects adding non-existent user in OSS', async () => {
+  it('creates an invitation for a non-existent project user', async () => {
     const userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnThis(),
@@ -125,15 +234,29 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
         if (entity === ProjectMember) return memberRepo;
-        return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
 
+    const { projectMemberService } = await import('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js');
+    const { invitationService } = await import('@enterpriseglue/shared/services/invitations.js');
+    (projectMemberService.getMembership as Mock).mockResolvedValueOnce({ role: 'owner', roles: ['owner'] })
+      .mockResolvedValueOnce(null);
+
     const response = await request(app)
       .post('/starbase-api/projects/00000000-0000-0000-0000-000000000001/members')
-      .send({ email: 'nonexistent@example.com', roles: ['viewer'] });
+      .send({ email: 'nonexistent@example.com', roles: ['viewer'], deliveryMethod: 'email' });
 
-    expect(response.status).toBe(404);
-    expect(response.body.error).toContain('not found');
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual(expect.objectContaining({
+      invited: true,
+      emailSent: false,
+      inviteUrl: 'http://localhost:5173/t/default/invite/token-1',
+      oneTimePassword: 'RevealMe123!',
+    }));
+    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
+      deliveryMethod: 'email',
+    }));
   });
 });

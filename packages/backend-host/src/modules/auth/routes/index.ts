@@ -13,6 +13,7 @@ import microsoftRoute from './microsoft.js';
 import forgotPasswordRoute from './forgot-password.js';
 import ssoConfigRoute from './sso-config.js';
 import samlRoute from './saml.js';
+import onboardingRoute from './onboarding.js';
 
 export {
   loginRoute,
@@ -25,4 +26,5 @@ export {
   samlRoute,
   forgotPasswordRoute,
   ssoConfigRoute,
+  onboardingRoute,
 };

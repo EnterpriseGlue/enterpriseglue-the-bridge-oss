@@ -3,12 +3,12 @@ import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { sendWelcomeEmail } from '@enterpriseglue/shared/services/email/index.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { createUserLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
+import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
 
 const router = Router();
 
@@ -17,7 +17,7 @@ const createUserSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   role: z.enum(['admin', 'user']).default('user'),
-  platformRole: z.enum(['admin', 'developer', 'user']).optional(),
+  platformRole: z.enum(['admin', 'user']).optional(),
   sendEmail: z.boolean().default(true),
 });
 
@@ -25,7 +25,7 @@ const updateUserSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   role: z.enum(['admin', 'user']).optional(),
-  platformRole: z.enum(['admin', 'developer', 'user']).optional(),
+  platformRole: z.enum(['admin', 'user']).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -48,7 +48,7 @@ router.get('/api/users', requireAuth, requirePermission({ permission: PlatformPe
 router.post('/api/users', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), createUserLimiter, validateBody(createUserSchema), asyncHandler(async (req, res) => {
   const { email, firstName, lastName, platformRole, sendEmail } = req.body;
 
-  const result = await userService.createUser({
+  const user = await userService.createPendingUser({
     email,
     firstName,
     lastName,
@@ -56,35 +56,34 @@ router.post('/api/users', requireAuth, requirePermission({ permission: PlatformP
     createdByUserId: req.user!.userId,
   });
 
+  const inviteResult = await invitationService.createInvitation({
+    userId: user.id,
+    email,
+    tenantSlug: 'default',
+    resourceType: 'platform_user',
+    resourceName: 'Platform access',
+    platformRole: (platformRole || 'user'),
+    createdByUserId: req.user!.userId,
+    invitedByName: req.user!.email,
+    deliveryMethod: sendEmail ? 'email' : 'manual',
+  });
+
   await logAudit({
     userId: req.user!.userId,
     action: AuditActions.USER_CREATE,
     resourceType: 'user',
-    resourceId: result.user.id,
+    resourceId: user.id,
     ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
     userAgent: req.headers['user-agent'],
-    details: { email, platformRole: result.user.platformRole },
+    details: { email, platformRole: user.platformRole, deliveryMethod: sendEmail ? 'email' : 'manual' },
   });
 
-  let emailSent = false;
-  let emailError: string | undefined;
-
-  if (sendEmail) {
-    const welcomeResult = await sendWelcomeEmail({
-      to: email,
-      firstName,
-      temporaryPassword: result.temporaryPassword,
-    });
-    emailSent = welcomeResult.success;
-    emailError = welcomeResult.error;
-  }
-
   res.status(201).json({
-    user: result.user,
-    temporaryPassword: !emailSent ? result.temporaryPassword : undefined,
-    emailSent,
-    emailError,
-    verificationRequired: true,
+    user,
+    inviteUrl: inviteResult.emailSent ? undefined : inviteResult.inviteUrl,
+    oneTimePassword: inviteResult.oneTimePassword,
+    emailSent: inviteResult.emailSent,
+    emailError: inviteResult.emailError,
   });
 }));
 
@@ -125,6 +124,26 @@ router.delete('/api/users/:id', requireAuth, requirePermission({ permission: Pla
 
   await userService.deactivateUser(id);
   res.json({ message: 'User deleted successfully' });
+}));
+
+/**
+ * DELETE /api/users/:id/permanent
+ * Permanently delete a safe local user (pending or inactive) (admin only)
+ */
+router.delete('/api/users/:id/permanent', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
+  const id = String(req.params.id);
+
+  if (id === req.user!.userId) {
+    throw Errors.validation('Cannot delete your own account');
+  }
+
+  const localLoginDisabled = await invitationService.isLocalLoginDisabled();
+  if (localLoginDisabled) {
+    throw Errors.forbidden('Permanent delete is unavailable while SSO is enabled');
+  }
+
+  await userService.deleteUserPermanently(id);
+  res.json({ message: 'User permanently deleted successfully' });
 }));
 
 /**

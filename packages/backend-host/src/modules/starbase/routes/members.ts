@@ -7,25 +7,25 @@ import { Router } from 'express';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { addCaseInsensitiveEquals, caseInsensitiveColumn } from '@enterpriseglue/shared/db/adapters/QueryHelpers.js';
 import { z } from 'zod';
-import { randomBytes } from 'node:crypto';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
+import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
+import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
 import { PermissionGrant } from '@enterpriseglue/shared/db/entities/PermissionGrant.js';
-// Invitation and Tenant entities removed - multi-tenancy is EE-only
 import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
+import { Invitation } from '@enterpriseglue/shared/db/entities/Invitation.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, Not, Raw } from 'typeorm';
-import { sendInvitationEmail } from '@enterpriseglue/shared/services/email/index.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
 import { MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js';
 import { requireProjectRole, requireProjectAccess } from '@enterpriseglue/shared/middleware/projectAuth.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
+import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
 
 type ProjectRole = 'owner' | 'delegate' | 'developer' | 'editor' | 'viewer';
 
@@ -48,6 +48,126 @@ function getRolesFromMembership(membership: MembershipWithRoles | null): Project
   return Array.isArray(membership.roles) ? membership.roles : [membership.role];
 }
 
+type PendingInviteStatus = 'pending' | 'expired' | 'onboarding';
+
+interface PendingProjectInvite {
+  invitationId: string;
+  userId: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: ProjectRole;
+  roles: ProjectRole[];
+  status: PendingInviteStatus;
+  deliveryMethod: 'email' | 'manual';
+  expiresAt: number;
+  createdAt: number;
+}
+
+function parseInvitationRoles(value: string | null, fallbackRole: string | null): ProjectRole[] {
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    const roles = Array.isArray(parsed) ? parsed.map((item) => String(item)) : [];
+    const normalized = roles.filter((item): item is ProjectRole => ['owner', 'delegate', 'developer', 'editor', 'viewer'].includes(item));
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  } catch {
+  }
+
+  if (fallbackRole && ['owner', 'delegate', 'developer', 'editor', 'viewer'].includes(fallbackRole)) {
+    return [fallbackRole as ProjectRole];
+  }
+
+  return ['viewer'];
+}
+
+function toPendingInviteStatus(invitation: Pick<Invitation, 'status' | 'expiresAt'>, now: number): PendingInviteStatus {
+  if (invitation.status === 'otp_verified') {
+    return 'onboarding';
+  }
+
+  if (invitation.expiresAt < now) {
+    return 'expired';
+  }
+
+  return 'pending';
+}
+
+async function listPendingProjectInvites(projectId: string): Promise<PendingProjectInvite[]> {
+  const dataSource = await getDataSource();
+  const invitationRepo = dataSource.getRepository(Invitation);
+  const userRepo = dataSource.getRepository(User);
+  const projectMemberRepo = dataSource.getRepository(ProjectMember);
+  const now = Date.now();
+
+  const invitationRows = await invitationRepo.find({
+    where: {
+      resourceType: 'project',
+      resourceId: projectId,
+    },
+    order: {
+      updatedAt: 'DESC',
+      createdAt: 'DESC',
+    },
+  });
+
+  if (invitationRows.length === 0) {
+    return [];
+  }
+
+  const latestByUser = new Map<string, Invitation>();
+  for (const invitation of invitationRows) {
+    const key = String(invitation.userId || invitation.email || invitation.id).toLowerCase();
+    if (!latestByUser.has(key)) {
+      latestByUser.set(key, invitation);
+    }
+  }
+
+  const projectMembers = await projectMemberRepo.find({
+    where: { projectId },
+    select: ['userId'],
+  });
+  const activeMemberUserIds = new Set(projectMembers.map((member) => String(member.userId)));
+  const unresolvedInvitationRows = Array.from(latestByUser.values()).filter((invitation) => {
+    if (invitation.revokedAt || invitation.completedAt) {
+      return false;
+    }
+    return !activeMemberUserIds.has(String(invitation.userId));
+  });
+
+  if (unresolvedInvitationRows.length === 0) {
+    return [];
+  }
+
+  const userIds = Array.from(new Set(unresolvedInvitationRows.map((invitation) => String(invitation.userId)).filter(Boolean)));
+  const users = userIds.length > 0
+    ? await userRepo.find({
+        where: { id: In(userIds) },
+        select: ['id', 'firstName', 'lastName'],
+      })
+    : [];
+  const userMap = new Map(users.map((user) => [String(user.id), user]));
+
+  return unresolvedInvitationRows.map((invitation) => {
+    const roles = parseInvitationRoles(invitation.resourceRolesJson, invitation.resourceRole);
+    const user = userMap.get(String(invitation.userId));
+    return {
+      invitationId: invitation.id,
+      userId: String(invitation.userId),
+      email: invitation.email,
+      firstName: user?.firstName || null,
+      lastName: user?.lastName || null,
+      role: roles[0] || 'viewer',
+      roles,
+      status: toPendingInviteStatus(invitation, now),
+      deliveryMethod: invitation.deliveryMethod,
+      expiresAt: Number(invitation.expiresAt),
+      createdAt: Number(invitation.createdAt),
+    };
+  });
+}
+
 const router = Router();
 
 const uuidLikeSchema = z.string().regex(
@@ -65,10 +185,16 @@ const memberIdSchema = z.object({
   userId: uuidLikeSchema,
 });
 
+const pendingInviteIdSchema = z.object({
+  projectId: uuidLikeSchema,
+  invitationId: uuidLikeSchema,
+});
+
 const addMemberSchema = z.object({
   email: z.string().email(),
   role: z.enum(['delegate', 'developer', 'editor', 'viewer']).optional(),
   roles: z.array(z.enum(['delegate', 'developer', 'editor', 'viewer'])).optional(),
+  deliveryMethod: z.enum(['email', 'manual']).optional(),
 });
 
 const updateRoleSchema = z.object({
@@ -83,6 +209,11 @@ const updateDeployGrantSchema = z.object({
 const userSearchSchema = z.object({
   q: z.string().optional(),
 });
+
+const memberLookupSchema = z.object({
+  email: z.string().email().optional(),
+});
+
 router.get(
   '/starbase-api/projects/:projectId/members/user-search',
   apiLimiter,
@@ -128,6 +259,84 @@ router.get(
     } catch (error) {
       logger.error('Search users for project members error:', error);
       throw Errors.internal('Failed to search users');
+    }
+  })
+);
+
+router.get(
+  '/starbase-api/projects/:projectId/members/lookup',
+  apiLimiter,
+  requireAuth,
+  validateParams(projectIdSchema),
+  validateQuery(memberLookupSchema),
+  requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can look up users' }),
+  asyncHandler(async (req, res) => {
+    try {
+      const projectId = String(req.params.projectId);
+      const email = typeof req.query?.email === 'string' ? String(req.query.email).trim().toLowerCase() : '';
+
+      if (!email) {
+        return res.json({ mode: 'invite' });
+      }
+
+      const dataSource = await getDataSource();
+      const userRepo = dataSource.getRepository(User);
+      let targetQb = userRepo.createQueryBuilder('u')
+        .select(['u.id', 'u.email', 'u.firstName', 'u.lastName', 'u.passwordHash']);
+      targetQb = addCaseInsensitiveEquals(targetQb, 'u', 'email', 'email', email);
+      const targetUser = await targetQb.getOne();
+
+      if (!targetUser || !targetUser.passwordHash) {
+        return res.json({ mode: 'invite' });
+      }
+
+      const existingMembership = await projectMemberService.getMembership(projectId, targetUser.id);
+      if (existingMembership) {
+        return res.json({
+          mode: 'existing-member',
+          user: {
+            id: targetUser.id,
+            email: targetUser.email,
+            firstName: (targetUser as any).firstName || null,
+            lastName: (targetUser as any).lastName || null,
+          },
+        });
+      }
+
+      return res.json({
+        mode: 'direct-add',
+        user: {
+          id: targetUser.id,
+          email: targetUser.email,
+          firstName: (targetUser as any).firstName || null,
+          lastName: (targetUser as any).lastName || null,
+        },
+      });
+    } catch (error) {
+      logger.error('Lookup project member candidate error:', error);
+      throw Errors.internal('Failed to look up user');
+    }
+  })
+);
+
+router.get(
+  '/starbase-api/projects/:projectId/members/capabilities',
+  apiLimiter,
+  requireAuth,
+  validateParams(projectIdSchema),
+  requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can inspect invite capabilities' }),
+  asyncHandler(async (req, res) => {
+    try {
+      const emailConfig = await getEmailConfigForTenant((req as any).tenant?.tenantId);
+      const ssoRequired = await invitationService.isLocalLoginDisabled();
+
+      res.json({
+        ssoRequired,
+        emailConfigured: Boolean(emailConfig),
+      });
+    } catch (error) {
+      logger.error('Project member capabilities lookup error:', error);
+      throw Errors.internal('Failed to load member capabilities');
     }
   })
 );
@@ -212,6 +421,7 @@ router.get(
       }
 
       const members = await projectMemberService.getMembers(projectId);
+      const pendingInvites = await listPendingProjectInvites(projectId);
 
       const editorIds = members
         .filter((m: any) => String(m.role) === 'editor')
@@ -231,13 +441,98 @@ router.get(
         deployGrantSet = new Set(deployGrantRows.map((r) => String(r.userId)));
       }
 
-      res.json(members.map((m: any) => ({
-        ...m,
-        deployAllowed: String(m.role) === 'editor' ? deployGrantSet.has(String(m.userId)) : null,
-      })));
+      res.json({
+        members: members.map((m: any) => ({
+          ...m,
+          deployAllowed: String(m.role) === 'editor' ? deployGrantSet.has(String(m.userId)) : null,
+        })),
+        pendingInvites,
+      });
     } catch (error) {
       logger.error('Get project members error:', error);
       throw Errors.internal('Failed to get project members');
+    }
+  })
+);
+
+router.post(
+  '/starbase-api/projects/:projectId/pending-invites/:invitationId/reissue',
+  apiLimiter,
+  requireAuth,
+  validateParams(pendingInviteIdSchema),
+  requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can manage invitations' }),
+  asyncHandler(async (req, res) => {
+    try {
+      const projectId = String(req.params.projectId);
+      const invitationId = String(req.params.invitationId);
+      const requesterId = req.user!.userId;
+      const dataSource = await getDataSource();
+      const invitationRepo = dataSource.getRepository(Invitation);
+      const projectRepo = dataSource.getRepository(Project);
+
+      const invitation = await invitationRepo.findOne({
+        where: {
+          id: invitationId,
+          resourceType: 'project',
+          resourceId: projectId,
+        },
+      });
+
+      if (!invitation || invitation.revokedAt || invitation.completedAt) {
+        throw Errors.notFound('Invitation');
+      }
+
+      if (invitation.deliveryMethod !== 'manual') {
+        throw Errors.validation('Only manual invitations can be reissued here');
+      }
+
+      if (invitation.status === 'otp_verified') {
+        throw Errors.validation('Cannot reissue an invitation after onboarding has started');
+      }
+
+      const existingMembership = await projectMemberService.getMembership(projectId, String(invitation.userId));
+      if (existingMembership) {
+        throw Errors.conflict('User is already a member of this project');
+      }
+
+      const project = await projectRepo.findOne({ where: { id: projectId }, select: ['name'] });
+      const inviteRoles = parseInvitationRoles(invitation.resourceRolesJson, invitation.resourceRole);
+      const inviteResult = await invitationService.createInvitation({
+        userId: String(invitation.userId),
+        email: invitation.email,
+        tenantSlug: invitation.tenantSlug,
+        resourceType: 'project',
+        resourceId: projectId,
+        resourceName: project?.name || invitation.resourceName || projectId,
+        resourceRoles: inviteRoles,
+        resourceRole: inviteRoles[0],
+        createdByUserId: requesterId,
+        invitedByName: req.user!.email,
+        deliveryMethod: 'manual',
+      });
+
+      await logAudit({
+        userId: requesterId,
+        action: 'project.member.invite.reissued',
+        resourceType: 'project',
+        resourceId: projectId,
+        ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+        userAgent: req.headers['user-agent'],
+        details: { invitationId, email: invitation.email, deliveryMethod: 'manual', roles: inviteRoles },
+      });
+
+      return res.json({
+        invited: true,
+        emailSent: false,
+        inviteUrl: inviteResult.inviteUrl,
+        oneTimePassword: inviteResult.oneTimePassword,
+      });
+    } catch (error) {
+      logger.error('Reissue project invitation error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw Errors.internal('Failed to reissue invitation');
     }
   })
 );
@@ -256,7 +551,7 @@ router.post(
   asyncHandler(async (req, res) => {
     try {
       const projectId = String(req.params.projectId);
-      const { email, role, roles } = req.body as { email: string; role?: ProjectRole; roles?: ProjectRole[] };
+      const { email, role, roles, deliveryMethod } = req.body as { email: string; role?: ProjectRole; roles?: ProjectRole[]; deliveryMethod?: 'email' | 'manual' };
       const inviterId = req.user!.userId;
 
       if (typeof email !== 'string') {
@@ -279,13 +574,13 @@ router.post(
       // Find user by email
       const dataSource = await getDataSource();
       const userRepo = dataSource.getRepository(User);
+      const projectRepo = dataSource.getRepository(Project);
       let targetQb = userRepo.createQueryBuilder('u')
-        .select(['u.id', 'u.email']);
+        .select(['u.id', 'u.email', 'u.passwordHash']);
       targetQb = addCaseInsensitiveEquals(targetQb, 'u', 'email', 'email', emailLower);
       const targetUser = await targetQb.getOne();
 
-      // If user exists, add them directly as a member
-      if (targetUser) {
+      if (targetUser && targetUser.passwordHash) {
         // Check if user is already a member
         const existingMembership = await projectMemberService.getMembership(projectId, targetUser.id);
         if (existingMembership) {
@@ -315,9 +610,54 @@ router.post(
         });
       }
 
-      // User doesn't exist - OSS doesn't support invitations (EE-only feature)
-      // User must already be registered in the system
-      throw Errors.notFound('User not found. The user must be registered before they can be added to a project. Invitations are available in the Enterprise Edition.');
+      const pendingUser = targetUser || await userService.createPendingUser({
+        email: emailLower,
+        platformRole: 'user',
+        createdByUserId: inviterId,
+      }).then((user) => ({ id: user.id, email: user.email } as Pick<User, 'id' | 'email'>));
+
+      if (!pendingUser) {
+        throw Errors.internal('Failed to prepare invitation user');
+      }
+
+      const existingMembership = await projectMemberService.getMembership(projectId, pendingUser.id);
+      if (existingMembership) {
+        throw Errors.conflict('User is already a member of this project');
+      }
+
+      const project = await projectRepo.findOne({ where: { id: projectId }, select: ['name'] });
+      const tenantSlug = String(req.params.tenantSlug || '').trim() || 'default';
+      const inviteResult = await invitationService.createInvitation({
+        userId: pendingUser.id,
+        email: emailLower,
+        tenantSlug,
+        resourceType: 'project',
+        resourceId: projectId,
+        resourceName: project?.name || projectId,
+        resourceRoles: requestedRoles,
+        resourceRole: requestedRoles[0],
+        createdByUserId: inviterId,
+        invitedByName: req.user!.email,
+        deliveryMethod: deliveryMethod === 'email' ? 'email' : 'manual',
+      });
+
+      await logAudit({
+        userId: inviterId,
+        action: 'project.member.invited',
+        resourceType: 'project',
+        resourceId: projectId,
+        ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+        userAgent: req.headers['user-agent'],
+        details: { email: emailLower, roles: requestedRoles },
+      });
+
+      return res.status(201).json({
+        invited: true,
+        emailSent: inviteResult.emailSent,
+        emailError: inviteResult.emailError,
+        inviteUrl: inviteResult.emailSent ? undefined : inviteResult.inviteUrl,
+        oneTimePassword: inviteResult.oneTimePassword,
+      });
     } catch (error) {
       logger.error('Add project member error:', error);
       if (error instanceof AppError) {
@@ -419,6 +759,11 @@ router.delete(
       }
 
       await projectMemberService.removeMember(projectId, targetUserId);
+      await invitationService.revokeOutstandingInvitations({
+        userId: targetUserId,
+        resourceType: 'project',
+        resourceId: projectId,
+      });
 
       res.status(204).send();
     } catch (error) {

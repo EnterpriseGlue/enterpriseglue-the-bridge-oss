@@ -47,8 +47,8 @@ describe('platformAuth middleware', () => {
   });
 
   it('allows specific platform roles', () => {
-    req.user = { userId: 'user-1', platformRole: 'developer' };
-    const middleware = requirePlatformRole('admin', 'developer');
+    req.user = { userId: 'user-1', platformRole: 'user' };
+    const middleware = requirePlatformRole('admin', 'user');
     middleware(req as Request, res as Response, next);
     expect(next).toHaveBeenCalled();
   });

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  composeProjectRoles,
+  getProjectAccessSelection,
+  getProjectRoleDescription,
   roleLabel,
   tagTypeForRole,
   isValidEmail,
@@ -7,9 +10,10 @@ import {
   COLLABORATORS_PANEL_WIDTH,
   memberHeaders,
   editableRoleOptions,
+  projectBaseAccessOptions,
   tableHeaders,
   type ProjectRole,
-} from '@src/features/starbase/components/project-detail/project-detail-utils';
+} from '../../../../../../../packages/frontend-host/src/features/starbase/components/project-detail/project-detail-utils';
 
 describe('project-detail-utils', () => {
   describe('constants', () => {
@@ -28,6 +32,10 @@ describe('project-detail-utils', () => {
     it('exports editableRoleOptions', () => {
       expect(editableRoleOptions).toEqual(['delegate', 'developer', 'editor', 'viewer']);
       expect(editableRoleOptions).not.toContain('owner');
+    });
+
+    it('exports projectBaseAccessOptions', () => {
+      expect(projectBaseAccessOptions.map((option) => option.id)).toEqual(['viewer', 'editor', 'developer']);
     });
 
     it('exports tableHeaders', () => {
@@ -59,6 +67,40 @@ describe('project-detail-utils', () => {
 
     it('capitalizes viewer role', () => {
       expect(roleLabel('viewer')).toBe('Viewer');
+    });
+  });
+
+  describe('getProjectRoleDescription', () => {
+    it('describes delegate access clearly', () => {
+      expect(getProjectRoleDescription('delegate')).toContain('manage members');
+    });
+
+    it('describes viewer access clearly', () => {
+      expect(getProjectRoleDescription('viewer')).toContain('view project files');
+    });
+  });
+
+  describe('project access helpers', () => {
+    it('derives developer base access with delegate toggle', () => {
+      expect(getProjectAccessSelection(['delegate', 'developer'])).toEqual({
+        baseRole: 'developer',
+        hasDelegateAccess: true,
+      });
+    });
+
+    it('falls back to viewer base access when no elevated edit role is present', () => {
+      expect(getProjectAccessSelection(['viewer'])).toEqual({
+        baseRole: 'viewer',
+        hasDelegateAccess: false,
+      });
+    });
+
+    it('composes delegate access on top of the selected base role', () => {
+      expect(composeProjectRoles('editor', true)).toEqual(['delegate', 'editor']);
+    });
+
+    it('composes a single base role when delegate access is disabled', () => {
+      expect(composeProjectRoles('developer', false)).toEqual(['developer']);
     });
   });
 

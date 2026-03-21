@@ -85,9 +85,8 @@ const CLAIM_TYPES = [
 ];
 
 const PLATFORM_ROLES = [
-  { value: 'admin', label: 'Admin' },
-  { value: 'developer', label: 'Developer' },
-  { value: 'user', label: 'User' },
+  { value: 'admin', label: 'Platform Admin' },
+  { value: 'user', label: 'Standard User' },
 ];
 
 export default function SsoSettingsTab() {
@@ -744,7 +743,7 @@ export default function SsoSettingsTab() {
                                 <code style={{ fontSize: '12px' }}>{mapping.claimValue}</code>
                               </TableCell>
                               <TableCell>
-                                <Tag type={mapping.targetRole === 'admin' ? 'purple' : mapping.targetRole === 'developer' ? 'teal' : 'gray'}>
+                                <Tag type={mapping.targetRole === 'admin' ? 'purple' : 'gray'}>
                                   {mapping.targetRole}
                                 </Tag>
                               </TableCell>
@@ -985,9 +984,8 @@ export default function SsoSettingsTab() {
             value={providerForm.defaultRole}
             onChange={(e) => setProviderForm({ ...providerForm, defaultRole: e.target.value })}
           >
-            <SelectItem value="user" text="User" />
-            <SelectItem value="developer" text="Developer" />
-            <SelectItem value="admin" text="Admin" />
+            <SelectItem value="user" text="Standard User" />
+            <SelectItem value="admin" text="Platform Admin" />
           </Select>
           
           <Toggle
@@ -1150,7 +1148,7 @@ export default function SsoSettingsTab() {
               <div style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'flex-start' }}>
                 <Tag type="blue" size="sm" style={{ flexShrink: 0 }}>Role</Tag>
                 <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                  Match users by their SSO role claim (e.g., <code>developer</code>)
+                  Match users by their SSO role claim (e.g., <code>admin</code>)
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'flex-start' }}>
@@ -1194,7 +1192,7 @@ export default function SsoSettingsTab() {
             </h4>
             <div style={{ fontSize: '13px', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2)' }}>
               <div><strong>Priority 100:</strong> Group = "IT-Admins" → Admin</div>
-              <div><strong>Priority 50:</strong> Group = "Developers" → Developer</div>
+              <div><strong>Priority 50:</strong> Group = "Developers" → Standard User</div>
               <div><strong>Priority 10:</strong> Email = "*@company.com" → User</div>
             </div>
           </section>

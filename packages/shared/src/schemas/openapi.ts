@@ -1296,6 +1296,7 @@ const {
   UpdateProjectMemberRoleRequest,
   TransferProjectOwnershipRequest,
   EngineMemberSchema,
+  EngineMembersResponseSchema,
   EngineWithDetailsSchema,
   EngineRoleResponse,
   AddEngineMemberRequest,
@@ -1463,7 +1464,7 @@ registry.registerPath({
   method: 'get',
   path: '/engines-api/engines/{engineId}/members',
   request: { params: z.object({ engineId: z.string() }) },
-  responses: { 200: { description: 'Engine members', content: { 'application/json': { schema: z.array(EngineMemberSchema) } } } },
+  responses: { 200: { description: 'Engine members', content: { 'application/json': { schema: EngineMembersResponseSchema } } } },
 });
 
 registry.registerPath({

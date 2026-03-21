@@ -56,6 +56,27 @@ export type ProjectMember = {
   user?: { id: string; email: string; firstName?: string | null; lastName?: string | null } | null
 }
 
+export type ProjectPendingInviteStatus = 'pending' | 'expired' | 'onboarding'
+
+export type ProjectPendingInvite = {
+  invitationId: string
+  userId: string
+  email: string
+  firstName?: string | null
+  lastName?: string | null
+  role: ProjectRole
+  roles?: ProjectRole[]
+  status: ProjectPendingInviteStatus
+  deliveryMethod: 'email' | 'manual'
+  expiresAt: number
+  createdAt: number
+}
+
+export type ProjectMembersResponse = {
+  members: ProjectMember[]
+  pendingInvites: ProjectPendingInvite[]
+}
+
 export const COLLABORATORS_PANEL_WIDTH = 420
 
 export const memberHeaders = [
@@ -66,8 +87,70 @@ export const memberHeaders = [
 
 export const editableRoleOptions: ProjectRole[] = ['delegate', 'developer', 'editor', 'viewer']
 
+export type ProjectBaseAccessRole = 'developer' | 'editor' | 'viewer'
+
+export const projectBaseAccessOptions: Array<{ id: ProjectBaseAccessRole; label: string; description: string }> = [
+  {
+    id: 'viewer',
+    label: 'Viewer',
+    description: 'Can view project files and members.',
+  },
+  {
+    id: 'editor',
+    label: 'Editor',
+    description: 'Can create and edit content, but cannot deploy.',
+  },
+  {
+    id: 'developer',
+    label: 'Developer',
+    description: 'Can edit and deploy project changes.',
+  },
+]
+
 export function roleLabel(role: ProjectRole): string {
   return role.charAt(0).toUpperCase() + role.slice(1)
+}
+
+export function getProjectRoleDescription(role: ProjectRole): string {
+  switch (role) {
+    case 'owner':
+      return 'Full project control, including ownership.'
+    case 'delegate':
+      return 'Can manage members and project settings.'
+    case 'developer':
+      return 'Can edit and deploy project changes.'
+    case 'editor':
+      return 'Can create and edit content, but cannot deploy.'
+    case 'viewer':
+    default:
+      return 'Can view project files and members.'
+  }
+}
+
+export function getProjectAccessSelection(roles: ProjectRole[]): {
+  baseRole: ProjectBaseAccessRole
+  hasDelegateAccess: boolean
+} {
+  const normalized = Array.from(new Set(roles))
+
+  if (normalized.includes('developer')) {
+    return { baseRole: 'developer', hasDelegateAccess: normalized.includes('delegate') }
+  }
+
+  if (normalized.includes('editor')) {
+    return { baseRole: 'editor', hasDelegateAccess: normalized.includes('delegate') }
+  }
+
+  return {
+    baseRole: 'viewer',
+    hasDelegateAccess: normalized.includes('delegate'),
+  }
+}
+
+export function composeProjectRoles(baseRole: ProjectBaseAccessRole, hasDelegateAccess: boolean): ProjectRole[] {
+  return hasDelegateAccess
+    ? Array.from(new Set<ProjectRole>(['delegate', baseRole]))
+    : [baseRole]
 }
 
 export function tagTypeForRole(role: ProjectRole): 'red' | 'magenta' | 'blue' | 'teal' | 'gray' {

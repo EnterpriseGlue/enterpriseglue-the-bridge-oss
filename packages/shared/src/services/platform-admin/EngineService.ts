@@ -218,6 +218,9 @@ export class EngineService {
 
     // Add operators and deployers
     for (const member of members) {
+      if (member.userId === engine.ownerId || member.userId === engine.delegateId) {
+        continue;
+      }
       result.push({
         id: member.id,
         engineId: member.engineId,

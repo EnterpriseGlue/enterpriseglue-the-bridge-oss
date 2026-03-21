@@ -14,12 +14,13 @@ import { GitProvider } from '@enterpriseglue/shared/db/entities/GitProvider.js';
 import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
 import { ProjectMemberRole } from '@enterpriseglue/shared/db/entities/ProjectMemberRole.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { Invitation } from '@enterpriseglue/shared/db/entities/Invitation.js';
 import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
 import { EngineHealth } from '@enterpriseglue/shared/db/entities/EngineHealth.js';
 import { EngineProjectAccess } from '@enterpriseglue/shared/db/entities/EngineProjectAccess.js';
 import { EngineAccessRequest } from '@enterpriseglue/shared/db/entities/EngineAccessRequest.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/db/entities/EnvironmentTag.js';
-import { In, type EntityManager } from 'typeorm';
+import { In, IsNull, type EntityManager } from 'typeorm';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
@@ -242,6 +243,19 @@ r.get('/starbase-api/projects', apiLimiter, requireAuth, asyncHandler(async (req
       select: ['projectId', 'userId', 'role']
     });
 
+    const pendingProjectInvites = await dataSource.getRepository(Invitation).find({
+      where: {
+        resourceType: 'project',
+        resourceId: In(projectIds),
+        revokedAt: IsNull(),
+        completedAt: IsNull(),
+      },
+      select: ['resourceId', 'userId'],
+    });
+    const pendingMemberKeys = new Set(
+      pendingProjectInvites.map((invite) => `${String(invite.resourceId)}:${String(invite.userId)}`)
+    );
+
     // Get user details from database
     const memberUserIds = [...new Set(memberRowsData.map((m: ProjectMember) => String(m.userId)))];
     const userDetailsMap = new Map<string, { firstName: string | null; lastName: string | null }>();
@@ -261,6 +275,9 @@ r.get('/starbase-api/projects', apiLimiter, requireAuth, asyncHandler(async (req
     for (const m of memberRowsData) {
       const pid = String(m.projectId);
       const uid = String(m.userId);
+      if (pendingMemberKeys.has(`${pid}:${uid}`)) {
+        continue;
+      }
       const userDetails = userDetailsMap.get(uid) || { firstName: null, lastName: null };
       
       if (!membersByProjectId.has(pid)) {

@@ -49,8 +49,7 @@ const CLAIM_TYPES = [
 
 const TARGET_ROLES = [
   { id: 'admin', label: 'Platform Admin' },
-  { id: 'developer', label: 'Developer' },
-  { id: 'user', label: 'User' },
+  { id: 'user', label: 'Standard User' },
 ];
 
 const headers = [
@@ -153,9 +152,8 @@ export default function SsoMappings() {
 
   const getRoleTag = (role: string) => {
     switch (role) {
-      case 'admin': return <Tag type="red">Admin</Tag>;
-      case 'developer': return <Tag type="blue">Developer</Tag>;
-      default: return <Tag type="gray">User</Tag>;
+      case 'admin': return <Tag type="red">Platform Admin</Tag>;
+      default: return <Tag type="gray">Standard User</Tag>;
     }
   };
 

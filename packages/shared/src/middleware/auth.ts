@@ -15,6 +15,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: JwtPayload;
+      onboarding?: JwtPayload;
     }
   }
 }
@@ -111,6 +112,28 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   }
 
   next();
+}
+
+export function requireOnboarding(req: Request, res: Response, next: NextFunction) {
+  try {
+    const token = typeof req.cookies?.onboardingToken === 'string' ? req.cookies.onboardingToken : '';
+    const payload = verifyToken(token);
+
+    if (payload.type !== 'onboarding' || typeof payload.invitationId !== 'string' || payload.invitationId.trim().length === 0) {
+      return next(Errors.unauthorized('Invalid onboarding token'));
+    }
+
+    req.onboarding = payload;
+    return next();
+  } catch (error) {
+    if (error instanceof AppError) {
+      return next(error);
+    }
+    if (error instanceof Error) {
+      return next(Errors.unauthorized(error.message));
+    }
+    return next(Errors.unauthorized('Authentication failed'));
+  }
 }
 
 /**

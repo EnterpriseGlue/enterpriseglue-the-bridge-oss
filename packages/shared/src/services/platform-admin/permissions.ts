@@ -122,9 +122,6 @@ export const PlatformRolePermissions: Record<string, Permission[]> = {
     // Admins get all platform permissions
     ...Object.values(PlatformPermissions),
   ],
-  developer: [
-    PlatformPermissions.USER_VIEW,
-  ],
   user: [],
 };
 

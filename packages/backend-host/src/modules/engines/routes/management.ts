@@ -6,20 +6,21 @@
 import { Router, type Request } from 'express';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
-import { randomBytes } from 'node:crypto';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
+import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { engineService, engineAccessService, projectMemberService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
+import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
+import { Invitation } from '@enterpriseglue/shared/db/entities/Invitation.js';
+import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
 // Invitation and Tenant entities removed - multi-tenancy is EE-only
-import { IsNull } from 'typeorm';
-import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { In, IsNull } from 'typeorm';
 import { addCaseInsensitiveEquals } from '@enterpriseglue/shared/db/adapters/QueryHelpers.js';
-import { sendInvitationEmail } from '@enterpriseglue/shared/services/email/index.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
 import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES, MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
@@ -49,7 +50,8 @@ const userIdSchema = z.object({
 
 const addMemberSchema = z.object({
   email: z.string().email(),
-  role: z.enum(['delegate', 'operator', 'deployer']),
+  role: z.enum(['operator', 'deployer']),
+  deliveryMethod: z.enum(['email', 'manual']).optional(),
 });
 
 const updateMemberRoleSchema = z.object({
@@ -60,6 +62,16 @@ const assignDelegateSchema = z.object({
   email: z.string().email().nullable(),
 });
 
+const pendingInviteIdSchema = z.object({
+  engineId: z.string(),
+  invitationId: z.string().uuid(),
+});
+
+const memberLookupSchema = z.object({
+  email: z.string().email().optional(),
+  role: z.enum(['delegate', 'operator', 'deployer']).optional(),
+});
+
 const setEnvironmentSchema = z.object({
   environmentTagId: z.string(),
 });
@@ -67,6 +79,105 @@ const setEnvironmentSchema = z.object({
 const setLockedSchema = z.object({
   locked: z.boolean(),
 });
+
+type PendingInviteStatus = 'pending' | 'expired' | 'onboarding';
+
+interface PendingEngineInvite {
+  invitationId: string;
+  userId: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: 'operator' | 'deployer';
+  status: PendingInviteStatus;
+  deliveryMethod: 'email' | 'manual';
+  expiresAt: number;
+  createdAt: number;
+}
+
+function parseInvitationRole(role: string | null): 'operator' | 'deployer' {
+  return role === 'deployer' ? 'deployer' : 'operator';
+}
+
+function toPendingInviteStatus(invitation: Pick<Invitation, 'status' | 'expiresAt'>, now: number): PendingInviteStatus {
+  if (invitation.status === 'otp_verified') {
+    return 'onboarding';
+  }
+
+  if (invitation.expiresAt < now) {
+    return 'expired';
+  }
+
+  return 'pending';
+}
+
+async function listPendingEngineInvites(engineId: string): Promise<PendingEngineInvite[]> {
+  const dataSource = await getDataSource();
+  const invitationRepo = dataSource.getRepository(Invitation);
+  const userRepo = dataSource.getRepository(User);
+  const now = Date.now();
+
+  const invitationRows = await invitationRepo.find({
+    where: {
+      resourceType: 'engine',
+      resourceId: engineId,
+    },
+    order: {
+      updatedAt: 'DESC',
+      createdAt: 'DESC',
+    },
+  });
+
+  if (invitationRows.length === 0) {
+    return [];
+  }
+
+  const latestByUser = new Map<string, Invitation>();
+  for (const invitation of invitationRows) {
+    const key = String(invitation.userId || invitation.email || invitation.id).toLowerCase();
+    if (!latestByUser.has(key)) {
+      latestByUser.set(key, invitation);
+    }
+  }
+
+  const engineMembers = await engineService.getEngineMembers(engineId);
+  const activeMemberUserIds = new Set(engineMembers.map((member) => String(member.userId)));
+  const unresolvedInvitationRows = Array.from(latestByUser.values()).filter((invitation) => {
+    if (invitation.revokedAt || invitation.completedAt) {
+      return false;
+    }
+    return !activeMemberUserIds.has(String(invitation.userId));
+  });
+
+  if (unresolvedInvitationRows.length === 0) {
+    return [];
+  }
+
+  const userIds = Array.from(new Set(unresolvedInvitationRows.map((invitation) => String(invitation.userId)).filter(Boolean)));
+  const users = userIds.length > 0
+    ? await userRepo.find({
+        where: { id: In(userIds) },
+        select: ['id', 'firstName', 'lastName'],
+      })
+    : [];
+  const userMap = new Map(users.map((user) => [String(user.id), user]));
+
+  return unresolvedInvitationRows.map((invitation) => {
+    const user = userMap.get(String(invitation.userId));
+    return {
+      invitationId: invitation.id,
+      userId: String(invitation.userId),
+      email: invitation.email,
+      firstName: user?.firstName || null,
+      lastName: user?.lastName || null,
+      role: parseInvitationRole(invitation.resourceRole),
+      status: toPendingInviteStatus(invitation, now),
+      deliveryMethod: invitation.deliveryMethod,
+      expiresAt: Number(invitation.expiresAt),
+      createdAt: Number(invitation.createdAt),
+    };
+  });
+}
 
 /**
  * GET /engines-api/engines/:engineId/members
@@ -89,10 +200,94 @@ router.get(
       }
 
       const members = await engineService.getEngineMembers(engineId);
-      res.json(members);
+      const pendingInvites = await listPendingEngineInvites(engineId);
+      res.json({ members, pendingInvites });
     } catch (error) {
       logger.error('Get engine members error:', error);
       throw Errors.internal('Failed to get engine members');
+    }
+  })
+);
+
+router.get(
+  '/engines-api/engines/:engineId/members/capabilities',
+  apiLimiter,
+  requireAuth,
+  validateParams(engineIdSchema),
+  asyncHandler(async (req, res) => {
+    const engineId = String(req.params.engineId);
+    const canManage = await canManageEngine(req, engineId);
+    if (!canManage) {
+      throw Errors.forbidden('Only owners and delegates can inspect invite capabilities');
+    }
+
+    const emailConfig = await getEmailConfigForTenant((req as any).tenant?.tenantId);
+    const ssoRequired = await invitationService.isLocalLoginDisabled();
+
+    res.json({
+      ssoRequired,
+      emailConfigured: Boolean(emailConfig),
+    });
+  })
+);
+
+router.get(
+  '/engines-api/engines/:engineId/members/lookup',
+  apiLimiter,
+  requireAuth,
+  validateParams(engineIdSchema),
+  validateQuery(memberLookupSchema),
+  asyncHandler(async (req, res) => {
+    try {
+      const engineId = String(req.params.engineId);
+      const email = typeof req.query?.email === 'string' ? String(req.query.email).trim().toLowerCase() : '';
+      const role = req.query?.role === 'delegate' ? 'delegate' : (req.query?.role === 'deployer' ? 'deployer' : 'operator');
+
+      const canManage = await canManageEngine(req, engineId);
+      if (!canManage) {
+        throw Errors.forbidden('Only owners and delegates can look up users');
+      }
+
+      if (!email) {
+        return res.json({ mode: role === 'delegate' ? 'direct-add-only' : 'invite' });
+      }
+
+      const dataSource = await getDataSource();
+      const userRepo = dataSource.getRepository(User);
+      let targetQb = userRepo.createQueryBuilder('u')
+        .select(['u.id', 'u.email', 'u.firstName', 'u.lastName', 'u.passwordHash']);
+      targetQb = addCaseInsensitiveEquals(targetQb, 'u', 'email', 'email', email);
+      const targetUser = await targetQb.getOne();
+
+      if (!targetUser || !targetUser.passwordHash) {
+        return res.json({ mode: role === 'delegate' ? 'direct-add-only' : 'invite' });
+      }
+
+      const existingRole = await engineService.getEngineRole(targetUser.id, engineId);
+      if (existingRole) {
+        return res.json({
+          mode: 'existing-member',
+          user: {
+            id: targetUser.id,
+            email: targetUser.email,
+            firstName: (targetUser as any).firstName || null,
+            lastName: (targetUser as any).lastName || null,
+          },
+        });
+      }
+
+      return res.json({
+        mode: 'direct-add',
+        user: {
+          id: targetUser.id,
+          email: targetUser.email,
+          firstName: (targetUser as any).firstName || null,
+          lastName: (targetUser as any).lastName || null,
+        },
+      });
+    } catch (error) {
+      logger.error('Lookup engine member candidate error:', error);
+      throw Errors.internal('Failed to look up user');
     }
   })
 );
@@ -110,8 +305,9 @@ router.post(
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
-      const { email, role } = req.body;
+      const { email, role, deliveryMethod } = req.body;
       const granterId = req.user!.userId;
+      const requestedDeliveryMethod = deliveryMethod === 'manual' ? 'manual' : 'email';
 
       if (typeof email !== 'string') {
         throw Errors.validation('Invalid email');
@@ -127,13 +323,14 @@ router.post(
       // Find user by email
       const dataSource = await getDataSource();
       const userRepo = dataSource.getRepository(User);
+      const engineRepo = dataSource.getRepository(Engine);
 
       let targetQb = userRepo.createQueryBuilder('u');
+      targetQb = targetQb.select(['u.id', 'u.email', 'u.passwordHash']);
       targetQb = addCaseInsensitiveEquals(targetQb, 'u', 'email', 'email', emailLower);
       const targetUser = await targetQb.getOne();
 
-      // If user exists, add them directly as a member
-      if (targetUser) {
+      if (targetUser && targetUser.passwordHash) {
         // Check if user is already a member
         const existingRole = await engineService.getEngineRole(targetUser.id, engineId);
         if (existingRole) {
@@ -162,9 +359,54 @@ router.post(
         });
       }
 
-      // User doesn't exist - OSS doesn't support invitations (EE-only feature)
-      // User must already be registered in the system
-      throw Errors.notFound('User not found. The user must be registered before they can be added to an engine. Invitations are available in the Enterprise Edition.');
+      const pendingUser = targetUser || await userService.createPendingUser({
+        email: emailLower,
+        platformRole: 'user',
+        createdByUserId: granterId,
+      }).then((user) => ({ id: user.id, email: user.email } as Pick<User, 'id' | 'email'>));
+
+      if (!pendingUser) {
+        throw Errors.internal('Failed to prepare invitation user');
+      }
+
+      const existingRole = await engineService.getEngineRole(pendingUser.id, engineId);
+      if (existingRole) {
+        throw Errors.conflict('User already has access to this engine');
+      }
+
+      const engine = await engineRepo.findOne({ where: { id: engineId }, select: ['name'] });
+      const tenantSlug = String(req.params.tenantSlug || '').trim() || 'default';
+      const inviteResult = await invitationService.createInvitation({
+        userId: pendingUser.id,
+        email: emailLower,
+        tenantSlug,
+        resourceType: 'engine',
+        resourceId: engineId,
+        resourceName: engine?.name || engineId,
+        resourceRole: role,
+        resourceRoles: [role],
+        createdByUserId: granterId,
+        invitedByName: req.user!.email,
+        deliveryMethod: requestedDeliveryMethod,
+      });
+
+      await logAudit({
+        userId: granterId,
+        action: 'engine.member.invited',
+        resourceType: 'engine',
+        resourceId: engineId,
+        ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+        userAgent: req.headers['user-agent'],
+        details: { email: emailLower, role, deliveryMethod: requestedDeliveryMethod },
+      });
+
+      return res.status(201).json({
+        invited: true,
+        emailSent: inviteResult.emailSent,
+        emailError: inviteResult.emailError,
+        inviteUrl: inviteResult.emailSent ? undefined : inviteResult.inviteUrl,
+        oneTimePassword: inviteResult.oneTimePassword,
+      });
     } catch (error) {
       logger.error('Add engine member error:', error);
       if (error instanceof AppError) {
@@ -256,6 +498,93 @@ router.delete(
     } catch (error) {
       logger.error('Remove engine member error:', error);
       throw Errors.internal('Failed to remove member');
+    }
+  })
+);
+
+router.post(
+  '/engines-api/engines/:engineId/pending-invites/:invitationId/reissue',
+  apiLimiter,
+  requireAuth,
+  validateParams(pendingInviteIdSchema),
+  asyncHandler(async (req, res) => {
+    try {
+      const engineId = String(req.params.engineId);
+      const invitationId = String(req.params.invitationId);
+      const requesterId = req.user!.userId;
+
+      const canManage = await canManageEngine(req, engineId);
+      if (!canManage) {
+        throw Errors.forbidden('Only owners and delegates can manage invitations');
+      }
+
+      const dataSource = await getDataSource();
+      const invitationRepo = dataSource.getRepository(Invitation);
+      const engineRepo = dataSource.getRepository(Engine);
+
+      const invitation = await invitationRepo.findOne({
+        where: {
+          id: invitationId,
+          resourceType: 'engine',
+          resourceId: engineId,
+        },
+      });
+
+      if (!invitation || invitation.revokedAt || invitation.completedAt) {
+        throw Errors.notFound('Invitation');
+      }
+
+      if (invitation.deliveryMethod !== 'manual') {
+        throw Errors.validation('Only manual invitations can be reissued here');
+      }
+
+      if (invitation.status === 'otp_verified') {
+        throw Errors.validation('Cannot reissue an invitation after onboarding has started');
+      }
+
+      const existingRole = await engineService.getEngineRole(String(invitation.userId), engineId);
+      if (existingRole) {
+        throw Errors.conflict('User already has access to this engine');
+      }
+
+      const engine = await engineRepo.findOne({ where: { id: engineId }, select: ['name'] });
+      const inviteRole = parseInvitationRole(invitation.resourceRole);
+      const inviteResult = await invitationService.createInvitation({
+        userId: String(invitation.userId),
+        email: invitation.email,
+        tenantSlug: invitation.tenantSlug,
+        resourceType: 'engine',
+        resourceId: engineId,
+        resourceName: engine?.name || invitation.resourceName || engineId,
+        resourceRole: inviteRole,
+        resourceRoles: [inviteRole],
+        createdByUserId: requesterId,
+        invitedByName: req.user!.email,
+        deliveryMethod: 'manual',
+      });
+
+      await logAudit({
+        userId: requesterId,
+        action: 'engine.member.invite.reissued',
+        resourceType: 'engine',
+        resourceId: engineId,
+        ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+        userAgent: req.headers['user-agent'],
+        details: { invitationId, email: invitation.email, deliveryMethod: 'manual', role: inviteRole },
+      });
+
+      return res.json({
+        invited: true,
+        emailSent: false,
+        inviteUrl: inviteResult.inviteUrl,
+        oneTimePassword: inviteResult.oneTimePassword,
+      });
+    } catch (error) {
+      logger.error('Reissue engine invitation error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw Errors.internal('Failed to reissue invitation');
     }
   })
 );

@@ -12,7 +12,7 @@ export interface SsoClaimsMapping {
   claimType: 'group' | 'role' | 'email_domain' | 'custom';
   claimKey: string;
   claimValue: string;
-  targetRole: 'admin' | 'developer' | 'user';
+  targetRole: 'admin' | 'user';
   priority: number;
   isActive: boolean;
   createdAt: number;
