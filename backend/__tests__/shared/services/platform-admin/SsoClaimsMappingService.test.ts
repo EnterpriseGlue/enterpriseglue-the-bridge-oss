@@ -48,10 +48,10 @@ describe('SsoClaimsMappingService', () => {
     const resolvedRole = await ssoClaimsMappingService.resolveRoleFromClaims(
       { email: 'user@enterpriseglue.ai', groups: ['users'], roles: [] },
       'provider-1',
-      'developer'
+      'user'
     );
 
-    expect(resolvedRole).toBe('developer');
+    expect(resolvedRole).toBe('user');
   });
 
   it('matches custom claim values for provider-specific mappings', async () => {

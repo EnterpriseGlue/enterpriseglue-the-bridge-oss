@@ -1,4 +1,4 @@
-export type PlatformRole = 'admin' | 'developer' | 'user';
+export type PlatformRole = 'admin' | 'user';
 export interface User {
     id: string;
     email: string;
@@ -33,6 +33,8 @@ export interface RefreshTokenResponse {
 export interface ResetPasswordRequest {
     currentPassword: string;
     newPassword: string;
+    firstName?: string;
+    lastName?: string;
 }
 export interface ForgotPasswordRequest {
     email: string;
@@ -58,7 +60,8 @@ export interface CreateUserRequest {
 }
 export interface CreateUserResponse {
     user: User;
-    temporaryPassword?: string;
+    inviteUrl?: string;
+    oneTimePassword?: string;
     emailSent: boolean;
     emailError?: string;
 }

@@ -21,6 +21,8 @@ const router = Router();
 const resetPasswordSchema = z.object({
   currentPassword: z.string(),
   newPassword: z.string().min(8),
+  firstName: z.string().trim().min(1).max(100).optional(),
+  lastName: z.string().trim().min(1).max(100).optional(),
 });
 
 const changePasswordSchema = z.object({
@@ -34,7 +36,7 @@ const changePasswordSchema = z.object({
  * ✨ Migrated to TypeORM
  */
 router.post('/api/auth/reset-password', apiLimiter, requireAuth, passwordResetLimiter, validateBody(resetPasswordSchema), asyncHandler(async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
+  const { currentPassword, newPassword, firstName, lastName } = req.body;
 
   // Validate new password complexity
   const validation = validatePassword(newPassword);
@@ -69,6 +71,12 @@ router.post('/api/auth/reset-password', apiLimiter, requireAuth, passwordResetLi
 
   // Check if this is first password reset (must_reset_password was true)
   const wasFirstReset = Boolean(user.mustResetPassword);
+  const nextFirstName = typeof firstName === 'string' ? firstName.trim() : '';
+  const nextLastName = typeof lastName === 'string' ? lastName.trim() : '';
+
+  if (wasFirstReset && (!nextFirstName || !nextLastName)) {
+    throw Errors.validation('First name and last name are required to finish account setup');
+  }
 
   // Generate verification token if this is first reset
   let verificationToken: string | null = null;
@@ -84,6 +92,8 @@ router.post('/api/auth/reset-password', apiLimiter, requireAuth, passwordResetLi
   if (wasFirstReset) {
     await userRepo.update({ id: user.id }, {
       passwordHash: newPasswordHash,
+      firstName: nextFirstName || user.firstName || null,
+      lastName: nextLastName || user.lastName || null,
       mustResetPassword: false,
       emailVerificationToken: verificationToken,
       emailVerificationTokenExpiry: tokenExpiry,
@@ -92,6 +102,8 @@ router.post('/api/auth/reset-password', apiLimiter, requireAuth, passwordResetLi
   } else {
     await userRepo.update({ id: user.id }, {
       passwordHash: newPasswordHash,
+      ...(nextFirstName ? { firstName: nextFirstName } : {}),
+      ...(nextLastName ? { lastName: nextLastName } : {}),
       mustResetPassword: false,
       updatedAt: now
     });

@@ -19,6 +19,7 @@ export interface AuthContextValue {
   resetPassword: (request: ResetPasswordRequest) => Promise<void>;
   changePassword: (request: ChangePasswordRequest) => Promise<void>;
   refreshUser: () => Promise<void>;
+  setAuthenticatedUser: (user: User | null) => void;
 }
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -105,6 +106,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     persistUser(null);
   }, [persistUser]);
 
+  const setAuthenticatedUser = useCallback((nextUser: User | null) => {
+    if (!nextUser) {
+      clearAuth();
+      return;
+    }
+    setUser(nextUser);
+    localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+  }, [clearAuth]);
+
   /**
    * Login with email and password
    */
@@ -145,7 +155,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Update user must_reset_password flag
     if (user) {
-      const updatedUser = { ...user, mustResetPassword: false };
+      const updatedUser = {
+        ...user,
+        firstName: request.firstName ?? user.firstName,
+        lastName: request.lastName ?? user.lastName,
+        mustResetPassword: false,
+      };
       persistUser(updatedUser);
     }
   }, [persistUser, user]);
@@ -223,6 +238,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     resetPassword,
     changePassword,
     refreshUser,
+    setAuthenticatedUser,
   };
 
   // Show loading state while initializing

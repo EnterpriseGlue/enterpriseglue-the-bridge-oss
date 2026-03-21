@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Button, TextInput, Tile, Loading } from '@carbon/react';
+import { Button, TextInput } from '@carbon/react';
 import { useAuth } from '../shared/hooks/useAuth';
 import { parseApiError } from '../shared/api/apiErrorUtils';
 import { useToast } from '../shared/notifications/ToastProvider';
@@ -20,10 +20,17 @@ export default function ResetPassword() {
   const tenantSlug = rawTenantSlug && /^[a-zA-Z0-9_-]+$/.test(rawTenantSlug) ? rawTenantSlug : null;
   const homePath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : '/';
 
+  const [firstName, setFirstName] = useState(user?.firstName || '');
+  const [lastName, setLastName] = useState(user?.lastName || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setFirstName(user?.firstName || '');
+    setLastName(user?.lastName || '');
+  }, [user?.firstName, user?.lastName]);
 
   // Redirect if no user or already reset
   useEffect(() => {
@@ -58,6 +65,11 @@ export default function ResetPassword() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!firstName.trim() || !lastName.trim()) {
+      notify({ kind: 'error', title: 'Name is required', subtitle: 'Enter your first name and last name to finish account setup.' });
+      return;
+    }
+
     // Validate passwords match
     if (newPassword !== confirmPassword) {
       notify({ kind: 'error', title: 'Passwords do not match' });
@@ -74,7 +86,7 @@ export default function ResetPassword() {
     setIsLoading(true);
 
     try {
-      await resetPassword({ currentPassword, newPassword });
+      await resetPassword({ currentPassword, newPassword, firstName: firstName.trim(), lastName: lastName.trim() });
       notify({
         kind: 'success',
         title: 'Password reset',
@@ -129,6 +141,30 @@ export default function ResetPassword() {
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 'var(--spacing-5)' }}>
             <TextInput
+              id="first-name"
+              labelText="First Name"
+              placeholder="Enter your first name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+          </div>
+
+          <div style={{ marginBottom: 'var(--spacing-5)' }}>
+            <TextInput
+              id="last-name"
+              labelText="Last Name"
+              placeholder="Enter your last name"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+          </div>
+
+          <div style={{ marginBottom: 'var(--spacing-5)' }}>
+            <TextInput
               id="current-password"
               labelText="Current Password"
               placeholder="Enter your temporary password"
@@ -179,7 +215,7 @@ export default function ResetPassword() {
           <Button
             type="submit"
             kind="primary"
-            disabled={isLoading || !currentPassword || !newPassword || !confirmPassword}
+            disabled={isLoading || !firstName.trim() || !lastName.trim() || !currentPassword || !newPassword || !confirmPassword}
             style={{ width: '100%' }}
           >
             {isLoading ? 'Resetting...' : 'Reset Password'}

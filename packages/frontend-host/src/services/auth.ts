@@ -158,6 +158,10 @@ class AuthService {
     await apiClient.delete(`${API_BASE_URL}/users/${id}`);
   }
 
+  async deleteUserPermanently(id: string): Promise<void> {
+    await apiClient.delete(`${API_BASE_URL}/users/${id}/permanent`);
+  }
+
   /**
    * Unlock user account (admin only)
    */

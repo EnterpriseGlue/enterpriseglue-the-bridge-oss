@@ -15,6 +15,24 @@ export const EngineMemberSchema = z.object({
   user: UserSummarySchema.nullable().optional(),
 });
 
+export const PendingEngineInviteSchema = z.object({
+  invitationId: z.string(),
+  userId: z.string(),
+  email: z.string().email(),
+  firstName: z.string().nullable().optional(),
+  lastName: z.string().nullable().optional(),
+  role: z.enum(['operator', 'deployer']),
+  status: z.enum(['pending', 'expired', 'onboarding']),
+  deliveryMethod: z.enum(['email', 'manual']),
+  expiresAt: z.number(),
+  createdAt: z.number(),
+});
+
+export const EngineMembersResponseSchema = z.object({
+  members: z.array(EngineMemberSchema),
+  pendingInvites: z.array(PendingEngineInviteSchema),
+});
+
 // Engine with details (for my-engines endpoint)
 export const EngineWithDetailsSchema = z.object({
   engine: z.object({
@@ -44,6 +62,7 @@ export const EngineWithDetailsSchema = z.object({
 export const AddEngineMemberRequest = z.object({
   email: z.string().email(),
   role: z.enum(['operator', 'deployer']),
+  deliveryMethod: z.enum(['email', 'manual']).optional(),
 });
 
 export const UpdateEngineMemberRoleRequest = z.object({
@@ -77,4 +96,6 @@ export const EngineRoleResponse = z.object({
 // Types
 export type EngineRole = z.infer<typeof EngineRoleSchema>;
 export type EngineMember = z.infer<typeof EngineMemberSchema>;
+export type PendingEngineInvite = z.infer<typeof PendingEngineInviteSchema>;
+export type EngineMembersResponse = z.infer<typeof EngineMembersResponseSchema>;
 export type EngineWithDetails = z.infer<typeof EngineWithDetailsSchema>;

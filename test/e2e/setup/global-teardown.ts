@@ -96,6 +96,14 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   const pgModule = await import('pg');
   const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
   const schema = process.env.POSTGRES_SCHEMA || 'main';
+  const staleUserEmailPatterns = [
+    'e2e-%@example.com',
+    'browser-%@example.com',
+    'modal-%@example.com',
+    'accept-flow-%@example.com',
+    'test-%@example.com',
+    'test_%@example.com',
+  ];
   const pool = new Pool({
     host: process.env.POSTGRES_HOST,
     port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
@@ -136,6 +144,9 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   }
 
   await pool.query(`DELETE FROM ${schema}.refresh_tokens WHERE user_id = $1`, [userId]);
+  await pool.query(`DELETE FROM ${schema}.project_member_roles WHERE user_id = $1`, [userId]);
+  await pool.query(`DELETE FROM ${schema}.project_members WHERE user_id = $1`, [userId]);
+  await pool.query(`DELETE FROM ${schema}.invitations WHERE user_id = $1`, [userId]);
   await pool.query(
     `DELETE FROM ${schema}.audit_logs WHERE user_id = $1 OR resource_id::text = ANY($2::text[])`,
     [userId, projectIds]
@@ -160,8 +171,23 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     await pool.query(`DELETE FROM ${schema}.folders WHERE project_id = ANY($1::text[])`, [staleIds]);
     await pool.query(`DELETE FROM ${schema}.projects WHERE id = ANY($1::text[])`, [staleIds]);
   }
+  const staleUserIdsResult = await pool.query(
+    `SELECT id FROM ${schema}.users WHERE email LIKE ANY($1::text[])`,
+    [staleUserEmailPatterns]
+  );
+  const staleUserIds = staleUserIdsResult.rows.map((r: any) => r.id);
+  if (staleUserIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.refresh_tokens WHERE user_id = ANY($1::text[])`, [staleUserIds]);
+    await pool.query(`DELETE FROM ${schema}.project_member_roles WHERE user_id = ANY($1::text[])`, [staleUserIds]);
+    await pool.query(`DELETE FROM ${schema}.project_members WHERE user_id = ANY($1::text[])`, [staleUserIds]);
+    await pool.query(`DELETE FROM ${schema}.audit_logs WHERE user_id = ANY($1::text[])`, [staleUserIds]);
+    await pool.query(
+      `DELETE FROM ${schema}.invitations WHERE user_id = ANY($1::text[]) OR email LIKE ANY($2::text[])`,
+      [staleUserIds, staleUserEmailPatterns]
+    );
+  }
   await pool.query(`DELETE FROM ${schema}.engines WHERE name LIKE 'e2e-%'`);
-  await pool.query(`DELETE FROM ${schema}.users WHERE email LIKE 'e2e-%@example.com'`);
+  await pool.query(`DELETE FROM ${schema}.users WHERE email LIKE ANY($1::text[])`, [staleUserEmailPatterns]);
 
   await pool.end();
 }

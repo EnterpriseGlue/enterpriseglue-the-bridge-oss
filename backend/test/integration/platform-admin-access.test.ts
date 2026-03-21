@@ -8,7 +8,7 @@ const prefix = `test_seed_${Date.now()}_${Math.random().toString(36).slice(2, 8)
 
 let userId = '';
 let userToken = '';
-let developerToken = '';
+let standardUserToken = '';
 let adminToken = '';
 
 const app = createApp({
@@ -20,7 +20,7 @@ describe('Platform admin role access', () => {
     const user = await seedUser(prefix);
     userId = user.id;
     userToken = user.token;
-    developerToken = generateAccessToken({ id: user.id, email: user.email, platformRole: 'developer' });
+    standardUserToken = generateAccessToken({ id: user.id, email: user.email, platformRole: 'user' });
     adminToken = generateAccessToken({ id: user.id, email: user.email, platformRole: 'admin' });
   });
 
@@ -42,10 +42,10 @@ describe('Platform admin role access', () => {
     expect(response.status).toBe(403);
   });
 
-  it('rejects developer access', async () => {
+  it('rejects standard user access', async () => {
     const response = await request(app)
       .get('/api/users')
-      .set('Authorization', `Bearer ${developerToken}`);
+      .set('Authorization', `Bearer ${standardUserToken}`);
 
     expect(response.status).toBe(403);
   });

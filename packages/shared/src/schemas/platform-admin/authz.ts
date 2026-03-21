@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+function normalizeRoleValue(role?: string | null): 'admin' | 'user' {
+  return role === 'admin' ? 'admin' : 'user';
+}
+
 // Raw schema - matches TypeORM AuthzPolicy entity
 export const AuthzPolicySchemaRaw = z.object({
   id: z.string(),
@@ -110,7 +114,7 @@ export const SsoProviderSchema = SsoProviderSchemaRaw.transform((p) => ({
   buttonColor: p.buttonColor ?? undefined,
   displayOrder: p.displayOrder,
   autoProvision: p.autoProvision,
-  defaultRole: p.defaultRole as 'admin' | 'developer' | 'user',
+  defaultRole: normalizeRoleValue(p.defaultRole),
   createdAt: Number(p.createdAt),
   updatedAt: Number(p.updatedAt),
 }));
@@ -120,7 +124,7 @@ export const SsoProviderInsertSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1),
   type: z.enum(['microsoft', 'google', 'saml', 'oidc']),
-  defaultRole: z.enum(['admin', 'developer', 'user']).optional(),
+  defaultRole: z.enum(['admin', 'user']).optional(),
 });
 
 // Raw schema - matches TypeORM SsoClaimsMapping entity
@@ -144,7 +148,7 @@ export const SsoClaimsMappingSchema = SsoClaimsMappingSchemaRaw.transform((m) =>
   claimType: m.claimType as 'group' | 'role' | 'email_domain' | 'custom',
   claimKey: m.claimKey,
   claimValue: m.claimValue,
-  targetRole: m.targetRole as 'admin' | 'developer' | 'user',
+  targetRole: normalizeRoleValue(m.targetRole),
   priority: m.priority,
   isActive: m.isActive,
   createdAt: Number(m.createdAt),
@@ -157,7 +161,7 @@ export const SsoClaimsMappingInsertSchema = z.object({
   claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
   claimKey: z.string().min(1),
   claimValue: z.string().min(1),
-  targetRole: z.enum(['admin', 'developer', 'user']),
+  targetRole: z.enum(['admin', 'user']),
 });
 
 // Types

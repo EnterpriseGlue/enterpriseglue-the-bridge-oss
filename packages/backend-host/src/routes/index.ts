@@ -61,6 +61,7 @@ import {
   samlRoute,
   ssoConfigRoute,
   forgotPasswordRoute,
+  onboardingRoute,
   googleRoute,
   googleStartRoute,
   microsoftStartRoute,
@@ -83,6 +84,8 @@ import { usersRoute } from '@modules/users/index.js';
 import { auditRoute } from '@modules/audit/index.js';
 import { notificationsRoute } from '@modules/notifications/index.js';
 import vcsRoute from '@modules/versioning/index.js';
+
+import { invitationsRoute } from '@modules/invitations/index.js';
 
 /**
  * Create a router for tenant-scoped routes
@@ -172,6 +175,7 @@ export function registerRoutes(app: Express): void {
   app.use(forgotPasswordRoute);
   app.use(meRoute);
   app.use(verifyEmailRoute);
+  app.use(onboardingRoute);
   app.use(microsoftRoute);
   app.use(samlRoute);
   app.use(googleRoute);
@@ -179,6 +183,7 @@ export function registerRoutes(app: Express): void {
   app.use(googleStartRoute);
   app.use(samlStartRoute);
   app.use(ssoConfigRoute);
+  app.use(invitationsRoute);
 
   // Admin routes (platform-level)
   app.use(emailConfigsRoute);

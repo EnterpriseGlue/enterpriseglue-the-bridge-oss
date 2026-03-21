@@ -8,15 +8,22 @@ export interface InvitationEmailParams {
   to: string;
   tenantName: string;
   inviteUrl: string;
-  resourceType: 'tenant' | 'project' | 'engine';
+  resourceType: 'platform_user' | 'tenant' | 'project' | 'engine';
   invitedByName: string;
   tenantId?: string;
+  oneTimePassword?: string;
+  expiresIn?: string;
+  resourceName?: string;
 }
 
 export async function sendInvitationEmail(params: InvitationEmailParams): Promise<{ success: boolean; error?: string }> {
   try {
-    const { to, tenantName, inviteUrl, resourceType, invitedByName, tenantId } = params;
-    const resourceLabel = resourceType === 'tenant' ? 'workspace' : resourceType;
+    const { to, tenantName, inviteUrl, resourceType, invitedByName, tenantId, oneTimePassword, expiresIn = '24 hours', resourceName } = params;
+    const resourceLabel = resourceType === 'tenant' ? 'workspace' : resourceType === 'platform_user' ? 'platform' : resourceType;
+    const accessMethod = oneTimePassword ? 'otp' : 'magic-link';
+    const verificationInstructions = oneTimePassword
+      ? `Use the invite link below and enter the one-time password: ${oneTimePassword}`
+      : 'Use the invite link below to continue to account setup.';
 
     const dataSource = await getDataSource();
     const platformRepo = dataSource.getRepository(PlatformSettings);
@@ -27,7 +34,11 @@ export async function sendInvitationEmail(params: InvitationEmailParams): Promis
       platformName: emailPlatformName,
       inviterName: invitedByName,
       inviteLink: inviteUrl,
-      expiresIn: '7 days',
+      expiresIn,
+      oneTimePassword: oneTimePassword || '',
+      accessMethod,
+      verificationInstructions,
+      resourceName: resourceName || tenantName,
     };
 
     const template = await getActiveTemplateByType('invite');
@@ -61,7 +72,10 @@ export async function sendInvitationEmail(params: InvitationEmailParams): Promis
                 <p style="margin:0 0 16px 0;">
                   <strong>{{inviterName}}</strong> invited you to join <strong>{{platformName}}</strong> (${escapeHtml(resourceLabel)}).
                 </p>
+                <p style="margin:0 0 16px 0;">Resource: <strong>{{resourceName}}</strong></p>
                 <p style="margin:0 0 16px 0;">Click the button below to accept the invitation.</p>
+                <p style="margin:0 0 16px 0;">{{verificationInstructions}}</p>
+                ${oneTimePassword ? `<p style="margin:0 0 16px 0;">Your one-time password is <strong>{{oneTimePassword}}</strong></p>` : ''}
               </td>
             </tr>
             <tr>
@@ -97,9 +111,15 @@ export async function sendInvitationEmail(params: InvitationEmailParams): Promis
 
 ${invitedByName} has invited you to join the ${tenantName} ${resourceLabel}.
 
+Resource: ${resourceName || tenantName}
+
 Accept the invitation by visiting: ${inviteUrl}
 
-This invitation will expire in 7 days.`;
+${verificationInstructions}
+
+${oneTimePassword ? `One-time password: ${oneTimePassword}
+
+` : ''}This invitation will expire in ${expiresIn}.`;
 
     const text = template?.textTemplate
       ? renderBracesTemplate(template.textTemplate, vars)

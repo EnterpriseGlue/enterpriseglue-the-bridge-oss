@@ -13,6 +13,7 @@ import { GitCredential } from './entities/GitCredential.js';
 import { File } from './entities/File.js';
 import { WorkingFile } from './entities/WorkingFile.js';
 import { FileSnapshot } from './entities/FileSnapshot.js';
+import { Invitation } from './entities/Invitation.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -394,6 +395,7 @@ export async function runMigrations() {
         SsoClaimsMapping,
         GitProvider,
         GitCredential,
+        Invitation,
       ];
 
       const missingTables: string[] = [];
@@ -540,7 +542,7 @@ export async function seedInitialData() {
     const ssoMappingRepo = dataSource.getRepository(SsoClaimsMapping);
     await ssoMappingRepo.upsert([
       { id: 'default-admin-group', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'Platform Admins', targetRole: 'admin', priority: 100, isActive: true, createdAt: now, updatedAt: now },
-      { id: 'default-developer-group', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'Developers', targetRole: 'developer', priority: 50, isActive: true, createdAt: now, updatedAt: now },
+      { id: 'default-developer-group', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'Developers', targetRole: 'user', priority: 50, isActive: true, createdAt: now, updatedAt: now },
       { id: 'default-all-users', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: '*', targetRole: 'user', priority: 0, isActive: true, createdAt: now, updatedAt: now },
     ], { conflictPaths: ['id'], skipUpdateIfNoValuesChanged: true });
     console.log('  ✅ sso_claims_mappings seeded');

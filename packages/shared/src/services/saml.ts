@@ -173,10 +173,7 @@ function extractCustomClaims(profile: SamlProfile): Record<string, string | stri
 }
 
 function asPlatformRole(role: string | null | undefined): PlatformRole {
-  if (role === 'admin' || role === 'developer' || role === 'user') {
-    return role;
-  }
-  return 'user';
+  return role === 'admin' ? 'admin' : 'user';
 }
 
 function getMissingSamlFields(provider: {

@@ -11,7 +11,7 @@ const prefix = `test_seed_${Date.now()}_${Math.random().toString(36).slice(2, 8)
 let userId = '';
 let userToken = '';
 let adminToken = '';
-let developerToken = '';
+let standardUserToken = '';
 let skipAuthz = false;
 
 const app = createApp({
@@ -35,7 +35,7 @@ describe('Platform authz checks (authz storage required)', () => {
     userId = user.id;
     userToken = user.token;
     adminToken = generateAccessToken({ id: user.id, email: user.email, platformRole: 'admin' });
-    developerToken = generateAccessToken({ id: user.id, email: user.email, platformRole: 'developer' });
+    standardUserToken = generateAccessToken({ id: user.id, email: user.email, platformRole: 'user' });
   });
 
   afterAll(async () => {
@@ -78,15 +78,14 @@ describe('Platform authz checks (authz storage required)', () => {
     expect(result?.allowed).toBe(true);
   });
 
-  it('allows authz check for developer role with view permission granted', async () => {
+  it('denies authz check for standard user without explicit grant', async () => {
     if (skipAuthz) return;
     const response = await request(app)
       .post('/api/authz/check-batch')
-      .set('Authorization', `Bearer ${developerToken}`)
+      .set('Authorization', `Bearer ${standardUserToken}`)
       .send({ checks: [{ action: PlatformPermissions.USER_VIEW, resourceType: 'platform' }] });
 
     expect(response.status).toBe(200);
-    // Developer role has view permission granted by default policy
-    expect(response.body?.results?.[0]?.allowed).toBe(true);
+    expect(response.body?.results?.[0]?.allowed).toBe(false);
   });
 });

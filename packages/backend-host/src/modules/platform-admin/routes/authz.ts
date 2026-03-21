@@ -51,7 +51,7 @@ const ssoMappingCreateSchema = z.object({
   claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
   claimKey: z.string().min(1),
   claimValue: z.string().min(1),
-  targetRole: z.enum(['admin', 'developer', 'user']),
+  targetRole: z.enum(['admin', 'user']),
   priority: z.number().int().optional(),
 });
 

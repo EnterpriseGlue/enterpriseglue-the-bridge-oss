@@ -1,95 +1,83 @@
-import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import UserManagement from '@src/pages/admin/UserManagement';
-import { authService } from '@src/services/auth';
+import { describe, it, expect } from 'vitest';
+import { getUserDisplayStatus, getUserRowActions, type AdminManagedUser } from '../../../../../packages/frontend-host/src/pages/admin/UserManagement';
 
-vi.mock('@src/shared/hooks/useAuth', () => ({
-  useAuth: () => ({ user: { id: 'admin-1', capabilities: { canManageUsers: true } } }),
-}));
-
-const notifyMock = vi.fn();
-vi.mock('@src/shared/notifications/ToastProvider', () => ({
-  useToast: () => ({ notify: notifyMock }),
-}));
-
-vi.mock('@src/shared/hooks/useModal', () => ({
-  useModal: () => ({
-    isOpen: false,
-    openModal: vi.fn(),
-    closeModal: vi.fn(),
-    data: null,
-  }),
-}));
-
-vi.mock('@src/components/FormModal', () => ({
-  default: () => null,
-}));
-
-vi.mock('@src/shared/components/ConfirmModal', () => ({
-  default: () => null,
-}));
-
-vi.mock('@src/services/auth', () => ({
-  authService: {
-    listUsers: vi.fn(),
-    createUser: vi.fn(),
-    updateUser: vi.fn(),
-    deleteUser: vi.fn(),
-    unlockUser: vi.fn(),
-  },
-}));
+function makeUser(overrides: Partial<AdminManagedUser> = {}): AdminManagedUser {
+  return {
+    id: 'user-1',
+    email: 'user@example.com',
+    firstName: 'Test',
+    lastName: 'User',
+    platformRole: 'user',
+    isActive: true,
+    isEmailVerified: true,
+    mustResetPassword: false,
+    createdAt: Date.now(),
+    ...overrides,
+  }
+}
 
 describe('UserManagement', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  it('prefers explicit adminStatus when rendering an established admin account', () => {
+    const status = getUserDisplayStatus(makeUser({
+      email: 'admin@example.com',
+      platformRole: 'admin',
+      adminStatus: 'active',
+      isEmailVerified: false,
+      lastLoginAt: Date.now(),
+    }))
 
-  it('renders users and filters by search', async () => {
-    (authService.listUsers as unknown as Mock).mockResolvedValue([
-      {
-        id: 'user-1',
-        email: 'admin@example.com',
-        firstName: 'Ada',
-        lastName: 'Lovelace',
-        platformRole: 'admin',
-        isActive: true,
-        createdAt: Date.now(),
-      },
-      {
-        id: 'user-2',
-        email: 'dev@example.com',
-        firstName: 'Dev',
-        lastName: 'User',
-        platformRole: 'developer',
-        isActive: false,
-        createdAt: Date.now(),
-      },
-    ]);
+    expect(status).toEqual({ label: 'Active', tagType: 'green' })
+  })
 
-    render(<UserManagement />);
+  it('marks a pending local invite as deletable when local login is enabled', () => {
+    const actions = getUserRowActions(makeUser({
+      id: 'pending-1',
+      adminStatus: 'pending',
+      authProvider: 'local',
+      isActive: true,
+      isEmailVerified: false,
+    }), {
+      currentUserId: 'admin-1',
+      localLoginDisabled: false,
+      now: Date.now(),
+    })
 
-    await waitFor(() => {
-      expect(Boolean(screen.getByText('admin@example.com'))).toBe(true);
-    });
+    expect(actions.canPermanentDelete).toBe(true)
+    expect(actions.canDeactivate).toBe(true)
+    expect(actions.canUnlock).toBe(false)
+  })
 
-    const user = userEvent.setup();
-    await user.type(screen.getByPlaceholderText(/search users/i), 'dev');
+  it('offers permanent delete but not unlock or deactivate for an inactive local account', () => {
+    const actions = getUserRowActions(makeUser({
+      id: 'inactive-1',
+      isActive: false,
+      adminStatus: 'inactive',
+      authProvider: 'local',
+      failedLoginAttempts: 4,
+      lockedUntil: Date.now() + 60_000,
+    }), {
+      currentUserId: 'admin-1',
+      localLoginDisabled: false,
+      now: Date.now(),
+    })
 
-    expect(Boolean(screen.queryByText('admin@example.com'))).toBe(false);
-    expect(Boolean(screen.getByText('dev@example.com'))).toBe(true);
-  });
+    expect(actions.canUnlock).toBe(false)
+    expect(actions.canDeactivate).toBe(false)
+    expect(actions.canPermanentDelete).toBe(true)
+  })
 
-  it('notifies on load error', async () => {
-    (authService.listUsers as unknown as Mock).mockRejectedValue(new Error('boom'));
+  it('only offers unlock for active locked accounts', () => {
+    const actions = getUserRowActions(makeUser({
+      id: 'locked-1',
+      isActive: true,
+      failedLoginAttempts: 2,
+      lockedUntil: Date.now() + 60_000,
+    }), {
+      currentUserId: 'admin-1',
+      localLoginDisabled: false,
+      now: Date.now(),
+    })
 
-    render(<UserManagement />);
-
-    await waitFor(() => {
-      expect(notifyMock).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'error', title: 'Failed to load users' })
-      );
-    });
-  });
+    expect(actions.canUnlock).toBe(true)
+  })
 });

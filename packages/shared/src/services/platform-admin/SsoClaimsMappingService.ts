@@ -6,17 +6,17 @@
  */
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import type { PlatformRole as SharedPlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
 import { SsoClaimsMapping } from '@enterpriseglue/shared/db/entities/SsoClaimsMapping.js';
 import { IsNull } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 
 export type ClaimType = 'group' | 'role' | 'email_domain' | 'custom';
-export type PlatformRole = 'admin' | 'developer' | 'user';
+export type PlatformRole = SharedPlatformRole;
 
 // Role priority for determining "highest" role
 const ROLE_PRIORITY: Record<PlatformRole, number> = {
   admin: 100,
-  developer: 50,
   user: 0,
 };
 
@@ -34,6 +34,10 @@ export interface ClaimsMappingInput {
   claimValue: string;
   targetRole: PlatformRole;
   priority?: number;
+}
+
+function normalizeRoleValue(role?: string | null): PlatformRole {
+  return role === 'admin' ? 'admin' : 'user';
 }
 
 class SsoClaimsMappingServiceClass {
@@ -73,7 +77,7 @@ class SsoClaimsMappingServiceClass {
       const matches = this.claimMatches(claims, mapping);
       
       if (matches) {
-        const role = mapping.targetRole as PlatformRole;
+        const role = normalizeRoleValue(mapping.targetRole);
         const rolePriority = ROLE_PRIORITY[role] ?? 0;
         
         // Use mapping priority first, then role priority as tiebreaker
@@ -180,7 +184,11 @@ class SsoClaimsMappingServiceClass {
   async getAllMappings(): Promise<SsoClaimsMapping[]> {
     const dataSource = await getDataSource();
     const mappingRepo = dataSource.getRepository(SsoClaimsMapping);
-    return mappingRepo.find({ order: { priority: 'DESC' } });
+    const mappings = await mappingRepo.find({ order: { priority: 'DESC' } });
+    mappings.forEach((mapping) => {
+      mapping.targetRole = normalizeRoleValue(mapping.targetRole);
+    });
+    return mappings;
   }
 
   async createMapping(input: ClaimsMappingInput): Promise<{ id: string }> {
@@ -195,7 +203,7 @@ class SsoClaimsMappingServiceClass {
       claimType: input.claimType,
       claimKey: input.claimKey,
       claimValue: input.claimValue,
-      targetRole: input.targetRole,
+      targetRole: normalizeRoleValue(input.targetRole),
       priority: input.priority ?? 0,
       isActive: true,
       createdAt: now,
@@ -215,7 +223,7 @@ class SsoClaimsMappingServiceClass {
     if (updates.claimType !== undefined) updateData.claimType = updates.claimType;
     if (updates.claimKey !== undefined) updateData.claimKey = updates.claimKey;
     if (updates.claimValue !== undefined) updateData.claimValue = updates.claimValue;
-    if (updates.targetRole !== undefined) updateData.targetRole = updates.targetRole;
+    if (updates.targetRole !== undefined) updateData.targetRole = normalizeRoleValue(updates.targetRole);
     if (updates.priority !== undefined) updateData.priority = updates.priority;
     if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
 

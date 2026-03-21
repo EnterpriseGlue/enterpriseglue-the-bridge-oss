@@ -495,6 +495,7 @@ export function getPublicRoutes(): RouteObject[] {
   return [
     { path: '/login', element: <Login /> },
     { path: '/t/:tenantSlug/login', element: <Login /> },
+    { path: '/t/:tenantSlug/invite/:token', element: <AcceptInvite /> },
     { path: '/forgot-password', element: <ForgotPassword /> },
     { path: '/t/:tenantSlug/forgot-password', element: <ForgotPassword /> },
     { path: '/password-reset', element: <PasswordResetWithToken /> },
@@ -581,7 +582,6 @@ export function createTenantLayoutRoute(enterpriseChildren: RouteObject[] = []):
     ),
     children: [
       ...createProtectedChildRoutes(false),
-      { path: 'invite/:token', element: <AcceptInvite /> },
       ...enterpriseChildren,
     ],
   }

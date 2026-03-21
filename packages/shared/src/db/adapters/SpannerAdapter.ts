@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
-  User, RefreshToken, PasswordResetToken, AuditLog, Notification,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
   Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
@@ -19,7 +19,7 @@ import {
 } from '../entities/index.js';
 
 const entities = [
-  User, RefreshToken, PasswordResetToken, AuditLog, Notification,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
   Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,

@@ -1,4 +1,12 @@
-export type PlatformRole = 'admin' | 'developer' | 'user';
+export type PlatformRole = 'admin' | 'user';
+
+export type LegacyPlatformRole = PlatformRole | 'developer';
+
+export function normalizePlatformRole(role?: string | null): PlatformRole {
+  return role === 'admin' ? 'admin' : 'user';
+}
+
+export type AdminUserStatus = 'active' | 'inactive' | 'pending';
 
 export interface User {
   id: string;
@@ -7,11 +15,15 @@ export interface User {
   lastName?: string;
   platformRole: PlatformRole;
   capabilities?: UserCapabilities;
+  authProvider?: string;
   isActive: boolean;
   isEmailVerified: boolean;
   mustResetPassword: boolean;
   createdAt: number;
   lastLoginAt?: number;
+  adminStatus?: AdminUserStatus;
+  failedLoginAttempts?: number;
+  lockedUntil?: number | null;
 }
 
 export interface LoginRequest {
@@ -39,6 +51,8 @@ export interface RefreshTokenResponse {
 export interface ResetPasswordRequest {
   currentPassword: string;
   newPassword: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 export interface ForgotPasswordRequest {
@@ -70,7 +84,8 @@ export interface CreateUserRequest {
 
 export interface CreateUserResponse {
   user: User;
-  temporaryPassword?: string;
+  inviteUrl?: string;
+  oneTimePassword?: string;
   emailSent: boolean;
   emailError?: string;
 }

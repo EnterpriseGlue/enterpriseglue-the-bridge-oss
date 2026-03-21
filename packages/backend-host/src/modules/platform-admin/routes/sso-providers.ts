@@ -53,7 +53,7 @@ const createProviderSchema = z.object({
   
   // Provisioning
   autoProvision: z.boolean().optional(),
-  defaultRole: z.enum(['admin', 'developer', 'user']).optional(),
+  defaultRole: z.enum(['admin', 'user']).optional(),
 });
 
 const updateProviderSchema = createProviderSchema.partial();

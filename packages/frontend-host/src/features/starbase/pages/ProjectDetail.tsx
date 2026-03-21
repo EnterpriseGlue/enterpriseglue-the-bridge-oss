@@ -6,8 +6,6 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import {
   Button,
-  ComboBox,
-  MultiSelect,
   DataTableSkeleton,
   Tabs,
   TabList,
@@ -61,10 +59,10 @@ import {
   ProjectContents,
   ProjectRole,
   ProjectMember,
+  ProjectMembersResponse,
+  ProjectPendingInvite,
   COLLABORATORS_PANEL_WIDTH,
   memberHeaders,
-  editableRoleOptions,
-  roleLabel,
   tagTypeForRole,
   tableHeaders,
   isValidEmail,
@@ -119,7 +117,6 @@ export default function ProjectDetail() {
 
   const [collaboratorsOpen, setCollaboratorsOpen] = React.useState(false)
   const addMemberModal = useModal()
-  const inviteMemberModal = useModal()
   const editRolesModal = useModal<ProjectMember>()
   const removeMemberModal = useModal<ProjectMember>()
   const [memberEmail, setMemberEmail] = React.useState('')
@@ -127,6 +124,8 @@ export default function ProjectDetail() {
   const [memberUserSearch, setMemberUserSearch] = React.useState('')
   const [selectedMemberUser, setSelectedMemberUser] = React.useState<UserSearchItem | null>(null)
   const [memberRoles, setMemberRoles] = React.useState<ProjectRole[]>(['viewer'])
+  const [memberDeliveryMethod, setMemberDeliveryMethod] = React.useState<'email' | 'manual'>('manual')
+  const [memberInviteReveal, setMemberInviteReveal] = React.useState<{ email: string; inviteUrl: string; oneTimePassword: string } | null>(null)
   const [editRolesSelection, setEditRolesSelection] = React.useState<ProjectRole[]>(['viewer'])
   const [collaboratorsSearch, setCollaboratorsSearch] = React.useState('')
   const [collaboratorsSearchExpanded, setCollaboratorsSearchExpanded] = React.useState(false)
@@ -134,6 +133,7 @@ export default function ProjectDetail() {
   // Engine access state
   const [engineAccessOpen, setEngineAccessOpen] = React.useState(false)
   const [selectedEngineForRequest, setSelectedEngineForRequest] = React.useState<string | null>(null)
+  const memberManagementModalOpen = addMemberModal.isOpen || editRolesModal.isOpen || removeMemberModal.isOpen
 
   const openProjectMembers = React.useCallback(() => {
     setCollaboratorsSearch('')
@@ -150,6 +150,16 @@ export default function ProjectDetail() {
   const showToast = React.useCallback((t: { kind: 'success'|'error'; title: string; subtitle?: string }) => {
     notify({ kind: t.kind, title: t.title, subtitle: t.subtitle })
   }, [notify])
+
+  const resetAddMemberForm = React.useCallback(() => {
+    setMemberEmail('')
+    setMemberEmailTouched(false)
+    setMemberUserSearch('')
+    setSelectedMemberUser(null)
+    setMemberRoles(['viewer'])
+    setMemberDeliveryMethod('manual')
+    setMemberInviteReveal(null)
+  }, [])
   
   const projectsQ = useQuery({
     queryKey: ['starbase', 'projects'],
@@ -420,7 +430,7 @@ export default function ProjectDetail() {
 
   const membersQ = useQuery({
     queryKey: ['project-members', projectId],
-    queryFn: () => apiClient.get<ProjectMember[]>(`/starbase-api/projects/${projectId}/members`),
+    queryFn: () => apiClient.get<ProjectMembersResponse>(`/starbase-api/projects/${projectId}/members`),
     enabled: !!projectId,
   })
 
@@ -472,25 +482,7 @@ export default function ProjectDetail() {
     return canDeployProject(myMembershipQ.data, engineAccessQ.data, platformSettings?.defaultDeployRoles)
   }, [engineAccessQ.data, myMembershipQ.data, platformSettings?.defaultDeployRoles])
 
-  const roleOptions = React.useMemo<ProjectRole[]>(() => {
-    const isOwner = myRoles.includes('owner')
-    if (isOwner) return editableRoleOptions
-    return editableRoleOptions.filter((r) => r !== 'delegate')
-  }, [myRoles])
-
-  const roleItems = React.useMemo(() => {
-    return roleOptions.map((r) => ({ id: r, label: roleLabel(r) }))
-  }, [roleOptions])
-
-  const selectedMemberRoleItems = React.useMemo(() => {
-    const set = new Set(memberRoles)
-    return roleItems.filter((it) => set.has(it.id))
-  }, [roleItems, memberRoles])
-
-  const selectedEditRoleItems = React.useMemo(() => {
-    const set = new Set(editRolesSelection)
-    return roleItems.filter((it) => set.has(it.id))
-  }, [roleItems, editRolesSelection])
+  const canAssignDelegate = React.useMemo(() => myRoles.includes('owner'), [myRoles])
 
   const resolveMemberName = React.useCallback((member: ProjectMember) => {
     const userInfo = member.user
@@ -500,24 +492,37 @@ export default function ProjectDetail() {
     return fullName || (userInfo?.email ? userInfo.email.split('@')[0] : member.userId)
   }, [])
 
+  const resolvePendingInviteName = React.useCallback((invite: ProjectPendingInvite) => {
+    const fullName = `${invite.firstName || ''}${invite.firstName && invite.lastName ? ' ' : ''}${invite.lastName || ''}`.trim()
+    return fullName || invite.email
+  }, [])
+
+  const activeMembers = React.useMemo(() => {
+    const data = membersQ.data?.members
+    return Array.isArray(data) ? data : []
+  }, [membersQ.data])
+
+  const pendingInvites = React.useMemo(() => {
+    const data = membersQ.data?.pendingInvites
+    return Array.isArray(data) ? data : []
+  }, [membersQ.data])
+
   const memberNameById = React.useMemo(() => {
     const map = new Map<string, string>()
-    ;(membersQ.data || []).forEach((member) => {
+    activeMembers.forEach((member) => {
       map.set(member.userId, resolveMemberName(member))
     })
     return map
-  }, [membersQ.data, resolveMemberName])
+  }, [activeMembers, resolveMemberName])
 
   const membersTableRows = React.useMemo(() => {
-    const data = membersQ.data
-    if (!Array.isArray(data)) return [] as any[]
-    return data.map((m) => ({
+    return activeMembers.map((m) => ({
       id: m.userId,
       name: resolveMemberName(m),
       email: m.user?.email || '',
       _member: m,
     }))
-  }, [membersQ.data, resolveMemberName])
+  }, [activeMembers, resolveMemberName])
 
   const resolveUpdatedByLabel = React.useCallback((item: FileItem) => {
     const id = item.updatedBy || item.createdBy
@@ -535,6 +540,22 @@ export default function ProjectDetail() {
     })
   }, [membersTableRows, collaboratorsSearch])
 
+  const visiblePendingInvites = React.useMemo(() => {
+    const q = collaboratorsSearch.trim().toLowerCase()
+    if (!q) return pendingInvites
+    return pendingInvites.filter((invite) => {
+      const roles = Array.isArray(invite.roles) && invite.roles.length > 0 ? invite.roles.join(' ') : invite.role
+      const hay = [
+        resolvePendingInviteName(invite),
+        invite.email,
+        invite.status,
+        roles,
+        invite.deliveryMethod,
+      ].join(' ').toLowerCase()
+      return hay.includes(q)
+    })
+  }, [pendingInvites, collaboratorsSearch, resolvePendingInviteName])
+
   const memberUserSearchQ = useQuery({
     queryKey: ['project-members', projectId, 'user-search', memberUserSearch],
     queryFn: () => {
@@ -551,40 +572,116 @@ export default function ProjectDetail() {
 
   const trimmedMemberEmail = memberEmail.trim()
   const isMemberEmailValid = isValidEmail(trimmedMemberEmail)
+  const [debouncedMemberEmail, setDebouncedMemberEmail] = React.useState('')
+
+  React.useEffect(() => {
+    if (!addMemberModal.isOpen) {
+      setDebouncedMemberEmail('')
+      return
+    }
+
+    const handle = window.setTimeout(() => {
+      setDebouncedMemberEmail(trimmedMemberEmail)
+    }, 250)
+
+    return () => window.clearTimeout(handle)
+  }, [addMemberModal.isOpen, trimmedMemberEmail])
+
+  const memberCapabilitiesQ = useQuery({
+    queryKey: ['project-members', projectId, 'capabilities'],
+    queryFn: () => apiClient.get<{ ssoRequired: boolean; emailConfigured: boolean }>(`/starbase-api/projects/${projectId}/members/capabilities`),
+    enabled: addMemberModal.isOpen && !!projectId,
+    staleTime: 30 * 1000,
+  })
+  const memberLookupQ = useQuery({
+    queryKey: ['project-members', projectId, 'lookup', debouncedMemberEmail.toLowerCase()],
+    queryFn: () => apiClient.get<{ mode: 'invite' | 'direct-add' | 'existing-member'; user?: UserSearchItem | null }>(
+      `/starbase-api/projects/${projectId}/members/lookup`,
+      { email: debouncedMemberEmail.toLowerCase() }
+    ),
+    enabled: addMemberModal.isOpen && !!projectId && isValidEmail(debouncedMemberEmail),
+    staleTime: 30 * 1000,
+  })
+
+  React.useEffect(() => {
+    if (!addMemberModal.isOpen || !memberCapabilitiesQ.data) {
+      return
+    }
+
+    const disabled = Boolean(memberCapabilitiesQ.data.ssoRequired)
+    const nextEmailConfigured = Boolean(memberCapabilitiesQ.data.emailConfigured)
+    if (disabled && nextEmailConfigured) {
+      setMemberDeliveryMethod('email')
+    } else if (!disabled) {
+      setMemberDeliveryMethod(nextEmailConfigured ? 'email' : 'manual')
+    } else {
+      setMemberDeliveryMethod('manual')
+    }
+  }, [addMemberModal.isOpen, memberCapabilitiesQ.data])
 
   async function submitAddMember() {
     if (!projectId) return
     const email = memberEmail.trim()
     if (!isValidEmail(email)) return
+    const memberLookup = memberLookupQ.data
     try {
       const body = {
         email,
         roles: memberRoles.filter((r) => r !== 'owner'),
+        ...(memberLookup?.mode === 'invite' ? { deliveryMethod: memberDeliveryMethod } : {}),
       }
       const json = await apiClient.post<any>(`/starbase-api/projects/${projectId}/members`, body)
       const invited = !!json?.invited
       const emailSent = !!json?.emailSent
       const emailError = typeof json?.emailError === 'string' ? String(json.emailError) : ''
-      const temporaryPassword = typeof json?.temporaryPassword === 'string' ? String(json.temporaryPassword) : ''
+      const inviteUrl = typeof json?.inviteUrl === 'string' ? String(json.inviteUrl) : ''
+      const oneTimePassword = typeof json?.oneTimePassword === 'string' ? String(json.oneTimePassword) : ''
 
-      addMemberModal.closeModal()
-      setMemberEmail('')
-      setMemberUserSearch('')
-      setSelectedMemberUser(null)
-      setMemberRoles(['viewer'])
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
 
       if (invited) {
-        const subtitle = emailSent
-          ? `Invite email sent to ${email}`
-          : `Invite created for ${email}${emailError ? `. ${emailError}` : ''}${temporaryPassword ? ` Temporary password: ${temporaryPassword}` : ''}`
-        showToast({ kind: 'success', title: 'Member invited', subtitle })
+        if (!emailSent && inviteUrl && oneTimePassword) {
+          setMemberInviteReveal({ email, inviteUrl, oneTimePassword })
+          return
+        }
+        resetAddMemberForm()
+        addMemberModal.closeModal()
+        showToast({ kind: 'success', title: 'Member invited', subtitle: emailSent ? `Invite email sent to ${email}` : emailError || undefined })
       } else {
+        resetAddMemberForm()
+        addMemberModal.closeModal()
         showToast({ kind: 'success', title: 'Member added' })
       }
     } catch (e: any) {
       const parsed = parseApiError(e, 'Failed to add member')
       showToast({ kind: 'error', title: 'Failed to add member', subtitle: parsed.message })
+    }
+  }
+
+  async function submitReissuePendingInvite(invite: ProjectPendingInvite) {
+    if (!projectId) return
+    try {
+      const json = await apiClient.post<any>(`/starbase-api/projects/${projectId}/pending-invites/${encodeURIComponent(invite.invitationId)}/reissue`, {})
+      const inviteUrl = typeof json?.inviteUrl === 'string' ? String(json.inviteUrl) : ''
+      const oneTimePassword = typeof json?.oneTimePassword === 'string' ? String(json.oneTimePassword) : ''
+
+      await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
+
+      if (!inviteUrl || !oneTimePassword) {
+        showToast({ kind: 'error', title: 'Failed to reissue invitation', subtitle: 'The new invite link or one-time password was missing.' })
+        return
+      }
+
+      resetAddMemberForm()
+      setMemberInviteReveal({ email: invite.email, inviteUrl, oneTimePassword })
+      addMemberModal.openModal()
+    } catch (e: any) {
+      const parsed = parseApiError(e, invite.status === 'expired' ? 'Failed to recreate invitation' : 'Failed to regenerate invitation')
+      showToast({
+        kind: 'error',
+        title: invite.status === 'expired' ? 'Failed to recreate invitation' : 'Failed to regenerate invitation',
+        subtitle: parsed.message,
+      })
     }
   }
 
@@ -1148,27 +1245,25 @@ export default function ProjectDetail() {
         )}
 
         <ProjectMembersModal
-          open={collaboratorsOpen}
+          open={collaboratorsOpen && !memberManagementModalOpen}
           onClose={closeCollaborators}
           membersLoading={membersQ.isLoading}
           membersError={membersQ.isError}
-          members={(membersQ.data || []) as ProjectMember[]}
+          members={activeMembers}
+          pendingInvites={pendingInvites}
           memberHeaders={memberHeaders}
           visibleRows={visibleMembersTableRows}
+          visiblePendingInvites={visiblePendingInvites}
           collaboratorsSearch={collaboratorsSearch}
           setCollaboratorsSearch={setCollaboratorsSearch}
           collaboratorsSearchExpanded={collaboratorsSearchExpanded}
           setCollaboratorsSearchExpanded={setCollaboratorsSearchExpanded}
           canManageMembers={canManageMembers}
-          onInvite={() => inviteMemberModal.openModal()}
           onAddUser={() => {
-            setMemberEmail('')
-            setMemberEmailTouched(false)
-            setMemberUserSearch('')
-            setSelectedMemberUser(null)
-            setMemberRoles(['viewer'])
+            resetAddMemberForm()
             addMemberModal.openModal()
           }}
+          onReissuePendingInvite={(invite) => submitReissuePendingInvite(invite)}
           onEditRoles={(member) => {
             const current = (Array.isArray(member.roles) && member.roles.length > 0 ? member.roles : [member.role]) as ProjectRole[]
             const editable = current.filter((rr) => rr !== 'owner')
@@ -1182,7 +1277,10 @@ export default function ProjectDetail() {
 
         <ProjectMembersManagementModals
           addMemberOpen={addMemberModal.isOpen}
-          onCloseAddMember={() => addMemberModal.closeModal()}
+          onCloseAddMember={() => {
+            resetAddMemberForm()
+            addMemberModal.closeModal()
+          }}
           memberUserSearchItems={(Array.isArray(memberUserSearchQ.data) ? memberUserSearchQ.data : []) as UserSearchItem[]}
           selectedMemberUser={selectedMemberUser}
           setSelectedMemberUser={setSelectedMemberUser}
@@ -1192,19 +1290,23 @@ export default function ProjectDetail() {
           setMemberEmail={setMemberEmail}
           memberEmailTouched={memberEmailTouched}
           setMemberEmailTouched={setMemberEmailTouched}
-          roleItems={roleItems}
-          selectedMemberRoleItems={selectedMemberRoleItems}
+          memberRoles={memberRoles}
           setMemberRoles={setMemberRoles}
+          canAssignDelegate={canAssignDelegate}
           isMemberEmailValid={isMemberEmailValid}
+          memberLookupEmail={debouncedMemberEmail}
+          memberLookup={memberLookupQ.data || null}
+          memberLookupLoading={memberLookupQ.isLoading}
+          memberCapabilities={memberCapabilitiesQ.data || null}
+          memberCapabilitiesLoading={memberCapabilitiesQ.isLoading || memberCapabilitiesQ.isFetching}
+          memberDeliveryMethod={memberDeliveryMethod}
+          setMemberDeliveryMethod={setMemberDeliveryMethod}
+          memberInviteReveal={memberInviteReveal}
+          resetAddMemberForm={resetAddMemberForm}
           submitAddMember={submitAddMember}
-          inviteMemberOpen={inviteMemberModal.isOpen}
-          onInviteClose={() => inviteMemberModal.closeModal()}
-          onInviteSuccess={() => queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })}
-          projectId={projectId}
-          projectName={projectName}
           editRolesOpen={editRolesModal.isOpen}
           editRolesMember={editRolesModal.data as ProjectMember | null}
-          selectedEditRoleItems={selectedEditRoleItems}
+          editRolesSelection={editRolesSelection}
           setEditRolesSelection={setEditRolesSelection}
           submitUpdateRoles={(member, roles) => submitUpdateRoles(member, roles)}
           onCloseEditRoles={() => editRolesModal.closeModal()}

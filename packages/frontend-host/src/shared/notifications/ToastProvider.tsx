@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { ToastNotification } from '@carbon/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
@@ -84,37 +85,43 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const toastStack = (
+    <div
+      style={{
+        position: 'fixed',
+        top: 'calc(var(--header-height) + var(--spacing-5))',
+        right: 'var(--spacing-5)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--spacing-3)',
+        zIndex: 10000,
+        pointerEvents: 'none',
+      }}
+    >
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          onClick={() => persistToast(toast.id)}
+          role="presentation"
+          style={{ pointerEvents: 'auto' }}
+        >
+          <ToastNotification
+            kind={toast.kind}
+            title={toast.title}
+            subtitle={toast.subtitle}
+            timeout={toast.persistent ? undefined : toast.timeout}
+            onClose={() => removeToast(toast.id)}
+            hideCloseButton={false}
+          />
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <ToastContext.Provider value={{ notify }}>
       {children}
-      <div
-        style={{
-          position: 'fixed',
-          top: 'calc(var(--header-height) + var(--spacing-5))',
-          right: 'var(--spacing-5)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--spacing-3)',
-          zIndex: 'var(--z-toast)',
-        }}
-      >
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            onClick={() => persistToast(toast.id)}
-            role="presentation"
-          >
-            <ToastNotification
-              kind={toast.kind}
-              title={toast.title}
-              subtitle={toast.subtitle}
-              timeout={toast.persistent ? undefined : toast.timeout}
-              onClose={() => removeToast(toast.id)}
-              hideCloseButton={false}
-            />
-          </div>
-        ))}
-      </div>
+      {typeof document !== 'undefined' ? createPortal(toastStack, document.body) : toastStack}
     </ToastContext.Provider>
   );
 }
