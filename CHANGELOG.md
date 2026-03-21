@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.9...v0.8.10) (2026-03-21)
+
+
+### Bug Fixes
+
+* **auth:** unify invite onboarding and member invite flows ([#256](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/256)) ([5d3dbba](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5d3dbba3adb38719cbb162ea45d0c13e37b0b0cc))
+
 ## [0.8.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.8...v0.8.9) (2026-03-20)
 
 
