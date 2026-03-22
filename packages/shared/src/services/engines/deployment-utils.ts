@@ -76,6 +76,52 @@ export function normalizeBpmnProcessHistoryTtl(xml: string): string {
   })
 }
 
+function removeAttributeFromTag(tag: string, attributeName: string): string {
+  const lowerTag = tag.toLowerCase()
+  const lowerAttributeName = attributeName.toLowerCase()
+  const attributeIndex = lowerTag.indexOf(lowerAttributeName)
+  if (attributeIndex < 0) return tag
+
+  let start = attributeIndex
+  while (start > 0 && /\s/.test(tag[start - 1] || '')) {
+    start -= 1
+  }
+
+  let cursor = attributeIndex + attributeName.length
+  while (cursor < tag.length && /\s/.test(tag[cursor] || '')) {
+    cursor += 1
+  }
+  if ((tag[cursor] || '') !== '=') return tag
+
+  cursor += 1
+  while (cursor < tag.length && /\s/.test(tag[cursor] || '')) {
+    cursor += 1
+  }
+
+  const quote = tag[cursor] || ''
+  if (quote !== '"' && quote !== "'") return tag
+
+  cursor += 1
+  while (cursor < tag.length && (tag[cursor] || '') !== quote) {
+    cursor += 1
+  }
+  if (cursor >= tag.length) return tag
+
+  return `${tag.slice(0, start)}${tag.slice(cursor + 1)}`
+}
+
+function removeAttributeFromDefinitionsTag(xml: string, attributeName: string): string {
+  const src = String(xml || '')
+  const definitionsTagMatch = src.match(/<\s*(?:[a-zA-Z0-9_-]+:)?definitions\b[^>]*>/i)
+  if (!definitionsTagMatch?.[0]) return src
+
+  const definitionsTag = definitionsTagMatch[0]
+  const nextDefinitionsTag = removeAttributeFromTag(definitionsTag, attributeName)
+  if (nextDefinitionsTag === definitionsTag) return src
+
+  return src.replace(definitionsTag, nextDefinitionsTag)
+}
+
 function normalizeOperatonBpmnToCamunda(xml: string): string {
   let out = String(xml || '')
   if (!out) return out
@@ -86,7 +132,7 @@ function normalizeOperatonBpmnToCamunda(xml: string): string {
 
   if (hasOperatonNamespace) {
     if (/\bxmlns:camunda\s*=\s*["']/i.test(out)) {
-      out = out.replace(/\s+xmlns:operaton\s*=\s*["'][^"']+["']/i, '')
+      out = removeAttributeFromDefinitionsTag(out, 'xmlns:operaton')
     } else {
       out = out
         .replace(/\bxmlns:operaton\b/i, 'xmlns:camunda')
