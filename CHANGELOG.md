@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.11](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.10...v0.8.11) (2026-03-22)
+
+
+### Bug Fixes
+
+* **starbase:** refine link overlays and parent usage ([#258](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/258)) ([f056504](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f056504112f175420dac5b15aa0c9e7e92a9ce88))
+
 ## [0.8.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.9...v0.8.10) (2026-03-21)
 
 
