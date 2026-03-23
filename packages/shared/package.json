@@ -28,6 +28,7 @@
     "@asteasolutions/zod-to-openapi": "^8.4.3",
     "@azure/msal-node": "^5.0.6",
     "@gitbeaker/rest": "^43.8.0",
+    "adm-zip": "^0.5.16",
     "azure-devops-node-api": "^15.1.1",
     "bcryptjs": "^3.0.3",
     "bitbucket": "^2.12.0",
