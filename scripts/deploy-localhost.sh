@@ -288,6 +288,19 @@ package_is_resolvable() {
   (cd "$dir" && node -e "require.resolve(process.argv[1]);" "$pkg") >/dev/null 2>&1
 }
 
+first_missing_resolvable_package() {
+  local dir="$1"
+  shift
+  local pkg
+  for pkg in "$@"; do
+    if ! package_is_resolvable "$dir" "$pkg"; then
+      echo "$pkg"
+      return 0
+    fi
+  done
+  return 1
+}
+
 npm_install_with_lockfile() {
   local dir="$1"
   local prefer_online="${2:-false}"
@@ -306,12 +319,18 @@ npm_install_with_lockfile() {
 }
 
 build_backend() {
+  local backend_required_packages=(
+    "@azure/msal-node/package.json"
+    "adm-zip/package.json"
+  )
+  local missing_backend_pkg=""
+
   if [[ -f "$ROOT_LOCKFILE" ]]; then
     if [[ ! -d "$ROOT_NODE_MODULES_DIR" ]]; then
       log "Installing workspace deps from root lockfile"
       npm_install_with_lockfile "$BACKEND_DIR"
-    elif ! package_is_resolvable "$BACKEND_DIR" "@azure/msal-node/package.json"; then
-      warn "Workspace deps appear incomplete (missing @azure/msal-node). Cleaning cache and reinstalling..."
+    elif missing_backend_pkg=$(first_missing_resolvable_package "$BACKEND_DIR" "${backend_required_packages[@]}"); then
+      warn "Workspace deps appear incomplete (missing ${missing_backend_pkg}). Cleaning cache and reinstalling..."
       rm -rf "$ROOT_NODE_MODULES_DIR"
       (cd "$ROOT_DIR" && npm cache clean --force)
       npm_install_with_lockfile "$BACKEND_DIR" "true"
@@ -321,8 +340,8 @@ build_backend() {
   elif [[ ! -d "$BACKEND_DIR/node_modules" ]]; then
     log "Installing backend deps (including devDependencies for build)"
     npm_install_with_lockfile "$BACKEND_DIR"
-  elif ! package_is_resolvable "$BACKEND_DIR" "@azure/msal-node/package.json"; then
-    warn "Backend deps appear incomplete (missing @azure/msal-node). Cleaning cache and reinstalling..."
+  elif missing_backend_pkg=$(first_missing_resolvable_package "$BACKEND_DIR" "${backend_required_packages[@]}"); then
+    warn "Backend deps appear incomplete (missing ${missing_backend_pkg}). Cleaning cache and reinstalling..."
     rm -rf "$BACKEND_DIR/node_modules"
     (cd "$BACKEND_DIR" && npm cache clean --force)
     npm_install_with_lockfile "$BACKEND_DIR" "true"
