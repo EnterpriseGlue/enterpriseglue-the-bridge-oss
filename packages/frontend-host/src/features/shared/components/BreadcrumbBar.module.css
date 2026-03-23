@@ -17,6 +17,24 @@
   flex: 1;
 }
 
+.breadcrumbMain :global(.cds--breadcrumb) {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.breadcrumbMain :global(.cds--breadcrumb-item) {
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.breadcrumbMain :global(.cds--link) {
+  white-space: nowrap;
+}
+
 .rightActions {
   display: inline-flex;
   align-items: center;

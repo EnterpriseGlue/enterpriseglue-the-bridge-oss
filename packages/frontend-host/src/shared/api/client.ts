@@ -72,6 +72,23 @@ export const apiClient = {
     }
     return response.blob();
   },
+  async postBlob(url: string, body?: any, options?: RequestInit): Promise<Blob> {
+    const response = await interceptedFetch(url, {
+      ...options,
+      method: 'POST',
+      headers: mergeHeaders(options?.headers),
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new ApiError(
+        response.status,
+        response.statusText,
+        text || `HTTP ${response.status}: ${response.statusText}`
+      );
+    }
+    return response.blob();
+  },
   async get<T>(url: string, params?: Record<string, any>, options?: RequestInit): Promise<T> {
     const searchParams = new URLSearchParams();
     if (params) {

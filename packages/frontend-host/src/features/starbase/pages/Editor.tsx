@@ -15,6 +15,7 @@ import CommitModal from '../components/CommitModal'
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import type { File as StarbaseFile } from '../../../shared/api/types'
+import { buildEditorBreadcrumbBackState, buildEditorNavigationState, getEditorBreadcrumbTrail } from '../utils/editorBreadcrumbs'
 import { buildProjectFileIndex, resolveLinkedFile, type ProjectFileMeta } from '../utils/linkResolution'
 import type { FolderSummary, ProjectMember } from '../components/project-detail/project-detail-utils'
 import { FolderLoader, CurrentPath, TreePicker } from '../components/project-detail/FolderTreeHelpers'
@@ -187,6 +188,21 @@ export default function Editor() {
     refetchOnWindowFocus: false, // Prevent refetch on tab switch which would reset canvas
   })
 
+  const editorBreadcrumbTrail = React.useMemo(
+    () => getEditorBreadcrumbTrail(location.state, fileId ? String(fileId) : null),
+    [location.state, fileId]
+  )
+
+  const buildCurrentEditorNavigationState = React.useCallback(
+    (extraState?: Record<string, unknown>) => buildEditorNavigationState({
+      currentState: location.state,
+      currentFileId: fileId ? String(fileId) : null,
+      currentFileName: fileQ.data?.name ?? null,
+      extraState,
+    }),
+    [location.state, fileId, fileQ.data?.name]
+  )
+
   const projectFilesQ = useQuery({
     queryKey: ['starbase', 'project-files', fileQ.data?.projectId],
     queryFn: () => apiClient.get<StarbaseFile[]>(`/starbase-api/projects/${fileQ.data?.projectId}/files`),
@@ -207,7 +223,6 @@ export default function Editor() {
     enabled: Boolean(fileQ.data?.projectId && fileQ.data?.id && (fileQ.data?.type === 'bpmn' || fileQ.data?.type === 'dmn')),
     staleTime: 30 * 1000,
   })
-
 
   // Declare hooks unconditionally to keep a stable hook order across renders
   const [selection, setSelection] = React.useState<{ id: string; type: string; name?: string } | null>(null)
@@ -231,10 +246,13 @@ export default function Editor() {
   const [lastEditedAt, setLastEditedAt] = React.useState<number | null>(null)
   const [lastEditedAtHydrated, setLastEditedAtHydrated] = React.useState(false)
   const [localDirty, setLocalDirty] = React.useState(false)
+  const [linkStateVersion, setLinkStateVersion] = React.useState(0)
   const [decisionKey, setDecisionKey] = React.useState<string | undefined>(undefined)
   const [historyPanelOpen, setHistoryPanelOpen] = React.useState(false)
   const isRestoringRef = React.useRef(false)
   const appliedInitialHistoryRef = React.useRef(false)
+  const autosaveTimerRef = React.useRef<number | null>(null)
+  const addXmlHistorySnapshotRef = React.useRef<(xml: string, label: string) => void>(() => {})
   const ignoreDirtyUntilRef = React.useRef(0)
   const [projectFilesError, setProjectFilesError] = React.useState<string | null>(null)
   const [linkModalOpen, setLinkModalOpen] = React.useState(false)
@@ -277,6 +295,35 @@ export default function Editor() {
     [fileId]
   )
 
+  const clearPendingAutosave = React.useCallback(() => {
+    if (typeof window === 'undefined') return
+    if (autosaveTimerRef.current != null) {
+      window.clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
+    }
+  }, [])
+
+  const captureCurrentXmlSnapshot = React.useCallback(async (label: string = 'Navigation snapshot') => {
+    const modeler = modelerRef.current
+    if (!modeler || !fileId) return
+    try {
+      const { xml } = await modeler.saveXML({ format: true })
+      if (xml) {
+        addXmlHistorySnapshotRef.current(xml, label)
+      }
+    } catch {}
+  }, [fileId])
+
+  const snapshotBeforeEditorNavigation = React.useCallback(async () => {
+    clearPendingAutosave()
+    await captureCurrentXmlSnapshot()
+  }, [clearPendingAutosave, captureCurrentXmlSnapshot])
+
+  const refreshLinkedElementState = React.useCallback(() => {
+    setLinkStateVersion((current) => current + 1)
+    setLastEditedAt(Date.now())
+  }, [])
+
   const handleSelectionChange = React.useCallback(
     (next: { id: string; type: string; name?: string } | null) => {
       selectionIdRef.current = next?.id ?? null
@@ -291,6 +338,7 @@ export default function Editor() {
 
   // Reset editor state when navigating to a different file
   React.useEffect(() => {
+    clearPendingAutosave()
     setSelection(null)
     selectionIdRef.current = null
     setTabIndex(0)
@@ -317,7 +365,13 @@ export default function Editor() {
     setShowSaveFirstPrompt(false)
     viewModeImportedRef.current = false
     focusElementAttemptedRef.current = null
-  }, [fileId])
+  }, [fileId, clearPendingAutosave])
+
+  React.useEffect(() => {
+    return () => {
+      clearPendingAutosave()
+    }
+  }, [clearPendingAutosave])
 
   const projectFiles = React.useMemo<ProjectFileMeta[]>(() => {
     if (!Array.isArray(projectFilesQ.data)) return []
@@ -368,7 +422,7 @@ export default function Editor() {
   const elementLinkInfo = React.useMemo(
     () => getElementLinkInfo(selectedElement),
     // Linking updates properties on the same businessObject reference; lastEditedAt changes on commandStack events.
-    [selectedElement, lastEditedAt]
+    [selectedElement, lastEditedAt, linkStateVersion]
   )
 
   const resolvedLink = React.useMemo(() => {
@@ -422,19 +476,72 @@ export default function Editor() {
   const currentProjectId = fileQ.data?.projectId ?? null
   const currentFolderId = fileQ.data?.folderId ?? null
 
+  const buildFileCallersQueryKey = React.useCallback(
+    (targetFile: Pick<ProjectFileMeta, 'id' | 'type' | 'bpmnProcessId' | 'dmnDecisionId'> | null | undefined) => {
+      if (!currentProjectId || !targetFile?.id) return null
+      return [
+        'starbase',
+        'file-callers',
+        currentProjectId,
+        targetFile.id,
+        targetFile.type,
+        targetFile.bpmnProcessId ?? null,
+        targetFile.dmnDecisionId ?? null,
+      ] as const
+    },
+    [currentProjectId]
+  )
+
+  const updateCallerCacheForTarget = React.useCallback(
+    (
+      targetFile: Pick<ProjectFileMeta, 'id' | 'type' | 'bpmnProcessId' | 'dmnDecisionId'> | null | undefined,
+      mode: 'add' | 'remove'
+    ) => {
+      const queryKey = buildFileCallersQueryKey(targetFile)
+      if (!queryKey || !fileId || !fileQ.data?.name || !elementLinkInfo) return
+
+      const bo = selectedElement?.businessObject || selectedElement
+      const rawName = typeof bo?.name === 'string' ? bo.name.trim() : ''
+      const caller: CallerOccurrence = {
+        parentFileId: String(fileId),
+        parentFileName: fileQ.data.name,
+        parentFolderId: fileQ.data.folderId ?? null,
+        parentProcessId: fileQ.data.type === 'bpmn' ? (fileQ.data.bpmnProcessId ?? null) : null,
+        callActivityId: elementLinkInfo.elementId,
+        callActivityName: rawName || null,
+      }
+
+      queryClient.setQueryData(queryKey, (old: unknown) => {
+        const existing = Array.isArray(old)
+          ? old.filter((item): item is CallerOccurrence => Boolean(item && typeof item === 'object'))
+          : []
+        const matchesCaller = (item: CallerOccurrence) => item.parentFileId === caller.parentFileId && item.callActivityId === caller.callActivityId
+
+        if (mode === 'remove') {
+          return existing.filter((item) => !matchesCaller(item))
+        }
+
+        const withoutCurrent = existing.filter((item) => !matchesCaller(item))
+        return [...withoutCurrent, caller]
+      })
+    },
+    [buildFileCallersQueryKey, fileId, fileQ.data?.name, fileQ.data?.folderId, fileQ.data?.type, fileQ.data?.bpmnProcessId, elementLinkInfo, selectedElement, queryClient]
+  )
+
   const openLinkedFile = React.useCallback(() => {
     if (!resolvedLink) return
     // Invalidate the target file query to ensure fresh data loads
     queryClient.invalidateQueries({ queryKey: ['file', resolvedLink.id] })
-    tenantNavigate(`/starbase/editor/${resolvedLink.id}`, {
-      state: {
-        fromEditor: {
-          fileId: fileId ? String(fileId) : null,
-          fileName: fileQ.data?.name ?? null,
-        },
-      },
-    })
-  }, [tenantNavigate, resolvedLink, queryClient, fileId, fileQ.data?.name])
+    if (currentProjectId) {
+      queryClient.invalidateQueries({ queryKey: ['starbase', 'file-callers', currentProjectId, resolvedLink.id] })
+    }
+    ;(async () => {
+      await snapshotBeforeEditorNavigation()
+      tenantNavigate(`/starbase/editor/${resolvedLink.id}`, {
+        state: buildCurrentEditorNavigationState(),
+      })
+    })()
+  }, [tenantNavigate, resolvedLink, queryClient, buildCurrentEditorNavigationState, snapshotBeforeEditorNavigation, currentProjectId])
 
   const syncLinkedElementName = React.useCallback(async () => {
     if (!elementLinkInfo || !resolvedLink || !selectedElement || !modelerRef.current) return
@@ -449,6 +556,7 @@ export default function Editor() {
       nameSyncMode: elementLinkInfo.nameSyncMode,
       syncName: true,
     })
+    refreshLinkedElementState()
 
     const saved = await saveLinkUpdate('Linked name synced', 'Failed to sync the linked element name. Please try again.')
     if (!saved) {
@@ -457,8 +565,10 @@ export default function Editor() {
         title: 'Name sync failed',
         subtitle: 'Failed to sync the linked element name. Please try again.',
       })
+      return
     }
-  }, [elementLinkInfo, resolvedLink, selectedElement, notify])
+    updateCallerCacheForTarget(resolvedLink, 'add')
+  }, [elementLinkInfo, resolvedLink, selectedElement, notify, updateCallerCacheForTarget, refreshLinkedElementState])
 
   const setElementNameSyncMode = React.useCallback(async (mode: 'manual' | 'auto') => {
     if (!elementLinkInfo || !resolvedLink || !selectedElement || !modelerRef.current) return
@@ -473,6 +583,7 @@ export default function Editor() {
       nameSyncMode: mode,
       syncName: mode === 'auto',
     })
+    refreshLinkedElementState()
 
     const saved = await saveLinkUpdate('Link sync updated', 'Failed to update linked name sync settings. Please try again.')
     if (!saved) {
@@ -482,12 +593,13 @@ export default function Editor() {
         subtitle: 'Failed to update linked name sync settings. Please try again.',
       })
     }
-  }, [elementLinkInfo, resolvedLink, selectedElement, notify])
+  }, [elementLinkInfo, resolvedLink, selectedElement, notify, refreshLinkedElementState])
 
   const unlinkElement = React.useCallback(() => {
     if (!elementLinkInfo || !modelerRef.current || !selectedElement) return
     clearElementLink(modelerRef.current, selectedElement, elementLinkInfo.linkType)
-  }, [elementLinkInfo, selectedElement])
+    refreshLinkedElementState()
+  }, [elementLinkInfo, selectedElement, refreshLinkedElementState])
 
   const openLinkModal = React.useCallback(() => {
     captureFocus()
@@ -588,17 +700,14 @@ export default function Editor() {
   }, [restoreFocus])
 
   const openCallerOccurrence = React.useCallback((caller: CallerOccurrence) => {
-    tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(caller.parentFileId))}`, {
-      state: {
-        fromEditor: {
-          fileId: fileId ? String(fileId) : null,
-          fileName: fileQ.data?.name ?? null,
-        },
-        focusElementId: caller.callActivityId,
-      },
-    })
-    setCallersModalOpen(false)
-  }, [tenantNavigate, fileId, fileQ.data?.name])
+    ;(async () => {
+      await snapshotBeforeEditorNavigation()
+      tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(caller.parentFileId))}`, {
+        state: buildCurrentEditorNavigationState({ focusElementId: caller.callActivityId }),
+      })
+      setCallersModalOpen(false)
+    })()
+  }, [tenantNavigate, buildCurrentEditorNavigationState, snapshotBeforeEditorNavigation])
 
   const linkTargetType = elementLinkInfo?.linkType === 'decision' ? 'dmn' : 'bpmn'
   const filteredLinkFiles = React.useMemo(() => {
@@ -653,6 +762,7 @@ export default function Editor() {
 
   // Persistent XML history for undo/redo across page refreshes
   const xmlHistory = useXmlHistory(fileId)
+  addXmlHistorySnapshotRef.current = xmlHistory.addSnapshot
   const gitRepositoryQ = useGitRepository(fileQ.data?.projectId)
   const hasGitRepository = Boolean(gitRepositoryQ.data)
   const versioningModeResolved = !fileQ.data?.projectId || gitRepositoryQ.isSuccess || gitRepositoryQ.isError
@@ -1313,6 +1423,7 @@ export default function Editor() {
       queryClient.invalidateQueries({ queryKey: ['file', fileId] })
       if (currentProjectId) {
         queryClient.invalidateQueries({ queryKey: ['starbase', 'project-files', currentProjectId] })
+        queryClient.invalidateQueries({ queryKey: ['starbase', 'file-callers', currentProjectId] })
         queryClient.invalidateQueries({ queryKey: ['contents', currentProjectId] })
       }
       return true
@@ -1361,8 +1472,18 @@ export default function Editor() {
       const targetKey = isDecision
         ? (created?.dmnDecisionId ? String(created.dmnDecisionId) : payload.targetKey)
         : (created?.bpmnProcessId ? String(created.bpmnProcessId) : payload.targetKey)
+      const createdFileName = created?.name ? String(created.name) : payload.fileName
       if (!createdFileId || !targetKey) {
         throw new Error('Created linked file metadata is incomplete')
+      }
+
+      const createdTargetFile: ProjectFileMeta = {
+        id: createdFileId,
+        name: createdFileName,
+        type: isDecision ? 'dmn' : 'bpmn',
+        folderId: currentFolderId,
+        bpmnProcessId: isDecision ? null : targetKey,
+        dmnDecisionId: isDecision ? targetKey : null,
       }
 
       await queryClient.invalidateQueries({ queryKey: ['starbase', 'project-files', currentProjectId] })
@@ -1372,10 +1493,11 @@ export default function Editor() {
         linkType: elementLinkInfo.linkType,
         targetKey,
         fileId: createdFileId,
-        fileName: created?.name ? String(created.name) : payload.fileName,
+        fileName: createdFileName,
         nameSyncMode: elementLinkInfo.nameSyncMode,
         syncName: elementLinkInfo.nameSyncMode === 'auto',
       })
+      refreshLinkedElementState()
 
       const saved = await saveLinkUpdate(historyLabel, createSavedError)
 
@@ -1388,18 +1510,18 @@ export default function Editor() {
         return
       }
 
+      if (resolvedLink && resolvedLink.id !== createdTargetFile.id) {
+        updateCallerCacheForTarget(resolvedLink, 'remove')
+      }
+      updateCallerCacheForTarget(createdTargetFile, 'add')
+
       notify({
         kind: 'success',
         title: createTitle,
         subtitle: `${payload.fileName} was created and linked.`,
       })
       tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(createdFileId))}`, {
-        state: {
-          fromEditor: {
-            fileId: fileId ? String(fileId) : null,
-            fileName: fileQ.data?.name ?? null,
-          },
-        },
+        state: buildCurrentEditorNavigationState(),
       })
     } catch (error) {
       const parsed = parseApiError(error, createErrorTitle)
@@ -1416,10 +1538,7 @@ export default function Editor() {
   const prepareVersionSave = React.useCallback(async () => {
     try {
       ignoreDirtyUntilRef.current = Date.now() + 2000
-      if ((window as any).__autosaveTimer) {
-        clearTimeout((window as any).__autosaveTimer)
-        ;(window as any).__autosaveTimer = null
-      }
+      clearPendingAutosave()
 
       if (!modelerRef.current) return
 
@@ -1443,7 +1562,7 @@ export default function Editor() {
       setTimeout(() => setSaving('idle'), 3000)
       throw e
     }
-  }, [fileQ.data?.projectId, queryClient, saveXmlWithRetry])
+  }, [fileQ.data?.projectId, queryClient, saveXmlWithRetry, clearPendingAutosave])
 
   const handleVersionSaveSuccess = React.useCallback(() => {
     ignoreDirtyUntilRef.current = Date.now() + 500
@@ -1489,14 +1608,11 @@ export default function Editor() {
 
   const handleEnterViewMode = React.useCallback(() => {
     // Kill any pending autosave timer so it doesn't save snapshot XML to the server
-    if ((window as any).__autosaveTimer) {
-      clearTimeout((window as any).__autosaveTimer)
-      ;(window as any).__autosaveTimer = null
-    }
+    clearPendingAutosave()
     setPhase2Dismissed(true)
     viewModeImportedRef.current = false
     setEditorMode('view')
-  }, [])
+  }, [clearPendingAutosave])
 
   const handleStartHotfix = React.useCallback(() => {
     // If there are unsaved changes (local edits or uncommitted server draft), prompt to save first
@@ -1624,9 +1740,14 @@ export default function Editor() {
       nameSyncMode: elementLinkInfo.nameSyncMode,
       syncName: elementLinkInfo.nameSyncMode === 'auto',
     })
+    refreshLinkedElementState()
 
     const saved = await saveLinkUpdate('Link updated', 'Failed to save link. Please try again.')
     if (saved) {
+      if (resolvedLink && resolvedLink.id !== target.id) {
+        updateCallerCacheForTarget(resolvedLink, 'remove')
+      }
+      updateCallerCacheForTarget(target, 'add')
       setLinkModalOpen(false)
     }
   }
@@ -1664,19 +1785,22 @@ export default function Editor() {
             </a>
           </BreadcrumbItem>
         ))}
-        {location.state?.fromEditor?.fileId && location.state.fromEditor.fileId !== f.id && (
-          <BreadcrumbItem>
+        {editorBreadcrumbTrail.map((entry, index) => (
+          <BreadcrumbItem key={`${entry.fileId}-${index}`}>
             <a
-              href={toTenantPath(`/starbase/editor/${encodeURIComponent(sanitizePathParam(location.state.fromEditor.fileId))}`)}
-              onClick={(e) => {
+              href={toTenantPath(`/starbase/editor/${encodeURIComponent(sanitizePathParam(entry.fileId))}`)}
+              onClick={async (e) => {
                 e.preventDefault()
-                tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(location.state.fromEditor.fileId))}`)
+                await snapshotBeforeEditorNavigation()
+                tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(entry.fileId))}`, {
+                  state: buildEditorBreadcrumbBackState(editorBreadcrumbTrail, index),
+                })
               }}
             >
-              {toDisplayFileName(location.state.fromEditor.fileName) || 'Previous file'}
+              {toDisplayFileName(entry.fileName) || 'Previous file'}
             </a>
           </BreadcrumbItem>
-        )}
+        ))}
         <BreadcrumbItem isCurrentPage>{toDisplayFileName(f.name)}</BreadcrumbItem>
       </BreadcrumbBar>
 
@@ -1875,6 +1999,8 @@ export default function Editor() {
               // Suppress all saves in view mode (use ref to avoid stale closure)
               if (editorModeRef.current === 'view') return
 
+              const activeModeler = modelerRef.current
+
               setLastEditedAt(Date.now())
               setLocalDirty(true)
               
@@ -1882,23 +2008,23 @@ export default function Editor() {
               if (label) {
                 ;(async () => {
                   try {
-                    if (!modelerRef.current) return
-                    const { xml } = await modelerRef.current.saveXML({ format: true })
+                    if (!activeModeler) return
+                    const { xml } = await activeModeler.saveXML({ format: true })
                     xmlHistory.addSnapshot(xml, label)
                   } catch {}
                 })()
               }
               
               // Database save with longer debounce (800ms) - batches rapid changes
-              if ((window as any).__autosaveTimer) clearTimeout((window as any).__autosaveTimer)
-              ;(window as any).__autosaveTimer = setTimeout(async () => {
+              clearPendingAutosave()
+              autosaveTimerRef.current = window.setTimeout(async () => {
                 try {
-                  if (!modelerRef.current) return
+                  if (!activeModeler) return
                   if (Date.now() < ignoreDirtyUntilRef.current) return
                   // Double-check: don't save if we switched to view mode while the timer was pending
                   if (editorModeRef.current === 'view') return
                   setSaving('saving')
-                  const { xml } = await modelerRef.current.saveXML({ format: true })
+                  const { xml } = await activeModeler.saveXML({ format: true })
                   
                   await saveXmlWithRetry(xml)
                   setSaving('saved')
@@ -1910,6 +2036,8 @@ export default function Editor() {
                 } catch (e) {
                   setSaving('error')
                   setTimeout(() => setSaving('idle'), 3000)
+                } finally {
+                  autosaveTimerRef.current = null
                 }
               }, 800)
             }}
@@ -1940,28 +2068,30 @@ export default function Editor() {
                   // Suppress all saves in view mode (use ref to avoid stale closure)
                   if (editorModeRef.current === 'view') return
 
+                  const activeModeler = modelerRef.current
+
                   setLastEditedAt(Date.now())
                   setLocalDirty(true)
 
                   // History snapshot immediately for DMN changes
                   ;(async () => {
                     try {
-                      if (!modelerRef.current) return
-                      const { xml } = await modelerRef.current.saveXML({ format: true })
+                      if (!activeModeler) return
+                      const { xml } = await activeModeler.saveXML({ format: true })
                       xmlHistory.addSnapshot(xml, 'DMN change')
                     } catch {}
                   })()
 
                   // Database save with debounce
-                  if ((window as any).__autosaveTimer) clearTimeout((window as any).__autosaveTimer)
-                  ;(window as any).__autosaveTimer = setTimeout(async () => {
+                  clearPendingAutosave()
+                  autosaveTimerRef.current = window.setTimeout(async () => {
                     try {
-                      if (!modelerRef.current) return
+                      if (!activeModeler) return
                       if (Date.now() < ignoreDirtyUntilRef.current) return
                       // Double-check: don't save if we switched to view mode while the timer was pending
                       if (editorModeRef.current === 'view') return
                       setSaving('saving')
-                      const { xml } = await modelerRef.current.saveXML({ format: true })
+                      const { xml } = await activeModeler.saveXML({ format: true })
                       await saveXmlWithRetry(xml)
                       setSaving('saved')
                       setTimeout(() => setSaving('idle'), 1500)
@@ -1972,6 +2102,8 @@ export default function Editor() {
                     } catch (e) {
                       setSaving('error')
                       setTimeout(() => setSaving('idle'), 3000)
+                    } finally {
+                      autosaveTimerRef.current = null
                     }
                   }, 800)
                 }}

@@ -350,6 +350,49 @@ describe('bpmnLinking', () => {
       );
     });
 
+    it('strips the file extension when syncing a linked process name onto the element label', () => {
+      const element = { businessObject: { $type: 'bpmn:CallActivity', name: 'Old name' } };
+
+      updateElementLink(modeler, element, {
+        linkType: 'process',
+        targetKey: 'process-3',
+        fileId: 'file-3',
+        fileName: 'File 3.bpmn',
+        nameSyncMode: 'auto',
+        syncName: true,
+      });
+
+      expect(modeling.updateProperties).toHaveBeenCalledWith(
+        element,
+        expect.objectContaining({
+          calledElement: 'process-3',
+          name: 'File 3',
+          extensionElements: expect.any(Object),
+        })
+      );
+    });
+
+    it('strips the file extension when inheriting a linked file name into an empty element label', () => {
+      const element = { businessObject: { $type: 'bpmn:CallActivity', name: '   ' } };
+
+      updateElementLink(modeler, element, {
+        linkType: 'process',
+        targetKey: 'process-2',
+        fileId: 'file-2',
+        fileName: 'Process B.bpmn',
+        inheritNameIfEmpty: true,
+      });
+
+      expect(modeling.updateProperties).toHaveBeenCalledWith(
+        element,
+        expect.objectContaining({
+          calledElement: 'process-2',
+          name: 'Process B',
+          extensionElements: expect.any(Object),
+        })
+      );
+    });
+
     it('inherits the linked file name when a call activity name is empty', () => {
       const element = { businessObject: { $type: 'bpmn:CallActivity', name: '   ' } };
 

@@ -85,12 +85,13 @@ export default function ProjectDetail() {
   const newFolderModal = useModal()
   const createFileModal = useModal<'bpmn' | 'dmn'>()
   const deleteFolderModal = useModal<{ id: string; name: string; preview?: { folderCount: number; fileCount: number; filesByType: { bpmn: number; dmn: number; other: number }; samplePaths: string[] } }>()
-  const moveModal = useModal<{ id: string; name: string; type: 'folder' | 'file' }>()
+  const moveModal = useModal<{ id: string; name: string; type: 'folder' | 'file' | 'files'; ids?: string[] }>()
   const deployModal = useModal()
   const syncModal = useModal()
   const [gitSettingsOpen, setGitSettingsOpen] = React.useState(false)
   const [batchDeleteIds, setBatchDeleteIds] = React.useState<string[] | null>(null)
   const [batchCancelSelection, setBatchCancelSelection] = React.useState<null | (() => void)>(null)
+  const [batchMoveIds, setBatchMoveIds] = React.useState<string[] | null>(null)
   
   const [busy, setBusy] = React.useState(false)
   const [newFolderName, setNewFolderName] = React.useState('')
@@ -476,6 +477,23 @@ export default function ProjectDetail() {
     })
   }
 
+  async function downloadSelection(selectedItems: FileItem[], cancelSelection: () => void) {
+    if (!projectId || selectedItems.length === 0) return
+    try {
+      const fileIds = selectedItems.filter((item) => item.type !== 'folder').map((item) => item.id)
+      const folderIds = selectedItems.filter((item) => item.type === 'folder').map((item) => item.id)
+      const blob = await apiClient.postBlob(`/starbase-api/projects/${encodeURIComponent(projectId)}/download-selection`, {
+        fileIds,
+        folderIds,
+      })
+      if (!blob || blob.size === 0) return
+      const safeName = toSafeDownloadFilename(`${projectName}-selection.zip`, 'selection.zip')
+      downloadBlob(blob, safeName)
+      cancelSelection()
+    } catch {
+      // noop for now
+    }
+  }
 
   const membersQ = useQuery({
     queryKey: ['project-members', projectId],
@@ -812,6 +830,28 @@ export default function ProjectDetail() {
     }
   }
 
+  async function submitBatchMoveFiles(fileIds: string[], targetId: string | null) {
+    if (!projectId || fileIds.length === 0) return
+    try {
+      setBusy(true)
+      for (const fileId of fileIds) {
+        await apiClient.patch(`/starbase-api/files/${fileId}`, { folderId: targetId })
+      }
+      moveModal.closeModal()
+      setBatchMoveIds(null)
+      batchCancelSelection?.()
+      setBatchCancelSelection(null)
+      await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
+      await queryClient.invalidateQueries({ queryKey: ['contents', projectId, targetId ?? null] })
+      showToast({ kind: 'success', title: fileIds.length === 1 ? 'File moved' : 'Files moved' })
+    } catch (e: any) {
+      const parsed = parseApiError(e, 'Failed to move files')
+      showToast({ kind: 'error', title: 'Failed to move files', subtitle: parsed.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function submitMoveFolder(folder: FolderSummary, targetId: string | null) {
     if (!projectId) return
     try {
@@ -1047,6 +1087,7 @@ export default function ProjectDetail() {
                 downloadFile(file.id, file.name, file.type)
               }}
               onDownloadFolder={(file) => downloadFolder(file.id, file.name)}
+              onDownloadSelection={downloadSelection}
               onDeleteItem={(file) => {
                 if (file.type === 'folder') {
                   if (!file.id) return
@@ -1062,6 +1103,19 @@ export default function ProjectDetail() {
                 }
               }}
               getFileIcon={getFileIcon}
+              onOpenBatchMove={(ids, cancelSelection) => {
+                if (ids.length === 0) return
+                setBatchMoveIds(ids)
+                setBatchCancelSelection(() => cancelSelection)
+                setAllFolders(null)
+                setMoveTarget(folderId ?? 'ROOT')
+                moveModal.openModal({
+                  id: ids.join(','),
+                  ids,
+                  name: ids.length === 1 ? 'selected file' : `${ids.length} selected files`,
+                  type: 'files',
+                })
+              }}
               setBatchDeleteIds={setBatchDeleteIds}
               setBatchCancelSelection={setBatchCancelSelection}
               setSelectedAtOpen={setSelectedAtOpen}
@@ -1207,7 +1261,7 @@ export default function ProjectDetail() {
         >
           <ModalHeader
             label={undefined}
-            title={`Move ${moveModal.data?.type === 'folder' ? 'folder' : 'file'}`}
+            title={`Move ${moveModal.data?.type === 'folder' ? 'folder' : moveModal.data?.type === 'files' ? 'files' : 'file'}`}
             closeModal={() => {
               moveModal.closeModal()
               setMoveTarget('ROOT')
@@ -1217,7 +1271,9 @@ export default function ProjectDetail() {
           <ModalBody>
             {moveModal.data && (
               <div style={{ marginBottom: 'var(--spacing-5)' }}>
-                {`Select a destination for "${moveModal.data.name}".`}
+                {moveModal.data.type === 'files'
+                  ? `Select a destination for ${moveModal.data.ids?.length || 0} selected files.`
+                  : `Select a destination for "${moveModal.data.name}".`}
               </div>
             )}
             {moveModal.isOpen && projectId && !allFolders && (
@@ -1253,6 +1309,9 @@ export default function ProjectDetail() {
               onClick={() => {
                 if (!moveModal.data) return
                 const targetId = moveTarget === 'ROOT' ? null : moveTarget
+                if (moveModal.data.type === 'files') {
+                  return submitBatchMoveFiles(moveModal.data.ids || [], targetId)
+                }
                 if (moveModal.data.type === 'folder') {
                   return submitMoveFolder(
                     { id: moveModal.data.id, name: moveModal.data.name, parentFolderId: null },

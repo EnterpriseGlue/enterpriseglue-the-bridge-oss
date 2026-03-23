@@ -11,7 +11,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Project } from '@enterpriseglue/shared/db/entities/Project.js'
 import { Folder } from '@enterpriseglue/shared/db/entities/Folder.js'
 import { File } from '@enterpriseglue/shared/db/entities/File.js'
-import { IsNull, Raw } from 'typeorm'
+import { In, IsNull, Raw } from 'typeorm'
 import archiver from 'archiver'
 import { AuthorizationService } from '@enterpriseglue/shared/services/authorization.js'
 import { ResourceService } from '@enterpriseglue/shared/services/resources.js'
@@ -22,7 +22,8 @@ import { projectMemberService } from '@enterpriseglue/shared/services/platform-a
 import { applyProjectArchiveToProject } from '@enterpriseglue/shared/services/starbase/index.js'
 import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js'
 import { unixTimestamp } from '@enterpriseglue/shared/utils/id.js'
-import { projectIdParamSchema, folderIdParamSchema, createFolderBodySchema, renameFolderBodySchema } from '@enterpriseglue/shared/schemas/common.js'
+import { projectIdParamSchema, folderIdParamSchema, createFolderBodySchema, renameFolderBodySchema, uuidSchema } from '@enterpriseglue/shared/schemas/common.js'
+import { z } from 'zod'
 
 // Auto-commit helper for folder operations
 async function autoCommitFolderChange(projectId: string, userId: string, message: string): Promise<void> {
@@ -195,6 +196,143 @@ async function buildPathForFile(folderId: string | null, fileName: string): Prom
   }
   return parts.join('/');
 }
+
+type ArchiveScope = 'project' | 'folder' | 'selection'
+
+type ArchiveFolderEntry = {
+  id: string
+  name: string
+  parentFolderId: string | null
+}
+
+type ArchiveFileEntry = {
+  id: string
+  name: string
+  type: string
+  folderId: string | null
+  xml: string
+  bpmnProcessId?: string | null
+  dmnDecisionId?: string | null
+}
+
+async function streamZipArchive(params: {
+  res: Response
+  downloadName: string
+  projectId: string
+  scope: ArchiveScope
+  files: ArchiveFileEntry[]
+  folders: ArchiveFolderEntry[]
+  rootFolderId?: string | null
+  selectedFileIds?: string[]
+  selectedFolderIds?: string[]
+}) {
+  const { res, downloadName, projectId, scope, files, folders, rootFolderId = null, selectedFileIds = [], selectedFolderIds = [] } = params
+
+  if (!files.length && !folders.length) {
+    return res.status(204).end()
+  }
+
+  const safeDownloadName = sanitizeArchivePathSegment(downloadName, 'project')
+  res.setHeader('Content-Type', 'application/zip')
+  res.setHeader('Content-Disposition', `attachment; filename="${safeDownloadName.replace(/"/g, '')}.zip"`)
+
+  const archive = archiver('zip', { zlib: { level: 9 } })
+  archive.on('warning', (err: any) => {
+    logger.warn('ZIP archive warning', { projectId, scope, err })
+  })
+  archive.on('error', (err: any) => {
+    logger.error('ZIP archive error', { projectId, scope, err })
+    try {
+      if (!res.headersSent) res.status(500).end()
+      else res.end()
+    } catch {}
+  })
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      try { archive.abort() } catch {}
+    }
+  })
+  archive.pipe(res)
+
+  const folderEntries = await Promise.all(
+    folders.map(async (folder) => ({
+      id: folder.id,
+      name: folder.name,
+      parentFolderId: folder.parentFolderId,
+      path: await buildPathForFolder(folder.id),
+    }))
+  )
+
+  folderEntries
+    .filter((folder) => folder.path)
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .forEach((folder) => {
+      archive.append('', { name: `${folder.path}/` })
+    })
+
+  const fileEntries = await Promise.all(
+    files.map(async (file) => ({
+      id: file.id,
+      name: file.name,
+      type: file.type,
+      folderId: file.folderId,
+      path: await buildPathForFile(file.folderId, ensureFileExtension(file.name, file.type)),
+      xml: file.xml,
+      bpmnProcessId: file.bpmnProcessId ?? null,
+      dmnDecisionId: file.dmnDecisionId ?? null,
+    }))
+  )
+
+  const manifest = {
+    format: 'enterpriseglue.starbase.export',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    scope,
+    projectId,
+    rootFolderId,
+    selectedFileIds,
+    selectedFolderIds,
+    folders: folderEntries.map(({ id, name, parentFolderId, path }) => ({ id, name, parentFolderId, path })),
+    files: fileEntries.map(({ id, name, type, folderId, path }) => ({ id, name, type, folderId, path })),
+  }
+
+  const legacyManifest = {
+    schemaVersion: 1,
+    projectName: safeDownloadName,
+    exportedAt: unixTimestamp(),
+    folders: folderEntries
+      .filter((folder) => folder.path)
+      .map(({ id, path }) => ({
+        folderId: id,
+        path,
+      })),
+    files: fileEntries.map(({ id, name, type, path, bpmnProcessId, dmnDecisionId }) => ({
+      fileId: id,
+      path,
+      type: String(type).toLowerCase() === 'dmn' ? 'dmn' : 'bpmn',
+      name,
+      bpmnProcessId,
+      dmnDecisionId,
+    })),
+  }
+
+  archive.append(`${JSON.stringify(manifest, null, 2)}\n`, { name: 'manifest.json' })
+  archive.append(`${JSON.stringify(legacyManifest, null, 2)}\n`, { name: 'starbase-manifest.json' })
+  archive.append(`${JSON.stringify(legacyManifest, null, 2)}\n`, { name: '.starbase/manifest.json' })
+
+  fileEntries
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .forEach((file) => {
+      archive.append(file.xml, { name: file.path })
+    })
+
+  archive.finalize()
+}
+
+const downloadSelectionBodySchema = z.object({
+  fileIds: z.array(uuidSchema).default([]),
+  folderIds: z.array(uuidSchema).default([]),
+})
 
 /**
  * GET project contents (folders + files) under optional parent folder
@@ -503,43 +641,47 @@ r.get('/starbase-api/folders/:folderId/download', apiLimiter, requireAuth, async
 
   const folderName = String(ownerCheck.name || 'folder');
   const subtree = await collectSubtree(folderId);
-  
-  if (!subtree.files.length) {
-    return res.status(204).end();
+
+  const folders = subtree.folders.length
+    ? (await folderRepo.find({
+        where: { id: In(subtree.folders) },
+        select: ['id', 'name', 'parentFolderId']
+      })).map((folder) => ({
+        id: String(folder.id),
+        name: String(folder.name),
+        parentFolderId: folder.parentFolderId || null,
+      }))
+    : []
+
+  const files = subtree.files.length
+    ? (await fileRepo.find({
+        where: { id: In(subtree.files) },
+        select: ['id', 'name', 'type', 'folderId', 'xml', 'bpmnProcessId', 'dmnDecisionId']
+      })).map((file) => ({
+        id: String(file.id),
+        name: String(file.name),
+        type: String(file.type),
+        folderId: file.folderId || null,
+        xml: String(file.xml || ''),
+        bpmnProcessId: file.bpmnProcessId ? String(file.bpmnProcessId) : null,
+        dmnDecisionId: file.dmnDecisionId ? String(file.dmnDecisionId) : null,
+      }))
+    : []
+
+  if (files.length === 0) {
+    return res.status(204).end()
   }
 
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${folderName.replace(/"/g, '')}.zip"`);
-
-  const archive = archiver('zip', { zlib: { level: 9 } });
-  archive.on('warning', (err: any) => {
-    logger.warn('ZIP archive warning', { folderId, err });
-  });
-  archive.on('error', (err: any) => {
-    logger.error('ZIP archive error', { folderId, err });
-    try {
-      if (!res.headersSent) res.status(500).end();
-      else res.end();
-    } catch {}
-  });
-  res.on('close', () => {
-    if (!res.writableEnded) {
-      try { archive.abort(); } catch {}
-    }
-  });
-  archive.pipe(res);
-
-  for (const fid of subtree.files) {
-    const fileResult = await fileRepo.findOne({
-      where: { id: fid },
-      select: ['name', 'type', 'folderId', 'xml']
-    });
-    if (!fileResult) continue;
-    const fullPath = await buildPathForFile(fileResult.folderId || null, ensureFileExtension(String(fileResult.name), fileResult.type));
-    archive.append(String(fileResult.xml || ''), { name: fullPath });
-  }
-
-  archive.finalize();
+  return streamZipArchive({
+    res,
+    downloadName: folderName,
+    projectId: String(ownerCheck.projectId),
+    scope: 'folder',
+    rootFolderId: folderId,
+    selectedFolderIds: [folderId],
+    files,
+    folders,
+  })
 }));
 
 /**
@@ -551,15 +693,13 @@ r.get('/starbase-api/projects/:projectId/download', apiLimiter, requireAuth, req
 
   const dataSource = await getDataSource();
   const fileRepo = dataSource.getRepository(File);
-  const projectRepo = dataSource.getRepository(Project);
   const folderRepo = dataSource.getRepository(Folder);
-  
-  const filesResult = await fileRepo.find({
+  const projectRepo = dataSource.getRepository(Project);
+
+  const files = (await fileRepo.find({
     where: { projectId },
     select: ['id', 'name', 'type', 'folderId', 'xml', 'bpmnProcessId', 'dmnDecisionId']
-  });
-  
-  const filesList = filesResult.map((r: any) => ({
+  })).map((r: any) => ({
     id: String(r.id),
     name: String(r.name),
     type: String(r.type),
@@ -567,16 +707,16 @@ r.get('/starbase-api/projects/:projectId/download', apiLimiter, requireAuth, req
     xml: String(r.xml || ''),
     bpmnProcessId: r.bpmnProcessId ? String(r.bpmnProcessId) : null,
     dmnDecisionId: r.dmnDecisionId ? String(r.dmnDecisionId) : null,
-  }));
+  }))
 
-  const foldersResult = await folderRepo.find({
+  const folders = (await folderRepo.find({
     where: { projectId },
-    select: ['id']
-  });
-
-  if (!filesList.length) {
-    return res.status(204).end();
-  }
+    select: ['id', 'name', 'parentFolderId']
+  })).map((r: any) => ({
+    id: String(r.id),
+    name: String(r.name),
+    parentFolderId: r.parentFolderId || null,
+  }))
 
   const projResult = await projectRepo.findOne({
     where: { id: projectId },
@@ -584,58 +724,14 @@ r.get('/starbase-api/projects/:projectId/download', apiLimiter, requireAuth, req
   });
   const projectName = projResult ? String(projResult.name) : 'project';
 
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${projectName.replace(/"/g, '')}.zip"`);
-
-  const archive = archiver('zip', { zlib: { level: 9 } });
-  archive.on('warning', (err: any) => {
-    logger.warn('ZIP archive warning', { projectId, err });
-  });
-  archive.on('error', (err: any) => {
-    logger.error('ZIP archive error', { projectId, err });
-    try {
-      if (!res.headersSent) res.status(500).end();
-      else res.end();
-    } catch {}
-  });
-  res.on('close', () => {
-    if (!res.writableEnded) {
-      try { archive.abort(); } catch {}
-    }
-  });
-  archive.pipe(res);
-
-  const manifestFolders = await Promise.all(foldersResult.map(async (folder: any) => ({
-    folderId: String(folder.id),
-    path: await buildPathForFolder(String(folder.id)),
-  })));
-
-  const manifestFiles = await Promise.all(filesList.map(async (f) => ({
-    fileId: f.id,
-    path: await buildPathForFile(f.folderId, ensureFileExtension(f.name, f.type)),
-    type: String(f.type).toLowerCase() === 'dmn' ? 'dmn' : 'bpmn',
-    name: String(f.name),
-    bpmnProcessId: f.bpmnProcessId,
-    dmnDecisionId: f.dmnDecisionId,
-  })));
-
-  const manifestJson = JSON.stringify({
-    schemaVersion: 1,
-    projectName,
-    exportedAt: unixTimestamp(),
-    folders: manifestFolders.filter((folder: any) => folder.path),
-    files: manifestFiles,
-  }, null, 2)
-
-  archive.append(manifestJson, { name: 'starbase-manifest.json' });
-  archive.append(manifestJson, { name: '.starbase/manifest.json' });
-
-  for (const f of filesList) {
-    const fullPath = await buildPathForFile(f.folderId, ensureFileExtension(f.name, f.type));
-    archive.append(f.xml, { name: fullPath });
-  }
-
-  archive.finalize();
+  return streamZipArchive({
+    res,
+    downloadName: projectName,
+    projectId,
+    scope: 'project',
+    files,
+    folders,
+  })
 }));
 
 r.post('/starbase-api/projects/:projectId/import-zip', apiLimiter, requireAuth, raw({ type: ['application/zip', 'application/octet-stream'], limit: '25mb' }), validateParams(projectIdParamSchema), requireProjectRole(EDIT_ROLES), asyncHandler(async (req: Request, res: Response) => {
@@ -660,6 +756,92 @@ r.post('/starbase-api/projects/:projectId/import-zip', apiLimiter, requireAuth, 
   })
 
   res.status(201).json(result)
-}));
+}))
+
+r.post('/starbase-api/projects/:projectId/download-selection', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(downloadSelectionBodySchema), requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
+  const projectId = String(req.params.projectId)
+  const body = downloadSelectionBodySchema.parse(req.body)
+  const fileIds = Array.from(new Set(body.fileIds.map((id) => String(id))))
+  const folderIds = Array.from(new Set(body.folderIds.map((id) => String(id))))
+
+  if (!fileIds.length && !folderIds.length) {
+    throw Errors.validation('Select at least one file or folder to download')
+  }
+
+  const dataSource = await getDataSource()
+  const fileRepo = dataSource.getRepository(File)
+  const folderRepo = dataSource.getRepository(Folder)
+  const projectRepo = dataSource.getRepository(Project)
+
+  const selectedFolders = folderIds.length
+    ? await folderRepo.find({
+        where: { projectId, id: In(folderIds) },
+        select: ['id', 'name', 'parentFolderId']
+      })
+    : []
+  if (selectedFolders.length !== folderIds.length) {
+    throw Errors.validation('One or more selected folders could not be downloaded')
+  }
+
+  const folderIdSet = new Set<string>(selectedFolders.map((folder) => String(folder.id)))
+  const fileIdSet = new Set<string>(fileIds)
+
+  for (const folder of selectedFolders) {
+    const subtree = await collectSubtree(String(folder.id))
+    subtree.folders.forEach((id) => folderIdSet.add(String(id)))
+    subtree.files.forEach((id) => fileIdSet.add(String(id)))
+  }
+
+  const files = fileIdSet.size
+    ? (await fileRepo.find({
+        where: { projectId, id: In(Array.from(fileIdSet)) },
+        select: ['id', 'name', 'type', 'folderId', 'xml', 'bpmnProcessId', 'dmnDecisionId']
+      })).map((file) => ({
+        id: String(file.id),
+        name: String(file.name),
+        type: String(file.type),
+        folderId: file.folderId || null,
+        xml: String(file.xml || ''),
+        bpmnProcessId: file.bpmnProcessId ? String(file.bpmnProcessId) : null,
+        dmnDecisionId: file.dmnDecisionId ? String(file.dmnDecisionId) : null,
+      }))
+    : []
+
+  if (files.length !== fileIdSet.size) {
+    throw Errors.validation('One or more selected files could not be downloaded')
+  }
+
+  const folders = folderIdSet.size
+    ? (await folderRepo.find({
+        where: { projectId, id: In(Array.from(folderIdSet)) },
+        select: ['id', 'name', 'parentFolderId']
+      })).map((folder) => ({
+        id: String(folder.id),
+        name: String(folder.name),
+        parentFolderId: folder.parentFolderId || null,
+      }))
+    : []
+
+  if (folders.length !== folderIdSet.size) {
+    throw Errors.validation('One or more selected folders could not be downloaded')
+  }
+
+  const projectRow = await projectRepo.findOne({
+    where: { id: projectId },
+    select: ['name']
+  })
+  const projectName = projectRow ? String(projectRow.name) : 'project'
+
+  return streamZipArchive({
+    res,
+    downloadName: `${projectName}-selection`,
+    projectId,
+    scope: 'selection',
+    selectedFileIds: fileIds,
+    selectedFolderIds: folderIds,
+    files,
+    folders,
+  })
+}))
 
 export default r;

@@ -1586,7 +1586,7 @@ registry.registerPath({
   method: 'get',
   path: '/starbase-api/folders/{folderId}/download',
   request: { params: z.object({ folderId: z.string() }) },
-  responses: { 200: { description: 'ZIP archive of folder contents', content: { 'application/zip': { schema: z.string() } } }, 204: { description: 'Empty folder' } },
+  responses: { 200: { description: 'ZIP archive of folder contents with manifest', content: { 'application/zip': { schema: z.string() } } }, 204: { description: 'Empty folder' } },
 });
 
 // GET /starbase-api/projects/:projectId/download (zip)
@@ -1594,7 +1594,27 @@ registry.registerPath({
   method: 'get',
   path: '/starbase-api/projects/{projectId}/download',
   request: { params: z.object({ projectId: z.string() }) },
-  responses: { 200: { description: 'ZIP archive of project', content: { 'application/zip': { schema: z.string() } } }, 204: { description: 'Empty project' } },
+  responses: { 200: { description: 'ZIP archive of project with manifest', content: { 'application/zip': { schema: z.string() } } }, 204: { description: 'Empty project' } },
+});
+
+// POST /starbase-api/projects/:projectId/download-selection (zip)
+registry.registerPath({
+  method: 'post',
+  path: '/starbase-api/projects/{projectId}/download-selection',
+  request: {
+    params: z.object({ projectId: z.string() }),
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            fileIds: z.array(z.string()).default([]),
+            folderIds: z.array(z.string()).default([]),
+          })
+        }
+      }
+    },
+  },
+  responses: { 200: { description: 'ZIP archive of selected files and folders with manifest', content: { 'application/zip': { schema: z.string() } } }, 204: { description: 'Empty selection' } },
 });
 
 // GET /starbase-api/files/:fileId/download (XML attachment)

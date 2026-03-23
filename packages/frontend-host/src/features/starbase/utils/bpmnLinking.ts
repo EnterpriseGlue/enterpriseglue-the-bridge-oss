@@ -102,6 +102,14 @@ function toMessageRefId(rawId: string): string {
   return `Message_${normalized}`.slice(0, 64)
 }
 
+function toLinkedElementDisplayName(fileName: string | null | undefined): string {
+  const normalized = String(fileName || '').trim()
+  if (!normalized) return ''
+
+  const withoutExtension = normalized.replace(/\.(bpmn|dmn)$/i, '')
+  return withoutExtension || normalized
+}
+
 function ensureMessageRef(modeler: any, moddle: any, element: any, bo: any, fileName: string): { messageRef: any; messageRefId: string } {
   const eventDefinition = getMessageEventDefinition(bo)
   const existingMessageRef = eventDefinition?.messageRef || eventDefinition?.get?.('messageRef') || null
@@ -116,7 +124,7 @@ function ensureMessageRef(modeler: any, moddle: any, element: any, bo: any, file
     moddle.create('bpmn:Message', { id: messageRefId })
 
   messageRef.id = messageRefId
-  messageRef.name = fileName
+  messageRef.name = toLinkedElementDisplayName(fileName)
 
   return { messageRef, messageRefId }
 }
@@ -244,7 +252,7 @@ export function updateElementLink(
 
   const linkProps: Record<string, any> = { extensionElements }
   const currentName = typeof getElementName(bo) === 'string' ? String(getElementName(bo)).trim() : ''
-  const nextName = typeof payload.fileName === 'string' ? payload.fileName.trim() : ''
+  const nextName = toLinkedElementDisplayName(payload.fileName)
   if (payload.linkType === 'process') {
     if (!isSemanticMessageLink) {
       linkProps.calledElement = payload.targetKey

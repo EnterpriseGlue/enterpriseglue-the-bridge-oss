@@ -20,7 +20,7 @@ import {
   MenuButton,
   MenuItem,
 } from '@carbon/react'
-import { CloudUpload, Events, IbmWatsonMachineLearning, Renew, Upload, TrashCan, Commit } from '@carbon/icons-react'
+import { ArrowRight, CloudDownload, CloudUpload, Events, IbmWatsonMachineLearning, Renew, Upload, TrashCan, Commit } from '@carbon/icons-react'
 import type { FileItem } from '../../components/project-detail'
 
 interface ProjectContentsTableProps {
@@ -56,8 +56,10 @@ interface ProjectContentsTableProps {
   onMoveItem: (item: FileItem) => void
   onDownloadFile: (item: FileItem) => void
   onDownloadFolder: (item: FileItem) => void
+  onDownloadSelection: (items: FileItem[], cancelSelection: () => void) => void
   onDeleteItem: (item: FileItem) => void
   getFileIcon: (fileType: 'bpmn' | 'dmn' | 'folder' | 'form') => React.ReactNode
+  onOpenBatchMove: (ids: string[], cancelSelection: () => void) => void
   setBatchDeleteIds: (ids: string[]) => void
   setBatchCancelSelection: (cancel: () => void) => void
   setSelectedAtOpen: (ids: string[]) => void
@@ -102,8 +104,10 @@ export const ProjectContentsTable = ({
   onMoveItem,
   onDownloadFile,
   onDownloadFolder,
+  onDownloadSelection,
   onDeleteItem,
   getFileIcon,
+  onOpenBatchMove,
   setBatchDeleteIds,
   setBatchCancelSelection,
   setSelectedAtOpen,
@@ -125,7 +129,15 @@ export const ProjectContentsTable = ({
     headers={tableHeaders}
     isSortable
   >
-    {({ rows, headers, getHeaderProps, getRowProps, getSelectionProps, getTableProps, getToolbarProps, getBatchActionProps }) => (
+    {({ rows, headers, getHeaderProps, getRowProps, getSelectionProps, getTableProps, getToolbarProps, getBatchActionProps }) => {
+      const selectedRows = rows.filter((r) => r.isSelected)
+      const selectedIds = selectedRows.map((r) => String(r.id))
+      const selectedItems = selectedIds
+        .map((id) => items.find((item) => item.id === id) || null)
+        .filter((item): item is FileItem => Boolean(item))
+      const hasSelectedFolders = selectedItems.some((item) => item.type === 'folder')
+
+      return (
       <>
         <TableToolbar
           {...getToolbarProps()}
@@ -134,15 +146,36 @@ export const ProjectContentsTable = ({
         >
           <TableBatchActions {...getBatchActionProps()}>
             <TableBatchAction
+              renderIcon={CloudDownload}
+              onClick={() => {
+                if (selectedItems.length === 0) return
+                const batchProps = getBatchActionProps()
+                onDownloadSelection(selectedItems, batchProps.onCancel)
+              }}
+            >
+              Download
+            </TableBatchAction>
+            <TableBatchAction
               renderIcon={TrashCan}
               onClick={() => {
-                const ids = rows.filter((r) => r.isSelected).map((r) => String(r.id))
+                const ids = selectedIds
                 if (ids.length === 0) return
                 setBatchDeleteIds(ids)
                 setBatchCancelSelection(() => getBatchActionProps().onCancel)
               }}
             >
               Delete
+            </TableBatchAction>
+            <TableBatchAction
+              renderIcon={ArrowRight}
+              disabled={selectedIds.length === 0 || hasSelectedFolders}
+              onClick={() => {
+                if (selectedIds.length === 0 || hasSelectedFolders) return
+                const batchProps = getBatchActionProps()
+                onOpenBatchMove(selectedIds, batchProps.onCancel)
+              }}
+            >
+              Move
             </TableBatchAction>
             {showSyncButton && (
               <TableBatchAction
@@ -364,6 +397,6 @@ export const ProjectContentsTable = ({
           </Table>
         </div>
       </>
-    )}
+      )}}
   </DataTable>
 )
