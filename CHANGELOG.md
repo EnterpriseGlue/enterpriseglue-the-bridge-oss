@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.15](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.14...v0.8.15) (2026-03-23)
+
+
+### Bug Fixes
+
+* **frontend:** fix starbase breadcrumb drilldown history ([#266](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/266)) ([e5bc4b8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e5bc4b8796ad500dc9f5e1cb097d90a0c90cca5d))
+
 ## [0.8.14](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.13...v0.8.14) (2026-03-23)
 
 
