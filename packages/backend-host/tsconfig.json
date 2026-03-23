@@ -14,7 +14,7 @@
     "baseUrl": ".",
     "rootDir": "src",
     "paths": {
-      "@enterpriseglue/shared/*": ["../shared/dist/*"],
+      "@enterpriseglue/shared/*": ["../shared/dist/*", "../shared/src/*"],
       "@modules/*": ["./src/modules/*"],
       "@enterpriseglue/enterprise-plugin-api": ["../enterprise-plugin-api/src/index.d.ts"],
       "@enterpriseglue/enterprise-plugin-api/backend": ["../enterprise-plugin-api/src/backend.d.ts"]

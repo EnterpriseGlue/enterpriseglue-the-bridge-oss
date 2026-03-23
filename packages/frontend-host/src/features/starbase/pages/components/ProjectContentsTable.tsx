@@ -186,7 +186,7 @@ export const ProjectContentsTable = ({
             <input
               ref={uploadInputRef}
               type="file"
-              accept=".bpmn,.dmn,application/xml,text/xml"
+              accept=".bpmn,.dmn,.zip,application/xml,text/xml,application/zip,application/x-zip-compressed"
               style={{ display: 'none' }}
               onChange={onUploadChange}
             />

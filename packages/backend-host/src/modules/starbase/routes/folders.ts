@@ -4,6 +4,7 @@ import { caseInsensitiveColumn } from '@enterpriseglue/shared/db/adapters/QueryH
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireProjectAccess, requireProjectRole } from '@enterpriseglue/shared/middleware/projectAuth.js'
+import { raw } from 'express'
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js'
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
@@ -18,6 +19,7 @@ import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-de
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { logger } from '@enterpriseglue/shared/utils/logger.js'
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js'
+import { applyProjectArchiveToProject } from '@enterpriseglue/shared/services/starbase/index.js'
 import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js'
 import { unixTimestamp } from '@enterpriseglue/shared/utils/id.js'
 import { projectIdParamSchema, folderIdParamSchema, createFolderBodySchema, renameFolderBodySchema } from '@enterpriseglue/shared/schemas/common.js'
@@ -62,6 +64,26 @@ function sanitizeArchivePathSegment(name: string, fallback: string): string {
   }
 
   return cleaned
+}
+
+async function buildPathForFolder(folderId: string): Promise<string> {
+  const parts: string[] = []
+  let current: string | null = folderId
+  const dataSource = await getDataSource()
+  const folderRepo = dataSource.getRepository(Folder)
+
+  while (current) {
+    const row = await folderRepo.findOne({
+      where: { id: current },
+      select: ['name', 'parentFolderId']
+    })
+
+    if (!row) break
+    parts.unshift(sanitizeArchivePathSegment(String(row.name), 'folder'))
+    current = row.parentFolderId || null
+  }
+
+  return parts.join('/')
 }
 
 function toFolderSummary(row: any) {
@@ -530,10 +552,11 @@ r.get('/starbase-api/projects/:projectId/download', apiLimiter, requireAuth, req
   const dataSource = await getDataSource();
   const fileRepo = dataSource.getRepository(File);
   const projectRepo = dataSource.getRepository(Project);
+  const folderRepo = dataSource.getRepository(Folder);
   
   const filesResult = await fileRepo.find({
     where: { projectId },
-    select: ['id', 'name', 'type', 'folderId', 'xml']
+    select: ['id', 'name', 'type', 'folderId', 'xml', 'bpmnProcessId', 'dmnDecisionId']
   });
   
   const filesList = filesResult.map((r: any) => ({
@@ -542,7 +565,14 @@ r.get('/starbase-api/projects/:projectId/download', apiLimiter, requireAuth, req
     type: String(r.type),
     folderId: r.folderId || null,
     xml: String(r.xml || ''),
+    bpmnProcessId: r.bpmnProcessId ? String(r.bpmnProcessId) : null,
+    dmnDecisionId: r.dmnDecisionId ? String(r.dmnDecisionId) : null,
   }));
+
+  const foldersResult = await folderRepo.find({
+    where: { projectId },
+    select: ['id']
+  });
 
   if (!filesList.length) {
     return res.status(204).end();
@@ -575,12 +605,61 @@ r.get('/starbase-api/projects/:projectId/download', apiLimiter, requireAuth, req
   });
   archive.pipe(res);
 
+  const manifestFolders = await Promise.all(foldersResult.map(async (folder: any) => ({
+    folderId: String(folder.id),
+    path: await buildPathForFolder(String(folder.id)),
+  })));
+
+  const manifestFiles = await Promise.all(filesList.map(async (f) => ({
+    fileId: f.id,
+    path: await buildPathForFile(f.folderId, ensureFileExtension(f.name, f.type)),
+    type: String(f.type).toLowerCase() === 'dmn' ? 'dmn' : 'bpmn',
+    name: String(f.name),
+    bpmnProcessId: f.bpmnProcessId,
+    dmnDecisionId: f.dmnDecisionId,
+  })));
+
+  const manifestJson = JSON.stringify({
+    schemaVersion: 1,
+    projectName,
+    exportedAt: unixTimestamp(),
+    folders: manifestFolders.filter((folder: any) => folder.path),
+    files: manifestFiles,
+  }, null, 2)
+
+  archive.append(manifestJson, { name: 'starbase-manifest.json' });
+  archive.append(manifestJson, { name: '.starbase/manifest.json' });
+
   for (const f of filesList) {
     const fullPath = await buildPathForFile(f.folderId, ensureFileExtension(f.name, f.type));
     archive.append(f.xml, { name: fullPath });
   }
 
   archive.finalize();
+}));
+
+r.post('/starbase-api/projects/:projectId/import-zip', apiLimiter, requireAuth, raw({ type: ['application/zip', 'application/octet-stream'], limit: '25mb' }), validateParams(projectIdParamSchema), requireProjectRole(EDIT_ROLES), asyncHandler(async (req: Request, res: Response) => {
+  const projectId = String(req.params.projectId)
+  const userId = req.user!.userId
+  const zipBuffer = Buffer.isBuffer(req.body)
+    ? req.body
+    : (req.body ? Buffer.from(req.body) : Buffer.alloc(0))
+
+  if (zipBuffer.length === 0) {
+    throw Errors.validation('ZIP archive is required')
+  }
+
+  const dataSource = await getDataSource()
+  const result = await dataSource.transaction(async (manager) => {
+    return applyProjectArchiveToProject({
+      manager,
+      projectId,
+      userId,
+      zipBuffer,
+    })
+  })
+
+  res.status(201).json(result)
 }));
 
 export default r;

@@ -99,6 +99,16 @@ export const apiClient = {
     return handleResponse<T>(response);
   },
 
+  async postRaw<T>(url: string, body?: BodyInit | null, options?: RequestInit): Promise<T> {
+    const response = await interceptedFetch(url, {
+      ...options,
+      method: 'POST',
+      headers: mergeHeaders(options?.headers),
+      body: body ?? undefined,
+    });
+    return handleResponse<T>(response);
+  },
+
   async put<T>(url: string, body?: any, options?: RequestInit): Promise<T> {
     const response = await interceptedFetch(url, {
       ...options,

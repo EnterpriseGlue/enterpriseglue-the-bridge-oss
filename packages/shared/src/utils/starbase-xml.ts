@@ -218,3 +218,37 @@ export function updateStarbaseFileNameInXml(
 
   return { xml: out, updated }
 }
+
+export function remapStarbaseFileReferencesInXml(
+  xml: string,
+  fileIdMap: Map<string, { fileId: string; fileName: string }>
+): { xml: string; replacements: number } {
+  const src = String(xml || '')
+  if (!src || fileIdMap.size === 0) return { xml: src, replacements: 0 }
+
+  const elementBlockRegex = /<\s*(?:[a-zA-Z0-9_-]+:)?(?:callActivity|businessRuleTask|endEvent)\b[\s\S]*?<\/\s*(?:[a-zA-Z0-9_-]+:)?(?:callActivity|businessRuleTask|endEvent)>/gi
+  const fileIdRegex = buildPropertyValueRegex('starbase:fileId')
+  const fileNameRegex = buildPropertyValueRegex('starbase:fileName')
+
+  let replacements = 0
+  const out = src.replace(elementBlockRegex, (block) => {
+    const currentFileId = readPropertyValue(block, 'starbase:fileId')
+    if (!currentFileId) return block
+
+    const next = fileIdMap.get(currentFileId)
+    if (!next) return block
+
+    let nextBlock = block
+    if (fileIdRegex.test(nextBlock)) {
+      nextBlock = nextBlock.replace(fileIdRegex, `$1${escapeAttribute(next.fileId)}$3`)
+    }
+    if (fileNameRegex.test(nextBlock)) {
+      nextBlock = nextBlock.replace(fileNameRegex, `$1${escapeAttribute(next.fileName)}$3`)
+    }
+
+    replacements += 1
+    return nextBlock
+  })
+
+  return { xml: out, replacements }
+}

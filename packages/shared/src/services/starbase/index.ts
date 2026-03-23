@@ -8,3 +8,6 @@ export type { CreateFileInput, UpdateFileXmlInput, RenameFileInput, FileResult }
 
 export { folderService } from './FolderService.js';
 export type { CreateFolderInput, RenameFolderInput, FolderResult } from './FolderService.js';
+
+export { applyProjectArchiveToProject } from './project-archive-service.js';
+export type { ApplyProjectArchiveImportInput, ApplyProjectArchiveImportResult, ProjectArchiveManifest } from './project-archive-service.js';

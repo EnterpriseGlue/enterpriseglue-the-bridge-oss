@@ -427,6 +427,55 @@ export default function ProjectDetail() {
     }
   }
 
+  async function uploadProjectZip(file: File) {
+    if (!projectId) return
+    const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed'
+    if (!isZip) {
+      showToast({ kind: 'error', title: 'Upload failed', subtitle: 'Only .zip project archives are supported.' })
+      return
+    }
+
+    try {
+      const buffer = await file.arrayBuffer()
+      await apiClient.postRaw<{ foldersCreated: number; filesCreated: number; linksRewritten: number; warnings?: string[] }>(
+        `/starbase-api/projects/${encodeURIComponent(projectId)}/import-zip`,
+        buffer,
+        {
+          headers: {
+            'Content-Type': 'application/zip',
+          },
+        }
+      )
+
+      await queryClient.invalidateQueries({ queryKey: ['contents', projectId] })
+      await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
+      await queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
+      showToast({ kind: 'success', title: 'Project zip uploaded', subtitle: file.name })
+    } catch (e: any) {
+      const parsed = parseApiError(e, 'Upload failed')
+      showToast({ kind: 'error', title: 'Upload failed', subtitle: parsed.message })
+    }
+  }
+
+  async function handleUploadSelection(file: File) {
+    const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed'
+
+    if (isZip) {
+      await uploadProjectZip(file)
+      return
+    }
+
+    if (!projectId) return
+
+    await validateAndUploadFile({
+      file,
+      projectId,
+      folderId,
+      queryClient,
+      showToast,
+    })
+  }
+
 
   const membersQ = useQuery({
     queryKey: ['project-members', projectId],
@@ -971,14 +1020,8 @@ export default function ProjectDetail() {
               uploadInputRef={uploadInputRef}
               onUploadChange={async (e) => {
                 const file = e.target.files && e.target.files[0]
-                if (file && projectId) {
-                  await validateAndUploadFile({
-                    file,
-                    projectId,
-                    folderId,
-                    queryClient,
-                    showToast,
-                  })
+                if (file) {
+                  await handleUploadSelection(file)
                 }
                 if (uploadInputRef.current) uploadInputRef.current.value = ''
               }}

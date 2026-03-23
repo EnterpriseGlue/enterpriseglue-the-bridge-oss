@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-03-16T17:13:49.311Z
+Generated at: 2026-03-23T17:31:19.159Z
 
 Generated from:
 - third_party_licenses.json
@@ -27,7 +27,7 @@ Generated from:
 | BSD-2-Clause | 3 |
 | BSD-3-Clause | 14 |
 | ISC | 65 |
-| MIT | 520 |
+| MIT | 521 |
 | MIT OR SEE LICENSE IN FEEL-FREE.md | 1 |
 | MIT-0 | 2 |
 | OFL-1.1 | 9 |
@@ -227,6 +227,7 @@ Generated from:
 | @xmldom/xmldom | 0.8.11 | MIT | git://github.com/xmldom/xmldom.git | backend |
 | abort-controller | 3.0.0 | MIT | git+https://github.com/mysticatea/abort-controller.git | backend |
 | accepts | 2.0.0 | MIT | jshttp/accepts | backend, frontend, packages/frontend-host, packages/shared |
+| adm-zip | 0.5.16 | MIT | https://github.com/cthackers/adm-zip.git | backend |
 | agent-base | 7.1.4 | MIT | https://github.com/TooTallNate/proxy-agents.git | backend, frontend, packages/frontend-host, packages/shared |
 | ansi-colors | 4.1.3 | MIT | doowb/ansi-colors | frontend |
 | ansi-regex | 5.0.1 | MIT | chalk/ansi-regex | backend, frontend, packages/frontend-host, packages/shared |

@@ -3,6 +3,7 @@ import {
   extractBpmnCallActivityLinks,
   extractBpmnProcessId,
   extractDmnDecisionId,
+  remapStarbaseFileReferencesInXml,
   updateStarbaseFileNameInXml,
 } from '@enterpriseglue/shared/utils/starbase-xml.js';
 
@@ -142,6 +143,30 @@ describe('starbase xml utils', () => {
     expect(result.updated).toBe(true);
     expect(result.xml).toContain('<bpmn:message id="Message_EndEvent_1" name="New Name" />');
     expect(result.xml).toContain('<bpmn:endEvent id="EndEvent_1" name="New Name">');
+  });
+
+  it('remaps starbase file references in xml', () => {
+    const xml = `
+      <definitions>
+        <callActivity id="CallActivity_1" name="Call child" calledElement="child_process">
+          <extensionElements>
+            <properties>
+              <property name="starbase:fileId" value="old-child" />
+              <property name="starbase:fileName" value="Child Diagram" />
+            </properties>
+          </extensionElements>
+        </callActivity>
+      </definitions>
+    `;
+
+    const result = remapStarbaseFileReferencesInXml(xml, new Map([
+      ['old-child', { fileId: 'new-child', fileName: 'Imported Child Diagram' }],
+    ]));
+
+    expect(result.replacements).toBe(1);
+    expect(result.xml).toContain('value="new-child"');
+    expect(result.xml).toContain('value="Imported Child Diagram"');
+    expect(result.xml).not.toContain('value="old-child"');
   });
 
   it('does not update when file id missing', () => {
