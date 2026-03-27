@@ -2335,7 +2335,7 @@ export default function Editor() {
       style={{ height: 'calc(100vh - var(--header-height) - var(--spacing-4))', padding: 0, display: 'flex', flexDirection: 'column' }}
     >
       {/* Breadcrumb Bar */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 100001, background: 'var(--cds-background)', pointerEvents: 'auto' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--cds-background)', pointerEvents: 'auto' }}>
         <BreadcrumbBar
           rightActions={showUsedByAction ? (
             <Button kind="ghost" size="sm" renderIcon={Branch} onClick={openCallersModal} disabled={callersQ.isLoading}>
