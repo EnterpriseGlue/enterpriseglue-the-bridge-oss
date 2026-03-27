@@ -463,13 +463,13 @@ export async function seedInitialData() {
     console.log('  Note: environment_tags:', error.message);
   }
   
-  // Seed default platform settings
+  // Seed default platform settings (insert only — never overwrite existing branding data)
   try {
     const platformSettingsRepo = dataSource.getRepository(PlatformSettings);
-    await platformSettingsRepo.upsert(
-      { id: 'default', updatedAt: now },
-      { conflictPaths: ['id'], skipUpdateIfNoValuesChanged: true }
-    );
+    const existing = await platformSettingsRepo.findOne({ where: { id: 'default' } });
+    if (!existing) {
+      await platformSettingsRepo.insert({ id: 'default', updatedAt: now });
+    }
     console.log('  ✅ platform_settings seeded');
   } catch (error: any) {
     console.log('  Note: platform_settings:', error.message);
