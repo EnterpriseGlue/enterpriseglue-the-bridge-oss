@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.20](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.19...v0.8.20) (2026-03-27)
+
+
+### Bug Fixes
+
+* **frontend-host:** fix publish build errors ([#276](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/276)) ([b0e553c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b0e553c8c558efe3db346d2042a2728931fda044))
+
 ## [0.8.19](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.18...v0.8.19) (2026-03-27)
 
 
