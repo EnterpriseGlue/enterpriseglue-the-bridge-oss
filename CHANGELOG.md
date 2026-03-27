@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.18](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.17...v0.8.18) (2026-03-27)
+
+
+### Bug Fixes
+
+* **starbase:** collaboration lock reliability, canvas read-only guard, breadcrumb navigation ([#272](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/272)) ([df86f0a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/df86f0ab91da4309c4dc171b1263cd6306f3c3eb))
+
 ## [0.8.17](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.16...v0.8.17) (2026-03-23)
 
 
