@@ -2412,6 +2412,12 @@ export default function Editor() {
         </div>
       )}
 
+      {editorMode !== 'view' && collaborationMode === 'blocked' && collaborationSummary && (
+        <div role="status" style={{ padding: 'var(--spacing-3) var(--spacing-4)', fontSize: 'var(--text-13)', background: collaborationSummary.kind === 'warning' ? '#fff1c2' : collaborationSummary.kind === 'error' ? '#fff1f1' : '#edf5ff', borderBottom: '1px solid var(--cds-border-subtle)' }}>
+          {collaborationSummary.title}
+        </div>
+      )}
+
       {projectFilesError && (
         <div style={{ padding: 'var(--spacing-3) var(--spacing-4)' }}>
           <InlineNotification lowContrast kind="error" title="Project files failed to load" subtitle={projectFilesError} />

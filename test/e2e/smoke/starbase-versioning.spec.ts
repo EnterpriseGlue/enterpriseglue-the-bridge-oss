@@ -956,7 +956,7 @@ test.describe('Smoke: Starbase versioning split', () => {
 
     await page.goto(`/starbase/editor/${primaryFileId}`);
     await expect(page.getByRole('heading', { name: /take over editing\?/i })).toBeVisible();
-    await expect(page.getByRole('status').getByText(/Alex Editor is editing this draft/i)).toBeVisible();
+    await expect(page.getByRole('status').getByText(/Alex Editor is actively editing this draft/i)).toBeVisible();
 
     await page.getByRole('button', { name: /^Take over$/i }).click();
 
