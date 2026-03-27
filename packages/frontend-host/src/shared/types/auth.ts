@@ -17,4 +17,4 @@ export type {
   UpdateUserRequest,
   User,
   VerifyResetTokenResponse,
-} from '@enterpriseglue/shared/contracts/auth';
+} from '@enterpriseglue/shared/contracts/auth.js';

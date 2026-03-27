@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/frontend-host",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "OSS frontend host for EnterpriseGlue — routes, enterprise loader, extension registry, and feature components",
   "license": "Apache-2.0",
   "repository": {

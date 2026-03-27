@@ -175,7 +175,7 @@ export default function UserManagement() {
         };
         setLocalLoginDisabled(capabilities.ssoRequired);
         setEmailConfigured(capabilities.emailConfigured);
-        setCreateForm((current) => ({
+        setCreateForm((current: CreateUserRequest) => ({
           ...current,
           sendEmail: getPreferredInvitationDeliveryMethod(capabilities) === 'email',
         }));
@@ -183,7 +183,7 @@ export default function UserManagement() {
       .catch(() => {
         setLocalLoginDisabled(false);
         setEmailConfigured(true);
-        setCreateForm((current) => ({
+        setCreateForm((current: CreateUserRequest) => ({
           ...current,
           sendEmail: true,
         }));
