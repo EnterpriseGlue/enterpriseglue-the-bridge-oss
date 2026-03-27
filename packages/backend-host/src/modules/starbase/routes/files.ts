@@ -16,12 +16,16 @@ import { Brackets, IsNull } from 'typeorm';
 import { AuthorizationService } from '@enterpriseglue/shared/services/authorization.js';
 import { ResourceService } from '@enterpriseglue/shared/services/resources.js';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
+import { LockManager } from '@enterpriseglue/shared/services/git/LockManager.js';
 import { syncFileDelete, syncFileUpdate } from '@enterpriseglue/shared/services/versioning/index.js';
+import { emitLockEvent } from '../../git/lockEvents.js';
 import { sanitizeBpmnXml, sanitizeDmnXml } from '@enterpriseglue/shared/services/engines/deployment-utils.js';
 import { extractBpmnCallActivityLinks, extractBpmnProcessId, extractDmnDecisionId, updateStarbaseFileNameInXml } from '@enterpriseglue/shared/utils/starbase-xml.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { fileOperationsLimiter, apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles.js';
+
+const lockManager = new LockManager();
 
 // Validation schemas
 const uuidLikeSchema = z.string().regex(
@@ -433,6 +437,15 @@ r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimi
   if (!canEditFile) {
     throw Errors.notFound('File');
   }
+  const activeLock = await lockManager.getActiveLock(fileId)
+  if (activeLock && String(activeLock.userId) !== String(userId)) {
+    const lockHolder = await lockManager.getLockHolder(fileId)
+    throw Errors.conflict('File is currently being edited by another user', {
+      currentUpdatedAt: Number(row.updatedAt),
+      conflictType: 'lock-owner-mismatch',
+      lockHolder,
+    })
+  }
   const currentUpdatedAt = Number(row.updatedAt);
   if (typeof prevUpdatedAt === 'number' && currentUpdatedAt !== prevUpdatedAt) {
     throw Errors.conflict('File was modified by another user', { currentUpdatedAt });
@@ -473,6 +486,13 @@ r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimi
     xml,
     row.folderId
   ).catch(() => {}); // fire-and-forget, don't block response
+
+  // Notify SSE subscribers (view-only users) that the file was updated
+  emitLockEvent(fileId, {
+    type: 'file-updated',
+    fileId,
+    newOwnerId: userId,
+  });
   
   res.json({ updatedAt: now });
 }));

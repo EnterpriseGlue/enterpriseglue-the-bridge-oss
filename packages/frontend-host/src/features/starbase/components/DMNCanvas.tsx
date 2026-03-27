@@ -2,7 +2,7 @@ import React from 'react'
 import { CamundaPlatformModeler as DmnModeler } from 'camunda-dmn-js'
 import 'camunda-dmn-js/dist/assets/camunda-platform-modeler.css'
 
-export default function DMNCanvas({ xml, onModelerReady, onPendingDirty, onDirty }: { xml: string; onModelerReady?: (modeler: any) => void; onPendingDirty?: () => void; onDirty?: () => void }) {
+export default function DMNCanvas({ xml, onModelerReady, onPendingDirty, onDirty, readOnly = false }: { xml: string; onModelerReady?: (modeler: any) => void; onPendingDirty?: () => void; onDirty?: () => void; readOnly?: boolean }) {
   const containerRef = React.useRef<HTMLDivElement | null>(null)
   const wrapperRef = React.useRef<HTMLDivElement | null>(null)
   const modelerRef = React.useRef<any | null>(null)
@@ -15,9 +15,27 @@ export default function DMNCanvas({ xml, onModelerReady, onPendingDirty, onDirty
   // Track pending changes
   const hasPendingChangesRef = React.useRef(false)
   
+  // Block all editing commands when readOnly
+  const [dmnReady, setDmnReady] = React.useState(false)
+  React.useEffect(() => {
+    const modeler = modelerRef.current
+    if (!modeler || !dmnReady) return
+    if (!readOnly) return
+    // DMN modeler may expose an active editor; intercept its command stack
+    const blockCommand = (event: any) => { event.preventDefault?.(); return false }
+    try {
+      const activeEditor = (modeler as any).getActiveViewer?.()
+      if (activeEditor) {
+        activeEditor.on('commandStack.preExecute', 10000, blockCommand)
+        return () => { try { activeEditor.off('commandStack.preExecute', blockCommand) } catch {} }
+      }
+    } catch {}
+  }, [readOnly, dmnReady])
+
   // Mark as dirty (has unsaved changes)
   const markDirty = React.useCallback(() => {
     if (ignoreChangesRef.current) return
+    if (readOnly) return
     hasPendingChangesRef.current = true
     onPendingDirtyRef.current?.()
   }, [])
@@ -80,9 +98,14 @@ export default function DMNCanvas({ xml, onModelerReady, onPendingDirty, onDirty
     }
   }, [markDirty, saveIfDirty, attachViewBusListeners])
 
+  // Import XML on initial load only.
+  // After the first import the modeler owns XML state; subsequent saves update
+  // the query cache but must not trigger a reimport that would clear selection/state.
+  const calledReadyRef = React.useRef(false)
   React.useEffect(() => {
     const modeler = modelerRef.current
     if (!modeler || !xml) return
+    if (calledReadyRef.current) return // already imported – skip prop-driven reimports
     ignoreChangesRef.current = true
     modeler.importXML(xml)
       .then(async () => {
@@ -93,6 +116,8 @@ export default function DMNCanvas({ xml, onModelerReady, onPendingDirty, onDirty
           else if (views[0]) await (modeler as any).open(views[0])
           attachViewBusListeners()
         } catch {}
+        calledReadyRef.current = true
+        setDmnReady(true)
         setTimeout(() => { ignoreChangesRef.current = false }, 0)
       })
       .catch(() => {})
@@ -106,6 +131,19 @@ export default function DMNCanvas({ xml, onModelerReady, onPendingDirty, onDirty
         .dmn-literal-expression-container { padding: 40px 40px 0 40px; box-sizing: border-box; }
       `}</style>
       <div ref={containerRef} style={{ height: '100%' }} />
+      {readOnly && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 10,
+            background: 'transparent',
+            cursor: 'default',
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        />
+      )}
     </div>
   )
 }

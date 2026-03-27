@@ -63,6 +63,7 @@ async function login(page: Page) {
 
 type VersioningStubState = {
   fileUpdateBodies: Array<Record<string, unknown>>;
+  createdFileBodies: Array<Record<string, unknown>>;
   localSaveBodies: Array<Record<string, unknown>>;
   gitCommitBodies: Array<Record<string, unknown>>;
   getLocalRestoreVersionIds: () => string[];
@@ -91,6 +92,7 @@ type StubGitCommit = {
 async function stubEditorVersioning(page: Page, mode: 'offline' | 'git'): Promise<VersioningStubState> {
   let updatedAt = 1700000000000;
   const fileUpdateBodies: Array<Record<string, unknown>> = [];
+  const createdFileBodies: Array<Record<string, unknown>> = [];
   const localSaveBodies: Array<Record<string, unknown>> = [];
   const gitCommitBodies: Array<Record<string, unknown>> = [];
   const localRestoreVersionIds: string[] = [];
@@ -218,6 +220,98 @@ async function stubEditorVersioning(page: Page, mode: 'offline' | 'git'): Promis
     versionNumber: 1,
   }, SECONDARY_BPMN_XML);
 
+  const currentUserId = await page.evaluate(() => {
+    try {
+      const stored = window.localStorage.getItem('user');
+      const parsed = stored ? JSON.parse(stored) : null;
+      return typeof parsed?.id === 'string' ? parsed.id : 'user-1';
+    } catch {
+      return 'user-1';
+    }
+  });
+  const ownedLocksByFileId = new Map<string, CollaborationRouteLock>([
+    [
+      primaryFileId,
+      {
+        id: 'lock-primary-owner',
+        fileId: primaryFileId,
+        userId: currentUserId,
+        userName: 'Owner User',
+        acquiredAt: updatedAt,
+        lastInteractionAt: updatedAt,
+        expiresAt: updatedAt + 45_000,
+        heartbeatAt: updatedAt,
+        visibilityState: 'visible',
+        visibilityChangedAt: updatedAt,
+        sessionStatus: 'active',
+      },
+    ],
+  ]);
+
+  await page.route(/.*\/git-api\/locks\/[^/?]+\/heartbeat(?:\?.*)?$/, async (route) => {
+    const parts = new URL(route.request().url()).pathname.split('/');
+    const lockId = parts[parts.length - 2] || '';
+    const currentLock = [...ownedLocksByFileId.values()].find((lock) => lock.id === lockId) || null;
+    if (!currentLock) {
+      await fulfillJson(route, { message: 'Lock not found' }, 404);
+      return;
+    }
+    const nextLock = {
+      ...currentLock,
+      heartbeatAt: Date.now(),
+      lastInteractionAt: Date.now(),
+      expiresAt: Date.now() + 45_000,
+      sessionStatus: 'active' as const,
+    };
+    ownedLocksByFileId.set(currentLock.fileId, nextLock);
+    await fulfillJson(route, { success: true, lock: nextLock });
+  });
+
+  await page.route(/.*\/git-api\/locks\/[^/?]+(?:\?.*)?$/, async (route) => {
+    if (route.request().method() !== 'DELETE') {
+      await fulfillJson(route, { message: 'Not found' }, 404);
+      return;
+    }
+    const parts = new URL(route.request().url()).pathname.split('/');
+    const lockId = parts[parts.length - 1] || '';
+    for (const [fileId, lock] of ownedLocksByFileId.entries()) {
+      if (lock.id === lockId) {
+        ownedLocksByFileId.delete(fileId);
+      }
+    }
+    await fulfillJson(route, { success: true });
+  });
+
+  await page.route(/.*\/git-api\/locks(?:\?.*)?$/, async (route) => {
+    if (route.request().method() === 'GET') {
+      await fulfillJson(route, { locks: [...ownedLocksByFileId.values()] });
+      return;
+    }
+
+    if (route.request().method() === 'POST') {
+      const body = (route.request().postDataJSON() as Record<string, unknown>) || {};
+      const requestedFileId = String(body.fileId || '');
+      const nextLock: CollaborationRouteLock = {
+        id: `lock-${requestedFileId || 'file'}-owner`,
+        fileId: requestedFileId,
+        userId: currentUserId,
+        userName: 'Owner User',
+        acquiredAt: Date.now(),
+        lastInteractionAt: Date.now(),
+        expiresAt: Date.now() + 45_000,
+        heartbeatAt: Date.now(),
+        visibilityState: 'visible',
+        visibilityChangedAt: Date.now(),
+        sessionStatus: 'active',
+      };
+      ownedLocksByFileId.set(requestedFileId, nextLock);
+      await fulfillJson(route, nextLock, 201);
+      return;
+    }
+
+    await fulfillJson(route, { message: 'Method not allowed' }, 405);
+  });
+
   await page.route('**/api/auth/platform-settings', async (route) => {
     await fulfillJson(route, {
       syncPushEnabled: true,
@@ -262,6 +356,29 @@ async function stubEditorVersioning(page: Page, mode: 'offline' | 'git'): Promis
   });
 
   await page.route(`**/starbase-api/projects/${projectId}/files`, async (route) => {
+    if (route.request().method() === 'POST') {
+      const body = (route.request().postDataJSON() as Record<string, unknown>) || {};
+      createdFileBodies.push(body);
+      const nextId = `created-file-${createdFileBodies.length}`;
+      const createdFile = {
+        id: nextId,
+        name: String(body.name || `Recovered copy ${createdFileBodies.length}`),
+        type: 'bpmn' as const,
+        bpmnProcessId: `created-process-${createdFileBodies.length}`,
+        xml: typeof body.xml === 'string' ? body.xml : BPMN_XML,
+      };
+      files.push(createdFile);
+      fileById.set(createdFile.id, createdFile);
+      await fulfillJson(route, {
+        id: createdFile.id,
+        name: createdFile.name,
+        type: createdFile.type,
+        bpmnProcessId: createdFile.bpmnProcessId,
+        createdAt: updatedAt + createdFileBodies.length,
+        updatedAt: updatedAt + createdFileBodies.length,
+      }, 201);
+      return;
+    }
     await fulfillJson(route, files.map((file) => ({
       id: file.id,
       name: file.name,
@@ -513,6 +630,7 @@ async function stubEditorVersioning(page: Page, mode: 'offline' | 'git'): Promis
 
   return {
     fileUpdateBodies,
+    createdFileBodies,
     localSaveBodies,
     gitCommitBodies,
     getLocalRestoreVersionIds: () => [...localRestoreVersionIds],
@@ -522,6 +640,137 @@ async function stubEditorVersioning(page: Page, mode: 'offline' | 'git'): Promis
     getOfflineUncommittedCalls: () => offlineUncommittedCalls,
     getLocalVersionsReadCalls: () => localVersionsReadCalls,
     getGitCommitsReadCalls: () => gitCommitsReadCalls,
+  };
+}
+
+type CollaborationLockStatus = 'active' | 'idle' | 'hidden';
+
+type CollaborationRouteLock = {
+  id: string;
+  fileId: string;
+  userId: string;
+  userName: string;
+  acquiredAt: number;
+  lastInteractionAt: number;
+  expiresAt: number;
+  heartbeatAt: number;
+  visibilityState: 'visible' | 'hidden';
+  visibilityChangedAt: number;
+  sessionStatus: CollaborationLockStatus;
+};
+
+function toLockHolder(lock: CollaborationRouteLock) {
+  return {
+    userId: lock.userId,
+    name: lock.userName,
+    acquiredAt: lock.acquiredAt,
+    heartbeatAt: lock.heartbeatAt,
+    lastInteractionAt: lock.lastInteractionAt,
+    visibilityState: lock.visibilityState,
+    visibilityChangedAt: lock.visibilityChangedAt,
+    sessionStatus: lock.sessionStatus,
+  };
+}
+
+async function stubEditorCollaboration(page: Page, sessionStatus: CollaborationLockStatus) {
+  const versioning = await stubEditorVersioning(page, 'git');
+
+  const acquireBodies: Array<Record<string, unknown>> = [];
+  const heartbeatBodies: Array<Record<string, unknown>> = [];
+  const now = 1700000005000;
+  const currentUserId = await page.evaluate(() => {
+    try {
+      const stored = window.localStorage.getItem('user');
+      const parsed = stored ? JSON.parse(stored) : null;
+      return typeof parsed?.id === 'string' ? parsed.id : 'user-1';
+    } catch {
+      return 'user-1';
+    }
+  });
+  const competingUserId = currentUserId === 'user-2' ? 'user-2-other' : 'user-2';
+  const ownerLock: CollaborationRouteLock = {
+    id: 'lock-owner',
+    fileId: primaryFileId,
+    userId: currentUserId,
+    userName: 'Owner User',
+    acquiredAt: now,
+    lastInteractionAt: now,
+    expiresAt: now + 45_000,
+    heartbeatAt: now,
+    visibilityState: 'visible' as const,
+    visibilityChangedAt: now,
+    sessionStatus: 'active' as const,
+  };
+  const otherUserLockBase: CollaborationRouteLock = {
+    id: 'lock-other',
+    fileId: primaryFileId,
+    userId: competingUserId,
+    userName: 'Alex Editor',
+    acquiredAt: now - 20_000,
+    lastInteractionAt: sessionStatus === 'idle' ? now - 180_000 : now - 5_000,
+    expiresAt: now + 45_000,
+    heartbeatAt: now - 2_000,
+    visibilityState: sessionStatus === 'hidden' ? 'hidden' : 'visible',
+    visibilityChangedAt: sessionStatus === 'hidden' ? now - 40_000 : now - 2_000,
+    sessionStatus,
+  };
+  let currentLock: CollaborationRouteLock | null = otherUserLockBase;
+
+  await page.route(/.*\/git-api\/locks\/[^/?]+\/heartbeat(?:\?.*)?$/, async (route) => {
+    heartbeatBodies.push((route.request().postDataJSON() as Record<string, unknown>) || {});
+    await fulfillJson(route, { success: true, lock: ownerLock });
+  });
+
+  await page.route(/.*\/git-api\/locks\/[^/?]+(?:\?.*)?$/, async (route) => {
+    if (route.request().method() === 'DELETE') {
+      currentLock = null;
+      await fulfillJson(route, { success: true });
+      return;
+    }
+    await fulfillJson(route, { message: 'Not found' }, 404);
+  });
+
+  await page.route(/.*\/git-api\/locks(?:\?.*)?$/, async (route) => {
+    if (route.request().method() === 'GET') {
+      await fulfillJson(route, { locks: currentLock ? [currentLock] : [] });
+      return;
+    }
+
+    if (route.request().method() === 'POST') {
+      const body = (route.request().postDataJSON() as Record<string, unknown>) || {};
+      acquireBodies.push(body);
+      if (body.force === true) {
+        currentLock = ownerLock;
+        await fulfillJson(route, ownerLock, 201);
+        return;
+      }
+      await fulfillJson(route, {
+        error: 'File is locked by another user',
+        lockHolder: currentLock ? toLockHolder(currentLock) : null,
+      }, 409);
+      return;
+    }
+
+    await fulfillJson(route, { message: 'Method not allowed' }, 405);
+  });
+
+  return {
+    ...versioning,
+    acquireBodies,
+    heartbeatBodies,
+    currentUserId,
+    getCurrentLock: () => currentLock,
+    supersedeByOtherUser: () => {
+      currentLock = {
+        ...otherUserLockBase,
+        acquiredAt: Date.now(),
+        lastInteractionAt: Date.now(),
+        heartbeatAt: Date.now(),
+        expiresAt: Date.now() + 45_000,
+        visibilityChangedAt: Date.now(),
+        sessionStatus: 'active',
+      };
+    },
   };
 }
 
@@ -699,5 +948,38 @@ test.describe('Smoke: Starbase versioning split', () => {
 
     await expect(page.getByText(/Unsaved version/i)).toBeVisible();
     await expect(page.getByText(/Draft v2/i)).toBeVisible();
+  });
+
+  test('active collaboration lock shows takeover modal and force takeover works @smoke', async ({ page }) => {
+    await login(page);
+    const collaboration = await stubEditorCollaboration(page, 'active');
+
+    await page.goto(`/starbase/editor/${primaryFileId}`);
+    await expect(page.getByRole('heading', { name: /take over editing\?/i })).toBeVisible();
+    await expect(page.getByRole('status').getByText(/Alex Editor is editing this draft/i)).toBeVisible();
+
+    await page.getByRole('button', { name: /^Take over$/i }).click();
+
+    await expect.poll(() => collaboration.acquireBodies.filter((body) => body.force === true).length).toBe(1);
+    expect(collaboration.acquireBodies[collaboration.acquireBodies.length - 1]).toMatchObject({ fileId: primaryFileId, force: true });
+    await expect(page.getByRole('heading', { name: /take over editing\?/i })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Versions' })).toBeEnabled();
+    expect(collaboration.getCurrentLock()?.userId).toBe(collaboration.currentUserId);
+  });
+
+  test('idle collaboration lock stays read-only until explicit takeover @smoke', async ({ page }) => {
+    await login(page);
+    const collaboration = await stubEditorCollaboration(page, 'idle');
+
+    await page.goto(`/starbase/editor/${primaryFileId}`);
+    await expect(page.getByRole('status').getByText(/Alex Editor appears idle/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /take over editing\?/i })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Versions' })).toBeDisabled();
+
+    await page.getByRole('button', { name: /take over editing/i }).first().click();
+
+    await expect.poll(() => collaboration.acquireBodies.filter((body) => body.force === true).length).toBe(1);
+    expect(collaboration.acquireBodies[collaboration.acquireBodies.length - 1]).toMatchObject({ fileId: primaryFileId, force: true });
+    await expect(page.getByRole('button', { name: 'Versions' })).toBeEnabled();
   });
 });

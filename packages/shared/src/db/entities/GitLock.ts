@@ -14,11 +14,20 @@ export class GitLock extends AppBaseEntity {
   @Column({ name: 'acquired_at', type: 'bigint' })
   acquiredAt!: number;
 
+  @Column({ name: 'last_interaction_at', type: 'bigint' })
+  lastInteractionAt!: number;
+
   @Column({ name: 'expires_at', type: 'bigint' })
   expiresAt!: number;
 
   @Column({ name: 'heartbeat_at', type: 'bigint' })
   heartbeatAt!: number;
+
+  @Column({ name: 'visibility_state', type: 'text', default: 'visible' })
+  visibilityState!: string;
+
+  @Column({ name: 'visibility_changed_at', type: 'bigint' })
+  visibilityChangedAt!: number;
 
   @Column({ type: 'boolean', default: false })
   released!: boolean;

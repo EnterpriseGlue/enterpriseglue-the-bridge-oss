@@ -28,16 +28,19 @@ const DMNEvaluatePanel = React.lazy(() => import('../components/DMNEvaluatePanel
 // Properties panel is provided by camunda-bpmn-js and mounted by Canvas
 import DeployButton from '../../git/components/DeployButton'
 import GitVersionsPanel from '../../git/components/GitVersionsPanel'
+import { gitApi } from '../../git/api/gitApi'
 import { useGitRepository } from '../../git/hooks/useGitRepository'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { ProjectAccessError, isProjectAccessError } from '../components/ProjectAccessError'
 import { useSelectedEngine } from '../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../stores/engineSelectorStore'
 import { useToast } from '../../../shared/notifications/ToastProvider'
+import { useAuth } from '../../../shared/hooks/useAuth'
 import { toSafeInternalPath } from '../../../utils/safeNavigation'
-import { replaceAndReloadToInternalPath } from '../../../utils/redirect'
+import { redirectTo, replaceAndReloadToInternalPath } from '../../../utils/redirect'
 import { canDeployProject, type ProjectEngineAccessData } from '../utils/deployEligibility'
 import { LoadingState } from '../../shared/components/LoadingState'
+import type { LockHolder, LockResponse } from '../../git/types/git'
 
 type FolderBreadcrumb = {
   id: string
@@ -121,12 +124,17 @@ type RestoreFromCommitResponse = {
   updatedAt: number
 }
 
+type CollaborationLock = LockResponse
+type CollaborationHolder = LockHolder
+
 export default function Editor() {
   const { fileId } = useParams()
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as { state?: any; search: string }
   const { notify } = useToast()
+  const { user } = useAuth()
   const queryClient = useQueryClient()
+  const currentUserId = String(user?.id || '')
   const phase2Params = React.useMemo(() => new URLSearchParams(location.search || ''), [location.search])
   const phase2Source = String(phase2Params.get('source') || '')
   const phase2IsMissionControl = phase2Source === 'mission-control'
@@ -176,6 +184,13 @@ export default function Editor() {
     () => toSafeInternalPath(toTenantPath(cleanEditorPath), toTenantPath('/starbase')),
     [cleanEditorPath, toTenantPath]
   )
+  const navigateFromBreadcrumb = React.useCallback((path: string, options?: { state?: any }) => {
+    if (collaborationReadOnlyRef.current) {
+      redirectTo(toTenantPath(path))
+      return
+    }
+    tenantNavigate(path, options)
+  }, [tenantNavigate, toTenantPath])
   const fileQ = useQuery({
     queryKey: ['file', fileId],
     queryFn: () => apiClient.get<FileDetail>(`/starbase-api/files/${fileId}`),
@@ -242,6 +257,15 @@ export default function Editor() {
   const modelerRef = React.useRef<any | null>(null)
   const [modelerReady, setModelerReady] = React.useState(false)
   const [saving, setSaving] = React.useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const saveFeedbackTokenRef = React.useRef(0)
+  const saveFeedbackTimerRef = React.useRef<number | null>(null)
+  const [collaborationLock, setCollaborationLock] = React.useState<CollaborationLock | null>(null)
+  const [collaborationHolder, setCollaborationHolder] = React.useState<CollaborationHolder | null>(null)
+  const [collaborationMode, setCollaborationMode] = React.useState<'acquiring' | 'owner' | 'blocked' | 'superseded'>('acquiring')
+  const [collaborationError, setCollaborationError] = React.useState<string | null>(null)
+  const [takeoverModalOpen, setTakeoverModalOpen] = React.useState(false)
+  const [takeoverPending, setTakeoverPending] = React.useState(false)
+  const [recoveryPending, setRecoveryPending] = React.useState<'copy' | 'reload' | null>(null)
   const updatedAtRef = React.useRef<number | null>(null)
   const [lastEditedAt, setLastEditedAt] = React.useState<number | null>(null)
   const [lastEditedAtHydrated, setLastEditedAtHydrated] = React.useState(false)
@@ -263,6 +287,18 @@ export default function Editor() {
   const [callersModalOpen, setCallersModalOpen] = React.useState(false)
   const lastFocusRef = React.useRef<HTMLElement | null>(null)
   const focusElementAttemptedRef = React.useRef<string | null>(null)
+  const collaborationLockIdRef = React.useRef<string | null>(null)
+  const lastInteractionAtRef = React.useRef(Date.now())
+  const lastHeartbeatInteractionAtRef = React.useRef(0)
+  const acquireInFlightRef = React.useRef(false)
+  const blockingTakeoverPromptFileRef = React.useRef<string | null>(null)
+
+  const collaborationCanWrite = collaborationMode === 'owner'
+  const collaborationReadOnly = editorMode === 'view' || !collaborationCanWrite
+  const collaborationReadOnlyRef = React.useRef(collaborationReadOnly)
+  React.useEffect(() => {
+    collaborationReadOnlyRef.current = collaborationReadOnly
+  }, [collaborationReadOnly])
 
   const captureFocus = React.useCallback(() => {
     if (typeof document === 'undefined') return
@@ -303,6 +339,38 @@ export default function Editor() {
     }
   }, [])
 
+  const clearSaveFeedbackTimer = React.useCallback(() => {
+    if (typeof window === 'undefined') return
+    if (saveFeedbackTimerRef.current != null) {
+      window.clearTimeout(saveFeedbackTimerRef.current)
+      saveFeedbackTimerRef.current = null
+    }
+  }, [])
+
+  const beginTrackedSaveFeedback = React.useCallback(() => {
+    saveFeedbackTokenRef.current += 1
+    const token = saveFeedbackTokenRef.current
+    clearSaveFeedbackTimer()
+    setSaving('saving')
+    return token
+  }, [clearSaveFeedbackTimer])
+
+  const finishTrackedSaveFeedback = React.useCallback((token: number, state: 'idle' | 'saved' | 'error', resetAfterMs: number) => {
+    if (token !== saveFeedbackTokenRef.current) return
+    clearSaveFeedbackTimer()
+    setSaving(state)
+    if (state === 'idle' || typeof window === 'undefined') return
+    saveFeedbackTimerRef.current = window.setTimeout(() => {
+      if (token !== saveFeedbackTokenRef.current) return
+      setSaving('idle')
+      saveFeedbackTimerRef.current = null
+    }, resetAfterMs)
+  }, [clearSaveFeedbackTimer])
+
+  const wasSaveRequestAttempted = React.useCallback((error: unknown): boolean => {
+    return Boolean(error && typeof error === 'object' && 'saveRequestAttempted' in error && (error as { saveRequestAttempted?: boolean }).saveRequestAttempted)
+  }, [])
+
   const captureCurrentXmlSnapshot = React.useCallback(async (label: string = 'Navigation snapshot') => {
     const modeler = modelerRef.current
     if (!modeler || !fileId) return
@@ -316,7 +384,9 @@ export default function Editor() {
 
   const snapshotBeforeEditorNavigation = React.useCallback(async () => {
     clearPendingAutosave()
-    await captureCurrentXmlSnapshot()
+    if (!collaborationReadOnlyRef.current) {
+      try { await captureCurrentXmlSnapshot() } catch {}
+    }
   }, [clearPendingAutosave, captureCurrentXmlSnapshot])
 
   const refreshLinkedElementState = React.useCallback(() => {
@@ -339,6 +409,8 @@ export default function Editor() {
   // Reset editor state when navigating to a different file
   React.useEffect(() => {
     clearPendingAutosave()
+    clearSaveFeedbackTimer()
+    saveFeedbackTokenRef.current += 1
     setSelection(null)
     selectionIdRef.current = null
     setTabIndex(0)
@@ -357,6 +429,13 @@ export default function Editor() {
     setLinkModalError(null)
     setCreatingLinkedProcess(false)
     setCallersModalOpen(false)
+    setCollaborationLock(null)
+    setCollaborationHolder(null)
+    setCollaborationMode('acquiring')
+    setCollaborationError(null)
+    setTakeoverModalOpen(false)
+    setTakeoverPending(false)
+    setRecoveryPending(null)
     updatedAtRef.current = null
     appliedInitialHistoryRef.current = false
     ignoreDirtyUntilRef.current = 0
@@ -365,13 +444,15 @@ export default function Editor() {
     setShowSaveFirstPrompt(false)
     viewModeImportedRef.current = false
     focusElementAttemptedRef.current = null
-  }, [fileId, clearPendingAutosave])
+    blockingTakeoverPromptFileRef.current = null
+  }, [fileId, clearPendingAutosave, clearSaveFeedbackTimer])
 
   React.useEffect(() => {
     return () => {
       clearPendingAutosave()
+      clearSaveFeedbackTimer()
     }
-  }, [clearPendingAutosave])
+  }, [clearPendingAutosave, clearSaveFeedbackTimer])
 
   const projectFiles = React.useMemo<ProjectFileMeta[]>(() => {
     if (!Array.isArray(projectFilesQ.data)) return []
@@ -475,6 +556,499 @@ export default function Editor() {
   const createActionLabel = elementLinkInfo?.linkType === 'decision' ? 'Create decision' : 'Create process'
   const currentProjectId = fileQ.data?.projectId ?? null
   const currentFolderId = fileQ.data?.folderId ?? null
+
+  const collaborationLocksQ = useQuery({
+    queryKey: ['git-locks', currentProjectId],
+    queryFn: () => gitApi.getLocks(String(currentProjectId)),
+    enabled: Boolean(currentProjectId && fileQ.data?.id),
+    staleTime: 0,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: false,
+  })
+
+  const remoteFileLock = React.useMemo<CollaborationLock | null>(() => {
+    const locks = collaborationLocksQ.data?.locks || []
+    const targetFileId = String(fileQ.data?.id || '')
+    return locks.find((lock: CollaborationLock) => String(lock.fileId) === targetFileId) || null
+  }, [collaborationLocksQ.data?.locks, fileQ.data?.id])
+
+  const buildHolderFromLock = React.useCallback((lock: CollaborationLock | null): CollaborationHolder | null => {
+    if (!lock || String(lock.userId || '') === currentUserId) return null
+    return {
+      userId: lock.userId,
+      name: String(lock.userName || `User ${String(lock.userId).slice(0, 8)}`),
+      acquiredAt: lock.acquiredAt,
+      heartbeatAt: lock.heartbeatAt,
+      lastInteractionAt: lock.lastInteractionAt,
+      visibilityState: lock.visibilityState,
+      visibilityChangedAt: lock.visibilityChangedAt,
+      sessionStatus: lock.sessionStatus,
+    }
+  }, [currentUserId])
+
+  const collaborationSummary = React.useMemo(() => {
+    if (!collaborationHolder) return null
+    if (collaborationMode === 'superseded') {
+      return {
+        kind: 'error' as const,
+        title: <><strong>{collaborationHolder.name}</strong> took over this draft</>,
+        subtitle: 'Your unsaved work is still visible locally, but this editor is now read-only until you explicitly take over again.',
+      }
+    }
+    if (collaborationHolder.sessionStatus === 'active') {
+      return {
+        kind: 'warning' as const,
+        title: <><strong>{collaborationHolder.name}</strong> is actively editing this draft</>,
+        subtitle: 'You can review the current draft in read-only mode or take over editing explicitly.',
+      }
+    }
+    if (collaborationHolder.sessionStatus === 'idle') {
+      return {
+        kind: 'info' as const,
+        title: <><strong>{collaborationHolder.name}</strong> appears idle in this draft</>,
+        subtitle: 'You can take over editing if you need to continue working on this file.',
+      }
+    }
+    return {
+      kind: 'info' as const,
+      title: <><strong>{collaborationHolder.name}</strong> left this tab hidden</>,
+      subtitle: 'You can take over editing if they are no longer actively working here.',
+    }
+  }, [collaborationHolder, collaborationMode])
+
+  const collaborationTakeoverPrompt = React.useMemo(() => {
+    if (!collaborationHolder) return null
+    if (collaborationHolder.sessionStatus === 'active') {
+      return {
+        title: <><strong>{collaborationHolder.name}</strong> is actively editing this draft.</>,
+        subtitle: 'Taking over switches their editor to read-only. Your current tab will become writable immediately, and your unsaved local work stays in place.',
+      }
+    }
+    if (collaborationHolder.sessionStatus === 'idle') {
+      return {
+        title: <><strong>{collaborationHolder.name}</strong> appears idle in this draft.</>,
+        subtitle: 'You can take over editing if you need to continue working on this file. Your current tab will become writable immediately, and your unsaved local work stays in place.',
+      }
+    }
+    return {
+      title: <><strong>{collaborationHolder.name}</strong> left this draft hidden.</>,
+      subtitle: 'You can take over editing if they are no longer actively working here. Your current tab will become writable immediately, and your unsaved local work stays in place.',
+    }
+  }, [collaborationHolder])
+
+  const collaborationHeaderStatus = React.useMemo(() => {
+    if (editorMode === 'view') {
+      return {
+        label: 'View only',
+        background: '#e8f1ff',
+        color: '#002d9c',
+      }
+    }
+
+    if (collaborationMode === 'acquiring') {
+      return {
+        label: 'Connecting',
+        background: '#edf5ff',
+        color: '#0043ce',
+      }
+    }
+
+    if (collaborationMode === 'owner') {
+      if (collaborationLock?.sessionStatus === 'idle') {
+        return {
+          label: 'Idle',
+          background: '#fff1c2',
+          color: '#8a3800',
+        }
+      }
+
+      return {
+        label: 'Editing',
+        background: '#defbe6',
+        color: '#0e6027',
+      }
+    }
+
+    return {
+      label: 'View only',
+      background: '#f4f4f4',
+      color: '#525252',
+    }
+  }, [editorMode, collaborationMode, collaborationLock?.sessionStatus])
+
+  const shouldRenderCollaborationOverlay = React.useMemo(() => {
+    return editorMode !== 'view' && collaborationReadOnly && collaborationMode === 'superseded'
+  }, [editorMode, collaborationReadOnly, collaborationMode])
+
+  const openBlockingTakeoverPrompt = React.useCallback(() => {
+    const targetFileId = String(fileQ.data?.id || fileId || '')
+    if (!targetFileId) return
+    if (blockingTakeoverPromptFileRef.current === targetFileId) return
+    blockingTakeoverPromptFileRef.current = targetFileId
+    setTakeoverModalOpen(true)
+  }, [fileQ.data?.id, fileId])
+
+  const acquireCollaborationLock = React.useCallback(async (force = false) => {
+    if (!fileQ.data?.id || !currentUserId || acquireInFlightRef.current) return null
+    acquireInFlightRef.current = true
+    setCollaborationError(null)
+    try {
+      const lock = await gitApi.acquireLock({
+        fileId: fileQ.data.id,
+        force,
+        visibilityState: typeof document !== 'undefined' && document.hidden ? 'hidden' : 'visible',
+        hasInteraction: true,
+      })
+      collaborationLockIdRef.current = lock.id
+      setCollaborationLock(lock)
+      setCollaborationHolder(null)
+      setCollaborationMode('owner')
+      setTakeoverModalOpen(false)
+      if (force) {
+        notify({
+          kind: 'success',
+          title: 'Editing takeover complete',
+          subtitle: 'You are now the active editor for this draft.',
+        })
+        // Refresh file data so the editor shows the latest XML saved by the previous owner
+        const freshFile = await queryClient.fetchQuery({
+          queryKey: ['file', fileQ.data!.id],
+          queryFn: () => apiClient.get<FileDetail>(`/starbase-api/files/${fileQ.data!.id}`),
+          staleTime: 0,
+        })
+        if (freshFile?.xml && modelerRef.current) {
+          try {
+            isRestoringRef.current = true
+            ignoreDirtyUntilRef.current = Date.now() + 2000
+            await modelerRef.current.importXML(freshFile.xml)
+            if (typeof freshFile.updatedAt === 'number') {
+              updatedAtRef.current = freshFile.updatedAt
+            }
+            try { fitViewport(modelerRef.current) } catch {}
+          } finally {
+            isRestoringRef.current = false
+          }
+        }
+      }
+      collaborationLocksQ.refetch()
+      return lock
+    } catch (error) {
+      const parsed = parseApiError(error, 'Unable to acquire editing access')
+      const holder = parsed.payload?.lockHolder as CollaborationHolder | undefined
+      if (holder) {
+        setCollaborationHolder(holder)
+        setCollaborationMode(force ? 'blocked' : 'blocked')
+        if (holder.sessionStatus === 'active') {
+          openBlockingTakeoverPrompt()
+        } else {
+          setTakeoverModalOpen(false)
+        }
+        return null
+      }
+      setCollaborationError(parsed.message)
+      setCollaborationMode('blocked')
+      return null
+    } finally {
+      acquireInFlightRef.current = false
+    }
+  }, [fileQ.data?.id, currentUserId, notify, collaborationLocksQ, openBlockingTakeoverPrompt, queryClient])
+
+  const releaseCollaborationLock = React.useCallback(async () => {
+    const lockId = collaborationLockIdRef.current
+    if (!lockId) return
+    collaborationLockIdRef.current = null
+    try {
+      await gitApi.releaseLock(lockId)
+    } catch {}
+  }, [])
+
+  React.useEffect(() => {
+    if (!fileQ.data?.id || !currentUserId) return
+    if (collaborationMode === 'superseded' && remoteFileLock && String(remoteFileLock.userId) === currentUserId) {
+      return
+    }
+    if (remoteFileLock && String(remoteFileLock.userId) === currentUserId) {
+      collaborationLockIdRef.current = remoteFileLock.id
+      setCollaborationLock(remoteFileLock)
+      setCollaborationHolder(null)
+      setCollaborationMode('owner')
+      setTakeoverModalOpen(false)
+      return
+    }
+    if (remoteFileLock) {
+      const holder = buildHolderFromLock(remoteFileLock)
+      collaborationLockIdRef.current = null
+      setCollaborationHolder(holder)
+      setCollaborationLock(null)
+      if (remoteFileLock.sessionStatus === 'active') {
+        openBlockingTakeoverPrompt()
+      }
+      setCollaborationMode((current: 'acquiring' | 'owner' | 'blocked' | 'superseded') => (current === 'owner' ? 'superseded' : 'blocked'))
+      return
+    }
+    if (editorMode !== 'view' && collaborationMode !== 'owner') {
+      acquireCollaborationLock(false)
+    }
+  }, [fileQ.data?.id, currentUserId, remoteFileLock, buildHolderFromLock, acquireCollaborationLock, collaborationMode, editorMode, openBlockingTakeoverPrompt])
+
+  React.useEffect(() => {
+    lastInteractionAtRef.current = Date.now()
+    const markInteraction = () => {
+      lastInteractionAtRef.current = Date.now()
+    }
+    if (typeof window === 'undefined') return
+    window.addEventListener('pointerdown', markInteraction)
+    window.addEventListener('keydown', markInteraction)
+    window.addEventListener('focus', markInteraction)
+    return () => {
+      window.removeEventListener('pointerdown', markInteraction)
+      window.removeEventListener('keydown', markInteraction)
+      window.removeEventListener('focus', markInteraction)
+    }
+  }, [fileId])
+
+  React.useEffect(() => {
+    if (!collaborationLockIdRef.current || collaborationMode !== 'owner') return
+    let cancelled = false
+    const sendHeartbeat = async () => {
+      const hasInteraction = lastInteractionAtRef.current > lastHeartbeatInteractionAtRef.current
+      try {
+        const response = await gitApi.sendHeartbeat(collaborationLockIdRef.current!, {
+          visibilityState: typeof document !== 'undefined' && document.hidden ? 'hidden' : 'visible',
+          hasInteraction,
+        })
+        if (cancelled) return
+        if (hasInteraction) {
+          lastHeartbeatInteractionAtRef.current = lastInteractionAtRef.current
+        }
+        if (response.lock) {
+          setCollaborationLock(response.lock)
+        }
+      } catch {}
+    }
+    // Heartbeat must be shorter than LOCK_TIMEOUT_MS (default 45s) to keep the lock alive.
+    const interval = window.setInterval(sendHeartbeat, typeof document !== 'undefined' && document.hidden ? 40_000 : 30_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [collaborationMode, collaborationLock?.id])
+
+  // SSE: Subscribe to lock events for instant takeover notification + live canvas sync
+  React.useEffect(() => {
+    const targetFileId = fileQ.data?.id
+    if (!targetFileId || collaborationMode === 'acquiring') return
+    if (editorMode === 'view') return
+
+    // Build the SSE URL with tenant prefix (EventSource doesn't go through fetch interceptor)
+    const tenantMatch = window.location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
+    const tenantSlug = tenantMatch?.[1] ? decodeURIComponent(tenantMatch[1]) : 'default'
+    const sseUrl = `/t/${encodeURIComponent(tenantSlug)}/git-api/locks/${encodeURIComponent(targetFileId)}/events`
+
+    let es: EventSource | null = null
+    try {
+      es = new EventSource(sseUrl, { withCredentials: true })
+
+      // Owner: listen for lock-revoked (someone took over)
+      es.addEventListener('lock-revoked', (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data)
+          // Ignore if this tab is the one performing the takeover
+          if (acquireInFlightRef.current) {
+            return
+          }
+          const takerName = data.newOwnerName || 'Another user'
+          setCollaborationHolder({
+            userId: data.newOwnerId,
+            name: takerName,
+            acquiredAt: Date.now(),
+            heartbeatAt: Date.now(),
+            lastInteractionAt: Date.now(),
+            visibilityState: 'visible',
+            visibilityChangedAt: Date.now(),
+            sessionStatus: 'active',
+          })
+          collaborationLockIdRef.current = null
+          setCollaborationLock(null)
+          setCollaborationMode('superseded')
+          setTakeoverModalOpen(true)
+          void queryClient.invalidateQueries({ queryKey: ['git-locks', currentProjectId] })
+        } catch {}
+      })
+
+      // Blocked/view-only: listen for file-updated (owner saved changes)
+      es.addEventListener('file-updated', () => {
+        if (collaborationReadOnlyRef.current && modelerRef.current) {
+          (async () => {
+            try {
+              const freshFile = await queryClient.fetchQuery({
+                queryKey: ['file', targetFileId],
+                queryFn: () => apiClient.get<any>(`/starbase-api/files/${targetFileId}`),
+                staleTime: 0,
+              })
+              if (freshFile?.xml && modelerRef.current) {
+                isRestoringRef.current = true
+                ignoreDirtyUntilRef.current = Date.now() + 2000
+                await modelerRef.current.importXML(freshFile.xml)
+                if (typeof freshFile.updatedAt === 'number') {
+                  updatedAtRef.current = freshFile.updatedAt
+                }
+                isRestoringRef.current = false
+              }
+            } catch {
+              isRestoringRef.current = false
+            }
+          })()
+        }
+      })
+
+      es.onerror = () => {
+        // SSE connection lost — no action needed, polling is the fallback
+      }
+    } catch {
+      // EventSource not supported or URL construction failed — fall back to polling
+    }
+
+    return () => {
+      if (es) {
+        es.close()
+        es = null
+      }
+    }
+  }, [fileQ.data?.id, collaborationMode, editorMode, queryClient])
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handlePageHide = () => {
+      releaseCollaborationLock()
+    }
+    window.addEventListener('pagehide', handlePageHide)
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide)
+    }
+  }, [releaseCollaborationLock])
+
+  React.useEffect(() => {
+    return () => {
+      releaseCollaborationLock()
+    }
+  }, [releaseCollaborationLock])
+
+  const ensureCollaborationWriteAllowed = React.useCallback(() => {
+    if (collaborationCanWrite) return
+    if (collaborationMode === 'superseded') {
+      throw new Error('Another user has taken over this draft. Your local changes are preserved, but editing is read-only until you take over again.')
+    }
+    throw new Error('This draft is currently read-only because another user owns the editing session.')
+  }, [collaborationCanWrite, collaborationMode])
+
+  const handleTakeover = React.useCallback(async () => {
+    setTakeoverPending(true)
+    try {
+      await acquireCollaborationLock(true)
+    } finally {
+      setTakeoverPending(false)
+    }
+  }, [acquireCollaborationLock])
+
+  const readCurrentEditorXml = React.useCallback(async () => {
+    if (modelerRef.current) {
+      try {
+        const saved = await modelerRef.current.saveXML({ format: true })
+        if (saved?.xml) return saved.xml
+      } catch {
+        try {
+          const saved = await modelerRef.current.saveXML()
+          if (saved?.xml) return saved.xml
+        } catch {}
+      }
+    }
+
+    return String(fileQ.data?.xml || '')
+  }, [fileQ.data?.xml])
+
+  const handleReloadSharedVersion = React.useCallback(() => {
+    setRecoveryPending('reload')
+    clearPendingAutosave()
+    setLocalDirty(false)
+    setLastEditedAt(null)
+    setTakeoverModalOpen(false)
+    try {
+      if (fileId) {
+        localStorage.removeItem(`xml-history-${fileId}`)
+      }
+      if (fileId) {
+        sessionStorage.removeItem(`starbase:lastEditedAt:${fileId}`)
+      }
+    } catch {}
+    if (fileId) {
+      queryClient.invalidateQueries({ queryKey: ['file', fileId] })
+    }
+    replaceAndReloadToInternalPath(safeEditorTenantPath, toTenantPath('/starbase'))
+  }, [clearPendingAutosave, fileId, queryClient, safeEditorTenantPath, toTenantPath])
+
+  const handleSaveLocalWorkAsCopy = React.useCallback(async () => {
+    if (!currentProjectId || !fileQ.data) return
+
+    setRecoveryPending('copy')
+    try {
+      const xml = await readCurrentEditorXml()
+      const baseName = toDisplayFileName(fileQ.data.name) || 'Recovered draft'
+      const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')
+      const candidates = [
+        `${baseName} (Recovered copy)`,
+        `${baseName} (Recovered copy ${stamp})`,
+      ]
+
+      let created: { id?: string; name?: string } | null = null
+      let lastError: unknown = null
+      for (const candidate of candidates) {
+        try {
+          created = await apiClient.post<{ id?: string; name?: string }>(
+            `/starbase-api/projects/${currentProjectId}/files`,
+            {
+              name: candidate,
+              type: fileQ.data.type,
+              folderId: currentFolderId,
+              xml,
+            }
+          )
+          break
+        } catch (error) {
+          lastError = error
+          const parsed = parseApiError(error, 'Failed to save local work as copy')
+          if (parsed.status === 409) continue
+          throw error
+        }
+      }
+
+      if (!created?.id) {
+        throw lastError || new Error('Failed to save local work as copy')
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['starbase', 'project-files', currentProjectId] })
+      await queryClient.invalidateQueries({ queryKey: ['contents', currentProjectId] })
+
+      notify({
+        kind: 'success',
+        title: 'Local work saved as copy',
+        subtitle: `${String(created.name || 'Recovered copy')} was created from your local draft.`,
+      })
+
+      tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(String(created.id)))}`, {
+        state: buildCurrentEditorNavigationState(),
+      })
+    } catch (error) {
+      const parsed = parseApiError(error, 'Failed to save local work as copy')
+      notify({
+        kind: 'error',
+        title: 'Failed to save local work as copy',
+        subtitle: parsed.message,
+      })
+    } finally {
+      setRecoveryPending(null)
+    }
+  }, [currentProjectId, fileQ.data, readCurrentEditorXml, currentFolderId, queryClient, notify, tenantNavigate, buildCurrentEditorNavigationState])
 
   const buildFileCallersQueryKey = React.useCallback(
     (targetFile: Pick<ProjectFileMeta, 'id' | 'type' | 'bpmnProcessId' | 'dmnDecisionId'> | null | undefined) => {
@@ -741,6 +1315,7 @@ export default function Editor() {
     modeler: modelerRef.current,
     elementId: elementLinkInfo?.elementId ?? null,
     visible: Boolean(elementLinkInfo),
+    readOnly: collaborationReadOnly,
     status: linkStatus as any,
     isMessageEndEventLink,
     linkedLabel,
@@ -1348,9 +1923,13 @@ export default function Editor() {
   }, [modelerReady, location.state, fileId])
 
   const fileIdForSave = fileQ.data?.id
+  const saveXmlWithRetryRef = React.useRef<(xml: string) => Promise<any>>(async () => { throw new Error('saveXmlWithRetry not ready') })
   const saveXmlWithRetry = React.useCallback(async (xml: string) => {
     if (!fileIdForSave) throw new Error('File ID unavailable')
+    ensureCollaborationWriteAllowed()
+    let saveRequestAttempted = false
     try {
+      saveRequestAttempted = true
       const data = await apiClient.put<{ updatedAt?: number }>(`/starbase-api/files/${fileIdForSave}`, {
         xml,
         prevUpdatedAt: updatedAtRef.current ?? undefined,
@@ -1360,10 +1939,11 @@ export default function Editor() {
       }
 
       // Keep the editor query cache in sync so navigating away/back doesn't show stale XML.
+      // Include the saved xml so the cache reflects the current modeler state.
       queryClient.setQueryData(['file', fileIdForSave], (old: any) => {
         if (!old) return old
         const nextUpdatedAt = typeof data?.updatedAt === 'number' ? data.updatedAt : old.updatedAt
-        return { ...old, updatedAt: nextUpdatedAt }
+        return { ...old, xml, updatedAt: nextUpdatedAt }
       })
       queryClient.setQueryData(['file-breadcrumb', fileIdForSave], (old: any) => {
         if (!old) return old
@@ -1375,6 +1955,14 @@ export default function Editor() {
     } catch (error) {
       const parsed = parseApiError(error, 'Failed to save')
       if (parsed.status === 409) {
+        const holder = (parsed.payload?.details?.lockHolder || parsed.payload?.lockHolder || null) as CollaborationHolder | null
+        if (holder) {
+          collaborationLockIdRef.current = null
+          setCollaborationHolder(holder)
+          setCollaborationLock(null)
+          setCollaborationMode('superseded')
+          setTakeoverModalOpen(holder.sessionStatus === 'active')
+        }
         const conflictUpdatedAt =
           typeof parsed.payload?.details?.currentUpdatedAt === 'number'
             ? parsed.payload.details.currentUpdatedAt
@@ -1387,39 +1975,27 @@ export default function Editor() {
             updatedAtRef.current = Number(latest.updatedAt) || updatedAtRef.current
           }
         }
-        const data = await apiClient.put<{ updatedAt?: number }>(`/starbase-api/files/${fileIdForSave}`, {
-          xml,
-          prevUpdatedAt: updatedAtRef.current ?? undefined,
-        })
-        if (typeof data?.updatedAt === 'number') {
-          updatedAtRef.current = Number(data.updatedAt) || updatedAtRef.current
-        }
-
-        queryClient.setQueryData(['file', fileIdForSave], (old: any) => {
-          if (!old) return old
-          const nextUpdatedAt = typeof data?.updatedAt === 'number' ? data.updatedAt : old.updatedAt
-          return { ...old, updatedAt: nextUpdatedAt }
-        })
-        queryClient.setQueryData(['file-breadcrumb', fileIdForSave], (old: any) => {
-          if (!old) return old
-          const nextUpdatedAt = typeof data?.updatedAt === 'number' ? data.updatedAt : old.updatedAt
-          return { ...old, updatedAt: nextUpdatedAt }
-        })
-
-        return data
+        const conflictError = new Error(holder
+          ? `${holder.name} now owns this draft. Your current tab is read-only until you take over again.`
+          : parsed.message)
+        ;(conflictError as Error & { saveRequestAttempted?: boolean }).saveRequestAttempted = saveRequestAttempted
+        throw conflictError
+      }
+      if (error instanceof Error) {
+        ;(error as Error & { saveRequestAttempted?: boolean }).saveRequestAttempted = saveRequestAttempted
       }
       throw error
     }
-  }, [fileIdForSave, queryClient])
+  }, [fileIdForSave, queryClient, ensureCollaborationWriteAllowed])
+  saveXmlWithRetryRef.current = saveXmlWithRetry
 
   async function saveLinkUpdate(historyLabel: string, errorMessage: string): Promise<boolean> {
+    const saveToken = beginTrackedSaveFeedback()
     try {
-      setSaving('saving')
       const { xml } = await modelerRef.current.saveXML({ format: true })
       await saveXmlWithRetry(xml)
       xmlHistory.addSnapshot(xml, historyLabel)
-      setSaving('saved')
-      setTimeout(() => setSaving('idle'), 1500)
+      finishTrackedSaveFeedback(saveToken, 'saved', 1500)
       queryClient.invalidateQueries({ queryKey: ['file', fileId] })
       if (currentProjectId) {
         queryClient.invalidateQueries({ queryKey: ['starbase', 'project-files', currentProjectId] })
@@ -1428,14 +2004,14 @@ export default function Editor() {
       }
       return true
     } catch {
-      setSaving('error')
-      setTimeout(() => setSaving('idle'), 3000)
+      finishTrackedSaveFeedback(saveToken, 'error', 3000)
       setLinkModalError(errorMessage)
       return false
     }
   }
 
   async function handleCreateLinkedFile(): Promise<void> {
+    ensureCollaborationWriteAllowed()
     if (!elementLinkInfo || !selectedElement || !modelerRef.current) return
     if (!currentProjectId) return
     const linkedFileName = createLinkedProcessName
@@ -1536,13 +2112,13 @@ export default function Editor() {
   }
 
   const prepareVersionSave = React.useCallback(async () => {
+    const saveToken = beginTrackedSaveFeedback()
     try {
       ignoreDirtyUntilRef.current = Date.now() + 2000
       clearPendingAutosave()
 
       if (!modelerRef.current) return
 
-      setSaving('saving')
       let xml: string
       try {
         const saved = await modelerRef.current.saveXML({ format: true })
@@ -1554,15 +2130,13 @@ export default function Editor() {
       if (!xml) throw new Error('Failed to read XML from modeler')
 
       await saveXmlWithRetry(xml)
-      setSaving('saved')
-      setTimeout(() => setSaving('idle'), 1500)
+      finishTrackedSaveFeedback(saveToken, 'saved', 1500)
       queryClient.invalidateQueries({ queryKey: ['uncommitted-files', fileQ.data?.projectId] })
     } catch (e) {
-      setSaving('error')
-      setTimeout(() => setSaving('idle'), 3000)
+      finishTrackedSaveFeedback(saveToken, 'error', 3000)
       throw e
     }
-  }, [fileQ.data?.projectId, queryClient, saveXmlWithRetry, clearPendingAutosave])
+  }, [fileQ.data?.projectId, queryClient, saveXmlWithRetry, clearPendingAutosave, beginTrackedSaveFeedback, finishTrackedSaveFeedback])
 
   const handleVersionSaveSuccess = React.useCallback(() => {
     ignoreDirtyUntilRef.current = Date.now() + 500
@@ -1572,6 +2146,7 @@ export default function Editor() {
 
   const restoreFromDeploymentMutation = useMutation({
     mutationFn: async () => {
+      ensureCollaborationWriteAllowed()
       if (!fileId) throw new Error('Missing fileId')
 
       const payload: { commitId?: string; fileVersionNumber?: number } = {}
@@ -1760,49 +2335,51 @@ export default function Editor() {
       style={{ height: 'calc(100vh - var(--header-height) - var(--spacing-4))', padding: 0, display: 'flex', flexDirection: 'column' }}
     >
       {/* Breadcrumb Bar */}
-      <BreadcrumbBar
-        rightActions={showUsedByAction ? (
-          <Button kind="ghost" size="sm" renderIcon={Branch} onClick={openCallersModal} disabled={callersQ.isLoading}>
-            {usedByButtonLabel}
-          </Button>
-        ) : undefined}
-      >
-        <BreadcrumbItem>
-          <a href={toTenantPath('/starbase')} onClick={(e) => { e.preventDefault(); tenantNavigate('/starbase'); }}>Starbase</a>
-        </BreadcrumbItem>
-        <BreadcrumbItem>
-          <a href={toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}`)} onClick={(e) => { e.preventDefault(); tenantNavigate(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}`); }}>
-            {f.projectName}
-          </a>
-        </BreadcrumbItem>
-        {f.folderBreadcrumb.map((folder) => (
-          <BreadcrumbItem key={folder.id}>
-            <a 
-              href={toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}?folder=${encodeURIComponent(sanitizePathParam(folder.id))}`)} 
-              onClick={(e) => { e.preventDefault(); tenantNavigate(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}?folder=${encodeURIComponent(sanitizePathParam(folder.id))}`); }}
-            >
-              {folder.name}
+      <div style={{ position: 'sticky', top: 0, zIndex: 100001, background: 'var(--cds-background)', pointerEvents: 'auto' }}>
+        <BreadcrumbBar
+          rightActions={showUsedByAction ? (
+            <Button kind="ghost" size="sm" renderIcon={Branch} onClick={openCallersModal} disabled={callersQ.isLoading}>
+              {usedByButtonLabel}
+            </Button>
+          ) : undefined}
+        >
+          <BreadcrumbItem>
+            <a href={toTenantPath('/starbase')} onClick={(e) => { e.preventDefault(); navigateFromBreadcrumb('/starbase'); }}>Starbase</a>
+          </BreadcrumbItem>
+          <BreadcrumbItem>
+            <a href={toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}`)} onClick={(e) => { e.preventDefault(); navigateFromBreadcrumb(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}`); }}>
+              {f.projectName}
             </a>
           </BreadcrumbItem>
-        ))}
-        {editorBreadcrumbTrail.map((entry, index) => (
-          <BreadcrumbItem key={`${entry.fileId}-${index}`}>
-            <a
-              href={toTenantPath(`/starbase/editor/${encodeURIComponent(sanitizePathParam(entry.fileId))}`)}
-              onClick={async (e) => {
-                e.preventDefault()
-                await snapshotBeforeEditorNavigation()
-                tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(entry.fileId))}`, {
-                  state: buildEditorBreadcrumbBackState(editorBreadcrumbTrail, index),
-                })
-              }}
-            >
-              {toDisplayFileName(entry.fileName) || 'Previous file'}
-            </a>
-          </BreadcrumbItem>
-        ))}
-        <BreadcrumbItem isCurrentPage>{toDisplayFileName(f.name)}</BreadcrumbItem>
-      </BreadcrumbBar>
+          {f.folderBreadcrumb.map((folder) => (
+            <BreadcrumbItem key={folder.id}>
+              <a 
+                href={toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}?folder=${encodeURIComponent(sanitizePathParam(folder.id))}`)} 
+                onClick={(e) => { e.preventDefault(); navigateFromBreadcrumb(`/starbase/project/${encodeURIComponent(sanitizePathParam(f.projectId))}?folder=${encodeURIComponent(sanitizePathParam(folder.id))}`); }}
+              >
+                {folder.name}
+              </a>
+            </BreadcrumbItem>
+          ))}
+          {editorBreadcrumbTrail.map((entry, index) => (
+            <BreadcrumbItem key={`${entry.fileId}-${index}`}>
+              <a
+                href={toTenantPath(`/starbase/editor/${encodeURIComponent(sanitizePathParam(entry.fileId))}`)}
+                onClick={(e) => {
+                  e.preventDefault()
+                  snapshotBeforeEditorNavigation().catch(() => {})
+                  navigateFromBreadcrumb(`/starbase/editor/${encodeURIComponent(sanitizePathParam(entry.fileId))}`, {
+                    state: buildEditorBreadcrumbBackState(editorBreadcrumbTrail, index),
+                  })
+                }}
+              >
+                {toDisplayFileName(entry.fileName) || 'Previous file'}
+              </a>
+            </BreadcrumbItem>
+          ))}
+          <BreadcrumbItem isCurrentPage>{toDisplayFileName(f.name)}</BreadcrumbItem>
+        </BreadcrumbBar>
+      </div>
 
       {/* View mode banner */}
       {editorMode === 'view' && (
@@ -1829,6 +2406,12 @@ export default function Editor() {
         </div>
       )}
 
+      {collaborationError && (
+        <div style={{ padding: 'var(--spacing-3) var(--spacing-4) 0' }}>
+          <InlineNotification lowContrast kind="error" title="Collaboration session issue" subtitle={collaborationError} />
+        </div>
+      )}
+
       {projectFilesError && (
         <div style={{ padding: 'var(--spacing-3) var(--spacing-4)' }}>
           <InlineNotification lowContrast kind="error" title="Project files failed to load" subtitle={projectFilesError} />
@@ -1850,7 +2433,7 @@ export default function Editor() {
       {f.type === 'bpmn' ? (
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-2) var(--spacing-4)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-4)' }}>
-            <Tabs selectedIndex={tabIndex} onChange={({ selectedIndex }) => setTabIndex(selectedIndex)}>
+            <Tabs selectedIndex={tabIndex} onChange={({ selectedIndex }: { selectedIndex: number }) => setTabIndex(selectedIndex)}>
               <TabList aria-label="Editor modes">
                 <Tab>Design</Tab>
                 <Tab>Implement</Tab>
@@ -1877,6 +2460,27 @@ export default function Editor() {
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', marginRight: 'var(--spacing-2)' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  fontSize: 'var(--text-12)',
+                  fontWeight: 600,
+                  background: collaborationHeaderStatus.background,
+                  color: collaborationHeaderStatus.color,
+                }}
+              >
+                {collaborationHeaderStatus.label}
+              </span>
+              {editorMode !== 'view' && collaborationReadOnly && collaborationHolder && (
+                <Button kind="ghost" size="sm" onClick={() => setTakeoverModalOpen(true)} style={{ marginLeft: 4, fontSize: 'var(--text-12)' }}>
+                  Take over
+                </Button>
+              )}
+            </div>
             <div style={{ fontSize: 'var(--text-12)', color: saving === 'error' ? 'var(--color-error)' : 'var(--color-text-tertiary)' }}>
               {saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : saving === 'error' ? 'Save failed' : ''}
             </div>
@@ -1890,13 +2494,13 @@ export default function Editor() {
             )}
             <button
               onClick={handleUndo}
-              disabled={!xmlHistory.canUndo}
+              disabled={!xmlHistory.canUndo || collaborationReadOnly}
               title="Undo (Ctrl+Z)"
               style={{
                 background: 'none',
                 border: 'none',
-                cursor: xmlHistory.canUndo ? 'pointer' : 'default',
-                color: xmlHistory.canUndo ? '#0f62fe' : '#c6c6c6',
+                cursor: xmlHistory.canUndo && !collaborationReadOnly ? 'pointer' : 'default',
+                color: xmlHistory.canUndo && !collaborationReadOnly ? '#0f62fe' : '#c6c6c6',
                 display: 'flex',
                 alignItems: 'center',
                 padding: '4px'
@@ -1906,13 +2510,13 @@ export default function Editor() {
             </button>
             <button
               onClick={handleRedo}
-              disabled={!xmlHistory.canRedo}
+              disabled={!xmlHistory.canRedo || collaborationReadOnly}
               title="Redo (Ctrl+Y)"
               style={{
                 background: 'none',
                 border: 'none',
-                cursor: xmlHistory.canRedo ? 'pointer' : 'default',
-                color: xmlHistory.canRedo ? '#0f62fe' : '#c6c6c6',
+                cursor: xmlHistory.canRedo && !collaborationReadOnly ? 'pointer' : 'default',
+                color: xmlHistory.canRedo && !collaborationReadOnly ? '#0f62fe' : '#c6c6c6',
                 display: 'flex',
                 alignItems: 'center',
                 padding: '4px'
@@ -1920,7 +2524,7 @@ export default function Editor() {
             >
               <Redo size={20} />
             </button>
-            <Button kind="ghost" size="sm" onClick={() => setVersionsPanelOpen(!versionsPanelOpen)}>Versions</Button>
+            <Button kind="ghost" size="sm" onClick={() => setVersionsPanelOpen(!versionsPanelOpen)} disabled={collaborationReadOnly}>Versions</Button>
           </div>
         </div>
       ) : (
@@ -1929,6 +2533,27 @@ export default function Editor() {
             {dmnEvaluateOpen ? 'Hide' : 'Show'} Evaluate Panel
           </Button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', marginRight: 'var(--spacing-2)' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  fontSize: 'var(--text-12)',
+                  fontWeight: 600,
+                  background: collaborationHeaderStatus.background,
+                  color: collaborationHeaderStatus.color,
+                }}
+              >
+                {collaborationHeaderStatus.label}
+              </span>
+              {editorMode !== 'view' && collaborationReadOnly && collaborationHolder && (
+                <Button kind="ghost" size="sm" onClick={() => setTakeoverModalOpen(true)} style={{ marginLeft: 4, fontSize: 'var(--text-12)' }}>
+                  Take over
+                </Button>
+              )}
+            </div>
             <div style={{ fontSize: 'var(--text-12)', color: saving === 'error' ? 'var(--color-error)' : 'var(--color-text-tertiary)' }}>
               {saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : saving === 'error' ? 'Save failed' : ''}
             </div>
@@ -1942,13 +2567,13 @@ export default function Editor() {
             )}
             <button
               onClick={handleUndo}
-              disabled={!xmlHistory.canUndo}
+              disabled={!xmlHistory.canUndo || collaborationReadOnly}
               title="Undo (Ctrl+Z)"
               style={{
                 background: 'none',
                 border: 'none',
-                cursor: xmlHistory.canUndo ? 'pointer' : 'default',
-                color: xmlHistory.canUndo ? '#0f62fe' : '#c6c6c6',
+                cursor: xmlHistory.canUndo && !collaborationReadOnly ? 'pointer' : 'default',
+                color: xmlHistory.canUndo && !collaborationReadOnly ? '#0f62fe' : '#c6c6c6',
                 display: 'flex',
                 alignItems: 'center',
                 padding: '4px'
@@ -1958,13 +2583,13 @@ export default function Editor() {
             </button>
             <button
               onClick={handleRedo}
-              disabled={!xmlHistory.canRedo}
+              disabled={!xmlHistory.canRedo || collaborationReadOnly}
               title="Redo (Ctrl+Y)"
               style={{
                 background: 'none',
                 border: 'none',
-                cursor: xmlHistory.canRedo ? 'pointer' : 'default',
-                color: xmlHistory.canRedo ? '#0f62fe' : '#c6c6c6',
+                cursor: xmlHistory.canRedo && !collaborationReadOnly ? 'pointer' : 'default',
+                color: xmlHistory.canRedo && !collaborationReadOnly ? '#0f62fe' : '#c6c6c6',
                 display: 'flex',
                 alignItems: 'center',
                 padding: '4px'
@@ -1972,7 +2597,7 @@ export default function Editor() {
             >
               <Redo size={20} />
             </button>
-            <Button kind="ghost" size="sm" onClick={() => setVersionsPanelOpen(!versionsPanelOpen)}>Versions</Button>
+            <Button kind="ghost" size="sm" onClick={() => setVersionsPanelOpen(!versionsPanelOpen)} disabled={collaborationReadOnly}>Versions</Button>
           </div>
         </div>
       )}
@@ -1983,6 +2608,7 @@ export default function Editor() {
           <Canvas
             key={f.id}
             xml={f.xml}
+            readOnly={collaborationReadOnly}
             onSelectionChange={handleSelectionChange}
             propertiesParent={showPropertiesParent as any}
             onModelerReady={(m) => { 
@@ -1996,10 +2622,10 @@ export default function Editor() {
               if (isRestoringRef.current) return
               // Skip spurious dirty events right after saving/committing
               if (Date.now() < ignoreDirtyUntilRef.current) return
-              // Suppress all saves in view mode (use ref to avoid stale closure)
-              if (editorModeRef.current === 'view') return
+              if (collaborationReadOnlyRef.current) return
 
               const activeModeler = modelerRef.current
+              lastInteractionAtRef.current = Date.now()
 
               setLastEditedAt(Date.now())
               setLocalDirty(true)
@@ -2018,24 +2644,28 @@ export default function Editor() {
               // Database save with longer debounce (800ms) - batches rapid changes
               clearPendingAutosave()
               autosaveTimerRef.current = window.setTimeout(async () => {
+                let saveToken: number | null = null
                 try {
                   if (!activeModeler) return
                   if (Date.now() < ignoreDirtyUntilRef.current) return
-                  // Double-check: don't save if we switched to view mode while the timer was pending
-                  if (editorModeRef.current === 'view') return
-                  setSaving('saving')
+                  if (collaborationReadOnlyRef.current) return
                   const { xml } = await activeModeler.saveXML({ format: true })
+                  if (!xml) return
+                  saveToken = beginTrackedSaveFeedback()
                   
-                  await saveXmlWithRetry(xml)
-                  setSaving('saved')
-                  setTimeout(() => setSaving('idle'), 1500)
+                  await saveXmlWithRetryRef.current(xml)
+                  finishTrackedSaveFeedback(saveToken, 'saved', 1500)
                   // Invalidate uncommitted-files query so project page shows updated status
                   queryClient.invalidateQueries({ queryKey: ['uncommitted-files', f.projectId] })
                   // Ensure updated process/decision IDs are available without refresh.
                   queryClient.invalidateQueries({ queryKey: ['starbase', 'project-files', f.projectId] })
                 } catch (e) {
-                  setSaving('error')
-                  setTimeout(() => setSaving('idle'), 3000)
+                  if (saveToken == null) return
+                  if (wasSaveRequestAttempted(e)) {
+                    finishTrackedSaveFeedback(saveToken, 'error', 3000)
+                  } else {
+                    finishTrackedSaveFeedback(saveToken, 'idle', 0)
+                  }
                 } finally {
                   autosaveTimerRef.current = null
                 }
@@ -2048,6 +2678,7 @@ export default function Editor() {
               <DMNCanvas
                 key={f.id}
                 xml={f.xml}
+                readOnly={collaborationReadOnly}
                 onModelerReady={(m) => { 
                   modelerRef.current = m
                   setModelerReady(true)
@@ -2055,8 +2686,9 @@ export default function Editor() {
                 onPendingDirty={() => {
                   if (isRestoringRef.current) return
                   if (Date.now() < ignoreDirtyUntilRef.current) return
-                  if (editorModeRef.current === 'view') return
+                  if (collaborationReadOnlyRef.current) return
 
+                  lastInteractionAtRef.current = Date.now()
                   setLastEditedAt(Date.now())
                   setLocalDirty(true)
                 }}
@@ -2065,10 +2697,10 @@ export default function Editor() {
                   if (isRestoringRef.current) return
                   // Skip spurious dirty events right after saving/committing
                   if (Date.now() < ignoreDirtyUntilRef.current) return
-                  // Suppress all saves in view mode (use ref to avoid stale closure)
-                  if (editorModeRef.current === 'view') return
+                  if (collaborationReadOnlyRef.current) return
 
                   const activeModeler = modelerRef.current
+                  lastInteractionAtRef.current = Date.now()
 
                   setLastEditedAt(Date.now())
                   setLocalDirty(true)
@@ -2085,23 +2717,27 @@ export default function Editor() {
                   // Database save with debounce
                   clearPendingAutosave()
                   autosaveTimerRef.current = window.setTimeout(async () => {
+                    let saveToken: number | null = null
                     try {
                       if (!activeModeler) return
                       if (Date.now() < ignoreDirtyUntilRef.current) return
-                      // Double-check: don't save if we switched to view mode while the timer was pending
-                      if (editorModeRef.current === 'view') return
-                      setSaving('saving')
+                      if (collaborationReadOnlyRef.current) return
                       const { xml } = await activeModeler.saveXML({ format: true })
-                      await saveXmlWithRetry(xml)
-                      setSaving('saved')
-                      setTimeout(() => setSaving('idle'), 1500)
+                      if (!xml) return
+                      saveToken = beginTrackedSaveFeedback()
+                      await saveXmlWithRetryRef.current(xml)
+                      finishTrackedSaveFeedback(saveToken, 'saved', 1500)
                       // Invalidate uncommitted-files query so project page shows updated status
                       queryClient.invalidateQueries({ queryKey: ['uncommitted-files', f.projectId] })
                       // Ensure updated process/decision IDs are available without refresh.
                       queryClient.invalidateQueries({ queryKey: ['starbase', 'project-files', f.projectId] })
                     } catch (e) {
-                      setSaving('error')
-                      setTimeout(() => setSaving('idle'), 3000)
+                      if (saveToken == null) return
+                      if (wasSaveRequestAttempted(e)) {
+                        finishTrackedSaveFeedback(saveToken, 'error', 3000)
+                      } else {
+                        finishTrackedSaveFeedback(saveToken, 'idle', 0)
+                      }
                     } finally {
                       autosaveTimerRef.current = null
                     }
@@ -2133,6 +2769,48 @@ export default function Editor() {
           </div>
         )}
 
+        {shouldRenderCollaborationOverlay && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(255,255,255,0.48)',
+              backdropFilter: 'blur(1px)',
+              zIndex: 'var(--z-overlay)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto',
+            }}
+          >
+            <div style={{ background: 'white', border: '1px solid var(--color-border-primary)', boxShadow: 'var(--shadow-lg)', padding: 'var(--spacing-5)', maxWidth: 520, borderRadius: 8, display: 'grid', gap: 'var(--spacing-3)' }}>
+              <strong style={{ fontSize: 'var(--text-14)' }}>{collaborationSummary?.title || 'Read-only collaboration mode'}</strong>
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-13)' }}>
+                {collaborationSummary?.subtitle || 'This draft is read-only until you explicitly take over editing again.'}
+              </span>
+              <div style={{ display: 'flex', gap: 'var(--spacing-2)', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                {collaborationMode === 'superseded' ? (
+                  <>
+                    <Button kind="secondary" size="sm" onClick={() => { void handleSaveLocalWorkAsCopy() }} disabled={recoveryPending !== null}>
+                      {recoveryPending === 'copy' ? 'Saving copy…' : 'Save local work as copy'}
+                    </Button>
+                    <Button kind="secondary" size="sm" onClick={handleReloadSharedVersion} disabled={recoveryPending !== null}>
+                      {recoveryPending === 'reload' ? 'Reloading…' : 'Reload shared version'}
+                    </Button>
+                  </>
+                ) : (
+                  <Button kind="secondary" size="sm" onClick={() => setTakeoverModalOpen(false)}>
+                    Keep read-only
+                  </Button>
+                )}
+                <Button kind="primary" size="sm" onClick={() => { void handleTakeover() }} disabled={takeoverPending || recoveryPending !== null}>
+                  {takeoverPending ? 'Taking over…' : 'Take over editing'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Versions Panel (right sidebar) */}
         {versionsPanelOpen && (
           <div style={{ position: 'absolute', top: 0, right: overlayOpen ? 360 : 0, height: '100%', width: 360, background: 'var(--cds-layer-01, #ffffff)', borderLeft: '1px solid var(--color-border-primary)', boxShadow: 'var(--shadow-md)', display: 'flex', flexDirection: 'column', zIndex: 'var(--z-overlay)' }}>
@@ -2148,9 +2826,11 @@ export default function Editor() {
               kind="tertiary"
               size="sm" 
               onClick={() => {
+                if (collaborationReadOnly) return
                 captureFocus()
                 commitModal.openModal()
               }}
+              disabled={collaborationReadOnly}
               style={{ background: '#24a148', borderColor: '#24a148', color: 'white', borderRadius: '4px', padding: '4px 12px', minHeight: 'auto', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
               <Branch size={16} /> {hasUnsavedVersion ? 'Save version' : 'New version'}
@@ -2569,6 +3249,28 @@ export default function Editor() {
           }
         }}
       />
+
+      <ComposedModal open={takeoverModalOpen && !!collaborationHolder && editorMode !== 'view'} size="sm" onClose={() => setTakeoverModalOpen(false)}>
+        <ModalHeader label={undefined} title="Take over editing?" closeModal={() => setTakeoverModalOpen(false)} />
+        <ModalBody>
+          <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
+            <p style={{ margin: 0 }}>
+              {collaborationTakeoverPrompt?.title || 'Another user is currently editing this draft.'}
+            </p>
+            <p style={{ margin: 0, color: 'var(--color-text-secondary)' }}>
+              {collaborationTakeoverPrompt?.subtitle || 'Taking over switches their editor to read-only. Your current tab will become writable immediately, and your unsaved local work stays in place.'}
+            </p>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button kind="secondary" onClick={() => setTakeoverModalOpen(false)}>
+            Keep read-only
+          </Button>
+          <Button kind="primary" onClick={() => { void handleTakeover() }} disabled={takeoverPending}>
+            {takeoverPending ? 'Taking over…' : 'Take over'}
+          </Button>
+        </ModalFooter>
+      </ComposedModal>
     </div>
   )
 }

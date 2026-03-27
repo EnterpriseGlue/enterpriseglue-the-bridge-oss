@@ -10,6 +10,10 @@
   justify-content: space-between;
   gap: 12px;
   flex-shrink: 0;
+  position: relative;
+  isolation: isolate;
+  z-index: 100000;
+  pointer-events: auto;
 }
 
 .breadcrumbMain {
@@ -33,6 +37,12 @@
 
 .breadcrumbMain :global(.cds--link) {
   white-space: nowrap;
+}
+
+.breadcrumbMain :global(a) {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
 }
 
 .rightActions {

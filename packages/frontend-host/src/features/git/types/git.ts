@@ -53,8 +53,12 @@ export interface FileLock {
   fileId: string;
   userId: string;
   acquiredAt: number;
+  lastInteractionAt: number;
   expiresAt: number;
   heartbeatAt: number;
+  visibilityState: 'visible' | 'hidden';
+  visibilityChangedAt: number;
+  sessionStatus: 'active' | 'idle' | 'hidden';
 }
 
 export interface Commit {
@@ -108,6 +112,14 @@ export interface RollbackRequest {
 
 export interface AcquireLockRequest {
   fileId: string;
+  force?: boolean;
+  visibilityState?: 'visible' | 'hidden';
+  hasInteraction?: boolean;
+}
+
+export interface LockHeartbeatRequest {
+  visibilityState?: 'visible' | 'hidden';
+  hasInteraction?: boolean;
 }
 
 // Response types
@@ -123,12 +135,22 @@ export interface LockResponse {
   fileId: string;
   userId: string;
   acquiredAt: number;
+  lastInteractionAt: number;
   expiresAt: number;
   heartbeatAt: number;
+  visibilityState: 'visible' | 'hidden';
+  visibilityChangedAt: number;
+  sessionStatus: 'active' | 'idle' | 'hidden';
+  userName?: string;
 }
 
 export interface LockHolder {
   userId: string;
   name: string;
   acquiredAt: number;
+  heartbeatAt: number;
+  lastInteractionAt: number;
+  visibilityState: 'visible' | 'hidden';
+  visibilityChangedAt: number;
+  sessionStatus: 'active' | 'idle' | 'hidden';
 }

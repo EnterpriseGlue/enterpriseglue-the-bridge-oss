@@ -13,12 +13,31 @@ import '@bpmn-io/properties-panel/dist/assets/properties-panel.css'
 import 'camunda-bpmn-js/dist/assets/camunda-platform-modeler.css'
 
 type SelectionInfo = { id: string; type: string; name?: string }
-export default function Canvas({ xml, onSelectionChange, propertiesParent, onModelerReady, onDirty, implementMode = false }: { xml: string; onSelectionChange?: (sel: SelectionInfo | null) => void; propertiesParent?: HTMLDivElement | null; onModelerReady?: (modeler: any) => void; onDirty?: (label?: string) => void; implementMode?: boolean }) {
+export default function Canvas({ xml, onSelectionChange, propertiesParent, onModelerReady, onDirty, implementMode = false, readOnly = false }: { xml: string; onSelectionChange?: (sel: SelectionInfo | null) => void; propertiesParent?: HTMLDivElement | null; onModelerReady?: (modeler: any) => void; onDirty?: (label?: string) => void; implementMode?: boolean; readOnly?: boolean }) {
   const containerRef = React.useRef<HTMLDivElement | null>(null)
   const modelerRef = React.useRef<any | null>(null)
   const ignoreChangesRef = React.useRef(false)
   const calledReadyRef = React.useRef(false)
   const [modelerReady, setModelerReady] = React.useState(false)
+
+  // Block all editing commands when readOnly
+  React.useEffect(() => {
+    const modeler = modelerRef.current
+    if (!modeler || !modelerReady) return
+    if (!readOnly) {
+      // Re-enable: show palette + context pad
+      try { modeler.get('palette')._update() } catch {}
+      return
+    }
+    // Intercept command execution to prevent edits
+    const blockCommand = (event: any) => { event.preventDefault?.(); return false }
+    modeler.on('commandStack.preExecute', 10000, blockCommand)
+    // Hide palette and context pad
+    try { modeler.get('contextPad').close() } catch {}
+    return () => {
+      try { modeler.off('commandStack.preExecute', blockCommand) } catch {}
+    }
+  }, [readOnly, modelerReady])
 
   // Create modeler once
   React.useEffect(() => {
@@ -316,10 +335,14 @@ export default function Canvas({ xml, onSelectionChange, propertiesParent, onMod
     } catch {}
   }, [implementMode])
 
-  // Import XML on change
+  // Import XML on initial load only.
+  // After the first import the modeler owns XML state; subsequent updates
+  // (autosave, link saves, history, takeover) go through modelerRef.current.importXML()
+  // directly, so we must NOT reimport here when the query-cache refreshes the prop.
   React.useEffect(() => {
     const modeler = modelerRef.current
     if (!modeler || !xml) return
+    if (calledReadyRef.current) return // already imported – skip prop-driven reimports
     ignoreChangesRef.current = true
     modeler
       .importXML(xml)
@@ -374,8 +397,21 @@ export default function Canvas({ xml, onSelectionChange, propertiesParent, onMod
   }, [propertiesParent])
 
   return (
-    <div style={{ position: 'relative', height: '100%', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'relative', height: '100%', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column' }} className={readOnly ? 'canvas-read-only' : ''}>
       <div ref={containerRef} style={{ flex: 1, minHeight: 0 }} />
+      {readOnly && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 10,
+            background: 'transparent',
+            cursor: 'default',
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        />
+      )}
       {modelerReady && modelerRef.current && (
         <ProblemsPanel
           modeler={modelerRef.current}

@@ -26,6 +26,15 @@
 
 /* Hide canvas context pad when the right properties drawer is open */
 .drawer-open .djs-context-pad { display: none !important; }
+
+/* ── Read-only canvas: block editing, keep overlays (link pills) clickable ── */
+.canvas-read-only .djs-palette { display: none !important; }
+.canvas-read-only .djs-context-pad { display: none !important; }
+.canvas-read-only .djs-container > svg { pointer-events: none !important; }
+.canvas-read-only .djs-overlay-container { pointer-events: auto !important; }
+/* DMN decision table: block cell editing in read-only mode */
+.canvas-read-only .dmn-decision-table-container { pointer-events: none !important; }
+.canvas-read-only .dmn-literal-expression-container { pointer-events: none !important; }
  
 /* Hide the origin crosshair marker (0, 0) */
 .layer-djs-origin,

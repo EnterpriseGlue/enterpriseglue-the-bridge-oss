@@ -80,9 +80,12 @@ export default function CommitModal({ open, onClose, projectId, fileId, saveMode
         if (fileId) {
           queryClient.invalidateQueries({ queryKey: ['versions', fileId] })
           queryClient.invalidateQueries({ queryKey: ['versions-panel', 'local', projectId, fileId] })
+          queryClient.refetchQueries({ queryKey: ['versions-panel', 'local', projectId, fileId], type: 'active' })
         }
       } else {
-        queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', projectId] })
+        queryClient.invalidateQueries({ queryKey: ['versions-panel', 'git', projectId, fileId] })
+        queryClient.refetchQueries({ queryKey: ['versions-panel', 'git', projectId, fileId], type: 'active' })
+        queryClient.invalidateQueries({ queryKey: ['vcs', 'latest-file-commit', projectId, fileId] })
         queryClient.invalidateQueries({ queryKey: ['uncommitted-files', projectId, 'draft'] })
       }
       onClose()

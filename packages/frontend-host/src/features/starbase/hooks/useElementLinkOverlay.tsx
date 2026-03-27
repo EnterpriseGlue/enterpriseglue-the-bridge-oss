@@ -10,6 +10,7 @@ export interface UseElementLinkOverlayProps {
   modeler: any
   elementId: string | null
   visible: boolean
+  readOnly?: boolean
   status: LinkOverlayStatus
   isMessageEndEventLink?: boolean
   linkedLabel: string | null
@@ -50,6 +51,7 @@ function getPillStyle(background: string): React.CSSProperties {
 export type ElementLinkOverlayContentProps = Omit<UseElementLinkOverlayProps, 'modeler' | 'elementId' | 'visible'>
 
 export function ElementLinkOverlayContent({
+  readOnly = false,
   status,
   isMessageEndEventLink = false,
   linkedLabel,
@@ -98,80 +100,82 @@ export function ElementLinkOverlayContent({
           <Link size={14} style={{ color: '#ffffff', fill: '#ffffff' }} />
         </button>
       )}
-      <Toggletip align="bottom">
-        <ToggletipButton label={`Configure ${linkTypeLabel} link`} onMouseDownCapture={onTriggerClick}>
-          <div style={configPillStyle}>
-            <Settings size={14} style={{ color: '#ffffff', fill: '#ffffff' }} />
-            {status === 'missing' && <WarningAltFilled size={12} style={{ color: '#ffffff', fill: '#ffffff' }} />}
-          </div>
-        </ToggletipButton>
-        <ToggletipContent>
-          <Theme theme="g100">
-            <div style={{ display: 'grid', gap: 'var(--spacing-4)', minWidth: 280, maxWidth: 320, padding: 'var(--spacing-5)', background: 'var(--cds-layer-01)', color: 'var(--cds-text-primary)', border: '1px solid var(--cds-border-subtle-01)' }}>
-              <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
-                <div style={{ fontSize: 12, color: 'var(--cds-text-secondary)' }}>{statusLabel}</div>
-                {status !== 'unlinked' && (
-                  <div style={{ fontSize: 14, fontWeight: 600, wordBreak: 'break-word' }}>
-                    {linkedLabel || 'Untitled'}
-                  </div>
-                )}
-              </div>
-              <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-                <Button
-                  size="sm"
-                  kind="primary"
-                  onClick={onLink}
-                  style={{ width: '100%' }}
-                >
-                  {status === 'unlinked' ? 'Link' : 'Change'}
-                </Button>
-                {showNameSyncControls && (
-                  <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-                    {canSyncName && onSyncName && (
-                      <Button
-                        size="sm"
-                        kind="secondary"
-                        onClick={onSyncName}
-                        style={{ width: '100%', whiteSpace: 'nowrap' }}
-                      >
-                        Sync element name
-                      </Button>
-                    )}
-                    <Toggle
-                      id={`name-sync-${linkTypeLabel}`}
-                      labelText="Auto-sync element name"
-                      toggled={nameSyncMode === 'auto'}
-                      onToggle={(checked) => onSetNameSyncMode?.(checked ? 'auto' : 'manual')}
-                      size="sm"
-                    />
-                  </div>
-                )}
-                {showCreateProcess && (
+      {!readOnly && (
+        <Toggletip align="bottom">
+          <ToggletipButton label={`Configure ${linkTypeLabel} link`} onMouseDownCapture={onTriggerClick}>
+            <div style={configPillStyle}>
+              <Settings size={14} style={{ color: '#ffffff', fill: '#ffffff' }} />
+              {status === 'missing' && <WarningAltFilled size={12} style={{ color: '#ffffff', fill: '#ffffff' }} />}
+            </div>
+          </ToggletipButton>
+          <ToggletipContent>
+            <Theme theme="g100">
+              <div style={{ display: 'grid', gap: 'var(--spacing-4)', minWidth: 280, maxWidth: 320, padding: 'var(--spacing-5)', background: 'var(--cds-layer-01)', color: 'var(--cds-text-primary)', border: '1px solid var(--cds-border-subtle-01)' }}>
+                <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+                  <div style={{ fontSize: 12, color: 'var(--cds-text-secondary)' }}>{statusLabel}</div>
+                  {status !== 'unlinked' && (
+                    <div style={{ fontSize: 14, fontWeight: 600, wordBreak: 'break-word' }}>
+                      {linkedLabel || 'Untitled'}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
                   <Button
                     size="sm"
                     kind="primary"
-                    onClick={onCreateProcess}
-                    disabled={createProcessDisabled}
+                    onClick={onLink}
                     style={{ width: '100%' }}
                   >
-                    {createActionLabel || 'Create process'}
+                    {status === 'unlinked' ? 'Link' : 'Change'}
                   </Button>
-                )}
-                {showUnlink && (
-                  <Button
-                    size="sm"
-                    kind="ghost"
-                    onClick={onUnlink}
-                    style={{ width: '100%' }}
-                  >
-                    Unlink
-                  </Button>
-                )}
+                  {showNameSyncControls && (
+                    <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+                      {canSyncName && onSyncName && (
+                        <Button
+                          size="sm"
+                          kind="secondary"
+                          onClick={onSyncName}
+                          style={{ width: '100%', whiteSpace: 'nowrap' }}
+                        >
+                          Sync element name
+                        </Button>
+                      )}
+                      <Toggle
+                        id={`name-sync-${linkTypeLabel}`}
+                        labelText="Auto-sync element name"
+                        toggled={nameSyncMode === 'auto'}
+                        onToggle={(checked) => onSetNameSyncMode?.(checked ? 'auto' : 'manual')}
+                        size="sm"
+                      />
+                    </div>
+                  )}
+                  {showCreateProcess && (
+                    <Button
+                      size="sm"
+                      kind="primary"
+                      onClick={onCreateProcess}
+                      disabled={createProcessDisabled}
+                      style={{ width: '100%' }}
+                    >
+                      {createActionLabel || 'Create process'}
+                    </Button>
+                  )}
+                  {showUnlink && (
+                    <Button
+                      size="sm"
+                      kind="ghost"
+                      onClick={onUnlink}
+                      style={{ width: '100%' }}
+                    >
+                      Unlink
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          </Theme>
-        </ToggletipContent>
-      </Toggletip>
+            </Theme>
+          </ToggletipContent>
+        </Toggletip>
+      )}
     </div>
   )
 }
@@ -180,6 +184,7 @@ export function useElementLinkOverlay({
   modeler,
   elementId,
   visible,
+  readOnly,
   status,
   isMessageEndEventLink,
   linkedLabel,
@@ -226,6 +231,7 @@ export function useElementLinkOverlay({
     if (!rootRef.current) return
     rootRef.current.render(
       <ElementLinkOverlayContent
+        readOnly={readOnly}
         status={status}
         isMessageEndEventLink={isMessageEndEventLink}
         linkedLabel={linkedLabel}
@@ -246,6 +252,7 @@ export function useElementLinkOverlay({
       />
     )
   }, [
+    readOnly,
     status,
     isMessageEndEventLink,
     linkedLabel,

@@ -14,6 +14,7 @@ import type {
   DeployRequest,
   RollbackRequest,
   AcquireLockRequest,
+  LockHeartbeatRequest,
   DeploymentResponse,
   LockResponse,
   LockHolder,
@@ -55,6 +56,9 @@ class GitApi {
           return await apiClient.get<T>(`${API_BASE}${endpoint}`, undefined, baseOptions);
       }
     } catch (error) {
+      if (error instanceof Error && 'status' in (error as object)) {
+        throw error;
+      }
       const parsed = parseApiError(error, 'Request failed');
       const combined = parsed.hint ? `${parsed.message}. ${parsed.hint}` : parsed.message;
       throw new Error(combined || 'Request failed');
@@ -199,9 +203,10 @@ class GitApi {
     return this.fetch(`/locks?projectId=${projectId}`);
   }
 
-  async sendHeartbeat(lockId: string): Promise<{ success: boolean }> {
+  async sendHeartbeat(lockId: string, data?: LockHeartbeatRequest): Promise<{ success: boolean; lock?: LockResponse }> {
     return this.fetch(`/locks/${lockId}/heartbeat`, {
       method: 'PUT',
+      body: JSON.stringify(data || {}),
     });
   }
 }

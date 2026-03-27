@@ -2172,6 +2172,7 @@ registry.registerPath({ method: 'get', path: '/git-api/sync/status', request: { 
 
 // Git lock heartbeat
 registry.registerPath({ method: 'put', path: '/git-api/locks/{lockId}/heartbeat', request: { params: z.object({ lockId: z.string() }) }, responses: { 200: { description: 'Lock heartbeat renewed' } } });
+registry.registerPath({ method: 'get', path: '/git-api/locks/{fileId}/events', request: { params: z.object({ fileId: z.string().uuid() }) }, responses: { 200: { description: 'SSE stream of lock and file events', content: { 'text/event-stream': { schema: z.string() } } } } });
 
 // Git OAuth
 registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/authorize', request: { params: z.object({ providerId: z.string() }) }, responses: { 302: { description: 'Redirect to OAuth provider' } } });

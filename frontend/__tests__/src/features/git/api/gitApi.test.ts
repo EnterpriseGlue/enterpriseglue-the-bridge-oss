@@ -250,7 +250,7 @@ describe('gitApi', () => {
   describe('file locks', () => {
     it('acquires a lock', async () => {
       const mockLock = { id: 'l1', fileId: 'f1', holder: { userId: 'u1', userName: 'User' } };
-      const lockData = { projectId: 'p1', fileId: 'f1' };
+      const lockData = { fileId: 'f1', force: true, visibilityState: 'visible' as const, hasInteraction: true };
       vi.mocked(apiClient.post).mockResolvedValue(mockLock);
       
       const result = await gitApi.acquireLock(lockData);
@@ -278,12 +278,13 @@ describe('gitApi', () => {
     });
 
     it('sends heartbeat for lock', async () => {
+      const heartbeat = { visibilityState: 'hidden' as const, hasInteraction: true };
       const mockResponse = { success: true };
       vi.mocked(apiClient.put).mockResolvedValue(mockResponse);
       
-      const result = await gitApi.sendHeartbeat('l1');
+      const result = await gitApi.sendHeartbeat('l1', heartbeat);
       
-      expect(apiClient.put).toHaveBeenCalledWith('/git-api/locks/l1/heartbeat', undefined, { credentials: 'include' });
+      expect(apiClient.put).toHaveBeenCalledWith('/git-api/locks/l1/heartbeat', heartbeat, { credentials: 'include' });
       expect(result).toEqual(mockResponse);
     });
   });

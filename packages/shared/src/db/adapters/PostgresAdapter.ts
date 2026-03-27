@@ -134,12 +134,38 @@ export class PostgresAdapter implements DatabaseAdapter {
     return 'packages/shared/src/db/adapters/sql/postgres';
   }
 
+  private findWorktreeDistPath(pathSegments: string[]): string | null {
+    const searchRoots = [process.cwd(), path.dirname(fileURLToPath(import.meta.url))];
+
+    for (const root of searchRoots) {
+      let current = root;
+      while (true) {
+        const candidate = path.join(current, ...pathSegments);
+        if (fs.existsSync(candidate)) {
+          return candidate;
+        }
+
+        const parent = path.dirname(current);
+        if (parent === current) {
+          break;
+        }
+        current = parent;
+      }
+    }
+
+    return null;
+  }
+
   getMigrationsPath(): string {
     const runtimePath = fileURLToPath(import.meta.url);
     const adapterDir = path.dirname(runtimePath);
     const runningFromDist = runtimePath.includes(`${path.sep}dist${path.sep}`);
 
     if (runningFromDist) {
+      const sharedDistMigrations = this.findWorktreeDistPath(['packages', 'shared', 'dist', 'db', 'migrations']);
+      if (sharedDistMigrations) {
+        return sharedDistMigrations;
+      }
       return path.join(adapterDir, '..', 'migrations');
     }
     return 'packages/shared/src/db/migrations';
