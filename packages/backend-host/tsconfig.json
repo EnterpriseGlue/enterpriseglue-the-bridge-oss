@@ -23,6 +23,6 @@
     "outDir": "dist",
     "declaration": true
   },
-  "include": ["src/**/*.ts", "../shared/src/types/**/*.d.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

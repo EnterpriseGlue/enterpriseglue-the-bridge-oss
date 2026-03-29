@@ -6,12 +6,19 @@ exports[`Plugin API surface snapshot > backend contract surface matches snapshot
   "query<T = unknown>(",
   "close(): Promise<void>;",
   "getNativePool(): unknown;",
+  "export interface NotificationTenantResolveContext {",
+  "req?: unknown;",
+  "user?: { userId?: string };",
+  "query?: Record<string, string>;",
+  "export interface NotificationTenantResolver {",
+  "resolve(context: NotificationTenantResolveContext): {",
   "export interface EnterpriseBackendContext {",
   "connectionPool: ConnectionPool;",
   "config: unknown;",
   "export interface EnterpriseBackendPlugin {",
   "registerRoutes?: (app: unknown, ctx: EnterpriseBackendContext) => void | Promise<void>;",
   "migrateEnterpriseDatabase?: (ctx: EnterpriseBackendContext) => void | Promise<void>;",
+  "getNotificationTenantResolver?: (",
 ]
 `;
 

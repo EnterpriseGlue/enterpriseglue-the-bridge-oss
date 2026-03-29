@@ -10,6 +10,7 @@ import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { registerRoutes } from './routes/index.js';
+import type { NotificationTenantResolver } from '@enterpriseglue/enterprise-plugin-api/backend';
 
 interface CreateAppOptions {
   registerBaseRoutes?: boolean;
@@ -17,10 +18,14 @@ interface CreateAppOptions {
   includeRateLimiting?: boolean;
   includeDocs?: boolean;
   registerFinalMiddleware?: boolean;
+  notificationTenantResolver?: NotificationTenantResolver;
 }
 
-export function registerBaseRoutes(app: express.Express): void {
-  registerRoutes(app);
+export function registerBaseRoutes(
+  app: express.Express,
+  options: { notificationTenantResolver?: NotificationTenantResolver } = {}
+): void {
+  registerRoutes(app, options);
 }
 
 export function registerFinalMiddleware(
@@ -45,6 +50,7 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     includeRateLimiting = true,
     includeDocs = true,
     registerFinalMiddleware: shouldRegisterFinalMiddleware = true,
+    notificationTenantResolver,
   } = options;
   const shouldRegisterBaseRoutes = registerBaseRoutesOption ?? registerRoutesOption ?? true;
 
@@ -186,7 +192,7 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
 
   // Register all application routes
   if (shouldRegisterBaseRoutes) {
-    registerBaseRoutes(app);
+    registerBaseRoutes(app, { notificationTenantResolver });
   }
 
   if (shouldRegisterFinalMiddleware) {

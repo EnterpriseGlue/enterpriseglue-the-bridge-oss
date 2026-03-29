@@ -1,7 +1,29 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import notificationsRouter from '../../../../packages/backend-host/src/modules/notifications/routes/notifications.js';
+const { handleConnection, createNotificationSSEManager } = vi.hoisted(() => {
+  const handleConnection = vi.fn();
+  const createNotificationSSEManager = vi.fn(() => ({ handleConnection }));
+
+  return {
+    handleConnection,
+    createNotificationSSEManager,
+  };
+});
+
+vi.mock('@enterpriseglue/shared/services/notifications/index.js', () => ({
+  createNotificationSSEManager,
+}));
+
+vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
+  notificationsLimiter: (_req: any, _res: any, next: any) => next(),
+}));
+
+vi.mock('@enterpriseglue/shared/middleware/errorHandler.js', () => ({
+  asyncHandler: (handler: any) => handler,
+}));
+
+import notificationsRouter, { createNotificationsRouter } from '../../../../packages/backend-host/src/modules/notifications/routes/notifications.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -30,6 +52,32 @@ describe('notifications module', () => {
     app.use(express.json());
     app.use(notificationsRouter);
     vi.clearAllMocks();
+    handleConnection.mockReset();
+  });
+
+  it('passes an injected tenant resolver to the SSE manager factory', () => {
+    const tenantResolver = {
+      resolve: vi.fn(() => ({ userId: 'user-1', tenantId: 'tenant-1' })),
+    };
+
+    createNotificationsRouter({ tenantResolver });
+
+    expect(createNotificationSSEManager).toHaveBeenCalled();
+    const calls = createNotificationSSEManager.mock.calls as unknown as Array<[{ tenantResolver: { resolve: (context: any) => unknown } }]>;
+    const options = calls[calls.length - 1]![0];
+    expect(typeof options.tenantResolver.resolve).toBe('function');
+    expect(
+      options.tenantResolver.resolve({
+        req: { headers: {} },
+        user: { userId: 'user-1' },
+        query: {},
+      })
+    ).toEqual({ userId: 'user-1', tenantId: 'tenant-1' });
+    expect(tenantResolver.resolve).toHaveBeenCalledWith({
+      req: { headers: {} },
+      user: { userId: 'user-1' },
+      query: {},
+    });
   });
 
   it('returns notifications list and unread count', async () => {

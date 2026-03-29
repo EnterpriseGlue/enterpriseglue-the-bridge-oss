@@ -7,8 +7,9 @@ import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Notification } from '@enterpriseglue/shared/infrastructure/persistence/entities/Notification.js';
-
-const router = Router();
+import { createNotificationSSEManager } from '@enterpriseglue/shared/services/notifications/index.js';
+import type { NotificationTenantResolver } from '@enterpriseglue/enterprise-plugin-api/backend';
+import { createNotificationStreamRouter } from './stream.js';
 
 const createNotificationSchema = z.object({
   state: z.enum(['success', 'info', 'warning', 'error']),
@@ -31,172 +32,193 @@ const notificationIdParamSchema = z.object({
   id: z.string().min(1),
 });
 
-router.get('/api/notifications', requireAuth, notificationsLimiter, validateQuery(notificationsQuerySchema), asyncHandler(async (req, res) => {
-  const dataSource = await getDataSource();
-  const notificationRepo = dataSource.getRepository(Notification);
-  const userId = req.user!.userId;
-  const tenantId = req.tenant?.tenantId || null;
+export function createNotificationsRouter(options: { tenantResolver?: NotificationTenantResolver } = {}) {
+  const router = Router();
+  const sseManager = createNotificationSSEManager(
+    options.tenantResolver
+      ? {
+          tenantResolver: {
+            resolve(context) {
+              return options.tenantResolver!.resolve(context);
+            },
+          },
+        }
+      : {}
+  );
 
-  const limit = Number(req.query.limit);
-  const offset = Number(req.query.offset);
-  const unread = String(req.query.unread || '').toLowerCase();
-  const unreadOnly = unread === 'true' || unread === '1';
-  const stateParam = String(req.query.state || '').trim();
-  const states = stateParam
-    ? stateParam.split(',').map((s) => s.trim()).filter(Boolean)
-    : [];
+  router.use('/api/notifications', createNotificationStreamRouter(sseManager));
 
-  const cutoff = Date.now() - 5 * 24 * 60 * 60 * 1000;
-  await notificationRepo
-    .createQueryBuilder()
-    .delete()
-    .where('createdAt < :cutoff', { cutoff })
-    .execute();
+  router.get('/api/notifications', requireAuth, notificationsLimiter, validateQuery(notificationsQuerySchema), asyncHandler(async (req, res) => {
+    const dataSource = await getDataSource();
+    const notificationRepo = dataSource.getRepository(Notification);
+    const userId = req.user!.userId;
+    const tenantId = req.tenant?.tenantId || null;
 
-  const qb = notificationRepo
-    .createQueryBuilder('n')
-    .where('n.userId = :userId', { userId })
-    .orderBy('n.createdAt', 'DESC')
-    .skip(offset)
-    .take(limit);
+    const limit = Number(req.query.limit);
+    const offset = Number(req.query.offset);
+    const unread = String(req.query.unread || '').toLowerCase();
+    const unreadOnly = unread === 'true' || unread === '1';
+    const stateParam = String(req.query.state || '').trim();
+    const states = stateParam
+      ? stateParam.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
 
-  if (tenantId) {
-    qb.andWhere('n.tenantId = :tenantId', { tenantId });
-  }
+    const cutoff = Date.now() - 5 * 24 * 60 * 60 * 1000;
+    await notificationRepo
+      .createQueryBuilder()
+      .delete()
+      .where('createdAt < :cutoff', { cutoff })
+      .execute();
 
-  if (states.length > 0) {
-    qb.andWhere('n.state IN (:...states)', { states });
-  }
+    const qb = notificationRepo
+      .createQueryBuilder('n')
+      .where('n.userId = :userId', { userId })
+      .orderBy('n.createdAt', 'DESC')
+      .skip(offset)
+      .take(limit);
 
-  if (unreadOnly) {
-    qb.andWhere('n.readAt IS NULL');
-  }
+    if (tenantId) {
+      qb.andWhere('n.tenantId = :tenantId', { tenantId });
+    }
 
-  const [rows, total] = await qb.getManyAndCount();
+    if (states.length > 0) {
+      qb.andWhere('n.state IN (:...states)', { states });
+    }
 
-  const unreadCount = await notificationRepo.count({
-    where: {
+    if (unreadOnly) {
+      qb.andWhere('n.readAt IS NULL');
+    }
+
+    const [rows, total] = await qb.getManyAndCount();
+
+    const unreadCount = await notificationRepo.count({
+      where: {
+        userId,
+        ...(tenantId ? { tenantId } : {}),
+        readAt: IsNull(),
+      },
+    });
+
+    res.json({
+      notifications: rows.map((row: Notification) => ({
+        id: row.id,
+        userId: row.userId,
+        tenantId: row.tenantId,
+        state: row.state,
+        title: row.title,
+        subtitle: row.subtitle,
+        readAt: row.readAt,
+        createdAt: row.createdAt,
+      })),
+      total,
+      unreadCount,
+    });
+  }));
+
+  router.post('/api/notifications', requireAuth, notificationsLimiter, validateBody(createNotificationSchema), asyncHandler(async (req, res) => {
+    const dataSource = await getDataSource();
+    const notificationRepo = dataSource.getRepository(Notification);
+    const userId = req.user!.userId;
+    const tenantId = req.tenant?.tenantId || null;
+    const now = Date.now();
+
+    const notification = notificationRepo.create({
       userId,
-      ...(tenantId ? { tenantId } : {}),
-      readAt: IsNull(),
-    },
-  });
+      tenantId,
+      state: req.body.state,
+      title: req.body.title,
+      subtitle: req.body.subtitle ?? null,
+      readAt: null,
+      createdAt: now,
+    });
 
-  res.json({
-    notifications: rows.map((row) => ({
-      id: row.id,
-      userId: row.userId,
-      tenantId: row.tenantId,
-      state: row.state,
-      title: row.title,
-      subtitle: row.subtitle,
-      readAt: row.readAt,
-      createdAt: row.createdAt,
-    })),
-    total,
-    unreadCount,
-  });
-}));
+    const saved = await notificationRepo.save(notification);
 
-router.post('/api/notifications', requireAuth, notificationsLimiter, validateBody(createNotificationSchema), asyncHandler(async (req, res) => {
-  const dataSource = await getDataSource();
-  const notificationRepo = dataSource.getRepository(Notification);
-  const userId = req.user!.userId;
-  const tenantId = req.tenant?.tenantId || null;
-  const now = Date.now();
+    res.status(201).json({
+      id: saved.id,
+      userId: saved.userId,
+      tenantId: saved.tenantId,
+      state: saved.state,
+      title: saved.title,
+      subtitle: saved.subtitle,
+      readAt: saved.readAt,
+      createdAt: saved.createdAt,
+    });
+  }));
 
-  const notification = notificationRepo.create({
-    userId,
-    tenantId,
-    state: req.body.state,
-    title: req.body.title,
-    subtitle: req.body.subtitle ?? null,
-    readAt: null,
-    createdAt: now,
-  });
+  router.patch('/api/notifications/read', requireAuth, notificationsLimiter, validateBody(markNotificationsReadSchema), asyncHandler(async (req, res) => {
+    const dataSource = await getDataSource();
+    const notificationRepo = dataSource.getRepository(Notification);
+    const userId = req.user!.userId;
+    const tenantId = req.tenant?.tenantId || null;
+    const now = Date.now();
+    const ids = req.body.ids?.filter(Boolean) ?? null;
 
-  const saved = await notificationRepo.save(notification);
+    const qb = notificationRepo
+      .createQueryBuilder()
+      .update(Notification)
+      .set({ readAt: now })
+      .where('userId = :userId', { userId });
 
-  res.status(201).json({
-    id: saved.id,
-    userId: saved.userId,
-    tenantId: saved.tenantId,
-    state: saved.state,
-    title: saved.title,
-    subtitle: saved.subtitle,
-    readAt: saved.readAt,
-    createdAt: saved.createdAt,
-  });
-}));
+    if (tenantId) {
+      qb.andWhere('tenantId = :tenantId', { tenantId });
+    }
 
-router.patch('/api/notifications/read', requireAuth, notificationsLimiter, validateBody(markNotificationsReadSchema), asyncHandler(async (req, res) => {
-  const dataSource = await getDataSource();
-  const notificationRepo = dataSource.getRepository(Notification);
-  const userId = req.user!.userId;
-  const tenantId = req.tenant?.tenantId || null;
-  const now = Date.now();
-  const ids = req.body.ids?.filter(Boolean) ?? null;
+    if (ids && ids.length > 0) {
+      qb.andWhere('id IN (:...ids)', { ids });
+    }
 
-  const qb = notificationRepo
-    .createQueryBuilder()
-    .update(Notification)
-    .set({ readAt: now })
-    .where('userId = :userId', { userId });
+    const result = await qb.execute();
 
-  if (tenantId) {
-    qb.andWhere('tenantId = :tenantId', { tenantId });
-  }
+    res.json({ updated: result.affected || 0 });
+  }));
 
-  if (ids && ids.length > 0) {
-    qb.andWhere('id IN (:...ids)', { ids });
-  }
+  router.delete('/api/notifications', requireAuth, notificationsLimiter, asyncHandler(async (req, res) => {
+    const dataSource = await getDataSource();
+    const notificationRepo = dataSource.getRepository(Notification);
+    const userId = req.user!.userId;
+    const tenantId = req.tenant?.tenantId || null;
 
-  const result = await qb.execute();
+    const qb = notificationRepo
+      .createQueryBuilder()
+      .delete()
+      .where('userId = :userId', { userId });
 
-  res.json({ updated: result.affected || 0 });
-}));
+    if (tenantId) {
+      qb.andWhere('tenantId = :tenantId', { tenantId });
+    }
 
-router.delete('/api/notifications', requireAuth, notificationsLimiter, asyncHandler(async (req, res) => {
-  const dataSource = await getDataSource();
-  const notificationRepo = dataSource.getRepository(Notification);
-  const userId = req.user!.userId;
-  const tenantId = req.tenant?.tenantId || null;
+    const result = await qb.execute();
 
-  const qb = notificationRepo
-    .createQueryBuilder()
-    .delete()
-    .where('userId = :userId', { userId });
+    res.json({ deleted: result.affected || 0 });
+  }));
 
-  if (tenantId) {
-    qb.andWhere('tenantId = :tenantId', { tenantId });
-  }
+  router.delete('/api/notifications/:id', requireAuth, notificationsLimiter, validateParams(notificationIdParamSchema), asyncHandler(async (req, res) => {
+    const id = req.params.id;
 
-  const result = await qb.execute();
+    const dataSource = await getDataSource();
+    const notificationRepo = dataSource.getRepository(Notification);
+    const userId = req.user!.userId;
+    const tenantId = req.tenant?.tenantId || null;
 
-  res.json({ deleted: result.affected || 0 });
-}));
+    const qb = notificationRepo
+      .createQueryBuilder()
+      .delete()
+      .where('id = :id', { id })
+      .andWhere('userId = :userId', { userId });
 
-router.delete('/api/notifications/:id', requireAuth, notificationsLimiter, validateParams(notificationIdParamSchema), asyncHandler(async (req, res) => {
-  const id = req.params.id;
+    if (tenantId) {
+      qb.andWhere('tenantId = :tenantId', { tenantId });
+    }
 
-  const dataSource = await getDataSource();
-  const notificationRepo = dataSource.getRepository(Notification);
-  const userId = req.user!.userId;
-  const tenantId = req.tenant?.tenantId || null;
+    const result = await qb.execute();
 
-  const qb = notificationRepo
-    .createQueryBuilder()
-    .delete()
-    .where('id = :id', { id })
-    .andWhere('userId = :userId', { userId });
+    res.json({ deleted: result.affected || 0 });
+  }));
 
-  if (tenantId) {
-    qb.andWhere('tenantId = :tenantId', { tenantId });
-  }
+  return router;
+}
 
-  const result = await qb.execute();
+const notificationsRoute = createNotificationsRouter();
 
-  res.json({ deleted: result.affected || 0 });
-}));
-
-export default router;
+export default notificationsRoute;

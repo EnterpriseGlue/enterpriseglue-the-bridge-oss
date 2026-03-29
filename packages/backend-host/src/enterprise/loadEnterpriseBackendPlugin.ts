@@ -23,6 +23,7 @@ function assertValidPluginShape(plugin: Record<string, unknown>): void {
   const optionalHookNames: Array<keyof EnterpriseBackendPlugin> = [
     'registerRoutes',
     'migrateEnterpriseDatabase',
+    'getNotificationTenantResolver',
   ];
 
   const invalidHooks = optionalHookNames.filter((hookName) => {
