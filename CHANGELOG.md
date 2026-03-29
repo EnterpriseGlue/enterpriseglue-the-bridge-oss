@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.22](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.21...v0.8.22) (2026-03-29)
+
+
+### Bug Fixes
+
+* **shared:** refactor entity/service architecture and fix secure cookie handling ([#280](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/280)) ([6a992a3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6a992a3e709631cfed8e292172699f65481236f7))
+
 ## [0.8.21](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.20...v0.8.21) (2026-03-27)
 
 
