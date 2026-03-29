@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.24](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.23...v0.8.24) (2026-03-29)
+
+
+### Bug Fixes
+
+* **backend:** expose formal notification tenant resolver hook in enterprise plugin API ([#284](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/284)) ([7809010](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7809010dc4d688cdcde2f3675ac91690500493ed))
+
 ## [0.8.23](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.22...v0.8.23) (2026-03-29)
 
 
