@@ -10,6 +10,19 @@ export interface ConnectionPool {
   getNativePool(): unknown;
 }
 
+export interface NotificationTenantResolveContext {
+  req?: unknown;
+  user?: { userId?: string };
+  query?: Record<string, string>;
+}
+
+export interface NotificationTenantResolver {
+  resolve(context: NotificationTenantResolveContext): {
+    tenantId: string | null;
+    userId: string;
+  };
+}
+
 export interface EnterpriseBackendContext {
   connectionPool: ConnectionPool;
   config: unknown;
@@ -18,4 +31,7 @@ export interface EnterpriseBackendContext {
 export interface EnterpriseBackendPlugin {
   registerRoutes?: (app: unknown, ctx: EnterpriseBackendContext) => void | Promise<void>;
   migrateEnterpriseDatabase?: (ctx: EnterpriseBackendContext) => void | Promise<void>;
+  getNotificationTenantResolver?: (
+    ctx: EnterpriseBackendContext,
+  ) => NotificationTenantResolver | undefined | Promise<NotificationTenantResolver | undefined>;
 }

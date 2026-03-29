@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import express from 'express';
 import request from 'supertest';
-import { createRouteTestApp } from '../../utils/createRouteTestApp.js';
 
 const handleConnection = vi.fn();
-const createNotificationSSEManager = vi.fn(() => ({ handleConnection }));
 let requireAuthImplementation = (_req: any, _res: any, next: any) => next();
 
 vi.mock('@enterpriseglue/shared/services/notifications/index.js', () => ({
-  createNotificationSSEManager,
+  NotificationSSEManager: class NotificationSSEManager {},
+}));
+
+vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
+  notificationsLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => {
@@ -16,7 +19,6 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => {
   };
 });
 
-const { createNotificationSSEManager: createNotificationSSEManagerFactory } = await import('@enterpriseglue/shared/services/notifications/index.js');
 const { createNotificationStreamRouter } = await import('../../../../packages/backend-host/src/modules/notifications/routes/stream.js');
 
 describe('notification stream routes', () => {
@@ -28,26 +30,9 @@ describe('notification stream routes', () => {
     });
   });
 
-  it('passes injected tenant resolver to the SSE manager factory', () => {
-    const tenantResolver = {
-      resolve: vi.fn(() => ({ userId: 'user-1', tenantId: 'tenant-1' })),
-    };
-
-    createNotificationSSEManagerFactory({ tenantResolver } as any);
-
-    expect(createNotificationSSEManager).toHaveBeenCalledWith({ tenantResolver });
-  });
-
-  it('uses default factory options when no tenant resolver is provided', () => {
-    createNotificationSSEManagerFactory();
-
-    expect(createNotificationSSEManager).toHaveBeenCalledTimes(1);
-  });
-
   it('forwards stream requests to the SSE manager handler', async () => {
-    const app = createRouteTestApp(
-      createNotificationStreamRouter({ handleConnection } as any)
-    );
+    const app = express();
+    app.use(createNotificationStreamRouter({ handleConnection } as any));
 
     const response = await request(app).get('/stream');
 
@@ -60,9 +45,8 @@ describe('notification stream routes', () => {
       res.status(401).json({ error: 'Authentication required' });
     };
 
-    const app = createRouteTestApp(
-      createNotificationStreamRouter({ handleConnection } as any)
-    );
+    const app = express();
+    app.use(createNotificationStreamRouter({ handleConnection } as any));
 
     const response = await request(app).get('/stream');
 

@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/enterprise-plugin-api",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Plugin API contract types for EnterpriseGlue OSS/EE boundary",
   "license": "Apache-2.0",
   "private": false,

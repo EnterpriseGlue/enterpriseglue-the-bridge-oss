@@ -14,7 +14,7 @@ import type { EnterpriseBackendContext, ConnectionPool } from '@enterpriseglue/e
 describe('Backend host contract conformance', () => {
   it('assertValidPluginShape validates all contract hooks', async () => {
     const { __enterpriseBackendPluginTestUtils } = await import(
-      '@enterpriseglue/backend-host/enterprise/loadEnterpriseBackendPlugin.js'
+      '../../../packages/backend-host/src/enterprise/loadEnterpriseBackendPlugin.js'
     );
 
     // Valid plugin with all hooks
@@ -22,6 +22,9 @@ describe('Backend host contract conformance', () => {
       __enterpriseBackendPluginTestUtils.assertValidPluginShape({
         registerRoutes: async () => {},
         migrateEnterpriseDatabase: async () => {},
+        getNotificationTenantResolver: async () => ({
+          resolve: () => ({ userId: 'user-1', tenantId: 'tenant-1' }),
+        }),
       }),
     ).not.toThrow();
 

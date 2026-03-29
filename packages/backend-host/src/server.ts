@@ -20,27 +20,30 @@ export async function startServer() {
   app.locals.requirePlatformAdmin = requirePlatformAdmin;
 
   const enterprisePlugin = await loadEnterpriseBackendPlugin();
+  const enterpriseContext = {
+    connectionPool: getConnectionPool(),
+    config,
+  } as any;
+  const notificationTenantResolver = await enterprisePlugin.getNotificationTenantResolver?.(enterpriseContext);
   app.locals.enterprisePluginLoaded = Boolean(
-    enterprisePlugin && (enterprisePlugin.registerRoutes || enterprisePlugin.migrateEnterpriseDatabase)
+    enterprisePlugin && (enterprisePlugin.registerRoutes || enterprisePlugin.migrateEnterpriseDatabase || enterprisePlugin.getNotificationTenantResolver)
   );
   console.log(
     `[Enterprise] Backend plugin status: loaded=${app.locals.enterprisePluginLoaded}, ` +
       `registerRoutes=${Boolean(enterprisePlugin.registerRoutes)}, ` +
-      `migrateEnterpriseDatabase=${Boolean(enterprisePlugin.migrateEnterpriseDatabase)}`
+      `migrateEnterpriseDatabase=${Boolean(enterprisePlugin.migrateEnterpriseDatabase)}, ` +
+      `getNotificationTenantResolver=${Boolean(enterprisePlugin.getNotificationTenantResolver)}`
   );
 
   try {
     // Pass database-agnostic connection pool to enterprise plugin
-    await enterprisePlugin.registerRoutes?.(app as any, {
-      connectionPool: getConnectionPool(),
-      config,
-    } as any);
+    await enterprisePlugin.registerRoutes?.(app as any, enterpriseContext);
   } catch (error) {
     console.error('Failed to register enterprise routes:', error);
     throw error;
   }
 
-  registerBaseRoutes(app);
+  registerBaseRoutes(app, { notificationTenantResolver });
   registerFinalMiddleware(app);
 
   // Initialize database schema before starting server
@@ -58,8 +61,7 @@ export async function startServer() {
 
       // Run enterprise migrations
       await enterprisePlugin.migrateEnterpriseDatabase({
-        connectionPool: getConnectionPool(),
-        config,
+        ...enterpriseContext,
       } as any);
     } catch (error) {
       console.error('Failed to run enterprise migrations:', error);

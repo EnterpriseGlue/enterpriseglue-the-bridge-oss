@@ -34,6 +34,9 @@ describe('loadEnterpriseBackendPlugin validation helpers', () => {
       __enterpriseBackendPluginTestUtils.assertValidPluginShape({
         registerRoutes: async () => undefined,
         migrateEnterpriseDatabase: async () => undefined,
+        getNotificationTenantResolver: async () => ({
+          resolve: () => ({ userId: 'user-1', tenantId: 'tenant-1' }),
+        }),
       });
     }).not.toThrow();
   });
@@ -48,6 +51,9 @@ describe('loadEnterpriseBackendPlugin validation helpers', () => {
     }
     if (plugin.migrateEnterpriseDatabase !== undefined) {
       expect(typeof plugin.migrateEnterpriseDatabase).toBe('function');
+    }
+    if (plugin.getNotificationTenantResolver !== undefined) {
+      expect(typeof plugin.getNotificationTenantResolver).toBe('function');
     }
   });
 });

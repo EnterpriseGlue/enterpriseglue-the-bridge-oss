@@ -46,10 +46,11 @@ assert_contains "$FRONTEND_DTS" "routes" "frontend routes contract"
 assert_contains "$FRONTEND_DTS" "tenantRoutes" "frontend tenantRoutes contract"
 assert_contains "$BACKEND_DTS" "registerRoutes" "backend registerRoutes hook"
 assert_contains "$BACKEND_DTS" "migrateEnterpriseDatabase" "backend migrateEnterpriseDatabase hook"
+assert_contains "$BACKEND_DTS" "getNotificationTenantResolver" "backend notification tenant resolver hook"
 
 if [[ "$MODE" == "current" ]]; then
   assert_contains "$PKG_JSON" '"private": false' "non-private plugin-api package"
-  assert_contains "$PKG_JSON" '"version": "0.2.0"' "plugin-api baseline version"
+  assert_contains "$PKG_JSON" '"version": "0.2.1"' "plugin-api baseline version"
 
   if ! npm pack --dry-run ./packages/enterprise-plugin-api >/dev/null; then
     echo "❌ [plugin-api-compat] plugin-api npm pack dry-run failed"

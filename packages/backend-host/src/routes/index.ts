@@ -1,5 +1,6 @@
 import { Express, Router } from 'express';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
+import type { NotificationTenantResolver } from '@enterpriseglue/enterprise-plugin-api/backend';
 
 // Feature Modules
 import {
@@ -82,18 +83,27 @@ import {
 
 import { usersRoute } from '@modules/users/index.js';
 import { auditRoute } from '@modules/audit/index.js';
-import { notificationsRoute } from '@modules/notifications/index.js';
+import { createNotificationsRouter } from '@modules/notifications/index.js';
 import vcsRoute from '@modules/versioning/index.js';
 
 import { invitationsRoute } from '@modules/invitations/index.js';
+
+interface RegisterRoutesOptions {
+  notificationTenantResolver?: NotificationTenantResolver;
+}
+
+interface CreateTenantScopedRouterOptions {
+  includeAuditRoute?: boolean;
+  notificationTenantResolver?: NotificationTenantResolver;
+}
 
 /**
  * Create a router for tenant-scoped routes
  * All routes mounted here will be accessible under /t/:tenantSlug/*
  */
-function createTenantScopedRouter(options: { includeAuditRoute?: boolean } = {}): Router {
+function createTenantScopedRouter(options: CreateTenantScopedRouterOptions = {}): Router {
   const router = Router({ mergeParams: true });
-  const { includeAuditRoute = true } = options;
+  const { includeAuditRoute = true, notificationTenantResolver } = options;
 
   // Apply tenant context middleware to all tenant-scoped routes
   router.use(resolveTenantContext({ required: true }));
@@ -149,7 +159,7 @@ function createTenantScopedRouter(options: { includeAuditRoute?: boolean } = {})
   if (includeAuditRoute) {
     router.use(auditRoute);
   }
-  router.use(notificationsRoute);
+  router.use(createNotificationsRouter({ tenantResolver: notificationTenantResolver }));
   router.use(dashboardStatsRoute);
   router.use(dashboardContextRoute);
 
@@ -163,7 +173,7 @@ function createTenantScopedRouter(options: { includeAuditRoute?: boolean } = {})
  * 1. Platform-level routes (auth, admin) - no tenant prefix
  * 2. Tenant-scoped routes - mounted under /t/:tenantSlug
  */
-export function registerRoutes(app: Express): void {
+export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}): void {
   const enterprisePluginLoaded = Boolean(app.locals?.enterprisePluginLoaded);
   // ============ Platform-Level Routes (no tenant prefix) ============
   
@@ -211,5 +221,8 @@ export function registerRoutes(app: Express): void {
   // All routes below are accessible under /t/:tenantSlug/*
   // Example: /t/default/starbase-api/projects
   
-  app.use('/t/:tenantSlug', createTenantScopedRouter({ includeAuditRoute: !enterprisePluginLoaded }));
+  app.use('/t/:tenantSlug', createTenantScopedRouter({
+    includeAuditRoute: !enterprisePluginLoaded,
+    notificationTenantResolver: options.notificationTenantResolver,
+  }));
 }
