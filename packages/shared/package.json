@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/shared",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Shared utilities, contracts, and services for EnterpriseGlue",
   "license": "Apache-2.0",
   "repository": {
@@ -84,7 +84,11 @@
       "types": "./dist/interfaces/index.d.ts",
       "default": "./dist/interfaces/index.js"
     },
-    "./db/entities/*": {
+    "./db/adapters/*.js": {
+      "types": "./dist/infrastructure/persistence/adapters/*.d.ts",
+      "default": "./dist/infrastructure/persistence/adapters/*.js"
+    },
+    "./db/entities/*.js": {
       "types": "./dist/infrastructure/persistence/entities/*.d.ts",
       "default": "./dist/infrastructure/persistence/entities/*.js"
     },
