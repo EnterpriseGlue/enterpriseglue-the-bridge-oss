@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.25](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.24...v0.8.25) (2026-03-30)
+
+
+### Bug Fixes
+
+* **shared:** add db/adapters exports map for deep imports like QueryHelpers.js ([#286](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/286)) ([4193c66](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4193c660bcf60fdee582ffad26b879842a5eef2e))
+
 ## [0.8.24](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.23...v0.8.24) (2026-03-29)
 
 
