@@ -41,17 +41,31 @@ export class AddWorkingFilesMainFileId1700000000009 implements MigrationInterfac
 
     const tableRef = buildTableRef(table.schema, table.name);
     const filesTableRef = buildTableRef(filesTable.schema, filesTable.name);
+    const dbType = queryRunner.connection.options.type;
 
-    await queryRunner.query(`
-      UPDATE ${tableRef} AS wf
-      SET "main_file_id" = f."id"
-      FROM ${filesTableRef} AS f
-      WHERE wf."main_file_id" IS NULL
-        AND wf."project_id" = f."project_id"
-        AND wf."name" = f."name"
-        AND wf."type" = f."type"
-        AND COALESCE(wf."folder_id", '') = COALESCE(f."folder_id", '')
-    `);
+    if (dbType === 'oracle') {
+      await queryRunner.query(`
+        MERGE INTO ${tableRef} wf
+        USING ${filesTableRef} f
+        ON (wf."project_id" = f."project_id"
+            AND wf."name" = f."name"
+            AND wf."type" = f."type"
+            AND (wf."folder_id" = f."folder_id" OR (wf."folder_id" IS NULL AND f."folder_id" IS NULL))
+            AND wf."main_file_id" IS NULL)
+        WHEN MATCHED THEN UPDATE SET wf."main_file_id" = f."id"
+      `);
+    } else {
+      await queryRunner.query(`
+        UPDATE ${tableRef} AS wf
+        SET "main_file_id" = f."id"
+        FROM ${filesTableRef} AS f
+        WHERE wf."main_file_id" IS NULL
+          AND wf."project_id" = f."project_id"
+          AND wf."name" = f."name"
+          AND wf."type" = f."type"
+          AND COALESCE(wf."folder_id", '') = COALESCE(f."folder_id", '')
+      `);
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

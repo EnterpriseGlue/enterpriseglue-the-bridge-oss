@@ -41,14 +41,24 @@ export class AddFileSnapshotsMainFileId1700000000010 implements MigrationInterfa
 
     const tableRef = buildTableRef(table.schema, table.name);
     const workingFilesTableRef = buildTableRef(workingFilesTable.schema, workingFilesTable.name);
+    const dbType = queryRunner.connection.options.type;
 
-    await queryRunner.query(`
-      UPDATE ${tableRef} AS fs
-      SET "main_file_id" = wf."main_file_id"
-      FROM ${workingFilesTableRef} AS wf
-      WHERE fs."main_file_id" IS NULL
-        AND fs."working_file_id" = wf."id"
-    `);
+    if (dbType === 'oracle') {
+      await queryRunner.query(`
+        MERGE INTO ${tableRef} fs
+        USING ${workingFilesTableRef} wf
+        ON (fs."working_file_id" = wf."id" AND fs."main_file_id" IS NULL)
+        WHEN MATCHED THEN UPDATE SET fs."main_file_id" = wf."main_file_id"
+      `);
+    } else {
+      await queryRunner.query(`
+        UPDATE ${tableRef} AS fs
+        SET "main_file_id" = wf."main_file_id"
+        FROM ${workingFilesTableRef} AS wf
+        WHERE fs."main_file_id" IS NULL
+          AND fs."working_file_id" = wf."id"
+      `);
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
