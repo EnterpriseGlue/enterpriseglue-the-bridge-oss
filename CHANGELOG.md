@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.27](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.26...v0.8.27) (2026-03-31)
+
+
+### Bug Fixes
+
+* avoid Oracle MERGE ON-clause updates in backfill migrations ([#290](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/290)) ([df82e3c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/df82e3c5c65870eab9445527cd47d3c1224580db))
+
 ## [0.8.26](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.25...v0.8.26) (2026-03-31)
 
 
