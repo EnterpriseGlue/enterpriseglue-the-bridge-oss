@@ -27,7 +27,6 @@ export class AddPasswordResetTokensTable1700000000002 implements MigrationInterf
 
     await queryRunner.createIndices(tablePath, [
       new TableIndex({ name: 'idx_password_reset_tokens_user', columnNames: ['user_id'] }),
-      new TableIndex({ name: 'idx_password_reset_tokens_hash', columnNames: ['token_hash'] }),
       new TableIndex({ name: 'idx_password_reset_tokens_expires', columnNames: ['expires_at'] }),
       new TableIndex({ name: 'idx_password_reset_tokens_consumed', columnNames: ['consumed_at'] }),
     ]);

@@ -8,7 +8,6 @@ export type InvitationStatus = 'pending' | 'otp_verified' | 'completed' | 'revok
 @Entity({ name: 'invitations', schema: 'main' })
 @Index('idx_invitations_user', ['userId'])
 @Index('idx_invitations_email', ['email'])
-@Index('idx_invitations_token_hash', ['inviteTokenHash'], { unique: true })
 export class Invitation extends AppBaseEntity {
   @Column({ name: 'user_id', type: 'text' })
   userId!: string;

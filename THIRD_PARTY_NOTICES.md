@@ -224,7 +224,7 @@ Generated from:
 | @types/xml-encryption | 1.2.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | backend |
 | @types/xml2js | 0.4.14 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | backend |
 | @xmldom/is-dom-node | 1.0.1 | MIT | git+https://github.com/xmldom/is-dom-node.git | backend |
-| @xmldom/xmldom | 0.8.11 | MIT | git://github.com/xmldom/xmldom.git | backend |
+| @xmldom/xmldom | 0.8.12 | MIT | git://github.com/xmldom/xmldom.git | backend |
 | abort-controller | 3.0.0 | MIT | git+https://github.com/mysticatea/abort-controller.git | backend |
 | accepts | 2.0.0 | MIT | jshttp/accepts | backend, frontend, packages/frontend-host, packages/shared |
 | adm-zip | 0.5.16 | MIT | https://github.com/cthackers/adm-zip.git | backend, frontend, packages/frontend-host, packages/shared |

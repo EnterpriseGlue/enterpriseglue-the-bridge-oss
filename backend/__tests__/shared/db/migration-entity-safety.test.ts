@@ -11,6 +11,8 @@
  *  3. Fails if any migration attempts to drop a table that has an active entity.
  */
 import { describe, it, expect } from 'vitest';
+import { getMetadataArgsStorage } from 'typeorm';
+import '@enterpriseglue/shared/db/entities/index.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -103,6 +105,36 @@ function findDropTableViolations(activeTableNames: Set<string>): DropViolation[]
   }
 
   return violations;
+}
+
+function findDuplicateSingleColumnUniqueDefinitions(): string[] {
+  const metadata = getMetadataArgsStorage();
+  const duplicates = new Set<string>();
+
+  for (const index of metadata.indices) {
+    const uniqueIndex = index as typeof index & { options?: { unique?: boolean } };
+    const indexColumns = Array.isArray(index.columns)
+      ? index.columns.filter((column): column is string => typeof column === 'string')
+      : [];
+
+    if (!uniqueIndex.options?.unique || indexColumns.length !== 1) {
+      continue;
+    }
+
+    const propertyName = indexColumns[0];
+    const column = metadata.columns.find(
+      (candidate) => candidate.target === index.target && candidate.propertyName === propertyName
+    );
+
+    if (!column?.options?.unique) {
+      continue;
+    }
+
+    const entityName = typeof index.target === 'function' ? index.target.name : String(index.target);
+    duplicates.add(`${entityName}.${propertyName}`);
+  }
+
+  return [...duplicates].sort();
 }
 
 describe('Migration entity safety guard', () => {

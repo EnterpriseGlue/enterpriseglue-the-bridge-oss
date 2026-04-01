@@ -923,7 +923,7 @@
     "publisher": "Chris Barth",
     "email": "chrisjbarth@hotmail.com"
   },
-  "@xmldom/xmldom@0.8.11": {
+  "@xmldom/xmldom@0.8.12": {
     "licenses": "MIT",
     "repository": "git://github.com/xmldom/xmldom.git"
   },
