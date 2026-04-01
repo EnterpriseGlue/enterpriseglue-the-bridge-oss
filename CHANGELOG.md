@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.8.28](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.27...v0.8.28) (2026-04-01)
+
+
+### Bug Fixes
+
+* **shared:** typeorm uniqueness cleanup ([#293](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/293)) ([8138857](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8138857baf52bc8b250d00ada6a21df0f32ee4f7))
+
 ## [0.8.27](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.26...v0.8.27) (2026-03-31)
 
 
