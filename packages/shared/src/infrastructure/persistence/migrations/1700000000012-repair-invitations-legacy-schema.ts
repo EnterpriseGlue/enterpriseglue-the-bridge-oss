@@ -49,7 +49,6 @@ export class RepairInvitationsLegacySchema1700000000012 implements MigrationInte
     const indexes = [
       new TableIndex({ name: 'idx_invitations_user', columnNames: ['user_id'] }),
       new TableIndex({ name: 'idx_invitations_email', columnNames: ['email'] }),
-      new TableIndex({ name: 'idx_invitations_token_hash', columnNames: ['invite_token_hash'] }),
       new TableIndex({ name: 'idx_invitations_status', columnNames: ['status'] }),
       new TableIndex({ name: 'idx_invitations_expires', columnNames: ['expires_at'] }),
     ];

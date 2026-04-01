@@ -1,8 +1,7 @@
-import { Entity, Column, Index } from 'typeorm';
+import { Entity, Column } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'users', schema: 'main' })
-@Index('idx_users_email', ['email'], { unique: true })
 export class User extends AppBaseEntity {
   @Column({ type: 'text', unique: true })
   email!: string;
