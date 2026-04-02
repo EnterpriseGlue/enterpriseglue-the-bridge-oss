@@ -1185,7 +1185,7 @@
     "email": "john.david.dalton@gmail.com",
     "url": "http://allyoucanleet.com/"
   },
-  "lodash@4.17.23": {
+  "lodash@4.18.1": {
     "licenses": "MIT",
     "repository": "lodash/lodash",
     "publisher": "John-David Dalton",
