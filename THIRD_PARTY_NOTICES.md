@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-03-23T20:51:16.770Z
+Generated at: 2026-04-02T06:54:38.325Z
 
 Generated from:
 - third_party_licenses.json
@@ -492,7 +492,7 @@ Generated from:
 | jws | 4.0.1 | MIT | git://github.com/brianloveswords/node-jws.git | backend, frontend, packages/frontend-host, packages/shared |
 | lazystream | 1.0.1 | MIT | https://github.com/jpommerening/node-lazystream.git | backend |
 | lines-and-columns | 1.2.4 | MIT | https://github.com/eventualbuddha/lines-and-columns.git | backend, frontend, packages/frontend-host, packages/shared |
-| lodash-es | 4.17.23 | MIT | lodash/lodash | frontend |
+| lodash-es | 4.18.1 | MIT | lodash/lodash | frontend |
 | lodash.includes | 4.3.0 | MIT | lodash/lodash | backend, frontend, packages/frontend-host, packages/shared |
 | lodash.isboolean | 3.0.3 | MIT | lodash/lodash | backend, frontend, packages/frontend-host, packages/shared |
 | lodash.isinteger | 4.0.4 | MIT | lodash/lodash | backend, frontend, packages/frontend-host, packages/shared |
@@ -500,7 +500,7 @@ Generated from:
 | lodash.isplainobject | 4.0.6 | MIT | lodash/lodash | backend, frontend, packages/frontend-host, packages/shared |
 | lodash.isstring | 4.0.1 | MIT | lodash/lodash | backend, frontend, packages/frontend-host, packages/shared |
 | lodash.once | 4.1.1 | MIT | lodash/lodash | backend, frontend, packages/frontend-host, packages/shared |
-| lodash | 4.17.23 | MIT | lodash/lodash | backend |
+| lodash | 4.18.1 | MIT | lodash/lodash | backend |
 | loose-envify | 1.4.0 | MIT | git://github.com/zertosh/loose-envify.git | frontend |
 | lru-cache | 10.4.3 | ISC | git://github.com/isaacs/node-lru-cache.git | backend, frontend, packages/frontend-host, packages/shared |
 | lucide-react | 0.577.0 | ISC | https://github.com/lucide-icons/lucide.git | frontend |
