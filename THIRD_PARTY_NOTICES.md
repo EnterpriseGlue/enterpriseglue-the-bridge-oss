@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-04-02T06:54:38.325Z
+Generated at: 2026-04-10T07:52:50.707Z
 
 Generated from:
 - third_party_licenses.json
@@ -526,7 +526,7 @@ Generated from:
 | node-domexception | 1.0.0 | MIT | git+https://github.com/jimmywarting/node-domexception.git | backend, frontend, packages/frontend-host, packages/shared |
 | node-fetch | 2.7.0 | MIT | https://github.com/bitinn/node-fetch.git | backend, frontend, packages/frontend-host, packages/shared |
 | node-fetch | 3.3.2 | MIT | https://github.com/node-fetch/node-fetch.git | backend, frontend, packages/frontend-host, packages/shared |
-| nodemailer | 8.0.4 | MIT-0 | https://github.com/nodemailer/nodemailer.git | backend, frontend, packages/frontend-host, packages/shared |
+| nodemailer | 8.0.5 | MIT-0 | https://github.com/nodemailer/nodemailer.git | backend, frontend, packages/frontend-host, packages/shared |
 | normalize-path | 3.0.0 | MIT | jonschlinkert/normalize-path | backend |
 | object-assign | 4.1.1 | MIT | sindresorhus/object-assign | backend, frontend, packages/frontend-host, packages/shared |
 | object-inspect | 1.13.4 | MIT | git://github.com/inspect-js/object-inspect.git | backend, frontend, packages/frontend-host, packages/shared |

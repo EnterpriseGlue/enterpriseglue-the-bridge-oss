@@ -2442,7 +2442,7 @@
     "repository": "https://github.com/node-fetch/node-fetch.git",
     "publisher": "David Frank"
   },
-  "nodemailer@8.0.4": {
+  "nodemailer@8.0.5": {
     "licenses": "MIT-0",
     "repository": "https://github.com/nodemailer/nodemailer.git",
     "publisher": "Andris Reinman"

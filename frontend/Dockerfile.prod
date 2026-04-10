@@ -27,7 +27,11 @@ RUN npm run build:frontend-host \
     && ln -s busybox /tmp/busybox-bin/sh \
     && ln -s busybox /tmp/busybox-bin/sed
 
-FROM cgr.dev/chainguard/nginx:latest
+FROM cgr.dev/chainguard/nginx:latest-dev
+
+USER root
+RUN apk upgrade --no-cache
+USER 65532
 
 COPY --from=build /tmp/busybox-bin/ /busybox/
 COPY --from=build /repo/frontend/nginx.conf /nginx-site.conf.template

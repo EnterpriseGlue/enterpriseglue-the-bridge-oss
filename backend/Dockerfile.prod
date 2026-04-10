@@ -41,7 +41,8 @@ RUN npm ci -w backend --omit=dev --no-audit --no-fund \
 
 FROM cgr.dev/chainguard/node:latest-dev AS runtime-base
 USER root
-RUN apk del --no-network npm \
+RUN apk upgrade --no-cache \
+    && apk del --no-network npm \
     && rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx
 USER 65532
 
