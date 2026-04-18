@@ -9,7 +9,6 @@ import { BreadcrumbBar } from '../../shared/components/BreadcrumbBar'
 import { useModal } from '../../../shared/hooks/useModal'
 import Canvas from '../components/Canvas'
 import CanvasToolbar from '../components/CanvasToolbar'
-import DownloadPdfButton from '../components/DownloadPdfButton'
 import HistoryPanel from '../components/HistoryPanel'
 import { useXmlHistory } from '../hooks/useXmlHistory'
 import CommitModal from '../components/CommitModal'
@@ -2463,16 +2462,7 @@ export default function Editor() {
                 pointerEvents: 'auto',
               }}
             >
-              <CanvasToolbar
-                modeler={modelerRef.current}
-                fileName={fileQ.data?.name}
-                fileType={fileQ.data?.type}
-                onExportError={(message) => notify({
-                  kind: 'error',
-                  title: 'PDF export failed',
-                  subtitle: message,
-                })}
-              />
+              <CanvasToolbar modeler={modelerRef.current} />
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
@@ -2508,16 +2498,6 @@ export default function Editor() {
                 Mission Control
               </Button>
             )}
-            <DownloadPdfButton
-              modeler={modelerRef.current}
-              fileName={fileQ.data?.name}
-              fileType={fileQ.data?.type}
-              onExportError={(message) => notify({
-                kind: 'error',
-                title: 'PDF export failed',
-                subtitle: message,
-              })}
-            />
             <button
               onClick={handleUndo}
               disabled={!xmlHistory.canUndo || collaborationReadOnly}
@@ -2591,16 +2571,6 @@ export default function Editor() {
                 Mission Control
               </Button>
             )}
-            <DownloadPdfButton
-              modeler={modelerRef.current}
-              fileName={fileQ.data?.name}
-              fileType={fileQ.data?.type}
-              onExportError={(message) => notify({
-                kind: 'error',
-                title: 'PDF export failed',
-                subtitle: message,
-              })}
-            />
             <button
               onClick={handleUndo}
               disabled={!xmlHistory.canUndo || collaborationReadOnly}
