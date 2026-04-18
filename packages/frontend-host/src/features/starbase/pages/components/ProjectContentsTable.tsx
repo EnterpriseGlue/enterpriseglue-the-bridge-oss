@@ -56,6 +56,12 @@ interface ProjectContentsTableProps {
   onMoveItem: (item: FileItem) => void
   onDownloadFile: (item: FileItem) => void
   onDownloadFolder: (item: FileItem) => void
+  /**
+   * Export a single BPMN/DMN file as a PDF of the rendered diagram. Only
+   * invoked for `bpmn` / `dmn` items; `form` and `folder` rows do not
+   * expose this action.
+   */
+  onDownloadFileAsPdf: (item: FileItem) => void
   onDownloadSelection: (items: FileItem[], cancelSelection: () => void) => void
   onDeleteItem: (item: FileItem) => void
   getFileIcon: (fileType: 'bpmn' | 'dmn' | 'folder' | 'form') => React.ReactNode
@@ -104,6 +110,7 @@ export const ProjectContentsTable = ({
   onMoveItem,
   onDownloadFile,
   onDownloadFolder,
+  onDownloadFileAsPdf,
   onDownloadSelection,
   onDeleteItem,
   getFileIcon,
@@ -383,6 +390,9 @@ export const ProjectContentsTable = ({
                         <OverflowMenuItem itemText="Move" onClick={() => onMoveItem(file)} />
                         {file.type !== 'folder' && (
                           <OverflowMenuItem itemText="Download" onClick={() => onDownloadFile(file)} />
+                        )}
+                        {(file.type === 'bpmn' || file.type === 'dmn') && (
+                          <OverflowMenuItem itemText="Download as PDF" onClick={() => onDownloadFileAsPdf(file)} />
                         )}
                         {file.type === 'folder' && (
                           <OverflowMenuItem itemText="Download" onClick={() => onDownloadFolder(file)} />
