@@ -127,6 +127,10 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@src': path.resolve(__dirname, '../packages/frontend-host/src'),
+        // Source alias so frontend can reuse narrow shared utilities without
+        // requiring a shared package build in dev/test. Mirrors the existing
+        // contracts path alias in packages/frontend-host/tsconfig.json.
+        '@enterpriseglue/shared/utils/starbase-filenames.js': path.resolve(__dirname, '../packages/shared/src/utils/starbase-filenames.ts'),
         inferno: path.resolve(__dirname, '../node_modules/dmn-js-shared/node_modules/inferno'),
         'inferno-vnode-flags': path.resolve(__dirname, '../node_modules/dmn-js-shared/node_modules/inferno-vnode-flags'),
       },

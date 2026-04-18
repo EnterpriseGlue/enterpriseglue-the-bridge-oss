@@ -1,15 +1,24 @@
+import {
+  buildStarbaseFileName,
+  sanitizeFileNameSegment,
+} from '@enterpriseglue/shared/utils/starbase-filenames.js';
+
+/**
+ * Browser-safe filename sanitiser. Thin wrapper around the shared
+ * `sanitizeFileNameSegment` so the frontend uses the same rule as backend
+ * ZIP archive entries and individual-file download responses.
+ */
 export function toSafeDownloadFilename(value: unknown, fallback: string): string {
-  const raw = typeof value === 'string' ? value : '';
-  const base = (raw || fallback || 'download').trim();
-  const cleaned = base
-    .replace(/[\u0000-\u001F\u007F]/g, '_')
-    .replace(/[\\/]/g, '_')
-    .replace(/[:*?"<>|]/g, '_')
-    .replace(/\s+/g, '_')
-    .slice(0, 200);
-  return cleaned || fallback || 'download';
+  return sanitizeFileNameSegment(value, fallback);
 }
 
+/**
+ * Produce a download filename that ends with the given extension. Delegates
+ * to the shared `buildStarbaseFileName` helper with `forceExtension` so that
+ * an input already ending in any recognised diagram extension
+ * (`.bpmn|.dmn|.form|.xml|.pdf|.svg|.png`) gets its extension replaced
+ * rather than doubled.
+ */
 export function toSafeDownloadFilenameWithExtension(
   value: unknown,
   extension: string,
@@ -19,20 +28,13 @@ export function toSafeDownloadFilenameWithExtension(
   const safeFallbackBase = String(fallbackBase || 'download').trim() || 'download';
 
   if (!normalizedExtension) {
-    return toSafeDownloadFilename(value, safeFallbackBase);
+    return sanitizeFileNameSegment(value, safeFallbackBase);
   }
 
-  const fallback = `${safeFallbackBase}.${normalizedExtension}`;
-  const raw = typeof value === 'string' ? value.trim() : '';
-  let filename = raw || fallback;
-
-  if (/\.(bpmn|dmn|form|xml)$/i.test(filename)) {
-    filename = filename.replace(/\.(bpmn|dmn|form|xml)$/i, `.${normalizedExtension}`);
-  } else {
-    filename = `${filename}.${normalizedExtension}`;
-  }
-
-  return toSafeDownloadFilename(filename, fallback);
+  return buildStarbaseFileName(value, null, {
+    forceExtension: normalizedExtension,
+    fallbackBase: safeFallbackBase,
+  });
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

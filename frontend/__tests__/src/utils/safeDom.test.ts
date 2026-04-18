@@ -55,10 +55,12 @@ describe('safeDom utils', () => {
       expect(toSafeDownloadFilename(null, '')).toBe('download');
     });
 
-    it('handles edge case where sanitization results in underscores', () => {
-      // Slashes and asterisks are replaced with underscores, not removed
-      expect(toSafeDownloadFilename('///', 'fallback')).toBe('___');
-      expect(toSafeDownloadFilename('***', 'fallback')).toBe('___');
+    it('falls back when sanitization would yield an all-underscore name', () => {
+      // Inputs that only contain unsafe characters produce a meaningless
+      // underscore run; the shared filename helper treats this as empty and
+      // returns the fallback instead, which is a safer default for users.
+      expect(toSafeDownloadFilename('///', 'fallback')).toBe('fallback');
+      expect(toSafeDownloadFilename('***', 'fallback')).toBe('fallback');
     });
   });
 

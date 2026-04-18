@@ -9,6 +9,10 @@ export default defineConfig({
     alias: {
       '@src': new URL('../packages/frontend-host/src', import.meta.url).pathname,
       '@test': new URL('./test', import.meta.url).pathname,
+      '@enterpriseglue/shared/utils/starbase-filenames.js': new URL(
+        '../packages/shared/src/utils/starbase-filenames.ts',
+        import.meta.url,
+      ).pathname,
     },
   },
   server: {
