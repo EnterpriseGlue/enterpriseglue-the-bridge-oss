@@ -22,15 +22,26 @@ export class AddGitLockSessionState1700000000014 implements MigrationInterface {
       }
     }
 
+    const quote = (identifier: string): string => queryRunner.connection.driver.escape(identifier);
+    const quotedTable = tablePath
+      .split('.')
+      .map((segment) => quote(segment))
+      .join('.');
+    const lastInteractionAt = quote('last_interaction_at');
+    const visibilityState = quote('visibility_state');
+    const visibilityChangedAt = quote('visibility_changed_at');
+    const heartbeatAt = quote('heartbeat_at');
+    const acquiredAt = quote('acquired_at');
+
     const now = Date.now();
     await queryRunner.query(
-      `UPDATE ${tablePath} SET last_interaction_at = COALESCE(last_interaction_at, heartbeat_at, acquired_at, ${now})`
+      `UPDATE ${quotedTable} SET ${lastInteractionAt} = COALESCE(${lastInteractionAt}, ${heartbeatAt}, ${acquiredAt}, ${now})`
     );
     await queryRunner.query(
-      `UPDATE ${tablePath} SET visibility_state = COALESCE(visibility_state, 'visible')`
+      `UPDATE ${quotedTable} SET ${visibilityState} = COALESCE(${visibilityState}, 'visible')`
     );
     await queryRunner.query(
-      `UPDATE ${tablePath} SET visibility_changed_at = COALESCE(visibility_changed_at, heartbeat_at, acquired_at, ${now})`
+      `UPDATE ${quotedTable} SET ${visibilityChangedAt} = COALESCE(${visibilityChangedAt}, ${heartbeatAt}, ${acquiredAt}, ${now})`
     );
   }
 
