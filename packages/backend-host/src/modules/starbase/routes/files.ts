@@ -21,6 +21,7 @@ import { syncFileDelete, syncFileUpdate } from '@enterpriseglue/shared/services/
 import { emitLockEvent } from '../../git/lockEvents.js';
 import { sanitizeBpmnXml, sanitizeDmnXml } from '@enterpriseglue/shared/services/engines/deployment-utils.js';
 import { extractBpmnCallActivityLinks, extractBpmnProcessId, extractDmnDecisionId, updateStarbaseFileNameInXml } from '@enterpriseglue/shared/utils/starbase-xml.js';
+import { buildStarbaseFileName } from '@enterpriseglue/shared/utils/starbase-filenames.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { fileOperationsLimiter, apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles.js';
@@ -399,9 +400,9 @@ r.get('/starbase-api/files/:fileId/download', apiLimiter, requireAuth, asyncHand
   
   if (!row) throw Errors.notFound('File');
 
-  const fileName = String(row.name || 'diagram') + (String(row.name || '').includes('.') ? '' : `.${String(row.type || 'bpmn')}`);
+  const fileName = buildStarbaseFileName(row.name, row.type || 'bpmn');
   res.setHeader('Content-Type', 'application/xml');
-  res.setHeader('Content-Disposition', `attachment; filename="${fileName.replace(/"/g, '')}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   res.send(String(row.xml || ''));
 }));
 

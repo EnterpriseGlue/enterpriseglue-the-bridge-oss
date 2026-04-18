@@ -48,6 +48,7 @@ import { ProjectMembersModal } from './components/ProjectMembersModal'
 import { ProjectMembersManagementModals } from './components/ProjectMembersManagementModals'
 import { ProjectDetailHeader } from './components/ProjectDetailHeader'
 import { downloadBlob, toSafeDownloadFilename, toSafeDownloadFilenameWithExtension } from '../../../utils/safeDom'
+import { renderDiagramToPdf } from '../utils/renderDiagramToPdf'
 import { canDeployProject, type ProjectEngineAccessData } from '../utils/deployEligibility'
 
 // Import extracted utilities and components
@@ -403,6 +404,30 @@ export default function ProjectDetail() {
       downloadBlob(blob, safeName)
     } catch {
       // noop for now
+    }
+  }
+
+  async function downloadFileAsPdf(fileId: string, name: string, type: 'bpmn' | 'dmn') {
+    try {
+      // Reuse the authenticated source-XML endpoint; no new backend route needed.
+      const blob = await apiClient.getBlob(`/starbase-api/files/${encodeURIComponent(fileId)}/download`)
+      if (!blob || blob.size === 0) {
+        notify({
+          kind: 'error',
+          title: 'PDF export failed',
+          subtitle: 'The file is empty or could not be downloaded.',
+        })
+        return
+      }
+      const xml = await blob.text()
+      await renderDiagramToPdf({ xml, name, type })
+    } catch (error) {
+      const parsed = parseApiError(error, 'Failed to export diagram as PDF.')
+      notify({
+        kind: 'error',
+        title: 'PDF export failed',
+        subtitle: parsed.message,
+      })
     }
   }
 
@@ -1087,6 +1112,10 @@ export default function ProjectDetail() {
                 downloadFile(file.id, file.name, file.type)
               }}
               onDownloadFolder={(file) => downloadFolder(file.id, file.name)}
+              onDownloadFileAsPdf={(file) => {
+                if (file.type !== 'bpmn' && file.type !== 'dmn') return
+                downloadFileAsPdf(file.id, file.name, file.type)
+              }}
               onDownloadSelection={downloadSelection}
               onDeleteItem={(file) => {
                 if (file.type === 'folder') {

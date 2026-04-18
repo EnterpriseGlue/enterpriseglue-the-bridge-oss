@@ -6,8 +6,14 @@
     "baseUrl": ".",
     "paths": {
       "@enterpriseglue/shared/contracts": ["../shared/src/contracts/index.ts"],
-      "@enterpriseglue/shared/contracts/*": ["../shared/src/contracts/*"]
+      "@enterpriseglue/shared/contracts/*": ["../shared/src/contracts/*"],
+      "@enterpriseglue/shared/utils/*": ["../shared/src/utils/*"]
     }
   },
-  "include": ["src", "../shared/src/contracts/**/*.ts", "../shared/src/contracts/**/*.d.ts"]
+  "include": [
+    "src",
+    "../shared/src/contracts/**/*.ts",
+    "../shared/src/contracts/**/*.d.ts",
+    "../shared/src/utils/starbase-filenames.ts"
+  ]
 }

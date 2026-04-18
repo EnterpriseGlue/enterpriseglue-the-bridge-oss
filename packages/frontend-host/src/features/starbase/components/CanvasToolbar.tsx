@@ -1,10 +1,10 @@
 import React from 'react'
 import { Button } from '@carbon/react'
-import { 
-  FitToScreen, 
-  CenterCircle, 
-  Add, 
-  Subtract
+import {
+  FitToScreen,
+  CenterCircle,
+  Add,
+  Subtract,
 } from '@carbon/icons-react'
 
 interface CanvasToolbarProps {

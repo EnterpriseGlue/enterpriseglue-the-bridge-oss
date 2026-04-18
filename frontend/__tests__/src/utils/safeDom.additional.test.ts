@@ -12,8 +12,10 @@ describe('safeDom utils additional', () => {
       expect(toSafeDownloadFilename('file\x00name.txt', 'fallback.txt')).toBe('file_name.txt');
     });
 
-    it('replaces whitespace with underscores', () => {
-      expect(toSafeDownloadFilename('my file name.txt', 'fallback.txt')).toBe('my_file_name.txt');
+    it('preserves regular spaces (only control chars become underscores)', () => {
+      // Unified with backend ZIP archive rule: spaces are valid in filenames
+      // on every major OS and modern browsers handle them in a.download.
+      expect(toSafeDownloadFilename('my file name.txt', 'fallback.txt')).toBe('my file name.txt');
     });
 
     it('truncates long filenames', () => {

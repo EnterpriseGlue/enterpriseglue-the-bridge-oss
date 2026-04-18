@@ -19,6 +19,7 @@ Generated from:
 |---|---:|
 | (Apache-2.0 OR UPL-1.0) | 1 |
 | (MIT AND BSD-3-Clause) | 1 |
+| (MIT AND Zlib) | 1 |
 | (MPL-2.0 OR Apache-2.0) | 1 |
 | 0BSD | 1 |
 | Apache-2.0 | 41 |
@@ -27,7 +28,7 @@ Generated from:
 | BSD-2-Clause | 3 |
 | BSD-3-Clause | 14 |
 | ISC | 65 |
-| MIT | 521 |
+| MIT | 539 |
 | MIT OR SEE LICENSE IN FEEL-FREE.md | 1 |
 | MIT-0 | 2 |
 | OFL-1.1 | 9 |
@@ -211,16 +212,17 @@ Generated from:
 | @types/geojson | 7946.0.16 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend |
 | @types/ms | 2.1.0 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | backend |
 | @types/node | 25.3.5 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | backend |
+| @types/pako | 2.0.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend, packages/frontend-host |
 | @types/parse-json | 4.0.2 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | backend, frontend, packages/frontend-host, packages/shared |
 | @types/qs | 6.15.0 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | backend |
-| @types/raf | 3.4.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend |
+| @types/raf | 3.4.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend, packages/frontend-host |
 | @types/react | 19.2.14 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend |
 | @types/topojson-client | 3.1.5 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend |
 | @types/topojson-server | 3.0.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend |
 | @types/topojson-simplify | 3.0.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend |
 | @types/topojson-specification | 1.0.5 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend |
 | @types/topojson | 3.2.6 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend |
-| @types/trusted-types | 2.0.7 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend |
+| @types/trusted-types | 2.0.7 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | frontend, packages/frontend-host |
 | @types/xml-encryption | 1.2.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | backend |
 | @types/xml2js | 0.4.14 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | backend |
 | @xmldom/is-dom-node | 1.0.1 | MIT | git+https://github.com/xmldom/is-dom-node.git | backend |
@@ -251,6 +253,7 @@ Generated from:
 | bare-path | 3.0.0 | Apache-2.0 | git+https://github.com/holepunchto/bare-path.git | backend |
 | bare-stream | 2.8.0 | Apache-2.0 | git+https://github.com/holepunchto/bare-stream.git | backend |
 | bare-url | 2.3.2 | Apache-2.0 | git+https://github.com/holepunchto/bare-url.git | backend |
+| base64-arraybuffer | 1.0.2 | MIT | https://github.com/niklasvh/base64-arraybuffer | frontend, packages/frontend-host |
 | base64-js | 1.5.1 | MIT | git://github.com/beatgammit/base64-js.git | backend, frontend, packages/frontend-host, packages/shared |
 | basic-auth | 2.0.1 | MIT | jshttp/basic-auth | backend |
 | bcryptjs | 3.0.3 | BSD-3-Clause | https://github.com/dcodeIO/bcrypt.js.git | backend, frontend, packages/frontend-host, packages/shared |
@@ -287,6 +290,7 @@ Generated from:
 | camunda-bpmn-moddle | 7.0.1 | MIT | https://github.com/camunda/camunda-bpmn-moddle | frontend |
 | camunda-dmn-js | 3.7.0 | MIT | https://github.com/camunda/camunda-dmn-js | frontend |
 | camunda-dmn-moddle | 1.3.1 | MIT | https://github.com/camunda/camunda-dmn-moddle | frontend |
+| canvg | 3.0.11 | MIT | https://github.com/canvg/canvg | frontend, packages/frontend-host |
 | canvg | 4.0.3 | MIT | https://github.com/canvg/canvg | frontend |
 | class-variance-authority | 0.7.1 | Apache-2.0 | https://github.com/joe-bell/cva.git | frontend |
 | classnames | 2.5.1 | MIT | git+https://github.com/JedWatson/classnames.git | frontend |
@@ -313,6 +317,7 @@ Generated from:
 | cookie-signature | 1.2.2 | MIT | https://github.com/visionmedia/node-cookie-signature.git | backend, frontend, packages/frontend-host, packages/shared |
 | cookie | 0.7.2 | MIT | jshttp/cookie | backend, frontend, packages/frontend-host, packages/shared |
 | copy-to-clipboard | 3.3.3 | MIT | git+https://github.com/sudodoki/copy-to-clipboard | frontend |
+| core-js | 3.49.0 | MIT | git+https://github.com/zloirock/core-js.git | frontend, packages/frontend-host |
 | core-util-is | 1.0.3 | MIT | git://github.com/isaacs/core-util-is | backend |
 | cors | 2.8.6 | MIT | expressjs/cors | backend, frontend, packages/frontend-host, packages/shared |
 | cosmiconfig | 7.1.0 | MIT | git+https://github.com/davidtheclark/cosmiconfig.git | backend, frontend, packages/frontend-host, packages/shared |
@@ -321,7 +326,9 @@ Generated from:
 | crelt | 1.0.6 | MIT | git+https://github.com/marijnh/crelt.git | frontend |
 | cross-spawn | 7.0.6 | MIT | git@github.com:moxystudio/node-cross-spawn.git | backend, frontend, packages/frontend-host, packages/shared |
 | csrf-csrf | 4.0.3 | ISC | https://github.com/Psifi-Solutions/csrf-csrf | backend |
+| css-line-break | 2.1.0 | MIT | git+ssh://git@github.com/niklasvh/css-line-break.git | frontend, packages/frontend-host |
 | css.escape | 1.5.1 | MIT | https://github.com/mathiasbynens/CSS.escape.git | frontend |
+| cssesc | 3.0.0 | MIT | https://github.com/mathiasbynens/cssesc.git | frontend, packages/frontend-host |
 | csstype | 3.2.3 | MIT | https://github.com/frenic/csstype | frontend |
 | d3-array | 2.12.1 | BSD-3-Clause | https://github.com/d3/d3-array.git | frontend |
 | d3-array | 3.2.4 | ISC | https://github.com/d3/d3-array.git | frontend |
@@ -387,7 +394,7 @@ Generated from:
 | dmn-moddle | 12.0.1 | MIT | https://github.com/bpmn-io/dmn-moddle | frontend |
 | dom-iterator | 1.0.2 | MIT | https://github.com/MatthewMueller/dom-iterator.git | frontend |
 | domify | 3.0.0 | MIT | sindresorhus/domify | frontend |
-| dompurify | 3.3.2 | (MPL-2.0 OR Apache-2.0) | git://github.com/cure53/DOMPurify.git | frontend |
+| dompurify | 3.4.0 | (MPL-2.0 OR Apache-2.0) | git://github.com/cure53/DOMPurify.git | frontend, packages/frontend-host |
 | dotenv | 16.6.1 | BSD-2-Clause | git://github.com/motdotla/dotenv.git | backend, frontend, packages/frontend-host, packages/shared |
 | dotenv | 17.3.1 | BSD-2-Clause | git://github.com/motdotla/dotenv.git | backend, frontend, packages/frontend-host, packages/shared |
 | downshift | 9.0.10 | MIT | https://github.com/downshift-js/downshift.git | frontend |
@@ -415,13 +422,16 @@ Generated from:
 | extend | 3.0.2 | MIT | https://github.com/justmoon/node-extend.git | backend, frontend, packages/frontend-host, packages/shared |
 | fast-content-type-parse | 3.0.0 | MIT | git+https://github.com/fastify/fast-content-type-parse.git | backend, frontend, packages/frontend-host, packages/shared |
 | fast-fifo | 1.3.2 | MIT | https://github.com/mafintosh/fast-fifo.git | backend |
+| fast-png | 6.4.0 | MIT | git+https://github.com/image-js/fast-png.git | frontend, packages/frontend-host |
 | fast-sha256 | 1.3.0 | Unlicense | https://github.com/dchest/fast-sha256-js | backend, frontend, packages/frontend-host, packages/shared |
 | feelers | 1.5.1 | MIT | https://github.com/skaiir | frontend |
 | fetch-blob | 3.2.0 | MIT | https://github.com/node-fetch/fetch-blob.git | backend, frontend, packages/frontend-host, packages/shared |
+| fflate | 0.8.2 | MIT | https://github.com/101arrowz/fflate | frontend, packages/frontend-host |
 | finalhandler | 2.1.1 | MIT | pillarjs/finalhandler | backend, frontend, packages/frontend-host, packages/shared |
 | find-root | 1.1.0 | MIT | git@github.com:js-n/find-root.git | frontend |
 | flatpickr | 4.6.13 | MIT | git+https://github.com/chmln/flatpickr.git | frontend |
 | focus-trap | 8.0.0 | MIT | git+https://github.com/focus-trap/focus-trap.git | frontend |
+| font-family-papandreou | 0.2.0-patch2 | MIT | https://github.com/hanamura/font-family.git | frontend, packages/frontend-host |
 | for-each | 0.3.5 | MIT | https://github.com/Raynos/for-each.git | backend, frontend, packages/frontend-host, packages/shared |
 | foreground-child | 3.3.1 | ISC | git+https://github.com/tapjs/foreground-child.git | backend, frontend, packages/frontend-host, packages/shared |
 | formdata-polyfill | 4.0.10 | MIT | git+https://jimmywarting@github.com/jimmywarting/FormData.git | backend, frontend, packages/frontend-host, packages/shared |
@@ -448,6 +458,7 @@ Generated from:
 | hoist-non-react-statics | 3.3.2 | BSD-3-Clause | git://github.com/mridgway/hoist-non-react-statics.git | frontend |
 | htm | 3.1.1 | Apache-2.0 | developit/htm | frontend |
 | html-to-image | 1.11.11 | MIT | git+https://github.com/bubkoo/html-to-image.git | frontend |
+| html2canvas | 1.4.1 | MIT | git@github.com:niklasvh/html2canvas.git | frontend, packages/frontend-host |
 | http-errors | 2.0.1 | MIT | jshttp/http-errors | backend, frontend, packages/frontend-host, packages/shared |
 | https-proxy-agent | 7.0.6 | MIT | https://github.com/TooTallNate/proxy-agents.git | backend, frontend, packages/frontend-host, packages/shared |
 | iconv-lite | 0.6.3 | MIT | git://github.com/ashtuchkin/iconv-lite.git | frontend |
@@ -465,6 +476,7 @@ Generated from:
 | internmap | 1.0.1 | ISC | https://github.com/mbostock/internmap.git | frontend |
 | internmap | 2.0.3 | ISC | https://github.com/mbostock/internmap.git | frontend |
 | invariant | 2.2.4 | MIT | https://github.com/zertosh/invariant | frontend |
+| iobuffer | 5.4.0 | MIT | git+https://github.com/image-js/iobuffer.git | frontend, packages/frontend-host |
 | ip-address | 10.1.0 | MIT | git://github.com/beaugunderson/ip-address.git | backend, frontend, packages/frontend-host, packages/shared |
 | ipaddr.js | 1.9.1 | MIT | git://github.com/whitequark/ipaddr.js | backend, frontend, packages/frontend-host, packages/shared |
 | is-arrayish | 0.2.1 | MIT | https://github.com/qix-/node-is-arrayish.git | backend, frontend, packages/frontend-host, packages/shared |
@@ -488,6 +500,7 @@ Generated from:
 | json-source-map | 0.6.1 | MIT | git+https://github.com/epoberezkin/json-source-map.git | frontend |
 | json-with-bigint | 3.5.7 | MIT | https://github.com/Ivan-Korolenko/json-with-bigint | backend, frontend, packages/frontend-host, packages/shared |
 | jsonwebtoken | 9.0.3 | MIT | https://github.com/auth0/node-jsonwebtoken | backend, frontend, packages/frontend-host, packages/shared |
+| jspdf | 4.2.1 | MIT | https://github.com/parallax/jsPDF.git | frontend, packages/frontend-host |
 | jwa | 2.0.1 | MIT | git://github.com/brianloveswords/node-jwa.git | backend, frontend, packages/frontend-host, packages/shared |
 | jws | 4.0.1 | MIT | git://github.com/brianloveswords/node-jws.git | backend, frontend, packages/frontend-host, packages/shared |
 | lazystream | 1.0.1 | MIT | https://github.com/jpommerening/node-lazystream.git | backend |
@@ -540,6 +553,7 @@ Generated from:
 | opencollective-postinstall | 2.0.3 | MIT | git+https://github.com/opencollective/opencollective-postinstall.git | frontend |
 | oracledb | 6.10.0 | (Apache-2.0 OR UPL-1.0) | git://github.com/oracle/node-oracledb.git | backend, frontend, packages/frontend-host, packages/shared |
 | package-json-from-dist | 1.0.1 | BlueOak-1.0.0 | git+https://github.com/isaacs/package-json-from-dist.git | backend, frontend, packages/frontend-host, packages/shared |
+| pako | 2.1.0 | (MIT AND Zlib) | nodeca/pako | frontend, packages/frontend-host |
 | parent-module | 1.0.1 | MIT | sindresorhus/parent-module | backend, frontend, packages/frontend-host, packages/shared |
 | parse-json | 5.2.0 | MIT | sindresorhus/parse-json | backend, frontend, packages/frontend-host, packages/shared |
 | parseurl | 1.3.3 | MIT | pillarjs/parseurl | backend, frontend, packages/frontend-host, packages/shared |
@@ -549,7 +563,7 @@ Generated from:
 | path-scurry | 1.11.1 | BlueOak-1.0.0 | git+https://github.com/isaacs/path-scurry | backend, frontend, packages/frontend-host, packages/shared |
 | path-to-regexp | 8.4.0 | MIT | https://github.com/pillarjs/path-to-regexp.git | backend, frontend, packages/frontend-host, packages/shared |
 | path-type | 4.0.0 | MIT | sindresorhus/path-type | backend, frontend, packages/frontend-host, packages/shared |
-| performance-now | 2.1.0 | MIT | git://github.com/braveg1rl/performance-now.git | frontend |
+| performance-now | 2.1.0 | MIT | git://github.com/braveg1rl/performance-now.git | frontend, packages/frontend-host |
 | pg-cloudflare | 1.3.0 | MIT | git://github.com/brianc/node-postgres.git | backend, frontend, packages/frontend-host, packages/shared |
 | pg-connection-string | 2.12.0 | MIT | git://github.com/brianc/node-postgres.git | backend, frontend, packages/frontend-host, packages/shared |
 | pg-int8 | 1.0.1 | ISC | https://github.com/charmander/pg-int8 | backend, frontend, packages/frontend-host, packages/shared |
@@ -574,7 +588,7 @@ Generated from:
 | prop-types | 15.8.1 | MIT | facebook/prop-types | frontend |
 | proxy-addr | 2.0.7 | MIT | jshttp/proxy-addr | backend, frontend, packages/frontend-host, packages/shared |
 | qs | 6.15.0 | BSD-3-Clause | https://github.com/ljharb/qs.git | backend, frontend, packages/frontend-host, packages/shared |
-| raf | 3.4.1 | MIT | git://github.com/chrisdickinson/raf.git | frontend |
+| raf | 3.4.1 | MIT | git://github.com/chrisdickinson/raf.git | frontend, packages/frontend-host |
 | range-parser | 1.2.1 | MIT | jshttp/range-parser | backend, frontend, packages/frontend-host, packages/shared |
 | rate-limiter-flexible | 8.3.0 | ISC | git+https://github.com/animir/node-rate-limiter-flexible.git | backend, frontend, packages/frontend-host, packages/shared |
 | raw-body | 3.0.2 | MIT | stream-utils/raw-body | backend, frontend, packages/frontend-host, packages/shared |
@@ -593,11 +607,12 @@ Generated from:
 | readable-stream | 4.7.0 | MIT | git://github.com/nodejs/readable-stream | backend |
 | readdir-glob | 1.1.3 | Apache-2.0 | git://github.com/Yqnn/node-readdir-glob.git | backend |
 | reflect-metadata | 0.2.2 | Apache-2.0 | https://github.com/rbuckton/reflect-metadata.git | backend, frontend, packages/frontend-host, packages/shared |
+| regenerator-runtime | 0.13.11 | MIT | https://github.com/facebook/regenerator/tree/main/packages/runtime | frontend, packages/frontend-host |
 | require-directory | 2.1.1 | MIT | git://github.com/troygoode/node-require-directory.git | backend, frontend, packages/frontend-host, packages/shared |
 | resend | 6.9.3 | MIT | git+https://github.com/resend/resend-node.git | backend, frontend, packages/frontend-host, packages/shared |
 | resolve-from | 4.0.0 | MIT | sindresorhus/resolve-from | backend, frontend, packages/frontend-host, packages/shared |
 | resolve | 1.22.11 | MIT | ssh://github.com/browserify/resolve.git | backend, frontend, packages/frontend-host, packages/shared |
-| rgbcolor | 1.0.1 | MIT OR SEE LICENSE IN FEEL-FREE.md | https://github.com/yetzt/node-rgbcolor.git | frontend |
+| rgbcolor | 1.0.1 | MIT OR SEE LICENSE IN FEEL-FREE.md | https://github.com/yetzt/node-rgbcolor.git | frontend, packages/frontend-host |
 | rimraf | 5.0.10 | ISC | git://github.com/isaacs/rimraf.git | backend, frontend, packages/frontend-host, packages/shared |
 | robust-predicates | 3.0.2 | Unlicense | https://github.com/mourner/robust-predicates.git | frontend |
 | router | 2.2.0 | MIT | pillarjs/router | backend, frontend, packages/frontend-host, packages/shared |
@@ -628,10 +643,11 @@ Generated from:
 | simple-git | 3.32.3 | MIT | https://github.com/steveukx/git-js.git | backend, root |
 | simple-swizzle | 0.2.4 | MIT | qix-/node-simple-swizzle | frontend |
 | source-map | 0.5.7 | BSD-3-Clause | http://github.com/mozilla/source-map.git | frontend |
+| specificity | 0.4.1 | MIT | https://github.com/keeganstreet/specificity.git | frontend, packages/frontend-host |
 | split2 | 4.2.0 | ISC | https://github.com/mcollina/split2.git | backend, frontend, packages/frontend-host, packages/shared |
 | sql-highlight | 6.1.0 | MIT | git@github.com:scriptcoded/sql-highlight.git | backend, frontend, packages/frontend-host, packages/shared |
 | sql.js | 1.14.1 | MIT | http://github.com/sql-js/sql.js.git | backend, frontend, packages/frontend-host, packages/shared |
-| stackblur-canvas | 2.7.0 | MIT | https://github.com/flozz/StackBlur.git | frontend |
+| stackblur-canvas | 2.7.0 | MIT | https://github.com/flozz/StackBlur.git | frontend, packages/frontend-host |
 | standardwebhooks | 1.0.0 | MIT | https://github.com/standard-webhooks/standard-webhooks | backend, frontend, packages/frontend-host, packages/shared |
 | statuses | 2.0.2 | MIT | jshttp/statuses | backend, frontend, packages/frontend-host, packages/shared |
 | streamx | 2.23.0 | MIT | https://github.com/mafintosh/streamx.git | backend |
@@ -646,7 +662,9 @@ Generated from:
 | style-mod | 4.1.3 | MIT | git+https://github.com/marijnh/style-mod.git | frontend |
 | stylis | 4.2.0 | MIT | https://github.com/thysultan/stylis.js | frontend |
 | supports-preserve-symlinks-flag | 1.0.0 | MIT | git+https://github.com/inspect-js/node-supports-preserve-symlinks-flag.git | backend, frontend, packages/frontend-host, packages/shared |
-| svg-pathdata | 6.0.3 | MIT | https://github.com/nfroidure/svg-pathdata.git | frontend |
+| svg-pathdata | 6.0.3 | MIT | https://github.com/nfroidure/svg-pathdata.git | frontend, packages/frontend-host |
+| svg2pdf.js | 2.7.0 | MIT | git+https://github.com/yWorks/svg2pdf.js.git | frontend, packages/frontend-host |
+| svgpath | 2.6.0 | MIT | fontello/svgpath | frontend, packages/frontend-host |
 | svix | 1.84.1 | MIT | https://github.com/svix/svix-webhooks | backend, frontend, packages/frontend-host, packages/shared |
 | swagger-ui-dist | 5.32.0 | Apache-2.0 | git@github.com:swagger-api/swagger-ui.git | backend |
 | swagger-ui-express | 5.0.1 | MIT | git@github.com:scottie1984/swagger-ui-express.git | backend |
@@ -656,6 +674,7 @@ Generated from:
 | tar-stream | 3.1.8 | MIT | git+https://github.com/mafintosh/tar-stream.git | backend |
 | teex | 1.0.1 | MIT | https://github.com/mafintosh/teex.git | backend |
 | text-decoder | 1.2.7 | Apache-2.0 | git+https://github.com/holepunchto/text-decoder.git | backend |
+| text-segmentation | 1.0.3 | MIT | git+ssh://git@github.com/niklasvh/text-segmentation.git | frontend, packages/frontend-host |
 | tiny-glob | 0.2.9 | MIT | terkelg/tiny-glob | frontend |
 | tiny-svg | 3.1.3 | MIT | https://github.com/bpmn-io/tiny-svg | frontend |
 | tiny-svg | 4.1.4 | MIT | https://github.com/bpmn-io/tiny-svg | frontend |
@@ -679,6 +698,7 @@ Generated from:
 | unpipe | 1.0.0 | MIT | stream-utils/unpipe | backend, frontend, packages/frontend-host, packages/shared |
 | url-template | 2.0.8 | BSD | git://github.com/bramstein/url-template.git | backend, frontend, packages/frontend-host, packages/shared |
 | util-deprecate | 1.0.2 | MIT | git://github.com/TooTallNate/util-deprecate.git | backend |
+| utrie | 1.0.2 | MIT | git+ssh://git@github.com/niklasvh/utrie.git | frontend, packages/frontend-host |
 | uuid | 10.0.0 | MIT | git+https://github.com/uuidjs/uuid.git | backend, frontend, packages/frontend-host, packages/shared |
 | uuid | 11.1.0 | MIT | https://github.com/uuidjs/uuid.git | backend, frontend, packages/frontend-host, packages/shared |
 | uuid | 13.0.0 | MIT | https://github.com/uuidjs/uuid.git | backend, frontend, packages/frontend-host, packages/shared |

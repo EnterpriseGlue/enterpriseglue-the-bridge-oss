@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/backend-host",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "OSS backend host for EnterpriseGlue — Express app, route modules, enterprise loader, and server bootstrap",
   "license": "Apache-2.0",
   "repository": {

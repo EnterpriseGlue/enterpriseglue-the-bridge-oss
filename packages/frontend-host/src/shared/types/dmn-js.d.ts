@@ -8,6 +8,11 @@ declare module 'dmn-js/lib/Viewer' {
   export default Viewer
 }
 
+declare module 'dmn-js/lib/NavigatedViewer' {
+  const NavigatedViewer: any
+  export default NavigatedViewer
+}
+
 declare module 'camunda-dmn-js/lib/Modeler' {
   const Modeler: any
   export default Modeler

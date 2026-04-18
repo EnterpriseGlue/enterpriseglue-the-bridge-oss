@@ -23,6 +23,7 @@ import { applyProjectArchiveToProject } from '@enterpriseglue/shared/services/st
 import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js'
 import { unixTimestamp } from '@enterpriseglue/shared/utils/id.js'
 import { projectIdParamSchema, folderIdParamSchema, createFolderBodySchema, renameFolderBodySchema, uuidSchema } from '@enterpriseglue/shared/schemas/common.js'
+import { buildStarbaseFileName, sanitizeFileNameSegment } from '@enterpriseglue/shared/utils/starbase-filenames.js'
 import { z } from 'zod'
 
 // Auto-commit helper for folder operations
@@ -45,26 +46,12 @@ function rowString(row: any, key: string): string | null {
   return v == null ? null : String(v)
 }
 
-function ensureFileExtension(name: string, type: string | null | undefined): string {
-  const t = String(type || '').trim()
-  if (!t) return name
-  const ext = `.${t}`
-  return name.endsWith(ext) ? name : `${name}${ext}`
-}
-
+// Archive path-segment helpers are provided by the shared
+// `@enterpriseglue/shared/utils/starbase-filenames` module so that ZIP entry
+// names stay consistent with individual-file downloads and future export
+// formats. See packages/shared/src/utils/starbase-filenames.ts for rules.
 function sanitizeArchivePathSegment(name: string, fallback: string): string {
-  const cleaned = String(name || '')
-    .replace(/[\u0000-\u001F\u007F]/g, '_')
-    .replace(/[\\/]/g, '_')
-    .replace(/[:*?"<>|]/g, '_')
-    .trim()
-    .slice(0, 200)
-
-  if (!cleaned || cleaned === '.' || cleaned === '..') {
-    return fallback
-  }
-
-  return cleaned
+  return sanitizeFileNameSegment(name, fallback)
 }
 
 async function buildPathForFolder(folderId: string): Promise<string> {
@@ -276,7 +263,7 @@ async function streamZipArchive(params: {
       name: file.name,
       type: file.type,
       folderId: file.folderId,
-      path: await buildPathForFile(file.folderId, ensureFileExtension(file.name, file.type)),
+      path: await buildPathForFile(file.folderId, buildStarbaseFileName(file.name, file.type)),
       xml: file.xml,
       bpmnProcessId: file.bpmnProcessId ?? null,
       dmnDecisionId: file.dmnDecisionId ?? null,
