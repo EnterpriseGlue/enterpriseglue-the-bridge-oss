@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.9.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.31...v0.9.0) (2026-04-18)
+
+
+### Features
+
+* **starbase:** add pdf download of process models ([#302](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/302)) ([6d17759](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6d17759fb76c452cc1aa5c201673c25e4d7df7eb))
+
 ## [0.8.31](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.8.30...v0.8.31) (2026-04-10)
 
 
