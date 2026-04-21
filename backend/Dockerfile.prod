@@ -1,6 +1,16 @@
+# syntax=docker/dockerfile:1.7
 FROM node:24-bookworm-slim AS build
 
 WORKDIR /repo
+
+# Harden npm against transient CI network errors (e.g. ECONNRESET mid-install
+# or a stalled arm64 registry TCP stream that cancels the build). Scoped to
+# this build stage only — never shipped in the runtime image.
+# https://docs.npmjs.com/cli/v10/using-npm/config#fetch-retries
+ENV npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_mintimeout=20000 \
+    npm_config_fetch_retry_maxtimeout=120000 \
+    npm_config_fetch_timeout=600000
 
 # Copy workspace manifests for npm ci layer caching
 COPY package.json package-lock.json ./
@@ -11,8 +21,13 @@ COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY packages/frontend-host/package.json packages/frontend-host/
 COPY frontend/package.json frontend/
 
-RUN npm ci -w backend -w packages/shared -w packages/backend-host \
-    --include=dev --no-audit --no-fund
+# BuildKit cache mount hydrates ~/.npm across builds so `npm ci` mostly reads
+# from local disk instead of the registry. `sharing=locked` serializes
+# concurrent multi-platform builds safely. --prefer-offline makes npm use
+# cached tarballs first and only hit the registry for genuine misses.
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci -w backend -w packages/shared -w packages/backend-host \
+    --include=dev --no-audit --no-fund --prefer-offline
 
 # Build OSS packages (shared must be built before backend-host)
 COPY packages packages
@@ -26,6 +41,12 @@ FROM node:24-bookworm-slim AS deps
 
 WORKDIR /repo
 
+# Harden npm against transient CI network errors (see build stage above).
+ENV npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_mintimeout=20000 \
+    npm_config_fetch_retry_maxtimeout=120000 \
+    npm_config_fetch_timeout=600000
+
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/
 COPY packages/shared/package.json packages/shared/
@@ -34,8 +55,10 @@ COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY packages/frontend-host/package.json packages/frontend-host/
 COPY frontend/package.json frontend/
 
-RUN npm ci -w backend --omit=dev --no-audit --no-fund \
-    && npm install -w backend --omit=dev --no-audit --no-fund --no-save \
+# BuildKit cache mount — same rationale as the build stage above.
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci -w backend --omit=dev --no-audit --no-fund --prefer-offline \
+    && npm install -w backend --omit=dev --no-audit --no-fund --no-save --prefer-offline \
       mysql2 \
       mssql
 

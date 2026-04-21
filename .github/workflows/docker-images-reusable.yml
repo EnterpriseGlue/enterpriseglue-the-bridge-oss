@@ -140,8 +140,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push backend image
-        id: backend
+      # Two-attempt pattern: if the first build/push hits a transient buildx
+      # error (e.g. npm ECONNRESET mid-install, ghcr push 5xx, stalled arm64
+      # registry TCP stream), a second attempt runs. The Dockerfile-level
+      # BuildKit cache mount on ~/.npm means the second attempt only has to
+      # re-fetch whatever packages failed the first time.
+      - name: Build and push backend image (attempt 1)
+        id: backend_try1
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           builder: ${{ steps.buildx_backend.outputs.name }}
@@ -157,6 +163,37 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}
+
+      - name: Build and push backend image (attempt 2 after transient failure)
+        id: backend_try2
+        if: steps.backend_try1.outcome == 'failure'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          builder: ${{ steps.buildx_backend.outputs.name }}
+          context: .
+          file: backend/Dockerfile.prod
+          platforms: ${{ steps.meta.outputs.image_platforms }}
+          pull: true
+          no-cache: ${{ inputs.security_rebuild }}
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.backend_temp_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}
+
+      - name: Capture backend digest
+        id: backend
+        shell: bash
+        run: |
+          if [ "${{ steps.backend_try1.outcome }}" == "success" ]; then
+            echo "digest=${{ steps.backend_try1.outputs.digest }}" >> "$GITHUB_OUTPUT"
+            echo "[backend] published on attempt 1"
+          else
+            echo "digest=${{ steps.backend_try2.outputs.digest }}" >> "$GITHUB_OUTPUT"
+            echo "[backend] published on attempt 2 (attempt 1 failed — transient)"
+          fi
 
       - name: Verify backend image runtime contract for supported database adapters
         run: |
@@ -241,8 +278,13 @@ jobs:
         id: buildx_frontend
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Build and push frontend image
-        id: frontend
+      # Two-attempt pattern — see backend build for rationale. This step in
+      # particular hung for 1h20m on the arm64 leg of v0.9.1 and caused the
+      # entire publish run to be cancelled; the retry wrapper + Dockerfile
+      # cache mount specifically address that failure mode.
+      - name: Build and push frontend image (attempt 1)
+        id: frontend_try1
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           builder: ${{ steps.buildx_frontend.outputs.name }}
@@ -260,6 +302,39 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}
+
+      - name: Build and push frontend image (attempt 2 after transient failure)
+        id: frontend_try2
+        if: steps.frontend_try1.outcome == 'failure'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          builder: ${{ steps.buildx_frontend.outputs.name }}
+          context: .
+          file: frontend/Dockerfile.prod
+          platforms: ${{ steps.meta.outputs.image_platforms }}
+          pull: true
+          no-cache: ${{ inputs.security_rebuild }}
+          push: true
+          build-args: |
+            API_BASE_URL=
+          tags: |
+            ${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.frontend_temp_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}
+
+      - name: Capture frontend digest
+        id: frontend
+        shell: bash
+        run: |
+          if [ "${{ steps.frontend_try1.outcome }}" == "success" ]; then
+            echo "digest=${{ steps.frontend_try1.outputs.digest }}" >> "$GITHUB_OUTPUT"
+            echo "[frontend] published on attempt 1"
+          else
+            echo "digest=${{ steps.frontend_try2.outputs.digest }}" >> "$GITHUB_OUTPUT"
+            echo "[frontend] published on attempt 2 (attempt 1 failed — transient)"
+          fi
 
       - name: Verify frontend temporary image ref
         shell: bash

@@ -1,9 +1,19 @@
+# syntax=docker/dockerfile:1.7
 FROM node:24-alpine AS build
 
 WORKDIR /repo
 
 ARG API_BASE_URL
 ENV VITE_API_BASE_URL=${API_BASE_URL}
+
+# Harden npm against transient CI network errors (e.g. ECONNRESET mid-install
+# or a stalled arm64 registry TCP stream that cancels the build). Scoped to
+# this build stage only — never shipped in the runtime image.
+# https://docs.npmjs.com/cli/v10/using-npm/config#fetch-retries
+ENV npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_mintimeout=20000 \
+    npm_config_fetch_retry_maxtimeout=120000 \
+    npm_config_fetch_timeout=600000
 
 # Copy workspace manifests for npm ci layer caching
 COPY package.json package-lock.json ./
@@ -14,9 +24,14 @@ COPY packages/backend-host/package.json packages/backend-host/
 COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY backend/package.json backend/
 
-RUN apk upgrade --no-cache zlib \
+# BuildKit cache mount hydrates ~/.npm across builds, so `npm ci` mostly reads
+# from local disk instead of the registry. `sharing=locked` serializes
+# concurrent multi-platform builds safely. apk stays on `--no-cache` because
+# we only ever want the latest mirror fetch for security.
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    apk upgrade --no-cache zlib \
     && apk add --no-cache busybox-static \
-    && npm ci -w frontend --include=dev --no-audit --no-fund
+    && npm ci -w frontend --include=dev --no-audit --no-fund --prefer-offline
 
 COPY frontend frontend
 COPY packages packages
