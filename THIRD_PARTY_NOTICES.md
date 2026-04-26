@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-04-10T07:52:50.707Z
+Generated at: 2026-04-26T10:48:16.373Z
 
 Generated from:
 - third_party_licenses.json
@@ -28,7 +28,7 @@ Generated from:
 | BSD-2-Clause | 3 |
 | BSD-3-Clause | 14 |
 | ISC | 65 |
-| MIT | 539 |
+| MIT | 536 |
 | MIT OR SEE LICENSE IN FEEL-FREE.md | 1 |
 | MIT-0 | 2 |
 | OFL-1.1 | 9 |
@@ -40,8 +40,8 @@ Generated from:
 | Package | Version | License | Repository | Source(s) |
 |---|---|---|---|---|
 | @asteasolutions/zod-to-openapi | 8.4.3 | MIT | https://github.com/asteasolutions/zod-to-openapi | backend, frontend, packages/frontend-host, packages/shared, root |
-| @azure/msal-common | 16.2.0 | MIT | https://github.com/AzureAD/microsoft-authentication-library-for-js.git | backend, frontend, packages/frontend-host, packages/shared |
-| @azure/msal-node | 5.0.6 | MIT | https://github.com/AzureAD/microsoft-authentication-library-for-js.git | backend, frontend, packages/frontend-host, packages/shared |
+| @azure/msal-common | 16.5.1 | MIT | https://github.com/AzureAD/microsoft-authentication-library-for-js.git | backend, frontend, packages/frontend-host, packages/shared |
+| @azure/msal-node | 5.1.4 | MIT | https://github.com/AzureAD/microsoft-authentication-library-for-js.git | backend, frontend, packages/frontend-host, packages/shared |
 | @babel/code-frame | 7.29.0 | MIT | https://github.com/babel/babel.git | backend, frontend, packages/frontend-host, packages/shared |
 | @babel/generator | 7.29.1 | MIT | https://github.com/babel/babel.git | frontend |
 | @babel/helper-globals | 7.28.0 | MIT | https://github.com/babel/babel.git | frontend |
@@ -59,7 +59,7 @@ Generated from:
 | @bpmn-io/dmn-variable-resolver | 0.7.0 | MIT |  | frontend |
 | @bpmn-io/element-template-chooser | 2.1.0 | MIT | https://github.com/bpmn-io/element-template-chooser.git | frontend |
 | @bpmn-io/element-template-icon-renderer | 1.0.0 | MIT | git+ssh://git@github.com/bpmn-io/element-template-icon-renderer.git | frontend |
-| @bpmn-io/element-templates-validator | 2.19.0 | MIT | git+https://github.com/bpmn-io/element-templates-validator.git | frontend |
+| @bpmn-io/element-templates-validator | 2.21.0 | MIT | git+https://github.com/bpmn-io/element-templates-validator.git | frontend |
 | @bpmn-io/extract-process-variables | 2.2.1 | MIT | git+https://github.com/bpmn-io/extract-process-variables.git | frontend |
 | @bpmn-io/feel-editor | 2.5.2 | MIT | git+https://github.com/bpmn-io/feel-editor.git | frontend |
 | @bpmn-io/feel-lint | 3.1.0 | MIT | git+https://github.com/bpmn-io/feel-lint.git | frontend |
@@ -73,7 +73,7 @@ Generated from:
 | @camunda/element-templates-json-schema | 0.21.0 | MIT | git+https://github.com/camunda/element-templates-json-schema.git | frontend |
 | @camunda/example-data-properties-provider | 1.3.0 | MIT |  | frontend |
 | @camunda/feel-builtins | 1.0.0 | MIT | git+https://github.com/camunda/feel-builtins.git | frontend |
-| @camunda/zeebe-element-templates-json-schema | 0.37.0 | MIT | git+https://github.com/camunda/element-templates-json-schema.git | frontend |
+| @camunda/zeebe-element-templates-json-schema | 0.40.0 | MIT | git+https://github.com/camunda/element-templates-json-schema.git | frontend |
 | @carbon/charts-react | 1.27.2 | Apache-2.0 | git+https://github.com/carbon-design-system/carbon-charts.git | frontend |
 | @carbon/charts | 1.27.2 | Apache-2.0 | git+https://github.com/carbon-design-system/carbon-charts.git | frontend |
 | @carbon/colors | 11.48.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon.git | frontend |
@@ -226,7 +226,7 @@ Generated from:
 | @types/xml-encryption | 1.2.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | backend |
 | @types/xml2js | 0.4.14 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git | backend |
 | @xmldom/is-dom-node | 1.0.1 | MIT | git+https://github.com/xmldom/is-dom-node.git | backend |
-| @xmldom/xmldom | 0.8.12 | MIT | git://github.com/xmldom/xmldom.git | backend |
+| @xmldom/xmldom | 0.8.13 | MIT | git://github.com/xmldom/xmldom.git | backend |
 | abort-controller | 3.0.0 | MIT | git+https://github.com/mysticatea/abort-controller.git | backend |
 | accepts | 2.0.0 | MIT | jshttp/accepts | backend, frontend, packages/frontend-host, packages/shared |
 | adm-zip | 0.5.16 | MIT | https://github.com/cthackers/adm-zip.git | backend, frontend, packages/frontend-host, packages/shared |
@@ -267,7 +267,7 @@ Generated from:
 | bpmn-js-color-picker | 0.7.2 | MIT | https://github.com/bpmn-io/bpmn-js-color-picker.git | frontend |
 | bpmn-js-copy-as-image | 0.4.1 | MIT | git+https://github.com/barmac/bpmn-js-copy-as-image.git | frontend |
 | bpmn-js-create-append-anything | 1.2.0 | MIT | git+https://github.com/bpmn-io/bpmn-js-create-append-anything.git | frontend |
-| bpmn-js-element-templates | 2.22.0 | MIT | https://github.com/bpmn-io/bpmn-js-element-templates | frontend |
+| bpmn-js-element-templates | 2.24.0 | MIT | https://github.com/bpmn-io/bpmn-js-element-templates | frontend |
 | bpmn-js-executable-fix | 0.2.1 | MIT | git+https://github.com/bpmn-io/bpmn-js-executable-fix.git | frontend |
 | bpmn-js-native-copy-paste | 0.3.0 | MIT | git+https://github.com/nikku/bpmn-js-native-copy-paste.git | frontend |
 | bpmn-js-properties-panel | 5.53.0 | MIT | https://github.com/bpmn-io/bpmn-js-properties-panel | frontend |
@@ -394,7 +394,7 @@ Generated from:
 | dmn-moddle | 12.0.1 | MIT | https://github.com/bpmn-io/dmn-moddle | frontend |
 | dom-iterator | 1.0.2 | MIT | https://github.com/MatthewMueller/dom-iterator.git | frontend |
 | domify | 3.0.0 | MIT | sindresorhus/domify | frontend |
-| dompurify | 3.4.0 | (MPL-2.0 OR Apache-2.0) | git://github.com/cure53/DOMPurify.git | frontend, packages/frontend-host |
+| dompurify | 3.4.1 | (MPL-2.0 OR Apache-2.0) | git://github.com/cure53/DOMPurify.git | frontend, packages/frontend-host |
 | dotenv | 16.6.1 | BSD-2-Clause | git://github.com/motdotla/dotenv.git | backend, frontend, packages/frontend-host, packages/shared |
 | dotenv | 17.3.1 | BSD-2-Clause | git://github.com/motdotla/dotenv.git | backend, frontend, packages/frontend-host, packages/shared |
 | downshift | 9.0.10 | MIT | https://github.com/downshift-js/downshift.git | frontend |
@@ -576,7 +576,7 @@ Generated from:
 | picomatch-browser | 2.2.6 | MIT | micromatch/picomatch | backend, frontend, packages/frontend-host, packages/shared |
 | pluralize | 8.0.0 | MIT | https://github.com/blakeembrey/pluralize.git | frontend |
 | possible-typed-array-names | 1.1.0 | MIT | git+https://github.com/ljharb/possible-typed-array-names.git | backend, frontend, packages/frontend-host, packages/shared |
-| postal-mime | 2.7.3 | MIT-0 | git+https://github.com/postalsys/postal-mime.git | backend, frontend, packages/frontend-host, packages/shared |
+| postal-mime | 2.7.4 | MIT-0 | git+https://github.com/postalsys/postal-mime.git | backend, frontend, packages/frontend-host, packages/shared |
 | postgres-array | 2.0.0 | MIT | bendrucker/postgres-array | backend, frontend, packages/frontend-host, packages/shared |
 | postgres-bytea | 1.0.1 | MIT | bendrucker/postgres-bytea | backend, frontend, packages/frontend-host, packages/shared |
 | postgres-date | 1.0.7 | MIT | bendrucker/postgres-date | backend, frontend, packages/frontend-host, packages/shared |
@@ -609,7 +609,7 @@ Generated from:
 | reflect-metadata | 0.2.2 | Apache-2.0 | https://github.com/rbuckton/reflect-metadata.git | backend, frontend, packages/frontend-host, packages/shared |
 | regenerator-runtime | 0.13.11 | MIT | https://github.com/facebook/regenerator/tree/main/packages/runtime | frontend, packages/frontend-host |
 | require-directory | 2.1.1 | MIT | git://github.com/troygoode/node-require-directory.git | backend, frontend, packages/frontend-host, packages/shared |
-| resend | 6.9.3 | MIT | git+https://github.com/resend/resend-node.git | backend, frontend, packages/frontend-host, packages/shared |
+| resend | 6.12.2 | MIT | git+https://github.com/resend/resend-node.git | backend, frontend, packages/frontend-host, packages/shared |
 | resolve-from | 4.0.0 | MIT | sindresorhus/resolve-from | backend, frontend, packages/frontend-host, packages/shared |
 | resolve | 1.22.11 | MIT | ssh://github.com/browserify/resolve.git | backend, frontend, packages/frontend-host, packages/shared |
 | rgbcolor | 1.0.1 | MIT OR SEE LICENSE IN FEEL-FREE.md | https://github.com/yetzt/node-rgbcolor.git | frontend, packages/frontend-host |
@@ -665,7 +665,7 @@ Generated from:
 | svg-pathdata | 6.0.3 | MIT | https://github.com/nfroidure/svg-pathdata.git | frontend, packages/frontend-host |
 | svg2pdf.js | 2.7.0 | MIT | git+https://github.com/yWorks/svg2pdf.js.git | frontend, packages/frontend-host |
 | svgpath | 2.6.0 | MIT | fontello/svgpath | frontend, packages/frontend-host |
-| svix | 1.84.1 | MIT | https://github.com/svix/svix-webhooks | backend, frontend, packages/frontend-host, packages/shared |
+| svix | 1.92.2 | MIT | https://github.com/svix/svix-webhooks | backend, frontend, packages/frontend-host, packages/shared |
 | swagger-ui-dist | 5.32.0 | Apache-2.0 | git@github.com:swagger-api/swagger-ui.git | backend |
 | swagger-ui-express | 5.0.1 | MIT | git@github.com:scottie1984/swagger-ui-express.git | backend |
 | tabbable | 6.4.0 | MIT | git+https://github.com/focus-trap/tabbable.git | frontend |
@@ -699,10 +699,7 @@ Generated from:
 | url-template | 2.0.8 | BSD | git://github.com/bramstein/url-template.git | backend, frontend, packages/frontend-host, packages/shared |
 | util-deprecate | 1.0.2 | MIT | git://github.com/TooTallNate/util-deprecate.git | backend |
 | utrie | 1.0.2 | MIT | git+ssh://git@github.com/niklasvh/utrie.git | frontend, packages/frontend-host |
-| uuid | 10.0.0 | MIT | git+https://github.com/uuidjs/uuid.git | backend, frontend, packages/frontend-host, packages/shared |
-| uuid | 11.1.0 | MIT | https://github.com/uuidjs/uuid.git | backend, frontend, packages/frontend-host, packages/shared |
-| uuid | 13.0.0 | MIT | https://github.com/uuidjs/uuid.git | backend, frontend, packages/frontend-host, packages/shared |
-| uuid | 8.3.2 | MIT | https://github.com/uuidjs/uuid.git | backend, frontend, packages/frontend-host, packages/shared |
+| uuid | 14.0.0 | MIT | https://github.com/uuidjs/uuid.git | backend, frontend, packages/frontend-host, packages/shared, root |
 | vary | 1.1.2 | MIT | jshttp/vary | backend, frontend, packages/frontend-host, packages/shared |
 | w3c-keyname | 2.2.8 | MIT | git+https://github.com/marijnh/w3c-keyname.git | frontend |
 | web-streams-polyfill | 3.3.3 | MIT | git+https://github.com/MattiasBuelens/web-streams-polyfill.git | backend, frontend, packages/frontend-host, packages/shared |

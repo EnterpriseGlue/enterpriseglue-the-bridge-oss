@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/shared",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Shared utilities, contracts, and services for EnterpriseGlue",
   "license": "Apache-2.0",
   "repository": {
@@ -44,10 +44,10 @@
     "octokit": "^5.0.5",
     "oracledb": "^6.0.0",
     "pg": "^8.11.3",
-    "resend": "^6.4.1",
+    "resend": "^6.12.2",
     "typeorm": "^0.3.28",
     "undici": "^7.24.0",
-    "uuid": "^13.0.0",
+    "uuid": "^14.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

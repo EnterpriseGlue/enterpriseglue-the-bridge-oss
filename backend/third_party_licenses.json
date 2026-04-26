@@ -5,14 +5,14 @@
     "publisher": "Astea Solutions",
     "email": "info@asteasolutions.com"
   },
-  "@azure/msal-common@16.2.0": {
+  "@azure/msal-common@16.5.1": {
     "licenses": "MIT",
     "repository": "https://github.com/AzureAD/microsoft-authentication-library-for-js.git",
     "publisher": "Microsoft",
     "email": "nugetaad@microsoft.com",
     "url": "https://www.microsoft.com"
   },
-  "@azure/msal-node@5.0.6": {
+  "@azure/msal-node@5.1.4": {
     "licenses": "MIT",
     "repository": "https://github.com/AzureAD/microsoft-authentication-library-for-js.git",
     "publisher": "Microsoft",
@@ -279,7 +279,7 @@
     "publisher": "Chris Barth",
     "email": "chrisjbarth@hotmail.com"
   },
-  "@xmldom/xmldom@0.8.12": {
+  "@xmldom/xmldom@0.8.13": {
     "licenses": "MIT",
     "repository": "git://github.com/xmldom/xmldom.git"
   },
@@ -1445,7 +1445,7 @@
     "publisher": "Jordan Harband",
     "email": "ljharb@gmail.com"
   },
-  "postal-mime@2.7.3": {
+  "postal-mime@2.7.4": {
     "licenses": "MIT-0",
     "repository": "git+https://github.com/postalsys/postal-mime.git",
     "publisher": "Andris Reinman"
@@ -1545,7 +1545,7 @@
     "email": "troygoode@gmail.com",
     "url": "http://github.com/troygoode/"
   },
-  "resend@6.9.3": {
+  "resend@6.12.2": {
     "licenses": "MIT",
     "repository": "git+https://github.com/resend/resend-node.git"
   },
@@ -1776,7 +1776,7 @@
     "publisher": "Jordan Harband",
     "email": "ljharb@gmail.com"
   },
-  "svix@1.84.1": {
+  "svix@1.92.2": {
     "licenses": "MIT",
     "repository": "https://github.com/svix/svix-webhooks",
     "publisher": "svix"
@@ -1910,19 +1910,7 @@
     "email": "nathan@tootallnate.net",
     "url": "http://n8.io/"
   },
-  "uuid@10.0.0": {
-    "licenses": "MIT",
-    "repository": "git+https://github.com/uuidjs/uuid.git"
-  },
-  "uuid@11.1.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/uuidjs/uuid.git"
-  },
-  "uuid@13.0.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/uuidjs/uuid.git"
-  },
-  "uuid@8.3.2": {
+  "uuid@14.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/uuidjs/uuid.git"
   },

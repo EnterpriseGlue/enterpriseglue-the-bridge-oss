@@ -5,14 +5,14 @@
     "publisher": "Astea Solutions",
     "email": "info@asteasolutions.com"
   },
-  "@azure/msal-common@16.2.0": {
+  "@azure/msal-common@16.5.1": {
     "licenses": "MIT",
     "repository": "https://github.com/AzureAD/microsoft-authentication-library-for-js.git",
     "publisher": "Microsoft",
     "email": "nugetaad@microsoft.com",
     "url": "https://www.microsoft.com"
   },
-  "@azure/msal-node@5.0.6": {
+  "@azure/msal-node@5.1.4": {
     "licenses": "MIT",
     "repository": "https://github.com/AzureAD/microsoft-authentication-library-for-js.git",
     "publisher": "Microsoft",
@@ -119,7 +119,7 @@
     "publisher": "Niklas Kiefer",
     "url": "https://github.com/pinussilvestrus"
   },
-  "@bpmn-io/element-templates-validator@2.19.0": {
+  "@bpmn-io/element-templates-validator@2.21.0": {
     "licenses": "MIT",
     "repository": "git+https://github.com/bpmn-io/element-templates-validator.git",
     "publisher": "Maciej Barelkowski",
@@ -198,7 +198,7 @@
     "publisher": "Camunda",
     "email": "https://camunda.com"
   },
-  "@camunda/zeebe-element-templates-json-schema@0.37.0": {
+  "@camunda/zeebe-element-templates-json-schema@0.40.0": {
     "licenses": "MIT",
     "repository": "git+https://github.com/camunda/element-templates-json-schema.git"
   },
@@ -1038,7 +1038,7 @@
     "repository": "git+https://github.com/bpmn-io/bpmn-js-create-append-anything.git",
     "publisher": "bpmn.io"
   },
-  "bpmn-js-element-templates@2.22.0": {
+  "bpmn-js-element-templates@2.24.0": {
     "licenses": "MIT",
     "repository": "https://github.com/bpmn-io/bpmn-js-element-templates",
     "publisher": "Nico Rehwaldt",
@@ -1733,7 +1733,7 @@
     "licenses": "MIT",
     "repository": "sindresorhus/domify"
   },
-  "dompurify@3.4.0": {
+  "dompurify@3.4.1": {
     "licenses": "(MPL-2.0 OR Apache-2.0)",
     "repository": "git://github.com/cure53/DOMPurify.git",
     "publisher": "Dr.-Ing. Mario Heiderich, Cure53",
@@ -2705,7 +2705,7 @@
     "publisher": "Jordan Harband",
     "email": "ljharb@gmail.com"
   },
-  "postal-mime@2.7.3": {
+  "postal-mime@2.7.4": {
     "licenses": "MIT-0",
     "repository": "git+https://github.com/postalsys/postal-mime.git",
     "publisher": "Andris Reinman"
@@ -2863,7 +2863,7 @@
     "email": "troygoode@gmail.com",
     "url": "http://github.com/troygoode/"
   },
-  "resend@6.9.3": {
+  "resend@6.12.2": {
     "licenses": "MIT",
     "repository": "git+https://github.com/resend/resend-node.git"
   },
@@ -3163,7 +3163,7 @@
     "licenses": "MIT",
     "repository": "fontello/svgpath"
   },
-  "svix@1.84.1": {
+  "svix@1.92.2": {
     "licenses": "MIT",
     "repository": "https://github.com/svix/svix-webhooks",
     "publisher": "svix"
@@ -3320,19 +3320,7 @@
     "email": "niklasvh@gmail.com",
     "url": "https://hertzen.com"
   },
-  "uuid@10.0.0": {
-    "licenses": "MIT",
-    "repository": "git+https://github.com/uuidjs/uuid.git"
-  },
-  "uuid@11.1.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/uuidjs/uuid.git"
-  },
-  "uuid@13.0.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/uuidjs/uuid.git"
-  },
-  "uuid@8.3.2": {
+  "uuid@14.0.0": {
     "licenses": "MIT",
     "repository": "https://github.com/uuidjs/uuid.git"
   },
