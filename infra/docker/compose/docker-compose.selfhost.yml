@@ -20,7 +20,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
       POSTGRES_DB: ${POSTGRES_DB:-enterpriseglue}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-enterpriseglue} -d ${POSTGRES_DB:-enterpriseglue} -h 127.0.0.1"]
       interval: 5s
