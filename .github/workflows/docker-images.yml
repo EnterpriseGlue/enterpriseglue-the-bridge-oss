@@ -155,6 +155,7 @@ jobs:
           path: |
             test/results/
           if-no-files-found: warn
+          retention-days: 7
 
   smoke-postgres-image-deploy-exposed:
     needs: publish
@@ -357,6 +358,7 @@ jobs:
             backend-trivy.json
             frontend-trivy.json
           if-no-files-found: warn
+          retention-days: 7
 
       - name: Security scan summary
         if: always()

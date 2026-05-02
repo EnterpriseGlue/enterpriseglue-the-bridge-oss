@@ -191,6 +191,7 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-${{ hashFiles('package-lock.json', 'backend/package-lock.json', 'frontend/package-lock.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-
+          retention-days: 7
 
       - name: Install Playwright browsers
         if: matrix.database == 'postgres' && inputs.run_e2e && steps.pw-cache.outputs.cache-hit != 'true'
@@ -285,18 +286,20 @@ jobs:
         run: npm --prefix backend run db:cleanup-test-data
 
       - name: Upload backend coverage
-        if: matrix.database == 'postgres'
+        if: failure() && matrix.database == 'postgres'
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: backend-coverage
           path: backend/coverage
+          retention-days: 7
 
       - name: Upload frontend coverage
-        if: matrix.database == 'postgres'
+        if: failure() && matrix.database == 'postgres'
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: frontend-coverage
           path: frontend/coverage
+          retention-days: 7
 
   build-ci-images:
     runs-on: ubuntu-latest
@@ -350,6 +353,7 @@ jobs:
           path: |
             eg-local-backend-pr.tar.gz
             eg-local-frontend-pr.tar.gz
+          retention-days: 7
 
   smoke-postgres-image-deploy:
     runs-on: ubuntu-latest
@@ -573,6 +577,7 @@ jobs:
             backend-trivy.json
             frontend-trivy.json
           if-no-files-found: warn
+          retention-days: 7
 
       - name: Security scan summary
         if: always()

@@ -115,6 +115,7 @@ jobs:
           path: .artifacts/
           if-no-files-found: error
           include-hidden-files: true
+          retention-days: 7
 
   compose-render:
     runs-on: ubuntu-latest
@@ -252,6 +253,7 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-${{ hashFiles('package-lock.json', 'backend/package-lock.json', 'frontend/package-lock.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-
+          retention-days: 7
 
       - name: Install Playwright browsers
         if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit != 'true'
@@ -333,18 +335,20 @@ jobs:
         run: npm --prefix backend run db:cleanup-test-data
 
       - name: Upload backend coverage
-        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
+        if: failure() && matrix.database == 'postgres' && github.event_name != 'merge_group'
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: backend-coverage
           path: backend/coverage
+          retention-days: 7
 
       - name: Upload frontend coverage
-        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
+        if: failure() && matrix.database == 'postgres' && github.event_name != 'merge_group'
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: frontend-coverage
           path: frontend/coverage
+          retention-days: 7
 
   build-ci-images:
     runs-on: ubuntu-latest
@@ -392,6 +396,7 @@ jobs:
           path: |
             eg-local-backend-pr.tar.gz
             eg-local-frontend-pr.tar.gz
+          retention-days: 7
 
 
   smoke-postgres-image-deploy:
@@ -623,6 +628,7 @@ jobs:
             backend-trivy.json
             frontend-trivy.json
           if-no-files-found: warn
+          retention-days: 7
 
       - name: Security scan summary
         if: always()

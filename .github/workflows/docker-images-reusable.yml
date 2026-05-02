@@ -444,6 +444,7 @@ jobs:
           name: image-digests-${{ steps.meta.outputs.image_tag }}
           path: image-digests.json
           if-no-files-found: error
+          retention-days: 7
 
       - name: Verify multi-arch manifest coverage
         shell: bash
