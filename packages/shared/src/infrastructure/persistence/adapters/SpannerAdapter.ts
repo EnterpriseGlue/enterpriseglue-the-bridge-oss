@@ -36,7 +36,7 @@ const entities = [
  * Google Cloud Spanner Database Adapter
  * Implements database-specific operations for Google Cloud Spanner
  * 
- * Driver: @google-cloud/spanner (npm install @google-cloud/spanner)
+ * Driver: @google-cloud/spanner (pnpm add @google-cloud/spanner)
  * 
  * Authentication: Set GOOGLE_APPLICATION_CREDENTIALS env var to service account JSON path
  * Emulator: Set SPANNER_EMULATOR_HOST env var for local development
@@ -56,7 +56,7 @@ export class SpannerAdapter implements DatabaseAdapter {
     } catch {
       console.warn(
         '⚠️  Google Spanner driver (@google-cloud/spanner) not installed. ' +
-        'Install with: npm install @google-cloud/spanner\n' +
+        'Install with: pnpm add @google-cloud/spanner\n' +
         '   Also set GOOGLE_APPLICATION_CREDENTIALS env var for authentication.'
       );
     }

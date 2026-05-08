@@ -164,7 +164,7 @@ export class OracleAdapter implements DatabaseAdapter {
     } catch {
       console.warn(
         '⚠️  Oracle driver (oracledb) not installed. ' +
-        'Install with: npm install oracledb\n' +
+        'Install with: pnpm add oracledb\n' +
         '   Also requires Oracle Instant Client. See: https://oracle.github.io/node-oracledb/INSTALL.html'
       );
     }

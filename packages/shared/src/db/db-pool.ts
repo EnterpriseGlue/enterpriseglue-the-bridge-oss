@@ -118,7 +118,7 @@ class OracleConnectionPool implements ConnectionPool {
       oracledbModule = await import('oracledb');
     } catch {
       throw new Error(
-        'Oracle driver (oracledb) not installed. Install with: npm install oracledb ' +
+        'Oracle driver (oracledb) not installed. Install with: pnpm add oracledb ' +
           'and configure Oracle Instant Client: https://oracle.github.io/node-oracledb/INSTALL.html'
       );
     }

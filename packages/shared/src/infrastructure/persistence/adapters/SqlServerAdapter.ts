@@ -36,7 +36,7 @@ const entities = [
  * Microsoft SQL Server Database Adapter
  * Implements database-specific operations for SQL Server
  * 
- * Driver: mssql (npm install mssql)
+ * Driver: mssql (pnpm add mssql)
  */
 export class SqlServerAdapter implements DatabaseAdapter {
   private readonly schema: string;
@@ -119,7 +119,7 @@ export class SqlServerAdapter implements DatabaseAdapter {
     } catch {
       console.warn(
         '⚠️  SQL Server driver (mssql) not installed. ' +
-        'Install with: npm install mssql'
+        'Install with: pnpm add mssql'
       );
     }
   }
