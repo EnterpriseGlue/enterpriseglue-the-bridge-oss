@@ -45,13 +45,18 @@
     "access": "restricted"
   },
   "dependencies": {
+    "@carbon/icons-react": "^11.80.0",
+    "@carbon/react": "^1.71.0",
     "@enterpriseglue/enterprise-plugin-api": "workspace:*",
     "@enterpriseglue/shared": "workspace:*",
+    "@tanstack/react-query": "^5.62.11",
+    "@tanstack/react-table": "^8.20.5",
     "bpmn-js": "^17.10.0",
     "clsx": "^2.1.1",
     "inferno": "~5.6.3",
     "jspdf": "^4.2.1",
     "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.1",
     "svg2pdf.js": "^2.7.0",
     "tailwind-merge": "^3.4.0",
