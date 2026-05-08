@@ -7,7 +7,7 @@ WORKDIR /repo
 RUN npm install -g pnpm@9
 
 # Copy workspace manifests for pnpm install layer caching
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/
 COPY packages/shared/package.json packages/shared/
 COPY packages/backend-host/package.json packages/backend-host/
@@ -35,7 +35,7 @@ WORKDIR /repo
 # Install pnpm globally
 RUN npm install -g pnpm@9
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/
 COPY packages/shared/package.json packages/shared/
 COPY packages/backend-host/package.json packages/backend-host/
