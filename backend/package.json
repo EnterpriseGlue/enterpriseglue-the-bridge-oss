@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts",
+    "start": "dotenv run node dist/backend/src/server.js",
     "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node scripts/resolve-dist-imports.mjs",
     "build:skip-generate": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node scripts/resolve-dist-imports.mjs",
     "start:compiled": "node dist/backend/src/server.js",
@@ -35,6 +35,7 @@
     "cors": "^2.8.5",
     "csrf-csrf": "^4.0.3",
     "dotenv": "^17.2.3",
+    "escape-html": "^1.0.3",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "google-auth-library": "^10.6.1",

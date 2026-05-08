@@ -402,7 +402,7 @@ build_frontend() {
 
 start_backend() {
   log "Starting backend on :$BACKEND_PORT"
-  (cd "$BACKEND_DIR" && nohup node dist/backend/src/server.js > server.log 2>&1 &)
+  (cd "$BACKEND_DIR" && nohup pnpm run start > server.log 2>&1 &)
 }
 
 start_frontend() {
@@ -414,7 +414,7 @@ verify_deployment() {
   log "Verifying deployment..."
   
   # Wait for backend to start
-  local MAX_WAIT=30
+  local MAX_WAIT=90
   local WAITED=0
   
   while ! curl -sf "http://localhost:${BACKEND_PORT}/health" >/dev/null 2>&1; do
