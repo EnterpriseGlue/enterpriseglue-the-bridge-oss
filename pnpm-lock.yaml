@@ -330,8 +330,8 @@ importers:
         specifier: ^2.8.5
         version: 2.8.6
       csrf-csrf:
-        specifier: ^3.0.6
-        version: 3.2.2
+        specifier: ^4.0.3
+        version: 4.0.3
       express:
         specifier: ^5.2.1
         version: 5.2.1
@@ -2492,9 +2492,6 @@ packages:
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
-
-  csrf-csrf@3.2.2:
-    resolution: {integrity: sha512-E3TgLWX1e+jqigDva+nFItfqa59UZ+gLR56DVNyL/xawBGwQr8o3U4/o1gP9FZmIWLnWCiIl5ni85MghMCNRfg==}
 
   csrf-csrf@4.0.3:
     resolution: {integrity: sha512-DaygOzelL4Qo1pHwI9LPyZL+X2456/OzpT596kNeZGiTSqKVDOk/9PPJ+FjzZacjMUEusOHw3WJKe1RW4iUhrw==}
@@ -7022,10 +7019,6 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
-
-  csrf-csrf@3.2.2:
-    dependencies:
-      http-errors: 2.0.1
 
   csrf-csrf@4.0.3:
     dependencies:
