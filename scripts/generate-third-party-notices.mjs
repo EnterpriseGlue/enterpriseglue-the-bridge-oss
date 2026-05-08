@@ -180,22 +180,41 @@ async function writeNormalizedJson(jsonPath, data) {
 }
 
 function runNpmLs(repoRoot, workspace) {
-  const args = ['ls', '--omit=dev', '--all', '--json'];
-  if (workspace) {
+  const isPnpm = existsSync(path.join(repoRoot, 'pnpm-lock.yaml'));
+  const args = isPnpm 
+    ? ['list', '--json', '--depth=Infinity']
+    : ['ls', '--omit=dev', '--all', '--json'];
+  
+  if (workspace && !isPnpm) {
     args.push('--workspace', workspace);
   }
 
-  const result = spawnSync('npm', args, {
+  const result = spawnSync(isPnpm ? 'pnpm' : 'npm', args, {
     cwd: repoRoot,
     encoding: 'utf8',
   });
 
   const output = String(result.stdout || '').trim();
   if (!output) {
-    throw new Error(`npm ls returned no JSON for ${workspace || 'root'}: ${String(result.stderr || '').trim()}`);
+    throw new Error(`${isPnpm ? 'pnpm' : 'npm'} ls returned no JSON for ${workspace || 'root'}: ${String(result.stderr || '').trim()}`);
   }
 
-  return JSON.parse(output);
+  const parsed = JSON.parse(output);
+  
+  // pnpm returns an array of workspace packages, npm returns a single object
+  if (isPnpm) {
+    if (workspace) {
+      const workspaceEntry = parsed.find(entry => entry.name === workspace || entry.path.endsWith(workspace));
+      if (!workspaceEntry) {
+        throw new Error(`pnpm list: workspace ${workspace} not found`);
+      }
+      return workspaceEntry;
+    }
+    // For root, return the first entry (root package)
+    return parsed[0];
+  }
+  
+  return parsed;
 }
 
 function findInstalledPackageDir(packageName, startDir, repoRoot) {
