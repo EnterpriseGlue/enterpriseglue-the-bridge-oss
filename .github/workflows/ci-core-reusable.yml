@@ -146,7 +146,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://npm.pkg.github.com
           scope: '@enterpriseglue'
 
@@ -206,11 +206,24 @@ jobs:
 
       - name: Build local packages
         run: |
-          pnpm --filter shared run build
-          pnpm install --filter backend-host
-          pnpm --filter backend-host run build
-          pnpm install --filter frontend-host
-          pnpm run build:frontend-host
+          if [ -d packages/shared ]; then
+            pnpm --filter shared run build
+          fi
+          if [ -d packages/backend-host ]; then
+            pnpm install --filter backend-host
+            pnpm --filter backend-host run build
+          fi
+          if [ -d packages/frontend-host ]; then
+            pnpm install --filter frontend-host
+            pnpm run build:frontend-host
+          fi
+          for pkg in packages/enterprise-*; do
+            [ -f "$pkg/package.json" ] || continue
+            name="$(node -e "console.log(require('./$pkg/package.json').name)")"
+            if node -e "process.exit(require('./$pkg/package.json').scripts?.build ? 0 : 1)"; then
+              pnpm --filter "$name" run build
+            fi
+          done
 
       - name: Build backend
         run: pnpm --filter webmodeler-backend run build:skip-generate

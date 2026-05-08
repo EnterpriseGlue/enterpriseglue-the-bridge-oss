@@ -91,7 +91,7 @@ jobs:
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true')
           && steps.check.outcome != 'success'
-        run: npm publish --dry-run
+        run: pnpm publish --dry-run --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -99,7 +99,7 @@ jobs:
         if: >-
           !(github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true')
           && steps.check.outcome != 'success'
-        run: npm publish --ignore-scripts
+        run: pnpm publish --ignore-scripts --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
