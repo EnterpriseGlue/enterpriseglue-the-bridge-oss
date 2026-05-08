@@ -52,7 +52,7 @@ if [[ "$MODE" == "current" ]]; then
   assert_contains "$PKG_JSON" '"private": false' "non-private plugin-api package"
   assert_contains "$PKG_JSON" '"version": "0.2.1"' "plugin-api baseline version"
 
-  if ! pnpm pack --dry-run ./packages/enterprise-plugin-api >/dev/null; then
+  if ! pnpm --dir packages/enterprise-plugin-api pack --dry-run >/dev/null; then
     echo "❌ [plugin-api-compat] plugin-api pnpm pack dry-run failed"
     fail=1
   fi
