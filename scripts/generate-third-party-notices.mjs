@@ -185,8 +185,12 @@ function runNpmLs(repoRoot, workspace) {
     ? ['list', '--json', '--depth=Infinity']
     : ['ls', '--omit=dev', '--all', '--json'];
   
-  if (workspace && !isPnpm) {
-    args.push('--workspace', workspace);
+  if (workspace) {
+    if (isPnpm) {
+      args.push('--filter', workspace);
+    } else {
+      args.push('--workspace', workspace);
+    }
   }
 
   const result = spawnSync(isPnpm ? 'pnpm' : 'npm', args, {
@@ -204,11 +208,11 @@ function runNpmLs(repoRoot, workspace) {
   // pnpm returns an array of workspace packages, npm returns a single object
   if (isPnpm) {
     if (workspace) {
-      const workspaceEntry = parsed.find(entry => entry.name === workspace || entry.path.endsWith(workspace));
-      if (!workspaceEntry) {
+      // When using --filter, pnpm returns a single entry for the filtered workspace
+      if (!parsed || parsed.length === 0) {
         throw new Error(`pnpm list: workspace ${workspace} not found`);
       }
-      return workspaceEntry;
+      return parsed[0];
     }
     // For root, return the first entry (root package)
     return parsed[0];
