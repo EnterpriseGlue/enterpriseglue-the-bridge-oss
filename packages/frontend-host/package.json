@@ -10,11 +10,11 @@
   },
   "type": "module",
   "scripts": {
-    "build:shared": "npm run --prefix ../shared build",
-    "typecheck": "npm run build:shared && tsc -p tsconfig.build.json --noEmit",
-    "build": "npm run build:shared && tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
+    "build:shared": "pnpm --filter shared run build",
+    "typecheck": "pnpm run build:shared && tsc -p tsconfig.build.json --noEmit",
+    "build": "pnpm run build:shared && tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "pnpm run clean && pnpm run build"
   },
   "files": [
     "dist/**/*.js",
