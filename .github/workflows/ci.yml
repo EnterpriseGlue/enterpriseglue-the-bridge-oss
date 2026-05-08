@@ -370,7 +370,7 @@ jobs:
 
       - name: Start frontend
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
-        run: pnpm --filter frontend run dev -- --host 0.0.0.0 --port 5173 &
+        run: pnpm --filter webmodeler-frontend run dev -- --host 0.0.0.0 --port 5173 &
 
       - name: Wait for services
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
@@ -792,4 +792,3 @@ jobs:
 
             sleep 15
           done
-

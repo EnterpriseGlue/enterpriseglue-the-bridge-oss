@@ -45,14 +45,24 @@
     "access": "restricted"
   },
   "dependencies": {
+    "@bpmn-io/properties-panel": "^3.33.0",
     "@carbon/icons-react": "^11.80.0",
     "@carbon/react": "^1.71.0",
+    "@carbon/styles": "^1.101.0",
     "@enterpriseglue/enterprise-plugin-api": "workspace:*",
     "@enterpriseglue/shared": "workspace:*",
     "@tanstack/react-query": "^5.62.11",
     "@tanstack/react-table": "^8.20.5",
     "bpmn-js": "^17.10.0",
+    "bpmn-js-bpmnlint": "^0.24.0",
+    "bpmn-js-properties-panel": "^5.42.3",
+    "bpmnlint": "^11.6.1",
+    "camunda-bpmn-js": "^5.14.2",
+    "camunda-bpmn-moddle": "^7.0.1",
+    "camunda-dmn-js": "^3.5.0",
     "clsx": "^2.1.1",
+    "dmn-js": "^17.4.0",
+    "dmn-js-properties-panel": "^3.8.0",
     "inferno": "~5.6.3",
     "jspdf": "^4.2.1",
     "react": "^19.2.4",
@@ -66,9 +76,11 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
     "@types/react": "^19.2.4",
     "@types/react-dom": "^19.2.3",
     "typescript": "~5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
   }
 }
