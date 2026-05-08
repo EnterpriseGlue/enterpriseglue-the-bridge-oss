@@ -182,7 +182,7 @@ async function writeNormalizedJson(jsonPath, data) {
 function runNpmLs(repoRoot, workspace) {
   const isPnpm = existsSync(path.join(repoRoot, 'pnpm-lock.yaml'));
   const args = isPnpm 
-    ? ['list', '--json', '--depth=Infinity']
+    ? ['list', '--json', '--depth=0']
     : ['ls', '--omit=dev', '--all', '--json'];
   
   if (workspace) {
