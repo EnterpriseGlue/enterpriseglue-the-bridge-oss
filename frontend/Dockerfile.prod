@@ -7,7 +7,7 @@ ARG API_BASE_URL
 ENV VITE_API_BASE_URL=${API_BASE_URL}
 
 # Install pnpm globally
-RUN npm install -g pnpm@8
+RUN npm install -g pnpm@11.0.8
 
 # Copy workspace manifests for pnpm install layer caching
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./

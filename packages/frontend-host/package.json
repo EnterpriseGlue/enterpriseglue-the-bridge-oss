@@ -60,6 +60,7 @@
     "react-loading-skeleton": "^3.5.0",
     "react-pro-sidebar": "^1.1.0",
     "react-router-dom": "^7.13.1",
+    "react-split-pane": "^3.2.0",
     "svg2pdf.js": "^2.7.0",
     "tailwind-merge": "^3.4.0",
     "zustand": "^5.0.2"

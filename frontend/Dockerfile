@@ -3,7 +3,7 @@ FROM node:24-alpine
 WORKDIR /repo
 
 # Install pnpm globally
-RUN npm install -g pnpm@8
+RUN npm install -g pnpm@11.0.8
 
 # Copy workspace manifests for pnpm install
 COPY --chown=node:node package.json pnpm-lock.yaml ./
