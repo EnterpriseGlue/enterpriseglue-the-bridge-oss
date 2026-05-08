@@ -429,7 +429,7 @@ async function resolveSources(repoRoot) {
       packageName: packageJson.name,
       packageDir: workspaceDir,
       packageJson,
-      workspace: path.relative(repoRoot, workspaceDir),
+      workspace: packageJson.name,
       outputFile: path.join(workspaceDir, 'third_party_licenses.json'),
       isRoot: false,
     });
