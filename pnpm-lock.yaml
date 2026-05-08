@@ -347,6 +347,9 @@ importers:
       swagger-ui-express:
         specifier: ^5.0.1
         version: 5.0.1(express@5.2.1)
+      typeorm:
+        specifier: ^0.3.28
+        version: 0.3.28(babel-plugin-macros@3.1.0)(oracledb@6.10.0)(pg@8.20.0)(sql.js@1.14.1)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
@@ -354,6 +357,9 @@ importers:
         specifier: ^4.3.6
         version: 4.4.3
     devDependencies:
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
       '@types/node':
         specifier: ^25.3.5
         version: 25.6.0

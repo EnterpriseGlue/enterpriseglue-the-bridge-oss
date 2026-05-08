@@ -24,10 +24,12 @@
     "helmet": "^8.1.0",
     "morgan": "^1.10.0",
     "swagger-ui-express": "^5.0.1",
+    "typeorm": "^0.3.28",
     "typescript": "^5.8.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^25.3.5",
     "@types/swagger-ui-express": "^4.1.8",
     "typescript": "^5.8.3"
