@@ -18,6 +18,8 @@
     "dist/**/*.d.ts"
   ],
   "dependencies": {
+    "archiver": "^7.0.1",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "csrf-csrf": "^4.0.3",
     "express": "^5.2.1",
@@ -26,10 +28,14 @@
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.28",
     "typescript": "^5.8.3",
+    "undici": "^7.24.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/archiver": "^7.0.0",
+    "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.6",
+    "@types/morgan": "^1.9.9",
     "@types/node": "^25.3.5",
     "@types/swagger-ui-express": "^4.1.8",
     "typescript": "^5.8.3"
