@@ -2,7 +2,7 @@ name: PR Auto-Rebase Reusable
 
 # Reusable workflow: automatically rebase open PRs that become stale or conflicting.
 # - Rebases BEHIND and CONFLICTING PRs onto main
-# - Handles lockfile-only conflicts by regenerating package-lock.json
+# - Handles lockfile-only conflicts by regenerating pnpm-lock.yaml
 # - Auto-closes no-op PRs (empty diff vs main after rebase)
 # - Skips Release Please PRs (they self-manage) and draft PRs
 
@@ -149,7 +149,7 @@ jobs:
 
             if [ "$rebase_ok" = true ]; then
               # Check for no-op: if the diff vs main is empty (or lockfile-only), this PR is redundant
-              diff_vs_main=$(git diff --name-only main..HEAD -- ':!package-lock.json' 2>/dev/null || true)
+              diff_vs_main=$(git diff --name-only main..HEAD -- ':!pnpm-lock.yaml' 2>/dev/null || true)
 
               if [ -z "$diff_vs_main" ] && [ "$AUTO_CLOSE_NOOP" = "true" ]; then
                 echo "  → No-op detected: no meaningful diff vs main after rebase"
