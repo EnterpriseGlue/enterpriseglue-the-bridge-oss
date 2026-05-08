@@ -4,7 +4,6 @@ packages:
   - 'packages/*'
 public-hoist-pattern:
   - '*'
-  - '@types/*'
 allowBuilds:
   '@carbon/charts': true
   '@carbon/charts-react': true
