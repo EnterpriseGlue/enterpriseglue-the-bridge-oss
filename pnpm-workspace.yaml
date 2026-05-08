@@ -4,6 +4,8 @@ packages:
   - 'packages/*'
 public-hoist-pattern:
   - '*'
+  - 'inferno'
+  - 'inferno*'
 allowBuilds:
   '@carbon/charts': true
   '@carbon/charts-react': true
