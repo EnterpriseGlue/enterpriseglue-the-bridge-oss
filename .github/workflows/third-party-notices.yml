@@ -38,7 +38,7 @@ jobs:
           node-version: 24
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@fe02b34f6d2c97e289c7d657c8f528b5b22b98f4 # v4.1.0
+        uses: pnpm/action-setup@v4
         with:
           version: 9
 
@@ -49,7 +49,7 @@ jobs:
           echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
-        uses: actions/cache@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/cache@v4
         with:
           path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -70,7 +70,7 @@ jobs:
 
       - name: Upload verification log
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@v4
         with:
           name: third-party-notices-${{ github.run_id }}
           path: third-party-notices.log
@@ -99,7 +99,7 @@ jobs:
           node-version: 24
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@fe02b34f6d2c97e289c7d657c8f528b5b22b98f4 # v4.1.0
+        uses: pnpm/action-setup@v4
         with:
           version: 9
 
@@ -110,7 +110,7 @@ jobs:
           echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
-        uses: actions/cache@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/cache@v4
         with:
           path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -131,7 +131,7 @@ jobs:
 
       - name: Upload refresh log
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@v4
         with:
           name: third-party-notices-refresh-${{ github.run_id }}
           path: third-party-notices-refresh.log

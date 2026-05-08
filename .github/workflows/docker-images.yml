@@ -145,7 +145,7 @@ jobs:
           echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
-        uses: actions/cache@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/cache@@v4
         with:
           path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -167,7 +167,7 @@ jobs:
 
       - name: Upload Mission Control smoke failure artifacts
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@@v4
         with:
           name: mission-control-smoke-failure-${{ github.run_id }}
           path: |
@@ -369,7 +369,7 @@ jobs:
 
       - name: Upload scan artifacts
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@@v4
         with:
           name: security-published-findings-${{ github.run_id }}
           path: |
