@@ -209,6 +209,7 @@ jobs:
           pnpm --filter shared run build
           pnpm install --filter backend-host
           pnpm --filter backend-host run build
+          pnpm install --filter frontend-host
           pnpm run build:frontend-host
 
       - name: Build backend
