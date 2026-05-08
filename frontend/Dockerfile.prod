@@ -24,7 +24,7 @@ COPY backend/package.json backend/
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     apk upgrade --no-cache zlib \
     && apk add --no-cache busybox-static \
-    && pnpm install --frozen-lockfile
+    && pnpm install --frozen-lockfile --shamefully-hoist
 
 COPY frontend frontend
 COPY packages packages
