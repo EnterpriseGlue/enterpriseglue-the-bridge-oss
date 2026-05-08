@@ -167,13 +167,12 @@ jobs:
 
       - name: Upload Mission Control smoke failure artifacts
         if: failure()
-        uses: actions/upload-artifact@@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
-          name: mission-control-smoke-failure-${{ github.run_id }}
+          name: test-results
           path: |
             test/results/
           if-no-files-found: warn
-          retention-days: 7
 
   smoke-postgres-image-deploy-exposed:
     needs: publish
@@ -369,14 +368,13 @@ jobs:
 
       - name: Upload scan artifacts
         if: always()
-        uses: actions/upload-artifact@@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: security-published-findings-${{ github.run_id }}
           path: |
             backend-trivy.json
             frontend-trivy.json
           if-no-files-found: warn
-          retention-days: 7
 
       - name: Security scan summary
         if: always()

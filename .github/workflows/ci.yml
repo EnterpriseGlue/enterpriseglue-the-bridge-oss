@@ -311,7 +311,6 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
             playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-
-          retention-days: 7
 
       - name: Install Playwright browsers
         if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit != 'true'
@@ -398,7 +397,6 @@ jobs:
         with:
           name: backend-coverage
           path: backend/coverage
-          retention-days: 7
 
       - name: Upload frontend coverage
         if: failure() && matrix.database == 'postgres' && github.event_name != 'merge_group'
@@ -406,7 +404,6 @@ jobs:
         with:
           name: frontend-coverage
           path: frontend/coverage
-          retention-days: 7
 
   build-ci-images:
     runs-on: ubuntu-latest
@@ -454,7 +451,6 @@ jobs:
           path: |
             eg-local-backend-pr.tar.gz
             eg-local-frontend-pr.tar.gz
-          retention-days: 7
 
 
   smoke-postgres-image-deploy:
@@ -686,7 +682,6 @@ jobs:
             backend-trivy.json
             frontend-trivy.json
           if-no-files-found: warn
-          retention-days: 7
 
       - name: Security scan summary
         if: always()
