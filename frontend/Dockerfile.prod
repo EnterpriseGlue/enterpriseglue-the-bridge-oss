@@ -10,7 +10,7 @@ ENV VITE_API_BASE_URL=${API_BASE_URL}
 RUN npm install -g pnpm@9
 
 # Copy workspace manifests for pnpm install layer caching
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY frontend/package.json frontend/
 COPY packages/shared/package.json packages/shared/
 COPY packages/frontend-host/package.json packages/frontend-host/

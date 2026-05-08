@@ -57,6 +57,8 @@
     "jspdf": "^4.2.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-loading-skeleton": "^3.5.0",
+    "react-pro-sidebar": "^1.1.0",
     "react-router-dom": "^7.13.1",
     "svg2pdf.js": "^2.7.0",
     "tailwind-merge": "^3.4.0",
@@ -64,6 +66,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.4",
+    "@types/react-dom": "^19.2.3",
     "typescript": "~5.9.3",
     "vite": "^7.3.1"
   }

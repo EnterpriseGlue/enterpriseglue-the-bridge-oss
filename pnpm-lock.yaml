@@ -428,6 +428,12 @@ importers:
       react-dom:
         specifier: ^19.2.4
         version: 19.2.6(react@19.2.6)
+      react-loading-skeleton:
+        specifier: ^3.5.0
+        version: 3.5.0(react@19.2.6)
+      react-pro-sidebar:
+        specifier: ^1.1.0
+        version: 1.1.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       react-router-dom:
         specifier: ^7.13.1
         version: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -444,6 +450,9 @@ importers:
       '@types/react':
         specifier: ^19.2.4
         version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
