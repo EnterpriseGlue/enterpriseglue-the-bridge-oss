@@ -121,16 +121,16 @@ jobs:
             if git rebase main 2>/dev/null; then
               rebase_ok=true
             else
-              # Check if the only conflicting file is package-lock.json
+              # Check if the only conflicting file is pnpm-lock.yaml
               conflicting_files=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
-              if [ "$conflicting_files" = "package-lock.json" ]; then
+              if [ "$conflicting_files" = "pnpm-lock.yaml" ]; then
                 echo "  → Lockfile-only conflict, resolving..."
 
                 # Accept main's lockfile and regenerate
-                git checkout main -- package-lock.json
-                npm install --package-lock-only --no-audit --no-fund 2>/dev/null
+                git checkout main -- pnpm-lock.yaml
+                pnpm install --frozen-lockfile 2>/dev/null
 
-                git add package-lock.json
+                git add pnpm-lock.yaml
                 if GIT_EDITOR=true git rebase --continue 2>/dev/null; then
                   rebase_ok=true
                 else

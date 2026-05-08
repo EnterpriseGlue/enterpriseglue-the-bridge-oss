@@ -52,8 +52,8 @@ if [[ "$MODE" == "current" ]]; then
   assert_contains "$PKG_JSON" '"private": false' "non-private plugin-api package"
   assert_contains "$PKG_JSON" '"version": "0.2.1"' "plugin-api baseline version"
 
-  if ! npm pack --dry-run ./packages/enterprise-plugin-api >/dev/null; then
-    echo "❌ [plugin-api-compat] plugin-api npm pack dry-run failed"
+  if ! pnpm pack --dry-run ./packages/enterprise-plugin-api >/dev/null; then
+    echo "❌ [plugin-api-compat] plugin-api pnpm pack dry-run failed"
     fail=1
   fi
 fi
@@ -71,7 +71,7 @@ if [[ ! -x "$TSC" ]]; then
   TSC="$(command -v tsc 2>/dev/null || echo "")"
 fi
 if [[ -z "$TSC" ]]; then
-  echo "⚠ [plugin-api-compat] tsc not found — skipping fixture compilation (run npm ci in backend/ first)"
+  echo "⚠ [plugin-api-compat] tsc not found — skipping fixture compilation (run pnpm install first)"
 elif ! "$TSC" -p packages/enterprise-plugin-api/fixtures/tsconfig.json 2>&1; then
   echo "❌ [plugin-api-compat] Fixture compilation failed — contract types are incompatible with consumer fixture"
   fail=1

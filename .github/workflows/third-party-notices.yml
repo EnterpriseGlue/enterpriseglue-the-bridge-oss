@@ -4,11 +4,9 @@ on:
   pull_request:
     paths:
       - package.json
-      - package-lock.json
+      - pnpm-lock.yaml
       - backend/package.json
-      - backend/package-lock.json
       - frontend/package.json
-      - frontend/package-lock.json
       - packages/*/package.json
       - scripts/generate-third-party-notices.mjs
       - scripts/update-third-party-notices.sh
@@ -38,10 +36,28 @@ jobs:
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 24
-          cache: npm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fe02b34f6d2c97e289c7d657c8f528b5b22b98f4 # v4.1.0
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
@@ -81,10 +97,28 @@ jobs:
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 24
-          cache: npm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fe02b34f6d2c97e289c7d657c8f528b5b22b98f4 # v4.1.0
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 

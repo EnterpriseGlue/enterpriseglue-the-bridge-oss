@@ -44,6 +44,7 @@
     "octokit": "^5.0.5",
     "oracledb": "^6.0.0",
     "pg": "^8.11.3",
+    "qs": "^6.13.1",
     "resend": "^6.12.2",
     "typeorm": "^0.3.28",
     "undici": "^7.24.0",
@@ -60,6 +61,7 @@
     "@types/node": "^25.3.5",
     "@types/nodemailer": "^7.0.11",
     "@types/pg": "^8.11.6",
+    "@types/qs": "^6.9.17",
     "@types/uuid": "^10.0.0",
     "typescript": "^5.8.3"
   },

@@ -2,8 +2,11 @@ FROM node:24-alpine
 
 WORKDIR /repo
 
-# Copy workspace manifests for npm ci
-COPY --chown=node:node package.json package-lock.json ./
+# Install pnpm globally
+RUN npm install -g pnpm@9
+
+# Copy workspace manifests for pnpm install
+COPY --chown=node:node package.json pnpm-lock.yaml ./
 COPY --chown=node:node backend/package.json backend/
 COPY --chown=node:node packages/shared/package.json packages/shared/
 COPY --chown=node:node packages/backend-host/package.json packages/backend-host/
@@ -12,8 +15,7 @@ COPY --chown=node:node packages/frontend-host/package.json packages/frontend-hos
 COPY --chown=node:node frontend/package.json frontend/
 
 RUN apk upgrade --no-cache zlib \
-    && npm ci -w backend -w packages/shared -w packages/backend-host \
-    --include=dev --no-audit --no-fund
+    && pnpm install --frozen-lockfile
 
 COPY --chown=node:node backend backend
 
@@ -23,4 +25,4 @@ EXPOSE 8787
 
 USER node
 
-CMD ["npm", "run", "start"]
+CMD ["pnpm", "run", "start"]

@@ -147,26 +147,30 @@ jobs:
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 20
-          cache: npm
           registry-url: https://npm.pkg.github.com
           scope: '@enterpriseglue'
 
-      - name: Install dependencies
-        run: npm ci
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.ci_token }}
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fe02b34f6d2c97e289c7d657c8f528b5b22b98f4 # v4.1.0
+        with:
+          version: 9
 
-      - name: Install standalone directory dependencies
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
         run: |
-          # EE: backend/ and frontend/ are standalone (not workspaces) with own lock files
-          # OSS: they are workspaces, already installed by root npm ci
-          for dir in backend frontend; do
-            if [ -f "$dir/package-lock.json" ]; then
-              echo "Installing $dir/ deps (standalone, not a workspace)..."
-              npm ci --prefix "$dir"
-            fi
-          done
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ci_token }}
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
@@ -174,8 +178,8 @@ jobs:
       - name: Install DB driver for matrix database
         if: matrix.database == 'oracle'
         run: |
-          # Install oracledb in backend — use --prefix since backend may not be a workspace
-          npm --prefix backend install --no-save oracledb
+          # Install oracledb in backend
+          pnpm add --filter backend --save-dev oracledb
 
       - name: Get Playwright version
         if: matrix.database == 'postgres' && inputs.run_e2e
@@ -188,7 +192,7 @@ jobs:
         id: pw-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-${{ hashFiles('package-lock.json', 'backend/package-lock.json', 'frontend/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
             playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-
           retention-days: 7
@@ -209,14 +213,15 @@ jobs:
           for pkg in packages/*/package.json; do
             [ -f "$pkg" ] || continue
             dir="$(dirname "$pkg")"
+            pkg_name=$(basename "$dir")
             if node -e "const p=require('./${pkg}'); process.exit(p.scripts?.build ? 0 : 1)" 2>/dev/null; then
               echo "Building $dir ..."
-              npm --prefix "$dir" run build
+              pnpm --filter "$pkg_name" run build
             fi
           done
 
       - name: Build backend
-        run: npm --prefix backend run build:skip-generate
+        run: pnpm --filter backend run build:skip-generate
 
       - name: Create PostgreSQL schema
         if: matrix.database == 'postgres'
@@ -224,20 +229,20 @@ jobs:
           PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
 
       - name: Sync database schema
-        run: npm --prefix backend run db:schema:sync
+        run: pnpm --filter backend run db:schema:sync
 
       - name: Run unit tests
         if: matrix.database == 'postgres'
-        run: npm run test:unit
+        run: pnpm run test:unit
 
       - name: Run integration tests
         if: matrix.database == 'postgres'
-        run: npm run test:integration
+        run: pnpm run test:integration
 
       - name: Run Oracle backend smoke
         if: matrix.database == 'oracle'
         run: |
-          npm --prefix backend run start:compiled &
+          pnpm --filter backend run start:compiled &
           for i in {1..45}; do
             if curl -sf http://localhost:8787/health >/dev/null; then
               break
@@ -258,11 +263,11 @@ jobs:
 
       - name: Start backend
         if: matrix.database == 'postgres' && inputs.run_e2e
-        run: npm --prefix backend run start:compiled &
+        run: pnpm --filter backend run start:compiled &
 
       - name: Start frontend
         if: matrix.database == 'postgres' && inputs.run_e2e
-        run: npm --prefix frontend run dev -- --host 0.0.0.0 --port 5173 &
+        run: pnpm --filter frontend run dev -- --host 0.0.0.0 --port 5173 &
 
       - name: Wait for services
         if: matrix.database == 'postgres' && inputs.run_e2e
@@ -278,12 +283,12 @@ jobs:
 
       - name: Run smoke e2e
         if: matrix.database == 'postgres' && inputs.run_e2e
-        run: npm run test:e2e:smoke
+        run: pnpm run test:e2e:smoke
 
       - name: Cleanup test data
         if: always() && matrix.database == 'postgres' && inputs.run_e2e
         continue-on-error: true
-        run: npm --prefix backend run db:cleanup-test-data
+        run: pnpm --filter backend run db:cleanup-test-data
 
       - name: Upload backend coverage
         if: failure() && matrix.database == 'postgres'

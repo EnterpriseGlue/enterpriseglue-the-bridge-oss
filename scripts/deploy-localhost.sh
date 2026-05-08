@@ -49,7 +49,7 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 SHARED_DIR="$ROOT_DIR/packages/shared"
 FRONTEND_HOST_DIR="$ROOT_DIR/packages/frontend-host"
 ROOT_NODE_MODULES_DIR="$ROOT_DIR/node_modules"
-ROOT_LOCKFILE="$ROOT_DIR/package-lock.json"
+ROOT_LOCKFILE="$ROOT_DIR/pnpm-lock.yaml"
 SELFHOST_ENV_FILE="$ROOT_DIR/.env.selfhost"
 BACKEND_ENV_FILE="$BACKEND_DIR/.env"
 
@@ -112,9 +112,9 @@ clean_build_artifacts() {
     rm -f "$BACKEND_DIR/tsconfig.tsbuildinfo"
   fi
   
-  # Optional: clean npm cache (uncomment if needed)
-  # log "Cleaning npm cache"
-  # npm cache clean --force
+  # Optional: clean pnpm cache (uncomment if needed)
+  # log "Cleaning pnpm cache"
+  # pnpm store prune
   
   log "✅ Build artifacts cleaned"
 }
@@ -255,7 +255,7 @@ check_database() {
 run_migrations() {
   if [[ "$RUN_MIGRATIONS" == "true" ]]; then
     log "Running database migrations for DATABASE_TYPE=${DATABASE_TYPE} (first-time install)"
-    (cd "$BACKEND_DIR" && npm run db:migration:run)
+    (cd "$BACKEND_DIR" && pnpm run db:migration:run)
     log "✅ Database migrations completed"
   else
     log "Database migrations will run automatically on backend startup"
@@ -316,11 +316,9 @@ npm_install_with_lockfile() {
   fi
 
   if [[ -f "$ROOT_LOCKFILE" ]]; then
-    (cd "$ROOT_DIR" && npm ci --include=dev --no-audit --no-fund $prefer_flag)
-  elif [[ -f "$dir/package-lock.json" ]]; then
-    (cd "$dir" && npm ci --no-audit --no-fund $prefer_flag)
+    (cd "$ROOT_DIR" && pnpm install --frozen-lockfile $prefer_flag)
   else
-    (cd "$dir" && npm install --include=dev --no-audit --no-fund --package-lock=false $prefer_flag)
+    (cd "$dir" && pnpm install $prefer_flag)
   fi
 }
 
@@ -338,7 +336,7 @@ build_backend() {
     elif missing_backend_pkg=$(first_missing_resolvable_package "$BACKEND_DIR" "${backend_required_packages[@]}"); then
       warn "Workspace deps appear incomplete (missing ${missing_backend_pkg}). Cleaning cache and reinstalling..."
       rm -rf "$ROOT_NODE_MODULES_DIR"
-      (cd "$ROOT_DIR" && npm cache clean --force)
+      (cd "$ROOT_DIR" && pnpm store prune)
       npm_install_with_lockfile "$BACKEND_DIR" "true"
     else
       log "Workspace dependencies already installed (offline mode)"
@@ -349,7 +347,7 @@ build_backend() {
   elif missing_backend_pkg=$(first_missing_resolvable_package "$BACKEND_DIR" "${backend_required_packages[@]}"); then
     warn "Backend deps appear incomplete (missing ${missing_backend_pkg}). Cleaning cache and reinstalling..."
     rm -rf "$BACKEND_DIR/node_modules"
-    (cd "$BACKEND_DIR" && npm cache clean --force)
+    (cd "$ROOT_DIR" && pnpm store prune)
     npm_install_with_lockfile "$BACKEND_DIR" "true"
   else
     log "Backend dependencies already installed (offline mode)"
@@ -362,17 +360,17 @@ build_backend() {
   fi
   
   log "Building backend (tsc only)"
-  (cd "$BACKEND_DIR" && npm run build:skip-generate)
+  (cd "$BACKEND_DIR" && pnpm run build:skip-generate)
 }
 
 build_shared() {
   log "Building shared package"
-  (cd "$SHARED_DIR" && npm run build)
+  (cd "$SHARED_DIR" && pnpm run build)
 }
 
 build_frontend_host() {
   log "Building frontend host package"
-  (cd "$FRONTEND_HOST_DIR" && npm run build)
+  (cd "$FRONTEND_HOST_DIR" && pnpm run build)
 }
 
 build_frontend() {
@@ -383,7 +381,7 @@ build_frontend() {
     elif ! package_is_resolvable "$FRONTEND_DIR" "vite/package.json"; then
       warn "Workspace deps appear incomplete (missing vite). Cleaning cache and reinstalling..."
       rm -rf "$ROOT_NODE_MODULES_DIR"
-      (cd "$ROOT_DIR" && npm cache clean --force)
+      (cd "$ROOT_DIR" && pnpm store prune)
       npm_install_with_lockfile "$FRONTEND_DIR" "true"
     else
       log "Workspace dependencies already installed (offline mode)"
@@ -399,7 +397,7 @@ build_frontend() {
   build_frontend_host
 
   log "Building frontend (vite build)"
-  (cd "$FRONTEND_DIR" && npm run build)
+  (cd "$FRONTEND_DIR" && pnpm run build)
 }
 
 start_backend() {
@@ -409,7 +407,7 @@ start_backend() {
 
 start_frontend() {
   log "Starting frontend preview on :$PREVIEW_PORT"
-  (cd "$FRONTEND_DIR" && nohup npm run preview -- --port "$PREVIEW_PORT" > preview.log 2>&1 &)
+  (cd "$FRONTEND_DIR" && nohup pnpm run preview -- --port "$PREVIEW_PORT" > preview.log 2>&1 &)
 }
 
 verify_deployment() {

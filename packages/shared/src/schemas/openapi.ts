@@ -2186,7 +2186,7 @@ registry.registerPath({ method: 'post', path: '/git-api/oauth/callback', respons
 registry.registerPath({ method: 'post', path: '/git-api/project-connection', request: { body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 200: { description: 'Project connection established', content: { 'application/json': { schema: z.unknown() } } } } });
 registry.registerPath({ method: 'put', path: '/git-api/project-connection/token', request: { body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 200: { description: 'Connection token updated' } } });
 
-export function generateOpenApi() {
+export function generateOpenApi(): any {
   const generator = new OpenApiGeneratorV3(registry.definitions);
   return generator.generateDocument({
     openapi: '3.0.3',
