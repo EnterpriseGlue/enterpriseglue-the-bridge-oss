@@ -507,6 +507,9 @@ importers:
       '@types/pg':
         specifier: ^8.11.6
         version: 8.20.0
+      '@types/qs':
+        specifier: ^6.9.17
+        version: 6.15.1
       '@types/uuid':
         specifier: ^10.0.0
         version: 10.0.0
