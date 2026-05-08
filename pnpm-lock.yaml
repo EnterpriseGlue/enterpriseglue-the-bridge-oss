@@ -125,8 +125,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@enterpriseglue/shared':
-        specifier: '*'
-        version: 0.3.2(babel-plugin-macros@3.1.0)(sql.js@1.14.1)
+        specifier: workspace:*
+        version: link:../packages/shared
       '@types/archiver':
         specifier: ^7.0.0
         version: 7.0.0
@@ -282,11 +282,11 @@ importers:
         version: 5.0.13(@types/react@19.2.14)(react@19.2.6)
     devDependencies:
       '@enterpriseglue/frontend-host':
-        specifier: '*'
-        version: 0.4.0(sql.js@1.14.1)
+        specifier: workspace:*
+        version: link:../packages/frontend-host
       '@enterpriseglue/shared':
-        specifier: '*'
-        version: 0.3.2(babel-plugin-macros@3.1.0)(sql.js@1.14.1)
+        specifier: workspace:*
+        version: link:../packages/shared
       '@testing-library/dom':
         specifier: ^10.4.1
         version: 10.4.1
@@ -359,11 +359,11 @@ importers:
   packages/frontend-host:
     dependencies:
       '@enterpriseglue/enterprise-plugin-api':
-        specifier: '*'
-        version: 0.2.1
+        specifier: workspace:*
+        version: link:../enterprise-plugin-api
       '@enterpriseglue/shared':
-        specifier: '*'
-        version: 0.3.2(babel-plugin-macros@3.1.0)(sql.js@1.14.1)
+        specifier: workspace:*
+        version: link:../shared
       bpmn-js:
         specifier: ^17.10.0
         version: 17.11.1
@@ -901,15 +901,6 @@ packages:
 
   '@emotion/weak-memoize@0.4.0':
     resolution: {integrity: sha512-snKqtPW01tN0ui7yu9rGv69aJXr/a/Ywvl11sUjNtEcRc+ng/mQriFL0wLXMef74iHa/EkftbDzU9F8iFbH+zg==}
-
-  '@enterpriseglue/enterprise-plugin-api@0.2.1':
-    resolution: {integrity: sha512-aOmbpv2DwKbI5VWhFUA66ojWJVy3HXGNFl+yc2U64T9mScsLaDl7Ci8XvhQ23XpUOSXWCoILRkplSwWENyNnWA==, tarball: https://npm.pkg.github.com/download/@enterpriseglue/enterprise-plugin-api/0.2.1/42e5da6c8ef76bc5127138b0e0777af1dbb75ace}
-
-  '@enterpriseglue/frontend-host@0.4.0':
-    resolution: {integrity: sha512-biBfMH3Ec7SkT9xxIeZ633DHPcUNmdXTmi8kVJ4oQKm+R3wAD/Rt2PHtWcIJeHc25MhVvsaJrfY2uAH5MVRUtA==, tarball: https://npm.pkg.github.com/download/@enterpriseglue/frontend-host/0.4.0/9e5405937404d2c6d63a551df2ce734539e6b8e6}
-
-  '@enterpriseglue/shared@0.3.2':
-    resolution: {integrity: sha512-nr2GwuKah0Xe60Y7IqHTH0s9r6NZ6Gi6ewz/4KwatuSoE0j4wcvraXB/FzNmGpfwOR0hOd3penpw8wzf3Ev0Ug==, tarball: https://npm.pkg.github.com/download/@enterpriseglue/shared/0.3.2/f9767df4a96474ee6130046d2e7641254daeed23}
 
   '@esbuild/aix-ppc64@0.27.7':
     resolution: {integrity: sha512-EKX3Qwmhz1eMdEJokhALr0YiD0lhQNwDqkPYyPhiSwKrh7/4KRjQc04sZ8db+5DVVnZ1LmbNDI1uAMPEUBnQPg==}
@@ -5306,80 +5297,6 @@ snapshots:
   '@emotion/utils@1.4.2': {}
 
   '@emotion/weak-memoize@0.4.0': {}
-
-  '@enterpriseglue/enterprise-plugin-api@0.2.1': {}
-
-  '@enterpriseglue/frontend-host@0.4.0(sql.js@1.14.1)':
-    dependencies:
-      '@enterpriseglue/enterprise-plugin-api': 0.2.1
-      '@enterpriseglue/shared': 0.3.2(babel-plugin-macros@3.1.0)(sql.js@1.14.1)
-      jspdf: 4.2.1
-      svg2pdf.js: 2.7.0(jspdf@4.2.1)
-    transitivePeerDependencies:
-      - '@google-cloud/spanner'
-      - '@react-email/render'
-      - '@sap/hana-client'
-      - babel-plugin-macros
-      - better-sqlite3
-      - encoding
-      - ioredis
-      - mongodb
-      - mssql
-      - mysql2
-      - pg-native
-      - pg-query-stream
-      - redis
-      - sql.js
-      - sqlite3
-      - supports-color
-      - ts-node
-      - typeorm-aurora-data-api-driver
-
-  '@enterpriseglue/shared@0.3.2(babel-plugin-macros@3.1.0)(sql.js@1.14.1)':
-    dependencies:
-      '@asteasolutions/zod-to-openapi': 8.5.0(zod@4.4.3)
-      '@azure/msal-node': 5.1.5
-      '@gitbeaker/rest': 43.8.0
-      adm-zip: 0.5.17
-      azure-devops-node-api: 15.1.2
-      bcryptjs: 3.0.3
-      bitbucket: 2.12.0
-      cookie-parser: 1.4.7
-      cors: 2.8.6
-      dotenv: 17.4.2
-      express: 5.2.1
-      express-rate-limit: 8.5.1(express@5.2.1)
-      google-auth-library: 10.6.2
-      helmet: 8.1.0
-      jsonwebtoken: 9.0.3
-      nodemailer: 8.0.7
-      octokit: 5.0.5
-      oracledb: 6.10.0
-      pg: 8.20.0
-      resend: 6.12.3
-      typeorm: 0.3.28(babel-plugin-macros@3.1.0)(oracledb@6.10.0)(pg@8.20.0)(sql.js@1.14.1)
-      undici: 7.25.0
-      uuid: 14.0.0
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - '@google-cloud/spanner'
-      - '@react-email/render'
-      - '@sap/hana-client'
-      - babel-plugin-macros
-      - better-sqlite3
-      - encoding
-      - ioredis
-      - mongodb
-      - mssql
-      - mysql2
-      - pg-native
-      - pg-query-stream
-      - redis
-      - sql.js
-      - sqlite3
-      - supports-color
-      - ts-node
-      - typeorm-aurora-data-api-driver
 
   '@esbuild/aix-ppc64@0.27.7':
     optional: true

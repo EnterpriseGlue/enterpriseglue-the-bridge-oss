@@ -45,8 +45,8 @@
     "access": "restricted"
   },
   "dependencies": {
-    "@enterpriseglue/enterprise-plugin-api": "*",
-    "@enterpriseglue/shared": "*",
+    "@enterpriseglue/enterprise-plugin-api": "workspace:*",
+    "@enterpriseglue/shared": "workspace:*",
     "bpmn-js": "^17.10.0",
     "clsx": "^2.1.1",
     "inferno": "~5.6.3",
