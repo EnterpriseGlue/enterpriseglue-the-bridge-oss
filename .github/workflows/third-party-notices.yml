@@ -23,6 +23,7 @@ on:
 permissions:
   contents: read
   issues: write
+  packages: read
 
 jobs:
   verify-third-party-notices:
