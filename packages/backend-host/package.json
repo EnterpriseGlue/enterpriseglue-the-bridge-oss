@@ -24,6 +24,7 @@
     "helmet": "^8.1.0",
     "morgan": "^1.10.0",
     "swagger-ui-express": "^5.0.1",
+    "typescript": "^5.8.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
