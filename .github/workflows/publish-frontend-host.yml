@@ -65,8 +65,30 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "Publishing $NAME@$VERSION"
 
-      - name: Validate package contents
-        run: npm pack --dry-run
+      - name: Pack package
+        id: pack
+        run: |
+          PACK_DIR="$RUNNER_TEMP/frontend-host-pack"
+          mkdir -p "$PACK_DIR"
+          TARBALL="$(pnpm pack --pack-destination "$PACK_DIR" | tail -n 1)"
+          case "$TARBALL" in
+            /*) ;;
+            *) TARBALL="$PACK_DIR/$TARBALL" ;;
+          esac
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          tar -xOf "$TARBALL" package/package.json > "$RUNNER_TEMP/frontend-host-package.json"
+          node - <<'NODE'
+          const pkg = require(`${process.env.RUNNER_TEMP}/frontend-host-package.json`);
+          const workspaceDeps = Object.entries({
+            ...pkg.dependencies,
+            ...pkg.peerDependencies,
+            ...pkg.optionalDependencies,
+          }).filter(([, version]) => typeof version === 'string' && version.startsWith('workspace:'));
+          if (workspaceDeps.length) {
+            console.error(`ERROR: packed package contains workspace protocol dependencies: ${workspaceDeps.map(([name]) => name).join(', ')}`);
+            process.exit(1);
+          }
+          NODE
 
       - name: Verify exports point to dist
         run: |
@@ -91,7 +113,7 @@ jobs:
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true')
           && steps.check.outcome != 'success'
-        run: pnpm publish --dry-run --no-git-checks
+        run: npm publish "${{ steps.pack.outputs.tarball }}" --dry-run --registry=https://npm.pkg.github.com
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -99,7 +121,7 @@ jobs:
         if: >-
           !(github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true')
           && steps.check.outcome != 'success'
-        run: pnpm publish --ignore-scripts --no-git-checks
+        run: npm publish "${{ steps.pack.outputs.tarball }}" --ignore-scripts --registry=https://npm.pkg.github.com
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
