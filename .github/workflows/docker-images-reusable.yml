@@ -439,12 +439,11 @@ jobs:
           EOF
 
       - name: Upload image digest artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: image-digests-${{ steps.meta.outputs.image_tag }}
           path: image-digests.json
           if-no-files-found: error
-          retention-days: 7
 
       - name: Verify multi-arch manifest coverage
         shell: bash

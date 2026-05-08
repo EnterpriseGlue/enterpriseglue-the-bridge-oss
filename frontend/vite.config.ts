@@ -86,6 +86,8 @@ export default defineConfig(({ mode }) => {
   }
 
   const require = createRequire(import.meta.url)
+  const packageDir = (specifier: string, resolver = require) => path.dirname(resolver.resolve(`${specifier}/package.json`))
+  const infernoRequire = createRequire(require.resolve('inferno/package.json'))
   let proxyPatterns = [
     '^/t/[^/]+/api',
     '^/t/[^/]+/engines-api',
@@ -131,8 +133,8 @@ export default defineConfig(({ mode }) => {
         // requiring a shared package build in dev/test. Mirrors the existing
         // contracts path alias in packages/frontend-host/tsconfig.json.
         '@enterpriseglue/shared/utils/starbase-filenames.js': path.resolve(__dirname, '../packages/shared/src/utils/starbase-filenames.ts'),
-        inferno: path.resolve(__dirname, '../node_modules/dmn-js-shared/node_modules/inferno'),
-        'inferno-vnode-flags': path.resolve(__dirname, '../node_modules/dmn-js-shared/node_modules/inferno-vnode-flags'),
+        inferno: packageDir('inferno'),
+        'inferno-vnode-flags': packageDir('inferno-vnode-flags', infernoRequire),
       },
     },
     esbuild: {

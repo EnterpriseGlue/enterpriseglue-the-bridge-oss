@@ -20,11 +20,11 @@
     "deploy:openshift:skip-health": "SKIP_EXTERNAL_HEALTHCHECK=true bash ./scripts/deploy-openshift.sh",
     "deploy:localhost": "bash ./scripts/deploy-localhost.sh",
     "build": "ENV_FILE=.local/docker/env/docker.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.docker; EG_BACKEND_ENV_FILE=\"$ENV_FILE\" docker compose --project-directory . --env-file \"$ENV_FILE\" -f infra/docker/compose/docker-compose.yml build",
-    "build:shared": "npm run --prefix packages/shared build",
-    "build:frontend-host": "npm run build:shared && npm run --prefix packages/frontend-host build",
-    "typecheck": "npm --prefix backend run typecheck && npm --prefix frontend run typecheck",
-    "test:unit": "npm --prefix backend run test:unit && npm --prefix frontend run test:unit",
-    "test:integration": "npm --prefix backend run test:integration",
+    "build:shared": "pnpm --filter shared run build",
+    "build:frontend-host": "pnpm run build:shared && pnpm --filter frontend-host run build",
+    "typecheck": "pnpm --filter webmodeler-backend run typecheck && pnpm --filter webmodeler-frontend run typecheck",
+    "test:unit": "pnpm --filter webmodeler-backend run test:unit && pnpm --filter webmodeler-frontend run test:unit",
+    "test:integration": "pnpm --filter webmodeler-backend run test:integration",
     "test:e2e": "playwright test --config test/e2e/playwright.config.ts",
     "test:e2e:smoke": "playwright test --config test/e2e/playwright.config.ts --grep @smoke",
     "test:e2e:smoke:mission-control": "playwright test --config test/e2e/playwright.config.ts --grep @mission-control",
@@ -33,9 +33,9 @@
     "mock-camunda:harvest": "bash ./scripts/mock-camunda-harvest.sh",
     "mock-camunda:normalize": "node test/e2e/mock-camunda/normalize.mjs",
     "mock-camunda:adapt": "node test/e2e/mock-camunda/adapt-normalized.mjs",
-    "mock-camunda:prepare": "npm run mock-camunda:harvest && npm run mock-camunda:normalize",
-    "test:ci": "npm run test:unit && npm run test:integration && npm run test:e2e && npm --prefix backend run db:cleanup-test-data",
-    "test:ci:pr": "npm run test:unit && npm run test:integration && npm run test:e2e:smoke && npm --prefix backend run db:cleanup-test-data",
+    "mock-camunda:prepare": "pnpm run mock-camunda:harvest && pnpm run mock-camunda:normalize",
+    "test:ci": "pnpm run test:unit && pnpm run test:integration && pnpm run test:e2e && pnpm --filter webmodeler-backend run db:cleanup-test-data",
+    "test:ci:pr": "pnpm run test:unit && pnpm run test:integration && pnpm run test:e2e:smoke && pnpm --filter webmodeler-backend run db:cleanup-test-data",
     "guard:oss-ee-boundary": "bash ./scripts/check-oss-ee-boundary.sh",
     "guard:published-package-versions": "bash ./scripts/check-published-package-version-discipline.sh",
     "guard:plugin-api:current": "bash ./scripts/check-plugin-api-compat.sh current",
@@ -43,7 +43,7 @@
     "guard:plugin-boot:oss": "bash ./scripts/check-plugin-boot-mode.sh oss",
     "licenses:update": "bash ./scripts/update-third-party-notices.sh",
     "licenses:check": "bash ./scripts/update-third-party-notices.sh --check --strict",
-    "plugin-api:pack": "mkdir -p ./.artifacts && cd packages/enterprise-plugin-api && npm pack && mv *.tgz ../../.artifacts/",
+    "plugin-api:pack": "mkdir -p ./.artifacts && cd packages/enterprise-plugin-api && pnpm pack && mv *.tgz ../../.artifacts/",
     "ci:watch": "bash ./scripts/ci-watch.sh",
     "ci:watch:trigger": "bash ./scripts/ci-watch.sh docker-images --trigger"
   },
@@ -54,7 +54,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2"
+    "@playwright/test": "^1.58.2",
+    "pg": "^8.11.3"
   },
   "overrides": {
     "@types/express": "5.0.6",

@@ -10,11 +10,11 @@ We use **TypeORM** for database schema management and migrations. All tables are
 
 | Command | When to Use |
 |---------|-------------|
-| `npm run build` | **Regular builds & deployments** - Compiles TypeScript |
-| `npm run db:migration:generate` | Generate new migration after entity changes |
-| `npm run db:migration:run` | Run pending migrations |
-| `npm run db:migration:revert` | Revert last migration |
-| `npm run db:schema:sync` | Sync schema directly (dev only) |
+| `pnpm run build` | **Regular builds & deployments** - Compiles TypeScript |
+| `pnpm run db:migration:generate` | Generate new migration after entity changes |
+| `pnpm run db:migration:run` | Run pending migrations |
+| `pnpm run db:migration:revert` | Revert last migration |
+| `pnpm run db:schema:sync` | Sync schema directly (dev only) |
 
 ## Workflow for Schema Changes
 
@@ -106,7 +106,7 @@ The Docker build compiles TypeScript:
 
 ```dockerfile
 # Dockerfile
-RUN npm run build
+RUN pnpm run build
 ```
 
 **How it works:**
@@ -139,12 +139,11 @@ The connection is configured in `src/db/data-source.ts`.
 
 ### Entity changes not reflected
 
-1. Run `npm run build` first to compile entities
-2. Then run `npm run db:migration:generate`
-3. Check migration was generated correctly
+1. Run `pnpm run build` first to compile entities
+2. Then run `pnpm run db:migration:generate`
+3. Run `pnpm run db:schema:sync` in development to force sync
 
 ### Schema mismatch errors
 
 1. Verify all entities use `schema: 'main'`
 2. Check migration SQL references correct schema
-3. Run `npm run db:schema:sync` in development to force sync

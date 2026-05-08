@@ -62,8 +62,8 @@ The compliance model generates and maintains:
 
 ### Generation entry points
 **Primary commands**
-- `npm run licenses:update`
-- `npm run licenses:check`
+- `pnpm run licenses:update`
+- `pnpm run licenses:check`
 - `bash ./scripts/update-third-party-notices.sh`
 - `bash ./scripts/update-third-party-notices.sh --check --strict`
 

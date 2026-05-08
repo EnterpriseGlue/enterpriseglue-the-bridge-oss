@@ -132,30 +132,47 @@ jobs:
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 24
-          cache: npm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Run Mission Control Playwright smoke on Postgres images
         env:
           EG_POSTGRES_IMAGE_ENV_FILE: ./.env.images.ci
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLAYWRIGHT_RUNNER_IMAGE: mcr.microsoft.com/playwright:v1.58.2-jammy
-        run: npm run test:e2e:smoke:postgres:images -- --env-file ./.env.images.ci --project-name enterpriseglue-postgres-image-smoke
+        run: pnpm run test:e2e:smoke:postgres:images -- --env-file ./.env.images.ci --project-name enterpriseglue-postgres-image-smoke
 
       - name: Upload Mission Control smoke failure artifacts
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
-          name: mission-control-smoke-failure-${{ github.run_id }}
+          name: test-results
           path: |
             test/results/
           if-no-files-found: warn
-          retention-days: 7
 
   smoke-postgres-image-deploy-exposed:
     needs: publish
@@ -351,14 +368,13 @@ jobs:
 
       - name: Upload scan artifacts
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: security-published-findings-${{ github.run_id }}
           path: |
             backend-trivy.json
             frontend-trivy.json
           if-no-files-found: warn
-          retention-days: 7
 
       - name: Security scan summary
         if: always()

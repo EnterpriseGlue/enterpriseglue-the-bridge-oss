@@ -36,7 +36,7 @@ const entities = [
  * MySQL/MariaDB Database Adapter
  * Implements database-specific operations for MySQL and MariaDB
  * 
- * Driver: mysql2 (npm install mysql2)
+ * Driver: mysql2 (pnpm add mysql2)
  */
 export class MySQLAdapter implements DatabaseAdapter {
   private readonly logging: boolean;
@@ -104,7 +104,7 @@ export class MySQLAdapter implements DatabaseAdapter {
     } catch {
       console.warn(
         '⚠️  MySQL driver (mysql2) not installed. ' +
-        'Install with: npm install mysql2'
+        'Install with: pnpm add mysql2'
       );
     }
   }

@@ -3,17 +3,11 @@ FROM node:24-bookworm-slim AS build
 
 WORKDIR /repo
 
-# Harden npm against transient CI network errors (e.g. ECONNRESET mid-install
-# or a stalled arm64 registry TCP stream that cancels the build). Scoped to
-# this build stage only — never shipped in the runtime image.
-# https://docs.npmjs.com/cli/v10/using-npm/config#fetch-retries
-ENV npm_config_fetch_retries=5 \
-    npm_config_fetch_retry_mintimeout=20000 \
-    npm_config_fetch_retry_maxtimeout=120000 \
-    npm_config_fetch_timeout=600000
+# Install pnpm globally
+RUN npm install -g pnpm@11.0.8
 
-# Copy workspace manifests for npm ci layer caching
-COPY package.json package-lock.json ./
+# Copy workspace manifests for pnpm install layer caching
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/
 COPY packages/shared/package.json packages/shared/
 COPY packages/backend-host/package.json packages/backend-host/
@@ -21,33 +15,27 @@ COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY packages/frontend-host/package.json packages/frontend-host/
 COPY frontend/package.json frontend/
 
-# BuildKit cache mount hydrates ~/.npm across builds so `npm ci` mostly reads
-# from local disk instead of the registry. `sharing=locked` serializes
-# concurrent multi-platform builds safely. --prefer-offline makes npm use
-# cached tarballs first and only hit the registry for genuine misses.
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
-    npm ci -w backend -w packages/shared -w packages/backend-host \
-    --include=dev --no-audit --no-fund --prefer-offline
+# BuildKit cache mount hydrates pnpm store across builds. `sharing=locked` serializes
+# concurrent multi-platform builds safely. --frozen-lockfile ensures reproducible installs.
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
+    pnpm install --frozen-lockfile
 
 # Build OSS packages (shared must be built before backend-host)
 COPY packages packages
-RUN npm -w packages/shared run build
-RUN npm -w packages/backend-host run build
+RUN pnpm --filter shared run build
+RUN pnpm --filter backend-host run build
 
 COPY backend backend
-RUN npm -w backend run build:skip-generate
+RUN pnpm --filter webmodeler-backend run build:skip-generate
 
 FROM node:24-bookworm-slim AS deps
 
 WORKDIR /repo
 
-# Harden npm against transient CI network errors (see build stage above).
-ENV npm_config_fetch_retries=5 \
-    npm_config_fetch_retry_mintimeout=20000 \
-    npm_config_fetch_retry_maxtimeout=120000 \
-    npm_config_fetch_timeout=600000
+# Install pnpm globally
+RUN npm install -g pnpm@11.0.8
 
-COPY package.json package-lock.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/
 COPY packages/shared/package.json packages/shared/
 COPY packages/backend-host/package.json packages/backend-host/
@@ -55,12 +43,10 @@ COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY packages/frontend-host/package.json packages/frontend-host/
 COPY frontend/package.json frontend/
 
-# BuildKit cache mount — same rationale as the build stage above.
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
-    npm ci -w backend --omit=dev --no-audit --no-fund --prefer-offline \
-    && npm install -w backend --omit=dev --no-audit --no-fund --no-save --prefer-offline \
-      mysql2 \
-      mssql
+# BuildKit cache mount for pnpm store — same rationale as the build stage above.
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
+    pnpm install --frozen-lockfile \
+    && pnpm add --filter webmodeler-backend --save-dev mysql2 mssql
 
 FROM cgr.dev/chainguard/node:latest-dev AS runtime-base
 USER root
@@ -75,7 +61,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY backend/package.json ./package.json
-COPY --from=deps /repo/node_modules ./node_modules
+
+# The compiled backend runs from /app/dist/backend/src. With pnpm, package
+# dependencies are symlinks from each workspace package's node_modules into the
+# root .pnpm store, so copy that same layout under /app/dist for Node's module
+# resolver.
+COPY --from=deps /repo/node_modules ./dist/node_modules
+COPY --from=deps /repo/backend/node_modules ./dist/backend/node_modules
+COPY --from=deps /repo/packages/backend-host/node_modules ./dist/packages/backend-host/node_modules
+COPY --from=deps /repo/packages/shared/node_modules ./dist/packages/shared/node_modules
 
 COPY --from=build /repo/backend/dist ./dist
 COPY --from=build /repo/packages/shared/src/db/adapters/sql ./packages/shared/src/db/adapters/sql

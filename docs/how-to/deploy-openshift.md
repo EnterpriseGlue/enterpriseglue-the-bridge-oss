@@ -81,14 +81,14 @@ Use the script entrypoint (default overlay is `prod`):
 
 ```bash
 set -a && source .local/docker/env/openshift.env && set +a
-npm run deploy:openshift
+pnpm run deploy:openshift
 ```
 
 Use a different overlay when needed:
 
 ```bash
 set -a && source .local/docker/env/openshift.env && set +a
-OPENSHIFT_OVERLAY=staging npm run deploy:openshift
+OPENSHIFT_OVERLAY=staging pnpm run deploy:openshift
 ```
 
 ## Notes
@@ -97,5 +97,5 @@ OPENSHIFT_OVERLAY=staging npm run deploy:openshift
 - Optional health check bypass:
 
 ```bash
-SKIP_EXTERNAL_HEALTHCHECK=true npm run deploy:openshift
+SKIP_EXTERNAL_HEALTHCHECK=true pnpm run deploy:openshift
 ```

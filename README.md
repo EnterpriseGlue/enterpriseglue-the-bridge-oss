@@ -35,7 +35,7 @@ To upgrade: change `IMAGE_TAG=latest` (or pin to e.g. `v1.2.3`) and re-run `up -
 ### Fast path (Postgres default)
 1. Start the stack:
    ```bash
-   npm run dev
+   pnpm run dev
    ```
    On first run, if `.local/docker/env/docker.env` is missing, it is created from `infra/docker/env/examples/docker.postgres.env.example`.
 2. Open the app:
@@ -49,10 +49,10 @@ To upgrade: change `IMAGE_TAG=latest` (or pin to e.g. `v1.2.3`) and re-run `up -
 Use a database selector for Docker dev:
 
 ```bash
-npm run dev -- --db mysql
-npm run dev -- --db mssql
-npm run dev -- --db oracle
-npm run dev -- --db spanner
+pnpm run dev -- --db mysql
+pnpm run dev -- --db mssql
+pnpm run dev -- --db oracle
+pnpm run dev -- --db spanner
 ```
 
 Behavior:
@@ -69,7 +69,7 @@ Behavior:
 2. Update secrets in `.local/docker/env/production.env` (JWT, admin password, encryption key).
 3. Start the production stack:
    ```bash
-   npm run prod
+   pnpm run prod
    ```
 4. Open the app:
    - Frontend: http://localhost:8080 (default)
@@ -92,9 +92,9 @@ Use this mode when you want to run exactly what CI published:
    - Leave `API_BASE_URL` empty for same-origin mode. In published-image mode, `API_BASE_URL` is already baked into the frontend image build; use `API_UPSTREAM` only to change the runtime proxy target.
 3. Start stack from images:
    ```bash
-   npm run prod:images:postgres
+   pnpm run prod:images:postgres
    # or
-   npm run prod:images:oracle
+   pnpm run prod:images:oracle
    ```
 4. Roll back by changing only `IMAGE_TAG` and re-running the same command.
 
@@ -110,27 +110,27 @@ Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin t
 - OpenShift env template:
   - `infra/docker/env/examples/openshift.env.example`
 - Deploy entrypoint:
-  - `npm run deploy:openshift`
-  - Optional overlay selector: `OPENSHIFT_OVERLAY=staging npm run deploy:openshift`
+  - `pnpm run deploy:openshift`
+  - Optional overlay selector: `OPENSHIFT_OVERLAY=staging pnpm run deploy:openshift`
 
 ## Stop
 ```bash
-npm run down
+pnpm run down
 ```
 
 To stop a specific DB stack explicitly:
 
 ```bash
-npm run down -- --db mysql
+pnpm run down -- --db mysql
 ```
 
 ```bash
-npm run prod:down
+pnpm run prod:down
 ```
 
 ```bash
-npm run prod:images:postgres:down
-npm run prod:images:oracle:down
+pnpm run prod:images:postgres:down
+pnpm run prod:images:oracle:down
 ```
 
 ## Documentation

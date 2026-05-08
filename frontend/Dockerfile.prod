@@ -6,17 +6,11 @@ WORKDIR /repo
 ARG API_BASE_URL
 ENV VITE_API_BASE_URL=${API_BASE_URL}
 
-# Harden npm against transient CI network errors (e.g. ECONNRESET mid-install
-# or a stalled arm64 registry TCP stream that cancels the build). Scoped to
-# this build stage only — never shipped in the runtime image.
-# https://docs.npmjs.com/cli/v10/using-npm/config#fetch-retries
-ENV npm_config_fetch_retries=5 \
-    npm_config_fetch_retry_mintimeout=20000 \
-    npm_config_fetch_retry_maxtimeout=120000 \
-    npm_config_fetch_timeout=600000
+# Install pnpm globally
+RUN npm install -g pnpm@11.0.8
 
-# Copy workspace manifests for npm ci layer caching
-COPY package.json package-lock.json ./
+# Copy workspace manifests for pnpm install layer caching
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY frontend/package.json frontend/
 COPY packages/shared/package.json packages/shared/
 COPY packages/frontend-host/package.json packages/frontend-host/
@@ -24,19 +18,18 @@ COPY packages/backend-host/package.json packages/backend-host/
 COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY backend/package.json backend/
 
-# BuildKit cache mount hydrates ~/.npm across builds, so `npm ci` mostly reads
-# from local disk instead of the registry. `sharing=locked` serializes
+# BuildKit cache mount hydrates pnpm store across builds. `sharing=locked` serializes
 # concurrent multi-platform builds safely. apk stays on `--no-cache` because
 # we only ever want the latest mirror fetch for security.
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     apk upgrade --no-cache zlib \
     && apk add --no-cache busybox-static \
-    && npm ci -w frontend --include=dev --no-audit --no-fund --prefer-offline
+    && pnpm install --frozen-lockfile
 
 COPY frontend frontend
 COPY packages packages
-RUN npm run build:frontend-host \
-    && npm -w frontend run build \
+RUN pnpm run build:frontend-host \
+    && pnpm --filter webmodeler-frontend run build \
     && mkdir -p /tmp/busybox-bin \
     && cp /bin/busybox.static /tmp/busybox-bin/busybox \
     && ln -s busybox /tmp/busybox-bin/sh \

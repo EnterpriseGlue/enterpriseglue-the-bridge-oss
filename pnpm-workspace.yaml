@@ -1,0 +1,43 @@
+packages:
+  - 'backend'
+  - 'frontend'
+  - 'packages/*'
+public-hoist-pattern:
+  - '*'
+  - 'inferno'
+  - 'inferno*'
+allowBuilds:
+  '@carbon/charts': true
+  '@carbon/charts-react': true
+  '@carbon/colors': true
+  '@carbon/feature-flags': true
+  '@carbon/grid': true
+  '@carbon/icon-helpers': true
+  '@carbon/icons': true
+  '@carbon/icons-react': true
+  '@carbon/layout': true
+  '@carbon/link': true
+  '@carbon/motion': true
+  '@carbon/pictograms': true
+  '@carbon/react': true
+  '@carbon/styles': true
+  '@carbon/themes': true
+  '@carbon/type': true
+  '@carbon/utilities': true
+  '@carbon/utils-position': true
+  '@ibm/plex': true
+  '@ibm/plex-mono': true
+  '@ibm/plex-sans': true
+  '@ibm/plex-sans-arabic': true
+  '@ibm/plex-sans-devanagari': true
+  '@ibm/plex-sans-hebrew': true
+  '@ibm/plex-sans-thai': true
+  '@ibm/plex-sans-thai-looped': true
+  '@ibm/plex-serif': true
+  '@parcel/watcher': true
+  '@scarf/scarf': true
+  core-js: true
+  esbuild: true
+  inferno: true
+  msw: true
+  oracledb: true

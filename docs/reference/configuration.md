@@ -7,7 +7,7 @@ Audience: Developers and architects.
 ## Backend Configuration
 Primary sources:
 - `.local/docker/env/docker.env` (Docker Compose, Postgres default)
-- `.local/docker/env/docker.<db>.env` (Docker Compose with `npm run dev -- --db <db>`)
+- `.local/docker/env/docker.<db>.env` (Docker Compose with `pnpm run dev -- --db <db>`)
 - `backend/.env` (host-based runs)
 
 Legacy fallback support:

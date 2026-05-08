@@ -52,7 +52,7 @@ Use the **Prism mock server** with our Postman collection from `local-docs/ING/a
 
 ```bash
 # Install Prism CLI
-npm install -g @stoplight/prism-cli
+pnpm add -g @stoplight/prism-cli
 
 # Start Camunda mock server
 cd local-docs/ING/api-specs
@@ -110,7 +110,7 @@ export ENGINE_USERNAME=demo
 export ENGINE_PASSWORD=demo
 
 # Run E2E tests
-npm run test:e2e
+pnpm run test:e2e
 ```
 
 ---

@@ -14,10 +14,10 @@ Describe the change and why it’s needed.
 
 Provide steps to validate the change.
 
-- [ ] Backend (if applicable): `cd backend && npm run dev`
-- [ ] Frontend (if applicable): `cd frontend && npm run dev`
+- [ ] Backend (if applicable): `cd backend && pnpm run dev`
+- [ ] Frontend (if applicable): `cd frontend && pnpm run dev`
 - [ ] Typecheck: `cd backend && npx tsc --noEmit`
-- [ ] Frontend build: `cd frontend && npm run build`
+- [ ] Frontend build: `cd frontend && pnpm run build`
 
 ## Checklist
 

@@ -132,7 +132,7 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
       sameSite: 'lax',
       path: '/',
     },
-    getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'],
+    getCsrfTokenFromRequest: (req: any) => req.headers['x-csrf-token'],
     skipCsrfProtection: (req) => {
       // Skip CSRF for login/refresh and CSRF token fetch (these endpoints validate credentials directly)
       if (req.path === '/api/auth/login' || req.path === '/api/auth/refresh' || req.path === '/api/csrf-token') return true;

@@ -25,5 +25,6 @@
       "@enterpriseglue/enterprise-plugin-api/frontend": ["../packages/enterprise-plugin-api/src/frontend.d.ts"]
     }
   },
-  "include": ["src", "__tests__", "test", "../packages/frontend-host/src"]
+  "include": ["src", "__tests__", "test", "../packages/frontend-host/src"],
+  "exclude": ["../packages/frontend-host/src/test"]
 }
