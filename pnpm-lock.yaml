@@ -326,6 +326,24 @@ importers:
 
   packages/backend-host:
     dependencies:
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.6
+      csrf-csrf:
+        specifier: ^3.0.6
+        version: 3.2.2
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1
+      helmet:
+        specifier: ^8.1.0
+        version: 8.1.0
+      morgan:
+        specifier: ^1.10.0
+        version: 1.10.1
+      swagger-ui-express:
+        specifier: ^5.0.1
+        version: 5.0.1(express@5.2.1)
       zod:
         specifier: ^4.3.6
         version: 4.4.3
@@ -344,12 +362,27 @@ importers:
       '@enterpriseglue/shared':
         specifier: '*'
         version: 0.3.2(babel-plugin-macros@3.1.0)(sql.js@1.14.1)
+      bpmn-js:
+        specifier: ^17.10.0
+        version: 17.11.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
       jspdf:
         specifier: ^4.2.1
         version: 4.2.1
+      react:
+        specifier: ^19.2.4
+        version: 19.2.6
+      react-router-dom:
+        specifier: ^7.13.1
+        version: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       svg2pdf.js:
         specifier: ^2.7.0
         version: 2.7.0(jspdf@4.2.1)
+      tailwind-merge:
+        specifier: ^3.4.0
+        version: 3.5.0
     devDependencies:
       typescript:
         specifier: ~5.9.3
@@ -2195,12 +2228,18 @@ packages:
       camunda-bpmn-js-behaviors: '>= 0.4'
       diagram-js: '>= 11.9'
 
+  bpmn-js@17.11.1:
+    resolution: {integrity: sha512-ywCeTg5kvN8lYkU+fHE+YXTGlfKc55lRBn7zW3k1//toeMNPy/PS/uQiujRWdFhMrH5dbtDvlwWukNw2pjWw8Q==}
+
   bpmn-js@18.16.1:
     resolution: {integrity: sha512-qdJp/1JbKY3JtqB2L7LF4VEJtVlbl9AGkvyUjzJlBJ8jURNNTx+22OdrZMVNPxaGOjW+nuHK38ObFCmMCp/Kcg==}
 
   bpmn-moddle@10.0.0:
     resolution: {integrity: sha512-vXePD5jkatcILmM3zwJG/m6IIHIghTGB7WvgcdEraEw8E8VdJHrTgrvBUhbzqaXJpnsGQz15QS936xeBY6l9aA==}
     engines: {node: '>= 20.12'}
+
+  bpmn-moddle@8.1.0:
+    resolution: {integrity: sha512-yI5OAFfYVJwViKTsTsonVfCBPtB3MlefADUORwNIxxBOMp21vnoxuxsdgUWlPH/dvAEZh/+mr8UtqOBNu8NC5Q==}
 
   bpmnlint-plugin-camunda-compat@2.49.2:
     resolution: {integrity: sha512-98TAhuA9O9w9oNUDmFB711Tyb3ZjdfrMIwbqEFUxsY2v9kZIs4OOD1YoHCI4xGpmBL0VofXaxNsh8HvKZlBqmA==}
@@ -2367,6 +2406,9 @@ packages:
   component-emitter@1.3.1:
     resolution: {integrity: sha512-T0+barUSQRTUQASh8bx02dl+DhF54GtIDY13Y3m9oWTklKbb3Wv974meRpeZ3lp1JpLVECWWNHC4vaG2XHXouQ==}
 
+  component-event@0.2.1:
+    resolution: {integrity: sha512-wGA++isMqiDq1jPYeyv2as/Bt/u+3iLW0rEa+8NQ82jAv3TgqMiCM+B2SaBdn2DfLilLjjq736YcezihRYhfxw==}
+
   component-props@1.1.1:
     resolution: {integrity: sha512-69pIRJs9fCCHRqCz3390YF2LV1Lu6iEMZ5zuVqqUn+G20V9BNXlMs0cWawWeW9g4Ynmg29JmkG6R7/lUJoGd1Q==}
 
@@ -2448,6 +2490,9 @@ packages:
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
+
+  csrf-csrf@3.2.2:
+    resolution: {integrity: sha512-E3TgLWX1e+jqigDva+nFItfqa59UZ+gLR56DVNyL/xawBGwQr8o3U4/o1gP9FZmIWLnWCiIl5ni85MghMCNRfg==}
 
   csrf-csrf@4.0.3:
     resolution: {integrity: sha512-DaygOzelL4Qo1pHwI9LPyZL+X2456/OzpT596kNeZGiTSqKVDOk/9PPJ+FjzZacjMUEusOHw3WJKe1RW4iUhrw==}
@@ -2711,8 +2756,15 @@ packages:
     peerDependencies:
       diagram-js: '*'
 
+  diagram-js@14.11.3:
+    resolution: {integrity: sha512-Seq9BHAXfzKS60L4v4Gvgvv72wOtvrfJQAyyPm9pntSZDMzjoodPSXnEUPud1G2zVCMGEUUW++s0reEdaWgkXA==}
+
   diagram-js@15.14.0:
     resolution: {integrity: sha512-xXIKBgK9qC5YIfdUs0Qx+rSlz3DNGMtYxx+pRK+U8eVBD184eZnLCu6KVzaZXXyyC5YRirQayorCVI55Ulhzvg==}
+
+  didi@10.2.2:
+    resolution: {integrity: sha512-l8NYkYFXV1izHI65EyT8EXOjUZtKmQkHLTT89cSP7HU5J/G7AOj0dXKtLc04EXYlga99PBY18IPjOeZ+c3DI4w==}
+    engines: {node: '>= 16'}
 
   didi@11.0.0:
     resolution: {integrity: sha512-PzCfRzQttvFpVcYMbSF7h8EsWjeJpVjWH4qDhB5LkMi1ILvHq4Ob0vhM2wLFziPkbUBi+PAo7ODbe2sacR7nJQ==}
@@ -2759,6 +2811,9 @@ packages:
 
   dom-iterator@1.0.2:
     resolution: {integrity: sha512-BMelEjhy08OpoWF3v/jrPtx7PZCyP1VM9yiB7rJk19UVmt7zTN5rqoC0Jea+EyT0M6v/VokL0LxIlGLUOBJZ2g==}
+
+  domify@1.4.2:
+    resolution: {integrity: sha512-m4yreHcUWHBncGVV7U+yQzc12vIlq0jMrtHZ5mW6dQMiL/7skSYNVX9wqKwOtyO9SGCgevrAFEgOCAHmamHTUA==}
 
   domify@3.0.0:
     resolution: {integrity: sha512-bs2yO68JDFOm6rKv8f0EnrM2cENduhRkpqOtt/s5l5JBA/eqGBZCzLPmdYoHtJ6utgLGgcBajFsEQbl12pT0lQ==}
@@ -3128,6 +3183,9 @@ packages:
     resolution: {integrity: sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==}
     engines: {node: '>=0.10.0'}
 
+  ids@1.0.5:
+    resolution: {integrity: sha512-XQ0yom/4KWTL29sLG+tyuycy7UmeaM/79GRtSJq6IG9cJGIPeBz5kwDCguie3TwxaMNIc3WtPi0cTa1XYHicpw==}
+
   ids@3.0.2:
     resolution: {integrity: sha512-t6YJP4mdC+GHF96Nbis/4FEANhP/8VWmYMvUuYpXvSdrhg5hpIVbq2XZlOA3UWTbtdwPCi0q7jEXOdHkAnqOnw==}
     engines: {node: '>= 20.12'}
@@ -3443,8 +3501,14 @@ packages:
     engines: {node: '>=4.0.0'}
     hasBin: true
 
+  min-dash@4.2.3:
+    resolution: {integrity: sha512-VLMYQI5+FcD9Ad24VcB08uA83B07OhueAlZ88jBK6PyupTvEJwllTMUqMy0wPGYs7pZUEtEEMWdHB63m3LtEcg==}
+
   min-dash@5.0.0:
     resolution: {integrity: sha512-EGuoBnVL7/Fnv2sqakpX5WGmZehZ3YMmLayT7sM8E9DRU74kkeyMg4Rik1lsOkR2GbFNeBca4/L+UfU6gF0Edw==}
+
+  min-dom@4.2.1:
+    resolution: {integrity: sha512-TMoL8SEEIhUWYgkj7XMSgxmwSyGI+4fP2KFFGnN3FbHfbGHVdsLYSz8LoIsgPhz4dWRmLvxWWSMgzZMJW5sZuA==}
 
   min-dom@5.3.0:
     resolution: {integrity: sha512-0w5FEBgPAyHhmFojW3zxd7we3D+m5XYS3E/06OyvxmbHJoiQVa4Nagj6RWvoAKYRw5xth6cP5TMePc5cR1M9hA==}
@@ -3471,11 +3535,17 @@ packages:
   mitt@3.0.1:
     resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
 
+  moddle-xml@10.1.0:
+    resolution: {integrity: sha512-erWckwLt+dYskewKXJso9u+aAZ5172lOiYxSOqKCPTy7L/xmqH1PoeoA7eVC7oJTt3PqF5TkZzUmbjGH6soQBg==}
+
   moddle-xml@12.0.0:
     resolution: {integrity: sha512-NJc2+sCe4tvuGlaUBcoZcYf6j9f+z+qxHOyGm/LB3ZrlJXVPPHoBTg/KXgDRCufdBJhJ3AheFs3QU/abABNzRg==}
     engines: {node: '>= 18'}
     peerDependencies:
       moddle: '>= 6.2.0'
+
+  moddle@6.2.3:
+    resolution: {integrity: sha512-bLVN+ZHL3aKnhxc19XtjUfvdJsS3EsiEJC7bT6YPD11qYmTzvsxrGgyYz1Ouof7TZuGw0lDJ1OLmEnxcpQWk3Q==}
 
   moddle@8.1.0:
     resolution: {integrity: sha512-dBddc1CNuZHgro8nQWwfPZ2BkyLWdnxoNpPu9d+XKPN96DAiiBOeBw527ft++ebDuFez5PMdaR3pgUgoOaUGrA==}
@@ -3620,6 +3690,10 @@ packages:
   parseurl@1.3.3:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
     engines: {node: '>= 0.8'}
+
+  path-intersection@3.1.0:
+    resolution: {integrity: sha512-3xS3lvv/vuwm5aH2BVvNRvnvwR2Drde7jQClKpCXTYXIMMjcw/EnMhzCgeHwqbCpzi760PEfAkU53vSIlrNr9A==}
+    engines: {node: '>= 14.20'}
 
   path-intersection@4.1.0:
     resolution: {integrity: sha512-urUP6WvhnxbHPdHYl6L7Yrc6+1ny6uOFKPCzPxTSUSYGHG0o94RmI7SvMMaScNAM5RtTf08bg4skc6/kjfne3A==}
@@ -3973,6 +4047,9 @@ packages:
   saxen@11.0.2:
     resolution: {integrity: sha512-WDb4gqac8uiJzOdOdVpr9NWh9NrJMm7Brn5GX2Poj+mjE/QTXqYQENr8T/mom54dDDgbd3QjwTg23TRHYiWXRA==}
     engines: {node: '>= 20.12'}
+
+  saxen@8.1.2:
+    resolution: {integrity: sha512-xUOiiFbc3Ow7p8KMxwsGICPx46ZQvy3+qfNVhrkwfz3Vvq45eGt98Ft5IQaA1R/7Tb5B5MKh9fUR9x3c3nDTxw==}
 
   saxes@6.0.0:
     resolution: {integrity: sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==}
@@ -6616,6 +6693,17 @@ snapshots:
       min-dash: 5.0.0
       min-dom: 5.3.0
 
+  bpmn-js@17.11.1:
+    dependencies:
+      bpmn-moddle: 8.1.0
+      diagram-js: 14.11.3
+      diagram-js-direct-editing: 3.3.0(diagram-js@14.11.3)
+      ids: 1.0.5
+      inherits-browser: 0.1.0
+      min-dash: 4.2.3
+      min-dom: 4.2.1
+      tiny-svg: 3.1.3
+
   bpmn-js@18.16.1:
     dependencies:
       bpmn-moddle: 10.0.0
@@ -6632,6 +6720,12 @@ snapshots:
       min-dash: 5.0.0
       moddle: 8.1.0
       moddle-xml: 12.0.0(moddle@8.1.0)
+
+  bpmn-moddle@8.1.0:
+    dependencies:
+      min-dash: 4.2.3
+      moddle: 6.2.3
+      moddle-xml: 10.1.0
 
   bpmnlint-plugin-camunda-compat@2.49.2(bpmnlint@11.12.1):
     dependencies:
@@ -6851,6 +6945,8 @@ snapshots:
 
   component-emitter@1.3.1: {}
 
+  component-event@0.2.1: {}
+
   component-props@1.1.1: {}
 
   component-xor@0.0.4: {}
@@ -6924,6 +7020,10 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
+
+  csrf-csrf@3.2.2:
+    dependencies:
+      http-errors: 2.0.1
 
   csrf-csrf@4.0.3:
     dependencies:
@@ -7183,6 +7283,12 @@ snapshots:
       asap: 2.0.6
       wrappy: 1.0.2
 
+  diagram-js-direct-editing@3.3.0(diagram-js@14.11.3):
+    dependencies:
+      diagram-js: 14.11.3
+      min-dash: 5.0.0
+      min-dom: 5.3.0
+
   diagram-js-direct-editing@3.3.0(diagram-js@15.14.0):
     dependencies:
       diagram-js: 15.14.0
@@ -7206,6 +7312,18 @@ snapshots:
       diagram-js: 15.14.0
       tiny-svg: 3.1.3
 
+  diagram-js@14.11.3:
+    dependencies:
+      '@bpmn-io/diagram-js-ui': 0.2.3
+      clsx: 2.1.1
+      didi: 10.2.2
+      inherits-browser: 0.1.0
+      min-dash: 4.2.3
+      min-dom: 4.2.1
+      object-refs: 0.4.0
+      path-intersection: 3.1.0
+      tiny-svg: 3.1.3
+
   diagram-js@15.14.0:
     dependencies:
       '@bpmn-io/diagram-js-ui': 0.2.3
@@ -7217,6 +7335,8 @@ snapshots:
       object-refs: 0.4.0
       path-intersection: 4.1.0
       tiny-svg: 4.1.4
+
+  didi@10.2.2: {}
 
   didi@11.0.0: {}
 
@@ -7314,6 +7434,8 @@ snapshots:
     dependencies:
       component-props: 1.1.1
       component-xor: 0.0.4
+
+  domify@1.4.2: {}
 
   domify@3.0.0: {}
 
@@ -7765,6 +7887,8 @@ snapshots:
     dependencies:
       safer-buffer: 2.1.2
 
+  ids@1.0.5: {}
+
   ids@3.0.2: {}
 
   ieee754@1.2.1: {}
@@ -8050,7 +8174,15 @@ snapshots:
 
   mime@2.6.0: {}
 
+  min-dash@4.2.3: {}
+
   min-dash@5.0.0: {}
+
+  min-dom@4.2.1:
+    dependencies:
+      component-event: 0.2.1
+      domify: 1.4.2
+      min-dash: 4.2.3
 
   min-dom@5.3.0:
     dependencies:
@@ -8073,11 +8205,21 @@ snapshots:
 
   mitt@3.0.1: {}
 
+  moddle-xml@10.1.0:
+    dependencies:
+      min-dash: 4.2.3
+      moddle: 6.2.3
+      saxen: 8.1.2
+
   moddle-xml@12.0.0(moddle@8.1.0):
     dependencies:
       min-dash: 5.0.0
       moddle: 8.1.0
       saxen: 11.0.2
+
+  moddle@6.2.3:
+    dependencies:
+      min-dash: 4.2.3
 
   moddle@8.1.0:
     dependencies:
@@ -8219,6 +8361,8 @@ snapshots:
       entities: 8.0.0
 
   parseurl@1.3.3: {}
+
+  path-intersection@3.1.0: {}
 
   path-intersection@4.1.0: {}
 
@@ -8556,6 +8700,8 @@ snapshots:
   sax@1.6.0: {}
 
   saxen@11.0.2: {}
+
+  saxen@8.1.2: {}
 
   saxes@6.0.0:
     dependencies:
