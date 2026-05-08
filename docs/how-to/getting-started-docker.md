@@ -28,7 +28,7 @@ See `infra/docker/env/examples/selfhost.env.example` for all available options.
 ## Steps (Dev)
 1. Start the stack (Postgres default):
    ```bash
-   npm run dev
+   pnpm run dev
    ```
    - If `.local/docker/env/docker.env` does not exist, it is auto-created from `infra/docker/env/examples/docker.postgres.env.example`.
 2. Open the app:
@@ -44,10 +44,10 @@ See `infra/docker/env/examples/selfhost.env.example` for all available options.
 Use `--db` to launch with another database:
 
 ```bash
-npm run dev -- --db mysql
-npm run dev -- --db mssql
-npm run dev -- --db oracle
-npm run dev -- --db spanner
+pm run dev -- --db mysql
+pm run dev -- --db mssql
+pm run dev -- --db oracle
+pm run dev -- --db spanner
 ```
 
 What happens automatically:
@@ -67,7 +67,7 @@ What happens automatically:
 4. Keep `API_BASE_URL` empty for same-origin API calls through Nginx proxy.
 5. Start the production stack:
    ```bash
-   npm run prod
+   pnpm run prod
    ```
 6. Open the app:
    - Frontend: http://localhost:8080 (default)
@@ -95,36 +95,36 @@ Published images:
 3. Keep `API_BASE_URL` empty for same-origin mode. In published-image mode, `API_BASE_URL` is baked into the frontend image at build time; use `API_UPSTREAM` only when the runtime Nginx proxy must target a different backend host.
 4. Start from images:
    ```bash
-   npm run prod:images:postgres
+   ppnpm run prod:images:postgres
    # or
-   npm run prod:images:oracle
+   ppnpm run prod:images:oracle
    ```
 5. Roll back by changing `IMAGE_TAG` to a previous working tag and re-running the same command.
 
 ## Stop the stack
 ```bash
-npm run down
+pnpm run down
 ```
 
 Stop a specific DB stack explicitly:
 
 ```bash
-npm run down -- --db mysql
+pnpm run down -- --db mysql
 ```
 
 ```bash
-npm run prod:down
+pnpm run prod:down
 ```
 
 ```bash
-npm run prod:images:postgres:down
-npm run prod:images:oracle:down
+pnpm run prod:images:postgres:down
+pnpm run prod:images:oracle:down
 ```
 
 ## Notes
 - Docker uses a PostgreSQL container by default (see `.local/docker/env/docker.env` / `.local/docker/env/production.env`).
 - Docker dev serves frontend through Nginx (production-parity pathing and proxy behavior).
-- Frontend source changes in Docker dev require rebuilding the frontend image (`npm run dev` already runs with `--build`).
+- Frontend source changes in Docker dev require rebuilding the frontend image (`pnpm run dev` already runs with `--build`).
 - Git repositories are stored at `./data/repos` inside the backend container.
 - To change ports or database settings, update the active env file.
 - If email verification is enabled, seed the default email configuration with `EMAIL_*` variables in the active env file so verification links work on first deploy.

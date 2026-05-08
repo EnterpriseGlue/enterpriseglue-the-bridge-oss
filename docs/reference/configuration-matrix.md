@@ -100,8 +100,8 @@ using provider fields (`entityId`, `ssoUrl`, `certificate`, `signatureAlgorithm`
 via dedicated backend environment variables.
 
 ## Dev launcher behavior
-- `npm run dev` defaults to Postgres and can auto-create `.local/docker/env/docker.env` from `infra/docker/env/examples/docker.postgres.env.example`.
-- `npm run dev -- --db <db>` uses `.local/docker/env/docker.<db>.env` and auto-creates it from `infra/docker/env/examples/docker.<db>.env.example` if missing.
+- `pnpm run dev` defaults to Postgres and can auto-create `.local/docker/env/docker.env` from `infra/docker/env/examples/docker.postgres.env.example`.
+- `pnpm run dev -- --db <db>` uses `.local/docker/env/docker.<db>.env` and auto-creates it from `infra/docker/env/examples/docker.<db>.env.example` if missing.
 - `scripts/db-preflight.sh` validates required DB variables and installs missing DB driver packages into local `node_modules`.
 
 ## Frontend

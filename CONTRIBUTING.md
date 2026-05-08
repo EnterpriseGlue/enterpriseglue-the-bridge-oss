@@ -28,7 +28,7 @@ By participating, you agree to abide by the Code of Conduct. See `CODE_OF_CONDUC
 Optional (only if running services outside Docker):
 
 - Node.js (LTS recommended)
-- npm
+- pnpm
 
 ### Configure environment
 
@@ -40,7 +40,7 @@ Optional (only if running services outside Docker):
 
 From the repo root:
 
-- `npm run dev`
+- `pnpm run dev`
 
 This starts:
 
@@ -49,7 +49,7 @@ This starts:
 
 To stop:
 
-- `npm run down`
+- `pnpm run down`
 
 Alternative entrypoints:
 
@@ -60,7 +60,7 @@ Alternative entrypoints:
 
 If you change the Postgres major version or want to reset your local database:
 
-- `npm run down -- -v`
+- `pnpm run down -- -v`
 
 ### Running services outside Docker (advanced)
 
@@ -68,16 +68,16 @@ If you prefer to run the backend/frontend outside Docker:
 
 - Backend:
   - Copy `backend/.env.example` to `backend/.env` and set required values.
-  - `cd backend && npm install`
-  - `cd backend && npm run dev`
+  - `cd backend && pnpm install`
+  - `cd backend && pnpm run dev`
 - Frontend:
-  - Copy `frontend/.env.example` to `frontend/.env.local` (or `.env`) and set required values.
-  - `cd frontend && npm install`
-  - `cd frontend && npm run dev`
+  - Copy `frontend/.env.example` to `frontend/.env` and set required values.
+  - `cd frontend && pnpm install`
+  - `cd frontend && pnpm run dev`
 
 Optional: local “production-style” run on the host (advanced):
 
-- `npm run deploy:localhost` (or `bash ./scripts/deploy-localhost.sh`)
+- `pnpm run deploy:localhost` (or `bash ./scripts/deploy-localhost.sh`)
   - It builds `backend/dist` and `frontend/dist`, then serves the frontend via `vite preview`.
   - For first-time installs, pass `--first-time` to run migrations before startup.
   - Otherwise, migrations run automatically when the backend starts.
@@ -92,8 +92,8 @@ Before running tests for the first time, you need to set up the test database sc
 ```bash
 # From repo root
 cd backend
-npm run build:skip-generate
-npm run db:schema:sync
+pnpm run build:skip-generate
+pnpm run db:schema:sync
 ```
 
 This creates all database tables in your test database. The test environment (`NODE_ENV=test`) skips migrations by design and uses schema synchronization instead.
@@ -102,10 +102,10 @@ This creates all database tables in your test database. The test environment (`N
 
 ```bash
 # From repo root
-npm run test:unit           # Unit tests only
-npm run test:integration    # Integration tests only
-npm run test:e2e            # E2E tests (requires services running)
-npm run test:ci             # All tests (unit + integration + e2e)
+pnpm run test:unit           # Unit tests only
+pnpm run test:integration    # Integration tests only
+pnpm run test:e2e            # E2E tests (requires services running)
+pnpm run test:ci             # All tests (unit + integration + e2e)
 ```
 
 Playwright uses `test/e2e/playwright.config.ts` as the canonical E2E config path.
@@ -122,7 +122,7 @@ This repo relies on TypeScript and build-time checks.
 - Backend typecheck (no emit):
   - `cd backend && npx tsc --noEmit`
 - Frontend build (includes typecheck):
-  - `cd frontend && npm run build`
+  - `cd frontend && pnpm run build`
 
 Optional API smoke checks (requires a running backend and valid credentials):
 

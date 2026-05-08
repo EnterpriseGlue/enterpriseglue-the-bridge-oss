@@ -172,22 +172,22 @@ TypeORM handles migrations automatically:
 
 1. **Development:** Migrations run on startup via `run-migrations.ts`
 2. **Production:** Same - migrations run automatically on container start
-3. **New migrations:** Use `npm run db:migration:generate` after entity changes
+3. **New migrations:** Use `pnpm run db:migration:generate` after entity changes
 
 ### Available Scripts
 
 ```bash
-npm run db:migration:generate  # Generate migration after entity changes
-npm run db:migration:run       # Run pending migrations
-npm run db:migration:revert    # Revert last migration
-npm run db:schema:sync         # Sync schema (dev only)
+pnpm run db:migration:generate  # Generate migration after entity changes
+pnpm run db:migration:run       # Run pending migrations
+pnpm run db:migration:revert    # Revert last migration
+pnpm run db:schema:sync         # Sync schema (dev only)
 ```
 
 ## Best Practices
 
 1. **Entity Changes:**
    - Update entity file in `entities/`
-   - Run `npm run db:migration:generate` to create migration
+   - Run `pnpm run db:migration:generate` to create migration
    - Review generated SQL before committing
 
 2. **Queries:**

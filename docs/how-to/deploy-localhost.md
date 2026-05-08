@@ -10,7 +10,7 @@ Audience: Developers and architects.
 
 ## Prerequisites
 - Node.js (LTS recommended)
-- npm
+- pnpm
 - PostgreSQL accessible locally or remotely
 - Backend and frontend environment files configured
 
@@ -60,9 +60,9 @@ Use this for faster rebuilds when dependencies are already installed.
 ## What the script does
 - Stops any running services on backend/frontend ports (defaults: `8787` and `5173`)
 - Validates backend and frontend environment variables
-- Uses the repo root `package-lock.json` when the repo is installed as an npm workspace
+- Uses the repo root `pnpm-lock.yaml` when the repo is installed as a pnpm workspace
 - Builds backend and frontend
-- Starts backend (`node dist/backend/src/server.js`) and frontend preview (`npm run preview`)
+- Starts backend (`node dist/backend/src/server.js`) and frontend preview (`pnpm run preview`)
 - Verifies health (`/health`)
 
 ## Database migrations
@@ -74,8 +74,8 @@ If you need to run migrations manually (e.g., to verify before startup):
 
 ```bash
 cd backend
-npm run build:skip-generate
-npm run db:migration:run
+pnpm run build:skip-generate
+pnpm run db:migration:run
 ```
 
 ## Access URLs

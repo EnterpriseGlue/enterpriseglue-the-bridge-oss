@@ -34,8 +34,8 @@ Audience: Developers and architects.
 - First-time test setup requires database schema sync:
   ```bash
   cd backend
-  npm run build:skip-generate
-  npm run db:schema:sync
+  pnpm run build:skip-generate
+  pnpm run db:schema:sync
   ```
 - The test environment (`NODE_ENV=test`) uses schema synchronization instead of migrations.
 - CI automatically runs schema sync before tests.

@@ -29,8 +29,8 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 
 ## Configuration (Dev)
 1. Use one of these startup options:
-   - Postgres default: `npm run dev`
-   - Explicit DB: `npm run dev -- --db <postgres|mysql|mssql|oracle|spanner>`
+   - Postgres default: `pnpm run dev`
+   - Explicit DB: `pnpm run dev -- --db <postgres|mysql|mssql|oracle|spanner>`
 2. Env file behavior:
    - If `.local/docker/env/docker.env` is missing, `dev.sh` creates it from `infra/docker/env/examples/docker.postgres.env.example`.
    - If using `--db mysql` (or others) and `.local/docker/env/docker.<db>.env` is missing, it is created from `infra/docker/env/examples/docker.<db>.env.example`.
@@ -48,7 +48,7 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 5. Set `API_BASE_URL` only if you need an explicit API origin. Leave empty to use relative `/api` calls through the Nginx proxy.
 6. Optional: set `API_UPSTREAM` if the frontend Nginx proxy should point at a custom backend host (defaults to `backend:${API_PORT}`).
 7. Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
-8. `API_BASE_URL` is consumed at frontend image build time. In Docker dev, `npm run dev` rebuilds the frontend image, so changes take effect on restart.
+8. `API_BASE_URL` is consumed at frontend image build time. In Docker dev, `pnpm run dev` rebuilds the frontend image, so changes take effect on restart.
 
 ## Configuration (Production)
 1. Prepare local env directory and copy production template:
@@ -58,7 +58,7 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 3. Set `FRONTEND_HOST_PORT` and keep `FRONTEND_URL` in sync with that public URL.
 4. Keep `API_BASE_URL` empty for default same-origin behavior (Nginx proxy). Set it only if frontend must call a different API origin.
 5. Optional: set `API_UPSTREAM` to point the frontend Nginx proxy at a different backend host.
-6. `API_BASE_URL` is consumed at frontend image build time, so changing it requires rebuilding the frontend image with `npm run prod`.
+6. `API_BASE_URL` is consumed at frontend image build time, so changing it requires rebuilding the frontend image with `pnpm run prod`.
 
 ## Configuration (Production from published images)
 1. Copy one image env template:
@@ -85,45 +85,45 @@ Key defaults:
 
 ## Start (Dev)
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 ## Start (Production)
 ```bash
-npm run prod
+pnpm run prod
 ```
 
 ## Start (Production from images)
 ```bash
-npm run prod:images:postgres
+pnpm run prod:images:postgres
 # or
-npm run prod:images:oracle
+pnpm run prod:images:oracle
 ```
 
 ## Stop
 ```bash
-npm run down
+pnpm run down
 ```
 
 Stop a specific DB stack explicitly:
 
 ```bash
-npm run down -- --db mysql
+pnpm run down -- --db mysql
 ```
 
 ```bash
-npm run prod:down
+pnpm run prod:down
 ```
 
 ```bash
-npm run prod:images:postgres:down
-npm run prod:images:oracle:down
+pnpm run prod:images:postgres:down
+pnpm run prod:images:oracle:down
 ```
 
 ## Rollback (image mode)
 1. Open the active image env file (`.local/docker/env/images.postgres.env` or `.local/docker/env/images.oracle.env`).
 2. Set `IMAGE_TAG` to the previous known-good tag.
-3. Re-run the same start command (`npm run prod:images:postgres` or `npm run prod:images:oracle`).
+3. Re-run the same start command (`pnpm run prod:images:postgres` or `pnpm run prod:images:oracle`).
 
 ## Volumes
 Docker creates persistent volumes for:

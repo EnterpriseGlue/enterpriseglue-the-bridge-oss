@@ -9,10 +9,10 @@ Audience: Developers and architects.
 Use `--db` with the dev launcher:
 
 ```bash
-npm run dev -- --db mysql
-npm run dev -- --db mssql
-npm run dev -- --db oracle
-npm run dev -- --db spanner
+pnpm run dev -- --db mysql
+pnpm run dev -- --db mssql
+pnpm run dev -- --db oracle
+pnpm run dev -- --db spanner
 ```
 
 What the launcher does automatically:
@@ -24,7 +24,7 @@ What the launcher does automatically:
 Stop the selected stack:
 
 ```bash
-npm run down -- --db mysql
+pnpm run down -- --db mysql
 ```
 
 ## Host-based backend workflow (without Docker DB overlays)

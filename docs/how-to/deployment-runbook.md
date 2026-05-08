@@ -8,11 +8,11 @@ Audience: Developers and architects.
 - Docker and Docker Compose installed.
 - Ports available (defaults): `8787` (backend), `5173` (frontend), `5432` (postgres).
 - If these are occupied, change `.local/docker/env/docker.env` values (`BACKEND_HOST_PORT`, `FRONTEND_HOST_PORT`, `POSTGRES_HOST_PORT`).
-- `.local/docker/env/docker.env` exists (auto-created by `npm run dev` or copied from `infra/docker/env/examples/docker.postgres.env.example`).
+- `.local/docker/env/docker.env` exists (auto-created by `pnpm run dev` or copied from `infra/docker/env/examples/docker.postgres.env.example`).
 
 ## Start
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 ## Verify
@@ -22,7 +22,7 @@ npm run dev
 - Login using `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.local/docker/env/docker.env`.
 
 ## Production Compose Notes
-- `npm run prod` serves frontend via Nginx on `FRONTEND_HOST_PORT` (default `8080`).
+- `pnpm run prod` serves frontend via Nginx on `FRONTEND_HOST_PORT` (default `8080`).
 - Backend is internal-only in production; API calls are proxied through the frontend origin.
 - Keep `FRONTEND_URL` aligned with `FRONTEND_HOST_PORT` in `.local/docker/env/production.env`.
 
@@ -32,8 +32,8 @@ npm run dev
    - or `cp infra/docker/env/examples/images.oracle.env.example .local/docker/env/images.oracle.env`
 2. Set `BACKEND_IMAGE`, `FRONTEND_IMAGE`, and `IMAGE_TAG`.
 3. Start from images:
-   - `npm run prod:images:postgres`
-   - or `npm run prod:images:oracle`
+   - `pnpm run prod:images:postgres`
+   - or `pnpm run prod:images:oracle`
 
 ### Verify (image mode)
 - Frontend: `http://localhost:8080`
@@ -45,8 +45,8 @@ npm run dev
 3. Re-run same `npm run prod:images:*` command.
 
 ### Stop (image mode)
-- `npm run prod:images:postgres:down`
-- `npm run prod:images:oracle:down`
+- `pnpm run prod:images:postgres:down`
+- `pnpm run prod:images:oracle:down`
 
 ## Logs
 ```bash
@@ -58,12 +58,12 @@ docker compose --project-directory . -f infra/docker/compose/docker-compose.yml 
 
 ## Stop
 ```bash
-npm run down
+pnpm run down
 ```
 
 ## Reset (clean volumes)
 ```bash
-npm run down -- -v
+pnpm run down -- -v
 ```
 
 ## Production-Style Local Deployment
