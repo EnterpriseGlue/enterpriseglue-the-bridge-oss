@@ -323,6 +323,7 @@ jobs:
       - name: Build OSS packages
         run: |
           pnpm --filter shared run build
+          pnpm install --filter backend-host
           pnpm --filter backend-host run build
           pnpm run build:frontend-host
 

@@ -206,18 +206,10 @@ jobs:
 
       - name: Build local packages
         run: |
-          # Auto-discover and build any packages/*/ that have a "build" script.
-          # OSS: packages/shared, packages/backend-host
-          # EE:  packages/enterprise-backend, packages/enterprise-frontend
-          for pkg in packages/*/package.json; do
-            [ -f "$pkg" ] || continue
-            dir="$(dirname "$pkg")"
-            pkg_name=$(basename "$dir")
-            if node -e "const p=require('./${pkg}'); process.exit(p.scripts?.build ? 0 : 1)" 2>/dev/null; then
-              echo "Building $dir ..."
-              pnpm --filter "$pkg_name" run build
-            fi
-          done
+          pnpm --filter shared run build
+          pnpm install --filter backend-host
+          pnpm --filter backend-host run build
+          pnpm run build:frontend-host
 
       - name: Build backend
         run: pnpm --filter webmodeler-backend run build:skip-generate
