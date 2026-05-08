@@ -4,11 +4,7 @@ packages:
   - 'packages/*'
 public-hoist-pattern:
   - '*'
-  - 'csrf-csrf'
-  - 'helmet'
-  - 'morgan'
-  - 'swagger-ui-express'
-  - 'express'
+  - '@types/*'
 allowBuilds:
   '@carbon/charts': true
   '@carbon/charts-react': true
