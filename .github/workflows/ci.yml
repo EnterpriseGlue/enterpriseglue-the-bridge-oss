@@ -46,7 +46,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
-          version: 9
+          version: 8
 
       - name: Run OSS boundary guard
         run: pnpm run guard:oss-ee-boundary
@@ -71,7 +71,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
-          version: 9
+          version: 8
 
       - name: Enforce published OSS package version discipline
         run: pnpm run guard:published-package-versions
@@ -94,7 +94,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
-          version: 9
+          version: 8
 
       - name: Validate plugin-api current compatibility lane
         run: pnpm run guard:plugin-api:current
@@ -117,7 +117,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
-          version: 9
+          version: 8
 
       - name: Validate plugin-api next compatibility lane
         run: pnpm run guard:plugin-api:next
@@ -140,7 +140,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
-          version: 9
+          version: 8
 
       - name: Package plugin-api artifact
         run: |
@@ -272,7 +272,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
-          version: 9
+          version: 8
 
       - name: Get pnpm store directory
         id: pnpm-cache

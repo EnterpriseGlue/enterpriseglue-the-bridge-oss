@@ -16,7 +16,9 @@ allowBuilds:
   '@carbon/icons': true
   '@carbon/icons-react': true
   '@carbon/layout': true
+  '@carbon/link': true
   '@carbon/motion': true
+  '@carbon/pictograms': true
   '@carbon/react': true
   '@carbon/styles': true
   '@carbon/themes': true

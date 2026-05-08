@@ -4,7 +4,7 @@ FROM node:24-bookworm-slim AS build
 WORKDIR /repo
 
 # Install pnpm globally
-RUN npm install -g pnpm@9
+RUN npm install -g pnpm@8
 
 # Copy workspace manifests for pnpm install layer caching
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -33,7 +33,7 @@ FROM node:24-bookworm-slim AS deps
 WORKDIR /repo
 
 # Install pnpm globally
-RUN npm install -g pnpm@9
+RUN npm install -g pnpm@8
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/

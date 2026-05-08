@@ -7,7 +7,7 @@ ARG API_BASE_URL
 ENV VITE_API_BASE_URL=${API_BASE_URL}
 
 # Install pnpm globally
-RUN npm install -g pnpm@9
+RUN npm install -g pnpm@8
 
 # Copy workspace manifests for pnpm install layer caching
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -24,7 +24,7 @@ COPY backend/package.json backend/
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     apk upgrade --no-cache zlib \
     && apk add --no-cache busybox-static \
-    && pnpm install --frozen-lockfile --shamefully-hoist
+    && pnpm install --frozen-lockfile
 
 COPY frontend frontend
 COPY packages packages
