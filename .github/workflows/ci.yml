@@ -295,7 +295,7 @@ jobs:
 
       - name: Install DB driver for matrix database
         if: matrix.database == 'oracle'
-        run: pnpm add --filter backend --save-dev oracledb
+        run: pnpm add --filter webmodeler-backend --save-dev oracledb
 
       - name: Get Playwright version
         if: matrix.database == 'postgres'
@@ -327,7 +327,7 @@ jobs:
           pnpm run build:frontend-host
 
       - name: Build backend
-        run: pnpm --filter backend run build:skip-generate
+        run: pnpm --filter webmodeler-backend run build:skip-generate
 
       - name: Create PostgreSQL schema
         if: matrix.database == 'postgres'
@@ -335,7 +335,7 @@ jobs:
           PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
 
       - name: Sync database schema
-        run: pnpm --filter backend run db:schema:sync
+        run: pnpm --filter webmodeler-backend run db:schema:sync
 
       - name: Run unit tests
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
@@ -348,7 +348,7 @@ jobs:
       - name: Run Oracle backend smoke
         if: matrix.database == 'oracle'
         run: |
-          pnpm --filter backend run start:compiled &
+          pnpm --filter webmodeler-backend run start:compiled &
           for i in {1..45}; do
             if curl -sf http://localhost:8787/health >/dev/null; then
               break
@@ -364,7 +364,7 @@ jobs:
 
       - name: Start backend
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
-        run: pnpm --filter backend run start:compiled &
+        run: pnpm --filter webmodeler-backend run start:compiled &
 
       - name: Start frontend
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
@@ -389,7 +389,7 @@ jobs:
       - name: Cleanup test data
         if: always() && matrix.database == 'postgres' && github.event_name != 'merge_group'
         continue-on-error: true
-        run: pnpm --filter backend run db:cleanup-test-data
+        run: pnpm --filter webmodeler-backend run db:cleanup-test-data
 
       - name: Upload backend coverage
         if: failure() && matrix.database == 'postgres' && github.event_name != 'merge_group'

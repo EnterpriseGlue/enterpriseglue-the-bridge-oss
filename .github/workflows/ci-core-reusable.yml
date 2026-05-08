@@ -179,7 +179,7 @@ jobs:
         if: matrix.database == 'oracle'
         run: |
           # Install oracledb in backend
-          pnpm add --filter backend --save-dev oracledb
+          pnpm add --filter webmodeler-backend --save-dev oracledb
 
       - name: Get Playwright version
         if: matrix.database == 'postgres' && inputs.run_e2e
@@ -220,7 +220,7 @@ jobs:
           done
 
       - name: Build backend
-        run: pnpm --filter backend run build:skip-generate
+        run: pnpm --filter webmodeler-backend run build:skip-generate
 
       - name: Create PostgreSQL schema
         if: matrix.database == 'postgres'
@@ -228,7 +228,7 @@ jobs:
           PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
 
       - name: Sync database schema
-        run: pnpm --filter backend run db:schema:sync
+        run: pnpm --filter webmodeler-backend run db:schema:sync
 
       - name: Run unit tests
         if: matrix.database == 'postgres'
@@ -241,7 +241,7 @@ jobs:
       - name: Run Oracle backend smoke
         if: matrix.database == 'oracle'
         run: |
-          pnpm --filter backend run start:compiled &
+          pnpm --filter webmodeler-backend run start:compiled &
           for i in {1..45}; do
             if curl -sf http://localhost:8787/health >/dev/null; then
               break
@@ -262,7 +262,7 @@ jobs:
 
       - name: Start backend
         if: matrix.database == 'postgres' && inputs.run_e2e
-        run: pnpm --filter backend run start:compiled &
+        run: pnpm --filter webmodeler-backend run start:compiled &
 
       - name: Start frontend
         if: matrix.database == 'postgres' && inputs.run_e2e
@@ -287,7 +287,7 @@ jobs:
       - name: Cleanup test data
         if: always() && matrix.database == 'postgres' && inputs.run_e2e
         continue-on-error: true
-        run: pnpm --filter backend run db:cleanup-test-data
+        run: pnpm --filter webmodeler-backend run db:cleanup-test-data
 
       - name: Upload backend coverage
         if: failure() && matrix.database == 'postgres'
