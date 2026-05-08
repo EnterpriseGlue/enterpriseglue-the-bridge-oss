@@ -24,6 +24,9 @@ importers:
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.59.1
+      pg:
+        specifier: ^8.11.3
+        version: 8.20.0
 
   backend:
     dependencies:
@@ -353,6 +356,9 @@ importers:
       morgan:
         specifier: ^1.10.0
         version: 1.10.1
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
       swagger-ui-express:
         specifier: ^5.0.1
         version: 5.0.1(express@5.2.1)
@@ -5112,7 +5118,7 @@ snapshots:
 
   '@camunda/element-templates-json-schema@0.21.0': {}
 
-  '@camunda/example-data-properties-provider@1.4.0(@bpmn-io/properties-panel@3.41.3)(@bpmn-io/variable-resolver@3.0.1(bpmn-js@18.16.1))(bpmn-js-properties-panel@5.54.0(@bpmn-io/properties-panel@3.41.3)(bpmn-js@17.11.1)(camunda-bpmn-js-behaviors@1.14.1(bpmn-js@17.11.1)(camunda-bpmn-moddle@7.0.1)(zeebe-bpmn-moddle@1.13.0))(diagram-js@15.14.0))(bpmn-js@18.16.1)':
+  '@camunda/example-data-properties-provider@1.4.0(@bpmn-io/properties-panel@3.41.3)(@bpmn-io/variable-resolver@3.0.1(bpmn-js@17.11.1))(bpmn-js-properties-panel@5.54.0(@bpmn-io/properties-panel@3.41.3)(bpmn-js@17.11.1)(camunda-bpmn-js-behaviors@1.14.1(bpmn-js@17.11.1)(camunda-bpmn-moddle@7.0.1)(zeebe-bpmn-moddle@1.13.0))(diagram-js@15.14.0))(bpmn-js@18.16.1)':
     dependencies:
       '@bpmn-io/properties-panel': 3.41.3
       '@bpmn-io/variable-resolver': 3.0.1(bpmn-js@18.16.1)
@@ -6896,7 +6902,7 @@ snapshots:
       '@bpmn-io/element-template-icon-renderer': 1.0.0(bpmn-js@18.16.1)(diagram-js@15.14.0)
       '@bpmn-io/properties-panel': 3.41.3
       '@bpmn-io/variable-resolver': 3.0.1(bpmn-js@18.16.1)
-      '@camunda/example-data-properties-provider': 1.4.0(@bpmn-io/properties-panel@3.41.3)(@bpmn-io/variable-resolver@3.0.1(bpmn-js@18.16.1))(bpmn-js-properties-panel@5.54.0(@bpmn-io/properties-panel@3.41.3)(bpmn-js@17.11.1)(camunda-bpmn-js-behaviors@1.14.1(bpmn-js@17.11.1)(camunda-bpmn-moddle@7.0.1)(zeebe-bpmn-moddle@1.13.0))(diagram-js@15.14.0))(bpmn-js@18.16.1)
+      '@camunda/example-data-properties-provider': 1.4.0(@bpmn-io/properties-panel@3.41.3)(@bpmn-io/variable-resolver@3.0.1(bpmn-js@17.11.1))(bpmn-js-properties-panel@5.54.0(@bpmn-io/properties-panel@3.41.3)(bpmn-js@17.11.1)(camunda-bpmn-js-behaviors@1.14.1(bpmn-js@17.11.1)(camunda-bpmn-moddle@7.0.1)(zeebe-bpmn-moddle@1.13.0))(diagram-js@15.14.0))(bpmn-js@18.16.1)
       bpmn-js: 18.16.1
       bpmn-js-color-picker: 0.7.2(bpmn-js@18.16.1)
       bpmn-js-copy-as-image: 0.4.1(bpmn-js@18.16.1)

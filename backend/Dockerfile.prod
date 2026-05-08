@@ -61,7 +61,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY backend/package.json ./package.json
-COPY --from=deps /repo/node_modules ./node_modules
+
+# The compiled backend runs from /app/dist/backend/src. With pnpm, package
+# dependencies are symlinks from each workspace package's node_modules into the
+# root .pnpm store, so copy that same layout under /app/dist for Node's module
+# resolver.
+COPY --from=deps /repo/node_modules ./dist/node_modules
+COPY --from=deps /repo/backend/node_modules ./dist/backend/node_modules
+COPY --from=deps /repo/packages/backend-host/node_modules ./dist/packages/backend-host/node_modules
+COPY --from=deps /repo/packages/shared/node_modules ./dist/packages/shared/node_modules
 
 COPY --from=build /repo/backend/dist ./dist
 COPY --from=build /repo/packages/shared/src/db/adapters/sql ./packages/shared/src/db/adapters/sql
