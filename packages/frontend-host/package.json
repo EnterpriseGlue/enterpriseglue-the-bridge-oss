@@ -47,8 +47,13 @@
   "dependencies": {
     "@enterpriseglue/enterprise-plugin-api": "*",
     "@enterpriseglue/shared": "*",
+    "bpmn-js": "^17.10.0",
+    "clsx": "^2.1.1",
     "jspdf": "^4.2.1",
-    "svg2pdf.js": "^2.7.0"
+    "react": "^19.2.4",
+    "react-router-dom": "^7.13.1",
+    "svg2pdf.js": "^2.7.0",
+    "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "typescript": "~5.9.3",
