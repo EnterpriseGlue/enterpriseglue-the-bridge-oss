@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.9.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.9.5...v0.9.6) (2026-05-16)
+
+
+### Bug Fixes
+
+* **backend-host:** restore root app API routes ([#320](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/320)) ([95f3170](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/95f3170732960c8cc1fbf72d69b0038f7b2fca60))
+
 ## [0.9.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.9.4...v0.9.5) (2026-05-08)
 
 
