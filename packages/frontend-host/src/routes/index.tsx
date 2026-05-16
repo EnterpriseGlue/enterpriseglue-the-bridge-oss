@@ -70,6 +70,24 @@ import { useAuth } from '../shared/hooks/useAuth'
 import { useFeatureFlag } from '../shared/hooks/useFeatureFlag'
 import { EngineAccessError } from '../features/mission-control/shared'
 
+/**
+ * Default tenant slug for OSS single-tenant mode and EE default tenant.
+ * Root protected routes redirect here so the browser URL remains the source
+ * of tenant context for routing, API prefixing, and tenant-aware navigation.
+ */
+const DEFAULT_TENANT_SLUG = 'default'
+
+function DefaultTenantRedirect() {
+  const location = useLocation()
+  const targetPath = location.pathname === '/' ? '' : location.pathname
+  return (
+    <Navigate
+      to={`/t/${DEFAULT_TENANT_SLUG}${targetPath}${location.search}${location.hash}`}
+      replace
+    />
+  )
+}
+
 function MissionControlRoleGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const location = useLocation()
@@ -111,23 +129,72 @@ function LazyRoute({ children, message = 'Loading page...' }: { children: React.
  * @param isRootLevel - true for root routes (uses "/" prefix), false for tenant routes (no prefix)
  */
 export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] {
+  const multiTenantEnabled = isMultiTenantEnabled()
   const fallbackPath = isRootLevel ? '/' : '..'
   const pathPrefix = isRootLevel ? '/' : ''
+
+  if (isRootLevel && multiTenantEnabled) {
+    return [
+      { path: '*', element: <DefaultTenantRedirect /> },
+    ]
+  }
 
   return [
     { index: true, element: <Dashboard /> },
     
     // Admin routes
-    ...(!isMultiTenantEnabled() ? [{ 
+    ...((!multiTenantEnabled || !isRootLevel) ? [{
       path: `${pathPrefix}admin/settings`, 
       element: (
-        <ProtectedRoute requireAdmin={isRootLevel}>
+        <ProtectedRoute requireAdmin>
           <LazyRoute message="Loading settings...">
             <PlatformSettingsPage />
           </LazyRoute>
         </ProtectedRoute>
       )
     }] : []),
+    ...((!multiTenantEnabled || !isRootLevel) ? [
+      {
+        path: `${pathPrefix}admin/settings/git`,
+        element: (
+          <ProtectedRoute requireAdmin>
+            <LazyRoute message="Loading Git settings...">
+              <PlatformSettingsPage section="git" />
+            </LazyRoute>
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: `${pathPrefix}admin/settings/projects`,
+        element: (
+          <ProtectedRoute requireAdmin>
+            <LazyRoute message="Loading project settings...">
+              <PlatformSettingsPage section="projects" />
+            </LazyRoute>
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: `${pathPrefix}admin/settings/engines`,
+        element: (
+          <ProtectedRoute requireAdmin>
+            <LazyRoute message="Loading engine settings...">
+              <PlatformSettingsPage section="engines" />
+            </LazyRoute>
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: `${pathPrefix}admin/settings/sso`,
+        element: (
+          <ProtectedRoute requireAdmin>
+            <LazyRoute message="Loading SSO settings...">
+              <PlatformSettingsPage section="sso" />
+            </LazyRoute>
+          </ProtectedRoute>
+        )
+      },
+    ] : []),
     { 
       path: `${pathPrefix}admin/sso-mappings`, 
       element: (
@@ -160,7 +227,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
     },
     // TenantManagement is EE-only (multi-tenant mode)
     // Uses ExtensionPage - shows fallback in OSS, actual page in EE
-    ...(isMultiTenantEnabled() ? [{ 
+    ...(multiTenantEnabled ? [{
       path: `${pathPrefix}admin/tenants`, 
       element: (
         <ProtectedRoute requireAdmin>
@@ -168,7 +235,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         </ProtectedRoute>
       )
     }] : []),
-    ...((!isMultiTenantEnabled() || !isRootLevel) ? [{
+    ...((!multiTenantEnabled || !isRootLevel) ? [{
       path: `${pathPrefix}admin/audit-logs`,
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
@@ -179,7 +246,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       )
     }] : []),
     // EE-only tenant-scoped admin pages (domains, sso, invite-policies)
-    ...(isMultiTenantEnabled() && !isRootLevel ? [
+    ...(multiTenantEnabled && !isRootLevel ? [
       { 
         path: `${pathPrefix}admin/domains`, 
         element: (
@@ -206,13 +273,13 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       },
     ] : []),
     // OSS: redirect old standalone pages to Platform Settings tabs
-    ...(!isMultiTenantEnabled() ? [
+    ...(!multiTenantEnabled ? [
       { path: `${pathPrefix}admin/email`, element: <Navigate to={isRootLevel ? '/admin/settings' : '../admin/settings'} replace /> },
       { path: `${pathPrefix}admin/email-templates`, element: <Navigate to={isRootLevel ? '/admin/settings' : '../admin/settings'} replace /> },
       { path: `${pathPrefix}admin/branding`, element: <Navigate to={isRootLevel ? '/admin/settings' : '../admin/settings'} replace /> },
     ] : []),
     // EE multi-tenant: keep extension page routes
-    ...(isMultiTenantEnabled() ? [{
+    ...(multiTenantEnabled ? [{
       path: `${pathPrefix}admin/email-settings`,
       element: (
         <ProtectedRoute requireAdmin>
@@ -220,7 +287,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         </ProtectedRoute>
       )
     }] : []),
-    ...(isMultiTenantEnabled() ? [{
+    ...(multiTenantEnabled ? [{
       path: `${pathPrefix}admin/email-templates`,
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
@@ -230,7 +297,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         </ProtectedRoute>
       )
     }] : []),
-    ...(isMultiTenantEnabled() && !isRootLevel ? [{
+    ...(multiTenantEnabled && !isRootLevel ? [{
       path: `${pathPrefix}admin/branding`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
@@ -239,7 +306,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       )
     }] : []),
     // User Management - OSS uses root-level UserManagement, EE multi-tenant uses tenant-scoped page
-    ...(!isMultiTenantEnabled() ? [{
+    ...(!multiTenantEnabled ? [{
       path: `${pathPrefix}admin/users`, 
       element: (
         <ProtectedRoute requireAdmin>
@@ -249,7 +316,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         </ProtectedRoute>
       )
     }] : []),
-    ...(isMultiTenantEnabled() ? [{
+    ...(multiTenantEnabled ? [{
       path: `${pathPrefix}admin/users`, 
       element: (
         <ProtectedRoute requireAdmin={isRootLevel}>
@@ -259,7 +326,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
     }] : []),
 
     // TenantSetupWizard is EE-only (multi-tenant mode)
-    ...(isMultiTenantEnabled() ? [{ 
+    ...(multiTenantEnabled ? [{
       path: `${pathPrefix}setup`, 
       element: (
         <ProtectedRoute>
@@ -533,12 +600,6 @@ export function getPublicRoutes(): RouteObject[] {
     },
   ]
 }
-
-/**
- * Default tenant slug for OSS single-tenant mode
- * In OSS, all users are redirected to /t/default/* paths for unified routing (Option A)
- */
-const DEFAULT_TENANT_SLUG = 'default';
 
 /**
  * Creates the root redirect route (OSS: redirects to /t/default/)

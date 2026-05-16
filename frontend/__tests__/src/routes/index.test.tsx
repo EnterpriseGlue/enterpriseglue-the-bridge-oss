@@ -22,7 +22,7 @@ describe('frontend routes index', () => {
     expect(tenantRoutes.find((r) => r.path === 'admin/settings')).toBeDefined();
   });
 
-  it('omits platform settings route in multi-tenant mode', async () => {
+  it('redirects root protected routes and keeps tenant platform settings in multi-tenant mode', async () => {
     const routes = await import('@src/routes/index');
     const { isMultiTenantEnabled } = await import('@src/enterprise/extensionRegistry');
     (isMultiTenantEnabled as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
@@ -30,7 +30,13 @@ describe('frontend routes index', () => {
     const rootRoutes = routes.createProtectedChildRoutes(true);
     const tenantRoutes = routes.createProtectedChildRoutes(false);
 
+    expect(rootRoutes.find((r) => r.path === '*')).toBeDefined();
+    expect(rootRoutes.find((r) => r.path === '/engines')).toBeUndefined();
     expect(rootRoutes.find((r) => r.path === '/admin/settings')).toBeUndefined();
-    expect(tenantRoutes.find((r) => r.path === 'admin/settings')).toBeUndefined();
+    expect(tenantRoutes.find((r) => r.path === 'admin/settings')).toBeDefined();
+    expect(tenantRoutes.find((r) => r.path === 'admin/settings/git')).toBeDefined();
+    expect(tenantRoutes.find((r) => r.path === 'admin/settings/projects')).toBeDefined();
+    expect(tenantRoutes.find((r) => r.path === 'admin/settings/engines')).toBeDefined();
+    expect(tenantRoutes.find((r) => r.path === 'admin/settings/sso')).toBeDefined();
   });
 });
