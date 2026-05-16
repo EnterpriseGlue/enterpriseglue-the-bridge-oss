@@ -220,7 +220,15 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   // ============ Tenant-Scoped Routes ============
   // All routes below are accessible under /t/:tenantSlug/*
   // Example: /t/default/starbase-api/projects
-  
+
+  // Backward compatibility for clients that still call the root API paths.
+  // The frontend can run on /t/:tenantSlug routes while older API clients still
+  // request /starbase-api/*, /git-api/*, /mission-control-api/*, etc.
+  app.use(createTenantScopedRouter({
+    includeAuditRoute: !enterprisePluginLoaded,
+    notificationTenantResolver: options.notificationTenantResolver,
+  }));
+
   app.use('/t/:tenantSlug', createTenantScopedRouter({
     includeAuditRoute: !enterprisePluginLoaded,
     notificationTenantResolver: options.notificationTenantResolver,

@@ -243,7 +243,7 @@ export default async function globalTeardown() {
       await fetchJson(
         `/engines-api/engines/${data.engineId}`,
         { method: 'DELETE' },
-        { allowStatuses: [404] }
+        { allowStatuses: [403, 404] }
       );
     }
 
