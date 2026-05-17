@@ -5,6 +5,8 @@ export type Engine = {
   id: string
   name: string
   baseUrl: string
+  type?: 'ion' | 'operaton' | 'camunda7'
+  authType?: 'none' | 'basic' | 'bearer'
   tenantId?: string
   createdAt: string
   updatedAt: string

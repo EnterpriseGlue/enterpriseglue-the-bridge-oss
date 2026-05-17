@@ -45,6 +45,19 @@ function getDockerLoopbackSuggestion(raw: string): string | null {
   }
 }
 
+type EngineTypeId = 'ion' | 'operaton' | 'camunda7'
+
+const ENGINE_TYPE_LABELS: Record<EngineTypeId, string> = {
+  ion: 'ION-Engine',
+  operaton: 'Operaton',
+  camunda7: 'Camunda 7',
+}
+
+function normalizeEngineType(type: unknown): EngineTypeId {
+  if (type === 'ion' || type === 'operaton' || type === 'camunda7') return type
+  return 'camunda7'
+}
+
 
 export default function Engines() {
   const location = useLocation() as any
@@ -54,14 +67,18 @@ export default function Engines() {
   const engineModal = useModal<any>()
   const { notify } = useToast()
   const [editing, setEditing] = React.useState<any | null>(null)
-  const [form, setForm] = React.useState<any>({ name: '', baseUrl: '', type: 'camunda7', authType: 'basic', username: '', passwordEnc: '', environmentTagId: '' })
+  const [form, setForm] = React.useState<any>({ name: '', baseUrl: '', type: 'ion', authType: 'basic', username: '', passwordEnc: '', environmentTagId: '' })
   const [searchQuery, setSearchQuery] = React.useState('')
 
   // Engine members panel state
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [selectedEngine, setSelectedEngine] = React.useState<any | null>(null)
 
-  const TYPE_ITEMS = React.useMemo(() => ([{ id: 'camunda7', label: 'Camunda 7' }, { id: 'operaton', label: 'Operaton (Camunda 7 fork)' }]), [])
+  const TYPE_ITEMS = React.useMemo(() => ([
+    { id: 'ion', label: ENGINE_TYPE_LABELS.ion },
+    { id: 'operaton', label: ENGINE_TYPE_LABELS.operaton },
+    { id: 'camunda7', label: ENGINE_TYPE_LABELS.camunda7 },
+  ]), [])
   const AUTH_ITEMS = React.useMemo(() => ([{ id: 'basic', label: 'Basic Auth (Username/Password)' }, { id: 'bearer', label: 'Bearer Token (SSO/OAuth2)' }]), [])
   const dockerLoopbackSuggestion = React.useMemo(() => getDockerLoopbackSuggestion(String(form.baseUrl || '').trim()), [form.baseUrl])
 
@@ -118,7 +135,7 @@ export default function Engines() {
     setEditing(null)
     // Auto-assign environment tag if there's only one
     const autoTagId = hasSingleTag ? envTags![0].id : ''
-    setForm({ name: '', baseUrl: '', type: 'camunda7', authType: 'basic', username: '', passwordEnc: '', environmentTagId: autoTagId })
+    setForm({ name: '', baseUrl: '', type: 'ion', authType: 'basic', username: '', passwordEnc: '', environmentTagId: autoTagId })
     engineModal.openModal()
   }, [hasSingleTag, envTags, engineModal])
 
@@ -135,7 +152,7 @@ export default function Engines() {
     setForm({
       name: row.name || '',
       baseUrl: row.baseUrl || '',
-      type: row.type || 'camunda7',
+      type: normalizeEngineType(row.type),
       authType: row.authType || 'basic',
       username: row.username || '',
       passwordEnc: row.passwordEnc || '',
@@ -289,7 +306,7 @@ export default function Engines() {
                 id: e.id,
                 name: e.name || '—',
                 baseUrl: e.baseUrl || '—',
-                type: e.type || 'camunda7',
+                type: ENGINE_TYPE_LABELS[normalizeEngineType(e.type)],
                 environment: envTag?.name || '—',
                 health: '',
                 version: '',

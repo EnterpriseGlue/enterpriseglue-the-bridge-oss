@@ -41,6 +41,8 @@ type SeedEngine = {
   baseUrl: string;
 };
 
+type SeedEngineType = 'ion' | 'operaton' | 'camunda7';
+
 export async function seedUser(prefix: string): Promise<SeedUser> {
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
@@ -115,7 +117,12 @@ export async function seedProject(userId: string, name: string): Promise<SeedPro
   return { id, name };
 }
 
-export async function seedEngine(ownerId: string, baseUrl: string, name: string): Promise<SeedEngine> {
+export async function seedEngine(
+  ownerId: string,
+  baseUrl: string,
+  name: string,
+  type: SeedEngineType = 'camunda7'
+): Promise<SeedEngine> {
   const dataSource = await getDataSource();
   const engineRepo = dataSource.getRepository(Engine);
   const id = generateId();
@@ -125,7 +132,7 @@ export async function seedEngine(ownerId: string, baseUrl: string, name: string)
     id,
     name,
     baseUrl,
-    type: 'camunda7',
+    type,
     authType: null,
     username: null,
     passwordEnc: null,

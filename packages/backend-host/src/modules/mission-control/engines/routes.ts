@@ -18,6 +18,8 @@ import { config } from '@enterpriseglue/shared/config/index.js'
 
 // Validation schemas
 const engineIdParamSchema = z.object({ id: z.string().min(1) })
+const engineTypeSchema = z.enum(['ion', 'operaton', 'camunda7'])
+const engineAuthTypeSchema = z.enum(['none', 'basic', 'bearer'])
 
 const isLocalOrPrivate = (raw: string): boolean => {
   try {
@@ -68,8 +70,8 @@ const baseUrlSchema = z.string().min(1).url().refine(
 const createEngineBodySchema = z.object({
   name: z.string().min(1).max(255),
   baseUrl: baseUrlSchema,
-  type: z.string().default('camunda7'),
-  authType: z.string().optional(),
+  type: engineTypeSchema.default('ion'),
+  authType: engineAuthTypeSchema.optional(),
   username: z.string().nullable().optional(),
   passwordEnc: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
@@ -79,8 +81,8 @@ const createEngineBodySchema = z.object({
 const updateEngineBodySchema = z.object({
   name: z.string().min(1).max(255).optional(),
   baseUrl: baseUrlSchema.optional(),
-  type: z.string().optional(),
-  authType: z.string().optional(),
+  type: engineTypeSchema.optional(),
+  authType: engineAuthTypeSchema.optional(),
   username: z.string().nullable().optional(),
   passwordEnc: z.string().nullable().optional(),
   version: z.string().nullable().optional(),

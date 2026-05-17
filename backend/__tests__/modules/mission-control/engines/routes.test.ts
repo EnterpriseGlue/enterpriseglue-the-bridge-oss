@@ -104,4 +104,53 @@ describe('mission-control engines routes', () => {
     expect(response.body).toMatchObject({ field: 'baseUrl' });
     expect(String(response.body.error || '')).toContain('host.docker.internal:8080/engine-rest');
   });
+
+  it('accepts ION, Operaton, and Camunda 7 engine types', async () => {
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        insert,
+      }),
+    });
+
+    for (const type of ['ion', 'operaton', 'camunda7']) {
+      const response = await request(app)
+        .post('/engines-api/engines')
+        .send({ name: `${type} engine`, baseUrl: `https://${type}.example.com/engine-rest`, type });
+
+      expect(response.status).toBe(201);
+      expect(response.body).toMatchObject({ type });
+    }
+
+    expect(insert).toHaveBeenCalledTimes(3);
+  });
+
+  it('defaults newly registered engines to ION when type is omitted', async () => {
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        insert,
+      }),
+    });
+
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({ name: 'Default engine', baseUrl: 'https://ion.example.com/engine-rest' });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ type: 'ion' });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ type: 'ion' }));
+  });
+
+  it('rejects unsupported engine type values', async () => {
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({ name: 'Unsupported engine', baseUrl: 'https://engine.example.com/engine-rest', type: 'camunda8' });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ error: 'Validation failed' });
+    expect(response.body.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'type' }),
+    ]));
+  });
 });

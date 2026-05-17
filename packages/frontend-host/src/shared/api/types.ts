@@ -39,8 +39,8 @@ export interface Engine {
   id: string;
   name: string;
   baseUrl: string;
-  type?: 'camunda7' | 'operaton';
-  authType?: 'none' | 'basic';
+  type?: 'ion' | 'operaton' | 'camunda7';
+  authType?: 'none' | 'basic' | 'bearer';
   username?: string;
   active: boolean;
   version?: string;

@@ -97,7 +97,7 @@ describe.skipIf(!runLiveIonTests)('Mission Control ION-Engine live integration',
     userId = user.id;
     token = user.token;
 
-    const engine = await seedEngine(userId, ION_ENGINE_BASE_URL, `${prefix}-engine`);
+    const engine = await seedEngine(userId, ION_ENGINE_BASE_URL, `${prefix}-engine`, 'ion');
     engineId = engine.id;
   });
 

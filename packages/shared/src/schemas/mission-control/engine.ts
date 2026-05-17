@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { toTimestamp, nullToUndefined } from '@enterpriseglue/shared/utils/schema-helpers.js';
 
+export const EngineTypeSchema = z.enum(['ion', 'operaton', 'camunda7']);
+export type EngineType = z.infer<typeof EngineTypeSchema>;
+
+export function normalizeEngineType(value: unknown): EngineType {
+  const parsed = EngineTypeSchema.safeParse(value ?? 'camunda7');
+  return parsed.success ? parsed.data : 'camunda7';
+}
+
 // Raw schema - matches TypeORM Engine entity
 export const EngineSchemaRaw = z.object({
   id: z.string(),
@@ -25,8 +33,8 @@ export const EngineSchema = EngineSchemaRaw.transform((e) => ({
   id: e.id,
   name: e.name,
   baseUrl: e.baseUrl,
-  type: e.type as 'camunda7' | 'operaton' | undefined,
-  authType: e.authType as 'none' | 'basic' | undefined,
+  type: normalizeEngineType(e.type),
+  authType: e.authType as 'none' | 'basic' | 'bearer' | undefined,
   username: nullToUndefined(e.username),
   passwordEnc: nullToUndefined(e.passwordEnc),
   active: Boolean(e.active),
@@ -39,8 +47,8 @@ export const EngineInsertSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1),
   baseUrl: z.string().url(),
-  type: z.enum(['camunda7', 'operaton']).optional(),
-  authType: z.enum(['none', 'basic']).optional(),
+  type: EngineTypeSchema.optional(),
+  authType: z.enum(['none', 'basic', 'bearer']).optional(),
   username: z.string().optional(),
   passwordEnc: z.string().optional(),
   active: z.boolean().optional(),
