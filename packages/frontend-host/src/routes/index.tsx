@@ -145,7 +145,11 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
     // Admin routes
     ...((!multiTenantEnabled || !isRootLevel) ? [{
       path: `${pathPrefix}admin/settings`, 
-      element: (
+      element: multiTenantEnabled && !isRootLevel ? (
+        <ProtectedRoute requireAdmin={false}>
+          <ExtensionPage name="tenant-settings-page" />
+        </ProtectedRoute>
+      ) : (
         <ProtectedRoute requireAdmin>
           <LazyRoute message="Loading settings...">
             <PlatformSettingsPage />
@@ -153,7 +157,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         </ProtectedRoute>
       )
     }] : []),
-    ...((!multiTenantEnabled || !isRootLevel) ? [
+    ...(!multiTenantEnabled ? [
       {
         path: `${pathPrefix}admin/settings/git`,
         element: (
@@ -194,6 +198,12 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
           </ProtectedRoute>
         )
       },
+    ] : []),
+    ...(multiTenantEnabled && !isRootLevel ? [
+      { path: `${pathPrefix}admin/settings/git`, element: <Navigate to="../admin/settings" replace /> },
+      { path: `${pathPrefix}admin/settings/projects`, element: <Navigate to="../admin/settings" replace /> },
+      { path: `${pathPrefix}admin/settings/engines`, element: <Navigate to="../admin/settings" replace /> },
+      { path: `${pathPrefix}admin/settings/sso`, element: <Navigate to="../admin/settings" replace /> },
     ] : []),
     { 
       path: `${pathPrefix}admin/sso-mappings`, 
