@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.10.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.9.9...v0.10.0) (2026-05-17)
+
+
+### Features
+
+* **mission-control:** add ION-compatible engine adapter context ([#328](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/328)) ([17a1a71](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/17a1a71a0efdc0102cd6db0c9ea56dabb34609d3))
+
 ## [0.9.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.9.8...v0.9.9) (2026-05-17)
 
 
