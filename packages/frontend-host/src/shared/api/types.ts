@@ -40,8 +40,11 @@ export interface Engine {
   name: string;
   baseUrl: string;
   type?: 'ion' | 'operaton' | 'camunda7';
-  authType?: 'none' | 'basic' | 'bearer';
+  authType?: 'none' | 'basic' | 'bearer' | 'oauth2-client-credentials';
   username?: string;
+  oauthTokenUrl?: string;
+  oauthScopes?: string;
+  oauthAudience?: string;
   active: boolean;
   version?: string;
   createdAt: number;

@@ -13,13 +13,14 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js'
 import { apiLimiter, engineLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
 import { engineService } from '@enterpriseglue/shared/services/platform-admin/index.js'
+import { withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
 import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js'
 import { config } from '@enterpriseglue/shared/config/index.js'
 
 // Validation schemas
 const engineIdParamSchema = z.object({ id: z.string().min(1) })
 const engineTypeSchema = z.enum(['ion', 'operaton', 'camunda7'])
-const engineAuthTypeSchema = z.enum(['none', 'basic', 'bearer'])
+const engineAuthTypeSchema = z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials'])
 
 const isLocalOrPrivate = (raw: string): boolean => {
   try {
@@ -74,6 +75,9 @@ const createEngineBodySchema = z.object({
   authType: engineAuthTypeSchema.optional(),
   username: z.string().nullable().optional(),
   passwordEnc: z.string().nullable().optional(),
+  oauthTokenUrl: z.string().url().nullable().optional(),
+  oauthScopes: z.string().nullable().optional(),
+  oauthAudience: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
   environmentTagId: z.string().nullable().optional(),
 })
@@ -85,6 +89,9 @@ const updateEngineBodySchema = z.object({
   authType: engineAuthTypeSchema.optional(),
   username: z.string().nullable().optional(),
   passwordEnc: z.string().nullable().optional(),
+  oauthTokenUrl: z.string().url().nullable().optional(),
+  oauthScopes: z.string().nullable().optional(),
+  oauthAudience: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
   environmentTagId: z.string().nullable().optional(),
 })
@@ -138,7 +145,7 @@ r.get('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (re
   // Filter engines by tenant context (including null tenantId for legacy data)
   const userEngines = await engineService.getUserEngines(req.user!.userId, tenantId)
   res.json(userEngines.map(({ engine, role }) => {
-    const out = { ...engine, myRole: role }
+    const out = withEngineCapabilities({ ...engine, myRole: role })
     if (role !== 'owner' && role !== 'delegate') return redactEngineSecrets(out)
     return out
   }))
@@ -163,6 +170,9 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, validateBody(createEn
     authType: req.body.authType || (req.body.username ? 'basic' : 'none'),
     username: req.body.username ?? null,
     passwordEnc: req.body.passwordEnc ?? null,
+    oauthTokenUrl: req.body.oauthTokenUrl ?? null,
+    oauthScopes: req.body.oauthScopes ?? null,
+    oauthAudience: req.body.oauthAudience ?? null,
     ownerId: req.user!.userId,
     delegateId: null,
     version: req.body.version ?? null,
@@ -173,7 +183,7 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, validateBody(createEn
     updatedAt: now,
   }
   await engineRepo.insert(payload)
-  res.status(201).json(payload)
+  res.status(201).json(withEngineCapabilities(payload))
 }))
 
 r.get('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
@@ -186,10 +196,10 @@ r.get('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async
 
   const role = await engineService.getEngineRole(req.user!.userId, String(engine.id))
   if (role !== 'owner' && role !== 'delegate') {
-    return res.json(redactEngineSecrets(engine))
+    return res.json(redactEngineSecrets(withEngineCapabilities(engine)))
   }
 
-  res.json(engine)
+  res.json(withEngineCapabilities(engine))
 }))
 
 r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(engineIdParamSchema), validateBody(updateEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
@@ -212,6 +222,9 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
     authType: req.body.authType,
     username: req.body.username,
     passwordEnc: req.body.passwordEnc,
+    oauthTokenUrl: req.body.oauthTokenUrl,
+    oauthScopes: req.body.oauthScopes,
+    oauthAudience: req.body.oauthAudience,
     version: req.body.version,
     environmentTagId: req.body.environmentTagId || null,
     updatedAt: now,
@@ -219,7 +232,7 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
   await engineRepo.update({ id: engineId }, updates)
   const updated = await engineRepo.findOneBy({ id: engineId })
   if (!updated) throw Errors.notFound('Engine')
-  res.json(updated)
+  res.json(withEngineCapabilities(updated))
 }))
 
 r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {

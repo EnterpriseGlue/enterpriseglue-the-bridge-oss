@@ -67,7 +67,18 @@ export default function Engines() {
   const engineModal = useModal<any>()
   const { notify } = useToast()
   const [editing, setEditing] = React.useState<any | null>(null)
-  const [form, setForm] = React.useState<any>({ name: '', baseUrl: '', type: 'ion', authType: 'basic', username: '', passwordEnc: '', environmentTagId: '' })
+  const [form, setForm] = React.useState<any>({
+    name: '',
+    baseUrl: '',
+    type: 'ion',
+    authType: 'basic',
+    username: '',
+    passwordEnc: '',
+    oauthTokenUrl: '',
+    oauthScopes: '',
+    oauthAudience: '',
+    environmentTagId: '',
+  })
   const [searchQuery, setSearchQuery] = React.useState('')
 
   // Engine members panel state
@@ -79,7 +90,12 @@ export default function Engines() {
     { id: 'operaton', label: ENGINE_TYPE_LABELS.operaton },
     { id: 'camunda7', label: ENGINE_TYPE_LABELS.camunda7 },
   ]), [])
-  const AUTH_ITEMS = React.useMemo(() => ([{ id: 'basic', label: 'Basic Auth (Username/Password)' }, { id: 'bearer', label: 'Bearer Token (SSO/OAuth2)' }]), [])
+  const AUTH_ITEMS = React.useMemo(() => ([
+    { id: 'none', label: 'None' },
+    { id: 'basic', label: 'Basic Auth (Username/Password)' },
+    { id: 'bearer', label: 'Bearer Token' },
+    { id: 'oauth2-client-credentials', label: 'OAuth2 Client Credentials' },
+  ]), [])
   const dockerLoopbackSuggestion = React.useMemo(() => getDockerLoopbackSuggestion(String(form.baseUrl || '').trim()), [form.baseUrl])
 
   // Fetch environment tags (read-only, used by engine owners/delegates too)
@@ -89,6 +105,8 @@ export default function Engines() {
   const hasMultipleTags = Array.isArray(envTags) && envTags.length > 1
 
   const listQ = useQuery({ queryKey: ['engines'], queryFn: () => apiClient.get<any[]>('/engines-api/engines', undefined, { credentials: 'include' }) })
+  const isOAuth2ClientCredentialsIncomplete = form.authType === 'oauth2-client-credentials'
+    && (!form.username || !form.passwordEnc || !form.oauthTokenUrl)
 
   const createM = useMutation({
     mutationFn: (payload: any) => apiClient.post<any>('/engines-api/engines', payload, { credentials: 'include' }),
@@ -135,7 +153,18 @@ export default function Engines() {
     setEditing(null)
     // Auto-assign environment tag if there's only one
     const autoTagId = hasSingleTag ? envTags![0].id : ''
-    setForm({ name: '', baseUrl: '', type: 'ion', authType: 'basic', username: '', passwordEnc: '', environmentTagId: autoTagId })
+    setForm({
+      name: '',
+      baseUrl: '',
+      type: 'ion',
+      authType: 'basic',
+      username: '',
+      passwordEnc: '',
+      oauthTokenUrl: '',
+      oauthScopes: '',
+      oauthAudience: '',
+      environmentTagId: autoTagId,
+    })
     engineModal.openModal()
   }, [hasSingleTag, envTags, engineModal])
 
@@ -156,6 +185,9 @@ export default function Engines() {
       authType: row.authType || 'basic',
       username: row.username || '',
       passwordEnc: row.passwordEnc || '',
+      oauthTokenUrl: row.oauthTokenUrl || '',
+      oauthScopes: row.oauthScopes || '',
+      oauthAudience: row.oauthAudience || '',
       environmentTagId: row.environmentTagId || '',
     })
     engineModal.openModal()
@@ -503,13 +535,25 @@ export default function Engines() {
             // Bearer auth only uses token (stored in passwordEnc), not username
             payload.username = undefined
           }
+          if (payload.authType === 'none') {
+            payload.username = undefined
+            payload.passwordEnc = undefined
+            payload.oauthTokenUrl = undefined
+            payload.oauthScopes = undefined
+            payload.oauthAudience = undefined
+          }
+          if (payload.authType !== 'oauth2-client-credentials') {
+            payload.oauthTokenUrl = undefined
+            payload.oauthScopes = undefined
+            payload.oauthAudience = undefined
+          }
           if (editing) updateM.mutate(payload)
           else createM.mutate(payload)
         }}
         title={editing ? 'Edit engine' : 'Add engine'}
         submitText={editing ? 'Save' : 'Create'}
         busy={createM.isPending || updateM.isPending}
-        submitDisabled={!form.name || !form.baseUrl}
+        submitDisabled={!form.name || !form.baseUrl || isOAuth2ClientCredentialsIncomplete}
         size="lg"
       >
         <TextInput
@@ -611,6 +655,47 @@ export default function Engines() {
             onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
             disabled={createM.isPending || updateM.isPending}
           />
+        )}
+        {form.authType === 'oauth2-client-credentials' && (
+          <>
+            <TextInput
+              id="eng-oauth-client"
+              labelText="Client ID"
+              value={form.username}
+              onChange={(e) => setForm((f: any) => ({ ...f, username: (e.target as any).value }))}
+              disabled={createM.isPending || updateM.isPending}
+            />
+            <TextInput
+              id="eng-oauth-secret"
+              type="password"
+              labelText="Client Secret"
+              value={form.passwordEnc}
+              onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
+              disabled={createM.isPending || updateM.isPending}
+            />
+            <TextInput
+              id="eng-oauth-token-url"
+              labelText="Token URL"
+              placeholder="https://keycloak.example.com/realms/acme/protocol/openid-connect/token"
+              value={form.oauthTokenUrl}
+              onChange={(e) => setForm((f: any) => ({ ...f, oauthTokenUrl: (e.target as any).value }))}
+              disabled={createM.isPending || updateM.isPending}
+            />
+            <TextInput
+              id="eng-oauth-scopes"
+              labelText="Scopes"
+              value={form.oauthScopes}
+              onChange={(e) => setForm((f: any) => ({ ...f, oauthScopes: (e.target as any).value }))}
+              disabled={createM.isPending || updateM.isPending}
+            />
+            <TextInput
+              id="eng-oauth-audience"
+              labelText="Audience"
+              value={form.oauthAudience}
+              onChange={(e) => setForm((f: any) => ({ ...f, oauthAudience: (e.target as any).value }))}
+              disabled={createM.isPending || updateM.isPending}
+            />
+          </>
         )}
       </FormModal>
     </PageLayout>

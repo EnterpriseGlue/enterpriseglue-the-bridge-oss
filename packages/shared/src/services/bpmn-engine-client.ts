@@ -59,7 +59,25 @@ import type {
   CamundaVariables,
 } from '@enterpriseglue/shared/types/bpmn-engine-api.js'
 
-type EngineCfg = { baseUrl: string; authType: 'none' | 'basic' | 'bearer'; username?: string | null; password?: string | null }
+type EngineAuthType = 'none' | 'basic' | 'bearer' | 'oauth2-client-credentials'
+
+type EngineCfg = {
+  id: string;
+  baseUrl: string;
+  authType: EngineAuthType;
+  username?: string | null;
+  password?: string | null;
+  oauthTokenUrl?: string | null;
+  oauthScopes?: string | null;
+  oauthAudience?: string | null;
+}
+
+type OAuthTokenCacheEntry = {
+  token: string;
+  expiresAt: number;
+}
+
+const oauthTokenCache = new Map<string, OAuthTokenCacheEntry>()
 
 async function getEngine(engineId: string): Promise<EngineCfg> {
   if (!engineId) throw Errors.validation('engineId is required')
@@ -68,11 +86,27 @@ async function getEngine(engineId: string): Promise<EngineCfg> {
   const row = await engineRepo.findOneBy({ id: engineId })
   if (!row || !row.baseUrl) throw Errors.engineNotFound(engineId)
 
-  const engineRow = row as Engine & { authType?: string; passwordEnc?: string; username?: string }
-  const authType = (engineRow.authType || (engineRow.username ? 'basic' : 'none')) as 'none' | 'basic' | 'bearer'
+  const engineRow = row as Engine & {
+    authType?: string;
+    passwordEnc?: string;
+    username?: string;
+    oauthTokenUrl?: string | null;
+    oauthScopes?: string | null;
+    oauthAudience?: string | null;
+  }
+  const authType = (engineRow.authType || (engineRow.username ? 'basic' : 'none')) as EngineAuthType
   const encryptedPassword = engineRow.passwordEnc || null
   const password = encryptedPassword ? safeDecrypt(encryptedPassword) : null
-  return { baseUrl: String(row.baseUrl), authType, username: engineRow.username || null, password }
+  return {
+    id: engineId,
+    baseUrl: String(row.baseUrl),
+    authType,
+    username: engineRow.username || null,
+    password,
+    oauthTokenUrl: engineRow.oauthTokenUrl || null,
+    oauthScopes: engineRow.oauthScopes || null,
+    oauthAudience: engineRow.oauthAudience || null,
+  }
 }
 
 function inferOperationClass(method: string, path: string): string {
@@ -87,7 +121,48 @@ function inferOperationClass(method: string, path: string): string {
   return 'engine.admin'
 }
 
-function buildHeaders(cfg: EngineCfg, meta: { engineId: string; method: string; path: string }): Record<string, string> {
+async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<string> {
+  if (!cfg.oauthTokenUrl) throw Errors.validation('OAuth2 token URL is required for engine client credentials auth')
+  if (!cfg.username) throw Errors.validation('OAuth2 client id is required for engine client credentials auth')
+  if (!cfg.password) throw Errors.validation('OAuth2 client secret is required for engine client credentials auth')
+
+  const cacheKey = [
+    cfg.id,
+    cfg.oauthTokenUrl,
+    cfg.username,
+    cfg.oauthScopes || '',
+    cfg.oauthAudience || '',
+  ].join('\n')
+  const cached = oauthTokenCache.get(cacheKey)
+  const now = Date.now()
+  if (cached && cached.expiresAt > now + 30_000) return cached.token
+
+  const body = new URLSearchParams()
+  body.set('grant_type', 'client_credentials')
+  body.set('client_id', cfg.username)
+  body.set('client_secret', cfg.password)
+  if (cfg.oauthScopes) body.set('scope', cfg.oauthScopes)
+  if (cfg.oauthAudience) body.set('audience', cfg.oauthAudience)
+
+  const response = await fetch(cfg.oauthTokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw Errors.authFailed(`Engine OAuth2 token request failed: ${response.status} ${response.statusText} ${text}`)
+  }
+
+  const payload = await response.json() as { access_token?: string; expires_in?: number }
+  if (!payload.access_token) throw Errors.authFailed('Engine OAuth2 token response did not include an access token')
+
+  const expiresInMs = Math.max(60, Number(payload.expires_in || 300)) * 1000
+  oauthTokenCache.set(cacheKey, { token: payload.access_token, expiresAt: now + expiresInMs })
+  return payload.access_token
+}
+
+async function buildHeaders(cfg: EngineCfg, meta: { engineId: string; method: string; path: string }): Promise<Record<string, string>> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' }
   if (cfg.authType === 'basic' && cfg.username) {
     const token = Buffer.from(`${cfg.username}:${cfg.password ?? ''}`).toString('base64')
@@ -95,6 +170,8 @@ function buildHeaders(cfg: EngineCfg, meta: { engineId: string; method: string; 
   } else if (cfg.authType === 'bearer' && cfg.password) {
     // Bearer token auth - token stored in password field
     h['Authorization'] = `Bearer ${cfg.password}`
+  } else if (cfg.authType === 'oauth2-client-credentials') {
+    h['Authorization'] = `Bearer ${await resolveOAuthClientCredentialsToken(cfg)}`
   }
 
   const requestContext = getBpmnEngineRequestContext()
@@ -120,7 +197,7 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
   }
   const res = await fetch(url.toString(), {
     method: 'GET',
-    headers: buildHeaders(cfg, { engineId, method: 'GET', path }),
+    headers: await buildHeaders(cfg, { engineId, method: 'GET', path }),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -136,7 +213,7 @@ async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT'
   const url = path.startsWith('http') ? path : cfg.baseUrl.replace(/\/$/, '') + path
   const res = await fetch(url, {
     method,
-    headers: buildHeaders(cfg, { engineId, method, path }),
+    headers: await buildHeaders(cfg, { engineId, method, path }),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {

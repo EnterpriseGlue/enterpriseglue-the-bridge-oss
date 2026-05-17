@@ -81,7 +81,18 @@ describe('mission-control engines routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
-      { id: 'e1', name: 'Engine 1', myRole: 'admin', username: null, passwordEnc: null },
+      expect.objectContaining({
+        id: 'e1',
+        name: 'Engine 1',
+        myRole: 'admin',
+        username: null,
+        passwordEnc: null,
+        capabilities: expect.objectContaining({
+          type: 'camunda7',
+          compatibilityProfile: 'camunda7-rest',
+          supportLevel: 'compatible',
+        }),
+      }),
     ]);
   });
 
@@ -140,6 +151,37 @@ describe('mission-control engines routes', () => {
     expect(response.status).toBe(201);
     expect(response.body).toMatchObject({ type: 'ion' });
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ type: 'ion' }));
+  });
+
+  it('accepts OAuth2 client credentials engine auth metadata', async () => {
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        insert,
+      }),
+    });
+
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Keycloak engine',
+        baseUrl: 'https://ion.example.com/engine-rest',
+        type: 'ion',
+        authType: 'oauth2-client-credentials',
+        username: 'enterpriseglue',
+        passwordEnc: 'client-secret',
+        oauthTokenUrl: 'https://keycloak.example.com/realms/acme/protocol/openid-connect/token',
+        oauthScopes: 'engine-rest',
+        oauthAudience: 'ion-engine',
+      });
+
+    expect(response.status).toBe(201);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      authType: 'oauth2-client-credentials',
+      oauthTokenUrl: 'https://keycloak.example.com/realms/acme/protocol/openid-connect/token',
+      oauthScopes: 'engine-rest',
+      oauthAudience: 'ion-engine',
+    }));
   });
 
   it('rejects unsupported engine type values', async () => {

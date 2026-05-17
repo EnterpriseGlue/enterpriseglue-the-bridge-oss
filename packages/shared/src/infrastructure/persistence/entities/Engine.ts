@@ -25,6 +25,15 @@ export class Engine extends AppBaseEntity {
   @Column({ name: 'password_enc', type: 'text', nullable: true })
   passwordEnc!: string | null;
 
+  @Column({ name: 'oauth_token_url', type: 'text', nullable: true })
+  oauthTokenUrl!: string | null;
+
+  @Column({ name: 'oauth_scopes', type: 'text', nullable: true })
+  oauthScopes!: string | null;
+
+  @Column({ name: 'oauth_audience', type: 'text', nullable: true })
+  oauthAudience!: string | null;
+
   @Column({ type: 'text', nullable: true })
   version!: string | null;
 
