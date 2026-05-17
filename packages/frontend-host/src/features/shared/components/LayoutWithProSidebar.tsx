@@ -779,9 +779,9 @@ export default function LayoutWithProSidebar() {
                     {getNavItemsBySection('admin').map((item: NavExtension) => (
                       <HeaderMenuItem
                         key={item.id}
-                        href={item.path}
+                        href={toTenantPath(item.path)}
                         isCurrentPage={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
-                        onClick={(e) => { e.preventDefault(); navigate(item.path); (document.activeElement as HTMLElement)?.blur() }}
+                        onClick={(e) => { e.preventDefault(); navigate(toTenantPath(item.path)); (document.activeElement as HTMLElement)?.blur() }}
                       >
                         {item.label}
                       </HeaderMenuItem>

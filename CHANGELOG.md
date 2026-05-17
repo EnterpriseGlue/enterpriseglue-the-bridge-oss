@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.9.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.9.8...v0.9.9) (2026-05-17)
+
+
+### Bug Fixes
+
+* **frontend-host:** allow injected enterprise plugin ([#326](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/326)) ([9d3431e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9d3431ec439dcfb7a482db3e5615ac9f1518f367))
+
+## [0.9.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.9.7...v0.9.8) (2026-05-17)
+
+
+### Bug Fixes
+
+* **frontend-host:** route tenant admin settings to EE page ([#324](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/324)) ([f07d906](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f07d906916b33ccc628a96915f28e6230404b310))
+
+## [0.9.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.9.6...v0.9.7) (2026-05-16)
+
+
+### Bug Fixes
+
+* **frontend-host:** canonicalize tenant routes ([#322](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/322)) ([354f264](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/354f2647f905863c52bf0dd9d269a14ff9fd179c))
+
 ## [0.9.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.9.5...v0.9.6) (2026-05-16)
 
 
