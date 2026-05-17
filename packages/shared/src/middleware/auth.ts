@@ -4,6 +4,7 @@ import { Errors, AppError } from './errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 
 /**
  * Authentication middleware
@@ -75,6 +76,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     // Add user info to request
     req.user = payload;
+    updateBpmnEngineRequestContext({ userId: payload.userId });
 
     const dataSource = await getDataSource();
     const userRepo = dataSource.getRepository(User);

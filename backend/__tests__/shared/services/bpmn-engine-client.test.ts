@@ -1,6 +1,15 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
+import { fetch } from 'undici';
+import {
+  camundaGet,
+  camundaPost,
+} from '@enterpriseglue/shared/services/bpmn-engine-client.js';
+import {
+  runWithBpmnEngineRequestContext,
+  updateBpmnEngineRequestContext,
+} from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -13,6 +22,7 @@ vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
 vi.mock('undici', () => ({
   fetch: vi.fn().mockResolvedValue({
     ok: true,
+    headers: { get: vi.fn().mockReturnValue('application/json') },
     json: vi.fn().mockResolvedValue({}),
     text: vi.fn().mockResolvedValue(''),
   }),
@@ -37,7 +47,77 @@ describe('bpmn-engine-client', () => {
     });
   });
 
-  it('mocked test placeholder', () => {
-    expect(true).toBe(true);
+  it('sends EnterpriseGlue request metadata headers for sidecar-compatible reads', async () => {
+    await runWithBpmnEngineRequestContext({ requestId: 'req-1' }, async () => {
+      updateBpmnEngineRequestContext({
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+        tenantSlug: 'acme',
+        engineId: 'engine-1',
+      });
+
+      await camundaGet('engine-1', '/version');
+    });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:8080/engine-rest/version', {
+      method: 'GET',
+      headers: expect.objectContaining({
+        'Content-Type': 'application/json',
+        'X-EnterpriseGlue-Request-Id': 'req-1',
+        'X-EnterpriseGlue-User-Id': 'user-1',
+        'X-EnterpriseGlue-Tenant-Id': 'tenant-1',
+        'X-EnterpriseGlue-Tenant-Slug': 'acme',
+        'X-EnterpriseGlue-Engine-Id': 'engine-1',
+        'X-EnterpriseGlue-Operation-Class': 'engine.read',
+      }),
+    });
+  });
+
+  it('infers mutating operation classes for sidecar policy checks', async () => {
+    await runWithBpmnEngineRequestContext({ requestId: 'req-2' }, async () => {
+      await camundaPost('engine-1', '/process-definition/key/order/start', {});
+    });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:8080/engine-rest/process-definition/key/order/start', {
+      method: 'POST',
+      headers: expect.objectContaining({
+        'X-EnterpriseGlue-Request-Id': 'req-2',
+        'X-EnterpriseGlue-Engine-Id': 'engine-1',
+        'X-EnterpriseGlue-Operation-Class': 'engine.instance.mutate',
+      }),
+      body: '{}',
+    });
+  });
+
+  it('keeps basic engine credentials server-side while adding metadata headers', async () => {
+    const engineRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'engine-1',
+        baseUrl: 'http://localhost:8080/engine-rest',
+        authType: 'basic',
+        username: 'demo',
+        passwordEnc: 'demo-secret',
+      }),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return engineRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await runWithBpmnEngineRequestContext({ requestId: 'req-3' }, async () => {
+      await camundaGet('engine-1', '/version');
+    });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:8080/engine-rest/version', {
+      method: 'GET',
+      headers: expect.objectContaining({
+        Authorization: `Basic ${Buffer.from('demo:demo-secret').toString('base64')}`,
+        'X-EnterpriseGlue-Request-Id': 'req-3',
+        'X-EnterpriseGlue-Operation-Class': 'engine.read',
+      }),
+    });
   });
 });

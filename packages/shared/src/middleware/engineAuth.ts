@@ -4,6 +4,7 @@ import { engineService } from '../services/platform-admin/index.js';
 import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 
 type EngineIdFrom = 'params' | 'body' | 'query' | 'any';
 
@@ -96,6 +97,7 @@ function requireEngineRole(allowedRoles: EngineRole[], options: EngineAuthOption
 
       (req as EngineRequest).engineId = engineId;
       (req as EngineRequest).engineRole = role as EngineRole;
+      updateBpmnEngineRequestContext({ engineId });
 
       next();
     } catch (e: any) {

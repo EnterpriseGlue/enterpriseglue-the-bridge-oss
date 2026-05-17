@@ -8,6 +8,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { Errors } from './errorHandler.js';
+import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 
 export type TenantRole = 'tenant_admin' | 'member';
 
@@ -60,6 +61,7 @@ export function resolveTenantContext(_options?: { required?: boolean }) {
     
     // In OSS single-tenant mode, always use default tenant regardless of slug
     req.tenant = { tenantId: DEFAULT_TENANT_ID, tenantSlug: slug };
+    updateBpmnEngineRequestContext({ tenantId: DEFAULT_TENANT_ID, tenantSlug: slug });
     next();
   };
 }

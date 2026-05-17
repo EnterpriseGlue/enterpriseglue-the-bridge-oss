@@ -9,6 +9,7 @@ import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { runWithBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import { registerRoutes } from './routes/index.js';
 import type { NotificationTenantResolver } from '@enterpriseglue/enterprise-plugin-api/backend';
 
@@ -100,6 +101,14 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   }));
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: false, limit: '2mb' }));
+  app.use((req, _res, next) => {
+    const headerRequestId = req.headers['x-request-id'] || req.headers['x-correlation-id'];
+    const requestId = Array.isArray(headerRequestId) ? headerRequestId[0] : headerRequestId;
+    runWithBpmnEngineRequestContext(
+      { requestId: typeof requestId === 'string' && requestId.trim() ? requestId.trim() : undefined },
+      next
+    );
+  });
   app.use((req, _res, next) => {
     const cookieHeader = req.headers.cookie;
     const cookies: Record<string, string> = Object.create(null);

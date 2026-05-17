@@ -1,9 +1,11 @@
 import { Buffer } from 'node:buffer'
+import { randomUUID } from 'node:crypto'
 import { fetch } from 'undici'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js'
 import { safeDecrypt } from './encryption.js'
+import { getBpmnEngineRequestContext } from './bpmn-engine-request-context.js'
 import type {
   Batch,
   BatchStatistics,
@@ -57,7 +59,7 @@ import type {
   CamundaVariables,
 } from '@enterpriseglue/shared/types/bpmn-engine-api.js'
 
-type EngineCfg = { baseUrl: string; authType: 'basic' | 'bearer'; username?: string | null; password?: string | null }
+type EngineCfg = { baseUrl: string; authType: 'none' | 'basic' | 'bearer'; username?: string | null; password?: string | null }
 
 async function getEngine(engineId: string): Promise<EngineCfg> {
   if (!engineId) throw Errors.validation('engineId is required')
@@ -67,13 +69,25 @@ async function getEngine(engineId: string): Promise<EngineCfg> {
   if (!row || !row.baseUrl) throw Errors.engineNotFound(engineId)
 
   const engineRow = row as Engine & { authType?: string; passwordEnc?: string; username?: string }
-  const authType = (engineRow.authType || 'basic') as 'basic' | 'bearer'
+  const authType = (engineRow.authType || (engineRow.username ? 'basic' : 'none')) as 'none' | 'basic' | 'bearer'
   const encryptedPassword = engineRow.passwordEnc || null
   const password = encryptedPassword ? safeDecrypt(encryptedPassword) : null
-  return { baseUrl: String(row.baseUrl), authType: authType as 'basic' | 'bearer', username: engineRow.username || null, password }
+  return { baseUrl: String(row.baseUrl), authType, username: engineRow.username || null, password }
 }
 
-function buildHeaders(cfg: EngineCfg): Record<string, string> {
+function inferOperationClass(method: string, path: string): string {
+  const normalizedMethod = method.toUpperCase()
+  const normalizedPath = path.startsWith('http') ? new URL(path).pathname : path
+  if (normalizedMethod === 'GET') return 'engine.read'
+  if (normalizedPath.includes('/deployment')) return 'engine.deploy'
+  if (normalizedPath.includes('/task/')) return 'engine.task.mutate'
+  if (normalizedPath.includes('/job') || normalizedPath.includes('/job-definition')) return 'engine.job.mutate'
+  if (normalizedPath.includes('/batch')) return 'engine.batch.admin'
+  if (normalizedPath.includes('/process-instance') || normalizedPath.includes('/process-definition')) return 'engine.instance.mutate'
+  return 'engine.admin'
+}
+
+function buildHeaders(cfg: EngineCfg, meta: { engineId: string; method: string; path: string }): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' }
   if (cfg.authType === 'basic' && cfg.username) {
     const token = Buffer.from(`${cfg.username}:${cfg.password ?? ''}`).toString('base64')
@@ -82,6 +96,15 @@ function buildHeaders(cfg: EngineCfg): Record<string, string> {
     // Bearer token auth - token stored in password field
     h['Authorization'] = `Bearer ${cfg.password}`
   }
+
+  const requestContext = getBpmnEngineRequestContext()
+  h['X-EnterpriseGlue-Request-Id'] = requestContext?.requestId || randomUUID()
+  if (requestContext?.userId) h['X-EnterpriseGlue-User-Id'] = requestContext.userId
+  if (requestContext?.tenantId) h['X-EnterpriseGlue-Tenant-Id'] = requestContext.tenantId
+  if (requestContext?.tenantSlug) h['X-EnterpriseGlue-Tenant-Slug'] = requestContext.tenantSlug
+  h['X-EnterpriseGlue-Engine-Id'] = requestContext?.engineId || meta.engineId
+  h['X-EnterpriseGlue-Operation-Class'] = inferOperationClass(meta.method, meta.path)
+
   return h
 }
 
@@ -97,7 +120,7 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
   }
   const res = await fetch(url.toString(), {
     method: 'GET',
-    headers: buildHeaders(cfg),
+    headers: buildHeaders(cfg, { engineId, method: 'GET', path }),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -113,7 +136,7 @@ async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT'
   const url = path.startsWith('http') ? path : cfg.baseUrl.replace(/\/$/, '') + path
   const res = await fetch(url, {
     method,
-    headers: buildHeaders(cfg),
+    headers: buildHeaders(cfg, { engineId, method, path }),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
