@@ -17,6 +17,7 @@ import { useModal } from '../shared/hooks/useModal';
 import { useToast } from '../shared/notifications/ToastProvider';
 
 const emptyPlugin: EnterpriseFrontendPlugin = { routes: [], tenantRoutes: [], navItems: [], menuItems: [] };
+const injectedPluginGlobal = '__ENTERPRISEGLUE_FRONTEND_PLUGIN__';
 
 type FrontendPluginModuleShape = {
   default?: unknown;
@@ -73,6 +74,83 @@ async function dynamicImport(specifier: string): Promise<unknown> {
 
 let cached: Promise<EnterpriseFrontendPlugin> | null = null;
 
+function resolvePluginCandidate(mod: unknown): unknown {
+  const imported = (mod ?? {}) as FrontendPluginModuleShape;
+  return imported.default ?? imported.enterpriseFrontendPlugin ?? imported.plugin ?? mod;
+}
+
+function getInjectedPlugin(): unknown {
+  return (globalThis as Record<string, unknown>)[injectedPluginGlobal];
+}
+
+function registerPlugin(pluginCandidate: unknown): EnterpriseFrontendPlugin {
+  if (!pluginCandidate || typeof pluginCandidate !== 'object') {
+    return emptyPlugin;
+  }
+
+  const plugin = pluginCandidate as FrontendPluginRuntimeShape;
+
+  // Register component overrides with extension registry
+  if (Array.isArray(plugin.componentOverrides)) {
+    for (const override of plugin.componentOverrides) {
+      if (isComponentOverrideCandidate(override)) {
+        registerComponentOverride(override.name, override.component);
+      }
+    }
+  }
+
+  // Register feature overrides from plugin
+  // The plugin already handles feature flag checking internally
+  if (Array.isArray(plugin.featureOverrides)) {
+    for (const override of plugin.featureOverrides) {
+      if (isFeatureOverrideCandidate(override)) {
+        registerFeatureOverride(override);
+      }
+    }
+  }
+
+  // Register nav items from plugin
+  // These appear in the sidebar/header menus
+  if (Array.isArray(plugin.navItems)) {
+    for (const item of plugin.navItems) {
+      if (isNavItemCandidate(item)) {
+        registerNavItem(item);
+      }
+    }
+  }
+
+  // Provide shared host utilities to the plugin via dependency injection
+  if (typeof plugin.init === 'function') {
+    const context: FrontendPluginContext = {
+      api: {
+        client: apiClient,
+        errors: { ApiError: ApiError as any, parseApiError, getUiErrorMessage, getErrorMessageFromResponse },
+      },
+      components: {
+        PageHeader,
+        PageLayout,
+        PAGE_GRADIENTS,
+        ConfirmModal,
+        InviteMemberModal,
+      },
+      hooks: { useAuth, useModal, useToast },
+    };
+    plugin.init(context);
+  }
+
+  // Mark registry as initialized
+  markInitialized();
+
+  console.log('[Enterprise] Frontend plugin loaded');
+
+  return {
+    routes: Array.isArray(plugin.routes) ? plugin.routes : [],
+    tenantRoutes: Array.isArray(plugin.tenantRoutes) ? plugin.tenantRoutes : [],
+    navItems: Array.isArray(plugin.navItems) ? plugin.navItems : [],
+    menuItems: Array.isArray(plugin.menuItems) ? plugin.menuItems : [],
+  };
+}
+
 /**
  * Load the enterprise frontend plugin if available.
  * 
@@ -83,76 +161,14 @@ let cached: Promise<EnterpriseFrontendPlugin> | null = null;
  * Feature flags are handled by the EE plugin itself (e.g., MULTI_TENANT).
  */
 export async function loadEnterpriseFrontendPlugin(): Promise<EnterpriseFrontendPlugin> {
+  const injectedPlugin = getInjectedPlugin();
+  if (injectedPlugin) {
+    return registerPlugin(resolvePluginCandidate(injectedPlugin));
+  }
+
   try {
     const mod = await dynamicImport('@enterpriseglue/enterprise-frontend');
-    const imported = (mod ?? {}) as FrontendPluginModuleShape;
-    const pluginCandidate = imported.default ?? imported.enterpriseFrontendPlugin ?? imported.plugin ?? mod;
-
-    if (pluginCandidate && typeof pluginCandidate === 'object') {
-      const plugin = pluginCandidate as FrontendPluginRuntimeShape;
-
-      // Register component overrides with extension registry
-      if (Array.isArray(plugin.componentOverrides)) {
-        for (const override of plugin.componentOverrides) {
-          if (isComponentOverrideCandidate(override)) {
-            registerComponentOverride(override.name, override.component);
-          }
-        }
-      }
-
-      // Register feature overrides from plugin
-      // The plugin already handles feature flag checking internally
-      if (Array.isArray(plugin.featureOverrides)) {
-        for (const override of plugin.featureOverrides) {
-          if (isFeatureOverrideCandidate(override)) {
-            registerFeatureOverride(override);
-          }
-        }
-      }
-
-      // Register nav items from plugin
-      // These appear in the sidebar/header menus
-      if (Array.isArray(plugin.navItems)) {
-        for (const item of plugin.navItems) {
-          if (isNavItemCandidate(item)) {
-            registerNavItem(item);
-          }
-        }
-      }
-
-      // Provide shared host utilities to the plugin via dependency injection
-      if (typeof plugin.init === 'function') {
-        const context: FrontendPluginContext = {
-          api: {
-            client: apiClient,
-            errors: { ApiError: ApiError as any, parseApiError, getUiErrorMessage, getErrorMessageFromResponse },
-          },
-          components: {
-            PageHeader,
-            PageLayout,
-            PAGE_GRADIENTS,
-            ConfirmModal,
-            InviteMemberModal,
-          },
-          hooks: { useAuth, useModal, useToast },
-        };
-        plugin.init(context);
-      }
-
-      // Mark registry as initialized
-      markInitialized();
-
-      console.log('[Enterprise] Frontend plugin loaded');
-
-      return {
-        routes: Array.isArray(plugin.routes) ? plugin.routes : [],
-        tenantRoutes: Array.isArray(plugin.tenantRoutes) ? plugin.tenantRoutes : [],
-        navItems: Array.isArray(plugin.navItems) ? plugin.navItems : [],
-        menuItems: Array.isArray(plugin.menuItems) ? plugin.menuItems : [],
-      };
-    }
-
-    return emptyPlugin;
+    return registerPlugin(resolvePluginCandidate(mod));
   } catch {
     // Plugin not available (OSS mode) - expected in OSS repo
     return emptyPlugin;
