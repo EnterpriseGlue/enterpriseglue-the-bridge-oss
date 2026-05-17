@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.9.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.9.7...v0.9.8) (2026-05-17)
+
+
+### Bug Fixes
+
+* **frontend-host:** route tenant admin settings to EE page ([#324](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/324)) ([f07d906](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f07d906916b33ccc628a96915f28e6230404b310))
+
 ## [0.9.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.9.6...v0.9.7) (2026-05-16)
 
 
