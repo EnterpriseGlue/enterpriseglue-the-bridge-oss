@@ -23,6 +23,9 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --)
+      shift
+      ;;
     --env-file)
       ENV_FILE="$2"
       shift 2
