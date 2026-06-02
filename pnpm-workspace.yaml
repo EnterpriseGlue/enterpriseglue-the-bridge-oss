@@ -6,6 +6,8 @@ public-hoist-pattern:
   - '*'
   - 'inferno'
   - 'inferno*'
+overrides:
+  qs: ^6.15.2
 allowBuilds:
   '@carbon/charts': true
   '@carbon/charts-react': true
