@@ -297,29 +297,6 @@ jobs:
         if: matrix.database == 'oracle'
         run: pnpm add --filter webmodeler-backend --save-dev oracledb
 
-      - name: Get Playwright version
-        if: matrix.database == 'postgres'
-        id: pw-version
-        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Playwright browsers
-        if: matrix.database == 'postgres'
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: pw-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-
-
-      - name: Install Playwright browsers
-        if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-
-      - name: Install Playwright OS deps only
-        if: matrix.database == 'postgres' && steps.pw-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
-
       - name: Build OSS packages
         run: |
           pnpm --filter shared run build
@@ -386,7 +363,31 @@ jobs:
 
       - name: Run smoke e2e
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
-        run: pnpm run test:e2e:smoke
+        run: |
+          PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
+          docker run --rm \
+            --network host \
+            --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -e CI="${CI:-true}" \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e E2E_API_BASE_URL=http://localhost:8787 \
+            -e CAMUNDA_BASE_URL \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DATABASE \
+            -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
+            -e ADMIN_EMAIL \
+            -e ADMIN_PASSWORD \
+            -v "$PWD:/work" \
+            -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
+            bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @smoke"
 
       - name: Cleanup test data
         if: always() && matrix.database == 'postgres' && github.event_name != 'merge_group'
