@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/backend-host",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "OSS backend host for EnterpriseGlue — Express app, route modules, enterprise loader, and server bootstrap",
   "license": "Apache-2.0",
   "repository": {
@@ -27,9 +27,9 @@
     "morgan": "^1.10.0",
     "reflect-metadata": "^0.2.2",
     "swagger-ui-express": "^5.0.1",
-    "typeorm": "^0.3.28",
+    "typeorm": "^0.3.29",
     "typescript": "^5.8.3",
-    "undici": "^7.24.0",
+    "undici": "^7.28.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

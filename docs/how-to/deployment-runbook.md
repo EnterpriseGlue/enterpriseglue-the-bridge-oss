@@ -42,7 +42,7 @@ pnpm run dev
 ### Rollback (image mode)
 1. Edit active `.local/docker/env/images.*.env` file.
 2. Set `IMAGE_TAG` to previous known-good version.
-3. Re-run same `npm run prod:images:*` command.
+3. Re-run same `pnpm run prod:images:*` command.
 
 ### Stop (image mode)
 - `pnpm run prod:images:postgres:down`

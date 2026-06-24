@@ -79,6 +79,54 @@ jobs:
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/production.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/production.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/images.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/images.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
 
+      - name: Validate compose network isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMPOSE_DIR="infra/docker/compose"
+          ENV_EXAMPLES_DIR="infra/docker/env/examples"
+
+          assert_project_network() {
+            local project_name="$1"
+            local rendered
+            shift
+            rendered="$("$@")"
+            if grep -Fq "name: enterpriseglue-network" <<<"$rendered"; then
+              echo "Compose render uses shared network name enterpriseglue-network for project ${project_name}" >&2
+              exit 1
+            fi
+            if ! grep -Fq "name: ${project_name}_enterpriseglue-network" <<<"$rendered"; then
+              echo "Compose render did not use project-scoped enterpriseglue network for project ${project_name}" >&2
+              exit 1
+            fi
+          }
+
+          assert_project_network eg-compose-dev \
+            env EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.postgres.env.example \
+            docker compose --project-name eg-compose-dev --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.yml" config
+
+          assert_project_network eg-compose-prod \
+            env EG_BACKEND_ENV_FILE=./infra/docker/env/examples/production.env.example \
+            docker compose --project-name eg-compose-prod --project-directory . --env-file "$ENV_EXAMPLES_DIR/production.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" config
+
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+          cp "$COMPOSE_DIR/docker-compose.selfhost.yml" "$tmp_dir/docker-compose.selfhost.yml"
+          cp "$ENV_EXAMPLES_DIR/selfhost.env.example" "$tmp_dir/.env"
+          assert_project_network eg-compose-selfhost \
+            docker compose --project-name eg-compose-selfhost --project-directory "$tmp_dir" -f "$tmp_dir/docker-compose.selfhost.yml" config
+
+      - name: Validate Docker docs command spelling
+        shell: bash
+        run: |
+          set -euo pipefail
+          matches="$(grep -RInE '(^|[^[:alnum:]_])(pm|ppnpm|npm)[[:space:]]+run' README.md CONTRIBUTING.md docs 2>/dev/null || true)"
+          if [[ -n "$matches" ]]; then
+            echo "Docker docs should use pnpm run commands; found:" >&2
+            echo "$matches" >&2
+            exit 1
+          fi
+
   test:
     runs-on: ubuntu-latest
     if: inputs.run_tests

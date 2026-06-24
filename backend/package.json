@@ -42,7 +42,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
-    "nodemailer": "^8.0.5",
+    "nodemailer": "^9.0.1",
     "octokit": "^5.0.5",
     "oracledb": "^6.0.0",
     "pg": "^8.11.3",
@@ -51,8 +51,8 @@
     "simple-git": "^3.32.3",
     "sql.js": "^1.13.0",
     "swagger-ui-express": "^5.0.0",
-    "typeorm": "^0.3.28",
-    "undici": "^7.24.0",
+    "typeorm": "^0.3.29",
+    "undici": "^7.28.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -77,7 +77,9 @@
     "vitest": "^4.0.18"
   },
   "overrides": {
-    "esbuild": "^0.27.2",
+    "esbuild": "^0.28.1",
+    "form-data": "^4.0.6",
+    "@babel/core": "^7.29.6",
     "cookie": "^0.7.0",
     "lodash": "^4.18.0",
     "minimatch": "^10.2.4",

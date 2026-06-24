@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/shared",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Shared utilities, contracts, and services for EnterpriseGlue",
   "license": "Apache-2.0",
   "repository": {
@@ -43,14 +43,14 @@
     "ip-address": ">=10.1.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^8.0.5",
+    "nodemailer": "^9.0.1",
     "octokit": "^5.0.5",
     "oracledb": "^6.0.0",
     "pg": "^8.11.3",
     "reflect-metadata": "^0.2.2",
     "resend": "^6.12.2",
-    "typeorm": "^0.3.28",
-    "undici": "^7.24.0",
+    "typeorm": "^0.3.29",
+    "undici": "^7.28.0",
     "uuid": "^14.0.0",
     "zod": "^4.3.6"
   },

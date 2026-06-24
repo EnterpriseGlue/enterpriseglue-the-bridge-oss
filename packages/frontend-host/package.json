@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/frontend-host",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "OSS frontend host for EnterpriseGlue — routes, enterprise loader, extension registry, and feature components",
   "license": "Apache-2.0",
   "repository": {
@@ -69,7 +69,7 @@
     "react-dom": "^19.2.4",
     "react-loading-skeleton": "^3.5.0",
     "react-pro-sidebar": "^1.1.0",
-    "react-router-dom": "^7.13.1",
+    "react-router-dom": "^7.15.1",
     "react-split-pane": "^3.2.0",
     "svg2pdf.js": "^2.7.0",
     "tailwind-merge": "^3.4.0",
@@ -80,7 +80,7 @@
     "@types/react": "^19.2.4",
     "@types/react-dom": "^19.2.3",
     "typescript": "~5.9.3",
-    "vite": "^7.3.1",
+    "vite": "^7.3.5",
     "vitest": "^4.0.18"
   }
 }
