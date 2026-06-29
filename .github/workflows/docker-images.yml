@@ -158,11 +158,19 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve Playwright runner image
+        id: playwright-runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./node_modules/@playwright/test/package.json').version")"
+          echo "image=mcr.microsoft.com/playwright:v${version}-jammy" >> "$GITHUB_OUTPUT"
+
       - name: Run Mission Control Playwright smoke on Postgres images
         env:
           EG_POSTGRES_IMAGE_ENV_FILE: ./.env.images.ci
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PLAYWRIGHT_RUNNER_IMAGE: mcr.microsoft.com/playwright:v1.58.2-jammy
+          PLAYWRIGHT_RUNNER_IMAGE: ${{ steps.playwright-runner.outputs.image }}
         run: pnpm run test:e2e:smoke:postgres:images -- --env-file ./.env.images.ci --project-name enterpriseglue-postgres-image-smoke
 
       - name: Upload Mission Control smoke failure artifacts
