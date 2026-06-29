@@ -148,6 +148,7 @@ jobs:
       - name: Build and push backend image (attempt 1)
         id: backend_try1
         continue-on-error: true
+        timeout-minutes: 30
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           builder: ${{ steps.buildx_backend.outputs.name }}
@@ -167,6 +168,7 @@ jobs:
       - name: Build and push backend image (attempt 2 after transient failure)
         id: backend_try2
         if: steps.backend_try1.outcome == 'failure'
+        timeout-minutes: 30
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           builder: ${{ steps.buildx_backend.outputs.name }}
@@ -280,11 +282,12 @@ jobs:
 
       # Two-attempt pattern — see backend build for rationale. This step in
       # particular hung for 1h20m on the arm64 leg of v0.9.1 and caused the
-      # entire publish run to be cancelled; the retry wrapper + Dockerfile
-      # cache mount specifically address that failure mode.
+      # entire publish run to be cancelled. Keep each attempt bounded so the
+      # retry wrapper and Dockerfile cache mount can address that failure mode.
       - name: Build and push frontend image (attempt 1)
         id: frontend_try1
         continue-on-error: true
+        timeout-minutes: 30
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           builder: ${{ steps.buildx_frontend.outputs.name }}
@@ -306,6 +309,7 @@ jobs:
       - name: Build and push frontend image (attempt 2 after transient failure)
         id: frontend_try2
         if: steps.frontend_try1.outcome == 'failure'
+        timeout-minutes: 30
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           builder: ${{ steps.buildx_frontend.outputs.name }}
