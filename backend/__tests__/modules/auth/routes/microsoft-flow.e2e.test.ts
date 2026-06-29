@@ -78,11 +78,14 @@ const testCookieParser: express.RequestHandler = (req, _res, next) => {
 
 describe('Microsoft OAuth flow e2e harness', () => {
   let app: express.Application;
+  let ssoProvisionedHook: Mock;
 
   beforeEach(() => {
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
+    ssoProvisionedHook = vi.fn().mockResolvedValue(undefined);
+    app.locals.onSsoUserProvisioned = ssoProvisionedHook;
     app.use(testCookieParser);
     app.use(microsoftRouter);
     app.use(microsoftStartRouter);
@@ -145,6 +148,55 @@ describe('Microsoft OAuth flow e2e harness', () => {
     expect(provisionMicrosoftUser as unknown as Mock).toHaveBeenCalledWith(
       expect.objectContaining({ email: 'entra-user@example.com', oid: 'oid-123' })
     );
+    expect(ssoProvisionedHook).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'microsoft',
+      tenantSlug: null,
+      returnTo: '/',
+      user: expect.objectContaining({ id: 'user-1' }),
+      userInfo: expect.objectContaining({ email: 'entra-user@example.com' }),
+    }));
+  });
+
+  it('preserves tenant context through mocked Entra ID start -> callback flow', async () => {
+    const agent = request.agent(app);
+
+    const initResponse = await agent.get('/api/auth/microsoft').query({ tenantSlug: 'default' });
+    expect(initResponse.status).toBe(302);
+    expect(initResponse.headers.location).toBe('/api/auth/microsoft/start?tenantSlug=default');
+
+    const startResponse = await agent.get(initResponse.headers.location);
+    expect(startResponse.status).toBe(302);
+    expect(startResponse.headers.location).toContain('https://login.microsoftonline.com');
+
+    const state = getCookieValue(getSetCookieHeader(startResponse.headers), 'oauth_state');
+    expect(state).toBeTruthy();
+    expect(getAuthorizationUrl as unknown as Mock).toHaveBeenCalledWith(state);
+
+    const callbackResponse = await agent
+      .get('/api/auth/microsoft/callback')
+      .query({ code: 'auth-code', state });
+
+    expect(callbackResponse.status).toBe(302);
+    expect(callbackResponse.headers.location).toBe(`${config.frontendUrl}/t/default/`);
+    expect(ssoProvisionedHook).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'microsoft',
+      tenantSlug: 'default',
+      returnTo: '/t/default/',
+    }));
+  });
+
+  it('rejects a mocked Entra authorization URL with an unexpected host', async () => {
+    (getAuthorizationUrl as unknown as Mock).mockResolvedValueOnce(
+      'https://login.microsoftonline.invalid/common/oauth2/v2.0/authorize'
+    );
+
+    const response = await request(app).get('/api/auth/microsoft/start');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual(expect.objectContaining({
+      error: 'Failed to initiate Microsoft authentication',
+      code: 'INTERNAL_ERROR',
+    }));
   });
 
   it('rejects callback when state does not match cookie', async () => {
@@ -158,6 +210,7 @@ describe('Microsoft OAuth flow e2e harness', () => {
     expect(callbackResponse.status).toBe(400);
     expect(callbackResponse.body).toEqual({ error: 'Invalid state parameter' });
     expect(exchangeCodeForTokens as unknown as Mock).not.toHaveBeenCalled();
+    expect(ssoProvisionedHook).not.toHaveBeenCalled();
   });
 
   it('redirects to login error when provisioned user is deactivated', async () => {
@@ -185,5 +238,6 @@ describe('Microsoft OAuth flow e2e harness', () => {
     const setCookies = getSetCookieHeader(callbackResponse.headers);
     expect(setCookies?.some((cookie) => cookie.startsWith('accessToken='))).toBe(false);
     expect(setCookies?.some((cookie) => cookie.startsWith('refreshToken='))).toBe(false);
+    expect(ssoProvisionedHook).not.toHaveBeenCalled();
   });
 });

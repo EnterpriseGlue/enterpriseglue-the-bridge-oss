@@ -13,6 +13,13 @@ import {
 import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import {
+  appendSsoStartQuery,
+  getSsoRedirectUrl,
+  getSsoReturnPath,
+  notifySsoUserProvisioned,
+  parseSsoState,
+} from './sso-state.js';
 
 const router = Router();
 
@@ -29,7 +36,7 @@ router.get('/api/auth/saml/status', apiLimiter, asyncHandler(async (_req: Reques
  * Initiate SAML flow
  * GET /api/auth/saml
  */
-router.get('/api/auth/saml', apiLimiter, asyncHandler(async (_req: Request, res: Response) => {
+router.get('/api/auth/saml', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
   const enabled = await isSamlAuthEnabled();
   if (!enabled) {
     return res.status(503).json({
@@ -38,7 +45,7 @@ router.get('/api/auth/saml', apiLimiter, asyncHandler(async (_req: Request, res:
     });
   }
 
-  return res.redirect('/api/auth/saml/start');
+  return res.redirect(appendSsoStartQuery(req, '/api/auth/saml/start'));
 }));
 
 /**
@@ -69,6 +76,7 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
       logger.error('[SAML Auth] RelayState mismatch - possible CSRF attack');
       return res.status(400).json({ error: 'Invalid relay state' });
     }
+    const ssoState = parseSsoState(relayState);
 
     res.clearCookie('oauth_state');
 
@@ -101,6 +109,15 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
       return res.redirect(errorUrl);
     }
 
+    await notifySsoUserProvisioned(req, {
+      provider: 'saml',
+      providerId,
+      tenantSlug: ssoState?.tenantSlug ?? null,
+      returnTo: getSsoReturnPath(ssoState),
+      user,
+      userInfo,
+    });
+
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
 
@@ -126,7 +143,7 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
       maxAge: config.jwtRefreshTokenExpires * 1000,
     });
 
-    res.redirect(`${config.frontendUrl}/`);
+    res.redirect(getSsoRedirectUrl(ssoState));
   } catch (error: any) {
     logger.error('[SAML Auth] Callback failed:', error);
 

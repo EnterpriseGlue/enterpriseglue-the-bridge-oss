@@ -17,6 +17,13 @@ import {
 import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import {
+  appendSsoStartQuery,
+  getSsoRedirectUrl,
+  getSsoReturnPath,
+  notifySsoUserProvisioned,
+  parseSsoState,
+} from './sso-state.js';
 
 const router = Router();
 
@@ -47,7 +54,7 @@ router.get('/api/auth/microsoft', apiLimiter, asyncHandler(async (req: Request, 
 
     // Do not redirect to external providers from a handler that reads HTTP params.
     // Redirect internally to a dedicated start route.
-    return res.redirect('/api/auth/microsoft/start');
+    return res.redirect(appendSsoStartQuery(req, '/api/auth/microsoft/start'));
 }));
 
 /**
@@ -81,6 +88,7 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
       logger.error('[Microsoft Auth] State mismatch - possible CSRF attack');
       return res.status(400).json({ error: 'Invalid state parameter' });
     }
+    const ssoState = parseSsoState(state);
 
     // Clear state cookie
     res.clearCookie('oauth_state');
@@ -131,6 +139,14 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
       return res.redirect(errorUrl);
     }
 
+    await notifySsoUserProvisioned(req, {
+      provider: 'microsoft',
+      tenantSlug: ssoState?.tenantSlug ?? null,
+      returnTo: getSsoReturnPath(ssoState),
+      user,
+      userInfo,
+    });
+
     // Generate JWT tokens (our own tokens for the session)
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
@@ -161,9 +177,9 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
       maxAge: config.jwtRefreshTokenExpires * 1000,
     });
 
-    // Redirect directly to frontend root
+    // Redirect directly to the captured tenant route or frontend root.
     // Cookies are set, so AuthContext will automatically load the user
-    res.redirect(`${config.frontendUrl}/`);
+    res.redirect(getSsoRedirectUrl(ssoState));
 }));
 
 export default router;

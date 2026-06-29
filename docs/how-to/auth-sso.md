@@ -22,6 +22,12 @@ Set the following when enabling Entra ID OAuth/OIDC:
 - `MICROSOFT_TENANT_ID`
 - `MICROSOFT_REDIRECT_URI`
 
+Use this redirect URI in the Entra app registration:
+- `https://<your-app-domain>/api/auth/microsoft/callback`
+
+For local dev with the backend exposed directly:
+- `http://localhost:8787/api/auth/microsoft/callback`
+
 ## Microsoft Entra ID as SAML 2.0 IdP (Recommended for SAML assertions)
 
 ### 1) Configure SAML provider in Platform Admin
@@ -54,9 +60,25 @@ Entra posts SAML assertion to:
 
 On success, EnterpriseGlue provisions/updates the user and issues platform JWT cookies.
 
+The callback URL is intentionally global. Tenant context is carried through the
+validated OAuth `state` / SAML `RelayState` value when login starts from
+`/t/:tenantSlug/login`, then EnterpriseGlue redirects back to `/t/:tenantSlug/`
+after the callback. Do not add `/t/:tenantSlug` to the Entra redirect URI or SAML
+Reply URL.
+
+Enterprise extensions can register `app.locals.onSsoUserProvisioned` to attach a
+provisioned SSO user to a tenant after the shared OSS auth flow validates the
+provider callback and before JWT cookies are issued. The hook receives:
+- `provider`: `microsoft` or `saml`
+- `providerId`: SAML provider id when available
+- `tenantSlug`: sanitized slug from state, or `null`
+- `returnTo`: safe internal post-login path
+- `user` and `userInfo`
+
 ### 5) Minor operational checks (recommended)
 - Confirm Entra **Identifier (Entity ID)** exactly matches the provider `entityId` value in EnterpriseGlue.
 - Confirm Entra **Reply URL / ACS URL** points to `https://<your-app-domain>/api/auth/saml/callback`.
+- Confirm Entra OAuth **Redirect URI** points to `https://<your-app-domain>/api/auth/microsoft/callback`.
 - Use `GET /api/auth/saml/status` to verify provider availability.
 - Use `GET /api/auth/saml/metadata` when you need SP metadata for IdP setup/review.
 

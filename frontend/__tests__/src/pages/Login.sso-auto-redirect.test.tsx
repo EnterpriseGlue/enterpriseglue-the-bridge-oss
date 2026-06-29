@@ -72,6 +72,19 @@ describe('Login SSO auto-redirect behavior', () => {
     });
   });
 
+  it('adds tenant slug to SSO auto-redirects from tenant login routes', async () => {
+    setupApiResponses({
+      providers: [{ id: 'p1', name: 'Entra SAML', type: 'saml' }],
+      autoRedirect: true,
+    });
+
+    renderLogin('/t/default/login');
+
+    await waitFor(() => {
+      expect(redirectTo).toHaveBeenCalledWith('/api/auth/saml?tenantSlug=default');
+    });
+  });
+
   it('does not auto-redirect when local bypass query param is present', async () => {
     setupApiResponses({
       providers: [{ id: 'p1', name: 'Entra SAML', type: 'saml' }],

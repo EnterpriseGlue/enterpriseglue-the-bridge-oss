@@ -4,6 +4,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { isSamlAuthEnabled, getSamlAuthorizationUrl } from '@enterpriseglue/shared/services/saml.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { buildSsoState } from './sso-state.js';
 
 const router = Router();
 
@@ -11,7 +12,7 @@ const router = Router();
  * Initiate SAML flow (no HTTP param inputs)
  * GET /api/auth/saml/start
  */
-router.get('/api/auth/saml/start', apiLimiter, async (_req: Request, res: Response) => {
+router.get('/api/auth/saml/start', apiLimiter, async (req: Request, res: Response) => {
   try {
     const enabled = await isSamlAuthEnabled();
     if (!enabled) {
@@ -21,12 +22,7 @@ router.get('/api/auth/saml/start', apiLimiter, async (_req: Request, res: Respon
       });
     }
 
-    const relayState = Buffer.from(
-      JSON.stringify({
-        timestamp: Date.now(),
-        nonce: Math.random().toString(36).substring(7),
-      })
-    ).toString('base64');
+    const relayState = buildSsoState(req);
 
     res.cookie('oauth_state', relayState, {
       httpOnly: true,

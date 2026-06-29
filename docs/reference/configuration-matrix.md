@@ -99,6 +99,13 @@ SAML 2.0 (including Microsoft Entra as IdP) is configured via **Platform Setting
 using provider fields (`entityId`, `ssoUrl`, `certificate`, `signatureAlgorithm`), not
 via dedicated backend environment variables.
 
+SSO callbacks are global:
+- Microsoft OAuth: `/api/auth/microsoft/callback`
+- SAML ACS / Reply URL: `/api/auth/saml/callback`
+
+Tenant-scoped login pages pass tenant context through OAuth `state` or SAML
+`RelayState`; do not register `/api/t/:tenantSlug/...` callback URLs with Entra.
+
 ## Dev launcher behavior
 - `pnpm run dev` defaults to Postgres and can auto-create `.local/docker/env/docker.env` from `infra/docker/env/examples/docker.postgres.env.example`.
 - `pnpm run dev -- --db <db>` uses `.local/docker/env/docker.<db>.env` and auto-creates it from `infra/docker/env/examples/docker.<db>.env.example` if missing.

@@ -80,12 +80,15 @@ const testCookieParser: express.RequestHandler = (req, _res, next) => {
 
 describe('SAML auth flow e2e harness', () => {
   let app: express.Application;
+  let ssoProvisionedHook: Mock;
 
   beforeEach(() => {
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
+    ssoProvisionedHook = vi.fn().mockResolvedValue(undefined);
+    app.locals.onSsoUserProvisioned = ssoProvisionedHook;
     app.use(testCookieParser);
     app.use(samlRouter);
     app.use(samlStartRouter);
@@ -169,6 +172,62 @@ describe('SAML auth flow e2e harness', () => {
       expect.objectContaining({ email: 'saml-user@example.com', oid: 'oid-123' }),
       'provider-saml-1'
     );
+    expect(ssoProvisionedHook).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'saml',
+      providerId: 'provider-saml-1',
+      tenantSlug: null,
+      returnTo: '/',
+      user: expect.objectContaining({ id: 'user-1' }),
+      userInfo: expect.objectContaining({ email: 'saml-user@example.com' }),
+    }));
+  });
+
+  it('preserves tenant context through mocked Entra SAML start -> callback flow', async () => {
+    const agent = request.agent(app);
+
+    const initResponse = await agent.get('/api/auth/saml').query({ tenantSlug: 'default' });
+    expect(initResponse.status).toBe(302);
+    expect(initResponse.headers.location).toBe('/api/auth/saml/start?tenantSlug=default');
+
+    const startResponse = await agent.get(initResponse.headers.location);
+    expect(startResponse.status).toBe(302);
+    expect(startResponse.headers.location).toContain('https://idp.example.com/sso');
+
+    const relayState = getCookieValue(getSetCookieHeader(startResponse.headers), 'oauth_state');
+    expect(relayState).toBeTruthy();
+    expect(getSamlAuthorizationUrl as unknown as Mock).toHaveBeenCalledWith(relayState);
+
+    const callbackResponse = await agent
+      .post('/api/auth/saml/callback')
+      .type('form')
+      .send({
+        SAMLResponse: 'mock-saml-response',
+        RelayState: relayState,
+      });
+
+    expect(callbackResponse.status).toBe(302);
+    expect(callbackResponse.headers.location).toBe(`${config.frontendUrl}/t/default/`);
+    expect(ssoProvisionedHook).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'saml',
+      providerId: 'provider-saml-1',
+      tenantSlug: 'default',
+      returnTo: '/t/default/',
+    }));
+  });
+
+  it('rejects a mocked SAML authorization URL whose host differs from the configured IdP', async () => {
+    (getSamlAuthorizationUrl as unknown as Mock).mockResolvedValueOnce({
+      url: 'https://attacker.example.com/sso',
+      entryPoint: 'https://idp.example.com/sso',
+    });
+
+    const response = await request(app).get('/api/auth/saml/start');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual(expect.objectContaining({
+      error: 'Failed to initiate SAML authentication',
+      code: 'INTERNAL_ERROR',
+    }));
   });
 
   it('rejects callback when relay state does not match cookie', async () => {
@@ -186,6 +245,7 @@ describe('SAML auth flow e2e harness', () => {
     expect(callbackResponse.status).toBe(400);
     expect(callbackResponse.body).toEqual({ error: 'Invalid relay state' });
     expect(validateSamlPostResponse as unknown as Mock).not.toHaveBeenCalled();
+    expect(ssoProvisionedHook).not.toHaveBeenCalled();
   });
 
   it('redirects to login error when provisioned user is deactivated', async () => {
@@ -217,5 +277,6 @@ describe('SAML auth flow e2e harness', () => {
     const setCookies = getSetCookieHeader(callbackResponse.headers);
     expect(setCookies?.some((cookie) => cookie.startsWith('accessToken='))).toBe(false);
     expect(setCookies?.some((cookie) => cookie.startsWith('refreshToken='))).toBe(false);
+    expect(ssoProvisionedHook).not.toHaveBeenCalled();
   });
 });
