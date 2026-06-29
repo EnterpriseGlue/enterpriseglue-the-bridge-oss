@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.10.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.10.3...v0.10.4) (2026-06-29)
+
+
+### Bug Fixes
+
+* **ci:** align release smoke Playwright runner image ([#340](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/340)) ([ec440d6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ec440d6b10f81e8aff2acdca48f16d45437d35f9))
+
 ## [0.10.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.10.2...v0.10.3) (2026-06-29)
 
 
