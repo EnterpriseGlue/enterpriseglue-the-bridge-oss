@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.10.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.10.2...v0.10.3) (2026-06-29)
+
+
+### Bug Fixes
+
+* **auth:** preserve tenant context through SSO callbacks ([#338](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/338)) ([f5eecc2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f5eecc2037a8c5df84f198c34784194ce2d0e5cb))
+
 ## [0.10.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.10.1...v0.10.2) (2026-06-24)
 
 
