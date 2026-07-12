@@ -75,6 +75,7 @@ vi.mock('@modules/auth/index.js', () => ({
   googleStartRoute: noopMiddleware,
   microsoftStartRoute: noopMiddleware,
   samlStartRoute: noopMiddleware,
+  identityOidcRoute: noopMiddleware,
 }));
 
 vi.mock('@modules/admin/index.js', () => ({

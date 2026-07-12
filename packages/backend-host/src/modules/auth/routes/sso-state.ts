@@ -1,12 +1,14 @@
 import type { Request } from 'express';
 import { config } from '@enterpriseglue/shared/config/index.js';
 
-export type SsoProviderType = 'microsoft' | 'saml';
+export type SsoProviderType = 'microsoft' | 'saml' | 'oidc' | 'ldap';
 
 export interface SsoState {
   timestamp: number;
   nonce: string;
   providerId?: string;
+  identityProviderKey?: string;
+  identityProviderTenantId?: string;
   tenantSlug?: string;
   returnTo?: string;
 }
@@ -21,7 +23,7 @@ export interface SsoProvisionedContext {
 }
 
 const TENANT_SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
-const PROVIDER_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
+const PROVIDER_ID_PATTERN = /^[a-zA-Z0-9._-]{1,160}$/;
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
 function sanitizeTenantSlug(value: unknown): string | undefined {
@@ -55,13 +57,15 @@ function sanitizeReturnTo(value: unknown, tenantSlug?: string): string | undefin
   }
 }
 
-export function buildSsoState(req: Request, providerId?: string): string {
+export function buildSsoState(req: Request, providerId?: string, identityProvider?: { key: string; tenantId?: string | null }): string {
   const tenantSlug = sanitizeTenantSlug(req.query.tenantSlug);
   const returnTo = sanitizeReturnTo(req.query.returnTo, tenantSlug);
   const payload: SsoState = {
     timestamp: Date.now(),
     nonce: Math.random().toString(36).substring(7),
     ...(sanitizeProviderId(providerId) ? { providerId: sanitizeProviderId(providerId) } : {}),
+    ...(sanitizeProviderId(identityProvider?.key) ? { identityProviderKey: sanitizeProviderId(identityProvider?.key) } : {}),
+    ...(sanitizeProviderId(identityProvider?.tenantId) ? { identityProviderTenantId: sanitizeProviderId(identityProvider?.tenantId) } : {}),
     ...(tenantSlug ? { tenantSlug } : {}),
     ...(returnTo ? { returnTo } : {}),
   };
@@ -94,11 +98,15 @@ export function parseSsoState(rawState: unknown): SsoState | null {
 
     const tenantSlug = sanitizeTenantSlug(parsed.tenantSlug);
     const providerId = sanitizeProviderId(parsed.providerId);
+    const identityProviderKey = sanitizeProviderId(parsed.identityProviderKey);
+    const identityProviderTenantId = sanitizeProviderId(parsed.identityProviderTenantId);
     const returnTo = sanitizeReturnTo(parsed.returnTo, tenantSlug);
     return {
       timestamp: parsed.timestamp,
       nonce: parsed.nonce,
       ...(providerId ? { providerId } : {}),
+      ...(identityProviderKey ? { identityProviderKey } : {}),
+      ...(identityProviderTenantId ? { identityProviderTenantId } : {}),
       ...(tenantSlug ? { tenantSlug } : {}),
       ...(returnTo ? { returnTo } : {}),
     };

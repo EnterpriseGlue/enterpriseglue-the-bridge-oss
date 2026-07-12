@@ -68,6 +68,7 @@ import {
   googleStartRoute,
   microsoftStartRoute,
   samlStartRoute,
+  identityOidcRoute,
 } from '@modules/auth/index.js';
 
 import {
@@ -193,6 +194,7 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   app.use(microsoftStartRoute);
   app.use(googleStartRoute);
   app.use(samlStartRoute);
+  app.use(identityOidcRoute);
   app.use(ssoConfigRoute);
   app.use(invitationsRoute);
 

@@ -14,6 +14,7 @@ import forgotPasswordRoute from './forgot-password.js';
 import ssoConfigRoute from './sso-config.js';
 import samlRoute from './saml.js';
 import onboardingRoute from './onboarding.js';
+import identityOidcRoute from './identity-oidc.js';
 
 export {
   loginRoute,
@@ -27,4 +28,5 @@ export {
   forgotPasswordRoute,
   ssoConfigRoute,
   onboardingRoute,
+  identityOidcRoute,
 };

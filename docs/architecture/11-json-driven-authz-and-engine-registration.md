@@ -120,7 +120,7 @@ The 2026-07-12 codebase review found that the implemented RBAC foundation is a u
 | --- | --- | --- |
 | P0 | `role_assignments` still requires legacy `user_id`; its uniqueness constraint uses user/resource/source-mapping compatibility fields rather than principal/scope/source lineage. | Make `principal_type`, `principal_id`, `role_id`, `scope_type`, `scope_id`, `source`, and `source_ref` the canonical non-null uniqueness contract. Remove user/resource aliases from new writes and evaluation. |
 | P0 | Legacy platform admin, project/member, engine/member, owner/delegate fallbacks still grant permissions and sync into RBAC. | Keep accountable owner metadata, but remove legacy authorization grants and `syncLegacyRoleAssignments` after greenfield seeding and UI/API migration. All authorization must come from scoped assignments and policies. |
-| P0 | SSO provider flows are not provider-neutral: generic OIDC has configuration but no login route, Microsoft uses a hard-coded provider id, and SAML/Google select the first provider by type. | Bind start/callback state to an exact provider id and tenant; implement generic OIDC and LDAP adapters; normalize every provider through the same subject/entitlement pipeline. |
+| P0 | Provider-neutral direct OIDC now has a provider-key-bound start/callback flow with PKCE, nonce, discovery/JWKS validation, and normalized identity provisioning. Microsoft/Google legacy flows and direct LDAP still need migration to the same provider lifecycle. | Complete direct LDAP and migrate remaining protocol starts/callbacks while retaining the current compatibility routes until their replacements pass parity. |
 | P0 | `User` has provider-specific Entra/Google columns but no general external identity link. Normalized identity snapshots are diagnostics, not a safe account-link model. | Add `external_identities` with unique tenant/provider/subject -> user linkage. Keep entitlement snapshots separate. Remove provider-specific user identity columns from the target model. |
 | P0 | Provider `tenant_id` represents an external directory tenant while authorization entities use `tenant_id` as the EnterpriseGlue tenant boundary. | Split `tenantId` for EnterpriseGlue scope from `directoryTenantId`/issuer-specific configuration. Never overload the same field. |
 | P0 | SSO provider secrets use reversible base64 marking and engine `password_enc` is consumed as plaintext by runtime clients. | Add one secret resolver/encryption boundary for UI, JSON config, and runtime. Production APIs store encrypted local values or opaque external refs; they never persist resolved plaintext. |
@@ -1783,7 +1783,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Add `IdentityProviderAdapter` plus OIDC, SAML, and LDAP adapter implementations; evolve `SsoNormalizedIdentityService`, `SsoGroupMappingService`, and `SsoSyncDiagnosticsService` into the provider-neutral orchestration path.
 - [x] ✅ Add a shared `SecretResolver` used by identity providers and engine connections; replace SSO base64 writes and direct engine credential consumption. Config preview/apply integration remains required before config apply is enabled.
 - [ ] ⬜ Add a shared engine `ConnectionResolver` used by health, metadata, deployment, Mission Control, and reconciliation calls. It must distinguish direct versus customer-sidecar endpoints without changing authorization semantics.
-- [ ] ⬜ Add provider-id-bound auth start/callback orchestration, generic OIDC login, direct LDAP login when configured, and provider-specific state/nonce/replay validation.
+- [ ] ⬜ Complete provider-id-bound auth start/callback orchestration for every protocol and direct LDAP login. Generic OIDC start/callback is implemented with provider-bound state, PKCE, nonce, discovery, JWKS verification, and normalized identity provisioning.
 - [ ] ⬜ Converge platform-role, group, and direct-engine SSO mapping services into group-first identity mappings; UI convenience flows create a managed internal group plus normal scoped assignment.
 - [ ] ⬜ Add runtime inventory, runtime resource-set materialization, runtime authorization filtering, deployment receipt, and deployment reconciliation services under `packages/shared/src/services/platform-admin/` or a dedicated shared engine-runtime service boundary.
 - [ ] ⬜ Extend `DeploymentEligibilityService` only for deployment eligibility; do not mix deployment metadata discovery into the eligibility evaluator.
@@ -2101,7 +2101,7 @@ This phase is required because the current implementation still carries compatib
 
 - [ ] ⬜ Add `IdentityProvider`, `ExternalIdentity`, `ExternalIdentitySnapshot`, `IdentityEntitlementMapping`, `IdentitySyncRun`, and `IdentitySyncEvent` contracts with unambiguous EnterpriseGlue tenant and external directory fields.
 - [x] ✅ Add the provider-neutral `ExternalIdentity` account-link entity and service with unique tenant/provider/subject identity, user linkage, directory-tenant metadata, and active/last-seen lifecycle fields. Existing normalized SSO snapshots now maintain the link; provider and entitlement contract replacement remains in progress.
-- [ ] ⬜ Add provider-id-bound OIDC/SAML start/callback flows, generic OIDC support, LDAP direct/claims-only modes, and exact provider state validation.
+- [ ] ⬜ Complete provider-id-bound OIDC/SAML start/callback flows and LDAP direct/claims-only modes. Generic OIDC support and exact provider state validation are implemented; SAML compatibility remains and LDAP is pending.
 - [x] ✅ Bind SAML start/callback state and metadata generation to an optional exact provider id. Explicit-provider login resolves the same configured SAML provider for authorization redirect, assertion validation, and metadata; legacy no-provider SAML login remains compatible. Generic OIDC, Microsoft configuration migration, and LDAP modes remain pending.
 - [ ] ⬜ Replace provider `defaultRole` with an explicit default/internal-group mapping and converge all external access through groups plus scoped assignments.
 - [ ] ⬜ Define verified-email account-linking policy, collision handling, unlink/deactivate behavior, and break-glass local account behavior.
@@ -2124,7 +2124,7 @@ This phase is required because the current implementation still carries compatib
 Phase 0 exit criteria:
 
 - [ ] ⬜ No new authorization write uses a legacy user/role/member field.
-- [ ] ⬜ Provider login and reconciliation are exact-provider-id based and generic OIDC is executable.
+- [ ] ⬜ Provider login and reconciliation are exact-provider-id based for every protocol. Generic OIDC is executable; legacy Microsoft/Google and direct LDAP remain pending.
 - [ ] ⬜ Secrets are encrypted or externally referenced end to end.
 - [ ] ⬜ Config-manageable entities have deterministic keys and ownership metadata.
 - [ ] ⬜ Project-engine target ownership has one unambiguous effective row per pair.
