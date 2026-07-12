@@ -1139,6 +1139,16 @@ export default function ProcessesOverviewPage() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
+      {defsQ.isSuccess && selectedEngineId && defItems.length === 0 && (
+        <InlineNotification
+          kind="info"
+          lowContrast
+          hideCloseButton
+          title="No visible process definitions"
+          subtitle="This engine may have no deployments, or your access is limited to a different runtime resource set."
+          style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }}
+        />
+      )}
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
