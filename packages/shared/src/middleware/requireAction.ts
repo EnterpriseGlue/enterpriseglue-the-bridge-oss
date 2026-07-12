@@ -63,12 +63,14 @@ export interface RequireRuntimeCollectionActionOptions {
  * an authorization resource key.
  */
 export interface RequireRuntimeDefinitionActionOptions extends RequireRuntimeCollectionActionOptions {
-  definitionPath: 'process-definition' | 'decision-definition';
+  /** Engine REST resource used to resolve the object and its runtime key. */
+  definitionPath: string;
   definitionLookup?: 'id' | 'key';
   definitionIdFrom?: ResourceIdLocation;
   definitionIdKey?: string;
   definitionVersionFrom?: ResourceIdLocation;
   definitionVersionKey?: string;
+  resourceKeyFields?: string[];
 }
 
 export type CompositeActionKind = 'deployment';
@@ -966,7 +968,10 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
             `/${options.definitionPath}/${encodeURIComponent(definitionId)}`
           )
           : await resolveRuntimeDefinitionByKey(engineId, options, definitionId, req);
-        const resourceKey = typeof definition.key === 'string' ? definition.key.trim() : '';
+        const resourceKey = (options.resourceKeyFields || ['key'])
+          .map((field) => definition[field])
+          .find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          ?.trim() || '';
         if (!resourceKey) throw Errors.forbidden('Runtime definition cannot be resolved for authorization');
         const runtimeTenantId = typeof definition.tenantId === 'string' ? definition.tenantId : '';
         const runtimeResource = await dataSource.getRepository(RuntimeResource).findOne({

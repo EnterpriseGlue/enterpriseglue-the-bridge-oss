@@ -52,6 +52,14 @@ const executionDetailsQuerySchema = z.object({
 
 const r = Router()
 
+// Process instances inherit authorization from their process definition key.
+// The guard resolves the instance from the engine before it evaluates access.
+const requireProcessInstanceAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {
+  resourceKind: 'process_definition',
+  definitionPath: 'process-instance',
+  resourceKeyFields: ['definitionKey', 'processDefinitionKey'],
+})
+
 // Type for process instance output
 interface ProcessInstanceOutput {
   id: string;
@@ -160,10 +168,15 @@ r.post('/mission-control-api/process-instances/preview-count', requireAction('en
     throw Errors.internal(e?.message || 'Failed to preview count')
   }
 }))
-r.get('/mission-control-api/process-instances', requireAction('engine.runtime.process-instances.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('engine.runtime.process-instances.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await listProcessInstancesDetailed(engineId, req.query as any)
+    const keys = req.authorizedRuntimeResourceKeys
+    const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null
+    const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null
+    const data = visibleKeys
+      ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listProcessInstancesDetailed(engineId, { ...req.query, processDefinitionKey })))).flat()
+      : await listProcessInstancesDetailed(engineId, req.query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
     res.json(redacted)
   } catch (e: any) {
@@ -171,7 +184,7 @@ r.get('/mission-control-api/process-instances', requireAction('engine.runtime.pr
   }
 }))
 
-r.get('/mission-control-api/process-instances/:id', requireAction('engine.runtime.process-instances.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-instances/:id', requireProcessInstanceAction('engine.runtime.process-instances.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -183,7 +196,7 @@ r.get('/mission-control-api/process-instances/:id', requireAction('engine.runtim
   }
 }))
 
-r.get('/mission-control-api/process-instances/:id/variables', requireAction('engine.runtime.process-instances.variables.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-instances/:id/variables', requireProcessInstanceAction('engine.runtime.process-instances.variables.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -195,7 +208,7 @@ r.get('/mission-control-api/process-instances/:id/variables', requireAction('eng
   }
 }))
 
-r.get('/mission-control-api/process-instances/:id/history/activity-instances', requireAction('engine.runtime.process-instances.activity-history.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-instances/:id/history/activity-instances', requireProcessInstanceAction('engine.runtime.process-instances.activity-history.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -207,7 +220,7 @@ r.get('/mission-control-api/process-instances/:id/history/activity-instances', r
   }
 }))
 
-r.get('/mission-control-api/process-instances/:id/execution-details', requireAction('engine.runtime.process-instances.execution-details.read', { resourceIdFrom: 'query' }), validateQuery(executionDetailsQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-instances/:id/execution-details', requireProcessInstanceAction('engine.runtime.process-instances.execution-details.read'), validateQuery(executionDetailsQuerySchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -220,7 +233,7 @@ r.get('/mission-control-api/process-instances/:id/execution-details', requireAct
   }
 }))
 
-r.get('/mission-control-api/process-instances/:id/jobs', requireAction('engine.runtime.jobs.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-instances/:id/jobs', requireProcessInstanceAction('engine.runtime.jobs.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -257,7 +270,7 @@ r.get('/mission-control-api/history/process-instances', requireAction('engine.ru
   }
 }))
 
-r.get('/mission-control-api/process-instances/:id/variable-history', requireAction('engine.runtime.process-instances.variable-history.read', { resourceIdFrom: 'query' }), validateQuery(variableHistoryQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-instances/:id/variable-history', requireProcessInstanceAction('engine.runtime.process-instances.variable-history.read'), validateQuery(variableHistoryQuerySchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -270,7 +283,7 @@ r.get('/mission-control-api/process-instances/:id/variable-history', requireActi
   }
 }))
 
-r.get('/mission-control-api/process-instances/:id/incidents', requireAction('engine.runtime.process-instances.incidents.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-instances/:id/incidents', requireProcessInstanceAction('engine.runtime.process-instances.incidents.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -297,7 +310,7 @@ r.get('/mission-control-api/history/variable-instances', requireAction('engine.r
 // -----------------------------
 // Instance actions
 // -----------------------------
-r.put('/mission-control-api/process-instances/:id/suspend', requireAction('engine.runtime.process-instances.suspension.update', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.put('/mission-control-api/process-instances/:id/suspend', requireProcessInstanceAction('engine.runtime.process-instances.suspension.update'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -308,7 +321,7 @@ r.put('/mission-control-api/process-instances/:id/suspend', requireAction('engin
   }
 }))
 
-r.put('/mission-control-api/process-instances/:id/activate', requireAction('engine.runtime.process-instances.suspension.update', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.put('/mission-control-api/process-instances/:id/activate', requireProcessInstanceAction('engine.runtime.process-instances.suspension.update'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -319,7 +332,7 @@ r.put('/mission-control-api/process-instances/:id/activate', requireAction('engi
   }
 }))
 
-r.delete('/mission-control-api/process-instances/:id', requireAction('engine.runtime.process-instances.delete', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.delete('/mission-control-api/process-instances/:id', requireProcessInstanceAction('engine.runtime.process-instances.delete'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -332,7 +345,7 @@ r.delete('/mission-control-api/process-instances/:id', requireAction('engine.run
 
 // Preview count
 // Get failed external tasks for a process instance
-r.get('/mission-control-api/process-instances/:id/failed-external-tasks', requireAction('engine.runtime.external-tasks.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-instances/:id/failed-external-tasks', requireProcessInstanceAction('engine.runtime.external-tasks.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -344,7 +357,7 @@ r.get('/mission-control-api/process-instances/:id/failed-external-tasks', requir
 }))
 
 // Retry failed jobs and external tasks for a process instance
-r.post('/mission-control-api/process-instances/:id/retry', requireAction('engine.runtime.process-instances.retry', { resourceIdFrom: 'body' }), validateBody(retrySchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/process-instances/:id/retry', requireProcessInstanceAction('engine.runtime.process-instances.retry'), validateBody(retrySchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
