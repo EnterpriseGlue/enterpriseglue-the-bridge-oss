@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
@@ -24,6 +25,7 @@ function mockDataSource(roles: unknown[] = [], groups: unknown[] = [], permissio
       if (entity === RbacRole) return { find: vi.fn().mockResolvedValue(roles) };
       if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue(groups) };
       if (entity === Engine) return { find: vi.fn().mockResolvedValue(engines) };
+      if (entity === EngineSet) return { find: vi.fn().mockResolvedValue([]) };
       if (entity === RbacRolePermission) return { find: vi.fn().mockResolvedValue(permissions) };
       throw new Error('Unexpected repository');
     },

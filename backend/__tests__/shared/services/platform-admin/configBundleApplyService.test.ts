@@ -3,6 +3,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
@@ -38,11 +39,13 @@ function setupDataSource() {
   const permissionRepo = { find: vi.fn().mockResolvedValue([]), insert: permissionInsert, delete: vi.fn() };
   const engineInsert = vi.fn().mockResolvedValue(undefined);
   const engineRepo = { find: vi.fn().mockResolvedValue([]), insert: engineInsert, update: vi.fn() };
+  const engineSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const auditRepo = { insert: auditInsert };
   const repositories = (entity: unknown) => {
     if (entity === RbacRole) return roleRepo;
     if (entity === AuthzGroup) return groupRepo;
     if (entity === Engine) return engineRepo;
+    if (entity === EngineSet) return engineSetRepo;
     if (entity === RbacRolePermission) return permissionRepo;
     if (entity === AuditLog) return auditRepo;
     throw new Error('Unexpected repository');
