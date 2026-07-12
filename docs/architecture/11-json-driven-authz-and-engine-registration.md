@@ -2266,7 +2266,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Show engine labels such as country, domain, environment, and region in engine detail and engine inventory filters.
 - [ ] ⬜ Show runtime authorization mode in Platform Settings with `enterpriseglue_authoritative` as active and later modes disabled with explanatory copy.
 - [x] ✅ Add a permission-gated Access Control > Runtime Resources tab for bounded, sanitized process/decision inventory inspection and manual reconciliation.
-- [ ] ⬜ Add the corresponding runtime-resource access summary to Engine Detail for central engines.
+- [x] ✅ Add a compact, permission-gated Engine Detail runtime-resource summary for `resource_aware` central engines. It shows bounded sanitized inventory only to administrators with runtime inventory read permission.
 - [ ] ⬜ Add per-engine runtime access scope and deployment integration controls plus deployment ingestion/lineage diagnostics.
 - [ ] ⬜ Add Mission Control filters and empty states that explain when the user can see the engine but has no visible process or decision resources.
 - [ ] ⬜ Ensure dashboard and Mission Control counters are based on authorized runtime subsets.

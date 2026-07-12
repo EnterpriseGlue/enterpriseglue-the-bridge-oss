@@ -186,18 +186,20 @@ function getEngineInventoryReadDecision(engine: any, permissions: any) {
   }
 }
 
-export type EngineDetailSectionId = 'registration' | 'access' | 'deployment'
+export type EngineDetailSectionId = 'registration' | 'access' | 'deployment' | 'runtime'
 
 export function resolveEngineDetailSections(options: {
   isEditing?: boolean
   canViewMembers?: boolean
   canViewProjectAccess?: boolean
+  canViewRuntimeResources?: boolean
   canViewDeployments?: boolean
 }): EngineDetailSectionId[] {
   const sections: EngineDetailSectionId[] = []
   if (options.isEditing) sections.push('registration')
   if (options.canViewMembers) sections.push('access')
   if (options.canViewProjectAccess || options.canViewDeployments) sections.push('deployment')
+  if (options.canViewRuntimeResources) sections.push('runtime')
   return sections
 }
 
@@ -730,6 +732,15 @@ function EngineDeploymentSection({
   )
 }
 
+function EngineRuntimeResourcesSection({ resources, loading, error }: { resources: Array<{ id: string; resourceKind: string; resourceKey: string; runtimeTenantId?: string; source: string; observedAt: number }>; loading: boolean; error: unknown }) {
+  const processes = resources.filter((resource) => resource.resourceKind === 'process_definition').length
+  const decisions = resources.filter((resource) => resource.resourceKind === 'decision_definition').length
+  return <section aria-label="Runtime resources" style={{ border: '1px solid var(--color-border-primary)', borderRadius: 8, padding: 'var(--spacing-4)', background: 'var(--color-bg-secondary)', display: 'grid', gap: 'var(--spacing-3)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}><h3 style={{ margin: 0, fontSize: 16 }}>Runtime resources</h3><div style={{ display: 'flex', gap: 'var(--spacing-2)' }}><Tag type="blue" size="sm">{processes} processes</Tag><Tag type="purple" size="sm">{decisions} decisions</Tag></div></div>
+    {loading ? <InlineLoading description="Loading runtime resources" /> : error ? <InlineNotification lowContrast kind="error" title="Runtime resources could not be loaded" subtitle={getUiErrorMessage(error, 'Request failed')} hideCloseButton /> : resources.length === 0 ? <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>No runtime resources have been recorded for this resource-aware engine.</div> : <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>{resources.slice(0, 8).map((resource) => <div key={resource.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-3)', padding: 'var(--spacing-2) 0', borderBottom: '1px solid var(--color-border-subtle)' }}><div style={{ minWidth: 0 }}><div style={{ overflowWrap: 'anywhere', fontSize: 13 }}>{resource.resourceKey}</div><div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{resource.runtimeTenantId || 'No runtime tenant'} | {resource.source}</div></div><Tag type={resource.resourceKind === 'process_definition' ? 'blue' : 'purple'} size="sm">{resource.resourceKind === 'process_definition' ? 'Process' : 'Decision'}</Tag></div>)}{resources.length > 8 && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Additional inventory is available in Access Control.</div>}</div>}
+  </section>
+}
+
 function EngineAccessSection({
   assignments,
   assignmentsError,
@@ -1035,6 +1046,7 @@ export default function Engines() {
   const qc = useQueryClient()
   const { refreshUser, hasEnginePermission, permissions } = useAuth()
   const createEngineDecision = useActionDecision('engine.inventory.create', { type: 'platform' })
+  const runtimeResourcesReadDecision = useActionDecision('platform.engine-sets.read', { type: 'platform' })
   const platformSettingsQ = useQuery({
     queryKey: ['platform', 'sync-settings'],
     queryFn: () => apiClient.get<{ engineOnboardingMode?: EngineOnboardingMode; engineAccessAuthority?: AccessAuthorityMode }>('/api/auth/platform-settings', undefined, { credentials: 'include' }),
@@ -1214,6 +1226,11 @@ export default function Engines() {
       { credentials: 'include' }
     ),
   })
+  const runtimeResourcesQ = useQuery({
+    queryKey: ['engines', editing?.id, 'runtime-resources'],
+    enabled: Boolean(engineModal.isOpen && editing?.id && editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed),
+    queryFn: () => apiClient.get<Array<{ id: string; resourceKind: string; resourceKey: string; runtimeTenantId?: string; source: string; observedAt: number }>>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(String(editing?.id))}`, undefined, { credentials: 'include' }),
+  })
   const accessMembersQ = useQuery({
     queryKey: ['engines', editing?.id, 'access-members'],
     enabled: Boolean(engineModal.isOpen && editing?.id && editingActions?.canViewMembers),
@@ -1247,7 +1264,8 @@ export default function Engines() {
     canViewMembers: Boolean(editingActions?.canViewMembers),
     canViewProjectAccess: canViewEditingProjectAccess,
     canViewDeployments: canViewEditingDeployments,
-  }), [canViewEditingDeployments, canViewEditingProjectAccess, editing, editingActions?.canViewMembers])
+    canViewRuntimeResources: Boolean(editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed),
+  }), [canViewEditingDeployments, canViewEditingProjectAccess, editing, editingActions?.canViewMembers, runtimeResourcesReadDecision.allowed])
 
   function openEngineDetails(row: any) {
     if (!row?.id) return
@@ -1722,6 +1740,7 @@ export default function Engines() {
             targets={deploymentTargetsQ.data || []}
           />
         )}
+        {editing && engineDetailSections.includes('runtime') && <EngineRuntimeResourcesSection resources={runtimeResourcesQ.data || []} loading={runtimeResourcesQ.isLoading} error={runtimeResourcesQ.error} />}
         <TextInput
           id="eng-name"
           labelText="Name"
