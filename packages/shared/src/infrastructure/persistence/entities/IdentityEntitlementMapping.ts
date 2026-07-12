@@ -10,6 +10,7 @@ export class IdentityEntitlementMapping extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true }) tenantId!: string | null;
   @Column({ name: 'provider_id', type: 'text' }) providerId!: string;
   @Column({ name: 'config_key', type: 'text', nullable: true }) configKey!: string | null;
+  @Column({ name: 'source_ref', type: 'text', nullable: true }) sourceRef!: string | null;
   @Column({ name: 'entitlement_type', type: 'text' }) entitlementType!: string;
   @Column({ name: 'external_id', type: 'text', nullable: true }) externalId!: string | null;
   @Column({ name: 'match_operator', type: 'text', default: 'exact' }) matchOperator!: string;
