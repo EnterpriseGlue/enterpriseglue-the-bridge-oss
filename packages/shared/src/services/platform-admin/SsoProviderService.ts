@@ -11,6 +11,7 @@ import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/e
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
+import { secretResolver } from './SecretResolver.js';
 
 export type SsoProviderType = 'microsoft' | 'google' | 'saml' | 'oidc';
 export type PlatformRole = SharedPlatformRole;
@@ -115,22 +116,6 @@ class SsoProviderServiceClass {
   }
 
   /**
-   * Simple encryption for secrets (in production, use proper key management)
-   */
-  private encryptSecret(secret: string): string {
-    // Base64 encode with a simple marker - in production use proper encryption
-    return `enc:${Buffer.from(secret).toString('base64')}`;
-  }
-
-  /**
-   * Decrypt a secret
-   */
-  private decryptSecret(encrypted: string): string {
-    if (!encrypted.startsWith('enc:')) return encrypted;
-    return Buffer.from(encrypted.slice(4), 'base64').toString('utf-8');
-  }
-
-  /**
    * Get all SSO providers (with secrets redacted for non-admin use)
    */
   async getAllProviders(): Promise<SsoProviderPublic[]> {
@@ -178,8 +163,8 @@ class SsoProviderServiceClass {
     if (!p) return null;
     
     // Decrypt secrets in place
-    if (p.clientSecretEnc) p.clientSecretEnc = this.decryptSecret(p.clientSecretEnc);
-    if (p.certificateEnc) p.certificateEnc = this.decryptSecret(p.certificateEnc);
+    if (p.clientSecretEnc) p.clientSecretEnc = secretResolver.resolveStored(p.clientSecretEnc);
+    if (p.certificateEnc) p.certificateEnc = secretResolver.resolveStored(p.certificateEnc);
     return p;
   }
 
@@ -194,8 +179,8 @@ class SsoProviderServiceClass {
     if (!p) return null;
     
     // Decrypt secrets in place
-    if (p.clientSecretEnc) p.clientSecretEnc = this.decryptSecret(p.clientSecretEnc);
-    if (p.certificateEnc) p.certificateEnc = this.decryptSecret(p.certificateEnc);
+    if (p.clientSecretEnc) p.clientSecretEnc = secretResolver.resolveStored(p.clientSecretEnc);
+    if (p.certificateEnc) p.certificateEnc = secretResolver.resolveStored(p.certificateEnc);
     return p;
   }
 
@@ -229,7 +214,7 @@ class SsoProviderServiceClass {
       
       // OIDC
       clientId: input.clientId || null,
-      clientSecretEnc: input.clientSecret ? this.encryptSecret(input.clientSecret) : null,
+      clientSecretEnc: input.clientSecret ? secretResolver.storeEncryptedLocal(input.clientSecret) : null,
       tenantId: input.tenantId || null,
       issuerUrl: input.issuerUrl || null,
       authorizationUrl: input.authorizationUrl || null,
@@ -241,7 +226,7 @@ class SsoProviderServiceClass {
       entityId: input.entityId || null,
       ssoUrl: input.ssoUrl || null,
       sloUrl: input.sloUrl || null,
-      certificateEnc: input.certificate ? this.encryptSecret(input.certificate) : null,
+      certificateEnc: input.certificate ? secretResolver.storeEncryptedLocal(input.certificate) : null,
       signatureAlgorithm: input.signatureAlgorithm || 'sha256',
       
       // Display
@@ -301,7 +286,7 @@ class SsoProviderServiceClass {
     // OIDC
     if (input.clientId !== undefined) updates.clientId = input.clientId || null;
     if (input.clientSecret !== undefined) {
-      updates.clientSecretEnc = input.clientSecret ? this.encryptSecret(input.clientSecret) : null;
+      updates.clientSecretEnc = input.clientSecret ? secretResolver.storeEncryptedLocal(input.clientSecret) : null;
     }
     if (input.tenantId !== undefined) updates.tenantId = input.tenantId || null;
     if (input.issuerUrl !== undefined) updates.issuerUrl = input.issuerUrl || null;
@@ -315,7 +300,7 @@ class SsoProviderServiceClass {
     if (input.ssoUrl !== undefined) updates.ssoUrl = input.ssoUrl || null;
     if (input.sloUrl !== undefined) updates.sloUrl = input.sloUrl || null;
     if (input.certificate !== undefined) {
-      updates.certificateEnc = input.certificate ? this.encryptSecret(input.certificate) : null;
+      updates.certificateEnc = input.certificate ? secretResolver.storeEncryptedLocal(input.certificate) : null;
     }
     if (input.signatureAlgorithm !== undefined) updates.signatureAlgorithm = input.signatureAlgorithm;
     

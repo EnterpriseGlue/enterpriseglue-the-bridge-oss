@@ -76,4 +76,23 @@ describe('SsoProviderService', () => {
 
     expect(update).toHaveBeenCalledWith({ id: 'provider-2' }, expect.objectContaining({ enabled: true }));
   });
+
+  it('stores new provider secrets with the shared encrypted secret resolver', async () => {
+    const insert = vi.fn();
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({ insert }),
+    });
+
+    await ssoProviderService.createProvider({
+      name: 'OIDC',
+      type: 'oidc',
+      clientId: 'client-id',
+      clientSecret: 'provider-secret',
+    });
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      clientSecretEnc: expect.stringMatching(/^v2:/),
+    }));
+  });
 });

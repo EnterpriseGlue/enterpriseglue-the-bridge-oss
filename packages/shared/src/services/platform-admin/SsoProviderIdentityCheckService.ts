@@ -3,6 +3,7 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import type { SsoClaims } from './SsoClaimsMappingService.js';
+import { secretResolver } from './SecretResolver.js';
 
 export type SsoProviderIdentityStatus = 'active' | 'inactive' | 'deleted' | 'unsupported' | 'unknown';
 
@@ -54,12 +55,6 @@ interface MicrosoftProviderConfig {
   clientSecret: string | null;
   tenantId: string | null;
   providerType: string;
-}
-
-function decryptSecret(encrypted: string | null | undefined): string | null {
-  if (!encrypted) return null;
-  if (!encrypted.startsWith('enc:')) return encrypted;
-  return Buffer.from(encrypted.slice(4), 'base64').toString('utf-8');
 }
 
 function normalizeProviderType(providerType: string | null | undefined, providerId: string): string {
@@ -714,7 +709,7 @@ class SsoProviderIdentityCheckServiceClass {
 
     return {
       clientId: provider?.clientId || config.microsoftClientId || null,
-      clientSecret: decryptSecret(provider?.clientSecretEnc) || config.microsoftClientSecret || null,
+      clientSecret: secretResolver.resolveStored(provider?.clientSecretEnc) || config.microsoftClientSecret || null,
       tenantId: provider?.tenantId || providerTenantId || config.microsoftTenantId || null,
       providerType,
     };
