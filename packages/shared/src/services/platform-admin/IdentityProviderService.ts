@@ -28,7 +28,14 @@ function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<
   if (rawSecrets.length) throw Errors.validation(`Provider configuration must use secret references: ${rawSecrets.join(', ')}`);
   if (protocol === 'oidc' && (typeof configuration.issuerUrl !== 'string' || typeof configuration.clientId !== 'string')) throw Errors.validation('OIDC providers require issuerUrl and clientId');
   if (protocol === 'saml' && (typeof configuration.entityId !== 'string' || typeof configuration.callbackUrl !== 'string')) throw Errors.validation('SAML providers require entityId and callbackUrl');
-  if (protocol === 'ldap' && (typeof configuration.url !== 'string' || !String(configuration.url).startsWith('ldaps://'))) throw Errors.validation('LDAP providers require an ldaps:// URL');
+  if (protocol === 'ldap') {
+    if (typeof configuration.url !== 'string' || !String(configuration.url).startsWith('ldaps://')) throw Errors.validation('LDAP providers require an ldaps:// URL');
+    for (const field of ['bindDn', 'bindPasswordRef', 'userBaseDn', 'userSearchFilter', 'groupBaseDn', 'groupIdAttribute']) {
+      if (typeof configuration[field] !== 'string' || !String(configuration[field]).trim()) throw Errors.validation(`LDAP providers require ${field}`);
+    }
+    if (!['memberOf', 'group_search'].includes(String(configuration.membershipMode))) throw Errors.validation('LDAP membershipMode must be memberOf or group_search');
+    if (!String(configuration.userSearchFilter).includes('{username}')) throw Errors.validation('LDAP userSearchFilter must contain {username}');
+  }
 }
 
 class IdentityProviderServiceClass {

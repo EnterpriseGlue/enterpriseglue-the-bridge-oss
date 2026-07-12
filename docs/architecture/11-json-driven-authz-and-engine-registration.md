@@ -2261,7 +2261,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add managed-by-config badges to existing Access Control and Engine UI surfaces.
 - [x] ✅ Add the Role Library and single-role editor; it avoids page-level horizontal scrolling for normal role management. Legacy Access Control matrix removal remains pending.
 - [ ] ⬜ Add role-editor search, grouped permission accordions, selected-only/risk filters, responsive checkboxes, sticky save/cancel, system-role duplication, and config ownership states.
-- [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Mapping connection health and reconciliation history remain pending.
+- [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Direct LDAPS configuration now includes bind identity, secret reference, user/group base DNs, user filter, and membership lookup fields. Mapping connection health and reconciliation history remain pending.
 - [ ] ⬜ Show engine labels such as country, domain, environment, and region in engine detail and engine inventory filters.
 - [ ] ⬜ Show runtime authorization mode in Platform Settings with `enterpriseglue_authoritative` as active and later modes disabled with explanatory copy.
 - [ ] ⬜ Add runtime resource access section in Engine Detail and Access Control for central engines.

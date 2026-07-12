@@ -23,4 +23,11 @@ describe('identityProviderService', () => {
     await expect(identityProviderService.upsert({ key: 'bad', protocol: 'oidc', configuration: { issuerUrl: 'https://idp.test', clientId: 'x', clientSecret: 'raw' } })).rejects.toThrow('secret references');
     await expect(identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: { url: 'ldap://directory.test' } })).rejects.toThrow('ldaps://');
   });
+  it('requires a complete direct LDAP configuration', async () => {
+    await expect(identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: { url: 'ldaps://directory.test' } })).rejects.toThrow('bindDn');
+    const provider = await identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: {
+      url: 'ldaps://directory.test', bindDn: 'cn=service,dc=example,dc=test', bindPasswordRef: 'LDAP_BIND_PASSWORD', userBaseDn: 'ou=users,dc=example,dc=test', userSearchFilter: '(uid={username})', groupBaseDn: 'ou=groups,dc=example,dc=test', groupIdAttribute: 'cn', membershipMode: 'memberOf',
+    } });
+    expect(provider.protocol).toBe('ldap');
+  });
 });
