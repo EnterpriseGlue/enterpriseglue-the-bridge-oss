@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import {
   modifyProcessInstance,
   modifyProcessDefinitionAsync,
@@ -16,11 +16,22 @@ import {
 
 const r = Router()
 
+const requireProcessInstanceAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {
+  resourceKind: 'process_definition',
+  definitionPath: 'process-instance',
+  resourceKeyFields: ['definitionKey', 'processDefinitionKey'],
+})
+
+const requireProcessDefinitionAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {
+  resourceKind: 'process_definition',
+  definitionPath: 'process-definition',
+})
+
 // Apply auth middleware only to /mission-control-api routes (not globally)
 r.use('/mission-control-api', requireAuth)
 
 // POST /mission-control-api/process-instances/:id/modify (sync)
-r.post('/mission-control-api/process-instances/:id/modify', requireAction('engine.runtime.process-instances.modify', { resourceIdFrom: 'body' }), validateBody(ProcessInstanceModificationRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/process-instances/:id/modify', requireProcessInstanceAction('engine.runtime.process-instances.modify'), validateBody(ProcessInstanceModificationRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)
   await modifyProcessInstance(engineId, instanceId, req.body)
@@ -28,7 +39,7 @@ r.post('/mission-control-api/process-instances/:id/modify', requireAction('engin
 }))
 
 // POST /mission-control-api/process-definitions/:id/modification/execute-async (batch)
-r.post('/mission-control-api/process-definitions/:id/modification/execute-async', requireAction('engine.runtime.process-definitions.modification.execute-async', { resourceIdFrom: 'body' }), validateBody(ProcessDefinitionModificationAsyncRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/process-definitions/:id/modification/execute-async', requireProcessDefinitionAction('engine.runtime.process-definitions.modification.execute-async'), validateBody(ProcessDefinitionModificationAsyncRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const { batchId, camundaBatchId } = await modifyProcessDefinitionAsync(engineId, definitionId, req.body)
@@ -36,7 +47,7 @@ r.post('/mission-control-api/process-definitions/:id/modification/execute-async'
 }))
 
 // POST /mission-control-api/process-definitions/:id/restart/execute-async (batch)
-r.post('/mission-control-api/process-definitions/:id/restart/execute-async', requireAction('engine.runtime.process-definitions.restart.execute-async', { resourceIdFrom: 'body' }), validateBody(ProcessDefinitionRestartAsyncRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/process-definitions/:id/restart/execute-async', requireProcessDefinitionAction('engine.runtime.process-definitions.restart.execute-async'), validateBody(ProcessDefinitionRestartAsyncRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const { batchId, camundaBatchId } = await restartProcessDefinitionAsync(engineId, definitionId, req.body)
