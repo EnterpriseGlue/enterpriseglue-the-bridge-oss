@@ -34,6 +34,7 @@ export { EngineSetMaterialization } from './EngineSetMaterialization.js';
 export { EnvironmentTag } from './EnvironmentTag.js';
 export { ExternalEngineRegistration } from './ExternalEngineRegistration.js';
 export { ExternalEngineSystem } from './ExternalEngineSystem.js';
+export { ExternalIdentity } from './ExternalIdentity.js';
 export { File } from './File.js';
 export { FileCommitVersion } from './FileCommitVersion.js';
 export { FileSnapshot } from './FileSnapshot.js';

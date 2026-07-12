@@ -2,6 +2,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { externalIdentityService } from './ExternalIdentityService.js';
 import type { SsoClaims } from './SsoClaimsMappingService.js';
 
 type SsoNormalizedIdentityStore = DataSource | EntityManager;
@@ -109,6 +110,10 @@ class SsoNormalizedIdentityServiceClass {
     const existing = await qb.getOne();
     if (existing) {
       await repo.update({ id: existing.id }, update);
+      await externalIdentityService.upsertInStore(store, {
+        tenantId, providerId, providerType: update.providerType, subjectId: providerSubject,
+        directoryTenantId: update.providerTenantId, userId: update.userId, emailHint: update.email, now,
+      });
       return { id: existing.id, created: false };
     }
 
@@ -118,6 +123,10 @@ class SsoNormalizedIdentityServiceClass {
       ...update,
       lastProviderCheckAt: null,
       createdAt: now,
+    });
+    await externalIdentityService.upsertInStore(store, {
+      tenantId, providerId, providerType: update.providerType, subjectId: providerSubject,
+      directoryTenantId: update.providerTenantId, userId: update.userId, emailHint: update.email, now,
     });
     return { id, created: true };
   }

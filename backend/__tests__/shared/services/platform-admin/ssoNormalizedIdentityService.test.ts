@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
+import { ExternalIdentity, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
 import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -26,9 +26,11 @@ describe('ssoNormalizedIdentityService', () => {
       insert,
       update,
     };
+    const externalRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn().mockResolvedValue(undefined), update: vi.fn().mockResolvedValue(undefined) };
     const dataSource = {
       getRepository: vi.fn((entity: unknown) => {
         if (entity === SsoNormalizedIdentity) return repo;
+        if (entity === ExternalIdentity) return externalRepo;
         throw new Error('Unexpected repository');
       }),
     };
@@ -78,6 +80,9 @@ describe('ssoNormalizedIdentityService', () => {
       updatedAt: 1234,
     }));
     expect(update).not.toHaveBeenCalled();
+    expect(externalRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'provider-1', subjectId: 'subject-1', userId: 'user-1', emailHint: 'user@example.com', identityKey: expect.any(String),
+    }));
   });
 
   it('updates an existing normalized identity snapshot by provider subject', async () => {
@@ -94,9 +99,11 @@ describe('ssoNormalizedIdentityService', () => {
       insert,
       update,
     };
+    const externalRepo = { findOne: vi.fn().mockResolvedValue({ id: 'external-identity-1' }), insert: vi.fn(), update: vi.fn().mockResolvedValue(undefined) };
     const dataSource = {
       getRepository: vi.fn((entity: unknown) => {
         if (entity === SsoNormalizedIdentity) return repo;
+        if (entity === ExternalIdentity) return externalRepo;
         throw new Error('Unexpected repository');
       }),
     };
@@ -130,5 +137,8 @@ describe('ssoNormalizedIdentityService', () => {
       updatedAt: 5678,
     }));
     expect(insert).not.toHaveBeenCalled();
+    expect(externalRepo.update).toHaveBeenCalledWith({ id: 'external-identity-1' }, expect.objectContaining({
+      providerId: 'microsoft', subjectId: 'oid-1', userId: 'user-1', lastSeenAt: 5678,
+    }));
   });
 });

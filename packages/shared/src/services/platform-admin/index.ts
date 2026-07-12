@@ -31,6 +31,7 @@ export * from './SsoAssignmentMappingService.js';
 export * from './SsoEngineAccessSnapshotService.js';
 export * from './SsoGroupMappingService.js';
 export * from './SsoNormalizedIdentityService.js';
+export * from './ExternalIdentityService.js';
 export * from './SsoProviderIdentityCheckService.js';
 export * from './SsoSyncDiagnosticsService.js';
 export * from './config-bundle-hash.js';
