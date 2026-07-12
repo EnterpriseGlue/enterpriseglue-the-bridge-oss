@@ -104,7 +104,7 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
   });
 
   identityMappings.forEach((mapping, index) => {
-    if (!providerKeys.has(mapping.providerKey)) {
+    if (providerKeys.size > 0 && !providerKeys.has(mapping.providerKey)) {
       errors.push({ path: `./identity-mappings.json.identityMappings.${index}.providerKey`, message: `Unknown identity provider key: ${mapping.providerKey}` });
     }
     if (!groupKeys.has(mapping.targetGroupKey)) {

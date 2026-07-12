@@ -70,7 +70,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, engineRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, roleRepo, groupRepo, engineRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -154,5 +154,19 @@ describe('configBundleApplyService', () => {
     const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
     await configBundleApplyService.apply({ bundle: targetBundle, files: targetFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
     expect(targetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project-1', engineId: 'engine-1', source: 'config', sourceRef: 'config_bundle:acme.authz', allowCiDeploy: true }));
+  });
+
+  it('applies a provider-neutral identity mapping to an existing configured provider and group', async () => {
+    const { groupRepo, providerRepo, identityMappingRepo } = setupDataSource();
+    groupRepo.find.mockResolvedValue([{ id: 'group-1', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false }]);
+    providerRepo.find.mockResolvedValue([{ id: 'provider-1', tenantId: 'tenant-a', configKey: 'identity.oidc.main' }]);
+    const mappingBundle = { ...bundle, imports: ['./groups.json', './identity-mappings.json'] };
+    const mappingFiles = {
+      './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+      './identity-mappings.json': { identityMappings: [{ key: 'mapping.operators', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'ops' }, targetGroupKey: 'group.operators' }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+    await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+    expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-1', configKey: 'mapping.operators', targetGroupId: 'group-1', sourceRef: 'config_bundle:acme.authz' }));
   });
 });
