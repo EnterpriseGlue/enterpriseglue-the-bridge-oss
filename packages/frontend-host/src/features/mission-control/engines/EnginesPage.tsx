@@ -49,6 +49,7 @@ function getDockerLoopbackSuggestion(raw: string): string | null {
 
 type EngineTypeId = 'ion' | 'operaton' | 'camunda7'
 type RuntimeAccessScope = 'engine_wide' | 'resource_aware'
+type DeploymentIntegration = 'enterpriseglue_proxy' | 'direct_engine'
 
 const ENGINE_TYPE_LABELS: Record<EngineTypeId, string> = {
   ion: 'ION-Engine',
@@ -980,6 +981,7 @@ function EngineRegistrationSection({ engine }: { engine: any }) {
         <EngineRegistrationDetail label="External ID" value={engine.externalId || '-'} />
         <EngineRegistrationDetail label="Management mode" value={formatEngineRegistrationStatus(engine.managementMode)} tagValue={engine.managementMode || undefined} />
         <EngineRegistrationDetail label="Runtime access" value={engine.runtimeAccessScope === 'resource_aware' ? 'Resource-aware (central)' : 'Engine-wide (distributed)'} />
+        <EngineRegistrationDetail label="Deployment integration" value={engine.deploymentIntegration === 'direct_engine' ? 'Direct engine deployment' : 'EnterpriseGlue proxy'} />
         <EngineRegistrationDetail label="Lifecycle" value={formatEngineRegistrationStatus(engine.lifecycleStatus || 'active')} tagValue={engine.lifecycleStatus || 'active'} />
         <EngineRegistrationDetail label="Drift" value={formatEngineRegistrationStatus(engine.driftStatus)} tagValue={engine.driftStatus || undefined} />
         <EngineRegistrationDetail label="Capability status" value={formatEngineRegistrationStatus(engine.capabilityStatus)} tagValue={engine.capabilityStatus || undefined} />
@@ -1075,6 +1077,7 @@ export default function Engines() {
     oauthAudience: '',
     environmentTagId: '',
     runtimeAccessScope: 'engine_wide' as RuntimeAccessScope,
+    deploymentIntegration: 'enterpriseglue_proxy' as DeploymentIntegration,
   })
   const [searchQuery, setSearchQuery] = React.useState('')
 
@@ -1096,6 +1099,10 @@ export default function Engines() {
   const RUNTIME_ACCESS_SCOPE_ITEMS = React.useMemo(() => ([
     { id: 'engine_wide' as const, label: 'Engine-wide (distributed)' },
     { id: 'resource_aware' as const, label: 'Resource-aware (central)' },
+  ]), [])
+  const DEPLOYMENT_INTEGRATION_ITEMS = React.useMemo(() => ([
+    { id: 'enterpriseglue_proxy' as const, label: 'EnterpriseGlue proxy' },
+    { id: 'direct_engine' as const, label: 'Direct engine with pipeline receipt' },
   ]), [])
   const dockerLoopbackSuggestion = React.useMemo(() => getDockerLoopbackSuggestion(String(form.baseUrl || '').trim()), [form.baseUrl])
 
@@ -1181,6 +1188,7 @@ export default function Engines() {
       oauthAudience: '',
       environmentTagId: autoTagId,
       runtimeAccessScope: 'engine_wide',
+      deploymentIntegration: 'enterpriseglue_proxy',
     })
     engineModal.openModal()
   }, [canCreateEngine, hasSingleTag, envTags, engineModal])
@@ -1292,6 +1300,7 @@ export default function Engines() {
       oauthAudience: row.oauthAudience || '',
       environmentTagId: row.environmentTagId || '',
       runtimeAccessScope: row.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide',
+      deploymentIntegration: row.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy',
     })
     engineModal.openModal()
   }
@@ -1827,6 +1836,25 @@ export default function Engines() {
             kind="info"
             title="Resource-aware runtime access"
             subtitle="Use Access Control after saving to assign access to exact runtime resources or Runtime Resource Sets."
+            hideCloseButton
+          />
+        )}
+        <Dropdown
+          id="eng-deployment-integration"
+          titleText="Deployment integration"
+          label="Select deployment integration"
+          items={DEPLOYMENT_INTEGRATION_ITEMS}
+          itemToString={(it: any) => it ? it.label : ''}
+          selectedItem={DEPLOYMENT_INTEGRATION_ITEMS.find((item) => item.id === form.deploymentIntegration)}
+          onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, deploymentIntegration: selectedItem?.id || 'enterpriseglue_proxy' }))}
+          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+        />
+        {form.deploymentIntegration === 'direct_engine' && (
+          <InlineNotification
+            lowContrast
+            kind="info"
+            title="Direct engine deployment"
+            subtitle="EnterpriseGlue deployment is disabled for this engine. Customer pipelines deploy directly and submit a deployment receipt for lineage and inventory."
             hideCloseButton
           />
         )}

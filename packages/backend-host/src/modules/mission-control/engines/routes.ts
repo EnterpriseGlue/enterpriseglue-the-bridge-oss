@@ -37,6 +37,7 @@ const engineIdParamSchema = z.object({ id: z.string().min(1) })
 const engineTypeSchema = z.enum(['ion', 'operaton', 'camunda7'])
 const engineAuthTypeSchema = z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials'])
 const runtimeAccessScopeSchema = z.enum(['engine_wide', 'resource_aware'])
+const deploymentIntegrationSchema = z.enum(['enterpriseglue_proxy', 'direct_engine'])
 const engineLabelsSchema = z.record(z.string().min(1).max(128), z.string().max(512))
 const engineManagementModeSchema = z.enum(['external_managed', 'hybrid'])
 const engineLifecycleStatusSchema = z.enum(['active', 'disabled', 'stale', 'decommissioned'])
@@ -194,6 +195,7 @@ const createEngineBodySchema = z.object({
   version: z.string().nullable().optional(),
   environmentTagId: z.string().nullable().optional(),
   runtimeAccessScope: runtimeAccessScopeSchema.optional(),
+  deploymentIntegration: deploymentIntegrationSchema.optional(),
 })
 
 const updateEngineBodySchema = z.object({
@@ -211,6 +213,7 @@ const updateEngineBodySchema = z.object({
   version: z.string().nullable().optional(),
   environmentTagId: z.string().nullable().optional(),
   runtimeAccessScope: runtimeAccessScopeSchema.optional(),
+  deploymentIntegration: deploymentIntegrationSchema.optional(),
 })
 
 const DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP: EngineFieldOwnership = {
@@ -239,6 +242,7 @@ const ENGINE_UPDATE_FIELD_GROUPS: Record<string, string> = {
   version: 'version',
   environmentTagId: 'environment',
   runtimeAccessScope: 'metadata',
+  deploymentIntegration: 'metadata',
 }
 
 const EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD: Record<string, string> = {
@@ -256,6 +260,7 @@ const EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD: Record<string, string> = {
   version: 'version',
   environmentTagId: 'environmentTagId',
   runtimeAccessScope: 'runtimeAccessScope',
+  deploymentIntegration: 'deploymentIntegration',
 }
 
 const ENGINE_SECRET_UPDATE_FIELDS = [
@@ -926,6 +931,7 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine
     environmentTagId: req.body.environmentTagId || null,
     environmentLocked: false,
     runtimeAccessScope: req.body.runtimeAccessScope || 'engine_wide',
+    deploymentIntegration: req.body.deploymentIntegration || 'enterpriseglue_proxy',
     tenantId,
     createdAt: now,
     updatedAt: now,
@@ -1013,6 +1019,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     version: req.body.version ?? null,
     environmentTagId: req.body.environmentTagId || null,
     runtimeAccessScope: req.body.runtimeAccessScope,
+    deploymentIntegration: req.body.deploymentIntegration,
     updatedAt: now,
   }
 
@@ -1415,6 +1422,7 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
     version: req.body.version,
     environmentTagId: req.body.environmentTagId === undefined ? undefined : req.body.environmentTagId || null,
     runtimeAccessScope: req.body.runtimeAccessScope,
+    deploymentIntegration: req.body.deploymentIntegration,
     updatedAt: now,
   }
   await engineRepo.update({ id: engineId }, updates)

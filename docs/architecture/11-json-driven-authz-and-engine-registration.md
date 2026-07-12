@@ -424,7 +424,7 @@ Engine config must mirror the current engine UI and route schema. Do not make fu
 | `version` | `engines.version` | Optional. May be refreshed by health/version checks. |
 | `environmentTagId` | `engines.environment_tag_id` | Optional existing environment tag id. |
 | `runtimeAccessScope` | new `engines.runtime_access_scope` | `engine_wide` for the normal distributed-engine case; `resource_aware` for central/shared engines. Defaults to `engine_wide`. |
-| `deploymentIntegration` | new engine deployment integration settings | Enables EnterpriseGlue proxy deployment, direct-engine receipts, and engine metadata discovery independently. |
+| `deploymentIntegration` | new engine deployment integration settings | v1 exposes `enterpriseglue_proxy` or `direct_engine`: proxy mode permits EnterpriseGlue deployment; direct mode rejects proxy deployment and accepts pipeline receipts. The independent multi-flag ingestion settings remain later work. |
 
 ### Distributed And Central Engine Runtime Scopes
 
@@ -449,6 +449,8 @@ There is deliberately no third `mixed` value. A `resource_aware` engine already 
 ### Dual Deployment Ingestion
 
 Deployment execution and deployment metadata ingestion are separate concerns. An engine may enable both EnterpriseGlue-proxied deployment and direct Camunda/Operaton API deployment.
+
+The current v1 UI/API deliberately uses a smaller mutually exclusive `deploymentIntegration` enum. This prevents accidental use of EnterpriseGlue proxy deployment against an engine that the customer has declared pipeline-owned. The multi-flag model below remains the target when direct metadata discovery and independent reconciliation scheduling are implemented.
 
 ```json
 "deploymentIntegration": {
@@ -1797,7 +1799,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Add the external machine-authenticated deployment receipt route with API deployment eligibility, action/OpenAPI metadata, audit logging, and inventory materialization. Runtime scope settings, inventory reads, and reconciliation routes remain pending.
 - [ ] ⬜ Update `packages/backend-host/src/modules/mission-control/engines/routes.ts` manual engine create/update/list/detail schemas and serializers, not only the platform-admin engine-management routes.
 - [ ] ⬜ Update auth start/callback routes and provider services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit.
-- [ ] ⬜ Complete authorized-subset filtering and inherited runtime-resource resolvers across every Mission Control route family. Process, process-instance, decision, batch, migration, job, incident, history, variable, and the legacy compatibility process-instance router now use runtime-aware guards; metrics and final route-family audit remain pending.
+- [ ] ⬜ Complete authorized-subset filtering and inherited runtime-resource resolvers across every Mission Control route family. Process, process-instance, decision, batch, migration, job, incident, history, variable, and the legacy compatibility process-instance router now use runtime-aware guards; metrics remain intentionally engine-wide-only and fail closed for resource-only grants. Final route-family audit remains pending.
 - [ ] ⬜ Update deployment query services and `edit-target-resolution.ts` for nullable project lineage and remove authorization through file-key fallback.
 - [ ] ⬜ Register every route in OpenAPI with `x-enterpriseglue-authz`, collection filter mode, lineage requirements, and audit risk.
 
@@ -1925,7 +1927,7 @@ The separate `Permissions` tab remains the catalog administration and inspection
 | Access Control > Roles | Replace the wide matrix with the role library and focused editor above. | System/config-locked roles are read-only; custom manual roles are editable. |
 | Access Control > Identity Mappings | Replace protocol-specific claim language with normalized group/role/scope/attribute source facts while retaining protocol-specific sample/test help. | Exact stable IDs are the default; risky matchers display preview warnings. |
 | Access Control > Effective Access | Add runtime tenant/process/decision resource inputs and identity entitlement source chain. | Explain engine-wide grants, resource-set grants, broad-grant shadowing, policy, and context separately. |
-| Engine create/edit/detail | Runtime access scope control/status is implemented; deployment integration controls remain pending. | Default to `engine_wide`; show runtime-resource controls only for `resource_aware`. |
+| Engine create/edit/detail | Runtime access scope and v1 deployment integration controls/status are implemented; independent ingestion controls remain pending. | Default to `engine_wide`; show runtime-resource controls only for `resource_aware`. Direct-engine mode disables EnterpriseGlue deployment and uses pipeline receipts for lineage. |
 | Engine Detail > Access | Add runtime tenants/resource sets and provider-managed group assignments. | Keep accountable owner metadata separate from effective access. |
 | Engine Detail > Deployments | Show proxied/reported/discovered/inferred badges, receipt principal, last reconciliation, and lineage gaps. | The current detail surface shows sanitized direct-pipeline receipt lineage and source; legacy/proxied/discovered history normalization remains pending. Bridge actions require verified lineage; reconciliation is admin/action guarded. |
 | Mission Control engine selector | Include distributed engines with engine runtime access and central engines with at least one visible runtime resource. | Do not require project membership for general Mission Control visibility. |
@@ -2187,7 +2189,7 @@ Phase 0 exit criteria:
 - [x] ✅ Upsert config-managed groups.
 - [x] ✅ Upsert provider-neutral identity providers and entitlement mappings with secret-reference-only provider configuration, source ownership, audit events, and source-scoped authoritative disable/archive behavior. Adapter execution and secret-reference availability checks remain pending.
 - [x] ✅ Upsert config-managed engines using the current engine field shape, opaque secret references, provenance, and central/distributed runtime settings.
-- [ ] ⬜ Persist engine runtime access scope and deployment integration settings.
+- [x] ✅ Persist engine runtime access scope and deployment integration settings.
 - [ ] ⬜ Refresh Engine Set materializations and authorization snapshots when config apply changes engine labels.
 - [ ] ⬜ Resolve secret refs and write encrypted engine credential fields.
 - [ ] ⬜ Upsert config-managed Engine Sets and materialize them.
@@ -2265,11 +2267,12 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add role-editor search, grouped permission accordions, selected-only/risk filters, responsive checkboxes, sticky save/cancel, system-role duplication, and config ownership states.
 - [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Direct LDAPS configuration now includes bind identity, secret reference, user/group base DNs, user filter, and membership lookup fields. Mapping connection health and reconciliation history remain pending.
 - [ ] ⬜ Show engine labels such as country, domain, environment, and region in engine detail and engine inventory filters.
-- [ ] ⬜ Show runtime authorization mode in Platform Settings with `enterpriseglue_authoritative` as active and later modes disabled with explanatory copy.
+- [x] ✅ Show the active `enterpriseglue_authoritative` runtime authorization mode in Platform Settings with explanatory copy. Unsupported later modes remain rejected by settings validation.
 - [x] ✅ Add a permission-gated Access Control > Runtime Resources tab for bounded, sanitized process/decision inventory inspection and manual reconciliation.
 - [x] ✅ Add a compact, permission-gated Engine Detail runtime-resource summary for `resource_aware` central engines. It shows bounded sanitized inventory only to administrators with runtime inventory read permission.
 - [x] ✅ Add per-engine runtime access scope controls to manual create/edit and engine detail. The API rejects unsafe downgrade to engine-wide access while resource-scoped assignments exist.
-- [ ] ⬜ Add per-engine deployment integration controls and remaining deployment ingestion/lineage diagnostics.
+- [x] ✅ Add per-engine v1 deployment integration controls to manual create/edit and engine detail. `enterpriseglue_proxy` permits EnterpriseGlue deployment; `direct_engine` rejects proxy deployment and accepts machine-authenticated pipeline receipts.
+- [ ] ⬜ Add independent deployment ingestion switches, discovery/reconciliation scheduling, and remaining lineage diagnostics.
 - [ ] ⬜ Add Mission Control filters and empty states that explain when the user can see the engine but has no visible process or decision resources.
 - [ ] ⬜ Ensure dashboard and Mission Control counters are based on authorized runtime subsets.
 - [ ] ⬜ Show `Customer-managed engine authentication` or `No EnterpriseGlue-managed credentials` for sidecar engines instead of implying missing security.

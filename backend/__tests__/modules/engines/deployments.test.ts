@@ -83,6 +83,7 @@ describe('engines deployments routes', () => {
   let app: express.Application;
   let engineDeploymentInserts: any[];
   let artifactInserts: any[];
+  let mockEngine: any;
 
   beforeEach(async () => {
     app = express();
@@ -131,7 +132,7 @@ describe('engines deployments routes', () => {
     engineDeploymentInserts = [];
     artifactInserts = [];
 
-    const mockEngine = {
+    mockEngine = {
       id: 'e1',
       baseUrl: 'http://localhost:8080',
       name: 'Test Engine',
@@ -328,6 +329,21 @@ describe('engines deployments routes', () => {
     });
   });
 
+  it('rejects proxy deployment preview for a direct-engine integration', async () => {
+    mockEngine.deploymentIntegration = 'direct_engine';
+
+    const response = await request(app)
+      .post('/engines-api/engines/e1/deployments/preview')
+      .send({ resources: { projectId: 'project-1' } });
+
+    expect(response.status).toBe(409);
+    expect(deploymentEligibilityService.evaluate).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      engineId: 'e1',
+      mode: 'manual',
+    }));
+  });
+
   it('creates manual deployments through composite deployment eligibility', async () => {
     const { fetch } = await import('undici');
     (fetch as any).mockResolvedValueOnce({
@@ -471,6 +487,7 @@ describe('engines deployments routes', () => {
   });
 
   it('records an idempotent external deployment receipt through API deployment eligibility', async () => {
+    mockEngine.deploymentIntegration = 'direct_engine';
     const response = await request(app)
       .post('/engines-api/external/engines/e1/deployment-receipts')
       .set('Authorization', 'Bearer token-1')

@@ -875,11 +875,12 @@ describe('mission-control engines routes', () => {
         name: 'Default engine',
         baseUrl: 'https://ion.example.com/engine-rest',
         runtimeAccessScope: 'resource_aware',
+        deploymentIntegration: 'direct_engine',
       });
 
     expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({ type: 'ion', runtimeAccessScope: 'resource_aware' });
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ type: 'ion', runtimeAccessScope: 'resource_aware' }));
+    expect(response.body).toMatchObject({ type: 'ion', runtimeAccessScope: 'resource_aware', deploymentIntegration: 'direct_engine' });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ type: 'ion', runtimeAccessScope: 'resource_aware', deploymentIntegration: 'direct_engine' }));
   });
 
   it('rejects changing a resource-aware engine to engine-wide while runtime assignments exist', async () => {

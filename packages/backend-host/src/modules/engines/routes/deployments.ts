@@ -83,7 +83,37 @@ async function getEngineById(engineId: string): Promise<EngineConnectionInfo> {
   const engineRepo = dataSource.getRepository(Engine)
   const row = await engineRepo.findOne({ where: { id: engineId } })
   if (!row) throw Object.assign(new Error('Engine not found'), { status: 404 })
-  return { id: row.id, baseUrl: row.baseUrl, authType: row.authType ?? null, username: row.username ?? null, passwordEnc: row.passwordEnc ?? null }
+  return {
+    id: row.id,
+    baseUrl: row.baseUrl,
+    deploymentIntegration: row.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy',
+    authType: row.authType ?? null,
+    username: row.username ?? null,
+    passwordEnc: row.passwordEnc ?? null,
+  }
+}
+
+function requireDeploymentIntegration(expected: 'enterpriseglue_proxy' | 'direct_engine') {
+  return async function requireConfiguredDeploymentIntegration(req: Request, _res: Response, next: NextFunction) {
+    try {
+      const engineId = String(req.params.engineId || '')
+      if (!engineId) throw Errors.validation('engineId is required')
+      const engine = await (await getDataSource()).getRepository(Engine).findOne({
+        where: { id: engineId },
+        select: ['id', 'deploymentIntegration'],
+      })
+      if (!engine) throw Errors.notFound('Engine')
+      const actual = engine.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy'
+      if (actual !== expected) {
+        throw Errors.conflict(expected === 'enterpriseglue_proxy'
+          ? 'This engine is configured for direct deployment. Deploy through the customer pipeline and submit a deployment receipt.'
+          : 'Deployment receipts are available only for engines configured for direct deployment.')
+      }
+      return next()
+    } catch (error) {
+      return next(error instanceof Error ? error : Errors.internal('Deployment integration validation failed'))
+    }
+  }
 }
 
 function authHeaders(e: { authType?: string | null; username?: string | null; passwordEnc?: string | null }): Record<string, string> {
@@ -244,7 +274,7 @@ r.post('/engines-api/engines/:engineId/deployments/preview', apiLimiter, require
   mode: 'manual',
   projectIdFrom: 'body',
   engineIdFrom: 'body',
-}), asyncHandler(async (req: Request, res: Response) => {
+}), requireDeploymentIntegration('enterpriseglue_proxy'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const files = await resolveFilesFromRequest(req)
     const folderMap = await buildFolderLookup()
@@ -370,6 +400,12 @@ async function createEngineDeployment(req: Request, res: Response) {
   try {
     const deployTotalStart = Date.now()
     const engine = await getEngineById(String(req.params.engineId))
+    if (engine.deploymentIntegration === 'direct_engine') {
+      return res.status(409).json({
+        error: 'Direct deployment engine',
+        message: 'This engine is configured for direct deployment. Deploy through the customer pipeline and submit a deployment receipt.',
+      })
+    }
     const resolveStart = Date.now()
     const files = await resolveFilesFromRequest(req)
     logger.info('Engine deploy: files resolved', { count: files.length, ms: Date.now() - resolveStart })
@@ -669,7 +705,7 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
   mode: 'manual',
   projectIdFrom: 'body',
   engineIdFrom: 'body',
-}), asyncHandler(createEngineDeployment))
+}), requireDeploymentIntegration('enterpriseglue_proxy'), asyncHandler(createEngineDeployment))
 
 r.post(
   '/engines-api/external/engines/:engineId/deployments',
@@ -677,6 +713,7 @@ r.post(
   validateBody(deployResourcesSchema),
   inferDeployAuthIds,
   requireApiDeploymentEligibility({ engineIdFrom: 'params', projectIdFrom: 'body' }),
+  requireDeploymentIntegration('enterpriseglue_proxy'),
   asyncHandler(createEngineDeployment)
 )
 
@@ -685,6 +722,7 @@ r.post(
   apiLimiter,
   validateBody(DeploymentReceiptCreateSchema),
   requireApiDeploymentEligibility({ engineIdFrom: 'params', projectIdFrom: 'body' }),
+  requireDeploymentIntegration('direct_engine'),
   asyncHandler(async (req: Request, res: Response) => {
     const principal = req.apiClient
       ? { source: 'api_client' as const, id: req.apiClient.id }

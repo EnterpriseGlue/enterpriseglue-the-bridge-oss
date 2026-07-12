@@ -11,6 +11,7 @@ import type { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastruc
 export interface EngineConnectionInfo {
   id: string;
   baseUrl: string;
+  deploymentIntegration?: 'enterpriseglue_proxy' | 'direct_engine';
   authType?: string | null;
   username?: string | null;
   passwordEnc?: string | null;
