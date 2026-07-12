@@ -60,6 +60,12 @@ const requireProcessInstanceAction = (actionId: string) => requireRuntimeDefinit
   resourceKeyFields: ['definitionKey', 'processDefinitionKey'],
 })
 
+const requireHistoricProcessInstanceAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {
+  resourceKind: 'process_definition',
+  definitionPath: 'history/process-instance',
+  resourceKeyFields: ['processDefinitionKey', 'definitionKey'],
+})
+
 // Type for process instance output
 interface ProcessInstanceOutput {
   id: string;
@@ -246,7 +252,7 @@ r.get('/mission-control-api/process-instances/:id/jobs', requireProcessInstanceA
 }))
 
 // History: process instance details (works for finished instances)
-r.get('/mission-control-api/history/process-instances/:id', requireAction('engine.runtime.history.process-instances.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/history/process-instances/:id', requireHistoricProcessInstanceAction('engine.runtime.history.process-instances.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
@@ -259,10 +265,15 @@ r.get('/mission-control-api/history/process-instances/:id', requireAction('engin
 }))
 
 // History: list with arbitrary filters (e.g., superProcessInstanceId)
-r.get('/mission-control-api/history/process-instances', requireAction('engine.runtime.history.process-instances.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/history/process-instances', requireRuntimeCollectionAction('engine.runtime.history.process-instances.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await listHistoricProcessInstances(engineId, req.query as any)
+    const keys = req.authorizedRuntimeResourceKeys
+    const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null
+    const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null
+    const data = visibleKeys
+      ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listHistoricProcessInstances(engineId, { ...req.query, processDefinitionKey })))).flat()
+      : await listHistoricProcessInstances(engineId, req.query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
     res.json(redacted)
   } catch (e: any) {
@@ -296,10 +307,15 @@ r.get('/mission-control-api/process-instances/:id/incidents', requireProcessInst
 }))
 
 // History: variable instances
-r.get('/mission-control-api/history/variable-instances', requireAction('engine.runtime.history.variables.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/history/variable-instances', requireRuntimeCollectionAction('engine.runtime.history.variables.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await listHistoricVariableInstances(engineId, req.query as any)
+    const keys = req.authorizedRuntimeResourceKeys
+    const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null
+    const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null
+    const data = visibleKeys
+      ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listHistoricVariableInstances(engineId, { ...req.query, processDefinitionKey })))).flat()
+      : await listHistoricVariableInstances(engineId, req.query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
     res.json(redacted)
   } catch (e: any) {
