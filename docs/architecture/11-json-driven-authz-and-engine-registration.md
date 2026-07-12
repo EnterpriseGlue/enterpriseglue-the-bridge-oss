@@ -46,6 +46,7 @@ Current config-as-code status:
 - [x] ✅ Expose side-effect-free strict config-bundle preview at `POST /api/authz/config-bundles/preview`, protected by `platform.authz.roles.manage`, with OpenAPI and route-inventory coverage.
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
+- [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply will persist the expanded permission list later.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
 - [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.
@@ -2131,10 +2132,10 @@ Phase 0 exit criteria:
 - [x] ✅ Add schema version and strict unknown-field rejection.
 - [x] ✅ Add stable object hashing and canonical JSON normalization.
 - [ ] ⬜ Add reference resolver types for `engineKey`, `engineExternalId`, `engineSetKey`, `groupKey`, `roleKey`, and `projectRef`.
-- [ ] ⬜ Add validation for same-scope role permissions.
-- [ ] ⬜ Add validation that system roles are reference-only and not mutable.
-- [ ] ⬜ Add custom-role config validation for explicit `permissions`.
-- [ ] ⬜ Add custom-role `copyFromRoleKey` expansion with same-scope `addPermissions` and `removePermissions`.
+- [x] ✅ Add validation for same-scope role permissions.
+- [x] ✅ Add validation that system roles are reference-only and not mutable.
+- [x] ✅ Add custom-role config validation for explicit `permissions`.
+- [x] ✅ Add custom-role `copyFromRoleKey` expansion with same-scope `addPermissions` and `removePermissions`.
 - [ ] ⬜ Add role baseline fingerprinting so previews show when a system-role template changed.
 - [x] ✅ Add settings schema for `engineRuntimeAuthorizationMode` with `enterpriseglue_authoritative` enabled in v1 and the other modes rejected as unsupported.
 - [ ] ⬜ Add per-engine `runtimeAccessScope` and `deploymentIntegration` schemas with distributed-engine defaults.
@@ -2151,7 +2152,7 @@ Phase 0 exit criteria:
 
 ### Phase 2: Preview Service
 
-- [ ] ⬜ Add `ConfigBundlePreviewService`.
+- [x] ✅ Add `ConfigBundlePreviewService` for strict, side-effect-free schema and staged-object reference validation.
 - [ ] ⬜ Load multi-file folder bundle and single-file bundle.
 - [ ] ⬜ Resolve imports with path traversal protection.
 - [ ] ⬜ Resolve all references against current database state and staged objects in the same bundle.

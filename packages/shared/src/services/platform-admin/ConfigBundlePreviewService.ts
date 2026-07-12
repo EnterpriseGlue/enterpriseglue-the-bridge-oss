@@ -20,7 +20,14 @@ const FILE_SCHEMAS: Record<string, z.ZodType> = {
 };
 
 export interface ConfigBundlePreviewInput { bundle: unknown; files: Record<string, unknown>; }
-export interface ConfigBundlePreview { valid: boolean; canonicalHash?: string; errors: Array<{ path: string; message: string }>; counts: Record<string, number>; }
+export interface ConfigBundlePreview {
+  valid: boolean;
+  canonicalHash?: string;
+  errors: Array<{ path: string; message: string }>;
+  counts: Record<string, number>;
+  /** Explicit effective permissions for copied config roles; never a runtime authorization source. */
+  expandedRolePermissions?: Record<string, string[]>;
+}
 
 function issues(prefix: string, error: z.ZodError): Array<{ path: string; message: string }> {
   return error.issues.map((issue) => ({ path: [prefix, ...issue.path].join('.'), message: issue.message }));
@@ -130,6 +137,63 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
   return errors;
 }
 
+function expandRoleTemplates(normalizedFiles: Record<string, unknown>): {
+  errors: Array<{ path: string; message: string }>;
+  expandedRolePermissions: Record<string, string[]>;
+} {
+  const roles = fileEntries(normalizedFiles, './roles.json', 'roles');
+  const systemRoles = new Map(SystemRoleDefinitions.map((role) => [role.key, {
+    scope: role.scope,
+    permissions: role.permissions,
+  }]));
+  const customRoles = new Map(roles.map((role, index) => [role.key, { role, index }]));
+  const resolved = new Map<string, string[]>();
+  const resolving = new Set<string>();
+  const errors: Array<{ path: string; message: string }> = [];
+
+  const resolve = (key: string): string[] | null => {
+    const cached = resolved.get(key);
+    if (cached) return cached;
+    const systemRole = systemRoles.get(key);
+    if (systemRole) return [...systemRole.permissions].sort();
+    const entry = customRoles.get(key);
+    if (!entry) return null;
+    if (resolving.has(key)) {
+      errors.push({ path: `./roles.json.roles.${entry.index}.copyFromRoleKey`, message: `Role template cycle detected at ${key}` });
+      return null;
+    }
+    resolving.add(key);
+    const { role, index } = entry;
+    let permissions: string[];
+    if ('permissions' in role) {
+      permissions = [...role.permissions];
+    } else {
+      const parentPermissions = resolve(role.copyFromRoleKey);
+      const parent = systemRoles.get(role.copyFromRoleKey) || customRoles.get(role.copyFromRoleKey)?.role;
+      if (!parentPermissions || !parent) {
+        permissions = [];
+      } else {
+        if (parent.scope !== role.scope) {
+          errors.push({
+            path: `./roles.json.roles.${index}.copyFromRoleKey`,
+            message: `Role template ${role.copyFromRoleKey} has ${parent.scope} scope and cannot be copied into a ${role.scope} role`,
+          });
+        }
+        const removed = new Set(role.removePermissions || []);
+        permissions = [...new Set([...parentPermissions, ...(role.addPermissions || [])])]
+          .filter((permission) => !removed.has(permission));
+      }
+    }
+    resolving.delete(key);
+    const normalized = [...new Set(permissions)].sort();
+    resolved.set(key, normalized);
+    return normalized;
+  };
+
+  for (const role of roles) resolve(role.key);
+  return { errors, expandedRolePermissions: Object.fromEntries(resolved.entries()) };
+}
+
 class ConfigBundlePreviewService {
   preview(input: ConfigBundlePreviewInput): ConfigBundlePreview {
     const parsedBundle = EnterpriseGlueConfigBundleSchema.safeParse(input.bundle);
@@ -146,9 +210,23 @@ class ConfigBundlePreviewService {
       counts[path] = Array.isArray(firstArray) ? firstArray.length : 0;
     }
     for (const path of Object.keys(input.files)) if (!parsedBundle.data.imports.includes(path as never)) errors.push({ path, message: 'File is not declared in bundle imports' });
-    if (errors.length === 0) errors.push(...validateCrossFileReferences(normalizedFiles));
+    let expandedRolePermissions: Record<string, string[]> | undefined;
+    if (errors.length === 0) {
+      errors.push(...validateCrossFileReferences(normalizedFiles));
+      if (errors.length === 0) {
+        const expanded = expandRoleTemplates(normalizedFiles);
+        errors.push(...expanded.errors);
+        expandedRolePermissions = expanded.expandedRolePermissions;
+      }
+    }
     if (errors.length > 0) return { valid: false, errors, counts };
-    return { valid: true, canonicalHash: hashCanonicalConfig({ bundle: parsedBundle.data, files: normalizedFiles }), errors: [], counts };
+    return {
+      valid: true,
+      canonicalHash: hashCanonicalConfig({ bundle: parsedBundle.data, files: normalizedFiles }),
+      errors: [],
+      counts,
+      expandedRolePermissions,
+    };
   }
 }
 

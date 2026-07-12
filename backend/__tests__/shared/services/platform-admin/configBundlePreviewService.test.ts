@@ -44,4 +44,50 @@ describe('configBundlePreviewService', () => {
       expect.objectContaining({ path: './assignments.json.assignments.0.scope.engineKey', message: 'Unknown engine key: engine.missing' }),
     ]));
   });
+
+  it('expands same-scope copied custom roles and rejects template cycles', () => {
+    const templateBundle = {
+      ...bundle,
+      imports: ['./roles.json'],
+    };
+    const expanded = configBundlePreviewService.preview({
+      bundle: templateBundle,
+      files: {
+        './roles.json': {
+          roles: [{
+            key: 'custom.engine.deployer-plus',
+            name: 'Deployer Plus',
+            scope: 'engine',
+            copyFromRoleKey: 'system.engine.deployer',
+            addPermissions: ['engine:process:start'],
+            removePermissions: [],
+          }],
+        },
+      },
+    });
+
+    expect(expanded).toMatchObject({
+      valid: true,
+      expandedRolePermissions: {
+        'custom.engine.deployer-plus': expect.arrayContaining(['engine:deploy', 'engine:process:start']),
+      },
+    });
+
+    const cycle = configBundlePreviewService.preview({
+      bundle: templateBundle,
+      files: {
+        './roles.json': {
+          roles: [
+            { key: 'custom.engine.alpha', name: 'Alpha', scope: 'engine', copyFromRoleKey: 'custom.engine.beta', addPermissions: ['engine:deploy'], removePermissions: [] },
+            { key: 'custom.engine.beta', name: 'Beta', scope: 'engine', copyFromRoleKey: 'custom.engine.alpha', addPermissions: ['engine:deploy'], removePermissions: [] },
+          ],
+        },
+      },
+    });
+
+    expect(cycle).toMatchObject({ valid: false });
+    expect(cycle.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: expect.stringContaining('Role template cycle detected') }),
+    ]));
+  });
 });
