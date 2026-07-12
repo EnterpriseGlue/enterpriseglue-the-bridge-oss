@@ -439,9 +439,10 @@ Most EnterpriseGlue installations use distributed engines where one project or t
 
 There is deliberately no third `mixed` value. A `resource_aware` engine already supports both broad engine assignments and narrow resource-set assignments. Config preview must warn when a broad engine grant shadows a narrow resource-set grant for the same principal.
 
-- [ ] ⬜ Add `RuntimeAccessScopeSchema = z.enum(['engine_wide', 'resource_aware'])` with `engine_wide` as the default.
-- [ ] ⬜ Persist `engines.runtime_access_scope` and expose it through manual, external, config, list, detail, audit, and OpenAPI engine contracts.
+- [x] ✅ Add `RuntimeAccessScopeSchema = z.enum(['engine_wide', 'resource_aware'])` with `engine_wide` as the default.
+- [x] ✅ Persist `engines.runtime_access_scope` and expose it through manual, external, config, list, and detail engine contracts. Dedicated engine-management OpenAPI completion remains tracked below.
 - [x] ✅ Reject exact runtime-resource and runtime-resource-set assignments unless the containing engine uses `resource_aware` runtime access. Assignment normalization preserves the requested runtime scope type.
+- [x] ✅ Reject changing a `resource_aware` engine back to `engine_wide` while exact runtime-resource or runtime-resource-set role assignments still target that engine.
 - [ ] ⬜ Require authorized-subset filtering for every runtime collection and count on `resource_aware` engines.
 - [x] ✅ Return and display an allow-only overlap warning from runtime-scoped assignment creation when active direct, inherited-group, or materialized Engine Set grants already supply the same permission. Access Control supports exact runtime-resource and runtime-resource-set assignment scopes for human principals, with engine-first inventory/set selectors instead of opaque IDs. The assignment remains additive; legacy-role and policy overlap diagnostics remain future work.
 
@@ -1924,7 +1925,7 @@ The separate `Permissions` tab remains the catalog administration and inspection
 | Access Control > Roles | Replace the wide matrix with the role library and focused editor above. | System/config-locked roles are read-only; custom manual roles are editable. |
 | Access Control > Identity Mappings | Replace protocol-specific claim language with normalized group/role/scope/attribute source facts while retaining protocol-specific sample/test help. | Exact stable IDs are the default; risky matchers display preview warnings. |
 | Access Control > Effective Access | Add runtime tenant/process/decision resource inputs and identity entitlement source chain. | Explain engine-wide grants, resource-set grants, broad-grant shadowing, policy, and context separately. |
-| Engine create/edit/detail | Add Runtime access scope and deployment integration controls/status. | Default to `engine_wide`; show runtime-resource controls only for `resource_aware`. |
+| Engine create/edit/detail | Runtime access scope control/status is implemented; deployment integration controls remain pending. | Default to `engine_wide`; show runtime-resource controls only for `resource_aware`. |
 | Engine Detail > Access | Add runtime tenants/resource sets and provider-managed group assignments. | Keep accountable owner metadata separate from effective access. |
 | Engine Detail > Deployments | Show proxied/reported/discovered/inferred badges, receipt principal, last reconciliation, and lineage gaps. | The current detail surface shows sanitized direct-pipeline receipt lineage and source; legacy/proxied/discovered history normalization remains pending. Bridge actions require verified lineage; reconciliation is admin/action guarded. |
 | Mission Control engine selector | Include distributed engines with engine runtime access and central engines with at least one visible runtime resource. | Do not require project membership for general Mission Control visibility. |
@@ -2267,7 +2268,8 @@ Phase 0 exit criteria:
 - [ ] ⬜ Show runtime authorization mode in Platform Settings with `enterpriseglue_authoritative` as active and later modes disabled with explanatory copy.
 - [x] ✅ Add a permission-gated Access Control > Runtime Resources tab for bounded, sanitized process/decision inventory inspection and manual reconciliation.
 - [x] ✅ Add a compact, permission-gated Engine Detail runtime-resource summary for `resource_aware` central engines. It shows bounded sanitized inventory only to administrators with runtime inventory read permission.
-- [ ] ⬜ Add per-engine runtime access scope and deployment integration controls plus deployment ingestion/lineage diagnostics.
+- [x] ✅ Add per-engine runtime access scope controls to manual create/edit and engine detail. The API rejects unsafe downgrade to engine-wide access while resource-scoped assignments exist.
+- [ ] ⬜ Add per-engine deployment integration controls and remaining deployment ingestion/lineage diagnostics.
 - [ ] ⬜ Add Mission Control filters and empty states that explain when the user can see the engine but has no visible process or decision resources.
 - [ ] ⬜ Ensure dashboard and Mission Control counters are based on authorized runtime subsets.
 - [ ] ⬜ Show `Customer-managed engine authentication` or `No EnterpriseGlue-managed credentials` for sidecar engines instead of implying missing security.

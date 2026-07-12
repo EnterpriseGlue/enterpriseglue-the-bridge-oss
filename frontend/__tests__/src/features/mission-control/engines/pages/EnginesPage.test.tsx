@@ -746,6 +746,7 @@ describe('EnginesPage', () => {
       oauthAudience: 'engine-api',
       version: '1.2.3',
       environmentTagId: 'env-prod',
+      runtimeAccessScope: 'resource_aware',
     }, { registrationSource: 'external_api' })).toEqual({
       name: 'Display Name',
       environmentTagId: 'env-prod',
@@ -764,6 +765,7 @@ describe('EnginesPage', () => {
       oauthScopes: 'engine',
       oauthAudience: 'engine-api',
       environmentTagId: '',
+      runtimeAccessScope: 'resource_aware',
     }, { registrationSource: 'user' })).toMatchObject({
       name: 'Manual Engine',
       baseUrl: 'https://manual.example.com/engine-rest',
@@ -774,6 +776,7 @@ describe('EnginesPage', () => {
       oauthTokenUrl: undefined,
       oauthScopes: undefined,
       oauthAudience: undefined,
+      runtimeAccessScope: 'resource_aware',
     });
   });
 

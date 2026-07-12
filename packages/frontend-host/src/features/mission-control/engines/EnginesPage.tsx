@@ -48,6 +48,7 @@ function getDockerLoopbackSuggestion(raw: string): string | null {
 }
 
 type EngineTypeId = 'ion' | 'operaton' | 'camunda7'
+type RuntimeAccessScope = 'engine_wide' | 'resource_aware'
 
 const ENGINE_TYPE_LABELS: Record<EngineTypeId, string> = {
   ion: 'ION-Engine',
@@ -978,6 +979,7 @@ function EngineRegistrationSection({ engine }: { engine: any }) {
         <EngineRegistrationDetail label="External system" value={engine.externalSystemId || '-'} />
         <EngineRegistrationDetail label="External ID" value={engine.externalId || '-'} />
         <EngineRegistrationDetail label="Management mode" value={formatEngineRegistrationStatus(engine.managementMode)} tagValue={engine.managementMode || undefined} />
+        <EngineRegistrationDetail label="Runtime access" value={engine.runtimeAccessScope === 'resource_aware' ? 'Resource-aware (central)' : 'Engine-wide (distributed)'} />
         <EngineRegistrationDetail label="Lifecycle" value={formatEngineRegistrationStatus(engine.lifecycleStatus || 'active')} tagValue={engine.lifecycleStatus || 'active'} />
         <EngineRegistrationDetail label="Drift" value={formatEngineRegistrationStatus(engine.driftStatus)} tagValue={engine.driftStatus || undefined} />
         <EngineRegistrationDetail label="Capability status" value={formatEngineRegistrationStatus(engine.capabilityStatus)} tagValue={engine.capabilityStatus || undefined} />
@@ -1072,6 +1074,7 @@ export default function Engines() {
     oauthScopes: '',
     oauthAudience: '',
     environmentTagId: '',
+    runtimeAccessScope: 'engine_wide' as RuntimeAccessScope,
   })
   const [searchQuery, setSearchQuery] = React.useState('')
 
@@ -1089,6 +1092,10 @@ export default function Engines() {
     { id: 'basic', label: 'Basic Auth (Username/Password)' },
     { id: 'bearer', label: 'Bearer Token' },
     { id: 'oauth2-client-credentials', label: 'OAuth2 Client Credentials' },
+  ]), [])
+  const RUNTIME_ACCESS_SCOPE_ITEMS = React.useMemo(() => ([
+    { id: 'engine_wide' as const, label: 'Engine-wide (distributed)' },
+    { id: 'resource_aware' as const, label: 'Resource-aware (central)' },
   ]), [])
   const dockerLoopbackSuggestion = React.useMemo(() => getDockerLoopbackSuggestion(String(form.baseUrl || '').trim()), [form.baseUrl])
 
@@ -1173,6 +1180,7 @@ export default function Engines() {
       oauthScopes: '',
       oauthAudience: '',
       environmentTagId: autoTagId,
+      runtimeAccessScope: 'engine_wide',
     })
     engineModal.openModal()
   }, [canCreateEngine, hasSingleTag, envTags, engineModal])
@@ -1283,6 +1291,7 @@ export default function Engines() {
       oauthScopes: row.oauthScopes || '',
       oauthAudience: row.oauthAudience || '',
       environmentTagId: row.environmentTagId || '',
+      runtimeAccessScope: row.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide',
     })
     engineModal.openModal()
   }
@@ -1802,6 +1811,25 @@ export default function Engines() {
           onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, type: selectedItem?.id }))}
           disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
+        <Dropdown
+          id="eng-runtime-access-scope"
+          titleText="Runtime access"
+          label="Select runtime access"
+          items={RUNTIME_ACCESS_SCOPE_ITEMS}
+          itemToString={(it: any) => it ? it.label : ''}
+          selectedItem={RUNTIME_ACCESS_SCOPE_ITEMS.find((item) => item.id === form.runtimeAccessScope)}
+          onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, runtimeAccessScope: selectedItem?.id || 'engine_wide' }))}
+          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+        />
+        {form.runtimeAccessScope === 'resource_aware' && (
+          <InlineNotification
+            lowContrast
+            kind="info"
+            title="Resource-aware runtime access"
+            subtitle="Use Access Control after saving to assign access to exact runtime resources or Runtime Resource Sets."
+            hideCloseButton
+          />
+        )}
         <Dropdown
           id="eng-auth"
           titleText="Auth"

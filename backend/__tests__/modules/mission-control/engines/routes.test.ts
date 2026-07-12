@@ -861,7 +861,7 @@ describe('mission-control engines routes', () => {
     expect(insert).toHaveBeenCalledTimes(3);
   });
 
-  it('defaults newly registered engines to ION when type is omitted', async () => {
+  it('defaults newly registered engines to ION and persists the requested runtime access scope', async () => {
     const insert = vi.fn().mockResolvedValue({});
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
@@ -871,11 +871,50 @@ describe('mission-control engines routes', () => {
 
     const response = await request(app)
       .post('/engines-api/engines')
-      .send({ name: 'Default engine', baseUrl: 'https://ion.example.com/engine-rest' });
+      .send({
+        name: 'Default engine',
+        baseUrl: 'https://ion.example.com/engine-rest',
+        runtimeAccessScope: 'resource_aware',
+      });
 
     expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({ type: 'ion' });
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ type: 'ion' }));
+    expect(response.body).toMatchObject({ type: 'ion', runtimeAccessScope: 'resource_aware' });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ type: 'ion', runtimeAccessScope: 'resource_aware' }));
+  });
+
+  it('rejects changing a resource-aware engine to engine-wide while runtime assignments exist', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const getCount = vi.fn().mockResolvedValue(1);
+    const queryBuilder = {
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getCount,
+    };
+    const update = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null }),
+        findOneBy: vi.fn().mockResolvedValue({
+          id: 'e1',
+          name: 'Central Engine',
+          registrationSource: 'user',
+          runtimeAccessScope: 'resource_aware',
+          tenantId: null,
+        }),
+        createQueryBuilder: vi.fn(() => queryBuilder),
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ runtimeAccessScope: 'engine_wide' });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error || '')).toContain('Remove or move runtime-resource role assignments');
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('accepts OAuth2 client credentials engine auth metadata', async () => {

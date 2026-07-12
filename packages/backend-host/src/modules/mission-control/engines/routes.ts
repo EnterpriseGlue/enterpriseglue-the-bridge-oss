@@ -5,6 +5,9 @@ import { z } from 'zod'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js'
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js'
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js'
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js'
 import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js'
 import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js'
 import { SavedFilter } from '@enterpriseglue/shared/infrastructure/persistence/entities/SavedFilter.js'
@@ -33,6 +36,7 @@ type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[]
 const engineIdParamSchema = z.object({ id: z.string().min(1) })
 const engineTypeSchema = z.enum(['ion', 'operaton', 'camunda7'])
 const engineAuthTypeSchema = z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials'])
+const runtimeAccessScopeSchema = z.enum(['engine_wide', 'resource_aware'])
 const engineLabelsSchema = z.record(z.string().min(1).max(128), z.string().max(512))
 const engineManagementModeSchema = z.enum(['external_managed', 'hybrid'])
 const engineLifecycleStatusSchema = z.enum(['active', 'disabled', 'stale', 'decommissioned'])
@@ -189,6 +193,7 @@ const createEngineBodySchema = z.object({
   oauthAudience: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
   environmentTagId: z.string().nullable().optional(),
+  runtimeAccessScope: runtimeAccessScopeSchema.optional(),
 })
 
 const updateEngineBodySchema = z.object({
@@ -205,6 +210,7 @@ const updateEngineBodySchema = z.object({
   oauthAudience: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
   environmentTagId: z.string().nullable().optional(),
+  runtimeAccessScope: runtimeAccessScopeSchema.optional(),
 })
 
 const DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP: EngineFieldOwnership = {
@@ -232,6 +238,7 @@ const ENGINE_UPDATE_FIELD_GROUPS: Record<string, string> = {
   oauthAudience: 'auth',
   version: 'version',
   environmentTagId: 'environment',
+  runtimeAccessScope: 'metadata',
 }
 
 const EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD: Record<string, string> = {
@@ -248,6 +255,7 @@ const EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD: Record<string, string> = {
   oauthAudience: 'oauthAudience',
   version: 'version',
   environmentTagId: 'environmentTagId',
+  runtimeAccessScope: 'runtimeAccessScope',
 }
 
 const ENGINE_SECRET_UPDATE_FIELDS = [
@@ -778,6 +786,29 @@ function scheduleRuntimeInventoryReconciliation(engineId: string, tenantId?: str
     .catch((error: unknown) => logger.warn('Failed to reconcile runtime resource inventory after engine change', { engineId, error }))
 }
 
+/**
+ * A resource-aware engine cannot become engine-wide while assignments still
+ * target its individual runtime resources or resource sets. Keeping those
+ * assignments would make their scope ambiguous to operators and evaluators.
+ */
+async function assertEngineCanUseEngineWideAccess(dataSource: DataSource, engineId: string): Promise<void> {
+  const assignments = dataSource.getRepository(RbacRoleAssignment)
+  const directResourceAssignmentCount = await assignments.createQueryBuilder('assignment')
+    .innerJoin(RuntimeResource, 'runtimeResource', 'runtimeResource.id = assignment.scopeId')
+    .where('assignment.scopeType = :scopeType', { scopeType: 'engine_runtime_resource' })
+    .andWhere('runtimeResource.engineId = :engineId', { engineId })
+    .getCount()
+  const resourceSetAssignmentCount = await assignments.createQueryBuilder('assignment')
+    .innerJoin(RuntimeResourceSet, 'runtimeResourceSet', 'runtimeResourceSet.id = assignment.scopeId')
+    .where('assignment.scopeType = :scopeType', { scopeType: 'engine_runtime_resource_set' })
+    .andWhere('runtimeResourceSet.engineId = :engineId', { engineId })
+    .getCount()
+
+  if (directResourceAssignmentCount + resourceSetAssignmentCount > 0) {
+    throw Errors.validation('Remove or move runtime-resource role assignments before changing this engine to engine-wide access')
+  }
+}
+
 async function testEngineConnectionAndRecord(
   dataSource: Awaited<ReturnType<typeof getDataSource>>,
   eng: Pick<Engine, 'id' | 'baseUrl' | 'authType' | 'username' | 'passwordEnc'>
@@ -894,6 +925,7 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine
     version: req.body.version ?? null,
     environmentTagId: req.body.environmentTagId || null,
     environmentLocked: false,
+    runtimeAccessScope: req.body.runtimeAccessScope || 'engine_wide',
     tenantId,
     createdAt: now,
     updatedAt: now,
@@ -953,6 +985,9 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
   const capabilitiesJson = capabilitiesToJson(reportedCapabilities)
   const capabilityStatus = getCapabilityStatus(req.body.type, reportedCapabilities)
   const existing = await engineRepo.findOne({ where: { externalId } })
+  if (existing && req.body.runtimeAccessScope === 'engine_wide' && existing.runtimeAccessScope === 'resource_aware') {
+    await assertEngineCanUseEngineWideAccess(dataSource, String(existing.id))
+  }
   const payload = {
     name: req.body.name,
     baseUrl: req.body.baseUrl,
@@ -977,6 +1012,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     oauthAudience: req.body.oauthAudience ?? null,
     version: req.body.version ?? null,
     environmentTagId: req.body.environmentTagId || null,
+    runtimeAccessScope: req.body.runtimeAccessScope,
     updatedAt: now,
   }
 
@@ -1355,6 +1391,9 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
   if (externallyOwnedUpdateFields.length > 0) {
     throw Errors.validation(`Externally managed engine fields are read-only: ${externallyOwnedUpdateFields.join(', ')}`)
   }
+  if (req.body.runtimeAccessScope === 'engine_wide' && existing.runtimeAccessScope === 'resource_aware') {
+    await assertEngineCanUseEngineWideAccess(dataSource, engineId)
+  }
   const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
   if (dockerLoopbackError) {
     return res.status(400).json({ error: dockerLoopbackError, field: 'baseUrl' })
@@ -1375,6 +1414,7 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
     oauthAudience: req.body.oauthAudience,
     version: req.body.version,
     environmentTagId: req.body.environmentTagId === undefined ? undefined : req.body.environmentTagId || null,
+    runtimeAccessScope: req.body.runtimeAccessScope,
     updatedAt: now,
   }
   await engineRepo.update({ id: engineId }, updates)
@@ -1401,6 +1441,9 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
   }
   if (req.body.externalId !== undefined || req.body.labels !== undefined) {
     await refreshEngineSetMaterializationsForEngine(engineId, existing.tenantId)
+    scheduleRuntimeInventoryReconciliation(engineId, existing.tenantId)
+  }
+  if (req.body.runtimeAccessScope === 'resource_aware' && existing.runtimeAccessScope !== 'resource_aware') {
     scheduleRuntimeInventoryReconciliation(engineId, existing.tenantId)
   }
   const updated = await engineRepo.findOneBy({ id: engineId })
