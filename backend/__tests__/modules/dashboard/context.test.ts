@@ -5,6 +5,7 @@ import contextRouter from '../../../../packages/backend-host/src/modules/dashboa
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
 import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
+import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
 import { engineService, permissionService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { permissionService as actionPermissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
@@ -26,6 +27,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   },
   permissionService: {
     getCurrentUserPermissions: vi.fn(),
+    getVisibleRuntimeResources: vi.fn(),
   },
   PlatformPermissions: {
     SETTINGS_MANAGE: 'platform:settings:manage',
@@ -101,6 +103,7 @@ describe('GET /api/dashboard/context', () => {
     );
     vi.mocked(engineService.getUserEngines).mockResolvedValue([]);
     vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue(emptyPermissions());
+    vi.mocked(permissionService.getVisibleRuntimeResources).mockResolvedValue([]);
   });
 
   it('returns context for regular user', async () => {
@@ -111,6 +114,7 @@ describe('GET /api/dashboard/context', () => {
       getRepository: (entity: unknown) => {
         if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -124,6 +128,7 @@ describe('GET /api/dashboard/context', () => {
     }));
     expect(response.body.isPlatformAdmin).toBe(false);
     expect(response.body.ownedEngineIds).toEqual([]);
+    expect(response.body.runtimeScopedEngineIds).toEqual([]);
     expect(response.body.projectMemberships).toEqual([]);
   });
 
@@ -153,6 +158,7 @@ describe('GET /api/dashboard/context', () => {
       getRepository: (entity: unknown) => {
         if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -177,6 +183,7 @@ describe('GET /api/dashboard/context', () => {
       getRepository: (entity: unknown) => {
         if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -208,6 +215,7 @@ describe('GET /api/dashboard/context', () => {
       getRepository: (entity: unknown) => {
         if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -221,6 +229,31 @@ describe('GET /api/dashboard/context', () => {
     expect(response.body.projectMemberships).toEqual([
       { projectId: 'project-2', projectName: 'Scoped Project', role: 'permission' },
     ]);
+  });
+
+  it('marks engines visible through a narrow runtime resource grant as scoped', async () => {
+    vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
+      ...emptyPermissions(),
+      engines: [{ resourceId: 'engine-central', permissions: ['engine:deploy:view'] }],
+    });
+    vi.mocked(permissionService.getVisibleRuntimeResources).mockResolvedValue([{ resourceKey: 'payments' }] as any);
+    const projectMemberRepo = { find: vi.fn().mockResolvedValue([]) };
+    const projectRepo = { find: vi.fn().mockResolvedValue([]) };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === ProjectMember) return projectMemberRepo;
+        if (entity === Project) return projectRepo;
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([{ id: 'engine-central' }]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app).get('/api/dashboard/context');
+
+    expect(response.status).toBe(200);
+    expect(response.body.runtimeScopedEngineIds).toEqual(['engine-central']);
+    expect(response.body.accessibleEngineIds).toContain('engine-central');
   });
 
   it('derives platform-admin dashboard flags from platform permissions', async () => {

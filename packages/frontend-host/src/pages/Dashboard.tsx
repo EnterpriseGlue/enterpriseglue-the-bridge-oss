@@ -13,6 +13,7 @@ import { evaluateActionSnapshot, WhyUnavailableLink } from '../shared/auth/guard
 
 type DashboardContext = {
   isPlatformAdmin: boolean
+  runtimeScopedEngineIds?: string[]
   projectMemberships?: Array<{ projectId: string; projectName?: string; role?: string }>
   canViewActiveUsers: boolean
   canViewEngines: boolean
@@ -99,6 +100,7 @@ export default function Dashboard() {
     hasAnyEnginePermission([EnginePermission.INSTANCE_VIEW])
   const canViewMetrics = Boolean(ctx?.canViewMetrics) ||
     hasAnyEnginePermission([EnginePermission.INSTANCE_VIEW])
+  const selectedEngineHasScopedRuntimeAccess = Boolean(selectedEngineId && ctx?.runtimeScopedEngineIds?.includes(selectedEngineId))
 
   // Fetch dashboard stats
   const statsQuery = useQuery({
@@ -279,6 +281,16 @@ export default function Dashboard() {
             </div>
           </div>
         </Tile>
+      )}
+
+      {selectedEngineHasScopedRuntimeAccess && (
+        <InlineNotification
+          kind="info"
+          lowContrast
+          hideCloseButton
+          title="Runtime access is scoped"
+          subtitle="Process and instance data for this engine is limited to the resources you are authorized to view."
+        />
       )}
 
       {/* KPI Row */}

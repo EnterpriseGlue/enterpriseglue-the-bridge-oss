@@ -2273,7 +2273,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add per-engine runtime access scope controls to manual create/edit and engine detail. The API rejects unsafe downgrade to engine-wide access while resource-scoped assignments exist.
 - [x] ✅ Add per-engine v1 deployment integration controls to manual create/edit and engine detail. `enterpriseglue_proxy` permits EnterpriseGlue deployment; `direct_engine` rejects proxy deployment and accepts machine-authenticated pipeline receipts.
 - [ ] ⬜ Add independent deployment ingestion switches, discovery/reconciliation scheduling, and remaining lineage diagnostics.
-- [ ] ⬜ Add Mission Control filters and empty states that explain when the user can see the engine but has no visible process or decision resources.
+- [ ] ⬜ Add Mission Control filters and empty states that explain when the user can see the engine but has no visible process or decision resources. Dashboard context and the selected-engine dashboard view now label resource-scoped runtime access; Mission Control collection-specific empty states remain pending.
 - [ ] ⬜ Ensure dashboard and Mission Control counters are based on authorized runtime subsets.
 - [ ] ⬜ Show `Customer-managed engine authentication` or `No EnterpriseGlue-managed credentials` for sidecar engines instead of implying missing security.
 - [ ] ⬜ Complete generic config ownership modes: config-locked engines are enforced and config-warn engine edits are marked as drift; config-sourced custom roles/groups/memberships are read-only. Add persisted `config_warn` ownership and drift-warning behavior for roles, groups, assignments, Engine Sets, and project-engine targets after the generic ownership schema is available.

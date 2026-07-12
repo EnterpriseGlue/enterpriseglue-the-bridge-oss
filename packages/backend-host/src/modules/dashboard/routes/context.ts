@@ -26,6 +26,7 @@ export type DashboardContext = {
   ownedEngineIds: string[];
   delegatedEngineIds: string[];
   accessibleEngineIds: string[]; // All engines user can see (owned + delegated + member)
+  runtimeScopedEngineIds: string[]; // Resource-aware engines visible through process or decision scope
   // Project access
   projectMemberships: Array<{
     projectId: string;
@@ -172,6 +173,7 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
     ownedEngineIds,
     delegatedEngineIds,
     accessibleEngineIds,
+    runtimeScopedEngineIds: runtimeVisibleEngineIds,
     projectMemberships,
     // Visibility flags
     canViewActiveUsers: isAdmin || canViewActiveUsers,
