@@ -5,12 +5,13 @@ import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/ent
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'role' | 'group' | 'engine' | 'engine_set' | 'runtime_resource_set';
+  objectType: 'role' | 'group' | 'engine' | 'engine_set' | 'runtime_resource_set' | 'identity_provider';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
@@ -41,6 +42,10 @@ function samePermissions(left: string[], right: string[]): boolean {
   return normalizedLeft.length === normalizedRight.length && normalizedLeft.every((value, index) => value === normalizedRight[index]);
 }
 
+function providerConfiguration(provider: any): Record<string, unknown> {
+  return provider[provider.type] || {};
+}
+
 /**
  * Produces a persisted-state diff for the currently supported config-owned
  * objects. It is intentionally read-only and must be used before apply.
@@ -56,13 +61,14 @@ class ConfigBundleDiffService {
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions] = await Promise.all([
+    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
       dataSource.getRepository(EngineSet).find(),
       dataSource.getRepository(RuntimeResourceSet).find(),
       dataSource.getRepository(RbacRolePermission).find(),
+      dataSource.getRepository(IdentityProvider).find(),
     ]);
     const rolePermissionsByRoleId = new Map<string, string[]>();
     for (const permission of rolePermissions) {
@@ -78,6 +84,8 @@ class ConfigBundleDiffService {
     const engineSetsByKey = new Map(tenantEngineSets.map((set) => [set.key, set]));
     const tenantRuntimeResourceSets = runtimeResourceSets.filter((set) => (set.tenantId || null) === normalizedTenantId);
     const runtimeResourceSetsByKey = new Map(tenantRuntimeResourceSets.map((set) => [set.key, set]));
+    const tenantIdentityProviders = identityProviders.filter((provider) => (provider.tenantId || null) === normalizedTenantId);
+    const identityProvidersByKey = new Map(tenantIdentityProviders.map((provider) => [provider.key, provider]));
     const changes: ConfigBundleDiffChange[] = [];
 
     const desiredRoles = values(compilation.files, './roles.json', 'roles');
@@ -172,6 +180,29 @@ class ConfigBundleDiffService {
       }
     }
 
+    const desiredIdentityProviders = values(compilation.files, './identity-providers.json', 'identityProviders');
+    const desiredIdentityProviderKeys = new Set(desiredIdentityProviders.map((provider) => provider.key));
+    for (const provider of desiredIdentityProviders) {
+      const existing = identityProvidersByKey.get(provider.key);
+      const configurationJson = JSON.stringify(providerConfiguration(provider));
+      const syncJson = JSON.stringify(provider.sync);
+      if (!existing) {
+        changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'create', reason: 'No persisted identity provider uses this tenant-scoped key' });
+      } else if (existing.sourceRef !== sourceRef) {
+        changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'conflict', currentId: existing.id, reason: 'Existing identity provider is not owned by this configuration bundle' });
+      } else if (
+        existing.protocol !== provider.type || existing.isEnabled !== provider.enabled ||
+        existing.authenticationMode !== provider.authenticationMode ||
+        existing.directoryTenantId !== (provider.directoryTenantId || null) ||
+        existing.configurationJson !== configurationJson || existing.syncJson !== syncJson ||
+        existing.ownershipMode !== (provider.ownershipMode || 'config_locked')
+      ) {
+        changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'update', currentId: existing.id, reason: 'Config-owned identity provider differs from the desired protocol, configuration, sync, or ownership state' });
+      } else {
+        changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned identity provider already matches the desired state' });
+      }
+    }
+
     if (manifest.mode === 'authoritative') {
       for (const role of tenantRoles) {
         if (role.source === CONFIG_SOURCE && role.sourceRef === sourceRef && !desiredRoleKeys.has(role.key) && !role.isArchived) {
@@ -194,6 +225,11 @@ class ConfigBundleDiffService {
       for (const set of tenantRuntimeResourceSets) {
         if (set.source === CONFIG_SOURCE && set.sourceRef === sourceRef && !desiredRuntimeResourceSetKeys.has(set.key) && !set.isArchived) {
           changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'archive', currentId: set.id, reason: 'Config-owned Runtime Resource Set is absent from an authoritative bundle' });
+        }
+      }
+      for (const provider of tenantIdentityProviders) {
+        if (provider.sourceRef === sourceRef && !desiredIdentityProviderKeys.has(provider.key) && provider.isEnabled) {
+          changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'archive', currentId: provider.id, reason: 'Config-owned identity provider is absent from an authoritative bundle' });
         }
       }
     }

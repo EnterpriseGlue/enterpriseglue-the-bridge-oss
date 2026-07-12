@@ -11,7 +11,7 @@ import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persis
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
-import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
@@ -59,7 +59,7 @@ function setupDataSource() {
   const assignmentRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn(), delete: vi.fn() };
   const projectRepo = { findOne: vi.fn().mockResolvedValue(null) };
   const targetRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
-  const providerRepo = { find: vi.fn().mockResolvedValue([]) };
+  const providerRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const identityMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
   const auditRepo = { insert: auditInsert };
   const repositories = (entity: unknown) => {
@@ -72,7 +72,7 @@ function setupDataSource() {
     if (entity === RbacRoleAssignment) return assignmentRepo;
     if (entity === Project) return projectRepo;
     if (entity === ProjectEngineTarget) return targetRepo;
-    if (entity === SsoProvider) return providerRepo;
+    if (entity === IdentityProvider) return providerRepo;
     if (entity === IdentityEntitlementMapping) return identityMappingRepo;
     if (entity === RbacRolePermission) return permissionRepo;
     if (entity === AuditLog) return auditRepo;
@@ -172,7 +172,7 @@ describe('configBundleApplyService', () => {
   it('applies a provider-neutral identity mapping to an existing configured provider and group', async () => {
     const { groupRepo, providerRepo, identityMappingRepo } = setupDataSource();
     groupRepo.find.mockResolvedValue([{ id: 'group-1', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false }]);
-    providerRepo.find.mockResolvedValue([{ id: 'provider-1', tenantId: 'tenant-a', configKey: 'identity.oidc.main' }]);
+    providerRepo.find.mockResolvedValue([{ id: 'provider-1', tenantId: 'tenant-a', key: 'identity.oidc.main' }]);
     const mappingBundle = { ...bundle, imports: ['./groups.json', './identity-mappings.json'] };
     const mappingFiles = {
       './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
@@ -181,6 +181,21 @@ describe('configBundleApplyService', () => {
     const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
     await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
     expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-1', configKey: 'mapping.operators', targetGroupId: 'group-1', sourceRef: 'config_bundle:acme.authz' }));
+  });
+
+  it('applies config-owned provider-neutral identity definitions before their mappings', async () => {
+    const { providerRepo } = setupDataSource();
+    const providerBundle = { ...bundle, imports: ['./identity-providers.json'] };
+    const providerFiles = {
+      './identity-providers.json': { identityProviders: [{
+        key: 'identity.oidc.main', type: 'oidc', enabled: true, authenticationMode: 'claims_only',
+        sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
+        oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', clientSecretRef: 'secret/entra', callbackUrl: 'https://app.example.test/callback', scopes: ['openid', 'profile'] },
+      }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: providerBundle, files: providerFiles });
+    await configBundleApplyService.apply({ bundle: providerBundle, files: providerFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+    expect(providerRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ key: 'identity.oidc.main', protocol: 'oidc', sourceRef: 'config_bundle:acme.authz' }));
   });
 
   it('applies a config-owned Runtime Resource Set against a configured engine', async () => {

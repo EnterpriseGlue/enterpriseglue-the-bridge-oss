@@ -6,6 +6,7 @@ import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/ent
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -20,7 +21,7 @@ const bundle = {
   imports: ['./roles.json', './groups.json'],
 };
 
-function mockDataSource(roles: unknown[] = [], groups: unknown[] = [], permissions: unknown[] = [], engines: unknown[] = []) {
+function mockDataSource(roles: unknown[] = [], groups: unknown[] = [], permissions: unknown[] = [], engines: unknown[] = [], identityProviders: unknown[] = []) {
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository: (entity: unknown) => {
       if (entity === RbacRole) return { find: vi.fn().mockResolvedValue(roles) };
@@ -29,9 +30,11 @@ function mockDataSource(roles: unknown[] = [], groups: unknown[] = [], permissio
       if (entity === EngineSet) return { find: vi.fn().mockResolvedValue([]) };
       if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue([]) };
       if (entity === RbacRolePermission) return { find: vi.fn().mockResolvedValue(permissions) };
+      if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue(identityProviders) };
       throw new Error('Unexpected repository');
     },
   });
+
 }
 
 describe('configBundleDiffService', () => {
@@ -106,6 +109,21 @@ describe('configBundleDiffService', () => {
     }, 'tenant-a');
     expect(result.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({ objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'create' }),
+    ]));
+  });
+
+  it('includes config-owned identity providers in the persisted-state diff', async () => {
+    mockDataSource([], [], [], [], []);
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./identity-providers.json'] },
+      files: { './identity-providers.json': { identityProviders: [{
+        key: 'identity.oidc.main', type: 'oidc', enabled: true, authenticationMode: 'claims_only',
+        sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
+        oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', callbackUrl: 'https://app.example.test/callback', scopes: ['openid'] },
+      }] } },
+    }, 'tenant-a');
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'identity_provider', key: 'identity.oidc.main', operation: 'create' }),
     ]));
   });
 });

@@ -9,7 +9,7 @@ import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persisten
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
-import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { engineSetService } from './EngineSetService.js';
@@ -60,6 +60,10 @@ function engineCredentialFields(auth: any): Record<string, string | null> {
   return { authType: 'none', username: null, passwordEnc: null, oauthTokenUrl: null, oauthScopes: null, oauthAudience: null };
 }
 
+function providerConfiguration(provider: any): Record<string, unknown> {
+  return provider[provider.type] || {};
+}
+
 function fail(message: string, statusCode: number): never {
   const error = new Error(message) as Error & { statusCode: number };
   error.statusCode = statusCode;
@@ -106,7 +110,7 @@ class ConfigBundleApplyService {
     if (input.expectedPreviewHash !== compilation.preview.canonicalHash) {
       return fail('Preview hash does not match the submitted configuration bundle', 409);
     }
-    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-sets.json', './runtime-resource-sets.json', './assignments.json', './project-engine-targets.json', './identity-mappings.json'].includes(path));
+    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-sets.json', './runtime-resource-sets.json', './assignments.json', './project-engine-targets.json', './identity-providers.json', './identity-mappings.json'].includes(path));
     if (unsupported.length > 0) {
       return fail(`Config apply does not yet support: ${unsupported.join(', ')}`, 422);
     }
@@ -127,6 +131,7 @@ class ConfigBundleApplyService {
     const desiredAssignments = entries(compilation.files, './assignments.json', 'assignments');
     const desiredTargets = entries(compilation.files, './project-engine-targets.json', 'projectEngineTargets');
     const desiredIdentityMappings = entries(compilation.files, './identity-mappings.json', 'identityMappings');
+    const desiredIdentityProviders = new Map(entries(compilation.files, './identity-providers.json', 'identityProviders').map((provider) => [provider.key, provider]));
     const materializeIds: string[] = [];
     const materializeRuntimeResourceSetIds: string[] = [];
     const now = Date.now();
@@ -145,7 +150,7 @@ class ConfigBundleApplyService {
       const assignmentRepo = manager.getRepository(RbacRoleAssignment);
       const projectRepo = manager.getRepository(Project);
       const targetRepo = manager.getRepository(ProjectEngineTarget);
-      const providerRepo = manager.getRepository(SsoProvider);
+      const providerRepo = manager.getRepository(IdentityProvider);
       const identityMappingRepo = manager.getRepository(IdentityEntitlementMapping);
       const rolePermissionRepo = manager.getRepository(RbacRolePermission);
 
@@ -327,6 +332,34 @@ class ConfigBundleApplyService {
             archived += 1;
           }
         }
+        if (change.objectType === 'identity_provider') {
+          const desired = desiredIdentityProviders.get(change.key);
+          const values = desired ? {
+            protocol: desired.type,
+            isEnabled: desired.enabled,
+            authenticationMode: desired.authenticationMode,
+            directoryTenantId: desired.directoryTenantId || null,
+            configurationJson: JSON.stringify(providerConfiguration(desired)),
+            syncJson: JSON.stringify(desired.sync),
+            ownershipMode: desired.ownershipMode || 'config_locked',
+            sourceRef: `config_bundle:${manifest.metadata.key}`,
+            updatedAt: now,
+          } : null;
+          if (change.operation === 'create' && desired && values) {
+            const id = generateId();
+            await providerRepo.insert({ id, tenantId, key: desired.key, ...values, createdAt: now });
+            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.create', resourceType: 'identity_provider', resourceId: id, details: { bundleKey: manifest.metadata.key, providerKey: desired.key, canonicalHash: diff.canonicalHash } });
+            created += 1;
+          } else if (change.operation === 'update' && change.currentId && values) {
+            await providerRepo.update({ id: change.currentId }, values);
+            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.update', resourceType: 'identity_provider', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, providerKey: desired!.key, canonicalHash: diff.canonicalHash } });
+            updated += 1;
+          } else if (change.operation === 'archive' && change.currentId) {
+            await providerRepo.update({ id: change.currentId }, { isEnabled: false, updatedAt: now });
+            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.archive', resourceType: 'identity_provider', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, providerKey: change.key, canonicalHash: diff.canonicalHash } });
+            archived += 1;
+          }
+        }
       }
 
       // Resolve references after staged role/group/engine/Engine Set writes.
@@ -422,7 +455,7 @@ class ConfigBundleApplyService {
       }
 
       const providers = await providerRepo.find();
-      const providerByKey = new Map(providers.filter((provider) => provider.configKey).map((provider) => [provider.configKey!, provider]));
+      const providerByKey = new Map(providers.map((provider) => [provider.key, provider]));
       const mappingKeys = new Set<string>();
       for (const mapping of desiredIdentityMappings) {
         const provider = providerByKey.get(mapping.providerKey);

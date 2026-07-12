@@ -353,7 +353,7 @@ Authoritative mode must only touch records with `source = "config"` and matching
 
 ### JSON Configuration Interface Status And Extension
 
-The JSON bundle is partially implemented. The platform now exposes strict schemas, canonical hashing, and the side-effect-free `POST /api/authz/config-bundles/preview` validation endpoint for CI/CD. Today it otherwise exposes separate REST/UI CRUD for roles, permissions, groups, SSO mappings, engines, Engine Sets, assignments, and project-engine targets. Bundle persistence, diff/apply/export/history routes, and a Configuration tab remain unimplemented.
+The JSON bundle is partially implemented. The platform exposes strict schemas, canonical hashing, side-effect-free preview/diff, and hash-bound apply for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, provider-neutral identity providers, and identity mappings. Export/history, connection testing, bundle UI, and affected-principal analysis remain unimplemented.
 
 The implementation must provide one bundle compiler over the same domain services used by the UI. JSON apply must not write authorization tables directly or maintain a second business-rule implementation.
 
@@ -363,7 +363,7 @@ The production bundle now needs these object families:
 | --- | --- | --- |
 | `roles.json` and permissions | Custom role/permission CRUD and role source lineage exist | Add template expansion, source-ownership enforcement, permission diff, and sensitive-risk validation. |
 | `groups.json` | Internal group CRUD exists | Add config ownership and stable references from identity mappings and assignments. |
-| `identity-providers.json` | OIDC/Microsoft/SAML provider CRUD exists | Generalize provider schema, add LDAP adapter config, secret refs, sync policy, and connectivity-test metadata. |
+| `identity-providers.json` | Provider-neutral OIDC/SAML/LDAP persistence and config apply exist | Add protocol adapters, secret resolution, sync policy execution, and connectivity-test metadata. |
 | `identity-mappings.json` | SSO group mappings exist | Compile normalized external entitlements to internal groups independent of protocol. |
 | `engines.json` | Manual/external engine APIs exist | Add `runtimeAccessScope`, deployment integration, first-class `connectionMode`, endpoint-auth policy validation, source ownership, and config-safe secret refs. |
 | `engine-sets.json` | Engine Set CRUD/materialization exists | Add deterministic config keys and previewed selector materialization. |
@@ -1812,9 +1812,9 @@ The implementation should extend existing packages rather than introduce an auth
 ## Proposed APIs
 
 - [x] ✅ `POST /api/authz/config-bundles/preview` and `POST /api/authz/config-bundles/diff`
-  - Preview validates the bundle; diff currently covers persisted roles, groups, and engines and reports source-ownership conflicts and authoritative archives. Broader object-family diffs, warnings, acknowledgements, and affected-object analysis remain pending.
+  - Preview validates the bundle; diff covers persisted roles, groups, engines, Engine Sets, runtime resource sets, and identity providers, and reports source-ownership conflicts and authoritative archives. Assignment/mapping/target detail, warnings, acknowledgements, and affected-object analysis remain pending.
 - [x] ✅ `POST /api/authz/config-bundles/apply`
-  - Applies an exact previewed bundle hash for config-owned roles, groups, and engines. It rejects unsupported object families until their compiler/apply support is implemented.
+  - Applies an exact previewed bundle hash for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, identity providers, and identity mappings. Unsupported object families still fail closed.
 - [ ] ⬜ `GET /api/config-bundles/runs`
   - Lists preview/apply runs.
 - [ ] ⬜ `GET /api/config-bundles/runs/:id`
@@ -1823,8 +1823,8 @@ The implementation should extend existing packages rather than introduce an auth
   - Exports current config-managed records as JSON.
 - [ ] ⬜ `POST /api/config-bundles/validate-secret-refs`
   - Optional preflight check for secret reference availability without returning secret values.
-- [ ] ⬜ `GET|POST|PUT|DELETE /api/identity/providers`
-  - Manages provider-neutral OIDC, SAML, and LDAP provider definitions with secret references and exact action metadata.
+- [x] ✅ `GET|POST|PUT|DELETE /api/identity/providers`
+  - Manages provider-neutral OIDC, SAML, and LDAP provider definitions with secret references, archival delete semantics, audit entries, and exact action/OpenAPI metadata.
 - [ ] ⬜ `POST /api/identity/providers/:id/test-connection`
   - Performs an explicit protocol-specific connectivity/configuration test and returns sanitized capability diagnostics without creating a session or membership.
 - [ ] ⬜ `GET|POST|PUT|DELETE /api/identity/mappings`
@@ -2183,7 +2183,7 @@ Phase 0 exit criteria:
 - [x] ✅ Upsert config-managed custom roles and explicit/template-expanded permissions.
 - [x] ✅ Store expanded custom-role permission lists after `copyFromRoleKey` resolution for the implemented role apply path.
 - [x] ✅ Upsert config-managed groups.
-- [ ] ⬜ Upsert provider-neutral identity providers and entitlement mappings with encrypted/secret-ref provider configuration.
+- [x] ✅ Upsert provider-neutral identity providers and entitlement mappings with secret-reference-only provider configuration, source ownership, audit events, and source-scoped authoritative disable/archive behavior. Adapter execution and secret-reference availability checks remain pending.
 - [x] ✅ Upsert config-managed engines using the current engine field shape, opaque secret references, provenance, and central/distributed runtime settings.
 - [ ] ⬜ Persist engine runtime access scope and deployment integration settings.
 - [ ] ⬜ Refresh Engine Set materializations and authorization snapshots when config apply changes engine labels.
@@ -2191,7 +2191,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Upsert config-managed Engine Sets and materialize them.
 - [x] ✅ Upsert config-managed runtime resource sets with tenant-scoped keys, config source ownership, engine-key resolution, audit events, authoritative archival, and post-apply materialization against the persisted runtime inventory. Engine discovery/reconciliation remains pending.
 - [x] ✅ Upsert config-managed group role assignments for platform, engine, Engine Set, exact runtime-resource, and Runtime Resource Set scopes using canonical assignment keys and source-scoped authoritative cleanup. User/API/service-account and project scopes remain pending.
-- [x] ✅ Upsert config-managed provider-neutral identity entitlement mappings by existing provider config key and internal group key, with source-scoped authoritative disablement. Provider creation from bundles remains pending.
+- [x] ✅ Upsert config-managed provider-neutral identity entitlement mappings by provider config key and internal group key, with source-scoped authoritative disablement. Provider creation from bundles is implemented.
 - [x] ✅ Upsert config-managed project-engine targets by explicit `projectRef.id` and config engine key, with source-scoped authoritative archival. Project-key resolution remains pending until projects have deterministic config keys.
 - [ ] ⬜ Refresh authorization version and frontend permission snapshot invalidation.
 - [ ] ⬜ Record audit events and run diagnostics.
