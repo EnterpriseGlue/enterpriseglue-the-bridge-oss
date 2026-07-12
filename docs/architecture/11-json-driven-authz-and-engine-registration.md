@@ -50,6 +50,7 @@ Current config-as-code status:
 - [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine create, update, no-op, conflict, and authoritative-archive previews. Other config object families remain pending.
 - [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for roles, groups, and engines. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, and refuses unsupported object families rather than ignoring them.
 - [x] ✅ Persist engine config provenance (`configKey`, source reference/hash, ownership mode, last applied time) plus `runtimeAccessScope`, `deploymentIntegration`, and `connectionMode` with backward-compatible defaults.
+- [x] ✅ Persist SSO provider config key and source reference so provider-neutral identity mappings can resolve configured providers safely. Provider bundle apply remains pending.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
 - [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.

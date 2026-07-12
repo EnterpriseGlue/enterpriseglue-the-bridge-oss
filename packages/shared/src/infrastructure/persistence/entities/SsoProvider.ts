@@ -1,7 +1,8 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, Index } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'sso_providers', schema: 'main' })
+@Index('idx_sso_providers_config_key', ['configKey'])
 export class SsoProvider extends AppBaseEntity {
   @Column({ type: 'text' })
   name!: string;
@@ -80,4 +81,10 @@ export class SsoProvider extends AppBaseEntity {
 
   @Column({ name: 'created_by_id', type: 'text', nullable: true })
   createdById!: string | null;
+
+  @Column({ name: 'config_key', type: 'text', nullable: true })
+  configKey!: string | null;
+
+  @Column({ name: 'source_ref', type: 'text', nullable: true })
+  sourceRef!: string | null;
 }
