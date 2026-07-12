@@ -42,7 +42,8 @@ Current config-as-code status:
 - [ ] ⬜ Complete the end-to-end alignment gate: clean principal assignments, external identity links, provider-id-bound login, secure secrets, config ownership fields, project-target ownership, runtime assignment semantics, and legacy authorization removal.
 - [x] ✅ Implement shared JSON config bundle schemas, strict canonical validation, deterministic config keys, and SHA-256 bundle hashing. Preview/apply persistence remains gated on Phase 0.
 - [x] ✅ Implement provider-neutral identity adapters and entitlement mappings for OIDC, SAML, and LDAP.
-- [ ] ⬜ Implement deterministic identity adapter contract tests and protocol-faithful mock OIDC, SAML, and LDAP services for integration and end-to-end testing.
+- [x] ✅ Implement deterministic identity adapter contract tests across OIDC, SAML, LDAP, and adapter lookup dispatch.
+- [ ] ⬜ Implement protocol-faithful mock OIDC, SAML, and LDAP services for integration and end-to-end testing.
 - [x] ✅ Expose side-effect-free strict config-bundle preview at `POST /api/authz/config-bundles/preview`, protected by `platform.authz.roles.manage`, with OpenAPI and route-inventory coverage.
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
@@ -1121,7 +1122,7 @@ LDAP may be used in either of two ways:
 
 ### Mapping And Synchronization Rules
 
-- [ ] ⬜ Add `IdentityProviderAdapter.normalizeIdentity(...)` with OIDC, SAML, and LDAP implementations.
+- [x] ✅ Add `IdentityProviderAdapter.normalizeIdentity(...)` with OIDC, SAML, and LDAP implementations.
 - [x] ✅ Add shared provider-neutral normalized identity and entitlement contract types with deterministic OIDC, SAML, and LDAP claim-envelope adapters. Protocol authentication, directory retrieval, and reconciliation remain in progress.
 - [ ] ⬜ Match exact immutable external ids by default; display-name and regex matching require preview warnings and explicit platform enablement.
 - [ ] ⬜ Persist external subject, entitlement, provider, mapping, sync-run, and last-seen lineage without exposing raw token or directory payloads to normal users.

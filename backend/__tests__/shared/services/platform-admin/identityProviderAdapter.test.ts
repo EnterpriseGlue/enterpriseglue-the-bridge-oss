@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ldapIdentityProviderAdapter, oidcIdentityProviderAdapter, samlIdentityProviderAdapter } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
+import {
+  getIdentityProviderAdapter,
+  ldapIdentityProviderAdapter,
+  oidcIdentityProviderAdapter,
+  samlIdentityProviderAdapter,
+  type IdentityProviderAdapter,
+} from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
 
 describe('identity provider adapters', () => {
   it('normalizes OIDC groups, roles, and delegated scopes deterministically', () => {
@@ -23,3 +29,60 @@ describe('identity provider adapters', () => {
       .toEqual([{ type: 'group', externalId: 'CN=Ops,DC=example' }]);
   });
 });
+
+function identityAdapterContract(name: string, adapter: IdentityProviderAdapter) {
+  describe(`${name} identity adapter contract`, () => {
+    it('returns a deterministic, provider-neutral entitlement envelope', () => {
+      const identity = adapter.normalizeIdentity({
+        providerKey: `provider-${name}`,
+        subjectId: 'subject-1',
+        email: 'Person@Example.COM',
+        username: 'person',
+        directoryTenantId: 'directory-1',
+        observedAt: 42,
+        claims: {
+          groups: ['group-b', 'group-a', 'group-a'],
+          roles: ['operator', 'operator'],
+          scp: 'engine.read engine.read files.read',
+        },
+      });
+
+      expect(identity).toEqual({
+        providerKey: `provider-${name}`,
+        providerType: adapter.type,
+        subjectId: 'subject-1',
+        username: 'person',
+        email: 'person@example.com',
+        directoryTenantId: 'directory-1',
+        observedAt: 42,
+        entitlements: [
+          { type: 'group', externalId: 'group-a' },
+          { type: 'group', externalId: 'group-b' },
+          { type: 'role', externalId: 'operator' },
+          { type: 'scope', externalId: 'engine.read' },
+          { type: 'scope', externalId: 'files.read' },
+        ],
+      });
+    });
+
+    it('accepts protocol claim aliases while rejecting missing stable identity fields', () => {
+      expect(adapter.normalizeIdentity({
+        providerKey: `provider-${name}`,
+        subjectId: 'subject-1',
+        claims: { group: 'ops', role: 'reader', scope: 'engine.read' },
+        observedAt: 1,
+      }).entitlements).toEqual([
+        { type: 'group', externalId: 'ops' },
+        { type: 'role', externalId: 'reader' },
+        { type: 'scope', externalId: 'engine.read' },
+      ]);
+      expect(() => adapter.normalizeIdentity({ providerKey: ' ', subjectId: 'subject-1', claims: {} })).toThrow('providerKey is required');
+      expect(() => adapter.normalizeIdentity({ providerKey: `provider-${name}`, subjectId: ' ', claims: {} })).toThrow('subjectId is required');
+    });
+  });
+}
+
+identityAdapterContract('oidc', oidcIdentityProviderAdapter);
+identityAdapterContract('saml', samlIdentityProviderAdapter);
+identityAdapterContract('ldap', ldapIdentityProviderAdapter);
+identityAdapterContract('lookup', getIdentityProviderAdapter('oidc'));
