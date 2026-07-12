@@ -6,6 +6,7 @@ export type SsoProviderType = 'microsoft' | 'saml';
 export interface SsoState {
   timestamp: number;
   nonce: string;
+  providerId?: string;
   tenantSlug?: string;
   returnTo?: string;
 }
@@ -20,6 +21,7 @@ export interface SsoProvisionedContext {
 }
 
 const TENANT_SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const PROVIDER_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
 function sanitizeTenantSlug(value: unknown): string | undefined {
@@ -27,6 +29,12 @@ function sanitizeTenantSlug(value: unknown): string | undefined {
   const trimmed = value.trim();
   if (!trimmed || !TENANT_SLUG_PATTERN.test(trimmed)) return undefined;
   return trimmed;
+}
+
+function sanitizeProviderId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return PROVIDER_ID_PATTERN.test(trimmed) ? trimmed : undefined;
 }
 
 function sanitizeReturnTo(value: unknown, tenantSlug?: string): string | undefined {
@@ -47,12 +55,13 @@ function sanitizeReturnTo(value: unknown, tenantSlug?: string): string | undefin
   }
 }
 
-export function buildSsoState(req: Request): string {
+export function buildSsoState(req: Request, providerId?: string): string {
   const tenantSlug = sanitizeTenantSlug(req.query.tenantSlug);
   const returnTo = sanitizeReturnTo(req.query.returnTo, tenantSlug);
   const payload: SsoState = {
     timestamp: Date.now(),
     nonce: Math.random().toString(36).substring(7),
+    ...(sanitizeProviderId(providerId) ? { providerId: sanitizeProviderId(providerId) } : {}),
     ...(tenantSlug ? { tenantSlug } : {}),
     ...(returnTo ? { returnTo } : {}),
   };
@@ -64,9 +73,11 @@ export function appendSsoStartQuery(req: Request, startPath: string): string {
   const params = new URLSearchParams();
   const tenantSlug = sanitizeTenantSlug(req.query.tenantSlug);
   const returnTo = sanitizeReturnTo(req.query.returnTo, tenantSlug);
+  const providerId = sanitizeProviderId(req.query.providerId);
 
   if (tenantSlug) params.set('tenantSlug', tenantSlug);
   if (returnTo) params.set('returnTo', returnTo);
+  if (providerId) params.set('providerId', providerId);
 
   const query = params.toString();
   return query ? `${startPath}?${query}` : startPath;
@@ -82,10 +93,12 @@ export function parseSsoState(rawState: unknown): SsoState | null {
     if (Date.now() - parsed.timestamp > STATE_MAX_AGE_MS) return null;
 
     const tenantSlug = sanitizeTenantSlug(parsed.tenantSlug);
+    const providerId = sanitizeProviderId(parsed.providerId);
     const returnTo = sanitizeReturnTo(parsed.returnTo, tenantSlug);
     return {
       timestamp: parsed.timestamp,
       nonce: parsed.nonce,
+      ...(providerId ? { providerId } : {}),
       ...(tenantSlug ? { tenantSlug } : {}),
       ...(returnTo ? { returnTo } : {}),
     };

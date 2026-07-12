@@ -215,6 +215,28 @@ describe('SAML auth flow e2e harness', () => {
     }));
   });
 
+  it('binds an explicit SAML provider id through start and callback', async () => {
+    const agent = request.agent(app);
+    const providerId = 'provider-saml-2';
+
+    const initResponse = await agent.get('/api/auth/saml').query({ providerId });
+    expect(initResponse.status).toBe(302);
+    expect(initResponse.headers.location).toBe(`/api/auth/saml/start?providerId=${providerId}`);
+
+    const startResponse = await agent.get(initResponse.headers.location);
+    const relayState = getCookieValue(getSetCookieHeader(startResponse.headers), 'oauth_state');
+    expect(startResponse.status).toBe(302);
+    expect(getSamlAuthorizationUrl as unknown as Mock).toHaveBeenCalledWith(relayState, providerId);
+
+    const callbackResponse = await agent
+      .post('/api/auth/saml/callback')
+      .type('form')
+      .send({ SAMLResponse: 'mock-saml-response', RelayState: relayState });
+
+    expect(callbackResponse.status).toBe(302);
+    expect(validateSamlPostResponse as unknown as Mock).toHaveBeenCalledWith('mock-saml-response', providerId);
+  });
+
   it('rejects a mocked SAML authorization URL whose host differs from the configured IdP', async () => {
     (getSamlAuthorizationUrl as unknown as Mock).mockResolvedValueOnce({
       url: 'https://attacker.example.com/sso',

@@ -22,7 +22,8 @@ router.get('/api/auth/saml/start', apiLimiter, async (req: Request, res: Respons
       });
     }
 
-    const relayState = buildSsoState(req);
+    const providerId = typeof req.query.providerId === 'string' ? req.query.providerId : undefined;
+    const relayState = buildSsoState(req, providerId);
 
     res.cookie('oauth_state', relayState, {
       httpOnly: true,
@@ -31,7 +32,9 @@ router.get('/api/auth/saml/start', apiLimiter, async (req: Request, res: Respons
       maxAge: 10 * 60 * 1000,
     });
 
-    const { url, entryPoint } = await getSamlAuthorizationUrl(relayState);
+    const { url, entryPoint } = providerId
+      ? await getSamlAuthorizationUrl(relayState, providerId)
+      : await getSamlAuthorizationUrl(relayState);
 
     let safeUrl: string | null = null;
     try {

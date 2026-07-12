@@ -80,7 +80,9 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
 
     res.clearCookie('oauth_state');
 
-    const { profile, providerId } = await validateSamlPostResponse(samlResponse);
+    const { profile, providerId } = ssoState?.providerId
+      ? await validateSamlPostResponse(samlResponse, ssoState.providerId)
+      : await validateSamlPostResponse(samlResponse);
     const userInfo = extractSamlUserInfo(profile);
 
     logger.info('[SAML Auth] User info extracted:', {

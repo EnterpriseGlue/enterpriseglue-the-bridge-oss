@@ -235,9 +235,11 @@ export async function getSamlStatus(): Promise<SamlStatus> {
   };
 }
 
-async function getEnabledSamlProvider() {
-  const provider = await ssoProviderService.getProviderByType('saml');
-  if (!provider || !provider.enabled) {
+async function getEnabledSamlProvider(providerId?: string) {
+  const provider = providerId
+    ? await ssoProviderService.getProviderWithSecrets(providerId)
+    : await ssoProviderService.getProviderByType('saml');
+  if (!provider || provider.type !== 'saml' || !provider.enabled) {
     throw new Error('SAML authentication is not enabled');
   }
   if (getMissingSamlFields(provider).length > 0) {
@@ -272,15 +274,15 @@ export async function isSamlAuthEnabled(): Promise<boolean> {
   return status.enabled;
 }
 
-export async function getSamlAuthorizationUrl(relayState: string): Promise<{ url: string; entryPoint: string }> {
-  const provider = await getEnabledSamlProvider();
+export async function getSamlAuthorizationUrl(relayState: string, providerId?: string): Promise<{ url: string; entryPoint: string }> {
+  const provider = await getEnabledSamlProvider(providerId);
   const samlClient = getSamlClient(provider);
   const url = await samlClient.getAuthorizeUrlAsync(relayState, undefined, {});
   return { url, entryPoint: provider.ssoUrl! };
 }
 
-export async function validateSamlPostResponse(samlResponse: string): Promise<{ profile: SamlProfile; providerId: string }> {
-  const provider = await getEnabledSamlProvider();
+export async function validateSamlPostResponse(samlResponse: string, providerId?: string): Promise<{ profile: SamlProfile; providerId: string }> {
+  const provider = await getEnabledSamlProvider(providerId);
   const samlClient = getSamlClient(provider);
 
   const { profile, loggedOut } = await samlClient.validatePostResponseAsync({
