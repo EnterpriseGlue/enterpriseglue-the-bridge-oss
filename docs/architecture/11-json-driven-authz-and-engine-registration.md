@@ -1808,9 +1808,9 @@ The implementation should extend existing packages rather than introduce an auth
 ## Proposed APIs
 
 - [x] ✅ `POST /api/authz/config-bundles/preview` and `POST /api/authz/config-bundles/diff`
-  - Preview validates the bundle; diff currently covers persisted roles/groups and reports source-ownership conflicts and authoritative archives. Broader object-family diffs, warnings, acknowledgements, and affected-object analysis remain pending.
+  - Preview validates the bundle; diff currently covers persisted roles, groups, and engines and reports source-ownership conflicts and authoritative archives. Broader object-family diffs, warnings, acknowledgements, and affected-object analysis remain pending.
 - [x] ✅ `POST /api/authz/config-bundles/apply`
-  - Applies an exact previewed bundle hash for config-owned roles/groups only. It rejects unsupported object families until their compiler/apply support is implemented.
+  - Applies an exact previewed bundle hash for config-owned roles, groups, and engines. It rejects unsupported object families until their compiler/apply support is implemented.
 - [ ] ⬜ `GET /api/config-bundles/runs`
   - Lists preview/apply runs.
 - [ ] ⬜ `GET /api/config-bundles/runs/:id`
@@ -2159,7 +2159,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Load multi-file folder bundle and single-file bundle.
 - [ ] ⬜ Resolve imports with path traversal protection.
 - [ ] ⬜ Resolve all references against current database state and staged objects in the same bundle.
-- [ ] ⬜ Extend the implemented role/group create/update/archive/no-op diff to engines, Engine Sets, runtime resource sets, assignments, identity providers/mappings, and project-engine targets.
+- [ ] ⬜ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets, runtime resource sets, assignments, identity providers/mappings, and project-engine targets.
 - [ ] ⬜ Produce role permission diffs with additions, removals, expanded template permissions, and affected assignments.
 - [ ] ⬜ Produce runtime resource set diffs with matched, unmatched, newly matched, and no-longer-matched process or decision keys.
 - [ ] ⬜ Validate identity provider references and preview normalized entitlement-to-group matches without contacting providers unless an explicit connectivity test is requested.
@@ -2174,7 +2174,7 @@ Phase 0 exit criteria:
 
 - [x] ✅ Add `ConfigBundleApplyService` for roles, groups, and engines; extend it to all remaining config object families.
 - [x] ✅ Require the exact canonical preview hash on the implemented apply endpoint.
-- [x] ✅ Apply the implemented role/group vertical in one transaction.
+- [x] ✅ Apply the implemented role/group/engine vertical in one transaction.
 - [x] ✅ Upsert config-managed custom roles and explicit/template-expanded permissions.
 - [x] ✅ Store expanded custom-role permission lists after `copyFromRoleKey` resolution for the implemented role apply path.
 - [x] ✅ Upsert config-managed groups.
