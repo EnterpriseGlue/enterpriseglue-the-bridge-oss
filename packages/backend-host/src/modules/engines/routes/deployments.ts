@@ -612,6 +612,15 @@ async function createEngineDeployment(req: Request, res: Response) {
         status: 'success',
         errorMessage: null,
         rawResponse: JSON.stringify(data),
+        ingestionSource: 'enterpriseglue_proxy',
+        lineageQuality: 'complete',
+        reportingPrincipalId: null,
+        reconciledAt: now,
+        lineageJson: JSON.stringify({
+          source: 'enterpriseglue_proxy',
+          ...(gitCommitSha ? { commitSha: gitCommitSha } : {}),
+          ...(gitDeploymentId ? { gitDeploymentId } : {}),
+        }),
         createdAt: now,
         updatedAt: now,
       } as any)

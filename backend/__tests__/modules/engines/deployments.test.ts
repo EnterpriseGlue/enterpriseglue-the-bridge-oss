@@ -178,14 +178,17 @@ describe('engines deployments routes', () => {
         }
         if (entityName === 'EngineDeployment') {
           return {
+            findOne: vi.fn().mockResolvedValue(null),
             insert: vi.fn().mockImplementation((row) => {
               engineDeploymentInserts.push(row);
               return Promise.resolve({});
             }),
+            update: vi.fn().mockResolvedValue({}),
           };
         }
         if (entityName === 'EngineDeploymentArtifact') {
           return {
+            find: vi.fn().mockResolvedValue([]),
             insert: vi.fn().mockImplementation((rows) => {
               artifactInserts.push(...rows);
               return Promise.resolve({});

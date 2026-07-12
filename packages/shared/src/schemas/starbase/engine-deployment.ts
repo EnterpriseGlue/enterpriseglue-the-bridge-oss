@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Raw schema - matches TypeORM EngineDeployment entity
 export const EngineDeploymentSchemaRaw = z.object({
   id: z.string(),
-  projectId: z.string(),
+  projectId: z.string().nullable(),
   engineId: z.string(),
   engineName: z.string().nullable(),
   environmentTag: z.string().nullable(),
@@ -22,6 +22,11 @@ export const EngineDeploymentSchemaRaw = z.object({
   status: z.string().nullable(),
   errorMessage: z.string().nullable(),
   rawResponse: z.string().nullable().optional(),
+  ingestionSource: z.string().optional(),
+  lineageQuality: z.enum(['complete', 'reported', 'discovered', 'inferred']).optional(),
+  reportingPrincipalId: z.string().nullable().optional(),
+  reconciledAt: z.number().nullable().optional(),
+  lineageJson: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -29,7 +34,7 @@ export const EngineDeploymentSchemaRaw = z.object({
 // Engine Deployment - Select schema (API response)
 export const EngineDeploymentSchema = EngineDeploymentSchemaRaw.transform((d) => ({
   id: d.id,
-  projectId: d.projectId,
+  projectId: d.projectId ?? undefined,
   engineId: d.engineId,
   engineName: d.engineName ?? undefined,
   environmentTag: d.environmentTag ?? undefined,
@@ -47,6 +52,10 @@ export const EngineDeploymentSchema = EngineDeploymentSchemaRaw.transform((d) =>
   resourceCount: d.resourceCount,
   status: d.status,
   errorMessage: d.errorMessage ?? undefined,
+  ingestionSource: d.ingestionSource,
+  lineageQuality: d.lineageQuality,
+  reportingPrincipalId: d.reportingPrincipalId ?? undefined,
+  reconciledAt: d.reconciledAt == null ? undefined : Number(d.reconciledAt),
   createdAt: Number(d.createdAt),
   updatedAt: Number(d.updatedAt),
 }));
@@ -65,7 +74,7 @@ export const EngineDeploymentInsertSchema = z.object({
 export const EngineDeploymentArtifactSchemaRaw = z.object({
   id: z.string(),
   engineDeploymentId: z.string(),
-  projectId: z.string(),
+  projectId: z.string().nullable(),
   engineId: z.string(),
   fileId: z.string().nullable(),
   fileType: z.string().nullable(),
@@ -87,7 +96,7 @@ export const EngineDeploymentArtifactSchemaRaw = z.object({
 export const EngineDeploymentArtifactSchema = EngineDeploymentArtifactSchemaRaw.transform((a) => ({
   id: a.id,
   engineDeploymentId: a.engineDeploymentId,
-  projectId: a.projectId,
+  projectId: a.projectId ?? undefined,
   engineId: a.engineId,
   fileId: a.fileId ?? undefined,
   fileType: a.fileType ?? undefined,
@@ -109,7 +118,7 @@ export const EngineDeploymentArtifactSchema = EngineDeploymentArtifactSchemaRaw.
 export const EngineDeploymentArtifactInsertSchema = z.object({
   id: z.string().uuid().optional(),
   engineDeploymentId: z.string().uuid(),
-  projectId: z.string().uuid(),
+  projectId: z.string().uuid().nullable(),
   engineId: z.string().uuid(),
   artifactKind: z.enum(['process', 'decision', 'drd']),
 });
