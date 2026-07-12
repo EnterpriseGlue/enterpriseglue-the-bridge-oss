@@ -2009,6 +2009,11 @@ router.post('/api/authz/runtime-resource-sets/:id/materialize', apiLimiter, requ
   res.json(result);
 }));
 
+router.post('/api/authz/runtime-resources/:id/reconcile', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
+  const result = await runtimeResourceInventoryService.reconcileEngine(String(req.params.id), req.tenant?.tenantId || null);
+  res.json(result);
+}));
+
 // ============================================================================
 // Project Engine Targets (Admin Only)
 // ============================================================================

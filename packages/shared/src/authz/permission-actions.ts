@@ -567,6 +567,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'POST', route: '/api/authz/engine-sets/preview', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/authz/engine-sets/:id/materialize', resourceResolver: 'engineSet.byId' },
       { method: 'POST', route: '/api/authz/runtime-resource-sets/:id/materialize', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/authz/runtime-resources/:id/reconcile', resourceResolver: 'engine.byId' },
     ],
   },
   {
