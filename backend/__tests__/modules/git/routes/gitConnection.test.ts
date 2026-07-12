@@ -7,6 +7,7 @@ import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -65,6 +66,7 @@ describe('git project connection routes', () => {
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(gitConnectionRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
 
     repoFindOne = vi.fn().mockResolvedValue({

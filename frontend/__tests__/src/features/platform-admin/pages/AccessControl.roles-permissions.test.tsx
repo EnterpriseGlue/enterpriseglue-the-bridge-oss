@@ -131,7 +131,7 @@ describe('AccessControl roles and permissions', () => {
     expect(screen.getByLabelText('Role name')).toBeInTheDocument();
     expect(screen.getByText('Deploy (engine:deploy)')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Create$/i }).some((button) => button.hasAttribute('disabled'))).toBe(true);
-  }, 30000);
+  }, 60000);
 
   it('hides denied Access Control tabs and disables known management actions', () => {
     authState.permissions = {

@@ -2398,7 +2398,6 @@ function RolePermissionMatrix({
   loading,
   canManage,
   savingRoleId,
-  onCreateRole,
   onEditRole,
   onDuplicateRole,
   onUpdateRolePermissions,
@@ -2408,7 +2407,6 @@ function RolePermissionMatrix({
   loading: boolean;
   canManage: boolean;
   savingRoleId: string | null;
-  onCreateRole: () => void;
   onEditRole: (role: RoleSummary) => void;
   onDuplicateRole: (role: RoleSummary) => void;
   onUpdateRolePermissions: (role: RoleSummary, permissionIds: string[]) => Promise<void>;
@@ -2505,9 +2503,6 @@ function RolePermissionMatrix({
             itemToString={(item) => item?.label || ''}
             onChange={({ selectedItem }) => setScopeFilter(selectedItem?.id || 'engine')}
           />
-          <Button kind="primary" renderIcon={Add} onClick={onCreateRole} disabled={!canManage} title={canManage ? undefined : 'Missing permission platform:authz:roles:manage'}>
-            Create Role
-          </Button>
         </TableToolbarContent>
       </TableToolbar>
       {visibleRoles.length === 0 || visiblePermissions.length === 0 ? (
@@ -7479,7 +7474,6 @@ export default function AccessControl() {
                   loading={rolesQ.isLoading || permissionsQ.isLoading}
                   canManage={canManageRoles}
                   savingRoleId={matrixSavingRoleId}
-                  onCreateRole={openCreateRole}
                   onEditRole={openEditRole}
                   onDuplicateRole={openDuplicateRole}
                   onUpdateRolePermissions={updateRolePermissionsFromMatrix}

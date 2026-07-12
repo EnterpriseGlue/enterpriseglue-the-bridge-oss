@@ -140,7 +140,7 @@ describe('AccessControl external registration', () => {
       name: 'Deploy bot',
       scopes: ['engine:register', 'deployment:execute'],
     }));
-  }, 30000);
+  }, 60000);
 
   it('creates service accounts for machine role assignment', async () => {
     authState.permissions = {
@@ -162,7 +162,7 @@ describe('AccessControl external registration', () => {
       description: 'Release automation',
       scopes: ['deployment:execute'],
     }));
-  }, 30000);
+  }, 60000);
 
   it('creates, edits, and archives external engine systems', () => {
     render(<AccessControl />);

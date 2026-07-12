@@ -935,12 +935,12 @@ describe('permissionService', () => {
 
     expect(result.allowed).toBe(true);
     expect(assignmentQb.andWhere).toHaveBeenCalledWith(
-      '(assignment.tenantId = :tenantId OR assignment.tenantId IS NULL)',
-      { tenantId: 'tenant-a' },
+      '(assignment.tenantId IN (:...tenantIds) OR assignment.tenantId IS NULL)',
+      { tenantIds: ['tenant-a'] },
     );
     expect(assignmentQb.andWhere).toHaveBeenCalledWith(
-      '(role.tenantId = :tenantId OR role.tenantId IS NULL)',
-      { tenantId: 'tenant-a' },
+      '(role.tenantId IN (:...tenantIds) OR role.tenantId IS NULL)',
+      { tenantIds: ['tenant-a'] },
     );
   });
 

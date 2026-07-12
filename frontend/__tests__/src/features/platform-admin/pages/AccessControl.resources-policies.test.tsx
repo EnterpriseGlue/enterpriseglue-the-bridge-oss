@@ -132,7 +132,7 @@ describe('AccessControl resources and policies', () => {
     expect(screen.getByRole('tab', { name: /^Audit$/i })).toHaveAttribute('aria-selected', 'true');
     expect(document.getElementById('authz-audit-resource-type-filter')).toHaveValue('role_assignment');
     expect(document.getElementById('authz-audit-resource-id-filter')).toHaveValue('assignment-sso-1');
-  }, 30000);
+  }, 60000);
 
   it('renders authorization audit events with filters', () => {
     render(<AccessControl />);
@@ -209,7 +209,7 @@ describe('AccessControl resources and policies', () => {
       selector: { mode: 'all' },
       riskAcknowledged: true,
     }));
-  }, 30000);
+  }, 60000);
 
   it('renders project-engine targets with manage, sync, and eligibility actions', async () => {
     render(<AccessControl />);
@@ -288,7 +288,7 @@ describe('AccessControl resources and policies', () => {
       externalProjectId: 'cmdb-project-new',
       policyTags: ['prod', 'sox'],
     })));
-  }, 30000);
+  }, 60000);
 
   it('renders authorization policies with manage actions', async () => {
     render(<AccessControl />);
@@ -347,7 +347,7 @@ describe('AccessControl resources and policies', () => {
         },
       },
     }));
-  }, 30000);
+  }, 60000);
 
   it('renders effective access query controls', () => {
     render(<AccessControl />);

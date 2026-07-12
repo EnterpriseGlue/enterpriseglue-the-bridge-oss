@@ -23,6 +23,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    testTimeout: 60000,
     setupFiles: ['../packages/frontend-host/src/test/setup.ts'],
     include: ['__tests__/**/*.test.tsx', '__tests__/**/*.test.ts'],
     exclude: [

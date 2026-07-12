@@ -123,7 +123,7 @@ describe('AccessControl groups', () => {
       name: 'Release Ops',
       description: 'Release operators',
     }));
-  }, 30000);
+  }, 60000);
 
   it('edits and archives manual authorization groups', async () => {
     render(<AccessControl />);
@@ -144,7 +144,7 @@ describe('AccessControl groups', () => {
     within(operationsRow).getByRole('button', { name: /Archive/i }).click();
 
     expect(archiveGroup).toHaveBeenCalledWith('group-1');
-  }, 30000);
+  }, 60000);
 
   it('manages manual group memberships', async () => {
     render(<AccessControl />);

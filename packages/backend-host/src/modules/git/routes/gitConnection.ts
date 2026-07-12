@@ -56,7 +56,10 @@ const disconnectSchema = z.object({
 
 // --- GET /git-api/project-connection?projectId=... ---
 
-router.get('/git-api/project-connection', apiLimiter, requireAuth, requireAction('project.git.repositories.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/project-connection', apiLimiter, requireAuth, requireAction('project.git.repositories.read', {
+  resourceResolver: 'project.byId',
+  resourceIdFrom: 'query',
+}), asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
   if (!projectId) {
     throw Errors.validation('projectId query parameter is required');

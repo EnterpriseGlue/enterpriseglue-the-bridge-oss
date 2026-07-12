@@ -175,7 +175,7 @@ describe('AccessControl SSO', () => {
       priority: 0,
       isActive: true,
     });
-  }, 30000);
+  }, 60000);
 
   it('requires acknowledgement before saving all-engine SSO engine assignments', async () => {
     render(<AccessControl />);

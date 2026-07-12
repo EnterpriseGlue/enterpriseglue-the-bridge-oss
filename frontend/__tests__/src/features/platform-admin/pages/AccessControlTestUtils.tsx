@@ -10,6 +10,7 @@ import type {
   PermissionCatalogEntry,
   ProjectEngineTarget,
   RoleAssignment,
+  RoleDetail,
   RoleSummary,
   SsoClaimsMapping,
   SsoGroupMapping,
@@ -18,8 +19,6 @@ import type {
   SsoSyncRun,
 } from '@src/features/platform-admin/hooks/useAuthzApi';
 import type { CurrentUserPermissions } from '@src/shared/types/auth';
-
-vi.setConfig({ testTimeout: 60000 });
 
 const ssoAssignmentTestState = vi.hoisted(() => ({
   data: null as null | {
@@ -108,7 +107,7 @@ const runSsoSyncDiagnostics = vi.fn();
 const previewEngineAccessTransitionCleanup = vi.fn();
 const applyEngineAccessTransitionCleanup = vi.fn();
 const evaluateAccess = vi.fn();
-const systemPlatformAdminRoleDetail = {
+const systemPlatformAdminRoleDetail: RoleDetail = {
   id: 'system.platform.admin',
   key: 'system.platform.admin',
   name: 'Platform Admin',
@@ -123,6 +122,74 @@ const systemPlatformAdminRoleDetail = {
   createdAt: 1,
   updatedAt: 1,
 };
+
+const mockRoleDetails: Record<string, RoleDetail> = {
+  'system.platform.admin': systemPlatformAdminRoleDetail,
+  'custom.engine.operator': {
+    id: 'custom.engine.operator',
+    key: 'custom.engine.operator',
+    name: 'Custom Operator',
+    description: 'Custom',
+    scope: 'engine',
+    kind: 'custom',
+    isEditable: true,
+    isAssignable: true,
+    isArchived: false,
+    permissionCount: 2,
+    permissions: ['engine:deploy', 'engine:instance:view'],
+    createdAt: 1,
+    updatedAt: 1,
+  },
+  'custom.engine.secret-reader': {
+    id: 'custom.engine.secret-reader',
+    key: 'custom.engine.secret-reader',
+    name: 'Custom Secret Reader',
+    description: 'Secret reader',
+    scope: 'engine',
+    kind: 'custom',
+    isEditable: true,
+    isAssignable: true,
+    isArchived: false,
+    permissionCount: 1,
+    permissions: ['engine:secrets:view'],
+    createdAt: 1,
+    updatedAt: 1,
+  },
+  'custom.engine.audit-reader': {
+    id: 'custom.engine.audit-reader',
+    key: 'custom.engine.audit-reader',
+    name: 'Custom Audit Reader',
+    description: 'Unredacted audit reader',
+    scope: 'engine',
+    kind: 'custom',
+    isEditable: true,
+    isAssignable: true,
+    isArchived: false,
+    permissionCount: 1,
+    permissions: ['platform:audit:unredacted-view'],
+    createdAt: 1,
+    updatedAt: 1,
+  },
+  'custom.engine.permanent-delete': {
+    id: 'custom.engine.permanent-delete',
+    key: 'custom.engine.permanent-delete',
+    name: 'Custom Permanent Delete',
+    description: 'Permanent delete authority',
+    scope: 'engine',
+    kind: 'custom',
+    isEditable: true,
+    isAssignable: true,
+    isArchived: false,
+    permissionCount: 1,
+    permissions: ['platform:users:permanent-delete'],
+    createdAt: 1,
+    updatedAt: 1,
+  },
+};
+
+function getMockRoleDetail(id?: string) {
+  return id ? mockRoleDetails[id] ?? null : null;
+}
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -269,59 +336,14 @@ vi.mock('@src/features/platform-admin/hooks/useAuthzApi', () => ({
     isError: false,
   }),
   useRoleDetail: (id?: string) => ({
-    data: id === 'system.platform.admin'
-      ? systemPlatformAdminRoleDetail
-      : id === 'custom.engine.secret-reader'
-      ? {
-        id: 'custom.engine.secret-reader',
-        key: 'custom.engine.secret-reader',
-        name: 'Custom Secret Reader',
-        description: 'Secret reader',
-        scope: 'engine',
-        kind: 'custom',
-        isEditable: true,
-        isAssignable: true,
-        isArchived: false,
-        permissionCount: 1,
-        permissions: ['engine:secrets:view'],
-        createdAt: 1,
-        updatedAt: 1,
-      }
-      : id === 'custom.engine.audit-reader'
-      ? {
-        id: 'custom.engine.audit-reader',
-        key: 'custom.engine.audit-reader',
-        name: 'Custom Audit Reader',
-        description: 'Unredacted audit reader',
-        scope: 'engine',
-        kind: 'custom',
-        isEditable: true,
-        isAssignable: true,
-        isArchived: false,
-        permissionCount: 1,
-        permissions: ['platform:audit:unredacted-view'],
-        createdAt: 1,
-        updatedAt: 1,
-      }
-      : id === 'custom.engine.permanent-delete'
-      ? {
-        id: 'custom.engine.permanent-delete',
-        key: 'custom.engine.permanent-delete',
-        name: 'Custom Permanent Delete',
-        description: 'Permanent delete authority',
-        scope: 'engine',
-        kind: 'custom',
-        isEditable: true,
-        isAssignable: true,
-        isArchived: false,
-        permissionCount: 1,
-        permissions: ['platform:users:permanent-delete'],
-        createdAt: 1,
-        updatedAt: 1,
-      }
-      : null,
+    data: getMockRoleDetail(id),
     isLoading: false,
   }),
+  useRoleDetails: (ids: string[]) => ids.map((id) => ({
+    data: getMockRoleDetail(id),
+    isLoading: false,
+    isError: false,
+  })),
   useRoleAssignments: () => ({
     data: [
       {
