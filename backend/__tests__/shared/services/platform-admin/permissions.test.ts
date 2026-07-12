@@ -1262,13 +1262,13 @@ describe('permissionService', () => {
       select: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       andWhere: vi.fn().mockReturnThis(),
-      getMany: vi.fn().mockResolvedValue([{ resourceId: 'project-rbac', scopeId: null }]),
+      getMany: vi.fn().mockResolvedValue([{ resourceId: null, scopeId: 'project-rbac' }]),
     };
     const engineAssignmentQb = {
       select: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       andWhere: vi.fn().mockReturnThis(),
-      getMany: vi.fn().mockResolvedValue([{ resourceId: 'engine-rbac', scopeId: null }]),
+      getMany: vi.fn().mockResolvedValue([{ resourceId: null, scopeId: 'engine-rbac' }]),
     };
     const engineSetAssignmentQb = {
       select: vi.fn().mockReturnThis(),

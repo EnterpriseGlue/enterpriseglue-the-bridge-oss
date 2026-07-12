@@ -1944,7 +1944,7 @@ class PermissionServiceClass {
       qb.andWhere('assignment.principalType = :principalType', { principalType: filters.principalType });
     }
     if (filters.principalId) {
-      qb.andWhere('(assignment.principalId = :principalId OR assignment.userId = :principalId)', { principalId: filters.principalId });
+      qb.andWhere('assignment.principalId = :principalId', { principalId: filters.principalId });
     }
     if (filters.resourceType) {
       qb.andWhere('assignment.resourceType = :resourceType', { resourceType: filters.resourceType });
@@ -1957,13 +1957,13 @@ class PermissionServiceClass {
       }
     }
     if (filters.scopeType) {
-      qb.andWhere('(assignment.scopeType = :scopeType OR assignment.resourceType = :scopeType)', { scopeType: filters.scopeType });
+      qb.andWhere('assignment.scopeType = :scopeType', { scopeType: filters.scopeType });
     }
     if (filters.scopeId !== undefined) {
       if (filters.scopeId) {
-        qb.andWhere('(assignment.scopeId = :scopeId OR assignment.resourceId = :scopeId)', { scopeId: filters.scopeId });
+        qb.andWhere('assignment.scopeId = :scopeId', { scopeId: filters.scopeId });
       } else {
-        qb.andWhere('(assignment.scopeId IS NULL OR assignment.resourceId IS NULL)');
+        qb.andWhere('assignment.scopeId IS NULL');
       }
     }
 
@@ -1980,19 +1980,19 @@ class PermissionServiceClass {
         id: assignment.id,
         tenantId: assignment.tenantId,
         userId: assignment.userId,
-        principalType: (assignment.principalType as PrincipalType | null) || 'user',
-        principalId: assignment.principalId || assignment.userId,
+        principalType: assignment.principalType as PrincipalType,
+        principalId: assignment.principalId!,
         roleId: assignment.roleId,
         roleKey: role?.key || null,
         roleName: role?.name || null,
         roleScope: role ? role.scope as RoleScope : null,
         resourceType: assignment.resourceType as ResourceType | null,
         resourceId: assignment.resourceId,
-        scopeType: (assignment.scopeType || assignment.resourceType) as ResourceType | null,
-        scopeId: assignment.scopeId ?? assignment.resourceId,
+        scopeType: assignment.scopeType as ResourceType | null,
+        scopeId: assignment.scopeId,
         source: assignment.source as RoleAssignmentSource,
         sourceMappingId: assignment.sourceMappingId,
-        sourceRef: assignment.sourceRef ?? assignment.sourceMappingId,
+        sourceRef: assignment.sourceRef,
         expiresAt: assignment.expiresAt,
         lastSeenAt: assignment.lastSeenAt,
         createdById: assignment.createdById,
@@ -2611,15 +2611,15 @@ class PermissionServiceClass {
       .createQueryBuilder('assignment')
       .select(['assignment.resourceId', 'assignment.scopeId'])
       .where('1 = 1')
-      .andWhere('(assignment.resourceType = :resourceType OR assignment.scopeType = :resourceType)', { resourceType: 'project' })
-      .andWhere('(assignment.resourceId IS NOT NULL OR assignment.scopeId IS NOT NULL)')
+      .andWhere('assignment.scopeType = :resourceType', { resourceType: 'project' })
+      .andWhere('assignment.scopeId IS NOT NULL')
       .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
     this.addPrincipalAssignmentFilter(assignmentQb, 'assignment', userId, groupIds);
     addTenantScopeFilter(assignmentQb, 'assignment', tenantId);
     const assignments = await assignmentQb.getMany();
     assignments.forEach((assignment) => {
-      const projectId = assignment.scopeId ?? assignment.resourceId;
+      const projectId = assignment.scopeId;
       if (projectId) ids.add(projectId);
     });
 
@@ -2680,15 +2680,15 @@ class PermissionServiceClass {
       .createQueryBuilder('assignment')
       .select(['assignment.resourceId', 'assignment.scopeId'])
       .where('1 = 1')
-      .andWhere('(assignment.resourceType = :resourceType OR assignment.scopeType = :resourceType)', { resourceType: 'engine' })
+      .andWhere('assignment.scopeType = :resourceType', { resourceType: 'engine' })
       .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
     this.addPrincipalAssignmentFilter(assignmentQb, 'assignment', userId, groupIds);
     addTenantScopeFilter(assignmentQb, 'assignment', tenantId);
     const assignments = await assignmentQb.getMany();
-    const hasGlobalEngineAssignment = assignments.some((assignment) => assignment.resourceId === null && assignment.scopeId === null);
+    const hasGlobalEngineAssignment = assignments.some((assignment) => assignment.scopeId === null);
     assignments.forEach((assignment) => {
-      const engineId = assignment.scopeId ?? assignment.resourceId;
+      const engineId = assignment.scopeId;
       if (engineId) ids.add(engineId);
     });
 
@@ -2816,7 +2816,7 @@ class PermissionServiceClass {
   ): void {
     if (groupIds.length > 0) {
       qb.andWhere(
-        `(((${alias}.principalType = :userPrincipalType AND ${alias}.principalId = :userId) OR ${alias}.userId = :userId) OR ` +
+        `((${alias}.principalType = :userPrincipalType AND ${alias}.principalId = :userId) OR ` +
         `(${alias}.principalType = :groupPrincipalType AND ${alias}.principalId IN (:...groupIds)))`,
         { userPrincipalType: 'user', groupPrincipalType: 'group', userId, groupIds }
       );
@@ -2824,7 +2824,7 @@ class PermissionServiceClass {
     }
 
     qb.andWhere(
-      `((${alias}.principalType = :userPrincipalType AND ${alias}.principalId = :userId) OR ${alias}.userId = :userId)`,
+      `(${alias}.principalType = :userPrincipalType AND ${alias}.principalId = :userId)`,
       { userPrincipalType: 'user', userId }
     );
   }
@@ -3011,21 +3011,17 @@ class PermissionServiceClass {
 
     if (resourceType && resourceId) {
       qb.andWhere(
-        '(((assignment.scopeType = :resourceType OR assignment.resourceType = :resourceType) AND ' +
-        '(assignment.scopeId = :resourceId OR assignment.resourceId = :resourceId)) OR ' +
-        '((assignment.scopeType = :resourceType OR assignment.resourceType = :resourceType) AND ' +
-        'assignment.scopeId IS NULL AND assignment.resourceId IS NULL))',
+        '((assignment.scopeType = :resourceType AND assignment.scopeId = :resourceId) OR ' +
+        '(assignment.scopeType = :resourceType AND assignment.scopeId IS NULL))',
         { resourceType, resourceId }
       );
     } else if (resourceType) {
       qb.andWhere(
-        '(((assignment.scopeType = :resourceType OR assignment.resourceType = :resourceType) AND ' +
-        'assignment.scopeId IS NULL AND assignment.resourceId IS NULL) OR ' +
-        '(assignment.scopeType IS NULL AND assignment.resourceType IS NULL))',
+        '(assignment.scopeType = :resourceType AND assignment.scopeId IS NULL)',
         { resourceType }
       );
     } else {
-      qb.andWhere('((assignment.scopeType IS NULL AND assignment.resourceType IS NULL) OR assignment.resourceType = :platform OR assignment.scopeType = :platform)', { platform: 'platform' });
+      qb.andWhere('(assignment.scopeType = :platform AND assignment.scopeId IS NULL)', { platform: 'platform' });
     }
 
     const assignments = await qb.getMany();
@@ -3033,13 +3029,13 @@ class PermissionServiceClass {
       type: 'role-assignment' as const,
       assignmentId: assignment.id,
       roleId: assignment.roleId,
-      principalType: (assignment.principalType as PrincipalType | null) || 'user',
-      principalId: assignment.principalId || assignment.userId,
+      principalType: assignment.principalType as PrincipalType,
+      principalId: assignment.principalId!,
       source: assignment.source,
       sourceMappingId: assignment.sourceMappingId,
-      sourceRef: assignment.sourceRef ?? assignment.sourceMappingId,
-      scopeType: (assignment.scopeType || assignment.resourceType) as ResourceType | null,
-      scopeId: assignment.scopeId || assignment.resourceId,
+      sourceRef: assignment.sourceRef,
+      scopeType: assignment.scopeType as ResourceType | null,
+      scopeId: assignment.scopeId,
     }));
 
     if (resourceType !== 'engine' || !resourceId) {
