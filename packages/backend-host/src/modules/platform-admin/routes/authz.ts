@@ -12,6 +12,9 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js';
 import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
@@ -51,6 +54,7 @@ import { getEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engi
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
+import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import {
   evaluateMissionControlStarbaseBridge,
   evaluateStarbaseMissionControlBridge,
@@ -81,6 +85,7 @@ const configBundleApplySchema = configBundlePreviewSchema.extend({
 
 const idParamSchema = z.object({ id: z.string().uuid() });
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
+const runtimeResourceQuerySchema = z.object({ engineId: z.string().min(1), resourceKind: z.enum(['process_definition', 'decision_definition']).optional(), includeInactive: z.enum(['true', 'false']).optional() });
 const externalEngineAuditActions = [
   'engine.external_registration.create',
   'engine.external_registration.update',
@@ -1976,6 +1981,32 @@ router.post('/api/authz/engine-sets/:id/materialize', apiLimiter, requireAuth, r
     logger.error('Materialize Engine Set error:', error);
     throw Errors.badRequest(error.message || 'Failed to materialize Engine Set');
   }
+}));
+
+// Runtime resource inventory is the authority for resource-aware engine filtering.
+router.get('/api/authz/runtime-resources', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.read'), validateQuery(runtimeResourceQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenant?.tenantId || null;
+  const dataSource = await getDataSource();
+  const resources = await dataSource.getRepository(RuntimeResource).find({
+    where: { engineId: String(req.query.engineId), ...(req.query.resourceKind ? { resourceKind: String(req.query.resourceKind) } : {}), ...(req.query.includeInactive === 'true' ? {} : { isActive: true }) },
+    order: { resourceKind: 'ASC', resourceKey: 'ASC', id: 'ASC' },
+  });
+  res.json(resources.filter((resource) => (resource.tenantId || null) === tenantId));
+}));
+
+router.get('/api/authz/runtime-resource-sets', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.read'), validateQuery(z.object({ engineId: z.string().min(1).optional(), includeArchived: z.enum(['true', 'false']).optional() })), asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenant?.tenantId || null;
+  const dataSource = await getDataSource();
+  const sets = await dataSource.getRepository(RuntimeResourceSet).find({
+    where: { ...(req.query.engineId ? { engineId: String(req.query.engineId) } : {}), ...(req.query.includeArchived === 'true' ? {} : { isArchived: false }) },
+    order: { key: 'ASC' },
+  });
+  res.json(sets.filter((set) => (set.tenantId || null) === tenantId));
+}));
+
+router.post('/api/authz/runtime-resource-sets/:id/materialize', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
+  const result = await runtimeResourceInventoryService.materialize(String(req.params.id), req.tenant?.tenantId || null);
+  res.json(result);
 }));
 
 // ============================================================================
