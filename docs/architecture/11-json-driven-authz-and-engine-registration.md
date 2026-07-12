@@ -1910,7 +1910,7 @@ Editor behavior:
 - [ ] ⬜ Require the existing acknowledgement flow for sensitive permissions before save.
 - [ ] ⬜ Show config ownership: `config_locked` is read-only; `config_warn` permits edits but marks drift; manual roles remain editable.
 - [ ] ⬜ Use a sticky Carbon action bar with Save and Cancel; do not put a save button in every permission row.
-- [ ] ⬜ Keep optional role comparison limited to two or three selected roles and present a vertical differences view, not an unbounded matrix.
+- [x] ✅ Remove the unbounded role-permission matrix from the primary Roles workflow. Custom roles are edited in the focused scoped editor; system roles are duplicated before mutation. A bounded role-comparison view remains optional future work.
 - [ ] ⬜ Verify no page-level horizontal overflow at supported desktop and tablet widths and ensure long permission labels wrap inside their category.
 
 The separate `Permissions` tab remains the catalog administration and inspection surface. The `Assignments` tab remains the principal-to-scope assignment surface. The role editor selects what a role contains; it does not also assign users or groups.

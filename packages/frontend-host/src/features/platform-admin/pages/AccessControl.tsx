@@ -7468,15 +7468,12 @@ export default function AccessControl() {
                   onArchive={archiveRole}
                   canManage={canManageRoles}
                 />
-                <RolePermissionMatrix
-                  roles={roles}
-                  permissions={permissions}
-                  loading={rolesQ.isLoading || permissionsQ.isLoading}
-                  canManage={canManageRoles}
-                  savingRoleId={matrixSavingRoleId}
-                  onEditRole={openEditRole}
-                  onDuplicateRole={openDuplicateRole}
-                  onUpdateRolePermissions={updateRolePermissionsFromMatrix}
+                <InlineNotification
+                  kind="info"
+                  lowContrast
+                  hideCloseButton
+                  title="Edit one role at a time"
+                  subtitle="Use Edit for custom roles or Duplicate for system roles. The focused role editor keeps permissions scoped, avoids horizontal comparison tables, and requires acknowledgement for sensitive permissions."
                 />
               </div>
             )}
