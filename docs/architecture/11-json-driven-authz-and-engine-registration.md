@@ -1153,6 +1153,7 @@ external entitlement
 ```
 
 - [ ] ⬜ Make `IdentityEntitlementMapping.targetGroupId` the persisted target for normal mappings.
+- [x] ✅ Add provider-neutral `IdentityEntitlementMapping` persistence with entitlement type, exact/contains/exists operator, target group, sync mode, provider, tenant, and deterministic matcher contract. Group membership reconciliation remains in progress.
 - [ ] ⬜ Represent “all authenticated users” as an `exists` mapping to a configured internal group; remove provider `defaultRole` authorization mutation.
 - [ ] ⬜ Implement the SSO/Identity Engine Assignment UI as a wizard that selects or creates a managed internal group and creates a normal group role assignment at engine/Engine Set/runtime scope.
 - [ ] ⬜ Migrate or remove `SsoClaimsMapping` and `SsoAssignmentMapping`; do not retain three runtime mapping evaluators.

@@ -33,6 +33,7 @@ export * from './SsoGroupMappingService.js';
 export * from './SsoNormalizedIdentityService.js';
 export * from './ExternalIdentityService.js';
 export * from './IdentityProviderAdapter.js';
+export * from './IdentityEntitlementMappingService.js';
 export * from './SsoProviderIdentityCheckService.js';
 export * from './SsoSyncDiagnosticsService.js';
 export * from './config-bundle-hash.js';
