@@ -546,6 +546,8 @@ export const AUTHZ_ACTIONS = [
     routes: [
       { method: 'GET', route: '/api/authz/engine-sets', resourceResolver: 'platform.self' },
       { method: 'GET', route: '/api/authz/engine-sets/:id', resourceResolver: 'engineSet.byId' },
+      { method: 'GET', route: '/api/authz/runtime-resources', resourceResolver: 'platform.self' },
+      { method: 'GET', route: '/api/authz/runtime-resource-sets', resourceResolver: 'platform.self' },
     ],
   },
   {
@@ -564,6 +566,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'DELETE', route: '/api/authz/engine-sets/:id', resourceResolver: 'engineSet.byId' },
       { method: 'POST', route: '/api/authz/engine-sets/preview', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/authz/engine-sets/:id/materialize', resourceResolver: 'engineSet.byId' },
+      { method: 'POST', route: '/api/authz/runtime-resource-sets/:id/materialize', resourceResolver: 'platform.self' },
     ],
   },
   {
