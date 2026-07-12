@@ -5,6 +5,8 @@ import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { engineSetService } from './EngineSetService.js';
 import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js';
@@ -94,7 +96,7 @@ class ConfigBundleApplyService {
     if (input.expectedPreviewHash !== compilation.preview.canonicalHash) {
       return fail('Preview hash does not match the submitted configuration bundle', 409);
     }
-    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-sets.json', './assignments.json'].includes(path));
+    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-sets.json', './assignments.json', './project-engine-targets.json'].includes(path));
     if (unsupported.length > 0) {
       return fail(`Config apply does not yet support: ${unsupported.join(', ')}`, 422);
     }
@@ -112,6 +114,7 @@ class ConfigBundleApplyService {
     const desiredEngines = new Map(entries(compilation.files, './engines.json', 'engines').map((engine) => [engine.key, engine]));
     const desiredEngineSets = new Map(entries(compilation.files, './engine-sets.json', 'engineSets').map((set) => [set.key, set]));
     const desiredAssignments = entries(compilation.files, './assignments.json', 'assignments');
+    const desiredTargets = entries(compilation.files, './project-engine-targets.json', 'projectEngineTargets');
     const materializeIds: string[] = [];
     const now = Date.now();
     let created = 0;
@@ -125,6 +128,8 @@ class ConfigBundleApplyService {
       const engineRepo = manager.getRepository(Engine);
       const engineSetRepo = manager.getRepository(EngineSet);
       const assignmentRepo = manager.getRepository(RbacRoleAssignment);
+      const projectRepo = manager.getRepository(Project);
+      const targetRepo = manager.getRepository(ProjectEngineTarget);
       const rolePermissionRepo = manager.getRepository(RbacRolePermission);
 
       for (const change of diff.changes) {
@@ -313,6 +318,42 @@ class ConfigBundleApplyService {
           await assignmentRepo.delete(staleIds);
           for (const id of staleIds) await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.assignment.delete', resourceType: 'role_assignment', resourceId: id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash } });
           archived += staleIds.length;
+        }
+      }
+
+      const targetKeys = new Set<string>();
+      for (const target of desiredTargets) {
+        if (!target.projectRef.id) fail('Config project-engine targets currently require projectRef.id', 422);
+        const project = await projectRepo.findOne({ where: { id: target.projectRef.id } });
+        const engine = engineByKey.get(target.engineRef.engineKey);
+        if (!project || !engine) fail('Config project-engine target references an unresolved project or engine', 422);
+        const pairKey = `${project.id}:${engine.id}`;
+        targetKeys.add(pairKey);
+        const existing = await targetRepo.findOne({ where: { projectId: project.id, engineId: engine.id } });
+        const values = {
+          status: target.status, source: 'config', sourceRef, externalSystemId: null, externalProjectId: null, externalEngineId: null, externalTargetId: null,
+          allowManualDeploy: target.allowManualDeploy, allowCiDeploy: target.allowCiDeploy, allowApiDeploy: target.allowApiDeploy, allowImport: target.allowImport,
+          approvedById: null, approvalStatus: 'not_required', approvedAt: null, policyTagsJson: null, diagnosticsJson: null, lastSeenAt: now, updatedAt: now,
+        };
+        if (!existing) {
+          const targetId = generateId();
+          await targetRepo.insert({ id: targetId, tenantId, projectId: project.id, engineId: engine.id, ...values, createdById: input.actorId, createdAt: now });
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.project_engine_target.create', resourceType: 'project_engine_target', resourceId: targetId, details: { bundleKey: manifest.metadata.key, projectId: project.id, engineKey: target.engineRef.engineKey, canonicalHash: diff.canonicalHash } });
+          created += 1;
+        } else {
+          if (existing.source !== 'config' || existing.sourceRef !== sourceRef) fail(`Config target conflicts with existing ${existing.source} target`, 409);
+          await targetRepo.update({ id: existing.id }, values);
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.project_engine_target.update', resourceType: 'project_engine_target', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, projectId: project.id, engineKey: target.engineRef.engineKey, canonicalHash: diff.canonicalHash } });
+          updated += 1;
+        }
+      }
+      if (manifest.mode === 'authoritative') {
+        const existing = await targetRepo.find({ where: { source: 'config', sourceRef } });
+        for (const target of existing) {
+          if (targetKeys.has(`${target.projectId}:${target.engineId}`)) continue;
+          await targetRepo.update({ id: target.id }, { status: 'archived', updatedAt: now });
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.project_engine_target.archive', resourceType: 'project_engine_target', resourceId: target.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash } });
+          archived += 1;
         }
       }
     });

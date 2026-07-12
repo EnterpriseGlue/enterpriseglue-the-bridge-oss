@@ -2187,7 +2187,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Upsert config-managed runtime resource sets and materialize them against the runtime resource inventory.
 - [x] ✅ Upsert config-managed group role assignments for platform, engine, and Engine Set scopes using canonical assignment keys and source-scoped authoritative cleanup. User/API/service-account, project, and runtime-resource scopes remain pending.
 - [ ] ⬜ Upsert config-managed provider-neutral identity entitlement mappings.
-- [ ] ⬜ Upsert config-managed project-engine targets.
+- [x] ✅ Upsert config-managed project-engine targets by explicit `projectRef.id` and config engine key, with source-scoped authoritative archival. Project-key resolution remains pending until projects have deterministic config keys.
 - [ ] ⬜ Refresh authorization version and frontend permission snapshot invalidation.
 - [ ] ⬜ Record audit events and run diagnostics.
 
