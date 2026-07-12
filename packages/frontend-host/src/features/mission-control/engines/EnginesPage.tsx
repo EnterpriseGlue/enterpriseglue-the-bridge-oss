@@ -244,11 +244,39 @@ export function formatEngineRegistrationStatus(value: unknown): string {
 }
 
 export function formatEngineLabels(labels: unknown): string {
-  if (!labels || typeof labels !== 'object' || Array.isArray(labels)) return '-'
-  const entries = Object.entries(labels as Record<string, unknown>)
+  const entries = getEngineLabelEntries(labels)
+  return entries.length > 0 ? entries.map(([key, value]) => `${key}=${value}`).join(', ') : '-'
+}
+
+export function getEngineLabelEntries(labels: unknown): Array<[string, string]> {
+  if (!labels || typeof labels !== 'object' || Array.isArray(labels)) return []
+  return Object.entries(labels as Record<string, unknown>)
     .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[0].trim().length > 0 && entry[1].trim().length > 0)
     .sort(([left], [right]) => left.localeCompare(right))
-  return entries.length > 0 ? entries.map(([key, value]) => `${key}=${value}`).join(', ') : '-'
+}
+
+export type EngineMetadataFilterOption = { id: string; label: string }
+
+const ENGINE_METADATA_FILTER_SEPARATOR = '\u0000'
+
+export function getEngineMetadataFilterOptions(engines: unknown[]): EngineMetadataFilterOption[] {
+  const entries = new Map<string, EngineMetadataFilterOption>()
+  for (const engine of engines) {
+    for (const [key, value] of getEngineLabelEntries((engine as any)?.labels)) {
+      const id = `${key}${ENGINE_METADATA_FILTER_SEPARATOR}${value}`
+      entries.set(id, { id, label: `${key}: ${value}` })
+    }
+  }
+  return Array.from(entries.values()).sort((left, right) => left.label.localeCompare(right.label))
+}
+
+export function matchesEngineMetadataFilter(engine: unknown, filterId: string): boolean {
+  if (!filterId) return true
+  const separatorIndex = filterId.indexOf(ENGINE_METADATA_FILTER_SEPARATOR)
+  if (separatorIndex < 1) return false
+  const key = filterId.slice(0, separatorIndex)
+  const value = filterId.slice(separatorIndex + ENGINE_METADATA_FILTER_SEPARATOR.length)
+  return getEngineLabelEntries((engine as any)?.labels).some(([entryKey, entryValue]) => entryKey === key && entryValue === value)
 }
 
 export function formatEngineFieldOwnership(ownership: unknown): string {
@@ -1094,6 +1122,7 @@ export default function Engines() {
     deploymentIntegration: 'enterpriseglue_proxy' as DeploymentIntegration,
   })
   const [searchQuery, setSearchQuery] = React.useState('')
+  const [metadataFilterId, setMetadataFilterId] = React.useState('')
 
   // Engine members panel state
   const [membersOpen, setMembersOpen] = React.useState(false)
@@ -1360,9 +1389,13 @@ export default function Engines() {
     []
   )
 
+  const metadataFilterOptions = React.useMemo(() => [
+    { id: '', label: 'All metadata' },
+    ...getEngineMetadataFilterOptions(rows),
+  ], [rows])
+
   const visibleEngines = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    if (!q) return rows
     return rows.filter((e: any) => {
       const envTagName = Array.isArray(envTags)
         ? (envTags.find((t) => t.id === e.environmentTagId)?.name || '')
@@ -1372,12 +1405,13 @@ export default function Engines() {
         String(e?.baseUrl || ''),
         String(e?.type || ''),
         String(envTagName || ''),
+        formatEngineLabels(e?.labels),
       ]
         .join(' ')
         .toLowerCase()
-      return hay.includes(q)
+      return (!q || hay.includes(q)) && matchesEngineMetadataFilter(e, metadataFilterId)
     })
-  }, [rows, searchQuery, envTags])
+  }, [rows, searchQuery, metadataFilterId, envTags])
 
   return (
     <PageLayout style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)', background: 'var(--color-bg-primary)', minHeight: '100vh' }}>
@@ -1503,6 +1537,18 @@ export default function Engines() {
                       value={searchQuery}
                       placeholder="Search engines"
                     />
+                    <Dropdown
+                      id="engine-metadata-filter"
+                      aria-label="Filter by engine metadata"
+                      titleText="Metadata"
+                      label="All metadata"
+                      items={metadataFilterOptions}
+                      itemToString={(item: EngineMetadataFilterOption | null) => item?.label || ''}
+                      selectedItem={metadataFilterOptions.find((item) => item.id === metadataFilterId) || null}
+                      onChange={({ selectedItem }: { selectedItem?: EngineMetadataFilterOption | null }) => setMetadataFilterId(selectedItem?.id || '')}
+                      disabled={metadataFilterOptions.length === 1}
+                      title={metadataFilterOptions.length === 1 ? 'No engine metadata labels are available' : undefined}
+                    />
                     {manualEngineOnboardingAllowed && (
                       <Button kind="primary" renderIcon={Add} onClick={openNew} disabled={!canCreateEngine} title={canCreateEngine ? undefined : createEngineUnavailableReason}>
                         Add engine
@@ -1530,7 +1576,7 @@ export default function Engines() {
                   <TableBody>
                     {tableRows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={headers.length}>No engines match this search.</TableCell>
+                      <TableCell colSpan={headers.length}>No engines match the current search and metadata filters.</TableCell>
                       </TableRow>
                     )}
                     {tableRows.map((row) => {

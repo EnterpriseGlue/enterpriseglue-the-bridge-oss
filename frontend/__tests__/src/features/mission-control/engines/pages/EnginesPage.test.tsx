@@ -13,6 +13,9 @@ import EnginesPage, {
   formatEngineCapabilitySummary,
   formatEngineFieldOwnership,
   formatEngineLabels,
+  getEngineLabelEntries,
+  getEngineMetadataFilterOptions,
+  matchesEngineMetadataFilter,
   formatProjectEngineTargetModes,
   formatProjectEngineTargetProject,
   formatProjectEngineTargetStatus,
@@ -91,6 +94,21 @@ describe('EnginesPage', () => {
   it('exports EnginesPage component', () => {
     expect(EnginesPage).toBeDefined();
     expect(typeof EnginesPage).toBe('function');
+  });
+
+  it('builds stable metadata filters from engine labels and matches exact values', () => {
+    const options = getEngineMetadataFilterOptions([
+      { labels: { country: 'TR', domain: 'payments' } },
+      { labels: { country: 'TR', region: 'eu-west' } },
+    ]);
+
+    expect(getEngineLabelEntries({ region: 'eu-west', country: 'TR', ignored: 1 })).toEqual([
+      ['country', 'TR'],
+      ['region', 'eu-west'],
+    ]);
+    expect(options.map((option) => option.label)).toEqual(['country: TR', 'domain: payments', 'region: eu-west']);
+    expect(matchesEngineMetadataFilter({ labels: { country: 'TR' } }, options[0].id)).toBe(true);
+    expect(matchesEngineMetadataFilter({ labels: { country: 'NL' } }, options[0].id)).toBe(false);
   });
 
   function renderPage() {
