@@ -8,7 +8,7 @@ import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, type DataSource, type Repository } from 'typeorm';
 
-export type EngineSetSource = 'manual' | 'sso' | 'api' | 'external' | 'system' | 'automation';
+export type EngineSetSource = 'manual' | 'sso' | 'api' | 'external' | 'system' | 'automation' | 'config';
 export type EngineSetSelectorMode = 'all' | 'engine_ids' | 'labels';
 export type EngineSetLabelMatch = 'all' | 'any';
 export type EngineSetSelectorRiskReason = 'all_engines_selector' | 'any_label_match';

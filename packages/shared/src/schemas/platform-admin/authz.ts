@@ -583,7 +583,7 @@ export const EngineSetSummarySchema = z.object({
   description: z.string().nullable(),
   selector: EngineSetSelectorSchema,
   selectorFingerprint: z.string(),
-  source: z.enum(['manual', 'sso', 'api', 'external', 'system', 'automation']),
+  source: z.enum(['manual', 'sso', 'api', 'external', 'system', 'automation', 'config']),
   sourceRef: z.string().nullable(),
   isArchived: z.boolean(),
   createdById: z.string().nullable(),
