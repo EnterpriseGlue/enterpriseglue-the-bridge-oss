@@ -43,7 +43,7 @@ Current config-as-code status:
 - [x] ✅ Implement shared JSON config bundle schemas, strict canonical validation, deterministic config keys, SHA-256 bundle hashing, and hash-bound persistence for the currently supported object families.
 - [x] ✅ Implement provider-neutral identity adapters and entitlement mappings for OIDC, SAML, and LDAP.
 - [x] ✅ Implement deterministic identity adapter contract tests across OIDC, SAML, LDAP, and adapter lookup dispatch.
-- [ ] ⬜ Implement protocol-faithful mock OIDC, SAML, and LDAP services for integration and end-to-end testing.
+- [ ] ⬜ Implement containerized protocol-faithful mock OIDC, SAML, and LDAP services for browser end-to-end testing. The in-process contract harness now exercises OIDC discovery/PKCE/JWKS, SAML attributes, and LDAP bind/group semantics.
 - [x] ✅ Expose side-effect-free strict config-bundle preview at `POST /api/authz/config-bundles/preview`, protected by `platform.authz.roles.manage`, with OpenAPI and route-inventory coverage.
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
