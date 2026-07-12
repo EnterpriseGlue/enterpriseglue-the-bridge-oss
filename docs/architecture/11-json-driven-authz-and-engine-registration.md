@@ -2220,6 +2220,7 @@ Phase 0 exit criteria:
 - [x] ✅ Resolve jobs and job definitions through their referenced process definition before authorizing detail or mutation routes; resource-aware collections filter their returned items by the authorized process-definition inventory.
 - [x] ✅ Resolve user tasks and task-scoped variables/forms through their referenced process definition; resource-aware task lists and counts query only authorized process-definition keys.
 - [x] ✅ Resolve external-task mutations through their referenced process definition; resource-aware external-task queries and fetch-and-lock calls are constrained to authorized process-definition keys.
+- [x] ✅ Route direct process-instance mutations, direct job retries, and synchronous migration execution through the same process-definition and migration guards as their batch equivalents.
 - [ ] ⬜ Keep `engine_wide` distributed-engine behavior on the fast path and invoke resource filtering only for `resource_aware` engines.
 - [ ] ⬜ Ensure process instance, job, incident, batch, and migration mutations resolve inherited process definition or decision scopes before authorization.
 - [ ] ⬜ Ensure EnterpriseGlue denial prevents engine calls even when the engine might allow the request.
