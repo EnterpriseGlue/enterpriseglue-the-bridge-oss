@@ -49,8 +49,14 @@ export default function ConfigurationBundleSettingsTab() {
     catch { setError('The selected configuration file could not be read.'); }
     finally { event.target.value = ''; }
   };
-  const exportJson = () => {
-    const blob = new Blob([source], { type: 'application/json' });
+  const exportJson = async () => {
+    let output = source;
+    try {
+      const input = parse();
+      const bundle = input.bundle as { metadata?: { key?: string }; tenantKey?: string };
+      if (bundle.metadata?.key) output = JSON.stringify(await apiClient.get(`/api/authz/config-bundles/export?bundleKey=${encodeURIComponent(bundle.metadata.key)}${bundle.tenantKey ? `&tenantKey=${encodeURIComponent(bundle.tenantKey)}` : ''}`), null, 2);
+    } catch (value) { setError(parseApiError(value, 'Configuration export failed').message); return; }
+    const blob = new Blob([output], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
     const anchor = document.createElement('a'); anchor.href = href; anchor.download = 'enterpriseglue-config-bundle.json'; anchor.click(); URL.revokeObjectURL(href);
   };

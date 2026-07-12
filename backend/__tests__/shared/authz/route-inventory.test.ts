@@ -99,6 +99,7 @@ describe('authorization route inventory validation', () => {
           ['POST', '/api/authz/config-bundles/diff'],
           ['POST', '/api/authz/config-bundles/apply'],
           ['GET', '/api/authz/config-bundles/runs'],
+          ['GET', '/api/authz/config-bundles/export'],
         ],
       },
       {

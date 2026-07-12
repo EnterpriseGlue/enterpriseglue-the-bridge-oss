@@ -2238,7 +2238,7 @@ Phase 0 exit criteria:
 
 ### Phase 5: APIs And OpenAPI
 
-- [x] ✅ Add config bundle preview/diff/apply APIs, hash-bound apply audit events, and recent apply-run history API. JSON export is client-side; server-side persisted-state export and CLI remain pending.
+- [x] ✅ Add config bundle preview/diff/apply APIs, hash-bound apply audit events, recent apply-run history API, server-side export of config-owned roles/groups/engines, and `pnpm authz:config` CI preview/apply command. Multi-file folder/ZIP import and export of the remaining config families remain pending.
 - [ ] ⬜ Add runtime resource inventory and runtime resource set read/preview/reconcile APIs.
 - [ ] ⬜ Add provider-neutral identity provider, identity mapping, mapping test, sync-run, and sync-event APIs.
 - [ ] ⬜ Add direct deployment receipt and deployment lineage APIs with machine-principal authorization and idempotency keys.

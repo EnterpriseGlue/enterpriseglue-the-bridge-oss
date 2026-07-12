@@ -54,6 +54,7 @@ import { getEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engi
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
+import { configBundleExportService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleExportService.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import {
   evaluateMissionControlStarbaseBridge,
@@ -1352,6 +1353,10 @@ router.get('/api/authz/config-bundles/runs', apiLimiter, requireAuth, requirePla
     try { details = row.details ? JSON.parse(row.details) as Record<string, unknown> : {}; } catch { /* preserve audit availability */ }
     return { id: row.id, bundleKey: row.resourceId, actorId: row.userId, createdAt: row.createdAt, ...details };
   }));
+}));
+
+router.get('/api/authz/config-bundles/export', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateQuery(z.object({ bundleKey: z.string().min(3).max(160), tenantKey: z.string().min(1).max(160).optional() })), asyncHandler(async (req: Request, res: Response) => {
+  res.json(await configBundleExportService.exportBundle({ bundleKey: String(req.query.bundleKey), tenantKey: req.query.tenantKey ? String(req.query.tenantKey) : undefined, tenantId: req.tenant?.tenantId || null }));
 }));
 
 // ============================================================================
