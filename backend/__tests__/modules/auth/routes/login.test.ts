@@ -5,6 +5,7 @@ import loginRouter from '../../../../../packages/backend-host/src/modules/auth/r
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { SsoProvider } from '@enterpriseglue/shared/db/entities/SsoProvider.js';
+import { IdentityProvider } from '@enterpriseglue/shared/db/entities/IdentityProvider.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { verifyPassword } from '@enterpriseglue/shared/utils/password.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
@@ -59,6 +60,7 @@ describe('auth login routes', () => {
   let refreshTokenRepo: {
     insert: Mock;
   };
+  let identityProviderRepo: { count: Mock };
 
   beforeEach(() => {
     app = express();
@@ -81,6 +83,7 @@ describe('auth login routes', () => {
     ssoProviderRepo = {
       count: vi.fn().mockResolvedValue(0),
     };
+    identityProviderRepo = { count: vi.fn().mockResolvedValue(0) };
 
     refreshTokenRepo = {
       insert: vi.fn(),
@@ -90,6 +93,7 @@ describe('auth login routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
         if (entity === SsoProvider) return ssoProviderRepo;
+        if (entity === IdentityProvider) return identityProviderRepo;
         return refreshTokenRepo;
       },
     });
@@ -105,6 +109,15 @@ describe('auth login routes', () => {
     expect(response.status).toBe(403);
     expect(response.body.error).toContain('Local login is disabled. Please use your SSO provider.');
     expect(userRepo.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('blocks local login for an enabled direct provider-neutral identity provider', async () => {
+    identityProviderRepo.count.mockResolvedValue(1);
+    const response = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'user@example.com', password: 'Password123!' });
+    expect(response.status).toBe(403);
+    expect(identityProviderRepo.count).toHaveBeenCalledWith({ where: { isEnabled: true, authenticationMode: 'direct' } });
   });
 
   it('blocks local login for non-local accounts', async () => {

@@ -40,18 +40,18 @@ Current config-as-code status:
 - [x] ✅ Provider-neutral identity normalization, distributed-versus-central runtime scoping, dual deployment ingestion, and the focused v1 runtime resource boundary are documented.
 - [x] ✅ Target operator guides now cover platform configuration and deployment/CI-CD operationalization without presenting unimplemented interfaces as currently available.
 - [ ] ⬜ Complete the end-to-end alignment gate: clean principal assignments, external identity links, provider-id-bound login, secure secrets, config ownership fields, project-target ownership, runtime assignment semantics, and legacy authorization removal.
-- [x] ✅ Implement shared JSON config bundle schemas, strict canonical validation, deterministic config keys, and SHA-256 bundle hashing. Preview/apply persistence remains gated on Phase 0.
+- [x] ✅ Implement shared JSON config bundle schemas, strict canonical validation, deterministic config keys, SHA-256 bundle hashing, and hash-bound persistence for the currently supported object families.
 - [x] ✅ Implement provider-neutral identity adapters and entitlement mappings for OIDC, SAML, and LDAP.
 - [x] ✅ Implement deterministic identity adapter contract tests across OIDC, SAML, LDAP, and adapter lookup dispatch.
 - [ ] ⬜ Implement protocol-faithful mock OIDC, SAML, and LDAP services for integration and end-to-end testing.
 - [x] ✅ Expose side-effect-free strict config-bundle preview at `POST /api/authz/config-bundles/preview`, protected by `platform.authz.roles.manage`, with OpenAPI and route-inventory coverage.
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
-- [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply will persist the expanded permission list later.
-- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine/Engine Set/Runtime Resource Set create, update, no-op, conflict, and authoritative-archive previews. Assignments, providers/mappings, and targets remain outside the diff response.
-- [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for roles, groups, engines, Engine Sets, Runtime Resource Sets, scoped group assignments, identity mappings, and project-engine targets. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, and refuses unsupported object families rather than ignoring them.
+- [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply persists the expanded permission list.
+- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine/Engine Set/Runtime Resource Set/identity-provider create, update, no-op, conflict, and authoritative-archive previews. Assignment, mapping, and target detail remains outside the diff response.
+- [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for roles, groups, engines, Engine Sets, Runtime Resource Sets, scoped group assignments, provider-neutral identity providers/mappings, and project-engine targets. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, and refuses unsupported object families rather than ignoring them.
 - [x] ✅ Persist engine config provenance (`configKey`, source reference/hash, ownership mode, last applied time) plus `runtimeAccessScope`, `deploymentIntegration`, and `connectionMode` with backward-compatible defaults.
-- [x] ✅ Persist SSO provider config key and source reference so provider-neutral identity mappings can resolve configured providers safely. Provider bundle apply remains pending.
+- [x] ✅ Persist provider-neutral identity-provider keys and source references so entitlement mappings resolve configured providers safely; config-bundle creation/update/archive is supported.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
 - [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.
@@ -75,7 +75,7 @@ Current config-as-code status:
 - [x] ✅ Make `enterpriseglue_authoritative` the v1 runtime authorization mode and keep engine-native mirroring/import as later explicit modes.
 - [x] ✅ Keep engine registration separate from engine authorization, then combine them in dropdown and deployment eligibility APIs.
 - [x] ✅ Keep runtime authorization based on database records and evaluator decisions, not direct JSON reads.
-- [x] ✅ Add the first API-only JSON config bundle preview endpoint; import, diff, apply, export, and history remain pending.
+- [x] ✅ Add API-only JSON config-bundle preview, diff, and hash-bound apply endpoints; import upload, export, and run history remain pending.
 - [ ] ⬜ Add UI and CI/CD workflows for managing config bundles.
 - [ ] ⬜ Add config-managed source ownership and drift diagnostics for imported objects.
 - [ ] ⬜ Replace the horizontally scrolling role-permission matrix with a role library and focused single-role permission editor.
@@ -140,7 +140,7 @@ The 2026-07-12 codebase review found that the implemented RBAC foundation is a u
 - [x] ✅ Keep navigation permission snapshots coarse; runtime-resource visibility is server-filtered.
 - [x] ✅ Make identity mappings group-first. Provider default access is represented as an `exists` mapping to an internal group, not a provider `defaultRole` mutation.
 - [x] ✅ Treat the current SSO platform-role and direct-engine mapping models as migration inputs, not parallel target models. Product wizards may create a managed internal group plus scoped assignment, but runtime lineage stays entitlement -> group -> assignment.
-- [x] ✅ Require exact provider-id-bound login and reconciliation for every protocol.
+- [ ] ⬜ Require exact provider-id-bound login and reconciliation for every protocol. Generic OIDC is exact-provider bound; legacy Microsoft/Google and direct LDAP remain pending.
 - [x] ✅ Require a real secret resolver/encryption service before config bundle apply can handle provider or engine credentials.
 - [x] ✅ Make the Phase 0 alignment gate a prerequisite for Phase 1 config schemas and runtime-resource persistence.
 
