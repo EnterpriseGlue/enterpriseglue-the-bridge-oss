@@ -41,6 +41,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
     hasPermission: vi.fn().mockResolvedValue(false),
     getKnownEngineIdsForUser: vi.fn().mockResolvedValue([]),
     getKnownProjectIdsForUser: vi.fn().mockResolvedValue([]),
+    getVisibleRuntimeResources: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -320,6 +321,21 @@ describe('requireAction project resource resolvers', () => {
     expect(camundaGet).toHaveBeenNthCalledWith(1, engineId, '/process-definition/source-v1');
     expect(camundaGet).toHaveBeenNthCalledWith(2, engineId, '/process-definition/target-v2');
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
+  });
+
+  it('discovers resource-aware engines when a runtime resource is visible', async () => {
+    engineFind.mockResolvedValue([{ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' }]);
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.getKnownEngineIdsForUser as unknown as Mock).mockResolvedValue([engineId]);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock)
+      .mockResolvedValueOnce([{ id: 'runtime-resource-1' }])
+      .mockResolvedValueOnce([]);
+
+    const response = await request(app).get('/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body.authorizedEngineIds).toEqual([engineId]);
   });
 
   it('authorizes deployment composite actions through deployment eligibility', async () => {
