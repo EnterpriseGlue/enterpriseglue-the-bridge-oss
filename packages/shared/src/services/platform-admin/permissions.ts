@@ -2171,13 +2171,30 @@ class PermissionServiceClass {
     const requestedPermissions = new Set(rolePermissions.map((permission) => permission.permissionId));
     if (requestedPermissions.size === 0) return [];
 
-    const broadAssignments = await dataSource.getRepository(RbacRoleAssignment).find({
-      where: { principalType: principal.principalType, principalId: principal.principalId, scopeType: 'engine', scopeId: engineId },
-      select: ['roleId', 'expiresAt', 'source'],
+    const principalRefs = [{ principalType: principal.principalType, principalId: principal.principalId }];
+    if (principal.principalType === 'user') {
+      const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, principal.principalId, tenantId);
+      principalRefs.push(...groupIds.map((principalId) => ({ principalType: 'group' as const, principalId })));
+    }
+    const candidateAssignments = await dataSource.getRepository(RbacRoleAssignment).find({
+      where: principalRefs,
+      select: ['roleId', 'scopeType', 'scopeId', 'expiresAt', 'source'],
     });
-    const activeRoleIds = broadAssignments
-      .filter((assignment) => assignment.source !== 'legacy' && (!assignment.expiresAt || assignment.expiresAt > Date.now()))
+    const activeAssignments = candidateAssignments
+      .filter((assignment) => assignment.source !== 'legacy' && (!assignment.expiresAt || assignment.expiresAt > Date.now()));
+    const directEngineRoleIds = activeAssignments
+      .filter((assignment) => assignment.scopeType === 'engine' && assignment.scopeId === engineId)
       .map((assignment) => assignment.roleId);
+    const engineSetIds = activeAssignments
+      .filter((assignment) => assignment.scopeType === 'engine_set' && assignment.scopeId)
+      .map((assignment) => assignment.scopeId!);
+    const matchingEngineSetIds = engineSetIds.length > 0
+      ? new Set((await dataSource.getRepository(EngineSetMaterialization).find({ where: { engineSetId: In(engineSetIds), engineId }, select: ['engineSetId'] })).map((row) => row.engineSetId))
+      : new Set<string>();
+    const engineSetRoleIds = activeAssignments
+      .filter((assignment) => assignment.scopeType === 'engine_set' && assignment.scopeId && matchingEngineSetIds.has(assignment.scopeId))
+      .map((assignment) => assignment.roleId);
+    const activeRoleIds = Array.from(new Set([...directEngineRoleIds, ...engineSetRoleIds]));
     if (activeRoleIds.length === 0) return [];
 
     const broadPermissions = await dataSource.getRepository(RbacRolePermission).find({ where: { roleId: In(activeRoleIds) }, select: ['permissionId'] });
