@@ -1096,6 +1096,7 @@ export function requireRuntimeProcessInstanceSelectionAction(
       }
 
       let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
+      let resourceKeys: string[] | undefined;
       if (!broad) {
         const ids = readRequestValues(req, options.processInstanceIdsKey || 'processInstanceIds', 'body');
         if (!ids.length) {
@@ -1104,7 +1105,7 @@ export function requireRuntimeProcessInstanceSelectionAction(
         const instances = await Promise.all(ids.map((id) => camundaGet<Record<string, unknown>>(
           engineId, `/process-instance/${encodeURIComponent(id)}`
         )));
-        const resourceKeys = Array.from(new Set(instances.map((instance) => {
+        resourceKeys = Array.from(new Set(instances.map((instance) => {
           const key = instance.definitionKey ?? instance.processDefinitionKey;
           return typeof key === 'string' ? key.trim() : '';
         }).filter(Boolean)));
@@ -1127,6 +1128,7 @@ export function requireRuntimeProcessInstanceSelectionAction(
       (req as Request & { engineId?: string }).engineId = engineId;
       req.authzAction = action;
       req.authzResource = resource;
+      req.authorizedRuntimeResourceKeys = resourceKeys;
       return next();
     } catch (error) {
       return next(error instanceof Error ? error : Errors.internal('Runtime batch authorization failed'));

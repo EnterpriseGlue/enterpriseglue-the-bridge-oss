@@ -3,7 +3,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { requireRuntimeCollectionAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import {
   processRetries,
   fetchBatchInfo,
@@ -24,7 +24,7 @@ const r = Router()
 
 r.use(requireAuth)
 
-async function insertLocalBatch(type: string, camundaBatchId: string, payload: any, engineDto: any, engineId: string) {
+async function insertLocalBatch(type: string, camundaBatchId: string, payload: any, engineDto: any, engineId: string, processDefinitionKeys?: string[]) {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const now = Date.now()
@@ -62,8 +62,27 @@ async function insertLocalBatch(type: string, camundaBatchId: string, payload: a
     updatedAt: now,
     completedAt: null,
     lastError: null,
+    metadata: processDefinitionKeys?.length ? JSON.stringify({ authz: { processDefinitionKeys } }) : null,
   })
   return { id }
+}
+
+function batchRuntimeResourceKeys(row: Batch): string[] {
+  if (!row.metadata) return []
+  try {
+    const keys = JSON.parse(row.metadata)?.authz?.processDefinitionKeys
+    return Array.isArray(keys) ? keys.filter((key): key is string => typeof key === 'string' && key.length > 0) : []
+  } catch {
+    return []
+  }
+}
+
+function requireVisibleBatch(row: Batch, authorizedKeys?: string[]) {
+  if (!authorizedKeys) return
+  const batchKeys = batchRuntimeResourceKeys(row)
+  if (!batchKeys.length || !batchKeys.some((key) => authorizedKeys.includes(key))) {
+    throw Errors.forbidden('Batch is not available for the authorized runtime resources')
+  }
 }
 
 function stripLocalAuditFields<T extends Record<string, any>>(body: T): Omit<T, 'auditReason'> {
@@ -84,7 +103,7 @@ r.post('/mission-control-api/batches/process-instances/delete', requireRuntimePr
   }
   const engineId = (req as any).engineId as string
   const engineDto: any = await deleteProcessInstancesBatch(engineId, stripLocalAuditFields(body))
-  const { id } = await insertLocalBatch('DELETE_INSTANCES', engineDto?.id, body, engineDto, engineId)
+  const { id } = await insertLocalBatch('DELETE_INSTANCES', engineDto?.id, body, engineDto, engineId, req.authorizedRuntimeResourceKeys)
   res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'DELETE_INSTANCES' })
 }))
 
@@ -95,7 +114,7 @@ r.post('/mission-control-api/batches/process-instances/suspend', requireRuntimeP
   const engineId = (req as any).engineId as string
   const engineDto: any = await suspendProcessInstancesBatch(engineId, engineBody)
   logger.info('[BATCH SUSPEND] Camunda response:', JSON.stringify(engineDto, null, 2))
-  const { id } = await insertLocalBatch('SUSPEND_INSTANCES', engineDto?.id, body, engineDto, engineId)
+  const { id } = await insertLocalBatch('SUSPEND_INSTANCES', engineDto?.id, body, engineDto, engineId, req.authorizedRuntimeResourceKeys)
   res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'SUSPEND_INSTANCES' })
 }))
 
@@ -103,7 +122,7 @@ r.post('/mission-control-api/batches/process-instances/activate', requireRuntime
   const body = { ...req.body, suspended: false }
   const engineId = (req as any).engineId as string
   const engineDto: any = await suspendProcessInstancesBatch(engineId, stripLocalAuditFields(body))
-  const { id } = await insertLocalBatch('ACTIVATE_INSTANCES', engineDto?.id, body, engineDto, engineId)
+  const { id } = await insertLocalBatch('ACTIVATE_INSTANCES', engineDto?.id, body, engineDto, engineId, req.authorizedRuntimeResourceKeys)
   res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'ACTIVATE_INSTANCES' })
 }))
 
@@ -119,7 +138,7 @@ r.post('/mission-control-api/batches/jobs/retries', requireRuntimeProcessInstanc
   const { id } = await insertLocalBatch('SET_JOB_RETRIES', 'local-retry-' + Date.now(), req.body, {
     totalJobs: processInstanceIds.length,
     jobsCreated: processInstanceIds.length
-  }, engineId)
+  }, engineId, req.authorizedRuntimeResourceKeys)
 
   // Start async processing in background
   processRetries(engineId, id, processInstanceIds).catch((err: any) => {
@@ -129,13 +148,15 @@ r.post('/mission-control-api/batches/jobs/retries', requireRuntimeProcessInstanc
   res.status(201).json({ id, type: 'SET_JOB_RETRIES' })
 }))
 
-r.get('/mission-control-api/batches', requireAction('engine.runtime.batches.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/batches', requireRuntimeCollectionAction('engine.runtime.batches.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   await markBatchPollerViewer()
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string
   const rows = await batchRepo.find({ where: { engineId } })
-  const sorted = rows.sort((a: any, b: any) => b.createdAt - a.createdAt)
+  const sorted = rows
+    .filter((row: Batch) => !req.authorizedRuntimeResourceKeys || batchRuntimeResourceKeys(row).some((key) => req.authorizedRuntimeResourceKeys!.includes(key)))
+    .sort((a: any, b: any) => b.createdAt - a.createdAt)
   const withSuspended = sorted.map((row: any) => {
     let suspended: boolean | undefined
     if (typeof row?.metadata === 'string' && row.metadata.trim()) {
@@ -149,7 +170,7 @@ r.get('/mission-control-api/batches', requireAction('engine.runtime.batches.read
   res.json(withSuspended)
 }))
 
-r.put('/mission-control-api/batches/:id/suspended', requireAction('engine.runtime.batches.suspension.update', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.put('/mission-control-api/batches/:id/suspended', requireRuntimeCollectionAction('engine.runtime.batches.suspension.update', { resourceKind: 'process_definition', engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const suspended = (req.body as { suspended?: boolean })?.suspended
   if (typeof suspended !== 'boolean') {
     throw Errors.validation('suspended (boolean) is required')
@@ -161,6 +182,7 @@ r.put('/mission-control-api/batches/:id/suspended', requireAction('engine.runtim
   const batchId = String(req.params.id)
   const row = await batchRepo.findOne({ where: { id: batchId, engineId } })
   if (!row) throw Errors.notFound('Batch', batchId)
+  requireVisibleBatch(row, req.authorizedRuntimeResourceKeys)
   if (!row.camundaBatchId) throw Errors.validation('Batch has no camundaBatchId')
   if (String(row.camundaBatchId).startsWith('local-')) {
     throw Errors.validation('Batch does not support suspension control')
@@ -192,7 +214,7 @@ r.put('/mission-control-api/batches/:id/suspended', requireAction('engine.runtim
   res.status(204).end()
 }))
 
-r.get('/mission-control-api/batches/:id', requireAction('engine.runtime.batches.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/batches/:id', requireRuntimeCollectionAction('engine.runtime.batches.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   await markBatchPollerViewer()
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
@@ -200,6 +222,7 @@ r.get('/mission-control-api/batches/:id', requireAction('engine.runtime.batches.
   const batchId = String(req.params.id)
   let row = await batchRepo.findOne({ where: { id: batchId, engineId } })
   if (!row) throw Errors.notFound('Batch', batchId)
+  requireVisibleBatch(row, req.authorizedRuntimeResourceKeys)
   let engine: any = null
   let stats: any = null
   let failedJobs: any[] = []
@@ -372,13 +395,14 @@ r.get('/mission-control-api/batches/:id', requireAction('engine.runtime.batches.
   res.json(redacted)
 }))
 
-r.delete('/mission-control-api/batches/:id', requireAction('engine.runtime.batches.cancel', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.delete('/mission-control-api/batches/:id', requireRuntimeCollectionAction('engine.runtime.batches.cancel', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string
   const batchId = String(req.params.id)
   const row = await batchRepo.findOne({ where: { id: batchId, engineId } })
   if (!row) throw Errors.notFound('Batch', batchId)
+  requireVisibleBatch(row, req.authorizedRuntimeResourceKeys)
   if (row.camundaBatchId) {
     try { await deleteBatch(engineId, row.camundaBatchId) } catch (e) { logger.debug('Failed to delete batch from engine (best-effort)', { batchId, error: e }) }
   }
@@ -390,13 +414,14 @@ r.delete('/mission-control-api/batches/:id', requireAction('engine.runtime.batch
 /**
  * Delete batch record from database (for completed/failed/canceled batches only)
  */
-r.delete('/mission-control-api/batches/:id/record', requireAction('engine.runtime.batches.record.delete', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.delete('/mission-control-api/batches/:id/record', requireRuntimeCollectionAction('engine.runtime.batches.record.delete', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string
   const batchId = String(req.params.id)
   const row = await batchRepo.findOne({ where: { id: batchId, engineId } })
   if (!row) throw Errors.notFound('Batch', batchId)
+  requireVisibleBatch(row, req.authorizedRuntimeResourceKeys)
   
   const st = String(row.status || '').toUpperCase()
   if (!['COMPLETED', 'FAILED', 'CANCELED'].includes(st)) {

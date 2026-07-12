@@ -40,6 +40,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(false),
+    getVisibleRuntimeResources: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -131,6 +132,32 @@ describe('mission-control batches routes', () => {
       deleteReason: 'Canceled via Mission Control',
     }));
     expect(batchRepo.insert).toHaveBeenCalled();
+  });
+
+  it('shows only batches with authorized process definition lineage on resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) {
+          return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
+        }
+        if (entity === Batch) return batchRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+    batchRepo.find.mockResolvedValue([
+      { id: 'batch-payments', createdAt: 2, metadata: JSON.stringify({ authz: { processDefinitionKeys: ['payments'] } }) },
+      { id: 'batch-hr', createdAt: 1, metadata: JSON.stringify({ authz: { processDefinitionKeys: ['hr'] } }) },
+      { id: 'batch-legacy', createdAt: 0, metadata: null },
+    ]);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/batches')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((batch: { id: string }) => batch.id)).toEqual(['batch-payments']);
   });
 
   it('keeps audit reasons locally without forwarding them to engine batch APIs', async () => {
