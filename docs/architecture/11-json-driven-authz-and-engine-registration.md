@@ -443,7 +443,7 @@ There is deliberately no third `mixed` value. A `resource_aware` engine already 
 - [ ] ⬜ Persist `engines.runtime_access_scope` and expose it through manual, external, config, list, detail, audit, and OpenAPI engine contracts.
 - [x] ✅ Reject exact runtime-resource and runtime-resource-set assignments unless the containing engine uses `resource_aware` runtime access. Assignment normalization preserves the requested runtime scope type.
 - [ ] ⬜ Require authorized-subset filtering for every runtime collection and count on `resource_aware` engines.
-- [ ] ⬜ Warn when a principal's broad engine runtime role makes a narrower runtime-resource assignment ineffective.
+- [x] ✅ Return an allow-only overlap warning from runtime-scoped assignment creation when an active direct engine-wide role for the same principal already grants the same permission. The assignment remains additive; broader inherited/Engine Set overlap diagnostics remain future work.
 
 ### Dual Deployment Ingestion
 

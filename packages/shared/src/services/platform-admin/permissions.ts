@@ -2052,7 +2052,7 @@ class PermissionServiceClass {
     });
   }
 
-  async assignRole(input: CreateRoleAssignmentInput): Promise<{ id: string }> {
+  async assignRole(input: CreateRoleAssignmentInput): Promise<{ id: string; warnings: string[] }> {
     const dataSource = await getDataSource();
     const role = await dataSource.getRepository(RbacRole).findOne({ where: { id: input.roleId } });
     if (!role) {
@@ -2104,7 +2104,7 @@ class PermissionServiceClass {
 
     const existing = await duplicateQb.getOne();
     if (existing) {
-      return { id: existing.id };
+      return { id: existing.id, warnings: await this.getRuntimeAssignmentWarnings(dataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
     }
 
     const id = generateId();
@@ -2152,7 +2152,56 @@ class PermissionServiceClass {
       },
     });
 
-    return { id };
+    return { id, warnings: await this.getRuntimeAssignmentWarnings(dataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
+  }
+
+  private async getRuntimeAssignmentWarnings(
+    dataSource: DataSource,
+    principal: { principalType: PrincipalType; principalId: string },
+    role: RbacRole,
+    scopeType: ResourceType,
+    scopeId: string | null,
+    tenantId?: string | null,
+  ): Promise<string[]> {
+    if (scopeType !== 'engine_runtime_resource' && scopeType !== 'engine_runtime_resource_set') return [];
+    const engineId = await this.resolveRuntimeScopeEngineId(dataSource, scopeType, scopeId, tenantId);
+    if (!engineId) return [];
+
+    const rolePermissions = await dataSource.getRepository(RbacRolePermission).find({ where: { roleId: role.id }, select: ['permissionId'] });
+    const requestedPermissions = new Set(rolePermissions.map((permission) => permission.permissionId));
+    if (requestedPermissions.size === 0) return [];
+
+    const broadAssignments = await dataSource.getRepository(RbacRoleAssignment).find({
+      where: { principalType: principal.principalType, principalId: principal.principalId, scopeType: 'engine', scopeId: engineId },
+      select: ['roleId', 'expiresAt', 'source'],
+    });
+    const activeRoleIds = broadAssignments
+      .filter((assignment) => assignment.source !== 'legacy' && (!assignment.expiresAt || assignment.expiresAt > Date.now()))
+      .map((assignment) => assignment.roleId);
+    if (activeRoleIds.length === 0) return [];
+
+    const broadPermissions = await dataSource.getRepository(RbacRolePermission).find({ where: { roleId: In(activeRoleIds) }, select: ['permissionId'] });
+    const overlap = Array.from(new Set(broadPermissions.map((permission) => permission.permissionId).filter((permission) => requestedPermissions.has(permission))));
+    return overlap.length > 0
+      ? [`A direct engine-wide assignment already grants: ${overlap.join(', ')}. This runtime-scoped assignment remains additive but does not narrow those permissions.`]
+      : [];
+  }
+
+  private async resolveRuntimeScopeEngineId(
+    dataSource: DataSource,
+    scopeType: ResourceType,
+    scopeId: string | null,
+    tenantId?: string | null,
+  ): Promise<string | null> {
+    if (scopeType === 'engine_runtime_resource') {
+      const resource = await dataSource.getRepository(RuntimeResource).findOne({ where: tenantScopedWhere({ id: scopeId || '', isActive: true }, tenantId), select: ['engineId'] });
+      return resource?.engineId || null;
+    }
+    if (scopeType === 'engine_runtime_resource_set') {
+      const set = await dataSource.getRepository(RuntimeResourceSet).findOne({ where: tenantScopedWhere({ id: scopeId || '', isArchived: false }, tenantId), select: ['engineId'] });
+      return set?.engineId || null;
+    }
+    return null;
   }
 
   async removeRoleAssignment(id: string, removedById?: string): Promise<void> {

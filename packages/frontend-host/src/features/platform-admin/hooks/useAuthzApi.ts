@@ -962,7 +962,7 @@ export function useAssignRole() {
       scopeId?: string | null;
       expiresAt?: number | null;
     }) =>
-      apiClient.post<{ id: string }>('/api/authz/role-assignments', data),
+      apiClient.post<{ id: string; warnings: string[] }>('/api/authz/role-assignments', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'role-assignments'] }),
   });
 }
