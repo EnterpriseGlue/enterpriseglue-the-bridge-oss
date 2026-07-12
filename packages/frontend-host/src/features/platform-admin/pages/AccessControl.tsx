@@ -152,7 +152,7 @@ import {
   type AuthzResourceType,
 } from '../hooks/useAuthzApi';
 
-type CoreAssignmentResourceType = Extract<AuthzResourceType, 'platform' | 'project' | 'engine' | 'external_engine_system'>;
+type CoreAssignmentResourceType = 'platform' | 'project' | 'engine' | 'engine_runtime_resource' | 'engine_runtime_resource_set' | 'external_engine_system';
 type AssignmentPrincipalType = 'user' | 'group' | 'api_client' | 'service_account';
 type EffectiveAccessSource = EffectiveAccessResult['sources'][number];
 type PrincipalSummaryStatus = 'active' | 'archived' | 'revoked' | 'unknown';
@@ -2000,8 +2000,11 @@ export function getAssignableRolesForPrincipal(
   resourceType: CoreAssignmentResourceType,
   principalType: AssignmentPrincipalType,
 ) {
+  const roleScope = resourceType === 'engine_runtime_resource' || resourceType === 'engine_runtime_resource_set'
+    ? 'engine'
+    : resourceType;
   return roles.filter((role) => {
-    if (role.scope !== resourceType || !role.isAssignable || role.isArchived) return false;
+    if (role.scope !== roleScope || !role.isAssignable || role.isArchived) return false;
     if (principalType !== 'api_client' && principalType !== 'service_account') return true;
     if (role.id === 'system.api.engine_registrar' && principalType !== 'api_client') return false;
     if (role.id === 'system.api.external_engine_system_registrar' && principalType !== 'api_client') return false;
@@ -2856,6 +2859,8 @@ function RoleAssignmentsPanel({
       { id: 'platform', label: 'Platform' },
       { id: 'project', label: 'Project' },
       { id: 'engine', label: 'Engine' },
+      { id: 'engine_runtime_resource', label: 'Runtime resource' },
+      { id: 'engine_runtime_resource_set', label: 'Runtime resource set' },
     ];
   const assignableRoles = React.useMemo(
     () => getAssignableRolesForPrincipal(roles, form.resourceType, form.principalType),
@@ -2976,6 +2981,7 @@ function RoleAssignmentsPanel({
           <TextInput
             id="assignment-resource-id"
             labelText="Resource ID"
+            helperText={form.resourceType === 'engine_runtime_resource' ? 'Select a Runtime Resources inventory row ID.' : form.resourceType === 'engine_runtime_resource_set' ? 'Enter a Runtime Resource Set ID.' : undefined}
             disabled={form.resourceType === 'platform'}
             value={form.resourceId}
             onChange={(event) => setForm((current) => ({ ...current, resourceId: event.target.value }))}
@@ -6307,6 +6313,7 @@ export default function AccessControl() {
   const platformSettingsQ = usePlatformSyncSettings();
 
   const [error, setError] = React.useState<string | null>(null);
+  const [assignmentWarnings, setAssignmentWarnings] = React.useState<string[]>([]);
   const [roleModalOpen, setRoleModalOpen] = React.useState(false);
   const [permissionModalOpen, setPermissionModalOpen] = React.useState(false);
   const [editingRole, setEditingRole] = React.useState<RoleSummary | null>(null);
@@ -7104,15 +7111,17 @@ export default function AccessControl() {
     resourceId: string;
   }) => {
     try {
-      await assignRoleM.mutateAsync({
+      const result = await assignRoleM.mutateAsync({
         principalType: assignment.principalType,
         principalId: assignment.principalId,
         roleId: assignment.roleId,
         resourceType: assignment.resourceType,
         resourceId: assignment.resourceType === 'platform' ? null : assignment.resourceId,
       });
+      setAssignmentWarnings(result.warnings || []);
       setError(null);
     } catch (e) {
+      setAssignmentWarnings([]);
       setError(parseApiError(e, 'Unable to assign role').message);
     }
   };
@@ -7622,6 +7631,8 @@ export default function AccessControl() {
             {assignmentsQ.isError || groupsQ.isError ? (
               <InlineNotification kind="error" title="Unable to load role assignments" lowContrast />
             ) : (
+              <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
+              {assignmentWarnings.length > 0 && <InlineNotification kind="warning" lowContrast title="Broader engine access already applies" subtitle={assignmentWarnings.join(' ')} onCloseButtonClick={() => setAssignmentWarnings([])} />}
               <RoleAssignmentsPanel
                 roles={roles}
                 assignments={assignments}
@@ -7636,6 +7647,7 @@ export default function AccessControl() {
                 canCreate={assignmentsCreateDecision.allowed}
                 canDelete={assignmentsDeleteDecision.allowed}
               />
+              </div>
             )}
           </TabPanel>
           )}
