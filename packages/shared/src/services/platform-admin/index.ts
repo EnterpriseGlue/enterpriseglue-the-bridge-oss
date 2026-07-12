@@ -44,6 +44,7 @@ export * from './config-bundle-hash.js';
 export * from './ConfigBundlePreviewService.js';
 export * from './ConfigBundleDiffService.js';
 export * from './ConfigBundleApplyService.js';
+export * from './RuntimeResourceInventoryService.js';
 export * from './SecretResolver.js';
 export * from './PolicyService.js';
 export * from './UserService.js';

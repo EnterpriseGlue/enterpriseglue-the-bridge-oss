@@ -16,11 +16,16 @@ import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructur
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 
-const { materializeRuntimeResourceSet } = vi.hoisted(() => ({
+const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSetsForEngine } = vi.hoisted(() => ({
   materializeRuntimeResourceSet: vi.fn().mockResolvedValue({ matched: 0, created: 0, updated: 0, removed: 0 }),
+  materializeForEngine: vi.fn().mockResolvedValue([]),
+  materializeEngineSetsForEngine: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
-  runtimeResourceInventoryService: { materialize: materializeRuntimeResourceSet },
+  runtimeResourceInventoryService: { materialize: materializeRuntimeResourceSet, materializeForEngine },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineSetService.js', () => ({
+  engineSetService: { materializeEngineSet: vi.fn().mockResolvedValue({}), materializeEngineSetsForEngine },
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -148,6 +153,8 @@ describe('configBundleApplyService', () => {
       sourceRef: 'config_bundle:acme.authz', passwordEnc: 'ref:PAYMENTS_ENGINE_PASSWORD', runtimeAccessScope: 'engine_wide',
       deploymentIntegration: 'enterpriseglue_proxy', connectionMode: 'direct',
     }));
+    expect(materializeEngineSetsForEngine).toHaveBeenCalled();
+    expect(materializeForEngine).toHaveBeenCalled();
   });
 
   it('creates a config-owned project-engine target for an existing config engine', async () => {

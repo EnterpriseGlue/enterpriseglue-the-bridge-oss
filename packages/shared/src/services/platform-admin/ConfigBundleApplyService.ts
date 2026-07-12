@@ -134,6 +134,7 @@ class ConfigBundleApplyService {
     const desiredIdentityProviders = new Map(entries(compilation.files, './identity-providers.json', 'identityProviders').map((provider) => [provider.key, provider]));
     const materializeIds: string[] = [];
     const materializeRuntimeResourceSetIds: string[] = [];
+    const changedEngineIds: string[] = [];
     const now = Date.now();
     let created = 0;
     let updated = 0;
@@ -266,6 +267,7 @@ class ConfigBundleApplyService {
               createdAt: now, updatedAt: now,
             });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.create', resourceType: 'engine', resourceId: engineId, details: { bundleKey: manifest.metadata.key, engineKey: desired.key, canonicalHash: diff.canonicalHash } });
+            changedEngineIds.push(engineId);
             created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
             await engineRepo.update({ id: change.currentId }, {
@@ -276,6 +278,7 @@ class ConfigBundleApplyService {
               runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, connectionMode: desired.connectionMode, updatedAt: now,
             });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.update', resourceType: 'engine', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, engineKey: desired.key, canonicalHash: diff.canonicalHash } });
+            changedEngineIds.push(change.currentId);
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
             await engineRepo.update({ id: change.currentId }, { lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned', lastAppliedAt: now, updatedAt: now });
@@ -487,6 +490,10 @@ class ConfigBundleApplyService {
     });
     for (const id of materializeIds) await engineSetService.materializeEngineSet(id, tenantId);
     for (const id of materializeRuntimeResourceSetIds) await runtimeResourceInventoryService.materialize(id, tenantId);
+    for (const id of [...new Set(changedEngineIds)]) {
+      await engineSetService.materializeEngineSetsForEngine(id, tenantId);
+      await runtimeResourceInventoryService.materializeForEngine(id, tenantId);
+    }
 
     return { canonicalHash: diff.canonicalHash, created, updated, archived, changes: diff.changes };
   }

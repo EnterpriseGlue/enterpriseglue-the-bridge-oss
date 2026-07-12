@@ -2203,8 +2203,8 @@ Phase 0 exit criteria:
 - [ ] ⬜ Enforce `enterpriseglue_authoritative` as the only active runtime authorization mode in v1.
 - [ ] ⬜ Ensure provider-created group memberships use `source = "identity_provider"` plus provider/mapping lineage for OIDC, SAML, and LDAP.
 - [ ] ⬜ Ensure config-managed assignments use `source = "config"` and source lineage.
-- [ ] ⬜ Ensure Engine Set materialization refreshes after config-managed engine label changes.
-- [ ] ⬜ Add runtime resource inventory refresh after deployment, import, engine sync, and explicit reconciliation.
+- [x] ✅ Ensure Engine Set and Runtime Resource Set materialization refresh after config-managed engine creation or label changes.
+- [x] ✅ Add runtime resource inventory reconciliation after EnterpriseGlue deployments, engine registration/update synchronization, config-managed engine changes, and explicit admin reconciliation. Import/pipeline receipt ingestion remains pending.
 - [x] ✅ Add an explicit admin reconciliation path that discovers process and decision definitions through the configured engine client, upserts sanitized runtime inventory rows, and rematerializes Runtime Resource Sets. Deployment/import/engine-sync triggers remain pending.
 - [ ] ⬜ Reconcile direct engine deployments by `engineId + engineDeploymentId` without duplicating proxied or receipt-backed records.
 - [ ] ⬜ Accept idempotent pipeline receipts and upgrade discovered lineage to reported lineage when references validate.

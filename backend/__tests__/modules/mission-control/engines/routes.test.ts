@@ -181,7 +181,7 @@ describe('mission-control engines routes', () => {
       expect.objectContaining({
         id: 'e1',
         name: 'Engine 1',
-        myRole: 'admin',
+        myRole: 'owner',
         username: null,
         passwordEnc: null,
         capabilities: expect.objectContaining({

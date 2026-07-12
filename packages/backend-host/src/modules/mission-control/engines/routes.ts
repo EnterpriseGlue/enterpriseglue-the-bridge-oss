@@ -18,6 +18,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js'
 import { apiLimiter, engineLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
 import { engineService, engineSetService, platformSettingsService, projectEngineTargetService, ApiClientScopes } from '@enterpriseglue/shared/services/platform-admin/index.js'
+import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
 import { buildEngineCredentialHeaders, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
@@ -772,6 +773,11 @@ async function refreshEngineSetMaterializationsForEngine(engineId: string, tenan
   }
 }
 
+function scheduleRuntimeInventoryReconciliation(engineId: string, tenantId?: string | null): void {
+  void runtimeResourceInventoryService.reconcileEngine(engineId, tenantId)
+    .catch((error: unknown) => logger.warn('Failed to reconcile runtime resource inventory after engine change', { engineId, error }))
+}
+
 async function testEngineConnectionAndRecord(
   dataSource: Awaited<ReturnType<typeof getDataSource>>,
   eng: Pick<Engine, 'id' | 'baseUrl' | 'authType' | 'username' | 'passwordEnc'>
@@ -915,6 +921,7 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine
     })
   }
   await refreshEngineSetMaterializationsForEngine(id, tenantId)
+  scheduleRuntimeInventoryReconciliation(id, tenantId)
   res.status(201).json(withEngineCapabilities(serializeEngine(payload)))
 }))
 
@@ -1008,6 +1015,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
       now,
     })
     await refreshEngineSetMaterializationsForEngine(String(existing.id), tenantId)
+    scheduleRuntimeInventoryReconciliation(String(existing.id), tenantId)
     const updated = await engineRepo.findOneBy({ id: existing.id })
     if (!updated) throw Errors.notFound('Engine')
     const health = req.body.testConnection ? await testEngineConnectionAndRecord(dataSource, updated) : null
@@ -1066,6 +1074,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     now,
   })
   await refreshEngineSetMaterializationsForEngine(id, tenantId)
+  scheduleRuntimeInventoryReconciliation(id, tenantId)
   const health = req.body.testConnection ? await testEngineConnectionAndRecord(dataSource, created) : null
   await logAudit({
     tenantId: tenantId || undefined,
@@ -1392,6 +1401,7 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
   }
   if (req.body.externalId !== undefined || req.body.labels !== undefined) {
     await refreshEngineSetMaterializationsForEngine(engineId, existing.tenantId)
+    scheduleRuntimeInventoryReconciliation(engineId, existing.tenantId)
   }
   const updated = await engineRepo.findOneBy({ id: engineId })
   if (!updated) throw Errors.notFound('Engine')

@@ -19,6 +19,7 @@ import { fetch, FormData } from 'undici'
 import { buildEngineCredentialHeaders, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
+import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
 import {
   sanitize,
   hashContent,
@@ -647,6 +648,8 @@ async function createEngineDeployment(req: Request, res: Response) {
       if (artifactRows.length > 0) {
         await artifactRepo.insert(artifactRows as any)
       }
+      void runtimeResourceInventoryService.reconcileEngine(actualEngineId, opts.tenantId ? String(opts.tenantId) : null)
+        .catch((error) => logger.warn('Failed to reconcile runtime inventory after deployment', { engineId: actualEngineId, error }))
     } catch {
       // Best-effort persistence; do not fail the deployment if history recording fails
     }
