@@ -65,6 +65,12 @@ export interface RequireRuntimeCollectionActionOptions {
 export interface RequireRuntimeDefinitionActionOptions extends RequireRuntimeCollectionActionOptions {
   /** Engine REST resource used to resolve the object and its runtime key. */
   definitionPath: string;
+  /**
+   * Some runtime objects, such as jobs, inherit access from a referenced
+   * process definition rather than carrying a process definition key.
+   */
+  definitionReferenceField?: string;
+  definitionReferencePath?: string;
   definitionLookup?: 'id' | 'key';
   definitionIdFrom?: ResourceIdLocation;
   definitionIdKey?: string;
@@ -953,6 +959,7 @@ export function requireRuntimeCollectionAction(actionId: string, options: Requir
       req.authzAction = action;
       req.authzResource = { type: 'engine', id: engineId };
       req.authorizedRuntimeResourceKeys = keys;
+      (req as Request & { engineId?: string }).engineId = engineId;
       return next();
     } catch (error) { return next(error instanceof Error ? error : Errors.internal('Runtime collection authorization failed')); }
   };
@@ -996,12 +1003,25 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
 
       let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
       if (!broad) {
-        const definition = definitionLookup === 'id'
+        const resolvedDefinition = definitionLookup === 'id'
           ? await camundaGet<Record<string, unknown>>(
             engineId,
             `/${options.definitionPath}/${encodeURIComponent(definitionId)}`
           )
           : await resolveRuntimeDefinitionByKey(engineId, options, definitionId, req);
+        const referenceId = options.definitionReferenceField
+          ? resolvedDefinition[options.definitionReferenceField]
+          : undefined;
+        if (options.definitionReferenceField && (typeof referenceId !== 'string' || !referenceId.trim())) {
+          throw Errors.forbidden('Runtime definition cannot be linked to an authorization resource');
+        }
+        const linkedDefinitionId = typeof referenceId === 'string' ? referenceId : '';
+        const definition = options.definitionReferenceField
+          ? await camundaGet<Record<string, unknown>>(
+            engineId,
+            `/${options.definitionReferencePath || 'process-definition'}/${encodeURIComponent(linkedDefinitionId)}`
+          )
+          : resolvedDefinition;
         const resourceKey = (options.resourceKeyFields || ['key'])
           .map((field) => definition[field])
           .find((value): value is string => typeof value === 'string' && value.trim().length > 0)

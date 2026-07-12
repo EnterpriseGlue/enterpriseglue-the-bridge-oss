@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import {
   listJobs,
   getJobById,
@@ -6,6 +6,7 @@ import {
   setJobRetriesById,
   listJobDefinitions,
   setJobDefinitionRetriesById,
+  filterRuntimeItemsByProcessDefinitionKeys,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/jobs-service.js';
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
@@ -14,12 +15,17 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   executeJob: vi.fn().mockResolvedValue(undefined),
   setJobRetries: vi.fn().mockResolvedValue(undefined),
   getJobDefinitions: vi.fn().mockResolvedValue([{ id: 'jd1' }]),
+  camundaGet: vi.fn(),
   setJobDefinitionRetries: vi.fn().mockResolvedValue(undefined),
   setJobSuspensionState: vi.fn().mockResolvedValue(undefined),
   setJobDefinitionSuspensionState: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('jobs-service', () => {
+  beforeEach(async () => {
+    const { camundaGet } = await import('@enterpriseglue/shared/services/bpmn-engine-client.js');
+    vi.mocked(camundaGet).mockReset();
+  });
   it('lists jobs', async () => {
     const result = await listJobs('engine-1', {});
     expect(result).toEqual([]);
@@ -45,5 +51,22 @@ describe('jobs-service', () => {
 
   it('sets job definition retries by id', async () => {
     await expect(setJobDefinitionRetriesById('engine-1', 'jd1', { retries: 2 })).resolves.toBeUndefined();
+  });
+
+  it('filters jobs by their process definition keys on resource-aware engines', async () => {
+    const { camundaGet } = await import('@enterpriseglue/shared/services/bpmn-engine-client.js');
+    vi.mocked(camundaGet)
+      .mockResolvedValueOnce({ id: 'definition-payments', key: 'payments' })
+      .mockResolvedValueOnce({ id: 'definition-hr', key: 'hr' });
+
+    const result = await filterRuntimeItemsByProcessDefinitionKeys('engine-1', [
+      { id: 'job-1', processDefinitionId: 'definition-payments' },
+      { id: 'job-2', processDefinitionId: 'definition-hr' },
+      { id: 'job-3' },
+    ], ['payments']);
+
+    expect(result).toEqual([{ id: 'job-1', processDefinitionId: 'definition-payments' }]);
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition/definition-payments');
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition/definition-hr');
   });
 });

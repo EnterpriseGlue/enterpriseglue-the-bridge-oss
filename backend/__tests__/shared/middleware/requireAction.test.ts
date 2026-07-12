@@ -170,6 +170,14 @@ describe('requireAction project resource resolvers', () => {
     }), (req: any, res) => {
       res.json({ resource: req.authzResource, engineId: req.engineId });
     });
+    app.get('/runtime-jobs/:id', requireRuntimeDefinitionAction('engine.runtime.jobs.read', {
+      resourceKind: 'process_definition',
+      definitionPath: 'job',
+      definitionReferenceField: 'processDefinitionId',
+      definitionReferencePath: 'process-definition',
+    }), (req: any, res) => {
+      res.json({ resource: req.authzResource, engineId: req.engineId });
+    });
     app.post('/runtime-instance-selection', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', {
       resourceKind: 'process_definition',
     }), (req: any, res) => {
@@ -275,6 +283,21 @@ describe('requireAction project resource resolvers', () => {
 
     expect(response.status).toBe(200);
     expect(camundaGet).toHaveBeenCalledWith(engineId, '/process-definition', { key: 'payments', version: 2 });
+    expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
+  });
+
+  it('resolves linked job authorization through its process definition', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    camundaGet
+      .mockResolvedValueOnce({ id: 'job-1', processDefinitionId: 'definition-1' })
+      .mockResolvedValueOnce({ id: 'definition-1', key: 'payments', tenantId: null });
+
+    const response = await request(app).get(`/runtime-jobs/job-1?engineId=${engineId}`);
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).toHaveBeenNthCalledWith(1, engineId, '/job/job-1');
+    expect(camundaGet).toHaveBeenNthCalledWith(2, engineId, '/process-definition/definition-1');
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 

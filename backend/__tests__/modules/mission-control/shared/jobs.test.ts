@@ -51,6 +51,7 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared
   listJobDefinitions: vi.fn().mockResolvedValue([{ id: 'jd1', activityId: 'task1' }]),
   setJobDefinitionRetriesById: vi.fn().mockResolvedValue(undefined),
   setJobDefinitionSuspensionStateById: vi.fn().mockResolvedValue(undefined),
+  filterRuntimeItemsByProcessDefinitionKeys: vi.fn().mockImplementation(async (_engineId: string, items: unknown[]) => items),
 }));
 
 describe('mission-control jobs routes', () => {
