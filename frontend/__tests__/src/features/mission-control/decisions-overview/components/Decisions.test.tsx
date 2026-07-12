@@ -194,12 +194,15 @@ describe('Decisions component', () => {
     } as any);
   });
 
-  it('renders empty decision selection prompt', () => {
+  it('renders empty decision selection prompt and scoped visibility explanation', async () => {
     vi.mocked(listDecisionDefinitions).mockResolvedValue([]);
 
     renderDecisions();
 
     expect(screen.getByText('To view a Decision Table, select a Decision in the Filters panel')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('No visible decision definitions')).toBeInTheDocument();
+    });
   });
 
   it('does not fetch decision definitions when the selected engine read action is denied', () => {
