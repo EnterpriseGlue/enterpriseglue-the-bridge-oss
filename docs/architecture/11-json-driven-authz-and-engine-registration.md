@@ -2211,7 +2211,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Persist process key, decision key, version, runtime tenant id, deployment id, and source observation for every discovered artifact.
 - [ ] ⬜ Ensure runtime resource set materialization refreshes after deployment lineage, engine label, runtime tenant, or selector changes.
 - [ ] ⬜ Ensure deployment dropdown uses project-engine targets plus project and engine evaluator checks.
-- [ ] ⬜ Ensure Mission Control collection endpoints filter by engine runtime resource authorization for central shared engines.
+- [x] ✅ Ensure Mission Control collections with process- or decision-definition lineage filter by engine runtime resource authorization for central shared engines. Messages, signals, and metrics remain engine-wide-only and therefore fail closed for resource-only grants.
 - [x] ✅ Filter Mission Control process-definition and decision-definition collections through a bounded runtime-inventory guard for `resource_aware` engines; broad engine grants keep the existing fast path.
 - [x] ✅ Resolve process/decision definition detail, XML, process definition activity counts, process-definition key resolution, and decision evaluation by id or key live from the engine before evaluating an exact runtime-resource inventory entry. Client-supplied definition ids or keys are never treated as authorization keys. Instance, history, batch, migration, and dashboard filtering remain pending.
 - [x] ✅ Resolve live process-instance and historic-process-instance detail plus instance-scoped read/mutation routes to their process-definition key before runtime-resource evaluation. Resource-aware process-instance, history, historic-variable lists, and preview counts issue engine queries only for authorized definition keys. Batch/migration and dashboard aggregation remain pending.
@@ -2225,9 +2225,9 @@ Phase 0 exit criteria:
 - [x] ✅ Persist process-definition lineage for newly created local batch records and filter batch reads, details, cancellation, suspension, and record deletion by that lineage on resource-aware engines; legacy unscoped batch records fail closed there.
 - [x] ✅ Apply the decision-definition resource resolver to the first-mounted decision edit-target route and preserve body-supplied engine resolution for decision evaluation mutations.
 - [x] ✅ Filter historic task, variable, decision, and process-scoped user-operation collections by authorized definition keys; historic decision input/output requests resolve their decision-definition lineage before access is evaluated.
-- [ ] ⬜ Keep `engine_wide` distributed-engine behavior on the fast path and invoke resource filtering only for `resource_aware` engines.
-- [ ] ⬜ Ensure process instance, job, incident, batch, and migration mutations resolve inherited process definition or decision scopes before authorization.
-- [ ] ⬜ Ensure EnterpriseGlue denial prevents engine calls even when the engine might allow the request.
+- [x] ✅ Keep `engine_wide` distributed-engine behavior on the fast path and invoke resource filtering only for `resource_aware` engines.
+- [x] ✅ Ensure process instance, job, incident, batch, and migration mutations resolve inherited process definition or decision scopes before authorization.
+- [x] ✅ Ensure EnterpriseGlue denial prevents engine calls even when the engine might allow the request.
 - [ ] ⬜ Ensure engine-side rejection after EnterpriseGlue allow is reported as an operational engine rejection, not as an authorization fallback.
 - [ ] ⬜ Route direct and customer-sidecar engines through one connection resolver so authorization, redaction, retries, timeouts, and audit behavior cannot drift by transport.
 - [ ] ⬜ Ensure effective-access explanations include config bundle lineage.

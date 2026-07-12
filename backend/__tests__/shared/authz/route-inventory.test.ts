@@ -95,6 +95,9 @@ describe('authorization route inventory validation', () => {
           ['POST', '/api/authz/roles'],
           ['PUT', '/api/authz/roles/{id}'],
           ['DELETE', '/api/authz/roles/{id}'],
+          ['POST', '/api/authz/config-bundles/preview'],
+          ['POST', '/api/authz/config-bundles/diff'],
+          ['POST', '/api/authz/config-bundles/apply'],
         ],
       },
       {
@@ -392,6 +395,10 @@ describe('authorization route inventory validation', () => {
           ['PUT', '/api/authz/sso-group-mappings/:id', 'ssoMapping.byId'],
           ['DELETE', '/api/authz/sso-group-mappings/:id', 'ssoMapping.byId'],
           ['POST', '/api/authz/sso-group-mappings/test', 'platform.self'],
+          ['POST', '/api/identity/mappings', 'platform.self'],
+          ['PUT', '/api/identity/mappings/{id}', 'platform.self'],
+          ['DELETE', '/api/identity/mappings/{id}', 'platform.self'],
+          ['POST', '/api/identity/mappings/test', 'platform.self'],
         ],
       },
       {
@@ -417,6 +424,9 @@ describe('authorization route inventory validation', () => {
         surfaceId: 'admin.sso.providers.actions',
         routes: [
           ['POST', '/api/sso/providers', 'platform.self'],
+          ['POST', '/api/identity/providers', 'platform.self'],
+          ['PUT', '/api/identity/providers/{key}', 'platform.self'],
+          ['DELETE', '/api/identity/providers/{key}', 'platform.self'],
           ['PUT', '/api/sso/providers/{id}', 'platform.self'],
           ['DELETE', '/api/sso/providers/{id}', 'platform.self'],
           ['POST', '/api/sso/providers/{id}/toggle', 'platform.self'],
@@ -580,6 +590,8 @@ describe('authorization route inventory validation', () => {
           ['DELETE', '/api/authz/engine-sets/:id', 'engineSet.byId'],
           ['POST', '/api/authz/engine-sets/preview', 'platform.self'],
           ['POST', '/api/authz/engine-sets/:id/materialize', 'engineSet.byId'],
+          ['POST', '/api/authz/runtime-resource-sets/:id/materialize', 'platform.self'],
+          ['POST', '/api/authz/runtime-resources/:id/reconcile', 'engine.byId'],
         ],
       },
     ];
