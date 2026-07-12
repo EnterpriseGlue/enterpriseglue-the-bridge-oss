@@ -3,6 +3,7 @@ import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { Button } from '@carbon/react'
 import { Pause, Play, TrashCan, Copy } from '@carbon/icons-react'
 import { WrenchIcon } from './Icons'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 interface InstanceHeaderProps {
   instanceId: string
@@ -19,6 +20,15 @@ interface InstanceHeaderProps {
   onModify: () => void
   onTerminate: () => void
   onRetry: () => void
+  suspensionDecision?: UiAuthzDecision
+  retryDecision?: UiAuthzDecision
+  modifyDecision?: UiAuthzDecision
+  terminateDecision?: UiAuthzDecision
+}
+
+function getDeniedReason(decision?: UiAuthzDecision | null): string | null {
+  if (!decision || decision.allowed) return null
+  return decision.reason || 'Action unavailable'
 }
 
 /**
@@ -40,8 +50,17 @@ export function InstanceHeader({
   onModify,
   onTerminate,
   onRetry,
+  suspensionDecision,
+  retryDecision,
+  modifyDecision,
+  terminateDecision,
 }: InstanceHeaderProps) {
   const { tenantNavigate } = useTenantNavigate()
+  const isTerminalStatus = status === 'COMPLETED' || status === 'CANCELED' || status === 'EXTERNALLY_TERMINATED' || status === 'INTERNALLY_TERMINATED'
+  const suspensionDeniedReason = getDeniedReason(suspensionDecision)
+  const retryDeniedReason = getDeniedReason(retryDecision)
+  const modifyDeniedReason = getDeniedReason(modifyDecision)
+  const terminateDeniedReason = getDeniedReason(terminateDecision)
 
   const formatTimestamp = (ts: string) => {
     if (!ts) return ''
@@ -171,6 +190,8 @@ export function InstanceHeader({
                 hasIconOnly
                 size="sm"
                 kind="ghost"
+                disabled={!!suspensionDeniedReason}
+                title={suspensionDeniedReason || undefined}
                 renderIcon={(props) => <Pause {...props} style={{ fill: 'white' }} />}
                 iconDescription="Suspend process instance"
                 onClick={onSuspend}
@@ -180,6 +201,8 @@ export function InstanceHeader({
                 hasIconOnly
                 size="sm"
                 kind="ghost"
+                disabled={!!suspensionDeniedReason}
+                title={suspensionDeniedReason || undefined}
                 renderIcon={(props) => <Play {...props} style={{ fill: 'white' }} />}
                 iconDescription="Resume process instance"
                 onClick={onResume}
@@ -200,9 +223,10 @@ export function InstanceHeader({
               hasIconOnly
               size="sm"
               kind="ghost"
-              disabled={status === 'COMPLETED' || status === 'CANCELED' || status === 'EXTERNALLY_TERMINATED' || status === 'INTERNALLY_TERMINATED'}
-              renderIcon={(props) => <WrenchIcon {...props} style={{ fill: status === 'COMPLETED' || status === 'EXTERNALLY_TERMINATED' || status === 'INTERNALLY_TERMINATED' ? 'rgba(255, 255, 255, 0.3)' : 'white' }} />}
-              iconDescription={status === 'COMPLETED' || status === 'EXTERNALLY_TERMINATED' || status === 'INTERNALLY_TERMINATED' ? "Process is completed" : "Modify / fix this process instance"}
+              disabled={isTerminalStatus || !!modifyDeniedReason}
+              title={modifyDeniedReason || undefined}
+              renderIcon={(props) => <WrenchIcon {...props} style={{ fill: isTerminalStatus || modifyDeniedReason ? 'rgba(255, 255, 255, 0.3)' : 'white' }} />}
+              iconDescription={isTerminalStatus ? "Process is completed" : "Modify / fix this process instance"}
               onClick={onModify}
             />
             
@@ -211,9 +235,10 @@ export function InstanceHeader({
               hasIconOnly
               size="sm"
               kind="danger--ghost"
-              disabled={status === 'COMPLETED' || status === 'CANCELED' || status === 'EXTERNALLY_TERMINATED' || status === 'INTERNALLY_TERMINATED'}
-              renderIcon={(props) => <TrashCan {...props} style={{ fill: status === 'COMPLETED' || status === 'EXTERNALLY_TERMINATED' || status === 'INTERNALLY_TERMINATED' ? 'rgba(255, 255, 255, 0.3)' : 'white' }} />}
-              iconDescription={status === 'COMPLETED' || status === 'EXTERNALLY_TERMINATED' || status === 'INTERNALLY_TERMINATED' ? "Process is completed" : "Cancel process instance"}
+              disabled={isTerminalStatus || !!terminateDeniedReason}
+              title={terminateDeniedReason || undefined}
+              renderIcon={(props) => <TrashCan {...props} style={{ fill: isTerminalStatus || terminateDeniedReason ? 'rgba(255, 255, 255, 0.3)' : 'white' }} />}
+              iconDescription={isTerminalStatus ? "Process is completed" : "Cancel process instance"}
               onClick={onTerminate}
             />
           </div>
@@ -228,7 +253,7 @@ export function InstanceHeader({
             {incidentCount} incident{incidentCount === 1 ? '' : 's'} occurred in this instance.
           </div>
           <div>
-            <Button size="sm" kind="danger" onClick={onRetry}>
+            <Button size="sm" kind="danger" disabled={!!retryDeniedReason} title={retryDeniedReason || undefined} onClick={onRetry}>
               Retry failed jobs & tasks
             </Button>
           </div>

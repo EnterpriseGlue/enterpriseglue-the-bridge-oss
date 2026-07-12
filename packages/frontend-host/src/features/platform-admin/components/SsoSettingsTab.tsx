@@ -26,14 +26,13 @@ import {
   TableToolbarContent,
   InlineNotification,
   SkeletonText,
-  OverflowMenu,
-  OverflowMenuItem,
   NumberInput,
 } from '@carbon/react';
 import { Add, Edit, TrashCan, Security, Link as LinkIcon, Information } from '@carbon/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
+import { GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid';
 
 // Types
@@ -91,24 +90,46 @@ const PLATFORM_ROLES = [
 
 export default function SsoSettingsTab() {
   const queryClient = useQueryClient();
-  
+  const platformAuthzResource = React.useMemo(() => ({ type: 'platform' as const }), []);
+  const providersReadDecision = useActionDecision('platform.sso.providers.read', platformAuthzResource);
+  const providersManageDecision = useActionDecision('platform.sso.providers.manage', platformAuthzResource);
+  const mappingsReadDecision = useActionDecision('platform.sso.platform-role-mappings.read', platformAuthzResource);
+  const mappingsManageDecision = useActionDecision('platform.sso.platform-role-mappings.manage', platformAuthzResource);
+  const canReadProviders = providersReadDecision.allowed;
+  const canManageProviders = providersManageDecision.allowed;
+  const canReadMappings = mappingsReadDecision.allowed;
+  const canManageMappings = mappingsManageDecision.allowed;
+  const hasVisibleSections = canReadProviders || canReadMappings;
+
   // Queries
   const providersQuery = useQuery({
     queryKey: ['sso-providers'],
     queryFn: () => apiClient.get<SsoProvider[]>('/api/sso/providers'),
+    enabled: canReadProviders,
   });
 
   const ssoLoginBehaviorQuery = useQuery({
     queryKey: ['platform-settings', 'sso-login-behavior'],
     queryFn: () =>
-      apiClient.get<{ ssoAutoRedirectSingleProvider: boolean }>('/api/admin/settings'),
+      apiClient.get<{
+        ssoAutoRedirectSingleProvider: boolean;
+        ssoAllEnginesAssignmentMappingsEnabled: boolean;
+        ssoEngineOwnerAssignmentMappingsEnabled: boolean;
+        ssoEngineDelegateAssignmentMappingsEnabled: boolean;
+        ssoRegexClaimMappingsEnabled: boolean;
+        ssoSecretViewMappingsEnabled: boolean;
+        ssoUnredactedAuditMappingsEnabled: boolean;
+        ssoPermanentDeleteMappingsEnabled: boolean;
+      }>('/api/admin/settings'),
+    enabled: canReadProviders,
   });
-  
+
   const mappingsQuery = useQuery({
     queryKey: ['sso-mappings'],
     queryFn: () => apiClient.get<SsoClaimsMapping[]>('/api/authz/sso-mappings'),
+    enabled: canReadMappings,
   });
-  
+
   // Provider state
   const [providerModalOpen, setProviderModalOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<SsoProvider | null>(null);
@@ -128,7 +149,8 @@ export default function SsoSettingsTab() {
     buttonLabel: '',
     defaultRole: 'user',
   });
-  
+  const [providerRiskAcknowledged, setProviderRiskAcknowledged] = useState(false);
+
   // Mapping state
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [editingMapping, setEditingMapping] = useState<SsoClaimsMapping | null>(null);
@@ -140,11 +162,12 @@ export default function SsoSettingsTab() {
     targetRole: 'user',
     priority: 0,
   });
-  
+
   // Delete confirmation state
   const [deleteProviderConfirm, setDeleteProviderConfirm] = useState<SsoProvider | null>(null);
   const [deleteMappingConfirm, setDeleteMappingConfirm] = useState<SsoClaimsMapping | null>(null);
-  
+  const [toggleProviderConfirm, setToggleProviderConfirm] = useState<SsoProvider | null>(null);
+
   // Documentation modal state
   const [docsModalOpen, setDocsModalOpen] = useState(false);
   const [providerFormError, setProviderFormError] = useState<string | null>(null);
@@ -178,7 +201,7 @@ export default function SsoSettingsTab() {
       return false;
     }
   })();
-  
+
   // Mutations
   const createProvider = useMutation({
     mutationFn: (data: any) => apiClient.post('/api/sso/providers', data),
@@ -192,7 +215,7 @@ export default function SsoSettingsTab() {
       setProviderFormError(parsed.message);
     },
   });
-  
+
   const updateProvider = useMutation({
     mutationFn: ({ id, ...data }: any) => apiClient.put(`/api/sso/providers/${id}`, data),
     onSuccess: () => {
@@ -205,7 +228,7 @@ export default function SsoSettingsTab() {
       setProviderFormError(parsed.message);
     },
   });
-  
+
   const deleteProvider = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/api/sso/providers/${id}`),
     onSuccess: () => {
@@ -213,11 +236,13 @@ export default function SsoSettingsTab() {
       setDeleteProviderConfirm(null);
     },
   });
-  
+
   const toggleProvider = useMutation({
-    mutationFn: (id: string) => apiClient.post(`/api/sso/providers/${id}/toggle`, {}),
+    mutationFn: ({ id, riskAcknowledged }: { id: string; riskAcknowledged?: boolean }) =>
+      apiClient.post(`/api/sso/providers/${id}/toggle`, riskAcknowledged ? { riskAcknowledged } : {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-providers'] });
+      setToggleProviderConfirm(null);
     },
   });
 
@@ -233,7 +258,28 @@ export default function SsoSettingsTab() {
       setSsoLoginBehaviorError(parsed.message);
     },
   });
-  
+
+  const updateSsoHighRiskSettings = useMutation({
+    mutationFn: (data: {
+      ssoAllEnginesAssignmentMappingsEnabled?: boolean;
+      ssoEngineOwnerAssignmentMappingsEnabled?: boolean;
+      ssoEngineDelegateAssignmentMappingsEnabled?: boolean;
+      ssoRegexClaimMappingsEnabled?: boolean;
+      ssoSecretViewMappingsEnabled?: boolean;
+      ssoUnredactedAuditMappingsEnabled?: boolean;
+      ssoPermanentDeleteMappingsEnabled?: boolean;
+    }) =>
+      apiClient.put('/api/admin/settings', data),
+    onSuccess: () => {
+      setSsoLoginBehaviorError(null);
+      queryClient.invalidateQueries({ queryKey: ['platform-settings', 'sso-login-behavior'] });
+    },
+    onError: (error: unknown) => {
+      const parsed = parseApiError(error, 'Failed to update SSO assignment guardrails');
+      setSsoLoginBehaviorError(parsed.message);
+    },
+  });
+
   const createMapping = useMutation({
     mutationFn: (data: any) => apiClient.post('/api/authz/sso-mappings', data),
     onSuccess: () => {
@@ -241,7 +287,7 @@ export default function SsoSettingsTab() {
       closeMappingModal();
     },
   });
-  
+
   const updateMapping = useMutation({
     mutationFn: ({ id, ...data }: any) => apiClient.put(`/api/authz/sso-mappings/${id}`, data),
     onSuccess: () => {
@@ -249,7 +295,7 @@ export default function SsoSettingsTab() {
       closeMappingModal();
     },
   });
-  
+
   const deleteMapping = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/api/authz/sso-mappings/${id}`),
     onSuccess: () => {
@@ -257,10 +303,11 @@ export default function SsoSettingsTab() {
       setDeleteMappingConfirm(null);
     },
   });
-  
+
   // Handlers
   const openCreateProvider = () => {
     setEditingProvider(null);
+    setProviderRiskAcknowledged(false);
     setProviderForm({
       name: '',
       type: 'microsoft',
@@ -279,9 +326,10 @@ export default function SsoSettingsTab() {
     });
     setProviderModalOpen(true);
   };
-  
+
   const openEditProvider = (provider: SsoProvider) => {
     setEditingProvider(provider);
+    setProviderRiskAcknowledged(false);
     setProviderForm({
       name: provider.name,
       type: provider.type,
@@ -300,10 +348,11 @@ export default function SsoSettingsTab() {
     });
     setProviderModalOpen(true);
   };
-  
+
   const closeProviderModal = () => {
     setProviderModalOpen(false);
     setEditingProvider(null);
+    setProviderRiskAcknowledged(false);
     setProviderFormError(null);
     setSamlStatusNotice(null);
     setCopiedField(null);
@@ -394,9 +443,22 @@ export default function SsoSettingsTab() {
 
     return missing;
   };
-  
+
+  const providerRequiresRiskAcknowledgement =
+    (providerForm.enabled && !editingProvider?.enabled) || providerForm.defaultRole === 'admin';
+
   const handleSaveProvider = () => {
     setProviderFormError(null);
+
+    if (!canManageProviders) {
+      setProviderFormError('Missing permission platform:settings:manage');
+      return;
+    }
+
+    if (providerRequiresRiskAcknowledgement && !providerRiskAcknowledged) {
+      setProviderFormError('Acknowledge the SSO provider risk before saving.');
+      return;
+    }
 
     const missingSamlFields = getMissingRequiredSamlFieldsForEnable();
     if (missingSamlFields.length > 0) {
@@ -416,13 +478,14 @@ export default function SsoSettingsTab() {
       buttonLabel: providerForm.buttonLabel || undefined,
       autoProvision: true,
       defaultRole: providerForm.defaultRole,
+      ...(providerRequiresRiskAcknowledgement ? { riskAcknowledged: providerRiskAcknowledged } : {}),
     };
-    
+
     // Only include secret if provided (for updates, empty means keep existing)
     if (providerForm.clientSecret) {
       data.clientSecret = providerForm.clientSecret;
     }
-    
+
     // SAML-specific fields
     if (providerForm.type === 'saml') {
       data.entityId = providerForm.entityId || undefined;
@@ -431,14 +494,14 @@ export default function SsoSettingsTab() {
         data.certificate = providerForm.certificate;
       }
     }
-    
+
     if (editingProvider) {
       updateProvider.mutate({ id: editingProvider.id, ...data });
     } else {
       createProvider.mutate(data);
     }
   };
-  
+
   const openCreateMapping = () => {
     setEditingMapping(null);
     setMappingForm({
@@ -451,7 +514,7 @@ export default function SsoSettingsTab() {
     });
     setMappingModalOpen(true);
   };
-  
+
   const openEditMapping = (mapping: SsoClaimsMapping) => {
     setEditingMapping(mapping);
     setMappingForm({
@@ -464,13 +527,15 @@ export default function SsoSettingsTab() {
     });
     setMappingModalOpen(true);
   };
-  
+
   const closeMappingModal = () => {
     setMappingModalOpen(false);
     setEditingMapping(null);
   };
-  
+
   const handleSaveMapping = () => {
+    if (!canManageMappings) return;
+
     const data = {
       providerId: mappingForm.providerId || null,
       claimType: mappingForm.claimType,
@@ -479,14 +544,14 @@ export default function SsoSettingsTab() {
       targetRole: mappingForm.targetRole,
       priority: mappingForm.priority,
     };
-    
+
     if (editingMapping) {
       updateMapping.mutate({ id: editingMapping.id, ...data });
     } else {
       createMapping.mutate(data);
     }
   };
-  
+
   // Update claimKey when claimType changes
   const handleClaimTypeChange = (type: string) => {
     let key = 'groups';
@@ -498,13 +563,22 @@ export default function SsoSettingsTab() {
     }
     setMappingForm({ ...mappingForm, claimType: type, claimKey: key });
   };
-  
+
   const providers = providersQuery.data || [];
   const mappings = mappingsQuery.data || [];
-  
-  const isLoading = providersQuery.isLoading || mappingsQuery.isLoading;
-  const error = providersQuery.error || mappingsQuery.error;
-  
+
+  const isLoading = (canReadProviders && providersQuery.isLoading) || (canReadMappings && mappingsQuery.isLoading);
+  const error = (canReadProviders && providersQuery.error) || (canReadMappings && mappingsQuery.error);
+
+  if (!hasVisibleSections) {
+    return (
+      <UnauthorizedEmptyState
+        title="SSO settings unavailable"
+        reason="No SSO settings read permissions are available for the current user."
+      />
+    );
+  }
+
   if (isLoading) {
     return (
       <PlatformGrid style={{ paddingInline: 0 }}>
@@ -517,7 +591,7 @@ export default function SsoSettingsTab() {
       </PlatformGrid>
     );
   }
-  
+
   if (error) {
     return (
       <InlineNotification
@@ -527,10 +601,11 @@ export default function SsoSettingsTab() {
       />
     );
   }
-  
+
   return (
     <PlatformGrid style={{ paddingInline: 0, alignItems: 'stretch' }}>
       {/* SSO Providers Section */}
+      {canReadProviders && (
       <PlatformRow>
         <PlatformCol sm={4} md={8} lg={16}>
           <Tile>
@@ -548,6 +623,8 @@ export default function SsoSettingsTab() {
                 size="sm"
                 renderIcon={Add}
                 onClick={openCreateProvider}
+                disabled={!canManageProviders}
+                title={canManageProviders ? undefined : providersManageDecision.reason}
               >
                 Add Provider
               </Button>
@@ -580,20 +657,268 @@ export default function SsoSettingsTab() {
                 labelA="Off"
                 labelB="On"
                 toggled={Boolean(ssoLoginBehaviorQuery.data?.ssoAutoRedirectSingleProvider)}
-                disabled={ssoLoginBehaviorQuery.isLoading || updateSsoLoginBehavior.isPending}
-                onToggle={(checked) => updateSsoLoginBehavior.mutate(checked)}
+                disabled={!canManageProviders || ssoLoginBehaviorQuery.isLoading || updateSsoLoginBehavior.isPending}
+                onToggle={(checked) => {
+                  if (!canManageProviders) return;
+                  updateSsoLoginBehavior.mutate(checked);
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--spacing-4)',
+                marginBottom: 'var(--spacing-4)',
+                padding: 'var(--spacing-3)',
+                borderRadius: '4px',
+                background: 'var(--cds-layer-01)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                  Allow all-engine SSO engine assignment mappings
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  When off, SSO engine mappings must target exact engines, external ids, or labels.
+                </div>
+              </div>
+              <Toggle
+                id="sso-all-engines-assignment-mappings-enabled"
+                labelText=""
+                hideLabel
+                labelA="Off"
+                labelB="On"
+                toggled={ssoLoginBehaviorQuery.data?.ssoAllEnginesAssignmentMappingsEnabled ?? true}
+                disabled={!canManageProviders || ssoLoginBehaviorQuery.isLoading || updateSsoHighRiskSettings.isPending}
+                onToggle={(checked) => {
+                  if (!canManageProviders) return;
+                  updateSsoHighRiskSettings.mutate({ ssoAllEnginesAssignmentMappingsEnabled: checked });
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--spacing-4)',
+                marginBottom: 'var(--spacing-4)',
+                padding: 'var(--spacing-3)',
+                borderRadius: '4px',
+                background: 'var(--cds-layer-01)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                  Allow SSO engine owner mappings
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  SSO can create effective engine owner grants without changing accountable owner metadata.
+                </div>
+              </div>
+              <Toggle
+                id="sso-engine-owner-assignment-mappings-enabled"
+                labelText=""
+                hideLabel
+                labelA="Off"
+                labelB="On"
+                toggled={ssoLoginBehaviorQuery.data?.ssoEngineOwnerAssignmentMappingsEnabled ?? false}
+                disabled={!canManageProviders || ssoLoginBehaviorQuery.isLoading || updateSsoHighRiskSettings.isPending}
+                onToggle={(checked) => {
+                  if (!canManageProviders) return;
+                  updateSsoHighRiskSettings.mutate({ ssoEngineOwnerAssignmentMappingsEnabled: checked });
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--spacing-4)',
+                marginBottom: 'var(--spacing-4)',
+                padding: 'var(--spacing-3)',
+                borderRadius: '4px',
+                background: 'var(--cds-layer-01)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                  Allow SSO engine delegate mappings
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  SSO can create effective engine delegate grants without changing delegate metadata.
+                </div>
+              </div>
+              <Toggle
+                id="sso-engine-delegate-assignment-mappings-enabled"
+                labelText=""
+                hideLabel
+                labelA="Off"
+                labelB="On"
+                toggled={ssoLoginBehaviorQuery.data?.ssoEngineDelegateAssignmentMappingsEnabled ?? false}
+                disabled={!canManageProviders || ssoLoginBehaviorQuery.isLoading || updateSsoHighRiskSettings.isPending}
+                onToggle={(checked) => {
+                  if (!canManageProviders) return;
+                  updateSsoHighRiskSettings.mutate({ ssoEngineDelegateAssignmentMappingsEnabled: checked });
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--spacing-4)',
+                marginBottom: 'var(--spacing-4)',
+                padding: 'var(--spacing-3)',
+                borderRadius: '4px',
+                background: 'var(--cds-layer-01)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                  Allow regex SSO claim mappings
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  When off, active SSO mappings cannot use regex claim operators.
+                </div>
+              </div>
+              <Toggle
+                id="sso-regex-claim-mappings-enabled"
+                labelText=""
+                hideLabel
+                labelA="Off"
+                labelB="On"
+                toggled={ssoLoginBehaviorQuery.data?.ssoRegexClaimMappingsEnabled ?? false}
+                disabled={!canManageProviders || ssoLoginBehaviorQuery.isLoading || updateSsoHighRiskSettings.isPending}
+                onToggle={(checked) => {
+                  if (!canManageProviders) return;
+                  updateSsoHighRiskSettings.mutate({ ssoRegexClaimMappingsEnabled: checked });
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--spacing-4)',
+                marginBottom: 'var(--spacing-4)',
+                padding: 'var(--spacing-3)',
+                borderRadius: '4px',
+                background: 'var(--cds-layer-01)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                  Allow SSO secret-view permission mappings
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  When off, SSO engine mappings cannot target custom roles that grant engine secret access.
+                </div>
+              </div>
+              <Toggle
+                id="sso-secret-view-mappings-enabled"
+                labelText=""
+                hideLabel
+                labelA="Off"
+                labelB="On"
+                toggled={ssoLoginBehaviorQuery.data?.ssoSecretViewMappingsEnabled ?? false}
+                disabled={!canManageProviders || ssoLoginBehaviorQuery.isLoading || updateSsoHighRiskSettings.isPending}
+                onToggle={(checked) => {
+                  if (!canManageProviders) return;
+                  updateSsoHighRiskSettings.mutate({ ssoSecretViewMappingsEnabled: checked });
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--spacing-4)',
+                marginBottom: 'var(--spacing-4)',
+                padding: 'var(--spacing-3)',
+                borderRadius: '4px',
+                background: 'var(--cds-layer-01)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                  Allow SSO unredacted audit permission mappings
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  Reserved for SSO mappings that grant unredacted audit payload access.
+                </div>
+              </div>
+              <Toggle
+                id="sso-unredacted-audit-mappings-enabled"
+                labelText=""
+                hideLabel
+                labelA="Off"
+                labelB="On"
+                toggled={ssoLoginBehaviorQuery.data?.ssoUnredactedAuditMappingsEnabled ?? false}
+                disabled={!canManageProviders || ssoLoginBehaviorQuery.isLoading || updateSsoHighRiskSettings.isPending}
+                onToggle={(checked) => {
+                  if (!canManageProviders) return;
+                  updateSsoHighRiskSettings.mutate({ ssoUnredactedAuditMappingsEnabled: checked });
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--spacing-4)',
+                marginBottom: 'var(--spacing-4)',
+                padding: 'var(--spacing-3)',
+                borderRadius: '4px',
+                background: 'var(--cds-layer-01)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                  Allow SSO permanent-delete permission mappings
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  Reserved for SSO mappings that grant irreversible delete permissions.
+                </div>
+              </div>
+              <Toggle
+                id="sso-permanent-delete-mappings-enabled"
+                labelText=""
+                hideLabel
+                labelA="Off"
+                labelB="On"
+                toggled={ssoLoginBehaviorQuery.data?.ssoPermanentDeleteMappingsEnabled ?? false}
+                disabled={!canManageProviders || ssoLoginBehaviorQuery.isLoading || updateSsoHighRiskSettings.isPending}
+                onToggle={(checked) => {
+                  if (!canManageProviders) return;
+                  updateSsoHighRiskSettings.mutate({ ssoPermanentDeleteMappingsEnabled: checked });
+                }}
               />
             </div>
 
             {ssoLoginBehaviorError && (
               <InlineNotification
                 kind="error"
-                title="Unable to update login redirect setting"
+                title="Unable to update SSO setting"
                 subtitle={ssoLoginBehaviorError}
                 onCloseButtonClick={() => setSsoLoginBehaviorError(null)}
               />
             )}
-            
+
             {providers.length === 0 ? (
               <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', margin: 0 }}>
                 No SSO providers configured. Add a provider to enable SSO authentication.
@@ -642,19 +967,28 @@ export default function SsoSettingsTab() {
                         id={`toggle-${provider.id}`}
                         size="sm"
                         toggled={provider.enabled}
-                        onToggle={() => toggleProvider.mutate(provider.id)}
+                        onToggle={() => {
+                          if (!canManageProviders) return;
+                          setToggleProviderConfirm(provider);
+                        }}
                         labelA=""
                         labelB=""
                         hideLabel
+                        disabled={!canManageProviders || toggleProvider.isPending}
                       />
-                      <OverflowMenu size="sm" flipped>
-                        <OverflowMenuItem itemText="Edit" onClick={() => openEditProvider(provider)} />
-                        <OverflowMenuItem
+                      <GuardedOverflowMenu size="sm" flipped>
+                        <GuardedOverflowMenuItem
+                          decision={providersManageDecision}
+                          itemText="Edit"
+                          onClick={() => openEditProvider(provider)}
+                        />
+                        <GuardedOverflowMenuItem
+                          decision={providersManageDecision}
                           itemText="Delete"
                           isDelete
                           onClick={() => setDeleteProviderConfirm(provider)}
                         />
-                      </OverflowMenu>
+                      </GuardedOverflowMenu>
                     </div>
                   </div>
                 ))}
@@ -663,9 +997,11 @@ export default function SsoSettingsTab() {
           </Tile>
         </PlatformCol>
       </PlatformRow>
-      
+      )}
+
       {/* Claims Mapping Section */}
-      <PlatformRow style={{ marginTop: 'var(--spacing-5)' }}>
+      {canReadMappings && (
+      <PlatformRow style={{ marginTop: canReadProviders ? 'var(--spacing-5)' : 0 }}>
         <PlatformCol sm={4} md={8} lg={16}>
           <Tile>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-4)' }}>
@@ -691,12 +1027,14 @@ export default function SsoSettingsTab() {
                   size="sm"
                   renderIcon={Add}
                   onClick={openCreateMapping}
+                  disabled={!canManageMappings}
+                  title={canManageMappings ? undefined : mappingsManageDecision.reason}
                 >
                   Add Mapping
                 </Button>
               </div>
             </div>
-            
+
             {mappings.length === 0 ? (
               <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', margin: 0 }}>
                 No role mappings configured. Users will receive the default role from the provider.
@@ -749,14 +1087,19 @@ export default function SsoSettingsTab() {
                               </TableCell>
                               <TableCell>{mapping.priority}</TableCell>
                               <TableCell>
-                                <OverflowMenu size="sm" flipped>
-                                  <OverflowMenuItem itemText="Edit" onClick={() => openEditMapping(mapping)} />
-                                  <OverflowMenuItem
+                                <GuardedOverflowMenu size="sm" flipped>
+                                  <GuardedOverflowMenuItem
+                                    decision={mappingsManageDecision}
+                                    itemText="Edit"
+                                    onClick={() => openEditMapping(mapping)}
+                                  />
+                                  <GuardedOverflowMenuItem
+                                    decision={mappingsManageDecision}
                                     itemText="Delete"
                                     isDelete
                                     onClick={() => setDeleteMappingConfirm(mapping)}
                                   />
-                                </OverflowMenu>
+                                </GuardedOverflowMenu>
                               </TableCell>
                             </TableRow>
                           );
@@ -770,7 +1113,8 @@ export default function SsoSettingsTab() {
           </Tile>
         </PlatformCol>
       </PlatformRow>
-      
+      )}
+
       {/* Provider Modal */}
       <Modal
         open={providerModalOpen}
@@ -779,7 +1123,13 @@ export default function SsoSettingsTab() {
         primaryButtonText={createProvider.isPending || updateProvider.isPending ? 'Saving...' : 'Save'}
         secondaryButtonText="Cancel"
         onRequestSubmit={handleSaveProvider}
-        primaryButtonDisabled={!providerForm.name || createProvider.isPending || updateProvider.isPending}
+        primaryButtonDisabled={
+          !canManageProviders ||
+          !providerForm.name ||
+          (providerRequiresRiskAcknowledgement && !providerRiskAcknowledged) ||
+          createProvider.isPending ||
+          updateProvider.isPending
+        }
         size="md"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingTop: 'var(--spacing-4)' }}>
@@ -799,7 +1149,7 @@ export default function SsoSettingsTab() {
             value={providerForm.name}
             onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
           />
-          
+
           <Select
             id="provider-type"
             labelText="Provider Type"
@@ -812,9 +1162,17 @@ export default function SsoSettingsTab() {
             <SelectItem value="saml" text="SAML 2.0" />
             <SelectItem value="oidc" text="OpenID Connect" />
           </Select>
-          
+
           {(providerForm.type === 'microsoft' || providerForm.type === 'google' || providerForm.type === 'oidc') && (
             <>
+              {editingProvider?.hasClientSecret && (
+                <InlineNotification
+                  kind="info"
+                  title="Client secret is stored"
+                  subtitle="Existing client secrets are never displayed. Enter a new value only when rotating the secret."
+                  lowContrast
+                />
+              )}
               <TextInput
                 id="provider-client-id"
                 labelText="Client ID"
@@ -822,16 +1180,17 @@ export default function SsoSettingsTab() {
                 value={providerForm.clientId}
                 onChange={(e) => setProviderForm({ ...providerForm, clientId: e.target.value })}
               />
-              
+
               <TextInput
                 id="provider-client-secret"
                 labelText={editingProvider ? 'Client Secret (leave empty to keep existing)' : 'Client Secret'}
                 placeholder="Client secret"
+                helperText={editingProvider?.hasClientSecret ? 'Stored secret is redacted and will be kept if this field stays empty.' : undefined}
                 type="password"
                 value={providerForm.clientSecret}
                 onChange={(e) => setProviderForm({ ...providerForm, clientSecret: e.target.value })}
               />
-              
+
               {providerForm.type === 'microsoft' && (
                 <TextInput
                   id="provider-tenant-id"
@@ -841,7 +1200,7 @@ export default function SsoSettingsTab() {
                   onChange={(e) => setProviderForm({ ...providerForm, tenantId: e.target.value })}
                 />
               )}
-              
+
               {providerForm.type === 'oidc' && (
                 <TextInput
                   id="provider-issuer"
@@ -853,7 +1212,7 @@ export default function SsoSettingsTab() {
               )}
             </>
           )}
-          
+
           {providerForm.type === 'saml' && (
             <>
               <InlineNotification
@@ -948,7 +1307,7 @@ export default function SsoSettingsTab() {
                 value={providerForm.entityId}
                 onChange={(e) => setProviderForm({ ...providerForm, entityId: e.target.value })}
               />
-              
+
               <TextInput
                 id="provider-sso-url"
                 labelText="SSO URL (IdP)"
@@ -957,19 +1316,19 @@ export default function SsoSettingsTab() {
                 value={providerForm.ssoUrl}
                 onChange={(e) => setProviderForm({ ...providerForm, ssoUrl: e.target.value })}
               />
-              
+
               <TextArea
                 id="provider-certificate"
                 labelText={editingProvider ? 'IdP Certificate (leave empty to keep existing)' : 'IdP Certificate'}
                 placeholder="-----BEGIN CERTIFICATE-----..."
-                helperText="Paste the X.509 signing certificate from Microsoft Entra."
+                helperText={editingProvider?.hasCertificate ? 'Stored certificate is redacted and will be kept if this field stays empty.' : 'Paste the X.509 signing certificate from Microsoft Entra.'}
                 value={providerForm.certificate}
                 onChange={(e) => setProviderForm({ ...providerForm, certificate: e.target.value })}
                 rows={4}
               />
             </>
           )}
-          
+
           <TextInput
             id="provider-button-label"
             labelText="Button Label (optional)"
@@ -977,28 +1336,55 @@ export default function SsoSettingsTab() {
             value={providerForm.buttonLabel}
             onChange={(e) => setProviderForm({ ...providerForm, buttonLabel: e.target.value })}
           />
-          
+
           <Select
             id="provider-default-role"
             labelText="Default Role"
             value={providerForm.defaultRole}
-            onChange={(e) => setProviderForm({ ...providerForm, defaultRole: e.target.value })}
+            onChange={(e) => {
+              setProviderRiskAcknowledged(false);
+              setProviderForm({ ...providerForm, defaultRole: e.target.value });
+            }}
           >
             <SelectItem value="user" text="Standard User" />
             <SelectItem value="admin" text="Platform Admin" />
           </Select>
-          
+
           <Toggle
             id="provider-enabled"
             labelText="Enable Provider"
             labelA="Disabled"
             labelB="Enabled"
             toggled={providerForm.enabled}
-            onToggle={(checked) => setProviderForm({ ...providerForm, enabled: checked })}
+            onToggle={(checked) => {
+              setProviderRiskAcknowledged(false);
+              setProviderForm({ ...providerForm, enabled: checked });
+            }}
           />
+
+          {providerRequiresRiskAcknowledgement && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
+              <InlineNotification
+                kind="warning"
+                title="High-risk SSO provider change"
+                subtitle={providerForm.defaultRole === 'admin'
+                  ? 'Users without a more specific matching rule can receive Platform Admin when this provider provisions them.'
+                  : 'Enabling a provider allows SSO login and provisioning according to configured mappings.'}
+                lowContrast
+              />
+              <Toggle
+                id="provider-risk-acknowledged"
+                labelText="I understand this SSO provider change can grant platform access."
+                labelA="Not acknowledged"
+                labelB="Acknowledged"
+                toggled={providerRiskAcknowledged}
+                onToggle={(checked) => setProviderRiskAcknowledged(checked)}
+              />
+            </div>
+          )}
         </div>
       </Modal>
-      
+
       {/* Mapping Modal */}
       <Modal
         open={mappingModalOpen}
@@ -1007,7 +1393,7 @@ export default function SsoSettingsTab() {
         primaryButtonText={createMapping.isPending || updateMapping.isPending ? 'Saving...' : 'Save'}
         secondaryButtonText="Cancel"
         onRequestSubmit={handleSaveMapping}
-        primaryButtonDisabled={!mappingForm.claimValue || createMapping.isPending || updateMapping.isPending}
+        primaryButtonDisabled={!canManageMappings || !mappingForm.claimValue || createMapping.isPending || updateMapping.isPending}
         size="sm"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingTop: 'var(--spacing-4)' }}>
@@ -1023,7 +1409,7 @@ export default function SsoSettingsTab() {
               <SelectItem key={p.id} value={p.id} text={p.name} />
             ))}
           </Select>
-          
+
           <Select
             id="mapping-claim-type"
             labelText="Claim Type"
@@ -1034,7 +1420,7 @@ export default function SsoSettingsTab() {
               <SelectItem key={ct.value} value={ct.value} text={ct.label} />
             ))}
           </Select>
-          
+
           {mappingForm.claimType === 'custom' && (
             <TextInput
               id="mapping-claim-key"
@@ -1044,7 +1430,7 @@ export default function SsoSettingsTab() {
               onChange={(e) => setMappingForm({ ...mappingForm, claimKey: e.target.value })}
             />
           )}
-          
+
           <TextInput
             id="mapping-claim-value"
             labelText="Claim Value"
@@ -1057,7 +1443,7 @@ export default function SsoSettingsTab() {
             value={mappingForm.claimValue}
             onChange={(e) => setMappingForm({ ...mappingForm, claimValue: e.target.value })}
           />
-          
+
           <Select
             id="mapping-target-role"
             labelText="Assign Platform Role"
@@ -1068,7 +1454,7 @@ export default function SsoSettingsTab() {
               <SelectItem key={r.value} value={r.value} text={r.label} />
             ))}
           </Select>
-          
+
           <NumberInput
             id="mapping-priority"
             label="Priority"
@@ -1080,7 +1466,41 @@ export default function SsoSettingsTab() {
           />
         </div>
       </Modal>
-      
+
+      {/* Toggle Provider Confirmation */}
+      <Modal
+        open={!!toggleProviderConfirm}
+        onRequestClose={() => setToggleProviderConfirm(null)}
+        modalHeading={`${toggleProviderConfirm?.enabled ? 'Disable' : 'Enable'} SSO Provider`}
+        primaryButtonText={toggleProvider.isPending ? 'Saving...' : toggleProviderConfirm?.enabled ? 'Disable' : 'Enable'}
+        secondaryButtonText="Cancel"
+        danger={!toggleProviderConfirm?.enabled}
+        onRequestSubmit={() =>
+          toggleProviderConfirm &&
+          toggleProvider.mutate({
+            id: toggleProviderConfirm.id,
+            riskAcknowledged: !toggleProviderConfirm.enabled,
+          })
+        }
+        primaryButtonDisabled={!canManageProviders || toggleProvider.isPending}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
+          <p style={{ margin: 0 }}>
+            {toggleProviderConfirm?.enabled
+              ? `Users will no longer be able to sign in using ${toggleProviderConfirm?.name}.`
+              : `Users may be able to sign in using ${toggleProviderConfirm?.name} after this provider is enabled.`}
+          </p>
+          {!toggleProviderConfirm?.enabled && (
+            <InlineNotification
+              kind="warning"
+              title="Review claim mappings before enabling"
+              subtitle="Provider enablement can grant platform access based on default role and matching SSO role mappings."
+              lowContrast
+            />
+          )}
+        </div>
+      </Modal>
+
       {/* Delete Provider Confirmation */}
       <Modal
         open={!!deleteProviderConfirm}
@@ -1090,14 +1510,14 @@ export default function SsoSettingsTab() {
         secondaryButtonText="Cancel"
         danger
         onRequestSubmit={() => deleteProviderConfirm && deleteProvider.mutate(deleteProviderConfirm.id)}
-        primaryButtonDisabled={deleteProvider.isPending}
+        primaryButtonDisabled={!canManageProviders || deleteProvider.isPending}
       >
         <p>
           Are you sure you want to delete <strong>{deleteProviderConfirm?.name}</strong>?
           Users will no longer be able to sign in using this provider.
         </p>
       </Modal>
-      
+
       {/* Delete Mapping Confirmation */}
       <Modal
         open={!!deleteMappingConfirm}
@@ -1107,14 +1527,14 @@ export default function SsoSettingsTab() {
         secondaryButtonText="Cancel"
         danger
         onRequestSubmit={() => deleteMappingConfirm && deleteMapping.mutate(deleteMappingConfirm.id)}
-        primaryButtonDisabled={deleteMapping.isPending}
+        primaryButtonDisabled={!canManageMappings || deleteMapping.isPending}
       >
         <p>
           Are you sure you want to delete this role mapping?
           Users matching this rule will no longer be assigned the <strong>{deleteMappingConfirm?.targetRole}</strong> role.
         </p>
       </Modal>
-      
+
       {/* Documentation Modal */}
       <Modal
         open={docsModalOpen}
@@ -1129,11 +1549,11 @@ export default function SsoSettingsTab() {
               How Role Mapping Works
             </h4>
             <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-              When a user signs in via SSO, the platform checks their claims (groups, roles, email domain) 
+              When a user signs in via SSO, the platform checks their claims (groups, roles, email domain)
               against your configured mappings. The first matching rule determines their platform role.
             </p>
           </section>
-          
+
           <section>
             <h4 style={{ margin: '0 0 var(--spacing-3) 0', fontSize: '14px', fontWeight: 600 }}>
               Claim Types
@@ -1165,27 +1585,27 @@ export default function SsoSettingsTab() {
               </div>
             </div>
           </section>
-          
+
           <section>
             <h4 style={{ margin: '0 0 var(--spacing-3) 0', fontSize: '14px', fontWeight: 600 }}>
               Priority
             </h4>
             <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-              Rules with higher priority numbers are evaluated first. If a user matches multiple rules, 
+              Rules with higher priority numbers are evaluated first. If a user matches multiple rules,
               the highest priority match wins. Use this to ensure admin mappings take precedence over general rules.
             </p>
           </section>
-          
+
           <section>
             <h4 style={{ margin: '0 0 var(--spacing-3) 0', fontSize: '14px', fontWeight: 600 }}>
               Wildcards
             </h4>
             <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-              Use <code>*</code> for wildcard matching. For example, <code>*@company.com</code> matches 
+              Use <code>*</code> for wildcard matching. For example, <code>*@company.com</code> matches
               all emails from that domain, or <code>Dev-*</code> matches all groups starting with "Dev-".
             </p>
           </section>
-          
+
           <section style={{ background: 'var(--cds-layer-02)', padding: 'var(--spacing-4)', borderRadius: '4px' }}>
             <h4 style={{ margin: '0 0 var(--spacing-3) 0', fontSize: '14px', fontWeight: 600 }}>
               Example Configuration

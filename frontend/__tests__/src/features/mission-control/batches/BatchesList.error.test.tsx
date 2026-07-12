@@ -7,6 +7,34 @@ import { http, HttpResponse } from 'msw';
 import { server } from '@test/mocks/server';
 import BatchesPage from '@src/features/mission-control/batches/BatchesPage';
 import { useEngineSelectorStore } from '@src/stores/engineSelectorStore';
+import { AuthContext } from '@src/contexts/AuthContext';
+
+const authContextValue = {
+  user: null,
+  permissions: {
+    userId: 'user-1',
+    platform: [],
+    projects: [],
+    engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
+    generatedAt: 1,
+  },
+  isAuthenticated: true,
+  isLoading: false,
+  login: () => Promise.resolve(),
+  logout: () => Promise.resolve(),
+  resetPassword: () => Promise.resolve(),
+  changePassword: () => Promise.resolve(),
+  refreshUser: () => Promise.resolve(),
+  setAuthenticatedUser: () => {},
+  refreshPermissions: () => Promise.resolve(),
+  hasPlatformPermission: () => false,
+  hasAnyPlatformPermission: () => false,
+  hasProjectPermission: () => false,
+  hasAnyProjectPermission: () => false,
+  hasEnginePermission: () => true,
+  hasAnyEnginePermission: () => true,
+  hasAnyScopedEnginePermission: () => true,
+} as any;
 
 function renderWithProviders() {
   useEngineSelectorStore.setState({ selectedEngineId: 'engine-1' });
@@ -16,11 +44,13 @@ function renderWithProviders() {
 
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/mission-control/batches']}>
-        <Routes>
-          <Route path="/mission-control/batches" element={<BatchesPage />} />
-        </Routes>
-      </MemoryRouter>
+      <AuthContext.Provider value={authContextValue}>
+        <MemoryRouter initialEntries={['/mission-control/batches']}>
+          <Routes>
+            <Route path="/mission-control/batches" element={<BatchesPage />} />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>
     </QueryClientProvider>
   );
 }

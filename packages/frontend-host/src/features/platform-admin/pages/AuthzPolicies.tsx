@@ -18,8 +18,6 @@ import {
   TableToolbar,
   TableToolbarContent,
   Tag,
-  OverflowMenu,
-  OverflowMenuItem,
   InlineNotification,
   TextInput,
   TextArea,
@@ -32,6 +30,7 @@ import {
 } from '@carbon/react';
 import { Add, Policy } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout';
+import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../shared/auth/guards';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import {
   useAuthzPolicies,
@@ -161,7 +160,7 @@ export default function AuthzPolicies() {
   const policies = policiesQ.data || [];
 
   const getEffectTag = (effect: string) => {
-    return effect === 'deny' 
+    return effect === 'deny'
       ? <Tag type="red">Deny</Tag>
       : <Tag type="green">Allow</Tag>;
   };
@@ -268,9 +267,9 @@ export default function AuthzPolicies() {
                             if (cell.info.header === 'action') {
                               return (
                                 <TableCell key={cell.id}>
-                                  <code style={{ 
-                                    background: 'var(--cds-layer-02)', 
-                                    padding: '2px 6px', 
+                                  <code style={{
+                                    background: 'var(--cds-layer-02)',
+                                    padding: '2px 6px',
                                     borderRadius: '4px',
                                     fontSize: '12px',
                                   }}>
@@ -282,25 +281,25 @@ export default function AuthzPolicies() {
                             if (cell.info.header === 'actions') {
                               return (
                                 <TableCell key={cell.id}>
-                                  <OverflowMenu size="sm" flipped>
-                                    <OverflowMenuItem
+                                  <GuardedOverflowMenu size="sm" flipped>
+                                    <GuardedOverflowMenuItem
                                       itemText="Edit"
                                       onClick={() => policy && openEdit(policy)}
                                     />
-                                    <OverflowMenuItem
+                                    <GuardedOverflowMenuItem
                                       itemText={policy?.isActive ? 'Disable' : 'Enable'}
-                                      onClick={() => policy && updateM.mutate({ 
-                                        id: policy.id, 
-                                        isActive: !policy.isActive 
+                                      onClick={() => policy && updateM.mutate({
+                                        id: policy.id,
+                                        isActive: !policy.isActive
                                       })}
                                     />
-                                    <OverflowMenuItem
+                                    <GuardedOverflowMenuItem
                                       itemText="Delete"
                                       isDelete
                                       hasDivider
                                       onClick={() => handleDelete(row.id)}
                                     />
-                                  </OverflowMenu>
+                                  </GuardedOverflowMenu>
                                 </TableCell>
                               );
                             }
@@ -396,9 +395,9 @@ export default function AuthzPolicies() {
               </p>
               <div style={{ fontSize: '12px', color: 'var(--cds-text-helper)', marginBottom: 'var(--spacing-3)' }}>
                 <strong>Example conditions:</strong>
-                <pre style={{ 
-                  background: 'var(--cds-layer-02)', 
-                  padding: 'var(--spacing-3)', 
+                <pre style={{
+                  background: 'var(--cds-layer-02)',
+                  padding: 'var(--spacing-3)',
                   borderRadius: '4px',
                   overflow: 'auto',
                   fontSize: '11px',

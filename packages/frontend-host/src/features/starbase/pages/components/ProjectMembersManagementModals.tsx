@@ -1,11 +1,12 @@
 import React from 'react'
-import { Button, Checkbox, InlineNotification, Select, SelectItem } from '@carbon/react'
+import { Button, Checkbox, InlineNotification, Select, SelectItem, TextInput } from '@carbon/react'
 import { ComposedModal, ModalHeader, ModalBody, ModalFooter } from '@carbon/react'
 import ConfirmModal from '../../../../shared/components/ConfirmModal'
 import InvitationFlowModal from '../../../../shared/components/InvitationFlowModal'
 import InvitationRevealPanel from '../../../../shared/components/InvitationRevealPanel'
 import UserLookupEmailField from '../../../../shared/components/UserLookupEmailField'
 import { getInvitationDeliveryOptions } from '../../../../shared/utils/invitationFlow'
+import { ProjectPermission } from '../../../../shared/auth/permissions'
 import { composeProjectRoles, getProjectAccessSelection, getProjectRoleDescription, projectBaseAccessOptions, type ProjectBaseAccessRole, type ProjectMember, type ProjectRole, type UserSearchItem } from '../../components/project-detail'
 
 interface MemberLookupResult {
@@ -24,6 +25,25 @@ interface MemberInviteReveal {
   oneTimePassword: string
 }
 
+type AuthzPrincipalType = 'user' | 'group' | 'api_client' | 'service_account'
+
+const ASSIGNMENT_PRINCIPAL_TYPE_LABELS: Record<AuthzPrincipalType, string> = {
+  user: 'User',
+  group: 'Group',
+  api_client: 'API client',
+  service_account: 'Service account',
+}
+
+export interface ProjectScopedCustomRole {
+  id: string
+  name: string
+  description?: string | null
+  scope: 'project'
+  kind: 'system' | 'custom'
+  isAssignable: boolean
+  isArchived: boolean
+}
+
 interface ProjectMembersManagementModalsProps {
   addMemberOpen: boolean
   onCloseAddMember: () => void
@@ -39,6 +59,16 @@ interface ProjectMembersManagementModalsProps {
   memberRoles: ProjectRole[]
   setMemberRoles: (roles: ProjectRole[]) => void
   canAssignDelegate: boolean
+  canAddMembers?: boolean
+  canInviteMembers?: boolean
+  canUpdateMemberRoles?: boolean
+  canRemoveMembers?: boolean
+  canAssignScopedAccess?: boolean
+  addMembersUnavailableReason?: string | null
+  inviteMembersUnavailableReason?: string | null
+  updateMemberRolesUnavailableReason?: string | null
+  removeMembersUnavailableReason?: string | null
+  assignScopedAccessUnavailableReason?: string | null
   isMemberEmailValid: boolean
   memberLookupEmail: string
   memberLookup: MemberLookupResult | null
@@ -48,8 +78,30 @@ interface ProjectMembersManagementModalsProps {
   memberDeliveryMethod: 'email' | 'manual'
   setMemberDeliveryMethod: (value: 'email' | 'manual') => void
   memberInviteReveal: MemberInviteReveal | null
+  customRoleOptions?: ProjectScopedCustomRole[]
+  editCustomRoleIds?: string[]
+  setEditCustomRoleIds?: (roleIds: string[]) => void
   resetAddMemberForm: () => void
   submitAddMember: () => void
+  assignmentOpen?: boolean
+  onCloseAssignment?: () => void
+  assignmentPrincipalType?: AuthzPrincipalType
+  setAssignmentPrincipalType?: (value: AuthzPrincipalType) => void
+  assignmentPrincipalIdInput?: string
+  setAssignmentPrincipalIdInput?: (value: string) => void
+  assignmentUserEmail?: string
+  setAssignmentUserEmail?: (value: string) => void
+  assignmentUserSearch?: string
+  setAssignmentUserSearch?: (value: string) => void
+  assignmentUserSearchItems?: UserSearchItem[]
+  selectedAssignmentUser?: UserSearchItem | null
+  setSelectedAssignmentUser?: (user: UserSearchItem | null) => void
+  assignmentRoleId?: string
+  setAssignmentRoleId?: (roleId: string) => void
+  assignmentError?: string
+  setAssignmentError?: (value: string) => void
+  assignmentSubmitting?: boolean
+  submitScopedAssignment?: () => void
   editRolesOpen: boolean
   editRolesMember: ProjectMember | null
   editRolesSelection: ProjectRole[]
@@ -60,6 +112,11 @@ interface ProjectMembersManagementModalsProps {
   removeMemberData: ProjectMember | null
   onCloseRemoveMember: () => void
   submitRemoveMember: (member: ProjectMember) => void
+  transferOwnershipOpen?: boolean
+  transferOwnershipMember?: ProjectMember | null
+  onCloseTransferOwnership?: () => void
+  submitTransferOwnership?: (member: ProjectMember) => void
+  transferOwnershipUnavailableReason?: string | null
 }
 
 export function ProjectMembersManagementModals({
@@ -77,6 +134,16 @@ export function ProjectMembersManagementModals({
   memberRoles,
   setMemberRoles,
   canAssignDelegate,
+  canAddMembers = true,
+  canInviteMembers = true,
+  canUpdateMemberRoles = true,
+  canRemoveMembers = true,
+  canAssignScopedAccess = false,
+  addMembersUnavailableReason,
+  inviteMembersUnavailableReason,
+  updateMemberRolesUnavailableReason,
+  removeMembersUnavailableReason,
+  assignScopedAccessUnavailableReason,
   isMemberEmailValid,
   memberLookupEmail,
   memberLookup,
@@ -86,8 +153,30 @@ export function ProjectMembersManagementModals({
   memberDeliveryMethod,
   setMemberDeliveryMethod,
   memberInviteReveal,
+  customRoleOptions = [],
+  editCustomRoleIds = [],
+  setEditCustomRoleIds,
   resetAddMemberForm,
   submitAddMember,
+  assignmentOpen = false,
+  onCloseAssignment = () => undefined,
+  assignmentPrincipalType = 'user',
+  setAssignmentPrincipalType,
+  assignmentPrincipalIdInput = '',
+  setAssignmentPrincipalIdInput,
+  assignmentUserEmail = '',
+  setAssignmentUserEmail,
+  assignmentUserSearch = '',
+  setAssignmentUserSearch,
+  assignmentUserSearchItems = [],
+  selectedAssignmentUser = null,
+  setSelectedAssignmentUser,
+  assignmentRoleId = '',
+  setAssignmentRoleId,
+  assignmentError = '',
+  setAssignmentError,
+  assignmentSubmitting = false,
+  submitScopedAssignment,
   editRolesOpen,
   editRolesMember,
   editRolesSelection,
@@ -98,6 +187,11 @@ export function ProjectMembersManagementModals({
   removeMemberData,
   onCloseRemoveMember,
   submitRemoveMember,
+  transferOwnershipOpen = false,
+  transferOwnershipMember = null,
+  onCloseTransferOwnership = () => undefined,
+  submitTransferOwnership,
+  transferOwnershipUnavailableReason,
 }: ProjectMembersManagementModalsProps) {
   const trimmedMemberEmail = String(memberEmail || '').trim()
   const lookupSettled = trimmedMemberEmail.length > 0 && trimmedMemberEmail === String(memberLookupEmail || '').trim()
@@ -110,13 +204,36 @@ export function ProjectMembersManagementModals({
   const deliveryOptions = getInvitationDeliveryOptions(resolvedCapabilities)
   const noDeliveryOptions = deliveryOptions.length === 0
   const addActionLabel = memberMode === 'invite' ? 'Create invitation' : 'Add user'
+  const addUnavailableReason = addMembersUnavailableReason || (
+    canAddMembers ? null : `Missing permission ${ProjectPermission.MEMBERS_ADD}`
+  )
+  const inviteUnavailableReason = inviteMembersUnavailableReason || (
+    canInviteMembers ? null : `Missing permission ${ProjectPermission.MEMBERS_INVITE}`
+  )
+  const editRolesUnavailableReason = updateMemberRolesUnavailableReason || (
+    canUpdateMemberRoles ? null : `Missing permission ${ProjectPermission.MEMBERS_UPDATE_ROLE}`
+  )
+  const removeUnavailableReason = removeMembersUnavailableReason || (
+    canRemoveMembers ? null : `Missing permission ${ProjectPermission.MEMBERS_REMOVE}`
+  )
+  const ownershipTransferUnavailableReason = transferOwnershipUnavailableReason || null
+  const assignAccessUnavailableReason = assignScopedAccessUnavailableReason || (
+    canAssignScopedAccess ? null : `Missing permission ${ProjectPermission.MEMBERS_ADD} or ${ProjectPermission.MEMBERS_UPDATE_ROLE}`
+  )
+  const modeUnavailableReason = memberMode === 'direct-add'
+    ? addUnavailableReason
+    : memberMode === 'invite'
+      ? inviteUnavailableReason
+      : null
+  const lacksModePermission = Boolean(modeUnavailableReason)
   const addActionDisabled =
     !isMemberEmailValid ||
     (isMemberEmailValid && !lookupSettled) ||
     (lookupSettled && memberLookupLoading) ||
     memberCapabilitiesLoading ||
     memberMode === 'existing-member' ||
-    (memberMode === 'invite' && noDeliveryOptions)
+    (memberMode === 'invite' && noDeliveryOptions) ||
+    lacksModePermission
   const showDeliveryMethod = memberMode === 'invite' && !noDeliveryOptions
   const statusNotice = (() => {
     if (memberLookupLoading && showResolvedState) {
@@ -128,6 +245,14 @@ export function ProjectMembersManagementModals({
     }
 
     if (memberMode === 'direct-add' && memberTargetUser && !memberLookupLoading) {
+      if (!canAddMembers) {
+        return {
+          kind: 'warning' as const,
+          title: 'Cannot add user directly',
+          subtitle: addUnavailableReason || 'Your role can search users, but cannot add existing users to this project.',
+        }
+      }
+
       return {
         kind: 'success' as const,
         title: 'Existing user found',
@@ -144,6 +269,14 @@ export function ProjectMembersManagementModals({
     }
 
     if (memberMode === 'invite' && trimmedMemberEmail && isMemberEmailValid && !memberLookupLoading) {
+      if (!canInviteMembers) {
+        return {
+          kind: 'warning' as const,
+          title: 'Cannot create invitation',
+          subtitle: inviteUnavailableReason || 'Your role can search users, but cannot invite new users to this project.',
+        }
+      }
+
       if (noDeliveryOptions) {
         return {
           kind: 'warning' as const,
@@ -179,21 +312,39 @@ export function ProjectMembersManagementModals({
   })()
   const memberAccess = getProjectAccessSelection(memberRoles)
   const editAccess = getProjectAccessSelection(editRolesSelection)
+  const assignableCustomRoles = customRoleOptions.filter((role) => role.kind === 'custom' && role.scope === 'project' && role.isAssignable && !role.isArchived)
+  const assignableScopedRoles = customRoleOptions.filter((role) => role.scope === 'project' && role.isAssignable && !role.isArchived)
+  const assignmentPrincipalId = assignmentPrincipalType === 'user'
+    ? selectedAssignmentUser?.id || ''
+    : assignmentPrincipalIdInput.trim()
 
   const updateMemberBaseRole = (baseRole: ProjectBaseAccessRole) => {
+    if (modeUnavailableReason) return
     setMemberRoles(composeProjectRoles(baseRole, canAssignDelegate && memberAccess.hasDelegateAccess))
   }
 
   const updateMemberDelegateAccess = (checked: boolean) => {
+    if (modeUnavailableReason) return
     setMemberRoles(composeProjectRoles(memberAccess.baseRole, canAssignDelegate && checked))
   }
 
   const updateEditBaseRole = (baseRole: ProjectBaseAccessRole) => {
+    if (editRolesUnavailableReason) return
     setEditRolesSelection(composeProjectRoles(baseRole, canAssignDelegate && editAccess.hasDelegateAccess))
   }
 
   const updateEditDelegateAccess = (checked: boolean) => {
+    if (editRolesUnavailableReason) return
     setEditRolesSelection(composeProjectRoles(editAccess.baseRole, canAssignDelegate && checked))
+  }
+
+  const toggleEditCustomRole = (roleId: string, checked: boolean) => {
+    if (editRolesUnavailableReason) return
+    if (!setEditCustomRoleIds) return
+    setEditCustomRoleIds(checked
+      ? Array.from(new Set([...editCustomRoleIds, roleId]))
+      : editCustomRoleIds.filter((id) => id !== roleId)
+    )
   }
 
   return (
@@ -268,6 +419,7 @@ export function ProjectMembersManagementModals({
                       id="member-base-access"
                       labelText="Base access"
                       value={memberAccess.baseRole}
+                      disabled={Boolean(modeUnavailableReason)}
                       onChange={(e: any) => updateMemberBaseRole(e.target.value as ProjectBaseAccessRole)}
                     >
                       {projectBaseAccessOptions.map((option) => (
@@ -284,6 +436,7 @@ export function ProjectMembersManagementModals({
                           id="member-delegate-access"
                           labelText="Also allow managing members and project settings"
                           checked={memberAccess.hasDelegateAccess}
+                          disabled={Boolean(modeUnavailableReason)}
                           onChange={(_, { checked }) => updateMemberDelegateAccess(Boolean(checked))}
                         />
                         <div style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary, #525252)' }}>
@@ -294,6 +447,26 @@ export function ProjectMembersManagementModals({
                   </div>
                 </div>
 
+                {assignableCustomRoles.length > 0 && memberMode === 'direct-add' ? (
+                  <InlineNotification
+                    lowContrast
+                    kind="info"
+                    title="Scoped access"
+                    subtitle="Use Assign access from the members table to grant custom or system RBAC roles to existing users, groups, API clients, or service accounts."
+                    hideCloseButton
+                  />
+                ) : null}
+
+                {assignableCustomRoles.length > 0 && memberMode === 'invite' ? (
+                  <InlineNotification
+                    lowContrast
+                    kind="info"
+                    title="Custom roles"
+                    subtitle="Custom roles can be assigned after the invited user accepts and appears in the members table."
+                    hideCloseButton
+                  />
+                ) : null}
+
                 {showDeliveryMethod ? (
                   <div>
                     <div style={{ fontSize: 'var(--cds-label-01-font-size, 0.75rem)', marginBottom: 'var(--spacing-3)' }}>Delivery</div>
@@ -302,7 +475,7 @@ export function ProjectMembersManagementModals({
                       labelText="Delivery Method"
                       value={memberDeliveryMethod}
                       onChange={(e: any) => setMemberDeliveryMethod(e.target.value as 'email' | 'manual')}
-                      disabled={memberCapabilitiesLoading}
+                      disabled={memberCapabilitiesLoading || Boolean(modeUnavailableReason)}
                     >
                       {deliveryOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value} text={option.text} />
@@ -316,17 +489,150 @@ export function ProjectMembersManagementModals({
         </InvitationFlowModal>
       )}
 
+      {assignmentOpen && (
+        <ComposedModal open size="sm" onClose={onCloseAssignment}>
+          <ModalHeader label="Project access" title="Assign access" closeModal={onCloseAssignment} />
+          <ModalBody>
+            <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
+              {assignmentError ? (
+                <InlineNotification kind="error" title="Error" subtitle={assignmentError} lowContrast hideCloseButton />
+              ) : null}
+              {assignAccessUnavailableReason ? (
+                <InlineNotification kind="warning" title="Access assignment unavailable" subtitle={assignAccessUnavailableReason} lowContrast hideCloseButton />
+              ) : null}
+
+              <Select
+                id="project-scoped-assignment-principal-type"
+                labelText="Principal type"
+                value={assignmentPrincipalType}
+                onChange={(event: any) => {
+                  setAssignmentPrincipalType?.(event.target.value as AuthzPrincipalType)
+                  setAssignmentPrincipalIdInput?.('')
+                  setAssignmentUserEmail?.('')
+                  setAssignmentUserSearch?.('')
+                  setSelectedAssignmentUser?.(null)
+                  setAssignmentError?.('')
+                }}
+                disabled={assignmentSubmitting || Boolean(assignAccessUnavailableReason)}
+              >
+                <SelectItem value="user" text="User" />
+                <SelectItem value="group" text="Group" />
+                <SelectItem value="api_client" text="API client" />
+                <SelectItem value="service_account" text="Service account" />
+              </Select>
+
+              {assignmentPrincipalType === 'user' ? (
+                <>
+                  <UserLookupEmailField
+                    id="project-scoped-assignment-user-search"
+                    labelText="User"
+                    placeholder="Search existing users by email"
+                    value={assignmentUserEmail}
+                    searchValue={assignmentUserSearch}
+                    suggestionItems={assignmentUserSearchItems}
+                    selectedItem={selectedAssignmentUser}
+                    disabled={assignmentSubmitting || Boolean(assignAccessUnavailableReason)}
+                    onChange={(next) => {
+                      setAssignmentUserEmail?.(next)
+                      setAssignmentUserSearch?.(next)
+                      if (selectedAssignmentUser && next.trim().toLowerCase() !== selectedAssignmentUser.email.toLowerCase()) {
+                        setSelectedAssignmentUser?.(null)
+                      }
+                    }}
+                    onSelect={(item) => {
+                      setSelectedAssignmentUser?.(item)
+                      setAssignmentUserEmail?.(item.email)
+                      setAssignmentUserSearch?.(item.email)
+                      setAssignmentError?.('')
+                    }}
+                  />
+                  <div style={{ marginTop: 'var(--spacing-2)', fontSize: '0.75rem', color: 'var(--cds-text-secondary, #525252)' }}>
+                    Scoped user assignments require an existing platform user.
+                  </div>
+                </>
+              ) : (
+                <TextInput
+                  id="project-scoped-assignment-principal-id"
+                  labelText={`${ASSIGNMENT_PRINCIPAL_TYPE_LABELS[assignmentPrincipalType]} ID`}
+                  value={assignmentPrincipalIdInput}
+                  placeholder={
+                    assignmentPrincipalType === 'group'
+                      ? 'group id'
+                      : assignmentPrincipalType === 'api_client'
+                        ? 'api client id'
+                        : 'service account id'
+                  }
+                  helperText="Use the principal identifier from Access Control."
+                  disabled={assignmentSubmitting || Boolean(assignAccessUnavailableReason)}
+                  onChange={(event: any) => {
+                    setAssignmentPrincipalIdInput?.(String(event.target.value || ''))
+                    setAssignmentError?.('')
+                  }}
+                />
+              )}
+
+              <Select
+                id="project-scoped-assignment-role"
+                labelText="Role"
+                value={assignmentRoleId}
+                onChange={(event: any) => {
+                  setAssignmentRoleId?.(String(event.target.value || ''))
+                  setAssignmentError?.('')
+                }}
+                disabled={assignmentSubmitting || Boolean(assignAccessUnavailableReason)}
+              >
+                <SelectItem value="" text="Select role" />
+                {assignableScopedRoles.map((role) => (
+                  <SelectItem key={role.id} value={role.id} text={role.name} />
+                ))}
+              </Select>
+              {assignableScopedRoles.length === 0 ? (
+                <InlineNotification kind="info" title="No assignable roles" subtitle="Create assignable project roles in Access Control first." lowContrast hideCloseButton />
+              ) : null}
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button kind="secondary" onClick={onCloseAssignment}>
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              onClick={submitScopedAssignment}
+              disabled={
+                assignmentSubmitting ||
+                Boolean(assignAccessUnavailableReason) ||
+                !assignmentRoleId ||
+                !assignmentPrincipalId
+              }
+            >
+              Assign
+            </Button>
+          </ModalFooter>
+        </ComposedModal>
+      )}
+
       {editRolesOpen && editRolesMember && (
         <ComposedModal data-eg-project-members-roles-modal open size="sm" onClose={onCloseEditRoles}>
           <ModalHeader label="Project members" title="Edit roles" closeModal={onCloseEditRoles} />
           <ModalBody style={{ overflow: 'visible', paddingBottom: 'var(--spacing-7)' }}>
             <div data-eg-project-members-roles>
+              {editRolesUnavailableReason ? (
+                <InlineNotification
+                  lowContrast
+                  kind="warning"
+                  title="Role changes unavailable"
+                  subtitle={editRolesUnavailableReason}
+                  hideCloseButton
+                  style={{ marginBottom: 'var(--spacing-4)' }}
+                />
+              ) : null}
               <div style={{ fontSize: 'var(--cds-label-01-font-size, 0.75rem)', marginBottom: 'var(--spacing-3)' }}>Access</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
                 <Select
                   id="edit-member-base-access"
                   labelText="Base access"
                   value={editAccess.baseRole}
+                  disabled={Boolean(editRolesUnavailableReason)}
                   onChange={(e: any) => updateEditBaseRole(e.target.value as ProjectBaseAccessRole)}
                 >
                   {projectBaseAccessOptions.map((option) => (
@@ -343,12 +649,31 @@ export function ProjectMembersManagementModals({
                       id="edit-member-delegate-access"
                       labelText="Also allow managing members and project settings"
                       checked={editAccess.hasDelegateAccess}
+                      disabled={Boolean(editRolesUnavailableReason)}
                       onChange={(_, { checked }) => updateEditDelegateAccess(Boolean(checked))}
                     />
                     <div style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary, #525252)' }}>
                       {getProjectRoleDescription('delegate')}
                     </div>
                   </>
+                ) : null}
+
+                {assignableCustomRoles.length > 0 ? (
+                  <div>
+                    <div style={{ fontSize: 'var(--cds-label-01-font-size, 0.75rem)', margin: 'var(--spacing-4) 0 var(--spacing-3)' }}>Custom roles</div>
+                    <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+                      {assignableCustomRoles.map((role) => (
+                        <Checkbox
+                          key={role.id}
+                          id={`edit-project-member-custom-role-${role.id}`}
+                          labelText={role.name}
+                          checked={editCustomRoleIds.includes(role.id)}
+                          disabled={Boolean(editRolesUnavailableReason)}
+                          onChange={(_, { checked }) => toggleEditCustomRole(role.id, Boolean(checked))}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -357,7 +682,15 @@ export function ProjectMembersManagementModals({
             <Button kind="secondary" onClick={onCloseEditRoles}>
               Cancel
             </Button>
-            <Button kind="primary" onClick={() => submitUpdateRoles(editRolesMember, editRolesSelection)}>
+            <Button
+              kind="primary"
+              disabled={Boolean(editRolesUnavailableReason)}
+              title={editRolesUnavailableReason ?? undefined}
+              onClick={() => {
+                if (editRolesUnavailableReason) return
+                submitUpdateRoles(editRolesMember, editRolesSelection)
+              }}
+            >
               Save
             </Button>
           </ModalFooter>
@@ -374,6 +707,23 @@ export function ProjectMembersManagementModals({
           confirmText="Remove"
           danger
           showWarning
+          confirmDisabled={Boolean(removeUnavailableReason)}
+          disabledReason={removeUnavailableReason}
+        />
+      )}
+
+      {transferOwnershipOpen && transferOwnershipMember && (
+        <ConfirmModal
+          open
+          onClose={onCloseTransferOwnership}
+          onConfirm={() => submitTransferOwnership?.(transferOwnershipMember)}
+          title="Transfer project ownership"
+          description={`You are about to make ${transferOwnershipMember.user?.email || transferOwnershipMember.userId} the project owner. Your owner role will be removed.`}
+          confirmText="Transfer ownership"
+          danger
+          showWarning
+          confirmDisabled={Boolean(ownershipTransferUnavailableReason)}
+          disabledReason={ownershipTransferUnavailableReason}
         />
       )}
     </>

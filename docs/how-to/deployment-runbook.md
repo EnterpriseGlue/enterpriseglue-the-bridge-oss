@@ -4,6 +4,8 @@ Summary: Operational steps for running EnterpriseGlue with Docker Compose.
 
 Audience: Developers and architects.
 
+This runbook covers the current deployment flow. Target config-bundle validation, apply, reconciliation, readiness, and rollback steps are tracked in [Deploy Authorization Configuration](./deploy-authorization-config.md).
+
 ## Preflight
 - Docker and Docker Compose installed.
 - Ports available (defaults): `8787` (backend), `5173` (frontend), `5432` (postgres).

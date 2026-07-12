@@ -4,6 +4,8 @@ Summary: Configure authentication, admin bootstrap, and SSO providers.
 
 Audience: Developers and architects.
 
+The instructions below describe the current provider-specific setup. The provider-neutral OIDC/SAML/LDAP, entitlement-to-group mapping, JSON bundle, and CI/CD target workflow is tracked in [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md). Do not use its planned APIs until implementation is complete.
+
 ## JWT and Admin Bootstrap
 Required variables:
 - `JWT_SECRET`

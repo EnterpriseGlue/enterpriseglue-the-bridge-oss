@@ -8,7 +8,7 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { z } from 'zod';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireProjectRole } from '@enterpriseglue/shared/middleware/projectAuth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
@@ -17,9 +17,22 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { encrypt } from '@enterpriseglue/shared/services/encryption.js';
 import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
-import { MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js';
+import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const router = Router();
+
+async function hasProjectPermission(req: Request, projectId: string, permission: Permission): Promise<boolean> {
+  return permissionService.hasPermission(permission, {
+    userId: req.user!.userId,
+    platformRole: req.user!.platformRole || (req.user as any).role,
+    resourceType: 'project',
+    resourceId: projectId,
+  });
+}
+
+async function canViewProjectConnection(req: Request, projectId: string): Promise<boolean> {
+  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_VIEW);
+}
 
 // --- Schemas ---
 
@@ -43,10 +56,14 @@ const disconnectSchema = z.object({
 
 // --- GET /git-api/project-connection?projectId=... ---
 
-router.get('/git-api/project-connection', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/project-connection', apiLimiter, requireAuth, requireAction('project.git.repositories.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
   if (!projectId) {
     throw Errors.validation('projectId query parameter is required');
+  }
+
+  if (!(await canViewProjectConnection(req, projectId))) {
+    throw Errors.notFound('Project');
   }
 
   const dataSource = await getDataSource();
@@ -78,7 +95,7 @@ router.get('/git-api/project-connection', apiLimiter, requireAuth, asyncHandler(
 
 // --- POST /git-api/project-connection ---
 
-router.post('/git-api/project-connection', apiLimiter, requireAuth, validateBody(connectSchema), requireProjectRole(MANAGE_ROLES, { projectIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/project-connection', apiLimiter, requireAuth, validateBody(connectSchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const { projectId, providerId, repositoryName, namespace, defaultBranch, token } = req.body;
 
@@ -161,7 +178,7 @@ router.post('/git-api/project-connection', apiLimiter, requireAuth, validateBody
 
 // --- PUT /git-api/project-connection/token ---
 
-router.put('/git-api/project-connection/token', apiLimiter, requireAuth, validateBody(updateTokenSchema), requireProjectRole(MANAGE_ROLES, { projectIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.put('/git-api/project-connection/token', apiLimiter, requireAuth, validateBody(updateTokenSchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const { projectId, token } = req.body;
 
@@ -218,7 +235,7 @@ router.put('/git-api/project-connection/token', apiLimiter, requireAuth, validat
 
 // --- DELETE /git-api/project-connection ---
 
-router.delete('/git-api/project-connection', apiLimiter, requireAuth, validateBody(disconnectSchema), requireProjectRole(MANAGE_ROLES, { projectIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/git-api/project-connection', apiLimiter, requireAuth, validateBody(disconnectSchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const { projectId } = req.body;
 

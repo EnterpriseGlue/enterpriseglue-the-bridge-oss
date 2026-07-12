@@ -34,6 +34,7 @@ export const ProcessInstanceModificationRequest = z.object({
   instructions: z.array(ModificationInstructionSchema).min(1),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
+  annotation: z.string().min(1).max(2000).optional(),
 })
 
 // Async modification for multiple instances by definition
@@ -43,6 +44,7 @@ export const ProcessDefinitionModificationAsyncRequest = z.object({
   processInstanceQuery: z.record(z.string(), z.any()).optional(),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
+  annotation: z.string().min(1).max(2000).optional(),
 })
 
 // Async restart of completed instances by definition

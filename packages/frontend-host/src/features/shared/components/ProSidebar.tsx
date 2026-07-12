@@ -25,6 +25,15 @@ import { useAuth } from '../../../shared/hooks/useAuth'
 import { isMultiTenantEnabled } from '../../../enterprise/extensionRegistry'
 import { apiClient } from '../../../shared/api/client'
 import { STATE_COLORS } from './viewer/viewerConstants'
+import {
+  hasMissionControlSectionAccess,
+  hasMissionControlUiAccess,
+  hasPlatformPermission,
+  MISSION_CONTROL_BATCHES_ENGINE_PERMISSIONS,
+  MISSION_CONTROL_DECISIONS_ENGINE_PERMISSIONS,
+  MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS,
+  PlatformPermission,
+} from '../../../shared/auth/permissions'
 
 // Legacy neon colors (no longer applied; sidebar now uses Carbon theme tokens)
 const NEON_COLORS = {
@@ -48,12 +57,15 @@ export default function ProSidebar() {
   const { pathname } = useLocation()
   const { sidebarOpen, sidebarCollapsed, setSidebarOpen, setSidebarCollapsed } = useLayoutStore()
   const { futuristicMode } = useDashboardThemeStore()
-  const { user } = useAuth()
+  const { user, permissions } = useAuth()
 
-  const canViewMissionControl = Boolean(user?.capabilities?.canViewMissionControl)
-  const canManagePlatformSettings = Boolean(user?.capabilities?.canManagePlatformSettings)
+  const missionControlAllowed = hasMissionControlUiAccess(permissions, user)
+  const canViewProcessesMenu = hasMissionControlSectionAccess(permissions, user, MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS)
+  const canViewDecisionsMenu = hasMissionControlSectionAccess(permissions, user, MISSION_CONTROL_DECISIONS_ENGINE_PERMISSIONS)
+  const canViewBatchesMenu = hasMissionControlSectionAccess(permissions, user, MISSION_CONTROL_BATCHES_ENGINE_PERMISSIONS)
+  const platformSettingsAllowed = hasPlatformPermission(permissions, PlatformPermission.SETTINGS_MANAGE)
   const isMultiTenant = isMultiTenantEnabled()
-  const hideVoyagerForPlatformAdmin = isMultiTenant && canManagePlatformSettings
+  const hideVoyagerForPlatformAdmin = isMultiTenant && platformSettingsAllowed
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
@@ -311,7 +323,7 @@ export default function ProSidebar() {
     }
   }
 
-  if (!inMissionControl || !isMissionControlEnabled || hideVoyagerForPlatformAdmin || !canViewMissionControl) {
+  if (!inMissionControl || !isMissionControlEnabled || hideVoyagerForPlatformAdmin || !missionControlAllowed) {
     return null
   }
 
@@ -360,7 +372,7 @@ export default function ProSidebar() {
         }}
         closeOnClick={effectiveCollapsed}
       > 
-        {isProcessesEnabled && (
+        {isProcessesEnabled && canViewProcessesMenu && (
           <MenuItem
             icon={<DecisionTree size={effectiveCollapsed ? 20 : 16} style={getNeonIconStyle('green')} />}
             active={effectivePathname.startsWith('/mission-control/processes')}
@@ -370,7 +382,7 @@ export default function ProSidebar() {
             Processes
           </MenuItem>
         )}
-        {isDecisionsEnabled && (
+        {isDecisionsEnabled && canViewDecisionsMenu && (
           <MenuItem
             icon={<DecisionNode size={effectiveCollapsed ? 20 : 16} style={getNeonIconStyle('green')} />}
             active={effectivePathname.startsWith('/mission-control/decisions')}
@@ -380,7 +392,7 @@ export default function ProSidebar() {
             Decisions
           </MenuItem>
         )}
-        {isBatchesEnabled && (
+        {isBatchesEnabled && canViewBatchesMenu && (
           <MenuItem
             icon={<BatchJob size={effectiveCollapsed ? 20 : 16} style={getNeonIconStyle('green')} />}
             active={effectivePathname.startsWith('/mission-control/batches')}

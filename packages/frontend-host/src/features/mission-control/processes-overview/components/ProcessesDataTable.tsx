@@ -17,6 +17,7 @@ import { CompactDataTable } from "../../../../shared/components/ui/compact-data-
 import { STATE_COLORS } from "../../../shared/components/viewer/viewerConstants"
 import { CopyableLink } from '../../shared/components/CopyableLink'
 import { formatDurationMs } from '../../process-instance-detail/components/activityDetailUtils'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 type ProcInst = {
   id: string
@@ -36,6 +37,11 @@ interface ProcessesDataTableProps {
   onRetry: (id: string) => void
   onActivate: (id: string) => Promise<any>
   onSuspend: (id: string) => Promise<any>
+  actionDecisions?: {
+    retry?: UiAuthzDecision
+    suspension?: UiAuthzDecision
+    terminate?: UiAuthzDecision
+  }
   selectedMap: Record<string, boolean>
   setSelectedMap: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   retryingMap: Record<string, boolean>
@@ -51,6 +57,7 @@ export function ProcessesDataTable({
   onRetry,
   onActivate,
   onSuspend,
+  actionDecisions,
   selectedMap,
   setSelectedMap,
   retryingMap,
@@ -59,6 +66,16 @@ export function ProcessesDataTable({
   processNameMap = {},
   searchValue,
 }: ProcessesDataTableProps) {
+  const retryDeniedReason = actionDecisions?.retry && !actionDecisions.retry.allowed
+    ? actionDecisions.retry.reason || 'Action unavailable'
+    : null
+  const suspensionDeniedReason = actionDecisions?.suspension && !actionDecisions.suspension.allowed
+    ? actionDecisions.suspension.reason || 'Action unavailable'
+    : null
+  const terminateDeniedReason = actionDecisions?.terminate && !actionDecisions.terminate.allowed
+    ? actionDecisions.terminate.reason || 'Action unavailable'
+    : null
+
   const columns: ColumnDef<ProcInst>[] = [
     {
       id: "select",
@@ -178,7 +195,8 @@ export function ProcessesDataTable({
       accessorKey: "id",
       header: "Instance ID",
       cell: ({ row }) => {
-        const fullKey = row.original.id
+        const fullKey = row.original.id ? String(row.original.id) : ''
+        if (!fullKey) return "--"
         const truncatedKey =
           fullKey.length > 19
             ? `${fullKey.substring(0, 8)}...${fullKey.substring(fullKey.length - 6)}`
@@ -317,6 +335,8 @@ export function ProcessesDataTable({
                   hasIconOnly
                   size="sm"
                   kind="ghost"
+                  disabled={!!retryDeniedReason}
+                  title={retryDeniedReason || undefined}
                   renderIcon={Renew}
                   iconDescription="Retry"
                   onClick={() => onRetry(inst.id)}
@@ -332,6 +352,8 @@ export function ProcessesDataTable({
                     hasIconOnly
                     size="sm"
                     kind="ghost"
+                    disabled={!!suspensionDeniedReason}
+                    title={suspensionDeniedReason || undefined}
                     renderIcon={Play}
                     iconDescription="Activate"
                     onClick={() => onActivate(inst.id)}
@@ -342,6 +364,8 @@ export function ProcessesDataTable({
                     hasIconOnly
                     size="sm"
                     kind="ghost"
+                    disabled={!!suspensionDeniedReason}
+                    title={suspensionDeniedReason || undefined}
                     renderIcon={Pause}
                     iconDescription="Suspend"
                     onClick={() => onSuspend(inst.id)}
@@ -356,6 +380,8 @@ export function ProcessesDataTable({
                   hasIconOnly
                   size="sm"
                   kind="danger--ghost"
+                  disabled={!!terminateDeniedReason}
+                  title={terminateDeniedReason || undefined}
                   renderIcon={TrashCan}
                   iconDescription="Cancel"
                   onClick={() => onTerminate(inst.id)}

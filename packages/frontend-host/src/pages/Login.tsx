@@ -13,6 +13,8 @@ import { toSafeInternalPath } from '../utils/safeNavigation';
 import { redirectTo } from '../utils/redirect';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
 
+const DEFAULT_TENANT_SLUG = 'default';
+
 // SSO Provider type from backend
 interface SsoProviderButton {
   id: string;
@@ -269,7 +271,7 @@ export default function Login() {
     const params = new URLSearchParams(location.search);
     if (params.get('error')) return;
 
-    const fallback = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : '/';
+    const fallback = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : `/t/${DEFAULT_TENANT_SLUG}/`;
     const fromRaw = (location.state as any)?.from?.pathname;
     navigate(toSafeInternalPath(fromRaw, fallback), { replace: true });
   }, [isAuthLoading, isAuthenticated, location.search, location.state, navigate, tenantSlug]);
@@ -356,7 +358,7 @@ export default function Login() {
       }
 
       // Redirect to the page they tried to visit or home
-      const fallback = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : '/';
+      const fallback = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : `/t/${DEFAULT_TENANT_SLUG}/`;
       const fromRaw = (location.state as any)?.from?.pathname;
       navigate(toSafeInternalPath(fromRaw, fallback), { replace: true });
     } catch (err) {

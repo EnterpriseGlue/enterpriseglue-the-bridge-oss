@@ -27,7 +27,16 @@ describe('tenant middleware', () => {
   it('resolves tenant context from default when multiTenant disabled', async () => {
     await resolveTenantContext()(req as Request, res as Response, next);
 
-    expect(req.tenant).toEqual({ tenantId: 'default-tenant-id', tenantSlug: 'default' });
+    expect(req.tenant).toEqual({ tenantId: 'tenant-default', tenantSlug: 'default' });
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('preserves an enterprise-resolved tenant context', async () => {
+    req.tenant = { tenantId: 'tenant-1', tenantSlug: 'acme' };
+
+    await resolveTenantContext()(req as Request, res as Response, next);
+
+    expect(req.tenant).toEqual({ tenantId: 'tenant-1', tenantSlug: 'acme' });
     expect(next).toHaveBeenCalled();
   });
 

@@ -281,16 +281,18 @@ describe('batches API', () => {
 
       const result = await createBulkDeleteBatch(['i1', 'i2'], 'Custom reason');
 
-      expect(apiClient.post).toHaveBeenCalledWith(
-        '/mission-control-api/batches/process-instances/delete',
-        {
-          processInstanceIds: ['i1', 'i2'],
-          deleteReason: 'Custom reason',
-          skipCustomListeners: true,
-          skipIoMappings: true,
-        },
-        { credentials: 'include' }
-      );
+	      expect(apiClient.post).toHaveBeenCalledWith(
+	        '/mission-control-api/batches/process-instances/delete',
+	        {
+	          processInstanceIds: ['i1', 'i2'],
+	          deleteReason: 'Custom reason',
+	          auditReason: 'Custom reason',
+	          skipCustomListeners: true,
+	          skipIoMappings: true,
+	          engineId: undefined,
+	        },
+	        { credentials: 'include' }
+	      );
       expect(result).toEqual({ success: true });
     });
 
@@ -301,14 +303,16 @@ describe('batches API', () => {
 
       expect(apiClient.post).toHaveBeenCalledWith(
         '/mission-control-api/batches/process-instances/delete',
-        {
-          processInstanceIds: ['i1'],
-          deleteReason: 'Canceled via Mission Control',
-          skipCustomListeners: true,
-          skipIoMappings: true,
-        },
-        { credentials: 'include' }
-      );
+	        {
+	          processInstanceIds: ['i1'],
+	          deleteReason: 'Canceled via Mission Control',
+	          auditReason: 'Canceled via Mission Control',
+	          skipCustomListeners: true,
+	          skipIoMappings: true,
+	          engineId: undefined,
+	        },
+	        { credentials: 'include' }
+	      );
     });
   });
 

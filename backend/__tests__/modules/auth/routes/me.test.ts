@@ -92,4 +92,49 @@ describe('GET /api/auth/me', () => {
     expect(response.status).toBe(200);
     expect(response.body.logoUrl).toBe('https://example.com/logo.png');
   });
+
+  it('returns authenticated platform settings with engine onboarding mode', async () => {
+    const mockSettings = {
+      id: 'default',
+      syncPushEnabled: true,
+      syncPullEnabled: false,
+      gitProjectTokenSharingEnabled: false,
+      defaultDeployRoles: JSON.stringify(['owner', 'delegate', 'operator']),
+      engineOnboardingMode: 'external_only',
+      projectEngineTargetMode: 'hybrid',
+      ssoAllEnginesAssignmentMappingsEnabled: false,
+      ssoEngineOwnerAssignmentMappingsEnabled: true,
+      ssoEngineDelegateAssignmentMappingsEnabled: false,
+      ssoRegexClaimMappingsEnabled: true,
+      ssoSecretViewMappingsEnabled: true,
+      ssoUnredactedAuditMappingsEnabled: false,
+      ssoPermanentDeleteMappingsEnabled: false,
+    };
+
+    const settingsRepo = { findOneBy: vi.fn().mockResolvedValue(mockSettings) };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return settingsRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app).get('/api/auth/platform-settings');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      syncPushEnabled: true,
+      defaultDeployRoles: ['owner', 'delegate', 'operator'],
+      engineOnboardingMode: 'external_only',
+      projectEngineTargetMode: 'hybrid',
+      ssoAllEnginesAssignmentMappingsEnabled: false,
+      ssoEngineOwnerAssignmentMappingsEnabled: true,
+      ssoEngineDelegateAssignmentMappingsEnabled: false,
+      ssoRegexClaimMappingsEnabled: true,
+      ssoSecretViewMappingsEnabled: true,
+      ssoUnredactedAuditMappingsEnabled: false,
+      ssoPermanentDeleteMappingsEnabled: false,
+    });
+  });
 });

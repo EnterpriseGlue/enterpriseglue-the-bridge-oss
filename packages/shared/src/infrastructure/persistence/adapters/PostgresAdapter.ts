@@ -5,29 +5,31 @@ import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, RbacRolePermission, SsoAssignmentMapping, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineSet, EngineSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 } from '../entities/index.js';
 
 const entities = [
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, RbacRolePermission, SsoAssignmentMapping, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineSet, EngineSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 ];

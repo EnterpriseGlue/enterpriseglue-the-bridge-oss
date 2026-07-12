@@ -107,6 +107,7 @@ export function requirePermission(options: RequirePermissionOptions) {
       // Build permission context
       const context: PermissionContext = {
         userId,
+        tenantId: req.tenant?.tenantId || null,
         platformRole,
       };
 
@@ -124,7 +125,7 @@ export function requirePermission(options: RequirePermissionOptions) {
               context.projectRole = membership.role;
             }
           } else if (resource.type === 'engine') {
-            const role = await engineService.getEngineRole(userId, resource.id);
+            const role = await engineService.getEngineRole(userId, resource.id, req.tenant?.tenantId || null);
             if (role) {
               context.engineRole = role;
             }
@@ -173,6 +174,7 @@ export function requireAllPermissions(
 
       const context: PermissionContext = {
         userId,
+        tenantId: req.tenant?.tenantId || null,
         platformRole,
       };
 
@@ -186,7 +188,7 @@ export function requireAllPermissions(
             const membership = await projectMemberService.getMembership(resource.id, userId);
             if (membership) context.projectRole = membership.role;
           } else if (resource.type === 'engine') {
-            const role = await engineService.getEngineRole(userId, resource.id);
+            const role = await engineService.getEngineRole(userId, resource.id, req.tenant?.tenantId || null);
             if (role) context.engineRole = role;
           }
         }
@@ -232,6 +234,7 @@ export function requireAnyPermission(
 
       const context: PermissionContext = {
         userId,
+        tenantId: req.tenant?.tenantId || null,
         platformRole,
       };
 
@@ -245,7 +248,7 @@ export function requireAnyPermission(
             const membership = await projectMemberService.getMembership(resource.id, userId);
             if (membership) context.projectRole = membership.role;
           } else if (resource.type === 'engine') {
-            const role = await engineService.getEngineRole(userId, resource.id);
+            const role = await engineService.getEngineRole(userId, resource.id, req.tenant?.tenantId || null);
             if (role) context.engineRole = role;
           }
         }

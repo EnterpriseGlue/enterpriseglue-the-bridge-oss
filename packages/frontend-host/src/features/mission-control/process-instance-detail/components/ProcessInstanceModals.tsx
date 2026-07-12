@@ -2,6 +2,7 @@ import React from 'react'
 import AlertModal from '../../../../shared/components/AlertModal'
 import { EditVariableModal, AddVariableModal, BulkUploadVariablesModal, VariableHistoryModal } from './VariableModals'
 import type { VariableHistoryEntry, VariableHistoryTarget } from './types'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import {
   IncidentDetailsModal,
   ModificationIntroModal,
@@ -29,6 +30,7 @@ interface ProcessInstanceModalsProps {
   variableHistoryEntries: VariableHistoryEntry[]
   variableHistoryLoading: boolean
   variableHistoryError: string | null
+  variableHistoryReadDecision?: UiAuthzDecision | null
   closeVariableHistory: () => void
   // Add variable
   addVariableOpen: boolean
@@ -66,7 +68,7 @@ interface ProcessInstanceModalsProps {
   terminateConfirmOpen: boolean
   instanceId: string
   setTerminateConfirmOpen: (open: boolean) => void
-  onTerminate: (id: string) => Promise<void>
+  onTerminate: (id: string, reason: string) => Promise<void>
   // Retry modal
   retryModalOpen: boolean
   retryBusy: boolean
@@ -75,6 +77,7 @@ interface ProcessInstanceModalsProps {
   retrySelectionMap: Record<string, boolean>
   retryDueMode: 'keep' | 'set'
   retryDueInput: string
+  retryDecision?: UiAuthzDecision | null
   setRetryModalOpen: (open: boolean) => void
   setRetrySelectionMap: (next: Record<string, boolean>) => void
   setRetryDueMode: (mode: 'keep' | 'set') => void
@@ -104,6 +107,7 @@ export function ProcessInstanceModals({
   variableHistoryEntries,
   variableHistoryLoading,
   variableHistoryError,
+  variableHistoryReadDecision,
   closeVariableHistory,
   addVariableOpen,
   addVariableName,
@@ -144,6 +148,7 @@ export function ProcessInstanceModals({
   retrySelectionMap,
   retryDueMode,
   retryDueInput,
+  retryDecision,
   setRetryModalOpen,
   setRetrySelectionMap,
   setRetryDueMode,
@@ -175,6 +180,7 @@ export function ProcessInstanceModals({
         entries={variableHistoryEntries}
         isLoading={variableHistoryLoading}
         error={variableHistoryError}
+        readDecision={variableHistoryReadDecision}
         onClose={closeVariableHistory}
       />
 
@@ -239,6 +245,7 @@ export function ProcessInstanceModals({
         retrySelectionMap={retrySelectionMap}
         retryDueMode={retryDueMode}
         retryDueInput={retryDueInput}
+        retryDecision={retryDecision}
         onClose={() => {
           setRetryModalOpen(false)
           setRetrySelectionMap({})

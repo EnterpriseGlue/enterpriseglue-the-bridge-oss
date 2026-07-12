@@ -10,6 +10,10 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ssoClaimsMappingService, type SsoClaims } from './platform-admin/SsoClaimsMappingService.js';
+import { ssoAssignmentMappingService } from './platform-admin/SsoAssignmentMappingService.js';
+import { ssoGroupMappingService } from './platform-admin/SsoGroupMappingService.js';
+import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIdentityService.js';
+import { ssoSyncDiagnosticsService, type SsoSyncCounts } from './platform-admin/SsoSyncDiagnosticsService.js';
 
 /**
  * Microsoft user info from ID token
@@ -138,13 +142,43 @@ export function extractUserInfo(idTokenClaims: any): MicrosoftUserInfo {
   };
 }
 
+async function syncMicrosoftAuthorizationForUser(
+  manager: any,
+  userId: string,
+  userInfo: MicrosoftUserInfo,
+  ssoClaims: SsoClaims
+): Promise<SsoSyncCounts> {
+  await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
+    providerId: 'microsoft',
+    providerType: 'microsoft',
+    providerSubject: userInfo.oid,
+    subjectClaim: 'oid',
+    providerTenantId: userInfo.tid,
+    userId,
+    email: userInfo.email,
+    displayName: userInfo.name || null,
+    firstName: userInfo.given_name || null,
+    lastName: userInfo.family_name || null,
+    claims: ssoClaims,
+  });
+  const groupSync = await ssoGroupMappingService.syncMembershipsForUserWithManager(manager, userId, ssoClaims, 'microsoft');
+  const assignmentSync = await ssoAssignmentMappingService.syncAssignmentsForUserWithManager(manager, userId, ssoClaims, 'microsoft');
+  return {
+    groupMembershipsCreated: groupSync.created,
+    groupMembershipsUpdated: groupSync.updated,
+    groupMembershipsRemoved: groupSync.removed,
+    assignmentsCreated: assignmentSync.created,
+    assignmentsUpdated: assignmentSync.updated,
+    assignmentsRemoved: assignmentSync.removed,
+  };
+}
+
 /**
  * Create or update user from Microsoft authentication
  * Just-In-Time (JIT) provisioning with SSO claims-based role mapping
  */
 export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
   const dataSource = await getDataSource();
-  const userRepo = dataSource.getRepository(User);
   const now = Date.now();
 
   // Resolve platform role from SSO claims (groups, roles, email domain)
@@ -154,7 +188,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
     roles: userInfo.roles || [],
   };
   const resolvedRole = await ssoClaimsMappingService.resolveRoleFromClaims(ssoClaims, 'microsoft');
-  
+
   logger.info('[Microsoft Auth] SSO claims role resolution:', {
     email: userInfo.email,
     groups: userInfo.groups,
@@ -162,91 +196,131 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
     resolvedRole,
   });
 
-  // Check if user exists by entraId
-  const existingByEntraId = await userRepo.findOneBy({ entraId: userInfo.oid });
-
-  if (existingByEntraId) {
-    // User exists - update profile and last login
-    const user = existingByEntraId;
-    // Use SSO-resolved role, but don't downgrade admins (manual admin override persists)
-    const currentRole = user.platformRole || 'user';
-    const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
-    
-    await userRepo.update({ id: user.id }, {
+  const runId = await ssoSyncDiagnosticsService.startRun({
+    providerId: 'microsoft',
+    trigger: 'login',
+    details: {
       email: userInfo.email,
-      entraEmail: userInfo.email,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-      platformRole,
-      lastLoginAt: now,
-      updatedAt: now,
-    });
-
-    return {
-      ...user,
-      email: userInfo.email,
-      platformRole,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-    };
-  }
-
-  // Check if user exists by email (might be migrating local user to Microsoft)
-  const existingByEmail = await userRepo.findOneBy({ email: userInfo.email });
-
-  if (existingByEmail) {
-    // Email exists but not linked to Microsoft account - link the accounts
-    const user = existingByEmail;
-    // Use SSO-resolved role, but don't downgrade admins
-    const currentRole = user.platformRole || 'user';
-    const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
-    
-    await userRepo.update({ id: user.id }, {
-      authProvider: 'microsoft',
-      entraId: userInfo.oid,
-      entraEmail: userInfo.email,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-      platformRole,
-      lastLoginAt: now,
-      updatedAt: now,
-      // Clear password-related fields since they're using Microsoft now
-      mustResetPassword: false,
-      failedLoginAttempts: 0,
-      lockedUntil: null,
-    });
-
-    return {
-      ...user,
-      authProvider: 'microsoft',
-      entraId: userInfo.oid,
-      platformRole,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-    };
-  }
-
-  // New user - create account with SSO-resolved role
-  const userId = generateId();
-  
-  await userRepo.insert({
-    id: userId,
-    email: userInfo.email,
-    authProvider: 'microsoft',
-    passwordHash: null, // Microsoft users don't have passwords
-    entraId: userInfo.oid,
-    entraEmail: userInfo.email,
-    firstName: userInfo.given_name || null,
-    lastName: userInfo.family_name || null,
-    platformRole: resolvedRole,
-    isActive: true,
-    mustResetPassword: false, // Microsoft handles password policy
-    failedLoginAttempts: 0,
-    createdAt: now,
-    updatedAt: now,
-    lastLoginAt: now,
+      groupsCount: ssoClaims.groups?.length ?? 0,
+      rolesCount: ssoClaims.roles?.length ?? 0,
+    },
   });
+  let syncCounts: SsoSyncCounts = {};
 
-  const newUser = await userRepo.findOneBy({ id: userId });
-  return newUser;
+  try {
+    const result = await dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+
+      // Check if user exists by entraId
+      const existingByEntraId = await userRepo.findOneBy({ entraId: userInfo.oid });
+
+      if (existingByEntraId) {
+        // User exists - update profile and last login
+        const user = existingByEntraId;
+        // Use SSO-resolved role, but don't downgrade admins (manual admin override persists)
+        const currentRole = user.platformRole || 'user';
+        const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
+
+        await userRepo.update({ id: user.id }, {
+          email: userInfo.email,
+          entraEmail: userInfo.email,
+          firstName: userInfo.given_name || user.firstName,
+          lastName: userInfo.family_name || user.lastName,
+          platformRole,
+          lastLoginAt: now,
+          updatedAt: now,
+        });
+
+        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims);
+
+        return {
+          ...user,
+          email: userInfo.email,
+          platformRole,
+          firstName: userInfo.given_name || user.firstName,
+          lastName: userInfo.family_name || user.lastName,
+        };
+      }
+
+      // Check if user exists by email (might be migrating local user to Microsoft)
+      const existingByEmail = await userRepo.findOneBy({ email: userInfo.email });
+
+      if (existingByEmail) {
+        // Email exists but not linked to Microsoft account - link the accounts
+        const user = existingByEmail;
+        // Use SSO-resolved role, but don't downgrade admins
+        const currentRole = user.platformRole || 'user';
+        const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
+
+        await userRepo.update({ id: user.id }, {
+          authProvider: 'microsoft',
+          entraId: userInfo.oid,
+          entraEmail: userInfo.email,
+          firstName: userInfo.given_name || user.firstName,
+          lastName: userInfo.family_name || user.lastName,
+          platformRole,
+          lastLoginAt: now,
+          updatedAt: now,
+          // Clear password-related fields since they're using Microsoft now
+          mustResetPassword: false,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        });
+
+        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims);
+
+        return {
+          ...user,
+          authProvider: 'microsoft',
+          entraId: userInfo.oid,
+          platformRole,
+          firstName: userInfo.given_name || user.firstName,
+          lastName: userInfo.family_name || user.lastName,
+        };
+      }
+
+      // New user - create account with SSO-resolved role
+      const userId = generateId();
+
+      await userRepo.insert({
+        id: userId,
+        email: userInfo.email,
+        authProvider: 'microsoft',
+        passwordHash: null, // Microsoft users don't have passwords
+        entraId: userInfo.oid,
+        entraEmail: userInfo.email,
+        firstName: userInfo.given_name || null,
+        lastName: userInfo.family_name || null,
+        platformRole: resolvedRole,
+        isActive: true,
+        mustResetPassword: false, // Microsoft handles password policy
+        failedLoginAttempts: 0,
+        createdAt: now,
+        updatedAt: now,
+        lastLoginAt: now,
+      });
+
+      const newUser = await userRepo.findOneBy({ id: userId });
+      syncCounts = await syncMicrosoftAuthorizationForUser(manager, userId, userInfo, ssoClaims);
+      return newUser;
+    });
+
+    await ssoSyncDiagnosticsService.completeRun(runId, {
+      providerId: 'microsoft',
+      userId: result?.id ?? null,
+      ...syncCounts,
+      details: {
+        email: userInfo.email,
+      },
+    });
+    return result;
+  } catch (error) {
+    await ssoSyncDiagnosticsService.failRun(runId, error, {
+      providerId: 'microsoft',
+      details: {
+        email: userInfo.email,
+      },
+    });
+    throw error;
+  }
 }

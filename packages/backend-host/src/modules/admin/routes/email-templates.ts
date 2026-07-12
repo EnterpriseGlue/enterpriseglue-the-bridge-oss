@@ -8,7 +8,7 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -16,7 +16,6 @@ import { EmailTemplate } from '@enterpriseglue/shared/infrastructure/persistence
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
-import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -36,7 +35,7 @@ const updateEmailPlatformNameSchema = z.object({
   emailPlatformName: z.string().min(1).max(120),
 });
 
-router.get('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (_req: Request, res: Response) => {
+router.get('/api/admin/email-platform-name', apiLimiter, requireAuth, requireAction('platform.settings.read'), asyncHandler(async (_req: Request, res: Response) => {
   const dataSource = await getDataSource();
   const settingsRepo = dataSource.getRepository(PlatformSettings);
   const settings = await settingsRepo.findOne({
@@ -47,7 +46,7 @@ router.get('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePer
   res.json({ emailPlatformName: settings?.emailPlatformName || 'EnterpriseGlue' });
 }));
 
-router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateBody(updateEmailPlatformNameSchema), asyncHandler(async (req: Request, res: Response) => {
+router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requireAction('platform.settings.manage'), validateBody(updateEmailPlatformNameSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const body = req.body;
     const dataSource = await getDataSource();
@@ -85,7 +84,7 @@ router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requirePer
  * GET /api/admin/email-templates
  * List all email templates (platform admin only)
  */
-router.get('/api/admin/email-templates', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/api/admin/email-templates', apiLimiter, requireAuth, requireAction('platform.settings.read'), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource();
   const templateRepo = dataSource.getRepository(EmailTemplate);
   const templates = await templateRepo.find({
@@ -106,7 +105,7 @@ router.get('/api/admin/email-templates', apiLimiter, requireAuth, requirePermiss
  * GET /api/admin/email-templates/:id
  * Get a single email template (platform admin only)
  */
-router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
+router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireAction('platform.settings.read'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const dataSource = await getDataSource();
   const templateRepo = dataSource.getRepository(EmailTemplate);
@@ -127,7 +126,7 @@ router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePer
  * PATCH /api/admin/email-templates/:id
  * Update an email template (platform admin only)
  */
-router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), validateBody(updateTemplateSchema), asyncHandler(async (req: Request, res: Response) => {
+router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireAction('platform.settings.manage'), validateParams(idParamSchema), validateBody(updateTemplateSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const body = req.body;
@@ -179,7 +178,7 @@ router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireP
  * POST /api/admin/email-templates/:id/reset
  * Reset an email template to default (platform admin only)
  */
-router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, requireAction('platform.settings.manage'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const dataSource = await getDataSource();
   const templateRepo = dataSource.getRepository(EmailTemplate);
@@ -457,7 +456,7 @@ router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, req
  * POST /api/admin/email-templates/:id/preview
  * Preview an email template with sample data (platform admin only)
  */
-router.post('/api/admin/email-templates/:id/preview', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/admin/email-templates/:id/preview', apiLimiter, requireAuth, requireAction('platform.settings.read'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const { variables } = req.body as { variables?: Record<string, string> };
   const dataSource = await getDataSource();

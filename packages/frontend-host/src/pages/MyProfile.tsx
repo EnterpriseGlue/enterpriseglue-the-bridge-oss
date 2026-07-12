@@ -12,11 +12,15 @@ import { useAuth } from '../shared/hooks/useAuth';
 import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
 import { useToast } from '../shared/notifications/ToastProvider';
+import {
+  ADMIN_NAV_PLATFORM_PERMISSIONS,
+  hasAnyPlatformPermission,
+} from '../shared/auth/permissions';
 
 export default function MyProfile() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { user, refreshUser } = useAuth();
+  const { user, permissions, refreshUser } = useAuth();
   const { notify } = useToast();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -57,6 +61,7 @@ export default function MyProfile() {
   const hasChanges = 
     firstName !== (user?.firstName || '') || 
     lastName !== (user?.lastName || '');
+  const hasAdminPermissions = hasAnyPlatformPermission(permissions, ADMIN_NAV_PLATFORM_PERMISSIONS);
 
   return (
     <PageLayout>
@@ -85,8 +90,8 @@ export default function MyProfile() {
               <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginBottom: 'var(--spacing-2)' }}>
                 Role
               </label>
-              <Tag type={user?.capabilities?.canAccessAdminRoutes ? 'purple' : 'gray'} size="sm">
-                {user?.capabilities?.canAccessAdminRoutes ? 'Platform Admin' : 'User'}
+              <Tag type={hasAdminPermissions ? 'purple' : 'gray'} size="sm">
+                {hasAdminPermissions ? 'Platform Admin' : 'User'}
               </Tag>
             </div>
 

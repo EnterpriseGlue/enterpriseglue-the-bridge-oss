@@ -1,6 +1,7 @@
 import React from 'react'
 import { DataTable, InlineNotification, Modal, Select, SelectItem, Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, TableRow, Tag, TextArea, TextInput } from '@carbon/react'
 import type { VariableHistoryEntry, VariableHistoryTarget } from './types'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 const VAR_TYPES = ['String', 'Boolean', 'Integer', 'Long', 'Double', 'Object', 'Json'] as const
 
@@ -117,6 +118,7 @@ interface VariableHistoryModalProps {
   entries: VariableHistoryEntry[]
   isLoading: boolean
   error: string | null
+  readDecision?: UiAuthzDecision | null
   onClose: () => void
 }
 
@@ -125,9 +127,13 @@ export function VariableHistoryModal({
   entries,
   isLoading,
   error,
+  readDecision,
   onClose,
 }: VariableHistoryModalProps) {
   if (!target) return null
+
+  const readDeniedReason = readDecision && !readDecision.allowed ? readDecision.reason || 'Action unavailable' : null
+  const redactValues = !!readDeniedReason
 
   const headers = [
     { key: 'time', header: 'Time' },
@@ -140,7 +146,7 @@ export function VariableHistoryModal({
   const rows = (entries || []).map((entry, index) => ({
     id: entry.id || `${entry.variableInstanceId}-${index}`,
     time: formatTimestamp(entry.time),
-    value: stringifyValue(entry.value),
+    value: redactValues ? 'Restricted' : stringifyValue(entry.value),
     type: entry.type || '—',
     activityInstanceId: entry.activityInstanceId || '—',
     revision: entry.revision ?? '—',
@@ -162,10 +168,19 @@ export function VariableHistoryModal({
         </div>
 
         <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
-          Current value: {stringifyValue(target.currentValue)}
+          Current value: {redactValues ? 'Restricted' : stringifyValue(target.currentValue)}
         </div>
 
-        {!target.variableInstanceId ? (
+        {readDeniedReason ? (
+          <InlineNotification
+            lowContrast
+            kind="warning"
+            title="Variable history redacted"
+            subtitle={readDeniedReason}
+          />
+        ) : null}
+
+        {!target.variableInstanceId && !readDeniedReason ? (
           <InlineNotification
             lowContrast
             kind="warning"
@@ -185,7 +200,7 @@ export function VariableHistoryModal({
 
         {isLoading ? <div>Loading history…</div> : null}
 
-        {!isLoading && !error && target.variableInstanceId ? (
+        {!isLoading && !error && target.variableInstanceId && !readDeniedReason ? (
           rows.length > 0 ? (
             <DataTable rows={rows} headers={headers as any} size="xs">
               {({ rows: dataRows, headers, getTableProps, getHeaderProps, getRowProps }) => (

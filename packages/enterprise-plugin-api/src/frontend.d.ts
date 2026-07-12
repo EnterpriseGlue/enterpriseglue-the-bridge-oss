@@ -1,9 +1,48 @@
 import type { ComponentType, ReactNode, CSSProperties } from 'react';
 
+export type EnterpriseAuthzResourceType =
+  | 'platform'
+  | 'tenant'
+  | 'project'
+  | 'engine'
+  | 'engine_set'
+  | 'project_engine_target'
+  | 'api_client'
+  | 'sso_mapping'
+  | 'sidecar'
+  | 'external_engine_system';
+
+export type EnterpriseAuthzBackendRouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+export interface EnterpriseAuthzBackendRoute {
+  method: EnterpriseAuthzBackendRouteMethod;
+  path: string;
+  actionId?: string;
+}
+
+export interface EnterpriseRouteAuthz {
+  /** Action id required to enter this extension route. */
+  actionId?: string;
+  /** Any matching action allows route entry. */
+  actionIds?: string[];
+  /** Static resource type used for action evaluation. Defaults to the action resource type. */
+  actionResourceType?: EnterpriseAuthzResourceType;
+  /** Optional static resource id used for action evaluation. */
+  actionResourceId?: string | null;
+  /** Optional backend/OpenAPI manifest rows this route depends on. */
+  backendRoutes?: EnterpriseAuthzBackendRoute[];
+}
+
+export type EnterpriseRouteHandle = Record<string, unknown> & {
+  enterpriseglueAuthz?: EnterpriseRouteAuthz;
+};
+
 export type EnterpriseRoute = {
   path?: string;
   index?: boolean;
   element?: unknown;
+  authz?: EnterpriseRouteAuthz;
+  handle?: EnterpriseRouteHandle;
   children?: EnterpriseRoute[];
 };
 
@@ -20,8 +59,38 @@ export interface FeatureOverride {
   enabled: boolean;
 }
 
-export type EnterpriseNavItem = Record<string, unknown>;
-export type EnterpriseMenuItem = Record<string, unknown>;
+export interface EnterpriseNavItem {
+  id: string;
+  label: string;
+  path: string;
+  order?: number;
+  actionId?: string;
+  actionIds?: string[];
+  actionResourceType?: EnterpriseAuthzResourceType;
+  actionResourceId?: string | null;
+  requiredPermission?: string;
+  requiredPermissions?: string[];
+  requiresTenantAdmin?: boolean;
+  requiredRole?: 'admin' | 'tenant_admin' | 'member';
+  section?: 'main' | 'admin' | 'tenant-admin' | 'settings' | 'tenant';
+  tenantOnly?: boolean;
+  [key: string]: unknown;
+}
+
+export interface EnterpriseMenuItem {
+  id: string;
+  label: string;
+  order?: number;
+  actionId?: string;
+  actionIds?: string[];
+  actionResourceType?: EnterpriseAuthzResourceType;
+  actionResourceId?: string | null;
+  requiredPermission?: string;
+  requiredPermissions?: string[];
+  requiresTenantAdmin?: boolean;
+  requiredRole?: 'admin' | 'tenant_admin' | 'member';
+  [key: string]: unknown;
+}
 
 // ---------------------------------------------------------------------------
 // FrontendPluginContext — shared utilities provided by the OSS host

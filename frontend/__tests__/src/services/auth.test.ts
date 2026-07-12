@@ -47,6 +47,23 @@ describe('authService', () => {
     expect(result.id).toBe('user-1');
   });
 
+  it('gets current user effective permissions', async () => {
+    (apiClient.get as any).mockResolvedValue({
+      userId: 'user-1',
+      platform: ['platform:authz:check'],
+      projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
+      engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
+      generatedAt: 123,
+    });
+
+    const result = await authService.getMyPermissions();
+
+    expect(result.platform).toContain('platform:authz:check');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/authz/me/permissions', undefined, {
+      credentials: 'include',
+    });
+  });
+
   it('lists users', async () => {
     (apiClient.get as any).mockResolvedValue([{ id: 'user-1' }]);
 

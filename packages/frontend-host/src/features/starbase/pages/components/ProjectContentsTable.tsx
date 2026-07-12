@@ -15,13 +15,60 @@ import {
   TableToolbarSearch,
   TableSelectAll,
   TableSelectRow,
-  OverflowMenu,
-  OverflowMenuItem,
   MenuButton,
   MenuItem,
 } from '@carbon/react'
 import { ArrowRight, CloudDownload, CloudUpload, Events, IbmWatsonMachineLearning, Renew, Upload, TrashCan, Commit } from '@carbon/icons-react'
+import {
+  GuardedOverflowMenuItem,
+  GuardedOverflowMenu,
+  summarizeBulkActionUnavailableReasons,
+  WhyUnavailableLink,
+} from '../../../../shared/auth/guards'
 import type { FileItem } from '../../components/project-detail'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+
+export type ProjectDetailRowAction =
+  | 'rename'
+  | 'move'
+  | 'download'
+  | 'downloadPdf'
+  | 'delete'
+
+export type ProjectDetailBulkAction =
+  | 'download'
+  | 'delete'
+  | 'move'
+  | 'sync'
+  | 'deploy'
+
+export type ProjectDetailToolbarAction =
+  | 'members'
+  | 'engineAccess'
+  | 'upload'
+  | 'create'
+
+function projectDetailBulkActionPastTense(action: ProjectDetailBulkAction): string {
+  if (action === 'download') return 'downloaded'
+  if (action === 'delete') return 'deleted'
+  if (action === 'move') return 'moved'
+  if (action === 'sync') return 'synced'
+  return 'deployed'
+}
+
+export function getProjectDetailBulkUnavailableSummary(
+  items: FileItem[],
+  action: ProjectDetailBulkAction,
+  getItemUnavailableReason: (item: FileItem) => string | null,
+  getDiagnosticDecision?: (item: FileItem, reason: string) => UiAuthzDecision | null
+) {
+  return summarizeBulkActionUnavailableReasons(items, getItemUnavailableReason, {
+    actionPastTense: projectDetailBulkActionPastTense(action),
+    getDiagnosticDecision,
+    itemLabelSingular: 'item',
+    itemLabelPlural: 'items',
+  })
+}
 
 interface ProjectContentsTableProps {
   items: FileItem[]
@@ -44,6 +91,17 @@ interface ProjectContentsTableProps {
   hasGitConnection: boolean
   showSyncButton: boolean
   canDeployByRole: boolean
+  canViewFiles: boolean
+  canCreateFiles: boolean
+  canEditFiles: boolean
+  canDeleteFiles: boolean
+  canViewMembers: boolean
+  canManageEngineAccess: boolean
+  getRowActionUnavailableReason?: (item: FileItem, action: ProjectDetailRowAction) => string | null
+  getBulkActionUnavailableReason?: (items: FileItem[], action: ProjectDetailBulkAction) => string | null
+  getBulkActionDiagnosticDecision?: (items: FileItem[], action: ProjectDetailBulkAction, reason?: string | null) => UiAuthzDecision | null
+  getToolbarActionUnavailableReason?: (action: ProjectDetailToolbarAction) => string | null
+  getToolbarActionDiagnosticDecision?: (action: ProjectDetailToolbarAction, reason?: string | null) => UiAuthzDecision | null
   onOpenSync: (cancelSelection: () => void) => void
   onDeploySelected: (ids: string[]) => void
   uploadInputRef: React.RefObject<HTMLInputElement | null>
@@ -98,6 +156,17 @@ export const ProjectContentsTable = ({
   hasGitConnection,
   showSyncButton,
   canDeployByRole,
+  canViewFiles,
+  canCreateFiles,
+  canEditFiles,
+  canDeleteFiles,
+  canViewMembers,
+  canManageEngineAccess,
+  getRowActionUnavailableReason,
+  getBulkActionUnavailableReason,
+  getBulkActionDiagnosticDecision,
+  getToolbarActionUnavailableReason,
+  getToolbarActionDiagnosticDecision,
   onOpenSync,
   onDeploySelected,
   uploadInputRef,
@@ -142,7 +211,75 @@ export const ProjectContentsTable = ({
       const selectedItems = selectedIds
         .map((id) => items.find((item) => item.id === id) || null)
         .filter((item): item is FileItem => Boolean(item))
-      const hasSelectedFolders = selectedItems.some((item) => item.type === 'folder')
+      const getBulkReason = (action: ProjectDetailBulkAction, targetItems = selectedItems) => getBulkActionUnavailableReason?.(targetItems, action) ?? null
+      const getBulkDiagnosticDecision = (
+        targetItems: FileItem[],
+        action: ProjectDetailBulkAction,
+        reason?: string | null
+      ) => {
+        if (!reason || targetItems.length === 0) return null
+        return getBulkActionDiagnosticDecision?.(targetItems, action, reason) ?? null
+      }
+      const downloadSummary = getProjectDetailBulkUnavailableSummary(
+        selectedItems,
+        'download',
+        (item) => getBulkReason('download', [item]),
+        (item, reason) => getBulkDiagnosticDecision([item], 'download', reason)
+      )
+      const deleteSummary = getProjectDetailBulkUnavailableSummary(
+        selectedItems,
+        'delete',
+        (item) => getBulkReason('delete', [item]),
+        (item, reason) => getBulkDiagnosticDecision([item], 'delete', reason)
+      )
+      const moveSummary = getProjectDetailBulkUnavailableSummary(
+        selectedItems,
+        'move',
+        (item) => item.type === 'folder' ? 'Move supports files only' : getBulkReason('move', [item]),
+        (item, reason) => getBulkDiagnosticDecision([item], 'move', reason)
+      )
+      const syncSummary = getProjectDetailBulkUnavailableSummary(
+        selectedItems,
+        'sync',
+        (item) => getBulkReason('sync', [item]),
+        (item, reason) => getBulkDiagnosticDecision([item], 'sync', reason)
+      )
+      const deploySummary = getProjectDetailBulkUnavailableSummary(
+        selectedItems,
+        'deploy',
+        (item) => getBulkReason('deploy', [item]) ?? (canDeployByRole ? null : 'No eligible deployment target'),
+        (item, reason) => getBulkDiagnosticDecision([item], 'deploy', reason)
+      )
+      const batchDownloadUnavailableReason = selectedItems.length === 0
+        ? 'Select at least one item'
+        : downloadSummary.reason
+      const batchDeleteUnavailableReason = selectedItems.length === 0
+        ? 'Select at least one item'
+        : deleteSummary.reason
+      const batchMoveUnavailableReason = selectedItems.length === 0
+        ? 'Select at least one item'
+        : moveSummary.reason
+      const batchSyncUnavailableReason = selectedItems.length === 0
+        ? 'Select at least one item'
+        : syncSummary.reason
+      const batchDeployUnavailableReason = selectedItems.length === 0
+        ? 'Select at least one item'
+        : deploySummary.reason
+      const firstBulkDiagnosticDecision = downloadSummary.firstDeniedDecision ||
+        deleteSummary.firstDeniedDecision ||
+        moveSummary.firstDeniedDecision ||
+        syncSummary.firstDeniedDecision ||
+        deploySummary.firstDeniedDecision
+      const membersUnavailableReason = getToolbarActionUnavailableReason?.('members') ?? (canViewMembers ? null : 'Project members unavailable')
+      const engineAccessUnavailableReason = getToolbarActionUnavailableReason?.('engineAccess') ?? (canManageEngineAccess ? null : 'Engine access unavailable')
+      const uploadUnavailableReason = getToolbarActionUnavailableReason?.('upload') ?? (canCreateFiles ? null : 'Upload unavailable')
+      const createUnavailableReason = getToolbarActionUnavailableReason?.('create') ?? (canCreateFiles ? null : 'Create unavailable')
+      const firstToolbarDiagnosticDecision =
+        (membersUnavailableReason ? getToolbarActionDiagnosticDecision?.('members', membersUnavailableReason) : null) ||
+        (engineAccessUnavailableReason ? getToolbarActionDiagnosticDecision?.('engineAccess', engineAccessUnavailableReason) : null) ||
+        (uploadUnavailableReason ? getToolbarActionDiagnosticDecision?.('upload', uploadUnavailableReason) : null) ||
+        (createUnavailableReason ? getToolbarActionDiagnosticDecision?.('create', createUnavailableReason) : null) ||
+        null
 
       return (
       <>
@@ -152,10 +289,20 @@ export const ProjectContentsTable = ({
           style={{ width: '100%', alignSelf: 'stretch' }}
         >
           <TableBatchActions {...getBatchActionProps()}>
+            {firstBulkDiagnosticDecision ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0 var(--spacing-4)' }}>
+                <WhyUnavailableLink
+                  decision={firstBulkDiagnosticDecision}
+                  style={{ color: 'var(--cds-text-on-color)', fontSize: 'var(--cds-label-01-font-size, 0.75rem)' }}
+                />
+              </span>
+            ) : null}
             <TableBatchAction
               renderIcon={CloudDownload}
+              disabled={Boolean(batchDownloadUnavailableReason)}
+              title={batchDownloadUnavailableReason ?? undefined}
               onClick={() => {
-                if (selectedItems.length === 0) return
+                if (batchDownloadUnavailableReason || selectedItems.length === 0) return
                 const batchProps = getBatchActionProps()
                 onDownloadSelection(selectedItems, batchProps.onCancel)
               }}
@@ -164,7 +311,10 @@ export const ProjectContentsTable = ({
             </TableBatchAction>
             <TableBatchAction
               renderIcon={TrashCan}
+              disabled={Boolean(batchDeleteUnavailableReason)}
+              title={batchDeleteUnavailableReason ?? undefined}
               onClick={() => {
+                if (batchDeleteUnavailableReason) return
                 const ids = selectedIds
                 if (ids.length === 0) return
                 setBatchDeleteIds(ids)
@@ -175,9 +325,11 @@ export const ProjectContentsTable = ({
             </TableBatchAction>
             <TableBatchAction
               renderIcon={ArrowRight}
-              disabled={selectedIds.length === 0 || hasSelectedFolders}
+              disabled={Boolean(batchMoveUnavailableReason)}
+              title={batchMoveUnavailableReason ?? undefined}
               onClick={() => {
-                if (selectedIds.length === 0 || hasSelectedFolders) return
+                if (batchMoveUnavailableReason) return
+                if (selectedIds.length === 0) return
                 const batchProps = getBatchActionProps()
                 onOpenBatchMove(selectedIds, batchProps.onCancel)
               }}
@@ -187,7 +339,10 @@ export const ProjectContentsTable = ({
             {showSyncButton && (
               <TableBatchAction
                 renderIcon={Renew}
+                disabled={Boolean(batchSyncUnavailableReason)}
+                title={batchSyncUnavailableReason ?? undefined}
                 onClick={() => {
+                  if (batchSyncUnavailableReason) return
                   const batchProps = getBatchActionProps()
                   setBatchCancelSelection(() => batchProps.onCancel)
                   onOpenSync(batchProps.onCancel)
@@ -196,25 +351,26 @@ export const ProjectContentsTable = ({
                 Sync
               </TableBatchAction>
             )}
-            {canDeployByRole && (
-              <TableBatchAction
-                renderIcon={CloudUpload}
-                onClick={() => {
-                  const selected = rows.filter((r) => r.isSelected).map((r) => String(r.id))
-                  if (selected.length === 0) return
-                  setSelectedAtOpen(selected)
-                  setSelectedFolderAtOpen(folderId)
-                  setDeployScope('files')
-                  setDeployStage('config')
-                  setPreviewData(null)
-                  setPreviewBusy(false)
-                  onDeploySelected(selected)
-                  openDeployModal()
-                }}
-              >
-                Deploy
-              </TableBatchAction>
-            )}
+            <TableBatchAction
+              renderIcon={CloudUpload}
+              disabled={Boolean(batchDeployUnavailableReason)}
+              title={batchDeployUnavailableReason ?? undefined}
+              onClick={() => {
+                if (batchDeployUnavailableReason) return
+                const selected = rows.filter((r) => r.isSelected).map((r) => String(r.id))
+                if (selected.length === 0) return
+                setSelectedAtOpen(selected)
+                setSelectedFolderAtOpen(folderId)
+                setDeployScope('files')
+                setDeployStage('config')
+                setPreviewData(null)
+                setPreviewBusy(false)
+                onDeploySelected(selected)
+                openDeployModal()
+              }}
+            >
+              Deploy
+            </TableBatchAction>
           </TableBatchActions>
           <TableToolbarContent>
             <TableToolbarSearch
@@ -223,6 +379,12 @@ export const ProjectContentsTable = ({
               value={query}
               placeholder="Search files..."
             />
+            {firstToolbarDiagnosticDecision ? (
+              <WhyUnavailableLink
+                decision={firstToolbarDiagnosticDecision}
+                style={{ fontSize: 'var(--cds-label-01-font-size, 0.75rem)', whiteSpace: 'nowrap' }}
+              />
+            ) : null}
             <input
               ref={uploadInputRef}
               type="file"
@@ -235,26 +397,56 @@ export const ProjectContentsTable = ({
               kind="ghost"
               renderIcon={(props) => <Events {...props} size={24} />}
               iconDescription="Project members"
-              onClick={onOpenMembers}
+              disabled={Boolean(membersUnavailableReason)}
+              title={membersUnavailableReason ?? undefined}
+              onClick={() => {
+                if (membersUnavailableReason) return
+                onOpenMembers()
+              }}
             />
             <Button
               hasIconOnly
               kind="ghost"
               renderIcon={(props) => <IbmWatsonMachineLearning {...props} size={24} />}
               iconDescription="Engine access"
-              onClick={onOpenEngineAccess}
+              disabled={Boolean(engineAccessUnavailableReason)}
+              title={engineAccessUnavailableReason ?? undefined}
+              onClick={() => {
+                if (engineAccessUnavailableReason) return
+                onOpenEngineAccess()
+              }}
             />
             <Button
               kind="secondary"
               renderIcon={Upload}
-              onClick={onUploadClick}
+              disabled={Boolean(uploadUnavailableReason)}
+              title={uploadUnavailableReason ?? undefined}
+              onClick={() => {
+                if (uploadUnavailableReason) return
+                onUploadClick()
+              }}
             >
               Upload
             </Button>
-            <MenuButton label="Create new" kind="primary" menuAlignment="bottom-end">
-              <MenuItem label="BPMN diagram" onClick={() => onCreateFile('bpmn')} />
-              <MenuItem label="DMN diagram" onClick={() => onCreateFile('dmn')} />
-              <MenuItem label="Folder" onClick={onCreateFolder} />
+            <MenuButton
+              label="Create new"
+              kind="primary"
+              menuAlignment="bottom-end"
+              disabled={Boolean(createUnavailableReason)}
+              title={createUnavailableReason ?? undefined}
+            >
+              <MenuItem label="BPMN diagram" onClick={() => {
+                if (createUnavailableReason) return
+                onCreateFile('bpmn')
+              }} />
+              <MenuItem label="DMN diagram" onClick={() => {
+                if (createUnavailableReason) return
+                onCreateFile('dmn')
+              }} />
+              <MenuItem label="Folder" onClick={() => {
+                if (createUnavailableReason) return
+                onCreateFolder()
+              }} />
             </MenuButton>
           </TableToolbarContent>
         </TableToolbar>
@@ -297,22 +489,25 @@ export const ProjectContentsTable = ({
             </TableHead>
             <TableBody>
               {rows.map((r) => {
-                const file = items.find((x) => x.id === r.id)
-                if (!file) return null
-                const { key, ...rowProps } = getRowProps({ row: r }) as any
-                return (
+              const file = items.find((x) => x.id === r.id)
+              if (!file) return null
+              const { key, ...rowProps } = getRowProps({ row: r }) as any
+              const getUnavailableReason = (action: ProjectDetailRowAction) => getRowActionUnavailableReason?.(file, action) ?? null
+              const canOpenItem = !getUnavailableReason('download')
+              return (
                   <TableRow key={key} {...rowProps}>
                     <TableSelectRow {...getSelectionProps({ row: r })} />
                     <TableCell
                       onClick={() => {
                         if (editingId) return
+                        if (!canOpenItem) return
                         if (file.type === 'folder') {
                           onOpenFolder(file.id)
                         } else if (file.type === 'bpmn' || file.type === 'dmn') {
                           onOpenEditor(file.id)
                         }
                       }}
-                      style={{ cursor: editingId ? 'text' : ((file.type === 'bpmn' || file.type === 'dmn' || file.type === 'folder') ? 'pointer' : 'default') }}
+                      style={{ cursor: editingId ? 'text' : (canOpenItem && (file.type === 'bpmn' || file.type === 'dmn' || file.type === 'folder') ? 'pointer' : 'default') }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {getFileIcon(file.type)}
@@ -385,20 +580,20 @@ export const ProjectContentsTable = ({
                       }) : ''}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()} style={{ width: '1%', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                      <OverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
-                        <OverflowMenuItem itemText="Rename" onClick={() => startEditing(file.id, file.name)} />
-                        <OverflowMenuItem itemText="Move" onClick={() => onMoveItem(file)} />
+                      <GuardedOverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
+                        <GuardedOverflowMenuItem itemText="Rename" unavailableReason={getUnavailableReason('rename')} onClick={() => startEditing(file.id, file.name)} />
+                        <GuardedOverflowMenuItem itemText="Move" unavailableReason={getUnavailableReason('move')} onClick={() => onMoveItem(file)} />
                         {file.type !== 'folder' && (
-                          <OverflowMenuItem itemText="Download" onClick={() => onDownloadFile(file)} />
+                          <GuardedOverflowMenuItem itemText="Download" unavailableReason={getUnavailableReason('download')} onClick={() => onDownloadFile(file)} />
                         )}
                         {(file.type === 'bpmn' || file.type === 'dmn') && (
-                          <OverflowMenuItem itemText="Download as PDF" onClick={() => onDownloadFileAsPdf(file)} />
+                          <GuardedOverflowMenuItem itemText="Download as PDF" unavailableReason={getUnavailableReason('downloadPdf')} onClick={() => onDownloadFileAsPdf(file)} />
                         )}
                         {file.type === 'folder' && (
-                          <OverflowMenuItem itemText="Download" onClick={() => onDownloadFolder(file)} />
+                          <GuardedOverflowMenuItem itemText="Download" unavailableReason={getUnavailableReason('download')} onClick={() => onDownloadFolder(file)} />
                         )}
-                        <OverflowMenuItem itemText="Delete" isDelete hasDivider onClick={() => onDeleteItem(file)} />
-                      </OverflowMenu>
+                        <GuardedOverflowMenuItem itemText="Delete" isDelete hasDivider unavailableReason={getUnavailableReason('delete')} onClick={() => onDeleteItem(file)} />
+                      </GuardedOverflowMenu>
                     </TableCell>
                   </TableRow>
                 )

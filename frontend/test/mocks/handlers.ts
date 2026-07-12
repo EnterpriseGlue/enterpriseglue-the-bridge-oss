@@ -15,6 +15,8 @@ export const handlers = [
       syncPullEnabled: false,
       gitProjectTokenSharingEnabled: false,
       defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
+      engineOnboardingMode: 'manual_allowed',
+      projectEngineTargetMode: 'manual_allowed',
     });
   }),
   http.get('/starbase-api/projects', () => {
@@ -64,6 +66,24 @@ export const handlers = [
   }),
   http.get('/t/default/git-api/credentials', () => {
     return HttpResponse.json([]);
+  }),
+  http.get('/engines-api/saved-filters', () => {
+    return HttpResponse.json([]);
+  }),
+  http.get('/t/default/engines-api/saved-filters', () => {
+    return HttpResponse.json([]);
+  }),
+  http.post('/engines-api/saved-filters', async () => {
+    return HttpResponse.json({ id: 'saved-filter-1', name: 'Saved filter' });
+  }),
+  http.post('/t/default/engines-api/saved-filters', async () => {
+    return HttpResponse.json({ id: 'saved-filter-1', name: 'Saved filter' });
+  }),
+  http.delete('/engines-api/saved-filters/:id', () => {
+    return HttpResponse.json({ success: true });
+  }),
+  http.delete('/t/default/engines-api/saved-filters/:id', () => {
+    return HttpResponse.json({ success: true });
   }),
   http.post('/api/notifications', async () => {
     return HttpResponse.json({ ok: true });

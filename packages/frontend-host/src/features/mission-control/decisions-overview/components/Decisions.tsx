@@ -19,8 +19,12 @@ import { EngineAccessError, isEngineAccessError } from '../../shared/components/
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../../stores/engineSelectorStore'
 import { apiClient } from '../../../../shared/api/client'
+import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
+import { evaluateMissionControlStarbaseBridge } from '../../../../shared/api/bridgeAuthz'
 import styles from './Decisions.module.css'
 import { LoadingState } from '../../../shared/components/LoadingState'
+import { evaluateActionSnapshot, WhyUnavailableLink } from '../../../../shared/auth/guards'
+import { AuthContext } from '../../../../contexts/AuthContext'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -107,6 +111,15 @@ export default function Decisions() {
   const [maxResults] = React.useState(50)
   const selectedEngineId = useSelectedEngine()
   const setSelectedEngineId = useEngineSelectorStore((s) => s.setSelectedEngineId)
+  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
+  const authContext = React.useContext(AuthContext)
+  const permissionSnapshot = authContext?.permissions ?? null
+  const selectedEngineResource = React.useMemo(
+    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
+    [selectedEngineId]
+  )
+  const decisionsReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.decisions.read', selectedEngineResource)
+  const decisionEditTargetDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.decisions.edit-target.read', selectedEngineResource)
 
   React.useEffect(() => {
     const engineIdParam = String(searchParams.get('engineId') || '')
@@ -123,7 +136,7 @@ export default function Decisions() {
   const defsQ = useQuery({
     queryKey: ['mission-control', 'decision-defs', selectedEngineId],
     queryFn: () => listDecisionDefinitions(selectedEngineId),
-    enabled: !!selectedEngineId,
+    enabled: !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const defItems = React.useMemo(() => {
@@ -220,7 +233,7 @@ export default function Decisions() {
       if (!currentDef) return ''
       return fetchDecisionDefinitionDmnXml(currentDef.id, selectedEngineId)
     },
-    enabled: !!currentDef?.id && !!selectedEngineId,
+    enabled: !!currentDef?.id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   // Derived boolean flags from selectedStates
@@ -249,7 +262,7 @@ export default function Decisions() {
       })
       return listDecisionHistory(params)
     },
-    enabled: !!selectedEngineId,
+    enabled: !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
 
@@ -269,7 +282,7 @@ export default function Decisions() {
       version: selectedVersion,
       decisionDefinitionId: defIdForVersion,
     }),
-    enabled: !!selectedEngineId && !!currentKey && selectedVersion !== null,
+    enabled: !!selectedEngineId && !!currentKey && selectedVersion !== null && decisionEditTargetDecision.allowed,
     retry: false,
     staleTime: 15_000,
   })
@@ -282,8 +295,28 @@ export default function Decisions() {
     decisionEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(() => {
+  const handleEditInStarbase = React.useCallback(async () => {
     if (!decisionEditTarget?.fileId || selectedVersion === null || !currentKey) return
+    setBridgeError(null)
+    try {
+      const bridgeDecision = await evaluateMissionControlStarbaseBridge({
+        engineId: String(selectedEngineId || decisionEditTarget.engineId || ''),
+        projectId: decisionEditTarget.projectId,
+        fileId: decisionEditTarget.fileId,
+        definitionId: defIdForVersion || undefined,
+        definitionKey: currentKey,
+        decisionDefinitionId: defIdForVersion || undefined,
+        decisionDefinitionKey: currentKey,
+        kind: 'decision',
+      })
+      if (!bridgeDecision.allowed) {
+        setBridgeError(bridgeDecision.reason || 'Starbase edit is unavailable for this deployment.')
+        return
+      }
+    } catch (error) {
+      setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'))
+      return
+    }
 
     const params = new URLSearchParams({
       source: 'mission-control',
@@ -302,7 +335,7 @@ export default function Decisions() {
     }
 
     tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(decisionEditTarget.fileId))}?${params.toString()}`)
-  }, [decisionEditTarget, selectedVersion, currentKey, selectedEngineId, tenantNavigate])
+  }, [decisionEditTarget, selectedVersion, currentKey, defIdForVersion, selectedEngineId, tenantNavigate])
 
   const rows = React.useMemo(() => {
     const list = historyQ.data || []
@@ -334,6 +367,23 @@ export default function Decisions() {
   const engineAccessError = isEngineAccessError(defsQ.error)
   if (engineAccessError) {
     return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
+  }
+
+  if (selectedEngineId && !decisionsReadDecision.allowed) {
+    return (
+      <div style={{ padding: 'var(--spacing-4)' }}>
+        <InlineNotification
+          kind="warning"
+          title="Decision definitions unavailable"
+          subtitle={decisionsReadDecision.reason || 'Missing permission to view decision definitions on this engine.'}
+          lowContrast
+          hideCloseButton
+        />
+        <div style={{ marginTop: 'var(--spacing-2)', fontSize: 12 }}>
+          <WhyUnavailableLink decision={decisionsReadDecision} />
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -440,6 +490,15 @@ export default function Decisions() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
+      {bridgeError && (
+        <InlineNotification
+          kind="warning"
+          title="Starbase edit unavailable"
+          subtitle={bridgeError}
+          lowContrast
+          hideCloseButton
+        />
+      )}
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>

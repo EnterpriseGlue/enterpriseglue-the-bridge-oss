@@ -1,7 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import migrationRouter from '../../../../../packages/backend-host/src/modules/mission-control/migration/routes.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import {
+  generateMigrationPlan,
+  executeMigrationAsync,
+} from '../../../../../packages/backend-host/src/modules/mission-control/migration/service.js';
+
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
+  getDataSource: vi.fn(),
+}));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -10,22 +21,33 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@enterpriseglue/shared/middleware/engineAuth.js', () => ({
-  requireEngineDeployer: () => (req: any, _res: any, next: any) => {
-    req.engineId = 'engine-1';
-    next();
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  EnginePermissions: {
+    INSTANCE_VIEW: 'engine:instance:view',
+    PROCESS_MODIFY: 'engine:process:modify',
+    MEMBERS_MANAGE: 'engine:members:manage',
   },
-  requireEngineReadOrWrite: () => (req: any, _res: any, next: any) => {
-    req.engineId = 'engine-1';
-    next();
+  PlatformPermissions: {
+    USER_MANAGE: 'platform:user:manage',
+    USERS_CREATE: 'platform:users:create',
+  },
+  ProjectPermissions: {
+    MEMBERS_MANAGE: 'project:members:manage',
+  },
+  permissionService: {
+    hasPermission: vi.fn().mockResolvedValue(false),
   },
 }));
 
 vi.mock('../../../../../packages/backend-host/src/modules/mission-control/migration/service.js', () => ({
+  toEnginePlan: vi.fn(),
+  previewMigrationCount: vi.fn().mockResolvedValue(0),
   generateMigrationPlan: vi.fn().mockResolvedValue({ instructions: [] }),
   validateMigrationPlan: vi.fn().mockResolvedValue({ instructionReports: [] }),
   executeMigration: vi.fn().mockResolvedValue(undefined),
   executeMigrationAsync: vi.fn().mockResolvedValue({ batchId: 'b1' }),
+  executeMigrationDirect: vi.fn().mockResolvedValue(undefined),
+  aggregateActiveSources: vi.fn().mockResolvedValue({}),
 }));
 
 describe('mission-control migration routes', () => {
@@ -37,23 +59,66 @@ describe('mission-control migration routes', () => {
     app.use(express.json());
     app.use(migrationRouter);
     vi.clearAllMocks();
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) {
+          return {
+            findOne: vi.fn(async ({ where }: any) => ({
+              id: String(where?.id || 'engine-1'),
+              tenantId: null,
+            })),
+          };
+        }
+        return { findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission.startsWith('engine:')
+    );
   });
 
   it('generates migration plan', async () => {
     const response = await request(app)
       .post('/mission-control-api/migration/generate')
-      .send({ sourceProcessDefinitionId: 'p1', targetProcessDefinitionId: 'p2' });
+      .send({ engineId: 'engine-1', sourceProcessDefinitionId: 'p1', targetProcessDefinitionId: 'p2' });
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ instructions: [] });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+    }));
+    expect(generateMigrationPlan).toHaveBeenCalledWith('engine-1', expect.objectContaining({
+      engineId: 'engine-1',
+    }));
   });
 
   it('executes migration async', async () => {
     const response = await request(app)
       .post('/mission-control-api/migration/execute-async')
-      .send({ processInstanceIds: ['pi1'] });
+      .send({ engineId: 'engine-1', processInstanceIds: ['pi1'] });
 
     expect(response.status).toBe(201);
     expect(response.body).toEqual({ batchId: 'b1' });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:process:modify', expect.objectContaining({
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+    }));
+    expect(executeMigrationAsync).toHaveBeenCalledWith('engine-1', expect.objectContaining({
+      processInstanceIds: ['pi1'],
+    }));
+  });
+
+  it('denies migration plan generation when instance view permission is missing', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app)
+      .post('/mission-control-api/migration/generate')
+      .send({ engineId: 'engine-1', sourceProcessDefinitionId: 'p1', targetProcessDefinitionId: 'p2' });
+
+    expect(response.status).toBe(403);
+    expect(generateMigrationPlan).not.toHaveBeenCalled();
   });
 });

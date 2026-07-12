@@ -18,6 +18,9 @@ export class SsoClaimsMapping extends AppBaseEntity {
   @Column({ name: 'claim_value', type: 'text' })
   claimValue!: string;
 
+  @Column({ name: 'claim_operator', type: 'text', nullable: true })
+  claimOperator!: string | null;
+
   @Column({ name: 'target_role', type: 'text' })
   targetRole!: string;
 

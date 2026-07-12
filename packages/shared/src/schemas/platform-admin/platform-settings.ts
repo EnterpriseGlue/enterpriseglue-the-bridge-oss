@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 const PiiProviderTypeSchema = z.enum(['presidio', 'gcp_dlp', 'aws_comprehend', 'azure_pii']);
 const PiiScopeSchema = z.enum(['processDetails', 'history', 'logs', 'errors', 'audit']);
+export const EngineOnboardingModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
+export const ProjectEngineTargetPolicyModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
+export const AccessAuthorityModeSchema = z.enum(['manual', 'transition_to_sso', 'sso_managed']);
 
 // Select schema (read responses)
 export const PlatformSettingsSchema = z.object({
@@ -10,9 +13,20 @@ export const PlatformSettingsSchema = z.object({
   syncPullEnabled: z.boolean(),
   gitProjectTokenSharingEnabled: z.boolean(),
   defaultDeployRoles: z.array(z.string()),
+  engineOnboardingMode: EngineOnboardingModeSchema,
+  projectEngineTargetMode: ProjectEngineTargetPolicyModeSchema,
+  engineAccessAuthority: AccessAuthorityModeSchema,
+  projectAccessAuthority: AccessAuthorityModeSchema,
   inviteAllowAllDomains: z.boolean(),
   inviteAllowedDomains: z.array(z.string()),
   ssoAutoRedirectSingleProvider: z.boolean(),
+  ssoAllEnginesAssignmentMappingsEnabled: z.boolean(),
+  ssoEngineOwnerAssignmentMappingsEnabled: z.boolean(),
+  ssoEngineDelegateAssignmentMappingsEnabled: z.boolean(),
+  ssoRegexClaimMappingsEnabled: z.boolean(),
+  ssoSecretViewMappingsEnabled: z.boolean(),
+  ssoUnredactedAuditMappingsEnabled: z.boolean(),
+  ssoPermanentDeleteMappingsEnabled: z.boolean(),
   piiRegexEnabled: z.boolean(),
   piiExternalProviderEnabled: z.boolean(),
   piiExternalProviderType: PiiProviderTypeSchema.nullable(),
@@ -33,9 +47,20 @@ export const UpdatePlatformSettingsRequest = z.object({
   syncPullEnabled: z.boolean().optional(),
   gitProjectTokenSharingEnabled: z.boolean().optional(),
   defaultDeployRoles: z.array(z.string()).optional(),
+  engineOnboardingMode: EngineOnboardingModeSchema.optional(),
+  projectEngineTargetMode: ProjectEngineTargetPolicyModeSchema.optional(),
+  engineAccessAuthority: AccessAuthorityModeSchema.optional(),
+  projectAccessAuthority: AccessAuthorityModeSchema.optional(),
   inviteAllowAllDomains: z.boolean().optional(),
   inviteAllowedDomains: z.array(z.string()).optional(),
   ssoAutoRedirectSingleProvider: z.boolean().optional(),
+  ssoAllEnginesAssignmentMappingsEnabled: z.boolean().optional(),
+  ssoEngineOwnerAssignmentMappingsEnabled: z.boolean().optional(),
+  ssoEngineDelegateAssignmentMappingsEnabled: z.boolean().optional(),
+  ssoRegexClaimMappingsEnabled: z.boolean().optional(),
+  ssoSecretViewMappingsEnabled: z.boolean().optional(),
+  ssoUnredactedAuditMappingsEnabled: z.boolean().optional(),
+  ssoPermanentDeleteMappingsEnabled: z.boolean().optional(),
   piiRegexEnabled: z.boolean().optional(),
   piiExternalProviderEnabled: z.boolean().optional(),
   piiExternalProviderType: PiiProviderTypeSchema.optional().nullable(),
@@ -52,3 +77,6 @@ export const UpdatePlatformSettingsRequest = z.object({
 // Types
 export type PlatformSettings = z.infer<typeof PlatformSettingsSchema>;
 export type UpdatePlatformSettings = z.infer<typeof UpdatePlatformSettingsRequest>;
+export type EngineOnboardingMode = z.infer<typeof EngineOnboardingModeSchema>;
+export type ProjectEngineTargetPolicyMode = z.infer<typeof ProjectEngineTargetPolicyModeSchema>;
+export type AccessAuthorityMode = z.infer<typeof AccessAuthorityModeSchema>;

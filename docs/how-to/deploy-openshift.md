@@ -4,6 +4,8 @@ Summary: Deploy EnterpriseGlue to OpenShift using the repo's Kustomize overlays 
 
 Audience: Developers and architects.
 
+Current Kustomize overlays do not project or apply authorization configuration bundles. The target ConfigMap/Secret separation, bundle-hash rollout, fail-closed readiness, and rollback workflow is tracked in [Deploy Authorization Configuration](./deploy-authorization-config.md).
+
 ## Layout
 - Kustomize base: `infra/kubernetes/openshift/kustomize/base/`
 - Kustomize overlays:

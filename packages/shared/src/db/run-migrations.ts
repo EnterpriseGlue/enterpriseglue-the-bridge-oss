@@ -7,6 +7,8 @@ import { User } from '../infrastructure/persistence/entities/User.js';
 import { EmailTemplate } from '../infrastructure/persistence/entities/EmailTemplate.js';
 import { SsoClaimsMapping } from '../infrastructure/persistence/entities/SsoClaimsMapping.js';
 import { SsoProvider } from '../infrastructure/persistence/entities/SsoProvider.js';
+import { authzGroupService } from '../services/platform-admin/AuthzGroupService.js';
+import { permissionService } from '../services/platform-admin/permissions.js';
 import { RefreshToken } from '../infrastructure/persistence/entities/RefreshToken.js';
 import { GitProvider } from '../infrastructure/persistence/entities/GitProvider.js';
 import { GitCredential } from '../infrastructure/persistence/entities/GitCredential.js';
@@ -548,6 +550,27 @@ export async function seedInitialData() {
     console.log('  ✅ sso_claims_mappings seeded');
   } catch (error: any) {
     console.log('  Note: sso_claims_mappings:', error.message);
+  }
+
+  try {
+    await permissionService.seedRbacFoundation(dataSource, now);
+    console.log('  ✅ RBAC permission catalog and system roles seeded');
+  } catch (error: any) {
+    console.log('  Note: RBAC foundation:', error.message);
+  }
+
+  try {
+    const result = await authzGroupService.seedDefaultPlatformGroups(dataSource, now);
+    console.log(`  ✅ default platform groups seeded (${result.groups} groups, ${result.assignments} role assignments)`);
+  } catch (error: any) {
+    console.log('  Note: default platform groups:', error.message);
+  }
+
+  try {
+    const result = await permissionService.syncLegacyRoleAssignments({ now }, dataSource);
+    console.log(`  ✅ legacy role assignments synced (${result.upserted} upserted, ${result.removed} removed)`);
+  } catch (error: any) {
+    console.log('  Note: legacy role assignment sync:', error.message);
   }
   
   console.log('✅ Initial data seeding complete');

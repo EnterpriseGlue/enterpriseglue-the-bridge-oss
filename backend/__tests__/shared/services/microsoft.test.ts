@@ -1,5 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
-import { isMicrosoftAuthEnabled } from '@enterpriseglue/shared/services/microsoft.js';
+import { beforeEach, describe, it, expect, vi, type Mock } from 'vitest';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { isMicrosoftAuthEnabled, provisionMicrosoftUser } from '@enterpriseglue/shared/services/microsoft.js';
+import { ssoClaimsMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.js';
+import { ssoAssignmentMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoAssignmentMappingService.js';
+import { ssoGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.js';
+import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
+import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   shouldUseSecureCookies: () => false,
@@ -11,9 +17,138 @@ vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   },
 }));
 
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
+  getDataSource: vi.fn(),
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.js', () => ({
+  ssoClaimsMappingService: {
+    resolveRoleFromClaims: vi.fn(),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoAssignmentMappingService.js', () => ({
+  ssoAssignmentMappingService: {
+    syncAssignmentsForUser: vi.fn().mockResolvedValue({ created: 0, updated: 0, removed: 0 }),
+    syncAssignmentsForUserWithManager: vi.fn().mockResolvedValue({ created: 1, updated: 0, removed: 0 }),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.js', () => ({
+  ssoGroupMappingService: {
+    syncMembershipsForUser: vi.fn().mockResolvedValue({ created: 0, updated: 0, removed: 0 }),
+    syncMembershipsForUserWithManager: vi.fn().mockResolvedValue({ created: 1, updated: 0, removed: 0 }),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({
+  ssoNormalizedIdentityService: {
+    upsertIdentityWithManager: vi.fn().mockResolvedValue({ id: 'identity-1', created: true }),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({
+  ssoSyncDiagnosticsService: {
+    startRun: vi.fn().mockResolvedValue('sync-run-1'),
+    completeRun: vi.fn().mockResolvedValue(undefined),
+    failRun: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 describe('microsoft service', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('returns false when Microsoft auth not configured', () => {
     const result = isMicrosoftAuthEnabled();
     expect(result).toBe(false);
+  });
+
+  it('syncs SSO group memberships before engine assignments when provisioning a new user', async () => {
+    const userRepo = {
+      findOneBy: vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 'user-1', email: 'sso-user@example.com', authProvider: 'microsoft' }),
+      update: vi.fn(),
+      insert: vi.fn().mockResolvedValue(undefined),
+    };
+    const manager = {
+      getRepository: vi.fn().mockReturnValue(userRepo),
+    };
+    const dataSource = {
+      transaction: vi.fn(async (callback: (managerArg: typeof manager) => Promise<unknown>) => callback(manager)),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+    (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('user');
+
+    await provisionMicrosoftUser({
+      oid: 'oid-123',
+      email: 'sso-user@example.com',
+      given_name: 'Sso',
+      family_name: 'User',
+      tid: 'microsoft-tenant',
+      groups: ['engines-prod'],
+      roles: ['deployer'],
+    });
+
+    expect(ssoSyncDiagnosticsService.startRun).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'microsoft',
+      trigger: 'login',
+      details: expect.objectContaining({ email: 'sso-user@example.com' }),
+    }));
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(
+      manager,
+      expect.objectContaining({
+        providerId: 'microsoft',
+        providerType: 'microsoft',
+        providerSubject: 'oid-123',
+        subjectClaim: 'oid',
+        providerTenantId: 'microsoft-tenant',
+        userId: expect.any(String),
+        email: 'sso-user@example.com',
+        firstName: 'Sso',
+        lastName: 'User',
+        claims: expect.objectContaining({
+          groups: ['engines-prod'],
+          roles: ['deployer'],
+        }),
+      })
+    );
+    expect(ssoGroupMappingService.syncMembershipsForUserWithManager).toHaveBeenCalledWith(
+      manager,
+      expect.any(String),
+      expect.objectContaining({
+        email: 'sso-user@example.com',
+        groups: ['engines-prod'],
+        roles: ['deployer'],
+      }),
+      'microsoft',
+    );
+    expect(ssoAssignmentMappingService.syncAssignmentsForUserWithManager).toHaveBeenCalledWith(
+      manager,
+      expect.any(String),
+      expect.objectContaining({
+        email: 'sso-user@example.com',
+        groups: ['engines-prod'],
+        roles: ['deployer'],
+      }),
+      'microsoft',
+    );
+    const snapshotOrder = (ssoNormalizedIdentityService.upsertIdentityWithManager as unknown as Mock).mock.invocationCallOrder[0];
+    const groupSyncOrder = (ssoGroupMappingService.syncMembershipsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];
+    const engineSyncOrder = (ssoAssignmentMappingService.syncAssignmentsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];
+    expect(snapshotOrder).toBeLessThan(groupSyncOrder);
+    expect(groupSyncOrder).toBeLessThan(engineSyncOrder);
+    expect(ssoSyncDiagnosticsService.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({
+      providerId: 'microsoft',
+      groupMembershipsCreated: 1,
+      assignmentsCreated: 1,
+      details: expect.objectContaining({ email: 'sso-user@example.com' }),
+    }));
+    expect(ssoSyncDiagnosticsService.failRun).not.toHaveBeenCalled();
   });
 });

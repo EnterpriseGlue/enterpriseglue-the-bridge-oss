@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireProjectRole, requireProjectAccess } from '@enterpriseglue/shared/middleware/projectAuth.js';
-import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
@@ -20,17 +20,23 @@ import { EngineHealth } from '@enterpriseglue/shared/infrastructure/persistence/
 import { EngineProjectAccess } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineProjectAccess.js';
 import { EngineAccessRequest } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineAccessRequest.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { In, IsNull, type EntityManager } from 'typeorm';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
-import { engineAccessService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import {
+  deploymentEligibilityService,
+  projectEngineTargetService,
+  type DeploymentEligibilityResult,
+} from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { PlatformPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { projectCreateLimiter, apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { MANAGE_ROLES, OWNER_ROLES, VIEW_ROLES } from '@enterpriseglue/shared/constants/roles.js';
 import {
   applyPreparedEngineImportToProject,
   assertUserCanImportFromEngine,
   prepareLatestEngineImport,
+  previewLatestEngineImport,
 } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
 
 // Validation schemas
@@ -51,6 +57,31 @@ const createProjectBodySchema = z.object({
   }
 });
 const renameProjectBodySchema = z.object({ name: z.string().min(1).max(255) });
+const importPreviewBodySchema = z.object({ engineId: z.string().min(1) });
+const projectDeploymentTargetStatusSchema = z.enum(['active', 'disabled', 'archived']);
+const projectDeploymentTargetSourceSchema = z.enum(['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation']);
+const projectDeploymentTargetsQuerySchema = z.object({
+  status: z.enum(['active', 'disabled', 'archived', 'all']).optional(),
+  source: projectDeploymentTargetSourceSchema.optional(),
+});
+const projectDeploymentTargetParamsSchema = projectIdParamSchema.extend({
+  targetId: z.string().min(1),
+});
+const projectDeploymentTargetCreateSchema = z.object({
+  engineId: z.string().min(1),
+  status: z.enum(['active', 'disabled']).optional(),
+  allowManualDeploy: z.boolean().optional(),
+  allowCiDeploy: z.boolean().optional(),
+  allowApiDeploy: z.boolean().optional(),
+  allowImport: z.boolean().optional(),
+});
+const projectDeploymentTargetUpdateSchema = z.object({
+  status: projectDeploymentTargetStatusSchema.optional(),
+  allowManualDeploy: z.boolean().optional(),
+  allowCiDeploy: z.boolean().optional(),
+  allowApiDeploy: z.boolean().optional(),
+  allowImport: z.boolean().optional(),
+});
 
 const r = Router();
 
@@ -90,21 +121,51 @@ interface UserRow {
   lastName: string | null;
 }
 
-interface MemberRawRow {
-  p_id: string;
-  p_name: string;
-  p_owner_id?: string;
-  p_ownerId?: string;
-  p_created_at?: number;
-  p_createdAt?: number;
-}
-
 interface AccessedEngineResponse {
   engineId: string;
   engineName: string;
   baseUrl: string;
   environment: { name: string; color: string } | null;
+  deploymentTarget?: {
+    id: string;
+    status: string;
+    source: string;
+    sourceRef: string | null;
+    allowManualDeploy: boolean;
+    allowCiDeploy: boolean;
+    allowApiDeploy: boolean;
+    allowImport: boolean;
+    lastSeenAt: number | null;
+    createdAt: number;
+    updatedAt: number;
+  };
   manualDeployAllowed?: boolean;
+  manualDeployDeniedReasons?: string[];
+  ciDeployAllowed?: boolean;
+  ciDeployDeniedReasons?: string[];
+  deploymentEligibility?: {
+    diagnosticsVisible?: boolean;
+    manual: {
+      allowed: boolean;
+      reasons: string[];
+      checks?: Array<{
+        id: string;
+        allowed: boolean;
+        reason: string;
+        remediation?: string;
+      }>;
+    };
+    ci?: {
+      allowed: boolean;
+      reasons: string[];
+      checks?: Array<{
+        id: string;
+        allowed: boolean;
+        reason: string;
+        remediation?: string;
+      }>;
+    };
+  };
   health: { status: string; latencyMs: number | null } | null;
   grantedAt: number;
   isLegacy?: boolean;
@@ -117,13 +178,70 @@ interface PendingRequestWithDetails {
   requestedAt: number;
 }
 
+const DEPLOYMENT_DIAGNOSTIC_PERMISSIONS = new Set<string>([
+  PlatformPermissions.AUTHZ_CHECK,
+  PlatformPermissions.PROJECT_ENGINE_TARGETS_VIEW,
+  PlatformPermissions.PROJECT_ENGINE_TARGETS_MANAGE,
+]);
+
+function requestPermissionStrings(req: Request): Set<string> {
+  const user = req.user as any;
+  const values = [
+    ...(Array.isArray(user?.permissions) ? user.permissions : []),
+    ...(Array.isArray(user?.capabilities?.permissions) ? user.capabilities.permissions : []),
+  ];
+  return new Set(values.map(String));
+}
+
+async function canViewDeploymentDiagnostics(req: Request): Promise<boolean> {
+  const permissions = requestPermissionStrings(req);
+  for (const permission of DEPLOYMENT_DIAGNOSTIC_PERMISSIONS) {
+    if (permissions.has(permission)) {
+      return true;
+    }
+  }
+
+  const user = req.user as any;
+  const userId = String(user?.userId || '');
+  if (!userId) {
+    return false;
+  }
+
+  const checks = await Promise.all(
+    Array.from(DEPLOYMENT_DIAGNOSTIC_PERMISSIONS).map((permission) =>
+      permissionService.hasPermission(permission, {
+        userId,
+        platformRole: user.platformRole || user.role,
+        resourceType: 'platform',
+        resourceId: 'platform',
+      })
+    )
+  );
+  return checks.some(Boolean);
+}
+
+function deploymentEligibilityView(result: DeploymentEligibilityResult, includeDiagnostics: boolean) {
+  return {
+    allowed: result.allowed,
+    reasons: result.reasons,
+    ...(includeDiagnostics ? { checks: result.checks } : {}),
+  };
+}
+
+async function assertProjectDeploymentTarget(projectId: string, targetId: string, tenantId?: string | null) {
+  const target = await projectEngineTargetService.getTarget(targetId, tenantId);
+  if (!target || target.projectId !== projectId) {
+    throw Errors.notFound('Project Engine Target');
+  }
+  return target;
+}
+
 /**
  * Get all projects for current user
  * 
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/projects', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user!.userId;
+r.get('/starbase-api/projects', apiLimiter, requireAuth, requireAction('project.projects.read', { resourceResolver: 'project.visibleCollection' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource();
   const projectRepo = dataSource.getRepository(Project);
   const fileRepo = dataSource.getRepository(File);
@@ -132,35 +250,18 @@ r.get('/starbase-api/projects', apiLimiter, requireAuth, asyncHandler(async (req
   const gitProviderRepo = dataSource.getRepository(GitProvider);
   const projectMemberRepo = dataSource.getRepository(ProjectMember);
   const userRepo = dataSource.getRepository(User);
+  const authorizedProjectIds = Array.isArray(req.authorizedProjectIds)
+    ? req.authorizedProjectIds
+    : [];
 
-  // Get projects where user is owner
-  const ownerRows = await projectRepo.find({
-    where: { ownerId: userId },
-    select: ['id', 'name', 'ownerId', 'createdAt']
-  }) as ProjectRow[];
-
-  // Get projects where user is a member
-  const memberRows = await projectRepo.createQueryBuilder('p')
-    .innerJoin(ProjectMember, 'pm', 'pm.projectId = p.id')
-    .where('pm.userId = :userId', { userId })
-    .select(['p.id', 'p.name', 'p.ownerId', 'p.createdAt'])
-    .getRawMany<MemberRawRow>();
-  const memberRowsMapped = memberRows.map((r: MemberRawRow) => ({
-    id: r.p_id,
-    name: r.p_name,
-    ownerId: r.p_owner_id || r.p_ownerId,
-    createdAt: r.p_created_at || r.p_createdAt
-  })) as ProjectRow[];
-
-  const byId = new Map<string, ProjectRow>();
-  for (const row of ownerRows) byId.set(String(row.id), row);
-  for (const row of memberRowsMapped) byId.set(String(row.id), row);
-  const rows = Array.from(byId.values());
-
-  const projectIds = rows.map((row) => String(row.id));
+  const projectIds = authorizedProjectIds.map(String);
   if (projectIds.length === 0) {
     return res.json([]);
   }
+  const rows = await projectRepo.find({
+    where: { id: In(projectIds) },
+    select: ['id', 'name', 'ownerId', 'createdAt']
+  }) as ProjectRow[];
 
   // Batch file counts
   const filesCountMap = new Map<string, number>();
@@ -325,7 +426,7 @@ r.get('/starbase-api/projects', apiLimiter, requireAuth, asyncHandler(async (req
  * 
  * ✨ Migrated to TypeORM
  */
-r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, validateBody(createProjectBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, requireAction('project.projects.create', { resourceResolver: 'platform.self' }), validateBody(createProjectBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const {
     name,
@@ -398,7 +499,15 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
     }
   });
 
+  await permissionService.syncLegacyRoleAssignments({ projectIds: [id] })
+    .catch((error) => logger.warn('Failed to sync legacy project role assignments', { projectId: id, error }));
+
   res.json({ id, name: trimmed, ownerId: userId, createdAt: now, updatedAt: now });
+}));
+
+r.post('/starbase-api/projects/import-preview', apiLimiter, requireAuth, validateBody(importPreviewBodySchema), requireAction('project.import.preview', { resourceResolver: 'engine.byId', resourceIdFrom: 'body', resourceIdKey: 'engineId' }), asyncHandler(async (req: Request, res: Response) => {
+  const preview = await previewLatestEngineImport(req.user!.userId, String(req.body.engineId).trim());
+  res.json(preview);
 }));
 
 /**
@@ -406,7 +515,7 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
  * 
  * ✨ Migrated to TypeORM
  */
-r.patch('/starbase-api/projects/:projectId', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(renameProjectBodySchema), requireProjectRole(MANAGE_ROLES), asyncHandler(async (req: Request, res: Response) => {
+r.patch('/starbase-api/projects/:projectId', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(renameProjectBodySchema), requireAction('project.projects.update', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const { name } = req.body;
   const trimmed = name.trim();
@@ -423,13 +532,74 @@ r.patch('/starbase-api/projects/:projectId', apiLimiter, requireAuth, validatePa
  * 
  * ✨ Migrated to TypeORM
  */
-r.delete('/starbase-api/projects/:projectId', apiLimiter, requireAuth, requireProjectRole(OWNER_ROLES), asyncHandler(async (req: Request, res: Response) => {
+r.delete('/starbase-api/projects/:projectId', apiLimiter, requireAuth, requireAction('project.projects.delete', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
 
   // Delete project and all its resources using cascade delete service
   await CascadeDeleteService.deleteProject(projectId);
+  await permissionService.syncLegacyRoleAssignments({ projectIds: [projectId] })
+    .catch((error) => logger.warn('Failed to prune legacy project role assignments', { projectId, error }));
 
   res.status(204).end();
+}));
+
+// ============ Project Deployment Target Routes ============
+
+r.get('/starbase-api/projects/:projectId/deployment-targets', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateQuery(projectDeploymentTargetsQuerySchema), requireAction('project.deployment-targets.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const targets = await projectEngineTargetService.listTargets({
+    tenantId: req.tenant?.tenantId || null,
+    projectId: String(req.params.projectId),
+    status: req.query.status as any,
+    source: req.query.source as any,
+  });
+  res.json(targets);
+}));
+
+r.post('/starbase-api/projects/:projectId/deployment-targets/sync-legacy', apiLimiter, requireAuth, validateParams(projectIdParamSchema), requireAction('project.deployment-targets.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const result = await projectEngineTargetService.syncLegacyAccessForProject(
+    String(req.params.projectId),
+    req.tenant?.tenantId || null
+  );
+  res.json(result);
+}));
+
+r.post('/starbase-api/projects/:projectId/deployment-targets', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(projectDeploymentTargetCreateSchema), requireAction('project.deployment-targets.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const result = await projectEngineTargetService.createTarget({
+    tenantId: req.tenant?.tenantId || null,
+    projectId: String(req.params.projectId),
+    engineId: String(req.body.engineId),
+    status: req.body.status || 'active',
+    source: 'manual',
+    allowManualDeploy: req.body.allowManualDeploy,
+    allowCiDeploy: req.body.allowCiDeploy,
+    allowApiDeploy: req.body.allowApiDeploy,
+    allowImport: req.body.allowImport,
+    createdById: req.user!.userId,
+  });
+  res.status(201).json(result);
+}));
+
+r.put('/starbase-api/projects/:projectId/deployment-targets/:targetId', apiLimiter, requireAuth, validateParams(projectDeploymentTargetParamsSchema), validateBody(projectDeploymentTargetUpdateSchema), requireAction('project.deployment-targets.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const projectId = String(req.params.projectId);
+  const targetId = String(req.params.targetId);
+  await assertProjectDeploymentTarget(projectId, targetId, req.tenant?.tenantId || null);
+  await projectEngineTargetService.updateTarget(targetId, {
+    tenantId: req.tenant?.tenantId || null,
+    status: req.body.status,
+    allowManualDeploy: req.body.allowManualDeploy,
+    allowCiDeploy: req.body.allowCiDeploy,
+    allowApiDeploy: req.body.allowApiDeploy,
+    allowImport: req.body.allowImport,
+  });
+  res.json({ success: true });
+}));
+
+r.delete('/starbase-api/projects/:projectId/deployment-targets/:targetId', apiLimiter, requireAuth, validateParams(projectDeploymentTargetParamsSchema), requireAction('project.deployment-targets.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const projectId = String(req.params.projectId);
+  const targetId = String(req.params.targetId);
+  await assertProjectDeploymentTarget(projectId, targetId, req.tenant?.tenantId || null);
+  await projectEngineTargetService.archiveTarget(targetId, req.tenant?.tenantId || null);
+  res.status(204).send();
 }));
 
 // ============ Project Engine Access Routes ============
@@ -439,11 +609,14 @@ r.delete('/starbase-api/projects/:projectId', apiLimiter, requireAuth, requirePr
  * Get engine access status for a project (engines it has access to + pending requests)
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth, requireProjectRole(VIEW_ROLES), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth, requireAction('project.deployment-options.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
+  const userId = req.user!.userId;
+  const tenantId = req.tenant?.tenantId || null;
 
   const dataSource = await getDataSource();
   const engineProjectAccessRepo = dataSource.getRepository(EngineProjectAccess);
+  const projectEngineTargetRepo = dataSource.getRepository(ProjectEngineTarget);
   const engineRepo = dataSource.getRepository(Engine);
   const envTagRepo = dataSource.getRepository(EnvironmentTag);
   const engineHealthRepo = dataSource.getRepository(EngineHealth);
@@ -454,15 +627,63 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
     where: { projectId },
     select: ['engineId', 'createdAt', 'autoApproved']
   });
+  const targetRows = await projectEngineTargetRepo.find({
+    where: { projectId, status: 'active' },
+    select: [
+      'id',
+      'engineId',
+      'status',
+      'source',
+      'sourceRef',
+      'allowManualDeploy',
+      'allowCiDeploy',
+      'allowApiDeploy',
+      'allowImport',
+      'lastSeenAt',
+      'createdAt',
+      'updatedAt',
+    ]
+  });
+  const targetByEngineId = new Map<string, Pick<ProjectEngineTarget,
+    'id' |
+    'engineId' |
+    'status' |
+    'source' |
+    'sourceRef' |
+    'allowManualDeploy' |
+    'allowCiDeploy' |
+    'allowApiDeploy' |
+    'allowImport' |
+    'lastSeenAt' |
+    'createdAt' |
+    'updatedAt'
+  >>();
+  for (const row of targetRows) {
+    targetByEngineId.set(row.engineId, row);
+  }
+  const accessByEngineId = new Map<string, { engineId: string; createdAt: number; autoApproved?: boolean; allowManualDeploy?: boolean }>();
+  for (const row of accessRows) {
+    accessByEngineId.set(row.engineId, row);
+  }
+  for (const row of targetRows) {
+    if (!accessByEngineId.has(row.engineId)) {
+      accessByEngineId.set(row.engineId, {
+        engineId: row.engineId,
+        createdAt: Number(row.createdAt),
+        allowManualDeploy: row.allowManualDeploy,
+      });
+    }
+  }
+  const connectedRows = Array.from(accessByEngineId.values());
 
   // Get engine details for accessed engines
-  const engineIds = accessRows
-    .map((r: Pick<EngineProjectAccess, 'engineId'>) => r.engineId)
+  const engineIds = connectedRows
+    .map((r) => r.engineId)
     .filter((id: string) => id !== '__env__');
   let accessedEngines: AccessedEngineResponse[] = [];
   
   // Handle special __env__ engine (legacy environment-based engine)
-  const envEngineAccess = accessRows.find((r: Pick<EngineProjectAccess, 'engineId'>) => r.engineId === '__env__');
+  const envEngineAccess = connectedRows.find((r) => r.engineId === '__env__');
   if (envEngineAccess) {
     // Get env engine health from environment variable
     const envBaseUrl = process.env.CAMUNDA_BASE_URL || process.env.ENGINE_BASE_URL;
@@ -478,6 +699,7 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
   }
   
   if (engineIds.length > 0) {
+    const includeDeploymentDiagnostics = await canViewDeploymentDiagnostics(req);
     const engineRows = await engineRepo.find({
       where: { id: In(engineIds) },
       select: ['id', 'name', 'baseUrl', 'environmentTagId']
@@ -513,16 +735,47 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
       }
     }
     
-    for (const a of accessRows.filter((r: Pick<EngineProjectAccess, 'engineId'>) => r.engineId !== '__env__')) {
+    for (const a of connectedRows.filter((r) => r.engineId !== '__env__')) {
       const engine = engineRows.find((e: Pick<Engine, 'id' | 'name' | 'baseUrl' | 'environmentTagId'>) => e.id === a.engineId);
       const envTag = engine?.environmentTagId ? envTagMap.get(engine.environmentTagId) : null;
       const health = healthMap.get(a.engineId) || null;
+      const target = targetByEngineId.get(a.engineId) || null;
+      const deploymentEligibility = await deploymentEligibilityService.evaluateModes({
+        userId,
+        tenantId,
+        projectId,
+        engineId: a.engineId,
+        modes: ['manual', 'ci'],
+      });
+      const manualEligibility = deploymentEligibility.manual!;
+      const ciEligibility = deploymentEligibility.ci!;
       accessedEngines.push({
         engineId: a.engineId,
         engineName: engine?.name || 'Unnamed Engine',
         baseUrl: engine?.baseUrl || '',
         environment: envTag ? { name: envTag.name, color: envTag.color } : null,
-        manualDeployAllowed: envTag ? envTag.manualDeployAllowed : true,
+        deploymentTarget: target ? {
+          id: target.id,
+          status: target.status,
+          source: target.source,
+          sourceRef: target.sourceRef,
+          allowManualDeploy: Boolean(target.allowManualDeploy),
+          allowCiDeploy: Boolean(target.allowCiDeploy),
+          allowApiDeploy: Boolean(target.allowApiDeploy),
+          allowImport: Boolean(target.allowImport),
+          lastSeenAt: target.lastSeenAt === null ? null : Number(target.lastSeenAt),
+          createdAt: Number(target.createdAt),
+          updatedAt: Number(target.updatedAt),
+        } : undefined,
+        manualDeployAllowed: manualEligibility.allowed,
+        manualDeployDeniedReasons: manualEligibility.allowed ? undefined : manualEligibility.reasons,
+        ciDeployAllowed: ciEligibility.allowed,
+        ciDeployDeniedReasons: ciEligibility.allowed ? undefined : ciEligibility.reasons,
+        deploymentEligibility: {
+          diagnosticsVisible: includeDeploymentDiagnostics,
+          manual: deploymentEligibilityView(manualEligibility, includeDeploymentDiagnostics),
+          ci: deploymentEligibilityView(ciEligibility, includeDeploymentDiagnostics),
+        },
         health: health ? { status: health.status, latencyMs: health.latencyMs } : null,
         grantedAt: a.createdAt,
       });

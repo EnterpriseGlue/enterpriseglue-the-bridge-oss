@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate';
 import { useQuery } from '@tanstack/react-query';
 import { useSelectedEngine } from '../../../../components/EngineSelector';
@@ -15,11 +15,14 @@ import {
 } from '@carbon/react';
 import { apiClient } from '../../../../shared/api/client';
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils';
+import { AuthContext } from '../../../../contexts/AuthContext';
+import { evaluateActionSnapshot } from '../../../../shared/auth/guards';
 
 interface BatchOperationConfig {
   type: 'delete' | 'suspend' | 'activate' | 'retries';
   title: string;
   endpoint: string;
+  actionId: string;
   fields: {
     deleteReason?: boolean;
     skipCustomListeners?: boolean;
@@ -35,6 +38,7 @@ const BATCH_CONFIGS: Record<string, BatchOperationConfig> = {
     type: 'delete',
     title: 'Cancel Process Instances',
     endpoint: '/mission-control-api/batches/process-instances/delete',
+    actionId: 'engine.runtime.batches.process-instances.delete',
     fields: {
       deleteReason: true,
       skipCustomListeners: true,
@@ -47,18 +51,21 @@ const BATCH_CONFIGS: Record<string, BatchOperationConfig> = {
     type: 'suspend',
     title: 'Suspend Process Instances',
     endpoint: '/mission-control-api/batches/process-instances/suspend',
+    actionId: 'engine.runtime.batches.process-instances.suspend',
     fields: {},
   },
   activate: {
     type: 'activate',
     title: 'Activate Process Instances',
     endpoint: '/mission-control-api/batches/process-instances/activate',
+    actionId: 'engine.runtime.batches.process-instances.activate',
     fields: {},
   },
   retries: {
     type: 'retries',
     title: 'Set Job Retries',
     endpoint: '/mission-control-api/batches/jobs/retries',
+    actionId: 'engine.runtime.batches.jobs.retry',
     fields: {
       retries: true,
     },
@@ -72,6 +79,7 @@ interface Props {
 export default function BatchOperationForm({ operationType }: Props) {
   const { tenantNavigate } = useTenantNavigate();
   const config = BATCH_CONFIGS[operationType];
+  const authContext = useContext(AuthContext);
 
   const [formData, setFormData] = useState({
     processDefinitionKey: '',
@@ -81,12 +89,18 @@ export default function BatchOperationForm({ operationType }: Props) {
     failIfNotExists: false,
     skipSubprocesses: false,
     retries: 3,
+    auditReason: '',
   });
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedEngineId = useSelectedEngine();
+  const engineResource = useMemo(() => ({ type: 'engine' as const, id: selectedEngineId ?? null }), [selectedEngineId]);
+  const submitDecision = evaluateActionSnapshot(authContext?.permissions ?? null, config.actionId, engineResource);
+  const submitDeniedReason = submitDecision.allowed ? null : submitDecision.reason || 'Action unavailable';
+  const auditReason = formData.auditReason.trim();
+  const auditReasonMissing = auditReason.length === 0;
 
   // Fetch process definitions for dropdown
   const q = useQuery({
@@ -102,6 +116,10 @@ export default function BatchOperationForm({ operationType }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitDeniedReason) {
+      setError(submitDeniedReason);
+      return;
+    }
     setSubmitting(true);
     setError(null);
 
@@ -111,7 +129,8 @@ export default function BatchOperationForm({ operationType }: Props) {
         engineId: selectedEngineId,
       };
 
-      if (config.fields.deleteReason) payload.deleteReason = formData.deleteReason;
+      if (config.fields.deleteReason) payload.deleteReason = auditReason;
+      payload.auditReason = auditReason;
       if (config.fields.skipCustomListeners) payload.skipCustomListeners = formData.skipCustomListeners;
       if (config.fields.skipIoMappings) payload.skipIoMappings = formData.skipIoMappings;
       if (config.fields.failIfNotExists) payload.failIfNotExists = formData.failIfNotExists;
@@ -154,14 +173,18 @@ export default function BatchOperationForm({ operationType }: Props) {
             ))}
           </Select>
 
-          {config.fields.deleteReason && (
-            <TextInput
-              id="deleteReason"
-              labelText="Cancel Reason (optional)"
-              value={formData.deleteReason}
-              onChange={(e) => setFormData({ ...formData, deleteReason: e.target.value })}
-            />
-          )}
+          <TextInput
+            id="auditReason"
+            labelText={config.fields.deleteReason ? 'Cancel reason' : 'Audit reason'}
+            value={formData.auditReason}
+            onChange={(e) => setFormData({ ...formData, auditReason: e.target.value, deleteReason: e.target.value })}
+            placeholder={
+              config.fields.deleteReason
+                ? 'e.g., Business request was canceled upstream.'
+                : 'e.g., Pausing instances while dependency maintenance runs.'
+            }
+            required
+          />
 
           {config.fields.retries && (
             <TextInput
@@ -212,7 +235,11 @@ export default function BatchOperationForm({ operationType }: Props) {
         </FormGroup>
 
         <div style={{ marginTop: 'var(--spacing-5)', display: 'flex', gap: 'var(--spacing-2)' }}>
-          <Button type="submit" disabled={submitting || !formData.processDefinitionKey}>
+          <Button
+            type="submit"
+            disabled={submitting || !formData.processDefinitionKey || !!submitDeniedReason || auditReasonMissing}
+            title={submitDeniedReason || (auditReasonMissing ? 'Audit reason is required' : undefined)}
+          >
             {submitting ? <InlineLoading description="Creating..." /> : `Create ${config.title}`}
           </Button>
           <Button kind="secondary" onClick={() => tenantNavigate('/mission-control/batches')}>

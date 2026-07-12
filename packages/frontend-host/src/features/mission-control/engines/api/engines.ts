@@ -16,6 +16,35 @@ export type Engine = {
   updatedAt: string
   status?: 'online' | 'offline' | 'unknown'
   version?: string
+  externalId?: string
+  registrationSource?: string
+  externalSystemId?: string
+  managementMode?: 'manual' | 'external_managed' | 'hybrid'
+  fieldOwnership?: Record<string, 'manual' | 'external'>
+  driftStatus?: string
+  lifecycleStatus?: 'active' | 'disabled' | 'stale' | 'decommissioned'
+  lastExternalSyncAt?: number
+  reportedCapabilities?: {
+    operations?: string[]
+    supportLevel?: string | null
+    compatibilityProfile?: string | null
+    [key: string]: unknown
+  } | null
+  capabilityStatus?: 'unknown' | 'in_sync' | 'mismatch' | string
+  capabilityDiagnostics?: {
+    status: 'unknown' | 'in_sync' | 'mismatch'
+    expectedOperations: string[]
+    reportedOperations: string[]
+    missingOperations: string[]
+    extraOperations: string[]
+    expectedSupportLevel: string
+    reportedSupportLevel: string | null
+    expectedCompatibilityProfile: string
+    reportedCompatibilityProfile: string | null
+    issues: string[]
+    recommendation: string
+  }
+  externalUpdatedAt?: number
 }
 
 export type EngineHealth = {

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useAlert } from '../../../../../shared/hooks/useAlert'
 import { apiClient } from '../../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 interface UseInstanceRetryProps {
   instanceId: string
@@ -11,9 +12,19 @@ interface UseInstanceRetryProps {
   incidentsQ: any
   actQ: any
   engineId?: string
+  retryDecision?: UiAuthzDecision | null
 }
 
-export function useInstanceRetry({ instanceId, allRetryItems, retryJobsQ, retryExtTasksQ, incidentsQ, actQ, engineId }: UseInstanceRetryProps) {
+export function useInstanceRetry({
+  instanceId,
+  allRetryItems,
+  retryJobsQ,
+  retryExtTasksQ,
+  incidentsQ,
+  actQ,
+  engineId,
+  retryDecision,
+}: UseInstanceRetryProps) {
   const { showAlert } = useAlert()
   const [retryModalOpen, setRetryModalOpen] = useState(false)
   const [retryActivityFilter, setRetryActivityFilter] = useState<string | null>(null)
@@ -49,6 +60,10 @@ export function useInstanceRetry({ instanceId, allRetryItems, retryJobsQ, retryE
 
   const submitRetrySelection = useCallback(async () => {
     if (!instanceId) return
+    if (retryDecision && !retryDecision.allowed) {
+      showAlert(retryDecision.reason || 'Action unavailable', 'warning')
+      return
+    }
     const selectedJobs = allRetryItems.filter(item => item.itemType === 'job' && retrySelectionMap[item.id]).map(item => item.id)
     const selectedExtTasks = allRetryItems
       .filter(item => item.itemType === 'externalTask' && retrySelectionMap[item.id])
@@ -76,7 +91,7 @@ export function useInstanceRetry({ instanceId, allRetryItems, retryJobsQ, retryE
     } finally {
       setRetryBusy(false)
     }
-  }, [instanceId, allRetryItems, retrySelectionMap, retryDueMode, retryDueInput, retryJobsQ, retryExtTasksQ, incidentsQ, actQ])
+  }, [instanceId, retryDecision, showAlert, allRetryItems, retrySelectionMap, retryDueMode, retryDueInput, engineId, retryJobsQ, retryExtTasksQ, incidentsQ, actQ])
 
   const openRetryModal = useCallback((activityId?: string) => {
     setRetryActivityFilter(activityId || null)

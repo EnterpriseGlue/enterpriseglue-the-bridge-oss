@@ -4,6 +4,8 @@ Summary: Common issues and fixes for EnterpriseGlue setup.
 
 Audience: Developers and architects.
 
+Config-bundle validation, ownership drift, reconciliation, identity adapter, central-engine filtering, and customer-sidecar transport troubleshooting will be added with the executable config runtime; see [Deploy Authorization Configuration](./deploy-authorization-config.md).
+
 ## Backend fails to start (missing env)
 - Ensure `.local/docker/env/docker.env` (Docker) or `backend/.env` (host) exists.
 - Legacy fallback: root `.env.docker` is still accepted.

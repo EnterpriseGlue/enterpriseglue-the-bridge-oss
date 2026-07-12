@@ -65,12 +65,20 @@ async function resetBranding(): Promise<void> {
   });
 }
 
-export default function BrandingSettingsTab() {
+interface BrandingSettingsTabProps {
+  canManageSettings?: boolean;
+  settingsUnavailableReason?: string | null;
+}
+
+export default function BrandingSettingsTab({
+  canManageSettings = true,
+  settingsUnavailableReason,
+}: BrandingSettingsTabProps = {}) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loginLogoInputRef = useRef<HTMLInputElement>(null);
   const faviconInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [logoTitle, setLogoTitle] = useState('');
   const [logoScale, setLogoScale] = useState(100);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -86,6 +94,7 @@ export default function BrandingSettingsTab() {
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const fontInputRef = useRef<HTMLInputElement>(null);
+  const disabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage';
 
   const brandingQuery = useQuery({
     queryKey: ['platform-branding'],
@@ -112,6 +121,7 @@ export default function BrandingSettingsTab() {
   }, [brandingQuery.data]);
 
   const handleFaviconFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canManageSettings) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -140,9 +150,10 @@ export default function BrandingSettingsTab() {
       setError('Failed to read favicon file');
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [canManageSettings]);
 
   const handleLoginLogoFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canManageSettings) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -167,9 +178,10 @@ export default function BrandingSettingsTab() {
       setError('Failed to read file');
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [canManageSettings]);
 
   const handleRemoveFavicon = () => {
+    if (!canManageSettings) return;
     setFaviconPreviewUrl(null);
     setIsDirty(true);
     if (faviconInputRef.current) {
@@ -178,7 +190,8 @@ export default function BrandingSettingsTab() {
   };
 
   const updateMutation = useMutation({
-    mutationFn: (data: Partial<PlatformBranding>) => updateBranding(data),
+    mutationFn: (data: Partial<PlatformBranding>) =>
+      canManageSettings ? updateBranding(data) : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-branding'] });
       setIsDirty(false);
@@ -191,7 +204,7 @@ export default function BrandingSettingsTab() {
   });
 
   const resetMutation = useMutation({
-    mutationFn: () => resetBranding(),
+    mutationFn: () => canManageSettings ? resetBranding() : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-branding'] });
       setPreviewUrl(null);
@@ -216,6 +229,7 @@ export default function BrandingSettingsTab() {
   });
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canManageSettings) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -243,9 +257,13 @@ export default function BrandingSettingsTab() {
       setError('Failed to read file');
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [canManageSettings]);
 
   const handleSave = () => {
+    if (!canManageSettings) {
+      setError(disabledReason);
+      return;
+    }
     if (loginTitleColor && !/^#[0-9A-Fa-f]{6}$/.test(loginTitleColor)) {
       setError('Login title color must be a 6-digit hex value like #112233');
       return;
@@ -291,11 +309,13 @@ export default function BrandingSettingsTab() {
   };
 
   const handleScaleChange = (value: number) => {
+    if (!canManageSettings) return;
     setLogoScale(value);
     setIsDirty(true);
   };
 
   const handleFontFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canManageSettings) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -303,7 +323,7 @@ export default function BrandingSettingsTab() {
     const validTypes = ['font/woff', 'font/woff2', 'font/ttf', 'font/otf', 'application/x-font-woff', 'application/font-woff', 'application/font-woff2', 'application/x-font-ttf', 'application/x-font-opentype'];
     const validExtensions = ['.woff', '.woff2', '.ttf', '.otf'];
     const hasValidExt = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
-    
+
     if (!validTypes.includes(file.type) && !hasValidExt) {
       setError('Please upload a font file (WOFF, WOFF2, TTF, or OTF)');
       return;
@@ -327,9 +347,10 @@ export default function BrandingSettingsTab() {
       setError('Failed to read font file');
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [canManageSettings]);
 
   const handleRemoveFont = () => {
+    if (!canManageSettings) return;
     setTitleFontUrl(null);
     setIsDirty(true);
     if (fontInputRef.current) {
@@ -338,6 +359,11 @@ export default function BrandingSettingsTab() {
   };
 
   const handleReset = () => {
+    if (!canManageSettings) {
+      setError(disabledReason);
+      return;
+    }
+
     const cachePayload = {
       logoUrl: null,
       loginLogoUrl: null,
@@ -361,6 +387,7 @@ export default function BrandingSettingsTab() {
   };
 
   const handleRemoveLogo = () => {
+    if (!canManageSettings) return;
     setPreviewUrl(null);
     setIsDirty(true);
     if (fileInputRef.current) {
@@ -369,6 +396,7 @@ export default function BrandingSettingsTab() {
   };
 
   const handleRemoveLoginLogo = () => {
+    if (!canManageSettings) return;
     setLoginLogoPreviewUrl(null);
     setIsDirty(true);
     if (loginLogoInputRef.current) {
@@ -377,6 +405,7 @@ export default function BrandingSettingsTab() {
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canManageSettings) return;
     setLogoTitle(e.target.value);
     setIsDirty(true);
   };
@@ -430,6 +459,17 @@ export default function BrandingSettingsTab() {
               />
             )}
 
+            {!canManageSettings && (
+              <InlineNotification
+                kind="warning"
+                title="Branding settings are read-only"
+                subtitle={disabledReason}
+                hideCloseButton
+                lowContrast
+                style={{ marginTop: 'var(--spacing-4)' }}
+              />
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)', marginTop: 'var(--spacing-5)' }}>
               <div>
                 <p style={{ margin: '0 0 var(--spacing-2) 0', fontSize: '14px', fontWeight: 600 }}>
@@ -439,7 +479,7 @@ export default function BrandingSettingsTab() {
                   Upload a custom logo to replace the EnterpriseGlue logo in the header. This will apply across all tenants.
                 </p>
 
-                <div style={{ 
+                <div style={{
                   marginBottom: 'var(--spacing-4)',
                   padding: 'var(--spacing-4)',
                   backgroundColor: 'var(--cds-layer-02, #393939)',
@@ -453,8 +493,8 @@ export default function BrandingSettingsTab() {
                     <img
                       src={currentLogoUrl}
                       alt="Custom Logo Preview"
-                      style={{ 
-                        height: '32px', 
+                      style={{
+                        height: '32px',
                         width: 'auto',
                         maxWidth: '200px',
                         objectFit: 'contain',
@@ -483,12 +523,15 @@ export default function BrandingSettingsTab() {
                     type="file"
                     accept="image/*"
                     onChange={handleFileChange}
+                    disabled={!canManageSettings}
                     style={{ display: 'none' }}
                   />
                   <Button
                     kind="tertiary"
                     size="sm"
                     renderIcon={Upload}
+                    disabled={!canManageSettings}
+                    title={!canManageSettings ? disabledReason : undefined}
                     onClick={() => fileInputRef.current?.click()}
                   >
                     Upload Logo
@@ -498,6 +541,8 @@ export default function BrandingSettingsTab() {
                       kind="ghost"
                       size="sm"
                       renderIcon={TrashCan}
+                      disabled={!canManageSettings}
+                      title={!canManageSettings ? disabledReason : undefined}
                       onClick={handleRemoveLogo}
                     >
                       Remove
@@ -517,6 +562,7 @@ export default function BrandingSettingsTab() {
                 value={logoTitle}
                 onChange={handleTitleChange}
                 helperText="This replaces 'EnterpriseGlue' in the header"
+                disabled={!canManageSettings}
               />
 
               <div>
@@ -528,6 +574,7 @@ export default function BrandingSettingsTab() {
                   step={10}
                   value={logoScale}
                   onChange={({ value }) => handleScaleChange(value)}
+                  disabled={!canManageSettings}
                 />
                 <p style={{ margin: 'var(--spacing-2) 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                   Adjust the logo size. 100% is the default size.
@@ -542,7 +589,12 @@ export default function BrandingSettingsTab() {
                   max={20}
                   step={1}
                   value={titleVerticalOffset}
-                  onChange={({ value }) => { setTitleVerticalOffset(value); setIsDirty(true); }}
+                  onChange={({ value }) => {
+                    if (!canManageSettings) return;
+                    setTitleVerticalOffset(value);
+                    setIsDirty(true);
+                  }}
+                  disabled={!canManageSettings}
                 />
                 <p style={{ margin: 'var(--spacing-2) 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                   Only affects the header title text.
@@ -563,14 +615,19 @@ export default function BrandingSettingsTab() {
                       type="color"
                       id="menu-accent-color"
                       value={menuAccentColor || '#0f62fe'}
-                      onChange={(e) => { setMenuAccentColor(e.target.value); setIsDirty(true); }}
+                      onChange={(e) => {
+                        if (!canManageSettings) return;
+                        setMenuAccentColor(e.target.value);
+                        setIsDirty(true);
+                      }}
+                      disabled={!canManageSettings}
                       style={{
                         width: '48px',
                         height: '48px',
                         padding: 0,
                         border: '2px solid var(--cds-border-subtle)',
                         borderRadius: '4px',
-                        cursor: 'pointer',
+                        cursor: canManageSettings ? 'pointer' : 'default',
                         backgroundColor: 'transparent',
                       }}
                     />
@@ -580,6 +637,7 @@ export default function BrandingSettingsTab() {
                       placeholder="#FF6200"
                       value={menuAccentColor || ''}
                       onChange={(e) => {
+                        if (!canManageSettings) return;
                         const val = e.target.value;
                         if (val === '' || /^#[0-9A-Fa-f]{0,6}$/.test(val)) {
                           setMenuAccentColor(val || null);
@@ -587,13 +645,20 @@ export default function BrandingSettingsTab() {
                         }
                       }}
                       style={{ width: '140px' }}
+                      disabled={!canManageSettings}
                     />
                   </div>
                   {menuAccentColor && (
                     <Button
                       kind="ghost"
                       size="sm"
-                      onClick={() => { setMenuAccentColor(null); setIsDirty(true); }}
+                      disabled={!canManageSettings}
+                      title={!canManageSettings ? disabledReason : undefined}
+                      onClick={() => {
+                        if (!canManageSettings) return;
+                        setMenuAccentColor(null);
+                        setIsDirty(true);
+                      }}
                     >
                       Reset to Default
                     </Button>
@@ -672,12 +737,15 @@ export default function BrandingSettingsTab() {
                     type="file"
                     accept="image/*"
                     onChange={handleLoginLogoFileChange}
+                    disabled={!canManageSettings}
                     style={{ display: 'none' }}
                   />
                   <Button
                     kind="tertiary"
                     size="sm"
                     renderIcon={Upload}
+                    disabled={!canManageSettings}
+                    title={!canManageSettings ? disabledReason : undefined}
                     onClick={() => loginLogoInputRef.current?.click()}
                   >
                     Upload Login Logo
@@ -687,6 +755,8 @@ export default function BrandingSettingsTab() {
                       kind="ghost"
                       size="sm"
                       renderIcon={TrashCan}
+                      disabled={!canManageSettings}
+                      title={!canManageSettings ? disabledReason : undefined}
                       onClick={handleRemoveLoginLogo}
                     >
                       Remove
@@ -708,9 +778,11 @@ export default function BrandingSettingsTab() {
                   step={1}
                   value={loginTitleVerticalOffset}
                   onChange={({ value }) => {
+                    if (!canManageSettings) return;
                     setLoginTitleVerticalOffset(value);
                     setIsDirty(true);
                   }}
+                  disabled={!canManageSettings}
                 />
                 <p style={{ margin: 'var(--spacing-2) 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                   Only affects the login page title text.
@@ -725,16 +797,18 @@ export default function BrandingSettingsTab() {
                       id="login-title-color"
                       value={loginTitleColor || '#000000'}
                       onChange={(e) => {
+                        if (!canManageSettings) return;
                         setLoginTitleColor(e.target.value);
                         setIsDirty(true);
                       }}
+                      disabled={!canManageSettings}
                       style={{
                         width: '48px',
                         height: '48px',
                         padding: 0,
                         border: '2px solid var(--cds-border-subtle)',
                         borderRadius: '4px',
-                        cursor: 'pointer',
+                        cursor: canManageSettings ? 'pointer' : 'default',
                         backgroundColor: 'transparent',
                       }}
                     />
@@ -744,6 +818,7 @@ export default function BrandingSettingsTab() {
                       placeholder="#000000"
                       value={loginTitleColor || ''}
                       onChange={(e) => {
+                        if (!canManageSettings) return;
                         const val = e.target.value;
                         if (val === '' || /^#[0-9A-Fa-f]{0,6}$/.test(val)) {
                           setLoginTitleColor(val || null);
@@ -751,13 +826,17 @@ export default function BrandingSettingsTab() {
                         }
                       }}
                       style={{ width: '160px' }}
+                      disabled={!canManageSettings}
                     />
                   </div>
                   {loginTitleColor && (
                     <Button
                       kind="ghost"
                       size="sm"
+                      disabled={!canManageSettings}
+                      title={!canManageSettings ? disabledReason : undefined}
                       onClick={() => {
+                        if (!canManageSettings) return;
                         setLoginTitleColor(null);
                         setIsDirty(true);
                       }}
@@ -791,7 +870,7 @@ export default function BrandingSettingsTab() {
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)', marginTop: 'var(--spacing-5)' }}>
-              <div style={{ 
+              <div style={{
                 padding: 'var(--spacing-3)',
                 backgroundColor: 'var(--cds-layer-02, #393939)',
                 borderRadius: '4px',
@@ -817,12 +896,15 @@ export default function BrandingSettingsTab() {
                   type="file"
                   accept=".woff,.woff2,.ttf,.otf"
                   onChange={handleFontFileChange}
+                  disabled={!canManageSettings}
                   style={{ display: 'none' }}
                 />
                 <Button
                   kind="tertiary"
                   size="sm"
                   renderIcon={Upload}
+                  disabled={!canManageSettings}
+                  title={!canManageSettings ? disabledReason : undefined}
                   onClick={() => fontInputRef.current?.click()}
                 >
                   Upload Font
@@ -832,6 +914,8 @@ export default function BrandingSettingsTab() {
                     kind="ghost"
                     size="sm"
                     renderIcon={TrashCan}
+                    disabled={!canManageSettings}
+                    title={!canManageSettings ? disabledReason : undefined}
                     onClick={handleRemoveFont}
                   >
                     Remove
@@ -847,7 +931,12 @@ export default function BrandingSettingsTab() {
                 id="title-font-weight"
                 labelText="Font Weight"
                 value={titleFontWeight}
-                onChange={(e) => { setTitleFontWeight(e.target.value); setIsDirty(true); }}
+                onChange={(e) => {
+                  if (!canManageSettings) return;
+                  setTitleFontWeight(e.target.value);
+                  setIsDirty(true);
+                }}
+                disabled={!canManageSettings}
               >
                 <SelectItem value="400" text="Regular (400)" />
                 <SelectItem value="500" text="Medium (500)" />
@@ -863,8 +952,13 @@ export default function BrandingSettingsTab() {
                 max={32}
                 step={1}
                 value={titleFontSize}
-                onChange={(_e, { value }) => { setTitleFontSize(value as number); setIsDirty(true); }}
+                onChange={(_e, { value }) => {
+                  if (!canManageSettings) return;
+                  setTitleFontSize(value as number);
+                  setIsDirty(true);
+                }}
                 helperText="Used as the base size for header and login page title text"
+                disabled={!canManageSettings}
               />
             </div>
           </Tile>
@@ -910,18 +1004,27 @@ export default function BrandingSettingsTab() {
                   type="file"
                   accept=".ico,.png,.svg,image/x-icon,image/vnd.microsoft.icon,image/png,image/svg+xml"
                   onChange={handleFaviconFileChange}
+                  disabled={!canManageSettings}
                   style={{ display: 'none' }}
                 />
                 <Button
                   kind="tertiary"
                   size="sm"
                   renderIcon={Upload}
+                  disabled={!canManageSettings}
+                  title={!canManageSettings ? disabledReason : undefined}
                   onClick={() => faviconInputRef.current?.click()}
                 >
                   Upload Favicon
                 </Button>
                 {faviconPreviewUrl && (
-                  <Button kind="ghost" size="sm" onClick={handleRemoveFavicon}>
+                  <Button
+                    kind="ghost"
+                    size="sm"
+                    disabled={!canManageSettings}
+                    title={!canManageSettings ? disabledReason : undefined}
+                    onClick={handleRemoveFavicon}
+                  >
                     Reset to Default
                   </Button>
                 )}
@@ -937,9 +1040,9 @@ export default function BrandingSettingsTab() {
 
       <PlatformRow>
         <PlatformCol sm={4} md={8} lg={16} style={{ marginInlineStart: 0, marginInlineEnd: 0 }}>
-          <div style={{ 
-            display: 'flex', 
-            gap: 'var(--spacing-3)', 
+          <div style={{
+            display: 'flex',
+            gap: 'var(--spacing-3)',
             justifyContent: 'flex-end',
             marginTop: 'var(--spacing-4)',
           }}>
@@ -949,7 +1052,8 @@ export default function BrandingSettingsTab() {
                 size="md"
                 renderIcon={Reset}
                 onClick={handleReset}
-                disabled={resetMutation.isPending}
+                disabled={resetMutation.isPending || !canManageSettings}
+                title={!canManageSettings ? disabledReason : undefined}
               >
                 {resetMutation.isPending ? 'Resetting...' : 'Reset to Default'}
               </Button>
@@ -958,7 +1062,8 @@ export default function BrandingSettingsTab() {
               kind="primary"
               size="md"
               onClick={handleSave}
-              disabled={!isDirty || updateMutation.isPending}
+              disabled={!isDirty || updateMutation.isPending || !canManageSettings}
+              title={!canManageSettings ? disabledReason : undefined}
             >
               {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
             </Button>

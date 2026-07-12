@@ -6,6 +6,10 @@
 import { apiClient } from '../../shared/api/client';
 
 // Types
+export type EngineOnboardingMode = 'manual_allowed' | 'external_only' | 'hybrid';
+export type ProjectEngineTargetPolicyMode = 'manual_allowed' | 'external_only' | 'hybrid';
+export type AccessAuthorityMode = 'manual' | 'transition_to_sso' | 'sso_managed';
+
 export interface EnvironmentTag {
   id: string;
   name: string;
@@ -23,9 +27,20 @@ export interface PlatformSettings {
   syncPullEnabled: boolean;
   gitProjectTokenSharingEnabled: boolean;
   defaultDeployRoles: string[];
+  engineOnboardingMode: EngineOnboardingMode;
+  projectEngineTargetMode: ProjectEngineTargetPolicyMode;
+  engineAccessAuthority: AccessAuthorityMode;
+  projectAccessAuthority: AccessAuthorityMode;
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
   ssoAutoRedirectSingleProvider: boolean;
+  ssoAllEnginesAssignmentMappingsEnabled: boolean;
+  ssoEngineOwnerAssignmentMappingsEnabled: boolean;
+  ssoEngineDelegateAssignmentMappingsEnabled: boolean;
+  ssoRegexClaimMappingsEnabled: boolean;
+  ssoSecretViewMappingsEnabled: boolean;
+  ssoUnredactedAuditMappingsEnabled: boolean;
+  ssoPermanentDeleteMappingsEnabled: boolean;
   piiRegexEnabled: boolean;
   piiExternalProviderEnabled: boolean;
   piiExternalProviderType: 'presidio' | 'gcp_dlp' | 'aws_comprehend' | 'azure_pii' | null;
@@ -45,7 +60,6 @@ export interface UserListItem {
   firstName: string | null;
   lastName: string | null;
   role: string;
-  platformRole?: string;
   isActive: boolean;
   createdAt: number;
   lastLoginAt: number | null;

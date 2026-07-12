@@ -75,6 +75,18 @@ export interface ApiError {
     error: string;
     details?: any;
 }
+export interface EffectiveResourcePermissions {
+    resourceId: string;
+    permissions: string[];
+}
+export interface CurrentUserPermissions {
+    userId: string;
+    platform: string[];
+    projects: EffectiveResourcePermissions[];
+    engines: EffectiveResourcePermissions[];
+    authorizationVersion?: string;
+    generatedAt: number;
+}
 export interface UserCapabilities {
     canViewAdminMenu: boolean;
     canAccessAdminRoutes: boolean;

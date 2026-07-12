@@ -3,10 +3,16 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { InlineLoading } from '@carbon/react';
 import { useAuth } from '../hooks/useAuth';
 import { apiClient } from '../../shared/api/client';
+import {
+  hasAdminRouteAccess,
+  hasPlatformPermission,
+  PlatformPermission,
+} from '../auth/permissions';
 
 interface ProtectedRouteProps {
   children: ReactNode;
   requireAdmin?: boolean;
+  requiredPlatformPermissions?: string[];
   skipSetupCheck?: boolean;
 }
 
@@ -15,14 +21,14 @@ interface ProtectedRouteProps {
  * Optionally can require admin role
  * Redirects admin users to setup wizard if platform not configured
  */
-export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck = false }: ProtectedRouteProps) {
-  const { user, isAuthenticated, isLoading } = useAuth();
+export function ProtectedRoute({ children, requireAdmin = false, requiredPlatformPermissions, skipSetupCheck = false }: ProtectedRouteProps) {
+  const { user, permissions, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   const [setupChecked, setSetupChecked] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
 
-  const canAccessAdminRoutes = Boolean(user?.capabilities?.canAccessAdminRoutes);
-  const canManagePlatformSettings = Boolean(user?.capabilities?.canManagePlatformSettings);
+  const platformSettingsAllowed = hasPlatformPermission(permissions, PlatformPermission.SETTINGS_MANAGE);
+  const canAccessAdminRoute = hasAdminRouteAccess(permissions, user, requiredPlatformPermissions);
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
@@ -37,7 +43,7 @@ export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck 
   const isExemptPath = setupExemptPaths.some(p => effectivePathname.includes(p));
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated || !canManagePlatformSettings || skipSetupCheck || isExemptPath) {
+    if (isLoading || !isAuthenticated || !platformSettingsAllowed || skipSetupCheck || isExemptPath) {
       setSetupChecked(true);
       return;
     }
@@ -56,7 +62,7 @@ export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck 
     };
 
     checkSetup();
-  }, [isLoading, isAuthenticated, canManagePlatformSettings, skipSetupCheck, isExemptPath]);
+  }, [isLoading, isAuthenticated, platformSettingsAllowed, skipSetupCheck, isExemptPath]);
 
   if (isLoading) {
     return (
@@ -72,12 +78,12 @@ export function ProtectedRoute({ children, requireAdmin = false, skipSetupCheck 
   }
 
   // Requires admin but user is not admin - redirect to home
-  if (requireAdmin && !canAccessAdminRoutes) {
+  if (requireAdmin && !canAccessAdminRoute) {
     return <Navigate to={homePath} replace />;
   }
 
   // Still checking setup status for admins
-  if (canManagePlatformSettings && !setupChecked && !skipSetupCheck && !isExemptPath) {
+  if (platformSettingsAllowed && !setupChecked && !skipSetupCheck && !isExemptPath) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
         <InlineLoading description="Loading..." />

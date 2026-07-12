@@ -40,6 +40,15 @@ describe('PlatformSettingsService', () => {
     expect(settings.syncPushEnabled).toBe(true);
     expect(settings.inviteAllowAllDomains).toBe(true);
     expect(settings.defaultDeployRoles).toContain('owner');
+    expect(settings.engineOnboardingMode).toBe('manual_allowed');
+    expect(settings.projectEngineTargetMode).toBe('manual_allowed');
+    expect(settings.ssoAllEnginesAssignmentMappingsEnabled).toBe(true);
+    expect(settings.ssoEngineOwnerAssignmentMappingsEnabled).toBe(false);
+    expect(settings.ssoEngineDelegateAssignmentMappingsEnabled).toBe(false);
+    expect(settings.ssoRegexClaimMappingsEnabled).toBe(false);
+    expect(settings.ssoSecretViewMappingsEnabled).toBe(false);
+    expect(settings.ssoUnredactedAuditMappingsEnabled).toBe(false);
+    expect(settings.ssoPermanentDeleteMappingsEnabled).toBe(false);
   });
 
   it('inserts new settings when absent', async () => {
@@ -58,6 +67,17 @@ describe('PlatformSettingsService', () => {
 
     await service.update({ syncPullEnabled: true }, 'admin-1');
     expect(repo.insert).toHaveBeenCalled();
+    expect(repo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      engineOnboardingMode: 'manual_allowed',
+      projectEngineTargetMode: 'manual_allowed',
+      ssoAllEnginesAssignmentMappingsEnabled: true,
+      ssoEngineOwnerAssignmentMappingsEnabled: false,
+      ssoEngineDelegateAssignmentMappingsEnabled: false,
+      ssoRegexClaimMappingsEnabled: false,
+      ssoSecretViewMappingsEnabled: false,
+      ssoUnredactedAuditMappingsEnabled: false,
+      ssoPermanentDeleteMappingsEnabled: false,
+    }));
     (expect(repo.update) as any).not.toHaveBeenCalled();
   });
 
@@ -81,6 +101,148 @@ describe('PlatformSettingsService', () => {
       updatedById: 'admin-1',
     }));
     (expect(repo.insert) as any).not.toHaveBeenCalled();
+  });
+
+  it('persists engine onboarding mode updates', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({ engineOnboardingMode: 'external_only' }, 'admin-1');
+
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      engineOnboardingMode: 'external_only',
+      updatedById: 'admin-1',
+    }));
+  });
+
+  it('persists project-engine target policy mode updates', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({ projectEngineTargetMode: 'external_only' }, 'admin-1');
+
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      projectEngineTargetMode: 'external_only',
+      updatedById: 'admin-1',
+    }));
+  });
+
+  it('persists all-engine SSO assignment mapping guardrail updates', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({ ssoAllEnginesAssignmentMappingsEnabled: false }, 'admin-1');
+
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      ssoAllEnginesAssignmentMappingsEnabled: false,
+      updatedById: 'admin-1',
+    }));
+  });
+
+  it('persists SSO engine governance assignment guardrail updates', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({
+      ssoEngineOwnerAssignmentMappingsEnabled: true,
+      ssoEngineDelegateAssignmentMappingsEnabled: true,
+    }, 'admin-1');
+
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      ssoEngineOwnerAssignmentMappingsEnabled: true,
+      ssoEngineDelegateAssignmentMappingsEnabled: true,
+      updatedById: 'admin-1',
+    }));
+  });
+
+  it('persists SSO regex claim mapping guardrail updates', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({ ssoRegexClaimMappingsEnabled: true }, 'admin-1');
+
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      ssoRegexClaimMappingsEnabled: true,
+      updatedById: 'admin-1',
+    }));
+  });
+
+  it('persists SSO sensitive permission mapping guardrail updates', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({
+      ssoSecretViewMappingsEnabled: true,
+      ssoUnredactedAuditMappingsEnabled: true,
+      ssoPermanentDeleteMappingsEnabled: true,
+    }, 'admin-1');
+
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      ssoSecretViewMappingsEnabled: true,
+      ssoUnredactedAuditMappingsEnabled: true,
+      ssoPermanentDeleteMappingsEnabled: true,
+      updatedById: 'admin-1',
+    }));
   });
 
   it('masks pii auth token in get() response', async () => {

@@ -1,8 +1,11 @@
 import React from 'react'
-import { Modal, InlineLoading } from '@carbon/react'
+import { Modal, InlineLoading, InlineNotification } from '@carbon/react'
 import { useMutation } from '@tanstack/react-query'
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
+import { useAuth } from '../../../shared/hooks/useAuth'
+import { ProjectPermission } from '../../../shared/auth/permissions'
+import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 
 interface PublishModalProps {
   open: boolean
@@ -12,9 +15,24 @@ interface PublishModalProps {
 }
 
 export default function PublishModal({ open, onClose, projectId, onSuccess }: PublishModalProps) {
+  const { permissions, hasProjectPermission } = useAuth()
+  const publishDecision = evaluateActionSnapshot(
+    permissions,
+    'project.vcs.publish',
+    { type: 'project', id: projectId }
+  )
+  const canPublish = publishDecision.allowed ||
+    hasProjectPermission(projectId, ProjectPermission.VERSIONS_CREATE)
+  const publishUnavailableReason = canPublish
+    ? null
+    : publishDecision.reason || `Missing permission ${ProjectPermission.VERSIONS_CREATE}`
+
   const publishMutation = useMutation({
     mutationFn: async () => {
       try {
+        if (publishUnavailableReason) {
+          throw new Error(publishUnavailableReason)
+        }
         return await apiClient.post<{ success?: boolean }>(`/vcs-api/projects/${projectId}/publish`)
       } catch (error) {
         const parsed = parseApiError(error, 'Publish failed')
@@ -28,6 +46,7 @@ export default function PublishModal({ open, onClose, projectId, onSuccess }: Pu
   })
 
   const handleSubmit = () => {
+    if (publishUnavailableReason) return
     publishMutation.mutate()
   }
 
@@ -46,7 +65,7 @@ export default function PublishModal({ open, onClose, projectId, onSuccess }: Pu
       modalLabel="Version Control"
       primaryButtonText={publishMutation.isPending ? 'Publishing...' : 'Publish'}
       secondaryButtonText="Cancel"
-      primaryButtonDisabled={publishMutation.isPending}
+      primaryButtonDisabled={publishMutation.isPending || Boolean(publishUnavailableReason)}
       size="sm"
       danger={false}
     >
@@ -57,6 +76,17 @@ export default function PublishModal({ open, onClose, projectId, onSuccess }: Pu
         <p style={{ fontSize: 'var(--text-14)', color: 'var(--color-text-secondary)' }}>
           Other users will see these changes after publishing.
         </p>
+
+        {publishUnavailableReason && (
+          <InlineNotification
+            kind="warning"
+            title="Publish unavailable"
+            subtitle={publishUnavailableReason}
+            lowContrast
+            hideCloseButton
+            style={{ marginTop: 'var(--spacing-3)' }}
+          />
+        )}
         
         {publishMutation.isError && (
           <p style={{ color: 'var(--color-error)', fontSize: 'var(--text-12)', marginTop: 'var(--spacing-3)' }}>

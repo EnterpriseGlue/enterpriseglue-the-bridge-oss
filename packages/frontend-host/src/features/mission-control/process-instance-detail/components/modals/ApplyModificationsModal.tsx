@@ -97,6 +97,8 @@ export function ApplyModificationsModal({
   if (!open) return null
 
   const apiInstructions = buildApiPayload(modPlan)
+  const annotationValue = annotation.trim()
+  const annotationMissing = annotationValue.length === 0
 
   return (
     <>
@@ -105,9 +107,9 @@ export function ApplyModificationsModal({
       modalHeading="Apply Modifications"
       primaryButtonText={applyBusy ? 'Applying...' : `Apply ${modPlan.length} modification${modPlan.length === 1 ? '' : 's'}`}
       secondaryButtonText="Cancel"
-      primaryButtonDisabled={modPlan.length === 0 || applyBusy}
+      primaryButtonDisabled={modPlan.length === 0 || applyBusy || annotationMissing}
       onRequestClose={onClose}
-      onRequestSubmit={() => onApply({ skipCustomListeners, skipIoMappings, annotation })}
+      onRequestSubmit={() => onApply({ skipCustomListeners, skipIoMappings, annotation: annotationValue })}
       size="md"
       hasScrollingContent
     >
@@ -171,12 +173,17 @@ export function ApplyModificationsModal({
           />
           <TextInput
             id="mod-annotation"
-            labelText="Annotation (optional)"
+            labelText="Audit reason"
             placeholder="e.g., Moving token past failed service task"
             size="sm"
             value={annotation}
             onChange={(e: any) => setAnnotation(e.target.value)}
           />
+          {annotationMissing ? (
+            <div style={{ fontSize: 'var(--text-12)', color: 'var(--cds-support-warning, #f1c21b)' }}>
+              An audit reason is required before modifications can be applied.
+            </div>
+          ) : null}
         </div>
 
         <div>

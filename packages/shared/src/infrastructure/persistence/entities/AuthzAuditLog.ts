@@ -2,10 +2,14 @@ import { Entity, Column, Index } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'authz_audit_log', schema: 'main' })
+@Index('idx_authz_audit_log_tenant', ['tenantId', 'timestamp'])
 @Index('idx_authz_audit_log_user', ['userId', 'timestamp'])
 @Index('idx_authz_audit_log_resource', ['resourceType', 'resourceId', 'timestamp'])
 @Index('idx_authz_audit_log_decision', ['decision', 'timestamp'])
 export class AuthzAuditLog extends AppBaseEntity {
+  @Column({ name: 'tenant_id', type: 'text', nullable: true })
+  tenantId!: string | null;
+
   @Column({ name: 'user_id', type: 'text' })
   userId!: string;
 

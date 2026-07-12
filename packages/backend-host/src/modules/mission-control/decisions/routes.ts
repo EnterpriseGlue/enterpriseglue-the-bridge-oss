@@ -3,14 +3,13 @@ import { z } from 'zod';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireEngineReadOrWrite } from '@enterpriseglue/shared/middleware/engineAuth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
-import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js';
+import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import {
   listDecisionDefinitions,
   fetchDecisionDefinition,
@@ -32,11 +31,31 @@ const editTargetQuerySchema = z.object({
   decisionDefinitionId: z.string().min(1).optional(),
 });
 
+function projectPermissionContext(req: Request, projectId: string) {
+  return {
+    userId: req.user!.userId,
+    platformRole: req.user!.platformRole || (req.user as any).role,
+    resourceType: 'project' as const,
+    resourceId: projectId,
+  };
+}
+
+function hasProjectPermission(req: Request, projectId: string, permission: Permission) {
+  return permissionService.hasPermission(permission, projectPermissionContext(req, projectId));
+}
+
+async function canViewProjectFile(req: Request, projectId: string) {
+  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_VIEW);
+}
+
+async function canEditProjectFile(req: Request, projectId: string) {
+  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_EDIT);
+}
+
 r.use(requireAuth);
 
 // Resolve Starbase edit target for a deployed decision version
-r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(editTargetQuerySchema), requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user!.userId;
+r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(editTargetQuerySchema), requireAction('engine.runtime.decisions.edit-target.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const decisionKey = String(req.query.key || '').trim();
   const decisionDefinitionId = req.query.decisionDefinitionId ? String(req.query.decisionDefinitionId) : null;
@@ -80,10 +99,10 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
     const fileId = row.fileId ? String(row.fileId) : '';
     if (!projectId || !fileId) continue;
 
-    const canRead = await projectMemberService.hasAccess(projectId, userId);
+    const canRead = await canViewProjectFile(req, projectId);
     if (!canRead) continue;
 
-    const canEdit = await projectMemberService.hasRole(projectId, userId, EDIT_ROLES);
+    const canEdit = await canEditProjectFile(req, projectId);
     const commitId = row.fileGitCommitId ? String(row.fileGitCommitId) : null;
     let fileVersionNumber: number | null = null;
     let mappingSource: 'git-commit' | 'db-timestamp' | 'db-latest' | 'deployment-timestamp' = 'db-latest';
@@ -161,10 +180,10 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
     const projectId = String(f.projectId || '');
     if (!projectId) continue;
 
-    const canRead = await projectMemberService.hasAccess(projectId, userId);
+    const canRead = await canViewProjectFile(req, projectId);
     if (!canRead) continue;
 
-    const canEdit = await projectMemberService.hasRole(projectId, userId, EDIT_ROLES);
+    const canEdit = await canEditProjectFile(req, projectId);
 
     let fileVersionNumber: number | null = null;
     let fallbackCommitId: string | null = null;
@@ -200,14 +219,14 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
 }));
 
 // List decision definitions
-r.get('/mission-control-api/decision-definitions', requireEngineReadOrWrite({ engineIdFrom: 'query' }), validateQuery(DecisionDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions', requireAction('engine.runtime.decisions.read', { resourceIdFrom: 'query' }), validateQuery(DecisionDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const data = await listDecisionDefinitions(engineId, req.query);
   res.json(data);
 }));
 
 // Get decision definition by ID
-r.get('/mission-control-api/decision-definitions/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions/:id', requireAction('engine.runtime.decisions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinition(engineId, definitionId);
@@ -215,7 +234,7 @@ r.get('/mission-control-api/decision-definitions/:id', requireEngineReadOrWrite(
 }));
 
 // Get decision definition XML
-r.get('/mission-control-api/decision-definitions/:id/xml', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions/:id/xml', requireAction('engine.runtime.decisions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinitionXml(engineId, definitionId);
@@ -223,7 +242,7 @@ r.get('/mission-control-api/decision-definitions/:id/xml', requireEngineReadOrWr
 }));
 
 // Evaluate decision
-r.post('/mission-control-api/decision-definitions/:id/evaluate', requireEngineReadOrWrite({ engineIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/decision-definitions/:id/evaluate', requireAction('engine.runtime.decisions.evaluate', { resourceIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await evaluateDecisionById(engineId, definitionId, req.body);
@@ -231,7 +250,7 @@ r.post('/mission-control-api/decision-definitions/:id/evaluate', requireEngineRe
 }));
 
 // Evaluate decision by key
-r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireEngineReadOrWrite({ engineIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireAction('engine.runtime.decisions.evaluate', { resourceIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionKey = String(req.params.key);
   const data = await evaluateDecisionByKey(engineId, definitionKey, req.body);

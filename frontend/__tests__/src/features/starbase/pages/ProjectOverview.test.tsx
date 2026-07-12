@@ -13,6 +13,14 @@ vi.mock('@src/features/git/components', () => ({
   DeployDialog: () => null,
 }));
 
+vi.mock('@src/shared/hooks/useAuth', () => ({
+  useAuth: () => ({
+    hasPlatformPermission: vi.fn(() => true),
+    hasProjectPermission: vi.fn(() => false),
+    hasEnginePermission: vi.fn(() => false),
+  }),
+}));
+
 vi.mock('../../platform-admin/hooks/usePlatformSyncSettings', () => ({
   usePlatformSyncSettings: () => ({
     data: {

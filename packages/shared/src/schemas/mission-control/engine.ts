@@ -5,10 +5,86 @@ export const EngineTypeSchema = z.enum(['ion', 'operaton', 'camunda7']);
 export type EngineType = z.infer<typeof EngineTypeSchema>;
 export const EngineAuthTypeSchema = z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials']);
 export type EngineAuthType = z.infer<typeof EngineAuthTypeSchema>;
+export const EngineCapabilityStatusSchema = z.enum(['unknown', 'in_sync', 'mismatch']);
+export type EngineCapabilityStatus = z.infer<typeof EngineCapabilityStatusSchema>;
+
+export const ExternalEngineCapabilitiesSchema = z.object({
+  operations: z.array(z.string()).optional(),
+  supportLevel: z.string().nullable().optional(),
+  compatibilityProfile: z.string().nullable().optional(),
+}).passthrough();
+export type ExternalEngineCapabilities = z.infer<typeof ExternalEngineCapabilitiesSchema>;
+
+export const ExternalEngineCapabilityDiagnosticsSchema = z.object({
+  status: EngineCapabilityStatusSchema,
+  expectedOperations: z.array(z.string()),
+  reportedOperations: z.array(z.string()),
+  missingOperations: z.array(z.string()),
+  extraOperations: z.array(z.string()),
+  expectedSupportLevel: z.string(),
+  reportedSupportLevel: z.string().nullable(),
+  expectedCompatibilityProfile: z.string(),
+  reportedCompatibilityProfile: z.string().nullable(),
+  issues: z.array(z.string()),
+  recommendation: z.string(),
+});
+export type ExternalEngineCapabilityDiagnostics = z.infer<typeof ExternalEngineCapabilityDiagnosticsSchema>;
 
 export function normalizeEngineType(value: unknown): EngineType {
   const parsed = EngineTypeSchema.safeParse(value ?? 'camunda7');
   return parsed.success ? parsed.data : 'camunda7';
+}
+
+function normalizeEngineLabels(labels: unknown, labelsJson: string | null | undefined): Record<string, string> {
+  if (labels && typeof labels === 'object' && !Array.isArray(labels)) {
+    return Object.fromEntries(
+      Object.entries(labels)
+        .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    );
+  }
+  if (!labelsJson) return {};
+  try {
+    const parsed = JSON.parse(labelsJson);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    );
+  } catch {
+    return {};
+  }
+}
+
+function normalizeFieldOwnership(value: unknown, fieldOwnershipJson: string | null | undefined): Record<string, 'manual' | 'external'> {
+  const input = value && typeof value === 'object' && !Array.isArray(value)
+    ? value
+    : (() => {
+        if (!fieldOwnershipJson) return null;
+        try {
+          return JSON.parse(fieldOwnershipJson);
+        } catch {
+          return null;
+        }
+      })();
+
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  return Object.fromEntries(
+    Object.entries(input)
+      .filter((entry): entry is [string, 'manual' | 'external'] => entry[1] === 'manual' || entry[1] === 'external')
+  );
+}
+
+function normalizeExternalEngineCapabilities(value: unknown, capabilitiesJson: string | null | undefined): ExternalEngineCapabilities | null {
+  const parsed = ExternalEngineCapabilitiesSchema.nullable().safeParse(value ?? null);
+  if (parsed.success && parsed.data) return parsed.data;
+  if (!capabilitiesJson) return null;
+  try {
+    const fromJson = JSON.parse(capabilitiesJson);
+    const jsonParsed = ExternalEngineCapabilitiesSchema.safeParse(fromJson);
+    return jsonParsed.success ? jsonParsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 // Raw schema - matches TypeORM Engine entity
@@ -23,6 +99,22 @@ export const EngineSchemaRaw = z.object({
   oauthTokenUrl: z.string().nullable().optional(),
   oauthScopes: z.string().nullable().optional(),
   oauthAudience: z.string().nullable().optional(),
+  externalId: z.string().nullable().optional(),
+  labels: z.record(z.string(), z.string()).optional(),
+  labelsJson: z.string().nullable().optional(),
+  registrationSource: z.string().nullable().optional(),
+  externalSystemId: z.string().nullable().optional(),
+  managementMode: z.string().nullable().optional(),
+  fieldOwnership: z.record(z.string(), z.enum(['manual', 'external'])).optional(),
+  fieldOwnershipJson: z.string().nullable().optional(),
+  driftStatus: z.string().nullable().optional(),
+  lifecycleStatus: z.string().nullable().optional(),
+  lastExternalSyncAt: z.number().nullable().optional(),
+  capabilitiesJson: z.string().nullable().optional(),
+  reportedCapabilities: ExternalEngineCapabilitiesSchema.nullable().optional(),
+  capabilityStatus: EngineCapabilityStatusSchema.or(z.string()).nullable().optional(),
+  capabilityDiagnostics: ExternalEngineCapabilityDiagnosticsSchema.optional(),
+  externalUpdatedAt: z.number().nullable().optional(),
   active: z.boolean().nullable(),
   version: z.string().nullable(),
   ownerId: z.string().nullable().optional(),
@@ -45,6 +137,19 @@ export const EngineSchema = EngineSchemaRaw.transform((e) => ({
   oauthTokenUrl: nullToUndefined(e.oauthTokenUrl ?? null),
   oauthScopes: nullToUndefined(e.oauthScopes ?? null),
   oauthAudience: nullToUndefined(e.oauthAudience ?? null),
+  externalId: nullToUndefined(e.externalId ?? null),
+  labels: normalizeEngineLabels(e.labels, e.labelsJson),
+  registrationSource: nullToUndefined(e.registrationSource ?? null),
+  externalSystemId: nullToUndefined(e.externalSystemId ?? null),
+  managementMode: nullToUndefined(e.managementMode ?? null),
+  fieldOwnership: normalizeFieldOwnership(e.fieldOwnership, e.fieldOwnershipJson),
+  driftStatus: nullToUndefined(e.driftStatus ?? null),
+  lifecycleStatus: nullToUndefined(e.lifecycleStatus ?? null),
+  lastExternalSyncAt: e.lastExternalSyncAt ?? undefined,
+  reportedCapabilities: normalizeExternalEngineCapabilities(e.reportedCapabilities, e.capabilitiesJson),
+  capabilityStatus: nullToUndefined(e.capabilityStatus ?? null),
+  capabilityDiagnostics: e.capabilityDiagnostics,
+  externalUpdatedAt: e.externalUpdatedAt ?? undefined,
   active: Boolean(e.active),
   version: nullToUndefined(e.version),
   createdAt: toTimestamp(e.createdAt),
@@ -62,6 +167,16 @@ export const EngineInsertSchema = z.object({
   oauthTokenUrl: z.string().url().optional(),
   oauthScopes: z.string().optional(),
   oauthAudience: z.string().optional(),
+  externalId: z.string().optional(),
+  labels: z.record(z.string(), z.string()).optional(),
+  externalSystemId: z.string().optional(),
+  managementMode: z.enum(['manual', 'external_managed', 'hybrid']).optional(),
+  fieldOwnership: z.record(z.string(), z.enum(['manual', 'external'])).optional(),
+  lifecycleStatus: z.enum(['active', 'disabled', 'stale', 'decommissioned']).optional(),
+  capabilitiesJson: z.string().nullable().optional(),
+  reportedCapabilities: ExternalEngineCapabilitiesSchema.nullable().optional(),
+  capabilityStatus: EngineCapabilityStatusSchema.optional(),
+  capabilityDiagnostics: ExternalEngineCapabilityDiagnosticsSchema.optional(),
   active: z.boolean().optional(),
   version: z.string().optional(),
   createdAt: z.number().optional(),

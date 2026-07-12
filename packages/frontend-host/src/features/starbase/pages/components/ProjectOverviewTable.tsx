@@ -15,14 +15,19 @@ import {
   TableToolbarSearch,
   TableSelectAll,
   TableSelectRow,
-  OverflowMenu,
-  OverflowMenuItem,
 } from '@carbon/react'
 import { Add, TrashCan, Renew, Commit, CloudUpload } from '@carbon/icons-react'
 import { GitProviderIcon } from '../../../shared/components/GitProviderIcon'
 import { StarbaseTableShell } from '../../components/StarbaseTableShell'
 import { getAvatarColor, getInitials } from '../../../../shared/utils/avatar'
+import {
+  GuardedOverflowMenuItem,
+  GuardedOverflowMenu,
+  summarizeBulkActionUnavailableReasons,
+  WhyUnavailableLink,
+} from '../../../../shared/auth/guards'
 import type { Project, ProjectMember } from '../projectOverviewTypes'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 const VcsDirtyStatus = ({ count }: { count: number | null | undefined }) => {
   const n = Number(count || 0)
@@ -63,6 +68,47 @@ const GitSyncStatus = ({ status }: { status: number | null | undefined }) => {
   )
 }
 
+export type ProjectOverviewRowAction =
+  | 'open'
+  | 'rename'
+  | 'download'
+  | 'connectEngines'
+  | 'connectGit'
+  | 'editGit'
+  | 'disconnectGit'
+  | 'delete'
+
+export type ProjectOverviewBulkAction =
+  | 'sync'
+  | 'deploy'
+  | 'delete'
+
+export function getProjectBulkPartialUnavailableReason(
+  projects: Project[],
+  actionPastTense: string,
+  getProjectReason: (project: Project) => string | null
+): string | null {
+  return summarizeBulkActionUnavailableReasons(projects, getProjectReason, {
+    actionPastTense,
+    itemLabelSingular: 'project',
+    itemLabelPlural: 'projects',
+  }).reason
+}
+
+export function getProjectBulkPartialUnavailableSummary(
+  projects: Project[],
+  actionPastTense: string,
+  getProjectReason: (project: Project) => string | null,
+  getDiagnosticDecision?: (project: Project, reason: string) => UiAuthzDecision | null
+) {
+  return summarizeBulkActionUnavailableReasons(projects, getProjectReason, {
+    actionPastTense,
+    getDiagnosticDecision,
+    itemLabelSingular: 'project',
+    itemLabelPlural: 'projects',
+  })
+}
+
 interface ProjectOverviewTableProps {
   items: Project[]
   query: string
@@ -89,6 +135,10 @@ interface ProjectOverviewTableProps {
   onEditGit: (project: Project) => void
   onDisconnectGit: (project: Project) => void
   onDeleteProject: (project: Project) => void
+  createProjectUnavailableReason?: string | null
+  getRowActionUnavailableReason?: (project: Project, action: ProjectOverviewRowAction) => string | null
+  getBulkActionUnavailableReason?: (projects: Project[], action: ProjectOverviewBulkAction) => string | null
+  getBulkActionDiagnosticDecision?: (projects: Project[], action: ProjectOverviewBulkAction, reason?: string | null) => UiAuthzDecision | null
 }
 
 export const ProjectOverviewTable = ({
@@ -117,6 +167,10 @@ export const ProjectOverviewTable = ({
   onEditGit,
   onDisconnectGit,
   onDeleteProject,
+  createProjectUnavailableReason,
+  getRowActionUnavailableReason,
+  getBulkActionUnavailableReason,
+  getBulkActionDiagnosticDecision,
 }: ProjectOverviewTableProps) => (
   <DataTable
     rows={items.map(p => ({
@@ -144,15 +198,68 @@ export const ProjectOverviewTable = ({
       { key: 'actions', header: '' },
     ]}
   >
-    {({ rows, headers, getHeaderProps, getRowProps, getTableProps, getToolbarProps, getSelectionProps, getBatchActionProps, selectedRows }) => (
+    {({ rows, headers, getHeaderProps, getRowProps, getTableProps, getToolbarProps, getSelectionProps, getBatchActionProps, selectedRows }) => {
+      const selectedProjects = selectedRows
+        .map((row) => items.find((project) => project.id === row.id))
+        .filter((project): project is Project => Boolean(project))
+      const getBatchReason = (action: ProjectOverviewBulkAction) => getBulkActionUnavailableReason?.(selectedProjects, action) ?? null
+      const getBatchDiagnosticDecision = (
+        projects: Project[],
+        action: ProjectOverviewBulkAction,
+        reason?: string | null
+      ) => {
+        if (!reason || projects.length === 0) return null
+        return getBulkActionDiagnosticDecision?.(projects, action, reason) ?? null
+      }
+      const syncGitSummary = getProjectBulkPartialUnavailableSummary(
+        selectedProjects,
+        'synced',
+        (project) => project.gitUrl ? null : 'project is not connected to Git',
+        (project, reason) => getBatchDiagnosticDecision([project], 'sync', reason)
+      )
+      const deployTargetSummary = getProjectBulkPartialUnavailableSummary(
+        selectedProjects,
+        'deployed',
+        (project) => deployableProjectIdsSet.has(String(project.id)) ? null : 'no eligible deployment target',
+        (project, reason) => getBatchDiagnosticDecision([project], 'deploy', reason)
+      )
+      const bulkSyncUnavailableReason = selectedProjects.length === 0
+        ? 'Select at least one project'
+        : syncGitSummary.reason || getBatchReason('sync')
+      const bulkDeployUnavailableReason = selectedProjects.length !== 1
+        ? 'Select exactly one project'
+        : getBatchReason('deploy') || deployTargetSummary.reason
+      const bulkDeleteUnavailableReason = selectedProjects.length === 0
+        ? 'Select at least one project'
+        : getBatchReason('delete')
+      const bulkSyncDiagnosticDecision = syncGitSummary.firstDeniedDecision ||
+        getBatchDiagnosticDecision(selectedProjects, 'sync', bulkSyncUnavailableReason)
+      const bulkDeployDiagnosticDecision = deployTargetSummary.firstDeniedDecision ||
+        getBatchDiagnosticDecision(selectedProjects, 'deploy', bulkDeployUnavailableReason)
+      const bulkDeleteDiagnosticDecision = getBatchDiagnosticDecision(selectedProjects, 'delete', bulkDeleteUnavailableReason)
+      const firstBulkDiagnosticDecision = bulkSyncDiagnosticDecision ||
+        bulkDeployDiagnosticDecision ||
+        bulkDeleteDiagnosticDecision
+
+      return (
       <StarbaseTableShell>
         <TableToolbar {...getToolbarProps()}>
           <TableBatchActions {...getBatchActionProps()}>
+            {firstBulkDiagnosticDecision ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0 var(--spacing-4)' }}>
+                <WhyUnavailableLink
+                  decision={firstBulkDiagnosticDecision}
+                  style={{ color: 'var(--cds-text-on-color)', fontSize: 'var(--cds-label-01-font-size, 0.75rem)' }}
+                />
+              </span>
+            ) : null}
             {hasGitProviders && anySyncEnabled && (
               <TableBatchAction
                 renderIcon={Renew}
-                disabled={selectedRows.length === 0 || selectedRows.every((r) => !(items.find((p) => p.id === r.id)?.gitUrl))}
+                disabled={Boolean(bulkSyncUnavailableReason)}
+                title={bulkSyncUnavailableReason ?? undefined}
                 onClick={() => {
+                  if (bulkSyncUnavailableReason) return
                   const ids = selectedRows.map((r) => r.id)
                   if (ids.length === 0) return
                   const batchProps = getBatchActionProps()
@@ -162,10 +269,13 @@ export const ProjectOverviewTable = ({
                 Sync to Git
               </TableBatchAction>
             )}
-            {selectedRows.length === 1 && deployableProjectIdsSet.has(String(selectedRows[0]?.id)) && (
+            {selectedRows.length === 1 && (
               <TableBatchAction
                 renderIcon={CloudUpload}
+                disabled={Boolean(bulkDeployUnavailableReason)}
+                title={bulkDeployUnavailableReason ?? undefined}
                 onClick={() => {
+                  if (bulkDeployUnavailableReason) return
                   const selectedProjectId = String(selectedRows[0]?.id || '')
                   if (!selectedProjectId) return
                   const batchProps = getBatchActionProps()
@@ -177,7 +287,10 @@ export const ProjectOverviewTable = ({
             )}
             <TableBatchAction
               renderIcon={TrashCan}
+              disabled={Boolean(bulkDeleteUnavailableReason)}
+              title={bulkDeleteUnavailableReason ?? undefined}
               onClick={() => {
+                if (bulkDeleteUnavailableReason) return
                 const ids = selectedRows.map((r) => r.id)
                 if (ids.length === 0) return
                 const batchProps = getBatchActionProps()
@@ -197,7 +310,12 @@ export const ProjectOverviewTable = ({
             <Button
               kind="primary"
               renderIcon={Add}
-              onClick={onOpenNewProject}
+              disabled={Boolean(createProjectUnavailableReason)}
+              title={createProjectUnavailableReason ?? undefined}
+              onClick={() => {
+                if (createProjectUnavailableReason) return
+                onOpenNewProject()
+              }}
             >
               New project
             </Button>
@@ -222,6 +340,7 @@ export const ProjectOverviewTable = ({
               const p = items.find((x) => x.id === r.id)
               if (!p) return null
               const { key, ...rowProps } = getRowProps({ row: r }) as any
+              const getUnavailableReason = (action: ProjectOverviewRowAction) => getRowActionUnavailableReason?.(p, action) ?? null
               return (
                 <TableRow key={key} {...rowProps}>
                   <TableSelectRow {...getSelectionProps({ row: r })} />
@@ -371,22 +490,22 @@ export const ProjectOverviewTable = ({
                     </div>
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
-                    <OverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
-                      <OverflowMenuItem itemText="Open" onClick={() => onOpenProject(p)} />
-                      <OverflowMenuItem itemText="Rename" onClick={() => startEditing(p.id, p.name)} />
-                      <OverflowMenuItem itemText="Download" onClick={() => onDownloadProject(p)} />
-                      <OverflowMenuItem itemText="Connect engines" onClick={() => onConnectEngines(p)} />
+                    <GuardedOverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
+                      <GuardedOverflowMenuItem itemText="Open" unavailableReason={getUnavailableReason('open')} onClick={() => onOpenProject(p)} />
+                      <GuardedOverflowMenuItem itemText="Rename" unavailableReason={getUnavailableReason('rename')} onClick={() => startEditing(p.id, p.name)} />
+                      <GuardedOverflowMenuItem itemText="Download" unavailableReason={getUnavailableReason('download')} onClick={() => onDownloadProject(p)} />
+                      <GuardedOverflowMenuItem itemText="Engine access" unavailableReason={getUnavailableReason('connectEngines')} onClick={() => onConnectEngines(p)} />
                       {hasGitProviders && !p.gitUrl && (
-                        <OverflowMenuItem itemText="Connect to Git" onClick={() => onConnectGit(p)} />
+                        <GuardedOverflowMenuItem itemText="Connect to Git" unavailableReason={getUnavailableReason('connectGit')} onClick={() => onConnectGit(p)} />
                       )}
                       {hasGitProviders && p.gitUrl && (
-                        <OverflowMenuItem itemText="Edit Git settings" onClick={() => onEditGit(p)} />
+                        <GuardedOverflowMenuItem itemText="Edit Git settings" unavailableReason={getUnavailableReason('editGit')} onClick={() => onEditGit(p)} />
                       )}
                       {p.gitUrl && (
-                        <OverflowMenuItem itemText="Disconnect Git" isDelete onClick={() => onDisconnectGit(p)} />
+                        <GuardedOverflowMenuItem itemText="Disconnect Git" isDelete unavailableReason={getUnavailableReason('disconnectGit')} onClick={() => onDisconnectGit(p)} />
                       )}
-                      <OverflowMenuItem itemText="Delete" hasDivider onClick={() => onDeleteProject(p)} />
-                    </OverflowMenu>
+                      <GuardedOverflowMenuItem itemText="Delete" hasDivider unavailableReason={getUnavailableReason('delete')} onClick={() => onDeleteProject(p)} />
+                    </GuardedOverflowMenu>
                   </TableCell>
                 </TableRow>
               )
@@ -408,6 +527,7 @@ export const ProjectOverviewTable = ({
           </div>
         )}
       </StarbaseTableShell>
-    )}
+      )
+    }}
   </DataTable>
 )

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ComposedModal, ModalHeader, ModalBody, ModalFooter, Button, InlineNotification, InlineLoading, ProgressBar } from '@carbon/react'
 import { apiClient } from '../../../../shared/api/client'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
+import { AuthContext } from '../../../../contexts/AuthContext'
+import { evaluateActionSnapshot } from '../../../../shared/auth/guards'
 
 interface Props {
   open: boolean
@@ -13,6 +15,12 @@ interface Props {
 export default function BatchDetailModal({ open, batchId, onClose }: Props) {
   const qc = useQueryClient()
   const selectedEngineId = useSelectedEngine()
+  const authContext = React.useContext(AuthContext)
+  const engineResource = React.useMemo(() => ({ type: 'engine' as const, id: selectedEngineId ?? null }), [selectedEngineId])
+  const toggleSuspensionDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'engine.runtime.batches.suspension.update', engineResource)
+  const cancelDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'engine.runtime.batches.cancel', engineResource)
+  const toggleSuspensionDeniedReason = toggleSuspensionDecision.allowed ? null : toggleSuspensionDecision.reason || 'Action unavailable'
+  const cancelDeniedReason = cancelDecision.allowed ? null : cancelDecision.reason || 'Action unavailable'
 
   const q = useQuery({
     queryKey: ['batches', 'detail', batchId, selectedEngineId],
@@ -70,6 +78,7 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
 
   async function cancelBatch() {
     if (!batchId) return
+    if (cancelDeniedReason) return
     const params = new URLSearchParams()
     if (selectedEngineId) params.set('engineId', selectedEngineId)
     await apiClient.delete(`/mission-control-api/batches/${batchId}?${params}`, { credentials: 'include' })
@@ -80,6 +89,7 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
 
   async function toggleSuspended() {
     if (!batchId) return
+    if (toggleSuspensionDeniedReason) return
     suspendMutation.mutate({ id: batchId, suspended: !isSuspended })
   }
 
@@ -185,7 +195,8 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
             kind="secondary"
             size="sm"
             onClick={toggleSuspended}
-            disabled={q.isLoading || q.isFetching || suspendMutation.isPending}
+            disabled={q.isLoading || q.isFetching || suspendMutation.isPending || !!toggleSuspensionDeniedReason}
+            title={toggleSuspensionDeniedReason || undefined}
           >
             {suspendMutation.isPending
               ? <InlineLoading description={isSuspended ? 'Resuming...' : 'Pausing...'} />
@@ -193,7 +204,7 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
           </Button>
         )}
         {canCancel && (
-          <Button kind="danger" size="sm" onClick={cancelBatch} disabled={q.isLoading || q.isFetching}>
+          <Button kind="danger" size="sm" onClick={cancelBatch} disabled={q.isLoading || q.isFetching || !!cancelDeniedReason} title={cancelDeniedReason || undefined}>
             Cancel batch
           </Button>
         )}

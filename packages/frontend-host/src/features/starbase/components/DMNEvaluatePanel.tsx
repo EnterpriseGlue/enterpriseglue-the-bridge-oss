@@ -14,9 +14,10 @@ type Props = {
   result?: any
   error?: string
   isEvaluating?: boolean
+  evaluateUnavailableReason?: string | null
 }
 
-export default function DMNEvaluatePanel({ decisionKey, onEvaluate, result, error, isEvaluating }: Props) {
+export default function DMNEvaluatePanel({ decisionKey, onEvaluate, result, error, isEvaluating, evaluateUnavailableReason }: Props) {
   const [variables, setVariables] = React.useState<Variable[]>([
     { name: '', type: 'String', value: '' }
   ])
@@ -37,6 +38,7 @@ export default function DMNEvaluatePanel({ decisionKey, onEvaluate, result, erro
 
   const handleEvaluate = () => {
     if (!onEvaluate) return
+    if (evaluateUnavailableReason) return
     
     const vars: Record<string, { value: any; type: string }> = {}
     for (const v of variables) {
@@ -146,10 +148,21 @@ export default function DMNEvaluatePanel({ decisionKey, onEvaluate, result, erro
         size="sm"
         renderIcon={Play}
         onClick={handleEvaluate}
-        disabled={!decisionKey || isEvaluating || variables.every(v => !v.name.trim())}
+        disabled={!decisionKey || isEvaluating || Boolean(evaluateUnavailableReason) || variables.every(v => !v.name.trim())}
+        title={evaluateUnavailableReason ?? undefined}
       >
         {isEvaluating ? 'Evaluating...' : 'Evaluate'}
       </Button>
+
+      {evaluateUnavailableReason && (
+        <InlineNotification
+          kind="warning"
+          title="Evaluation unavailable"
+          subtitle={evaluateUnavailableReason}
+          lowContrast
+          hideCloseButton
+        />
+      )}
 
       {error && (
         <InlineNotification

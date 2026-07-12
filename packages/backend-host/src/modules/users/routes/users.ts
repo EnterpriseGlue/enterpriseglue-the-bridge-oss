@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { createUserLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
-import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
 import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
 
@@ -31,21 +30,21 @@ const updateUserSchema = z.object({
 
 /**
  * GET /api/users
- * List all users (admin only)
+ * List all users
  * ✨ Migrated to TypeORM
  */
-router.get('/api/users', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
+router.get('/api/users', requireAuth, requireAction('platform.users.read'), asyncHandler(async (req, res) => {
   const users = await userService.listUsers();
   res.json(users);
 }));
 
 /**
  * POST /api/users
- * Create a new user (admin only)
+ * Create a new user
  * Rate limited: 20 user creations per hour
  * ✨ Uses validation middleware
  */
-router.post('/api/users', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), createUserLimiter, validateBody(createUserSchema), asyncHandler(async (req, res) => {
+router.post('/api/users', requireAuth, requireAction('platform.users.create'), createUserLimiter, validateBody(createUserSchema), asyncHandler(async (req, res) => {
   const { email, firstName, lastName, platformRole, sendEmail } = req.body;
 
   const user = await userService.createPendingUser({
@@ -89,10 +88,10 @@ router.post('/api/users', requireAuth, requirePermission({ permission: PlatformP
 
 /**
  * GET /api/users/:id
- * Get user by ID (admin only)
+ * Get user by ID
  * ✨ Migrated to TypeORM
  */
-router.get('/api/users/:id', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
+router.get('/api/users/:id', requireAuth, requireAction('platform.users.read'), asyncHandler(async (req, res) => {
   const userId = String(req.params.id);
   const user = await userService.getUser(userId);
   res.json(user);
@@ -100,11 +99,11 @@ router.get('/api/users/:id', requireAuth, requirePermission({ permission: Platfo
 
 /**
  * PUT /api/users/:id
- * Update user (admin only)
+ * Update user
  * ✨ Migrated to TypeORM
  * ✨ Uses validation middleware
  */
-router.put('/api/users/:id', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), validateBody(updateUserSchema), asyncHandler(async (req, res) => {
+router.put('/api/users/:id', requireAuth, requireAction('platform.users.update'), validateBody(updateUserSchema), asyncHandler(async (req, res) => {
   const userId = String(req.params.id);
   const user = await userService.updateUser(userId, req.body);
   res.json(user);
@@ -112,10 +111,10 @@ router.put('/api/users/:id', requireAuth, requirePermission({ permission: Platfo
 
 /**
  * DELETE /api/users/:id
- * Delete user (soft delete - deactivate) (admin only)
+ * Delete user (soft delete - deactivate)
  * ✨ Migrated to TypeORM
  */
-router.delete('/api/users/:id', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
+router.delete('/api/users/:id', requireAuth, requireAction('platform.users.deactivate'), asyncHandler(async (req, res) => {
   const id = String(req.params.id);
 
   if (id === req.user!.userId) {
@@ -128,9 +127,9 @@ router.delete('/api/users/:id', requireAuth, requirePermission({ permission: Pla
 
 /**
  * DELETE /api/users/:id/permanent
- * Permanently delete a safe local user (pending or inactive) (admin only)
+ * Permanently delete a safe local user (pending or inactive)
  */
-router.delete('/api/users/:id/permanent', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
+router.delete('/api/users/:id/permanent', requireAuth, requireAction('platform.users.permanent-delete'), asyncHandler(async (req, res) => {
   const id = String(req.params.id);
 
   if (id === req.user!.userId) {
@@ -148,10 +147,10 @@ router.delete('/api/users/:id/permanent', requireAuth, requirePermission({ permi
 
 /**
  * POST /api/users/:id/unlock
- * Unlock locked user account (admin only)
+ * Unlock locked user account
  * ✨ Migrated to TypeORM
  */
-router.post('/api/users/:id/unlock', requireAuth, requirePermission({ permission: PlatformPermissions.USER_MANAGE }), asyncHandler(async (req, res) => {
+router.post('/api/users/:id/unlock', requireAuth, requireAction('platform.users.unlock'), asyncHandler(async (req, res) => {
   const userId = String(req.params.id);
   await userService.unlockUser(userId);
   res.json({ message: 'User account unlocked successfully' });

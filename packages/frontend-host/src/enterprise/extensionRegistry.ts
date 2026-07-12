@@ -1,40 +1,50 @@
 /**
  * Extension Registry for OSS/EE Plugin Architecture
- * 
+ *
  * This registry allows the EE plugin to register UI components, routes, and features
  * without requiring any EE-specific code in the OSS codebase.
- * 
+ *
  * OSS defines extension points (slots) → EE fills them at runtime
  */
 
 import type { RouteObject } from 'react-router-dom';
 import type { ComponentType, ReactNode } from 'react';
+import type { AuthzResourceType } from '@enterpriseglue/shared/authz/permission-actions.js';
+
+export type ExtensionAuthzBackendRouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+export interface ExtensionAuthzBackendRoute {
+  method: ExtensionAuthzBackendRouteMethod;
+  path: string;
+  actionId?: string;
+}
+
+export interface ExtensionRouteAuthzMetadata {
+  /** Action id required to enter this extension route. */
+  actionId?: string;
+  /** Any matching action allows route entry. */
+  actionIds?: string[];
+  /** Resource type used for action evaluation. Defaults to the action resource type. */
+  actionResourceType?: AuthzResourceType;
+  /** Optional static resource id used for action evaluation. */
+  actionResourceId?: string | null;
+  /** Optional backend/OpenAPI manifest rows the extension route depends on. */
+  backendRoutes?: ExtensionAuthzBackendRoute[];
+}
+
+export type ExtensionRouteHandle = Record<string, unknown> & {
+  enterpriseglueAuthz?: ExtensionRouteAuthzMetadata;
+};
+
+export type EnterpriseExtensionRoute = RouteObject & {
+  authz?: ExtensionRouteAuthzMetadata;
+  handle?: ExtensionRouteHandle;
+  children?: EnterpriseExtensionRoute[];
+};
 
 // =============================================================================
 // Extension Types
 // =============================================================================
-
-export type CapabilityRequirement =
-  | 'canViewAdminMenu'
-  | 'canAccessAdminRoutes'
-  | 'canManageUsers'
-  | 'canViewAuditLogs'
-  | 'canManagePlatformSettings'
-  | 'canViewMissionControl'
-  | 'canManageTenants'
-  | 'canManagePlatformEmail'
-  | 'canManageSsoProviders'
-  | 'canManagePlatformBranding'
-  | 'canManageTenantDomains'
-  | 'canManageTenantUsers'
-  | 'canManageTenantBranding'
-  | 'canManageTenantEmailTemplates'
-  | 'canViewTenantAudit'
-  | 'canManageTenantSso'
-  | 'canManageProject'
-  | 'canManageEngine'
-  | 'canInviteProjectMembers'
-  | 'canInviteEngineMembers';
 
 /**
  * Sidebar navigation item extension
@@ -45,11 +55,21 @@ export interface NavExtension {
   icon?: ComponentType<{ size?: number }>;
   path: string;
   order?: number;
-  /** Capability required to show this item. */
-  requiredCapability?: CapabilityRequirement;
+  /** Action id required to show this item. Prefer action ids for route/menu parity. */
+  actionId?: string;
+  /** Any matching action allows the item. */
+  actionIds?: string[];
+  /** Resource type used for action evaluation. Defaults to platform for admin/menu items. */
+  actionResourceType?: AuthzResourceType;
+  /** Optional resource id used for action evaluation. */
+  actionResourceId?: string | null;
+  /** Permission required to show this item. Use permission ids, not legacy capability flags. */
+  requiredPermission?: string;
+  /** Any matching permission allows the item. */
+  requiredPermissions?: string[];
   /** Whether tenant admin access is required (platform admins also allowed). */
   requiresTenantAdmin?: boolean;
-  /** @deprecated Use requiredCapability/requiresTenantAdmin instead. */
+  /** @deprecated Use requiredPermission/requiredPermissions/requiresTenantAdmin instead. */
   requiredRole?: 'admin' | 'tenant_admin' | 'member';
   /** Section determines where the nav item appears:
    * - 'main': Main navigation area
@@ -84,11 +104,21 @@ export interface MenuExtension {
   href?: string;
   divider?: boolean;
   order?: number;
-  /** Capability required to show this item. */
-  requiredCapability?: CapabilityRequirement;
+  /** Action id required to show this item. Prefer action ids for route/menu parity. */
+  actionId?: string;
+  /** Any matching action allows the item. */
+  actionIds?: string[];
+  /** Resource type used for action evaluation. Defaults to platform for admin/menu items. */
+  actionResourceType?: AuthzResourceType;
+  /** Optional resource id used for action evaluation. */
+  actionResourceId?: string | null;
+  /** Permission required to show this item. Use permission ids, not legacy capability flags. */
+  requiredPermission?: string;
+  /** Any matching permission allows the item. */
+  requiredPermissions?: string[];
   /** Whether tenant admin access is required (platform admins also allowed). */
   requiresTenantAdmin?: boolean;
-  /** @deprecated Use requiredCapability/requiresTenantAdmin instead. */
+  /** @deprecated Use requiredPermission/requiredPermissions/requiresTenantAdmin instead. */
   requiredRole?: 'admin' | 'tenant_admin' | 'member';
 }
 
@@ -114,26 +144,26 @@ export interface ComponentOverride {
 
 export interface ExtensionRegistry {
   /** Routes for root layout (/) */
-  rootRoutes: RouteObject[];
-  
+  rootRoutes: EnterpriseExtensionRoute[];
+
   /** Routes for tenant layout (/t/:tenantSlug) */
-  tenantRoutes: RouteObject[];
-  
+  tenantRoutes: EnterpriseExtensionRoute[];
+
   /** Sidebar navigation items */
   navItems: NavExtension[];
-  
+
   /** Header/dropdown menu items */
   menuItems: MenuExtension[];
-  
+
   /** Header component slots */
   headerSlots: HeaderSlot[];
-  
+
   /** Feature flag overrides */
   featureOverrides: FeatureOverride[];
-  
+
   /** Component overrides (name → component) */
   componentOverrides: Map<string, ComponentType<Record<string, unknown>>>;
-  
+
   /** Whether the registry has been initialized by EE plugin */
   initialized: boolean;
 }
@@ -161,14 +191,14 @@ export const extensions: ExtensionRegistry = {
 /**
  * Register a root-level route (mounted at /)
  */
-export function registerRootRoute(route: RouteObject): void {
+export function registerRootRoute(route: EnterpriseExtensionRoute): void {
   extensions.rootRoutes.push(route);
 }
 
 /**
  * Register a tenant-scoped route (mounted at /t/:tenantSlug)
  */
-export function registerTenantRoute(route: RouteObject): void {
+export function registerTenantRoute(route: EnterpriseExtensionRoute): void {
   extensions.tenantRoutes.push(route);
 }
 
@@ -221,7 +251,7 @@ export function registerFeatureOverride(override: FeatureOverride): void {
  * Register a component override (replaces OSS component)
  */
 export function registerComponentOverride(
-  name: string, 
+  name: string,
   component: ComponentType<Record<string, unknown>>
 ): void {
   extensions.componentOverrides.set(name, component);
@@ -287,8 +317,8 @@ export function isMultiTenantEnabled(): boolean {
 // =============================================================================
 
 export interface PluginExtensions {
-  rootRoutes?: RouteObject[];
-  tenantRoutes?: RouteObject[];
+  rootRoutes?: EnterpriseExtensionRoute[];
+  tenantRoutes?: EnterpriseExtensionRoute[];
   navItems?: NavExtension[];
   menuItems?: MenuExtension[];
   headerSlots?: HeaderSlot[];

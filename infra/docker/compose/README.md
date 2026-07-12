@@ -2,6 +2,8 @@
 
 Canonical Docker Compose files live in this directory to keep repository root clean and make environment layering explicit.
 
+The planned optional authorization config-bundle override is not implemented yet. Its mount, secret separation, startup, readiness, and test requirements are tracked in [Deploy Authorization Configuration](../../../docs/how-to/deploy-authorization-config.md).
+
 ## Files
 
 - `docker-compose.yml` - development base stack (Postgres default)

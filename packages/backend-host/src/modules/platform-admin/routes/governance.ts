@@ -16,7 +16,7 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { addCaseInsensitiveLike } from '@enterpriseglue/shared/infrastructure/persistence/adapters/index.js';
-import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { PlatformPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -294,6 +294,8 @@ router.post(
         delegateId: userId || null,
         updatedAt: now,
       });
+      await permissionService.syncLegacyRoleAssignments({ engineIds: [engineId] })
+        .catch((error) => logger.warn('Failed to sync legacy engine role assignments', { engineId, error }));
 
       // Log the action
       await logAudit({

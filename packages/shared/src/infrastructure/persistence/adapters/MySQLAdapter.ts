@@ -5,29 +5,31 @@ import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, RbacRolePermission, SsoAssignmentMapping, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineSet, EngineSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 } from '../entities/index.js';
 
 const entities = [
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, RbacRolePermission, SsoAssignmentMapping, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineSet, EngineSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 ];
@@ -35,7 +37,7 @@ const entities = [
 /**
  * MySQL/MariaDB Database Adapter
  * Implements database-specific operations for MySQL and MariaDB
- * 
+ *
  * Driver: mysql2 (pnpm add mysql2)
  */
 export class MySQLAdapter implements DatabaseAdapter {
@@ -43,7 +45,7 @@ export class MySQLAdapter implements DatabaseAdapter {
 
   constructor() {
     this.logging = config.nodeEnv === 'development';
-    
+
     this.checkDriverAvailability();
     this.normalizeColumnsForMySQL();
   }
@@ -153,14 +155,14 @@ export class MySQLAdapter implements DatabaseAdapter {
     const supportedFeatures: DatabaseFeature[] = [
       'jsonb',        // MySQL 5.7+ has JSON type
     ];
-    
+
     // Features NOT supported or different in MySQL:
     // - 'ilike': MySQL uses LIKE with COLLATE for case-insensitive
     // - 'returning': MySQL 8.0.21+ has limited support, MariaDB 10.5+ has full support
     // - 'onConflict': MySQL uses ON DUPLICATE KEY UPDATE
     // - 'uuid': MySQL doesn't have native UUID, use CHAR(36) or BINARY(16)
     // - 'sequences': MySQL uses AUTO_INCREMENT instead
-    
+
     return supportedFeatures.includes(feature);
   }
 

@@ -8,12 +8,11 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { AppError, asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { ssoProviderService } from '@enterpriseglue/shared/services/platform-admin/SsoProviderService.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
-import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -27,7 +26,8 @@ const createProviderSchema = z.object({
   name: z.string().min(1).max(100),
   type: z.enum(['microsoft', 'google', 'saml', 'oidc']),
   enabled: z.boolean().optional(),
-  
+  riskAcknowledged: z.boolean().optional(),
+
   // OIDC
   clientId: z.string().optional(),
   clientSecret: z.string().optional(),
@@ -37,26 +37,76 @@ const createProviderSchema = z.object({
   tokenUrl: z.string().url().optional().or(z.literal('')),
   userInfoUrl: z.string().url().optional().or(z.literal('')),
   scopes: z.array(z.string()).optional(),
-  
+
   // SAML
   entityId: z.string().optional(),
   ssoUrl: z.string().url().optional().or(z.literal('')),
   sloUrl: z.string().url().optional().or(z.literal('')),
   certificate: z.string().optional(),
   signatureAlgorithm: z.enum(['sha1', 'sha256', 'sha512']).optional(),
-  
+
   // Display
   iconUrl: z.string().url().optional().or(z.literal('')),
   buttonLabel: z.string().optional(),
   buttonColor: z.string().optional(),
   displayOrder: z.number().int().optional(),
-  
+
   // Provisioning
   autoProvision: z.boolean().optional(),
   defaultRole: z.enum(['admin', 'user']).optional(),
 });
 
 const updateProviderSchema = createProviderSchema.partial();
+
+const toggleProviderSchema = z.object({
+  riskAcknowledged: z.boolean().optional(),
+}).default({});
+
+type SsoProviderRiskInput = {
+  enabled?: boolean;
+  defaultRole?: 'admin' | 'user';
+  riskAcknowledged?: boolean;
+};
+
+type SsoProviderRiskExisting = {
+  enabled?: boolean;
+  defaultRole?: string;
+};
+
+function getProviderRiskReasons(input: SsoProviderRiskInput, existing?: SsoProviderRiskExisting): string[] {
+  const reasons: string[] = [];
+
+  if (input.enabled === true && existing?.enabled !== true) {
+    reasons.push('provider_enable');
+  }
+
+  if (input.defaultRole === 'admin' && existing?.defaultRole !== 'admin') {
+    reasons.push('platform_admin_default_role');
+  }
+
+  return reasons;
+}
+
+function assertProviderRiskAcknowledged(input: SsoProviderRiskInput, existing?: SsoProviderRiskExisting): string[] {
+  const riskReasons = getProviderRiskReasons(input, existing);
+  if (riskReasons.length > 0 && input.riskAcknowledged !== true) {
+    throw Errors.validation('High-risk SSO provider change requires acknowledgement', { riskReasons });
+  }
+
+  return riskReasons;
+}
+
+function sanitizeProviderAuditDetails(details: Record<string, unknown>, riskReasons: string[]) {
+  return {
+    ...details,
+    ...(riskReasons.length > 0
+      ? {
+          riskAcknowledged: true,
+          riskReasons,
+        }
+      : {}),
+  };
+}
 
 const providerIdSchema = z.object({
   id: z.string().min(1),
@@ -69,7 +119,7 @@ const providerIdSchema = z.object({
 router.get(
   '/api/sso/providers',
   requireAuth,
-  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
+  requireAction('platform.sso.providers.read'),
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const providers = await ssoProviderService.getAllProviders();
@@ -115,7 +165,7 @@ router.get(
 router.get(
   '/api/sso/providers/:id',
   requireAuth,
-  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
+  requireAction('platform.sso.providers.read'),
   validateParams(providerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
@@ -140,10 +190,11 @@ router.get(
 router.post(
   '/api/sso/providers',
   requireAuth,
-  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
+  requireAction('platform.sso.providers.manage'),
   validateBody(createProviderSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
+      const riskReasons = assertProviderRiskAcknowledged(req.body);
       const result = await ssoProviderService.createProvider(req.body, req.user!.userId);
 
       await logAudit({
@@ -151,7 +202,15 @@ router.post(
         userId: req.user!.userId,
         resourceType: 'sso_provider',
         resourceId: result.id,
-        details: { name: req.body.name, type: req.body.type },
+        details: sanitizeProviderAuditDetails(
+          {
+            name: req.body.name,
+            type: req.body.type,
+            enabled: req.body.enabled === true,
+            defaultRole: req.body.defaultRole || 'user',
+          },
+          riskReasons
+        ),
       });
 
       res.status(201).json(result);
@@ -170,7 +229,7 @@ router.post(
 router.put(
   '/api/sso/providers/:id',
   requireAuth,
-  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
+  requireAction('platform.sso.providers.manage'),
   validateParams(providerIdSchema),
   validateBody(updateProviderSchema),
   asyncHandler(async (req: Request, res: Response) => {
@@ -181,6 +240,7 @@ router.put(
         throw Errors.providerNotFound();
       }
 
+      const riskReasons = assertProviderRiskAcknowledged(req.body, existing);
       await ssoProviderService.updateProvider(providerId, req.body);
 
       await logAudit({
@@ -188,7 +248,13 @@ router.put(
         userId: req.user!.userId,
         resourceType: 'sso_provider',
         resourceId: providerId,
-        details: { name: req.body.name || existing.name },
+        details: sanitizeProviderAuditDetails(
+          {
+            name: req.body.name || existing.name,
+            changedFields: Object.keys(req.body).filter((field) => field !== 'riskAcknowledged'),
+          },
+          riskReasons
+        ),
       });
 
       res.json({ success: true });
@@ -207,7 +273,7 @@ router.put(
 router.delete(
   '/api/sso/providers/:id',
   requireAuth,
-  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
+  requireAction('platform.sso.providers.manage'),
   validateParams(providerIdSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
@@ -243,8 +309,9 @@ router.delete(
 router.post(
   '/api/sso/providers/:id/toggle',
   requireAuth,
-  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
+  requireAction('platform.sso.providers.manage'),
   validateParams(providerIdSchema),
+  validateBody(toggleProviderSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const providerId = String(req.params.id);
@@ -254,6 +321,10 @@ router.post(
       }
 
       const newEnabled = !existing.enabled;
+      const riskReasons = assertProviderRiskAcknowledged(
+        { enabled: newEnabled, riskAcknowledged: req.body.riskAcknowledged },
+        existing
+      );
       await ssoProviderService.toggleProvider(providerId, newEnabled);
 
       await logAudit({
@@ -261,7 +332,7 @@ router.post(
         userId: req.user!.userId,
         resourceType: 'sso_provider',
         resourceId: providerId,
-        details: { name: existing.name },
+        details: sanitizeProviderAuditDetails({ name: existing.name, enabled: newEnabled }, riskReasons),
       });
 
       res.json({ enabled: newEnabled });

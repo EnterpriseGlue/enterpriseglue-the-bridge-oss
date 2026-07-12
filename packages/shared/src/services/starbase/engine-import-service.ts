@@ -5,6 +5,7 @@ import { ENGINE_MEMBER_ROLES } from '@enterpriseglue/shared/constants/roles.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineProjectAccess } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineProjectAccess.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { Version } from '@enterpriseglue/shared/infrastructure/persistence/entities/Version.js';
 import { engineService } from '../platform-admin/index.js';
 import { camundaGet } from '../bpmn-engine-client.js';
@@ -12,6 +13,7 @@ import type { DecisionDefinition, DecisionDefinitionXml, ProcessDefinition } fro
 import { ensureExt, sanitize, sanitizeBpmnXml, sanitizeDmnXml } from '../engines/deployment-utils.js';
 import { extractBpmnProcessId, extractDmnDecisionId } from '@enterpriseglue/shared/utils/starbase-xml.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
+import { EnginePermissions, permissionService } from '../platform-admin/permissions.js';
 
 interface ProcessDefinitionXml {
   id: string;
@@ -35,6 +37,23 @@ export interface PreparedEngineImport {
     bpmn: number;
     dmn: number;
   };
+}
+
+export interface EngineImportPreview {
+  engineId: string;
+  allowed: true;
+  targetAction: 'create_import_target';
+  counts: {
+    bpmn: number;
+    dmn: number;
+  };
+  files: Array<{
+    name: string;
+    type: ImportFileType;
+    bpmnProcessId: string | null;
+    dmnDecisionId: string | null;
+  }>;
+  warnings: string[];
 }
 
 export interface ApplyPreparedEngineImportInput {
@@ -175,7 +194,12 @@ export async function assertUserCanImportFromEngine(userId: string, engineId: st
     throw Errors.engineNotFound(engineId);
   }
 
-  const hasAccess = await engineService.hasEngineAccess(userId, engineId, ENGINE_MEMBER_ROLES);
+  const hasAccess = await engineService.hasEngineAccess(userId, engineId, ENGINE_MEMBER_ROLES) ||
+    await permissionService.hasPermission(EnginePermissions.DEPLOY_VIEW, {
+      userId,
+      resourceType: 'engine',
+      resourceId: engineId,
+    });
   if (!hasAccess) {
     throw Errors.forbidden('You do not have access to the selected engine');
   }
@@ -197,6 +221,25 @@ export async function prepareLatestEngineImport(engineId: string): Promise<Prepa
   };
 }
 
+export async function previewLatestEngineImport(userId: string, engineId: string): Promise<EngineImportPreview> {
+  await assertUserCanImportFromEngine(userId, engineId);
+  const prepared = await prepareLatestEngineImport(engineId);
+
+  return {
+    engineId: prepared.engineId,
+    allowed: true,
+    targetAction: 'create_import_target',
+    counts: prepared.counts,
+    files: prepared.files.map((file) => ({
+      name: file.name,
+      type: file.type,
+      bpmnProcessId: file.bpmnProcessId,
+      dmnDecisionId: file.dmnDecisionId,
+    })),
+    warnings: prepared.files.length === 0 ? ['No latest BPMN or DMN definitions were found on this engine.'] : [],
+  };
+}
+
 export async function applyPreparedEngineImportToProject({
   manager,
   projectId,
@@ -205,6 +248,7 @@ export async function applyPreparedEngineImportToProject({
 }: ApplyPreparedEngineImportInput): Promise<void> {
   const now = unixTimestamp();
   const accessRepo = manager.getRepository(EngineProjectAccess);
+  const targetRepo = manager.getRepository(ProjectEngineTarget);
   const fileRepo = manager.getRepository(File);
   const versionRepo = manager.getRepository(Version);
 
@@ -224,6 +268,48 @@ export async function applyPreparedEngineImportToProject({
       grantedById: userId,
       autoApproved: true,
       createdAt: now,
+    });
+  }
+
+  const existingTarget = await targetRepo.findOne({
+    where: {
+      projectId,
+      engineId: importData.engineId,
+    },
+    select: ['id', 'allowManualDeploy', 'allowCiDeploy', 'allowApiDeploy'],
+  });
+
+  if (existingTarget) {
+    await targetRepo.update({ id: existingTarget.id }, {
+      status: 'active',
+      source: 'import',
+      sourceRef: `engine_import:${projectId}:${importData.engineId}`,
+      allowManualDeploy: existingTarget.allowManualDeploy ?? true,
+      allowCiDeploy: existingTarget.allowCiDeploy ?? false,
+      allowApiDeploy: existingTarget.allowApiDeploy ?? false,
+      allowImport: true,
+      approvedById: userId,
+      lastSeenAt: now,
+      updatedAt: now,
+    });
+  } else {
+    await targetRepo.insert({
+      id: generateId(),
+      tenantId: null,
+      projectId,
+      engineId: importData.engineId,
+      status: 'active',
+      source: 'import',
+      sourceRef: `engine_import:${projectId}:${importData.engineId}`,
+      allowManualDeploy: true,
+      allowCiDeploy: false,
+      allowApiDeploy: false,
+      allowImport: true,
+      createdById: userId,
+      approvedById: userId,
+      lastSeenAt: now,
+      createdAt: now,
+      updatedAt: now,
     });
   }
 

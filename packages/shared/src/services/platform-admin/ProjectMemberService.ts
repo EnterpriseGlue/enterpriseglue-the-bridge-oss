@@ -12,6 +12,8 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { In } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { permissionService } from './permissions.js';
+import { logger } from '@enterpriseglue/shared/utils/logger.js';
 
 type ProjectRole = 'owner' | 'delegate' | 'developer' | 'editor' | 'viewer';
 
@@ -29,6 +31,14 @@ function computeEffectiveRole(roles: ProjectRole[]): ProjectRole {
     if (normalized.includes(r)) return r;
   }
   return 'viewer';
+}
+
+async function syncLegacyProjectAssignments(projectId: string): Promise<void> {
+  try {
+    await permissionService.syncLegacyRoleAssignments({ projectIds: [projectId] });
+  } catch (error) {
+    logger.warn('Failed to sync legacy project role assignments', { projectId, error });
+  }
 }
 
 export interface ProjectMemberWithUser {
@@ -226,6 +236,8 @@ export class ProjectMemberService {
         .execute();
     }
 
+    await syncLegacyProjectAssignments(projectId);
+
     return { id, projectId, userId, role: effectiveRole, roles };
   }
 
@@ -256,6 +268,8 @@ export class ProjectMemberService {
         .orIgnore()
         .execute();
     }
+
+    await syncLegacyProjectAssignments(projectId);
   }
 
   /**
@@ -268,6 +282,7 @@ export class ProjectMemberService {
 
     await roleRepo.delete({ projectId, userId });
     await memberRepo.delete({ projectId, userId });
+    await syncLegacyProjectAssignments(projectId);
   }
 
   /**
@@ -358,6 +373,7 @@ export class ProjectMemberService {
 
     // Update project owner_id
     await projectRepo.update({ id: projectId }, { ownerId: toUserId });
+    await syncLegacyProjectAssignments(projectId);
   }
 
   /**

@@ -99,6 +99,7 @@ export interface CloneFromGitRequest {
 
 export interface DeployRequest {
   projectId: string;
+  engineId?: string;
   message: string;
   environment?: string;
   createTag?: boolean;

@@ -45,6 +45,7 @@ export const DeploymentInsertSchema = z.object({
 // API-specific schemas
 export const DeployRequestSchema = z.object({
   projectId: z.string().uuid(),
+  engineId: z.string().min(1).optional(),
   message: z.string().min(1).max(500),
   environment: z.string().optional(),
   createTag: z.boolean().optional().default(false),

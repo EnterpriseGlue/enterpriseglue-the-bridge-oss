@@ -18,16 +18,19 @@ Audience: Developers and architects.
 - [Docker Compose Deployment](how-to/deploy-docker.md)
 - [OpenShift Deployment](how-to/deploy-openshift.md)
 - [Deployment Runbook](how-to/deployment-runbook.md)
+- [Deploy Authorization Configuration (Target)](how-to/deploy-authorization-config.md)
 
 ## Configuration
 - [Configuration Reference](reference/configuration.md)
 - [Configuration Matrix](reference/configuration-matrix.md)
 - [Auth and SSO Setup](how-to/auth-sso.md)
+- [Configure Authorization, Identity, and Engines (Target)](how-to/configure-authorization-and-engines.md)
 
 ## Architecture
 - [Architecture Overview](architecture/00-architecture-overview.md)
 - [Logical Architecture](architecture/02-oss-logical-architecture.md)
 - [Authorization and Access Control](architecture/09-oss-authorization-access-control-model.md)
+- [JSON-Driven Authorization and Engine Registration](architecture/11-json-driven-authz-and-engine-registration.md)
 
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)
@@ -41,8 +44,8 @@ Audience: Developers and architects.
 - [Security Hardening Checklist](reference/security-hardening.md)
 
 ## Existing Technical References
-- [Database Architecture](../backend/src/shared/db/README.md)
+- [Database Architecture](../packages/shared/src/db/README.md)
 - [Database Migrations](../backend/docs/DATABASE-MIGRATIONS.md)
-- [Error Handling Guide](../backend/src/shared/middleware/README.md)
-- [Frontend Shared Components](../frontend/src/features/shared/components/README.md)
-- [Frontend Modal System](../frontend/src/shared/components/modals/README.md)
+- [Error Handling Guide](../packages/shared/src/middleware/README.md)
+- [Frontend Shared Components](../packages/frontend-host/src/features/shared/components/README.md)
+- [Frontend Modal System](../packages/frontend-host/src/shared/components/modals/README.md)

@@ -18,6 +18,7 @@ import type {
   ChangePasswordRequest,
   CreateUserRequest,
   CreateUserResponse,
+  CurrentUserPermissions,
   UpdateUserRequest,
   User,
 } from '../shared/types/auth';
@@ -85,6 +86,15 @@ class AuthService {
   async getMe(): Promise<User> {
     return apiClient.get<User>(`${API_BASE_URL}/auth/me`, undefined, {
       credentials: 'include', // Send HTTP-only cookies for Microsoft auth
+    });
+  }
+
+  /**
+   * Get current user's effective RBAC permissions.
+   */
+  async getMyPermissions(): Promise<CurrentUserPermissions> {
+    return apiClient.get<CurrentUserPermissions>('/api/authz/me/permissions', undefined, {
+      credentials: 'include',
     });
   }
 

@@ -16,10 +16,11 @@ export const adminQueryKeys = {
 };
 
 // Platform Settings hooks
-export function usePlatformSettings() {
+export function usePlatformSettings(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.settings,
     queryFn: () => platformAdminApi.getSettings(),
+    enabled: options?.enabled,
   });
 }
 
@@ -32,14 +33,14 @@ export function useUpdatePlatformSettings() {
     onMutate: async (newData) => {
       await queryClient.cancelQueries({ queryKey: adminQueryKeys.settings });
       const previousSettings = queryClient.getQueryData<PlatformSettings>(adminQueryKeys.settings);
-      
+
       if (previousSettings) {
         queryClient.setQueryData<PlatformSettings>(adminQueryKeys.settings, {
           ...previousSettings,
           ...newData,
         });
       }
-      
+
       return { previousSettings };
     },
     // Rollback on error
@@ -55,10 +56,11 @@ export function useUpdatePlatformSettings() {
 }
 
 // Environment Tags hooks
-export function useEnvironmentTags() {
+export function useEnvironmentTags(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.environments,
     queryFn: () => platformAdminApi.getEnvironments(),
+    enabled: options?.enabled,
   });
 }
 
@@ -109,10 +111,11 @@ export function useReorderEnvironmentTags() {
 }
 
 // Users hooks
-export function useAdminUsers(params?: { limit?: number; offset?: number }) {
+export function useAdminUsers(params?: { limit?: number; offset?: number }, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.users(params),
     queryFn: () => platformAdminApi.getUsers(params),
+    enabled: options?.enabled,
   });
 }
 
@@ -151,10 +154,11 @@ export function useAssignEngineOwner() {
 }
 
 // Governance - Projects
-export function useProjectsGovernance(search?: string) {
+export function useProjectsGovernance(search?: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.projectsGovernance(search),
     queryFn: () => platformAdminApi.getProjectsForGovernance(search ? { search } : undefined),
+    enabled: options?.enabled,
   });
 }
 
@@ -172,10 +176,11 @@ export function useAssignProjectDelegate() {
 }
 
 // Governance - Engines
-export function useEnginesGovernance(search?: string) {
+export function useEnginesGovernance(search?: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.enginesGovernance(search),
     queryFn: () => platformAdminApi.getEnginesForGovernance(search ? { search } : undefined),
+    enabled: options?.enabled,
   });
 }
 
@@ -193,10 +198,11 @@ export function useAssignEngineDelegate() {
 }
 
 // Git Providers hooks
-export function useAdminGitProviders() {
+export function useAdminGitProviders(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.gitProviders,
     queryFn: () => platformAdminApi.getGitProviders(),
+    enabled: options?.enabled,
   });
 }
 

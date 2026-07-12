@@ -21,6 +21,16 @@ declare global {
   }
 }
 
+export interface EnterprisePostAuthContext {
+  tokenPayload: JwtPayload;
+  user: User;
+}
+
+export type EnterprisePostAuthResolver = (
+  req: Request,
+  context: EnterprisePostAuthContext
+) => void | Promise<void>;
+
 function getRequestTokenCandidate(req: Request): string | null {
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : null;
   if (authHeader?.startsWith('Bearer ')) {
@@ -59,6 +69,16 @@ function readOptionalAuthPayload(req: Request): JwtPayload | null {
   }
 
   return verifyToken(tokenCandidate);
+}
+
+async function runEnterprisePostAuthResolver(
+  req: Request,
+  context: EnterprisePostAuthContext
+): Promise<void> {
+  const resolver = (req.app?.locals as Record<string, unknown> | undefined)?.enterpriseTenantAuthorizationResolver;
+  if (typeof resolver === 'function') {
+    await (resolver as EnterprisePostAuthResolver)(req, context);
+  }
 }
 
 /**
@@ -102,6 +122,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     if (!user.isEmailVerified && !isAdminVerificationExempt && !allowUnverifiedPaths.includes(requestPath)) {
       throw Errors.forbidden('Email verification required');
     }
+
+    await runEnterprisePostAuthResolver(req, { tokenPayload: payload, user });
 
     next();
   } catch (error) {

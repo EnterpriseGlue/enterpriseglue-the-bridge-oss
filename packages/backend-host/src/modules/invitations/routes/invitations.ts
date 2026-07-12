@@ -4,6 +4,7 @@ import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter, createUserLimiter, passwordResetVerifyLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireInvitationCreateAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
@@ -12,9 +13,6 @@ import { addCaseInsensitiveEquals } from '@enterpriseglue/shared/infrastructure/
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
 import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
 import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
-import { engineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
-import { ENGINE_MANAGE_ROLES, MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js';
 import { generateOnboardingToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
@@ -62,33 +60,6 @@ function setOnboardingCookie(res: ExpressResponse, payload: {
   });
 }
 
-async function ensureInvitationPermission(req: Express.Request, resourceType: 'tenant' | 'project' | 'engine', resourceId?: string): Promise<void> {
-  if (resourceType === 'tenant') {
-    if (req.user?.platformRole !== 'admin') {
-      throw Errors.forbidden('Only platform admins can invite workspace users');
-    }
-    return;
-  }
-
-  if (!resourceId) {
-    throw Errors.validation('Resource ID is required');
-  }
-
-  if (resourceType === 'project') {
-    const membership = await projectMemberService.getMembership(resourceId, req.user!.userId);
-    const roles = Array.isArray((membership as any)?.roles) ? (membership as any).roles : membership ? [membership.role] : [];
-    if (!roles.some((role: string) => MANAGE_ROLES.includes(role as any))) {
-      throw Errors.forbidden('Only owners and delegates can invite project members');
-    }
-    return;
-  }
-
-  const canManageEngine = await engineService.hasEngineAccess(req.user!.userId, resourceId, ENGINE_MANAGE_ROLES);
-  if (!canManageEngine) {
-    throw Errors.forbidden('Only owners and delegates can invite engine members');
-  }
-}
-
 async function loadResourceName(resourceType: 'tenant' | 'project' | 'engine', tenantSlug: string, resourceId?: string, providedResourceName?: string): Promise<string> {
   if (providedResourceName && providedResourceName.trim().length > 0) {
     return providedResourceName.trim();
@@ -122,12 +93,10 @@ router.get('/api/t/:tenantSlug/invitations/capabilities', apiLimiter, requireAut
   });
 }));
 
-router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUserLimiter, validateBody(createInvitationSchema), asyncHandler(async (req, res) => {
+router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUserLimiter, validateBody(createInvitationSchema), requireInvitationCreateAction('invitations.create'), asyncHandler(async (req, res) => {
   const tenantSlug = String(req.params.tenantSlug || '').trim() || 'default';
   const { email, resourceType, resourceId, resourceName, role, deliveryMethod } = req.body as z.infer<typeof createInvitationSchema>;
   const normalizedEmail = email.toLowerCase();
-
-  await ensureInvitationPermission(req, resourceType, resourceId);
 
   if (resourceType === 'engine' && role && role !== 'operator' && role !== 'deployer') {
     throw Errors.validation('Engine invitations only support operator or deployer roles');

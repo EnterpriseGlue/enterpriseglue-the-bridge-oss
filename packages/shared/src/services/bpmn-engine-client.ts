@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { fetch } from 'undici'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
@@ -78,6 +79,37 @@ type OAuthTokenCacheEntry = {
 }
 
 const oauthTokenCache = new Map<string, OAuthTokenCacheEntry>()
+
+function isLoopbackEngineHost(raw: string): boolean {
+  try {
+    const host = new URL(raw).hostname
+    return host === 'localhost' || host === '::1' || host === '[::1]' || /^127\./.test(host)
+  } catch {
+    return false
+  }
+}
+
+function isDockerRuntime(): boolean {
+  if (process.env.EG_RUNTIME_MODE === 'docker') return true
+  if (process.env.EG_RUNTIME_MODE === 'host') return false
+  return existsSync('/.dockerenv')
+}
+
+function shouldRewriteDockerLoopbackEngineUrls(): boolean {
+  if (process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS === 'true') return true
+  if (process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS === 'false') return false
+  if (process.env.NODE_ENV === 'test') return false
+  return isDockerRuntime()
+}
+
+export function resolveBpmnEngineRequestUrl(baseUrl: string, path = ''): string {
+  const rawUrl = path.startsWith('http') ? path : baseUrl.replace(/\/$/, '') + path
+  if (!shouldRewriteDockerLoopbackEngineUrls() || !isLoopbackEngineHost(rawUrl)) return rawUrl
+
+  const rewritten = new URL(rawUrl)
+  rewritten.hostname = 'host.docker.internal'
+  return rewritten.toString()
+}
 
 async function getEngine(engineId: string): Promise<EngineCfg> {
   if (!engineId) throw Errors.validation('engineId is required')
@@ -187,7 +219,7 @@ async function buildHeaders(cfg: EngineCfg, meta: { engineId: string; method: st
 
 export async function camundaGet<T = unknown>(engineId: string, path: string, params?: Record<string, any>): Promise<T> {
   const cfg = await getEngine(engineId)
-  const url = new URL(path.startsWith('http') ? path : cfg.baseUrl.replace(/\/$/, '') + path)
+  const url = new URL(resolveBpmnEngineRequestUrl(cfg.baseUrl, path))
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v === undefined || v === null || v === '') continue
@@ -210,7 +242,7 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
 
 async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
   const cfg = await getEngine(engineId)
-  const url = path.startsWith('http') ? path : cfg.baseUrl.replace(/\/$/, '') + path
+  const url = resolveBpmnEngineRequestUrl(cfg.baseUrl, path)
   const res = await fetch(url, {
     method,
     headers: await buildHeaders(cfg, { engineId, method, path }),

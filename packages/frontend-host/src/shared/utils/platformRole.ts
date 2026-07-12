@@ -15,8 +15,10 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   user: 'Standard workspace access only.',
 };
 
+const PLATFORM_ROLE_VALUES = new Set(['admin']);
+
 function normalizePlatformRoleValue(role?: string | null): 'admin' | 'user' {
-  return role === 'admin' ? 'admin' : 'user';
+  return PLATFORM_ROLE_VALUES.has(String(role || '')) ? 'admin' : 'user';
 }
 
 export function getPlatformRoleTagType(role?: string | null): PlatformRoleTagType {

@@ -28,6 +28,8 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
       firstName: 'Ada',
       lastName: 'Lovelace',
     },
+    hasAnyPlatformPermission: vi.fn().mockReturnValue(false),
+    hasAnyEnginePermission: vi.fn().mockReturnValue(false),
   }),
 }))
 

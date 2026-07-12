@@ -14,6 +14,12 @@ vi.mock('@carbon/react', () => ({
       </div>
     ) : null,
   InlineNotification: ({ subtitle }: any) => <div>{subtitle}</div>,
+  TextArea: ({ labelText, value, onChange, ...props }: any) => (
+    <label>
+      {labelText}
+      <textarea value={value} onChange={onChange} {...props} />
+    </label>
+  ),
 }));
 
 describe('ConfirmModal', () => {
@@ -64,5 +70,26 @@ describe('ConfirmModal', () => {
       />
     );
     expect(screen.getByText('Be careful')).toBeInTheDocument();
+  });
+
+  it('requires an audit reason when configured', () => {
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmModal
+        open={true}
+        title="Confirm"
+        description="Are you sure?"
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+        requireReason
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Audit reason'), { target: { value: 'Maintenance window' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(onConfirm).toHaveBeenCalledWith('Maintenance window');
   });
 });

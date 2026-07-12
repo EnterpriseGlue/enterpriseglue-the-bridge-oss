@@ -22,6 +22,7 @@ import type {
 import type {
   EnterpriseBackendPlugin,
   EnterpriseBackendContext,
+  EnterpriseBackendRouteAuthz,
   ConnectionPool,
 } from '@enterpriseglue/enterprise-plugin-api/backend';
 
@@ -29,10 +30,38 @@ import type {
 // Frontend plugin fixture (consumer simulation)
 // ---------------------------------------------------------------------------
 
-const routes: EnterpriseRoute[] = [{ path: '/enterprise' }];
-const tenantRoutes: EnterpriseRoute[] = [{ path: '/t/:tenantSlug/enterprise' }];
-const navItems: EnterpriseNavItem[] = [{ id: 'enterprise-nav', label: 'Enterprise', path: '/enterprise' }];
-const menuItems: EnterpriseMenuItem[] = [{ id: 'enterprise-menu', label: 'Enterprise' }];
+const routes: EnterpriseRoute[] = [{
+  path: '/enterprise',
+  authz: {
+    actionId: 'platform.settings.read',
+    actionResourceType: 'platform',
+    backendRoutes: [{ method: 'GET', path: '/api/admin/settings', actionId: 'platform.settings.read' }],
+  },
+}];
+const tenantRoutes: EnterpriseRoute[] = [{
+  path: '/t/:tenantSlug/enterprise',
+  handle: {
+    enterpriseglueAuthz: {
+      actionId: 'platform.settings.read',
+      actionResourceType: 'platform',
+    },
+  },
+}];
+const navItems: EnterpriseNavItem[] = [{
+  id: 'enterprise-nav',
+  label: 'Enterprise',
+  path: '/enterprise',
+  actionId: 'platform.settings.read',
+  actionResourceType: 'platform',
+  requiredPermission: 'platform:settings:manage',
+}];
+const menuItems: EnterpriseMenuItem[] = [{
+  id: 'enterprise-menu',
+  label: 'Enterprise',
+  actionIds: ['platform.authz.roles.read', 'platform.settings.read'],
+  actionResourceType: 'platform',
+  requiredPermissions: ['platform:authz:roles:view', 'platform:settings:manage'],
+}];
 const componentOverrides: ComponentOverride[] = [{ name: 'engines-page', component: () => null }];
 const featureOverrides: FeatureOverride[] = [{ flag: 'multiTenant', enabled: true }];
 
@@ -70,8 +99,35 @@ export const frontendPluginFixture: EnterpriseFrontendPlugin = {
 // Backend plugin fixture (consumer simulation)
 // ---------------------------------------------------------------------------
 
+const backendAuthzRoutes: EnterpriseBackendRouteAuthz[] = [{
+  method: 'GET',
+  path: '/api/enterprise/settings',
+  actionId: 'platform.settings.read',
+  resourceResolver: 'platform.self',
+  additionalChecks: ['enterprise-feature-enabled'],
+  openApiOperationId: 'getEnterpriseSettings',
+}];
+
 export const backendPluginFixture: EnterpriseBackendPlugin = {
-  registerRoutes: async (_app: unknown, _ctx: EnterpriseBackendContext) => {},
+  registerRoutes: async (_app: unknown, _ctx: EnterpriseBackendContext) => {
+    const guard = _ctx.authz.requireAction('platform.settings.read', {
+      resourceResolver: 'platform.self',
+    });
+    const compositeGuard = _ctx.authz.requireCompositeAction('project-engine-target.deploy.use', {
+      mode: 'manual',
+      projectIdFrom: 'body',
+      engineIdFrom: 'body',
+    });
+    const declaredGuard = _ctx.authz.requireDeclaredAction(backendAuthzRoutes, 'GET', '/api/enterprise/settings', {
+      resourceIdFrom: 'params',
+    });
+    const openApiAuthz = _ctx.authz.buildOpenApiAuthzMetadata(backendAuthzRoutes);
+    void guard;
+    void compositeGuard;
+    void declaredGuard;
+    void openApiAuthz[0]?.extension;
+  },
+  authzRoutes: backendAuthzRoutes,
   migrateEnterpriseDatabase: async (_ctx: EnterpriseBackendContext) => {},
 };
 
@@ -94,4 +150,18 @@ const connectionPool: ConnectionPool = {
 export const backendContextFixture: EnterpriseBackendContext = {
   connectionPool,
   config: {},
+  authz: {
+    requireAction() {
+      return () => undefined;
+    },
+    requireCompositeAction() {
+      return () => undefined;
+    },
+    requireDeclaredAction() {
+      return () => undefined;
+    },
+    buildOpenApiAuthzMetadata() {
+      return [];
+    },
+  },
 };

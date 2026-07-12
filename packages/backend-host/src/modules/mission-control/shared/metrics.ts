@@ -2,14 +2,18 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireEngineReadOrWrite } from '@enterpriseglue/shared/middleware/engineAuth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { listMetrics, getMetric } from './metrics-service.js';
 import { MetricsQueryParams } from '@enterpriseglue/shared/schemas/mission-control/metrics.js';
 
 const r = Router();
 
 // Apply auth middleware only to /mission-control-api routes (not globally)
-r.use('/mission-control-api', requireAuth, requireEngineReadOrWrite({ engineIdFrom: 'query' }));
+r.use(
+  '/mission-control-api',
+  requireAuth,
+  requireAction('engine.runtime.metrics.read', { resourceIdFrom: 'query' })
+);
 
 // Query metrics
 r.get('/mission-control-api/metrics', validateQuery(MetricsQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {

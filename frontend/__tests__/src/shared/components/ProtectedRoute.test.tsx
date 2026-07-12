@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ProtectedRoute } from '@src/shared/components/ProtectedRoute';
@@ -26,12 +26,27 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-const mockUseAuth = async (state: { user: any; isAuthenticated: boolean; isLoading?: boolean }) => {
+const mockUseAuth = async (state: {
+  user: any;
+  isAuthenticated: boolean;
+  isLoading?: boolean;
+  permissions?: any;
+  hasAnyPlatformPermission?: (permissions: string[]) => boolean;
+}) => {
   const { useAuth } = await import('@src/shared/hooks/useAuth');
-  (useAuth as any).mockReturnValue({ isLoading: false, ...state });
+  (useAuth as any).mockReturnValue({
+    isLoading: false,
+    permissions: null,
+    hasAnyPlatformPermission: () => false,
+    ...state,
+  });
 };
 
 describe('ProtectedRoute', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('shows loading state while auth bootstrap is still running', async () => {
     await mockUseAuth({ user: null, isAuthenticated: false, isLoading: true });
 
@@ -95,10 +110,93 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('Secret')).toBeInTheDocument();
   });
 
+  it('allows admin routes when the current user has a required platform permission', async () => {
+    await mockUseAuth({
+      user: { capabilities: { canAccessAdminRoutes: false, canManagePlatformSettings: false } },
+      isAuthenticated: true,
+      permissions: {
+        userId: 'user-1',
+        platform: ['platform:authz:roles:view'],
+        projects: [],
+        engines: [],
+        generatedAt: 1,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/admin/access-control']}>
+        <ProtectedRoute requireAdmin requiredPlatformPermissions={['platform:authz:roles:view']}>
+          <div>Access Control</div>
+        </ProtectedRoute>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Access Control')).toBeInTheDocument();
+  });
+
+  it('allows generic admin routes when the current user has any admin navigation platform permission', async () => {
+    await mockUseAuth({
+      user: { capabilities: { canAccessAdminRoutes: false, canManagePlatformSettings: false } },
+      isAuthenticated: true,
+      permissions: {
+        userId: 'user-1',
+        platform: ['platform:audit:view'],
+        projects: [],
+        engines: [],
+        generatedAt: 1,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/admin']}>
+        <ProtectedRoute requireAdmin>
+          <div>Admin</div>
+        </ProtectedRoute>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Admin')).toBeInTheDocument();
+  });
+
+  it('runs setup checks for users with platform settings permission', async () => {
+    await mockUseAuth({
+      user: { capabilities: { canAccessAdminRoutes: false, canManagePlatformSettings: false } },
+      isAuthenticated: true,
+      permissions: {
+        userId: 'user-1',
+        platform: ['platform:settings:manage'],
+        projects: [],
+        engines: [],
+        generatedAt: 1,
+      },
+    });
+    const { apiClient } = await import('@src/shared/api/client');
+    (apiClient.get as any).mockResolvedValue({ isConfigured: false });
+
+    render(
+      <MemoryRouter initialEntries={['/admin/other']}>
+        <ProtectedRoute requireAdmin requiredPlatformPermissions={['platform:settings:manage']}>
+          <div>Admin</div>
+        </ProtectedRoute>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Navigate:/admin/tenants')).toBeInTheDocument();
+    });
+  });
+
   it('redirects admin to setup when not configured', async () => {
     await mockUseAuth({
       user: { capabilities: { canAccessAdminRoutes: true, canManagePlatformSettings: true } },
       isAuthenticated: true,
+      permissions: {
+        userId: 'user-1',
+        platform: ['platform:settings:manage'],
+        projects: [],
+        engines: [],
+        generatedAt: 1,
+      },
     });
     const { apiClient } = await import('@src/shared/api/client');
     (apiClient.get as any).mockResolvedValue({ isConfigured: false });
@@ -120,6 +218,13 @@ describe('ProtectedRoute', () => {
     await mockUseAuth({
       user: { capabilities: { canAccessAdminRoutes: true, canManagePlatformSettings: true } },
       isAuthenticated: true,
+      permissions: {
+        userId: 'user-1',
+        platform: ['platform:settings:manage'],
+        projects: [],
+        engines: [],
+        generatedAt: 1,
+      },
     });
 
     render(

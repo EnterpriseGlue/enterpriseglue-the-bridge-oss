@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { dashboardLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -14,7 +15,7 @@ const r = Router();
  * Get dashboard statistics for the current user
  * Returns aggregated counts for projects, files, file types
  */
-r.get('/api/dashboard/stats', requireAuth, dashboardLimiter, asyncHandler(async (req: Request, res: Response) => {
+r.get('/api/dashboard/stats', requireAuth, requireAction('platform.dashboard.read'), dashboardLimiter, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const dataSource = await getDataSource();
   const projectMemberRepo = dataSource.getRepository(ProjectMember);

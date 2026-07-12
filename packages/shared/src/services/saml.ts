@@ -5,7 +5,11 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ssoClaimsMappingService, type PlatformRole, type SsoClaims } from './platform-admin/SsoClaimsMappingService.js';
+import { ssoAssignmentMappingService } from './platform-admin/SsoAssignmentMappingService.js';
+import { ssoGroupMappingService } from './platform-admin/SsoGroupMappingService.js';
+import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIdentityService.js';
 import { ssoProviderService } from './platform-admin/SsoProviderService.js';
+import { ssoSyncDiagnosticsService, type SsoSyncCounts } from './platform-admin/SsoSyncDiagnosticsService.js';
 
 const require = createRequire(import.meta.url);
 const nodeSaml = require('@node-saml/node-saml');
@@ -343,12 +347,53 @@ export function extractSamlUserInfo(profile: SamlProfile): SamlUserInfo {
   };
 }
 
+function samlSubject(userInfo: SamlUserInfo): { subject: string; claim: string } {
+  if (userInfo.oid) return { subject: userInfo.oid, claim: 'oid' };
+  if (userInfo.nameId) return { subject: userInfo.nameId, claim: 'name_id' };
+  return { subject: userInfo.email, claim: 'email' };
+}
+
+async function syncSamlAuthorizationForUser(
+  manager: any,
+  userId: string,
+  userInfo: SamlUserInfo,
+  providerId: string,
+  tenantId: string | null,
+  ssoClaims: SsoClaims
+): Promise<SsoSyncCounts> {
+  const subject = samlSubject(userInfo);
+  await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
+    tenantId,
+    providerId,
+    providerType: 'saml',
+    providerSubject: subject.subject,
+    subjectClaim: subject.claim,
+    providerTenantId: userInfo.tid || null,
+    userId,
+    email: userInfo.email,
+    displayName: userInfo.name || null,
+    firstName: userInfo.given_name || null,
+    lastName: userInfo.family_name || null,
+    claims: ssoClaims,
+  });
+  const groupSync = await ssoGroupMappingService.syncMembershipsForUserWithManager(manager, userId, ssoClaims, providerId, tenantId);
+  const assignmentSync = await ssoAssignmentMappingService.syncAssignmentsForUserWithManager(manager, userId, ssoClaims, providerId, tenantId);
+  return {
+    groupMembershipsCreated: groupSync.created,
+    groupMembershipsUpdated: groupSync.updated,
+    groupMembershipsRemoved: groupSync.removed,
+    assignmentsCreated: assignmentSync.created,
+    assignmentsUpdated: assignmentSync.updated,
+    assignmentsRemoved: assignmentSync.removed,
+  };
+}
+
 export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: string) {
   const dataSource = await getDataSource();
-  const userRepo = dataSource.getRepository(User);
   const now = Date.now();
   const provider = await ssoProviderService.getProvider(providerId);
   const fallbackRole = asPlatformRole(provider?.defaultRole);
+  const tenantId = provider?.tenantId || null;
 
   const ssoClaims: SsoClaims = {
     ...userInfo.customClaims,
@@ -371,84 +416,126 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
     resolvedRole,
   });
 
-  const existingByEntraId = userInfo.oid ? await userRepo.findOneBy({ entraId: userInfo.oid }) : null;
-
-  if (existingByEntraId) {
-    const user = existingByEntraId;
-    const currentRole = user.platformRole || 'user';
-    const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
-
-    await userRepo.update({ id: user.id }, {
+  const runId = await ssoSyncDiagnosticsService.startRun({
+    tenantId,
+    providerId,
+    trigger: 'login',
+    details: {
       email: userInfo.email,
-      authProvider: 'saml',
-      entraEmail: userInfo.email,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-      platformRole,
-      lastLoginAt: now,
-      updatedAt: now,
-    });
-
-    return {
-      ...user,
-      email: userInfo.email,
-      authProvider: 'saml',
-      platformRole,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-    };
-  }
-
-  const existingByEmail = await userRepo.findOneBy({ email: userInfo.email });
-
-  if (existingByEmail) {
-    const user = existingByEmail;
-    const currentRole = user.platformRole || 'user';
-    const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
-
-    await userRepo.update({ id: user.id }, {
-      authProvider: 'saml',
-      entraId: userInfo.oid || user.entraId,
-      entraEmail: userInfo.email,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-      platformRole,
-      lastLoginAt: now,
-      updatedAt: now,
-      mustResetPassword: false,
-      failedLoginAttempts: 0,
-      lockedUntil: null,
-    });
-
-    return {
-      ...user,
-      authProvider: 'saml',
-      entraId: userInfo.oid || user.entraId,
-      platformRole,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-    };
-  }
-
-  const userId = generateId();
-
-  await userRepo.insert({
-    id: userId,
-    email: userInfo.email,
-    authProvider: 'saml',
-    passwordHash: null,
-    entraId: userInfo.oid || null,
-    entraEmail: userInfo.email,
-    firstName: userInfo.given_name || null,
-    lastName: userInfo.family_name || null,
-    platformRole: resolvedRole,
-    isActive: true,
-    mustResetPassword: false,
-    failedLoginAttempts: 0,
-    createdAt: now,
-    updatedAt: now,
-    lastLoginAt: now,
+      groupsCount: ssoClaims.groups?.length ?? 0,
+      rolesCount: ssoClaims.roles?.length ?? 0,
+    },
   });
+  let syncCounts: SsoSyncCounts = {};
 
-  return await userRepo.findOneBy({ id: userId });
+  try {
+    const result = await dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+      const existingByEntraId = userInfo.oid ? await userRepo.findOneBy({ entraId: userInfo.oid }) : null;
+
+      if (existingByEntraId) {
+        const user = existingByEntraId;
+        const currentRole = user.platformRole || 'user';
+        const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
+
+        await userRepo.update({ id: user.id }, {
+          email: userInfo.email,
+          authProvider: 'saml',
+          entraEmail: userInfo.email,
+          firstName: userInfo.given_name || user.firstName,
+          lastName: userInfo.family_name || user.lastName,
+          platformRole,
+          lastLoginAt: now,
+          updatedAt: now,
+        });
+
+        syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims);
+
+        return {
+          ...user,
+          email: userInfo.email,
+          authProvider: 'saml',
+          platformRole,
+          firstName: userInfo.given_name || user.firstName,
+          lastName: userInfo.family_name || user.lastName,
+        };
+      }
+
+      const existingByEmail = await userRepo.findOneBy({ email: userInfo.email });
+
+      if (existingByEmail) {
+        const user = existingByEmail;
+        const currentRole = user.platformRole || 'user';
+        const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
+
+        await userRepo.update({ id: user.id }, {
+          authProvider: 'saml',
+          entraId: userInfo.oid || user.entraId,
+          entraEmail: userInfo.email,
+          firstName: userInfo.given_name || user.firstName,
+          lastName: userInfo.family_name || user.lastName,
+          platformRole,
+          lastLoginAt: now,
+          updatedAt: now,
+          mustResetPassword: false,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        });
+
+        syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims);
+
+        return {
+          ...user,
+          authProvider: 'saml',
+          entraId: userInfo.oid || user.entraId,
+          platformRole,
+          firstName: userInfo.given_name || user.firstName,
+          lastName: userInfo.family_name || user.lastName,
+        };
+      }
+
+      const userId = generateId();
+
+      await userRepo.insert({
+        id: userId,
+        email: userInfo.email,
+        authProvider: 'saml',
+        passwordHash: null,
+        entraId: userInfo.oid || null,
+        entraEmail: userInfo.email,
+        firstName: userInfo.given_name || null,
+        lastName: userInfo.family_name || null,
+        platformRole: resolvedRole,
+        isActive: true,
+        mustResetPassword: false,
+        failedLoginAttempts: 0,
+        createdAt: now,
+        updatedAt: now,
+        lastLoginAt: now,
+      });
+
+      syncCounts = await syncSamlAuthorizationForUser(manager, userId, userInfo, providerId, tenantId, ssoClaims);
+      return await userRepo.findOneBy({ id: userId });
+    });
+
+    await ssoSyncDiagnosticsService.completeRun(runId, {
+      tenantId,
+      providerId,
+      userId: result?.id ?? null,
+      ...syncCounts,
+      details: {
+        email: userInfo.email,
+      },
+    });
+    return result;
+  } catch (error) {
+    await ssoSyncDiagnosticsService.failRun(runId, error, {
+      tenantId,
+      providerId,
+      details: {
+        email: userInfo.email,
+      },
+    });
+    throw error;
+  }
 }

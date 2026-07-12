@@ -4,6 +4,8 @@ import express from 'express';
 import emailTemplatesRouter from '../../../../../packages/backend-host/src/modules/admin/routes/email-templates.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/db/entities/PlatformSettings.js';
+import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -16,8 +18,13 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@enterpriseglue/shared/middleware/requirePermission.js', () => ({
-  requirePermission: () => (_req: any, _res: any, next: any) => next(),
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  PlatformPermissions: {
+    SETTINGS_MANAGE: 'platform:settings:manage',
+  },
+  permissionService: {
+    hasPermission: vi.fn().mockResolvedValue(true),
+  },
 }));
 
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
@@ -33,7 +40,9 @@ describe('GET /api/admin/email-platform-name', () => {
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(emailTemplatesRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
   });
 
   it('returns email platform name', async () => {
@@ -52,6 +61,24 @@ describe('GET /api/admin/email-platform-name', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.emailPlatformName).toBe('Test Platform');
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      PlatformPermissions.SETTINGS_MANAGE,
+      expect.objectContaining({
+        userId: 'user-1',
+        platformRole: 'admin',
+        resourceType: 'platform',
+      })
+    );
+  });
+
+  it('denies email platform name without settings permission', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app).get('/api/admin/email-platform-name');
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain('platform.settings.read');
+    expect(getDataSource).not.toHaveBeenCalled();
   });
 
   it('returns default name when settings not found', async () => {

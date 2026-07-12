@@ -5,7 +5,26 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Dashboard from '@src/pages/Dashboard';
 import { apiClient } from '@src/shared/api/client';
+import { PlatformPermission } from '@src/shared/auth/permissions';
 import { useDashboardFilterStore } from '@src/stores/dashboardFilterStore';
+
+const authMocks = vi.hoisted(() => ({
+  hasPlatformPermission: vi.fn(),
+  hasAnyEnginePermission: vi.fn(),
+  permissions: {
+    platform: ['platform:dashboard:view'],
+    projects: [],
+    engines: [],
+  },
+}));
+
+vi.mock('@src/shared/hooks/useAuth', () => ({
+  useAuth: () => ({
+    permissions: authMocks.permissions,
+    hasPlatformPermission: authMocks.hasPlatformPermission,
+    hasAnyEnginePermission: authMocks.hasAnyEnginePermission,
+  }),
+}));
 
 vi.mock('@src/components/EngineSelector', () => ({
   EngineSelector: () => <div data-testid="engine-selector" />,
@@ -28,6 +47,7 @@ function mockDashboardApi({ totalFiles, fileTypes = { bpmn: 0, dmn: 0, form: 0 }
         canViewProcessData: false,
         canViewDeployments: false,
         canViewMetrics: false,
+        projectMemberships: [],
       });
     }
 
@@ -70,6 +90,27 @@ describe('Dashboard', () => {
     vi.clearAllMocks();
     localStorage.clear();
     useDashboardFilterStore.setState({ timePeriod: 7 });
+    authMocks.permissions = {
+      platform: ['platform:dashboard:view'],
+      projects: [],
+      engines: [],
+    };
+    authMocks.hasPlatformPermission.mockReturnValue(false);
+    authMocks.hasAnyEnginePermission.mockReturnValue(false);
+  });
+
+  it('does not fetch dashboard data when dashboard read permission is missing', async () => {
+    authMocks.permissions = {
+      platform: [],
+      projects: [],
+      engines: [],
+    };
+
+    renderDashboard();
+
+    expect(await screen.findByText('Dashboard unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Missing permission platform:dashboard:view')).toBeInTheDocument();
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
 
   it('hides the file structure section when there are no files to report', async () => {
@@ -101,5 +142,20 @@ describe('Dashboard', () => {
     expect(screen.getByText('BPMN')).toBeInTheDocument();
     expect(screen.getByText('DMN')).toBeInTheDocument();
     expect(screen.getByText('Total: 3 files')).toBeInTheDocument();
+  });
+
+  it('shows active users from scoped platform permission even when legacy context is false', async () => {
+    authMocks.hasPlatformPermission.mockImplementation((permission: string) =>
+      permission === PlatformPermission.USERS_VIEW
+    );
+    mockDashboardApi({ totalFiles: 0 });
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Active Users')).toBeInTheDocument();
+    });
+
+    expect(apiClient.get).toHaveBeenCalledWith('/api/users');
   });
 });

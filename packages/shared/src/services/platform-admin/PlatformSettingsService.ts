@@ -5,9 +5,35 @@
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import {
+  AccessAuthorityModeSchema,
+  EngineOnboardingModeSchema,
+  ProjectEngineTargetPolicyModeSchema,
+  type AccessAuthorityMode,
+  type EngineOnboardingMode,
+  type ProjectEngineTargetPolicyMode,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import { encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
 
 const DEFAULT_PII_SCOPES = ['processDetails', 'history', 'logs', 'errors', 'audit'];
+export const DEFAULT_ENGINE_ONBOARDING_MODE: EngineOnboardingMode = 'manual_allowed';
+export const DEFAULT_PROJECT_ENGINE_TARGET_MODE: ProjectEngineTargetPolicyMode = 'manual_allowed';
+export const DEFAULT_ACCESS_AUTHORITY_MODE: AccessAuthorityMode = 'manual';
+
+export function normalizeEngineOnboardingMode(value: unknown): EngineOnboardingMode {
+  const parsed = EngineOnboardingModeSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_ENGINE_ONBOARDING_MODE;
+}
+
+export function normalizeProjectEngineTargetMode(value: unknown): ProjectEngineTargetPolicyMode {
+  const parsed = ProjectEngineTargetPolicyModeSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_PROJECT_ENGINE_TARGET_MODE;
+}
+
+export function normalizeAccessAuthorityMode(value: unknown): AccessAuthorityMode {
+  const parsed = AccessAuthorityModeSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_ACCESS_AUTHORITY_MODE;
+}
 
 export interface PlatformSettingsData {
   defaultEnvironmentTagId: string | null;
@@ -15,9 +41,20 @@ export interface PlatformSettingsData {
   syncPullEnabled: boolean;
   gitProjectTokenSharingEnabled: boolean;
   defaultDeployRoles: string[];
+  engineOnboardingMode: EngineOnboardingMode;
+  projectEngineTargetMode: ProjectEngineTargetPolicyMode;
+  engineAccessAuthority: AccessAuthorityMode;
+  projectAccessAuthority: AccessAuthorityMode;
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
   ssoAutoRedirectSingleProvider: boolean;
+  ssoAllEnginesAssignmentMappingsEnabled: boolean;
+  ssoEngineOwnerAssignmentMappingsEnabled: boolean;
+  ssoEngineDelegateAssignmentMappingsEnabled: boolean;
+  ssoRegexClaimMappingsEnabled: boolean;
+  ssoSecretViewMappingsEnabled: boolean;
+  ssoUnredactedAuditMappingsEnabled: boolean;
+  ssoPermanentDeleteMappingsEnabled: boolean;
   piiRegexEnabled: boolean;
   piiExternalProviderEnabled: boolean;
   piiExternalProviderType: string | null;
@@ -50,9 +87,20 @@ export class PlatformSettingsService {
         syncPullEnabled: false,
         gitProjectTokenSharingEnabled: false,
         defaultDeployRoles: ['owner', 'delegate', 'operator'],
+        engineOnboardingMode: DEFAULT_ENGINE_ONBOARDING_MODE,
+        projectEngineTargetMode: DEFAULT_PROJECT_ENGINE_TARGET_MODE,
+        engineAccessAuthority: DEFAULT_ACCESS_AUTHORITY_MODE,
+        projectAccessAuthority: DEFAULT_ACCESS_AUTHORITY_MODE,
         inviteAllowAllDomains: true,
         inviteAllowedDomains: [],
         ssoAutoRedirectSingleProvider: false,
+        ssoAllEnginesAssignmentMappingsEnabled: true,
+        ssoEngineOwnerAssignmentMappingsEnabled: false,
+        ssoEngineDelegateAssignmentMappingsEnabled: false,
+        ssoRegexClaimMappingsEnabled: false,
+        ssoSecretViewMappingsEnabled: false,
+        ssoUnredactedAuditMappingsEnabled: false,
+        ssoPermanentDeleteMappingsEnabled: false,
         piiRegexEnabled: false,
         piiExternalProviderEnabled: false,
         piiExternalProviderType: null,
@@ -73,6 +121,10 @@ export class PlatformSettingsService {
       syncPullEnabled: settings.syncPullEnabled,
       gitProjectTokenSharingEnabled: (settings as any).gitProjectTokenSharingEnabled ?? false,
       defaultDeployRoles: JSON.parse(settings.defaultDeployRoles),
+      engineOnboardingMode: normalizeEngineOnboardingMode((settings as any).engineOnboardingMode),
+      projectEngineTargetMode: normalizeProjectEngineTargetMode((settings as any).projectEngineTargetMode),
+      engineAccessAuthority: normalizeAccessAuthorityMode((settings as any).engineAccessAuthority),
+      projectAccessAuthority: normalizeAccessAuthorityMode((settings as any).projectAccessAuthority),
       inviteAllowAllDomains: (settings as any).inviteAllowAllDomains ?? true,
       inviteAllowedDomains: (() => {
         try {
@@ -82,6 +134,13 @@ export class PlatformSettingsService {
         }
       })(),
       ssoAutoRedirectSingleProvider: (settings as any).ssoAutoRedirectSingleProvider ?? false,
+      ssoAllEnginesAssignmentMappingsEnabled: (settings as any).ssoAllEnginesAssignmentMappingsEnabled ?? true,
+      ssoEngineOwnerAssignmentMappingsEnabled: (settings as any).ssoEngineOwnerAssignmentMappingsEnabled ?? false,
+      ssoEngineDelegateAssignmentMappingsEnabled: (settings as any).ssoEngineDelegateAssignmentMappingsEnabled ?? false,
+      ssoRegexClaimMappingsEnabled: (settings as any).ssoRegexClaimMappingsEnabled ?? false,
+      ssoSecretViewMappingsEnabled: (settings as any).ssoSecretViewMappingsEnabled ?? false,
+      ssoUnredactedAuditMappingsEnabled: (settings as any).ssoUnredactedAuditMappingsEnabled ?? false,
+      ssoPermanentDeleteMappingsEnabled: (settings as any).ssoPermanentDeleteMappingsEnabled ?? false,
       piiRegexEnabled: (settings as any).piiRegexEnabled ?? false,
       piiExternalProviderEnabled: (settings as any).piiExternalProviderEnabled ?? false,
       piiExternalProviderType: (settings as any).piiExternalProviderType ?? null,
@@ -129,9 +188,20 @@ export class PlatformSettingsService {
       syncPullEnabled: boolean;
       gitProjectTokenSharingEnabled: boolean;
       defaultDeployRoles: string[];
+      engineOnboardingMode: EngineOnboardingMode;
+      projectEngineTargetMode: ProjectEngineTargetPolicyMode;
+      engineAccessAuthority: AccessAuthorityMode;
+      projectAccessAuthority: AccessAuthorityMode;
       inviteAllowAllDomains: boolean;
       inviteAllowedDomains: string[];
       ssoAutoRedirectSingleProvider: boolean;
+      ssoAllEnginesAssignmentMappingsEnabled: boolean;
+      ssoEngineOwnerAssignmentMappingsEnabled: boolean;
+      ssoEngineDelegateAssignmentMappingsEnabled: boolean;
+      ssoRegexClaimMappingsEnabled: boolean;
+      ssoSecretViewMappingsEnabled: boolean;
+      ssoUnredactedAuditMappingsEnabled: boolean;
+      ssoPermanentDeleteMappingsEnabled: boolean;
       piiRegexEnabled: boolean;
       piiExternalProviderEnabled: boolean;
       piiExternalProviderType: string | null;
@@ -171,6 +241,18 @@ export class PlatformSettingsService {
     if (data.defaultDeployRoles !== undefined) {
       updateData.defaultDeployRoles = JSON.stringify(data.defaultDeployRoles);
     }
+    if (data.engineOnboardingMode !== undefined) {
+      updateData.engineOnboardingMode = data.engineOnboardingMode;
+    }
+    if (data.projectEngineTargetMode !== undefined) {
+      updateData.projectEngineTargetMode = data.projectEngineTargetMode;
+    }
+    if (data.engineAccessAuthority !== undefined) {
+      updateData.engineAccessAuthority = data.engineAccessAuthority;
+    }
+    if (data.projectAccessAuthority !== undefined) {
+      updateData.projectAccessAuthority = data.projectAccessAuthority;
+    }
     if (data.inviteAllowAllDomains !== undefined) {
       updateData.inviteAllowAllDomains = data.inviteAllowAllDomains;
     }
@@ -179,6 +261,27 @@ export class PlatformSettingsService {
     }
     if (data.ssoAutoRedirectSingleProvider !== undefined) {
       updateData.ssoAutoRedirectSingleProvider = data.ssoAutoRedirectSingleProvider;
+    }
+    if (data.ssoAllEnginesAssignmentMappingsEnabled !== undefined) {
+      updateData.ssoAllEnginesAssignmentMappingsEnabled = data.ssoAllEnginesAssignmentMappingsEnabled;
+    }
+    if (data.ssoEngineOwnerAssignmentMappingsEnabled !== undefined) {
+      updateData.ssoEngineOwnerAssignmentMappingsEnabled = data.ssoEngineOwnerAssignmentMappingsEnabled;
+    }
+    if (data.ssoEngineDelegateAssignmentMappingsEnabled !== undefined) {
+      updateData.ssoEngineDelegateAssignmentMappingsEnabled = data.ssoEngineDelegateAssignmentMappingsEnabled;
+    }
+    if (data.ssoRegexClaimMappingsEnabled !== undefined) {
+      updateData.ssoRegexClaimMappingsEnabled = data.ssoRegexClaimMappingsEnabled;
+    }
+    if (data.ssoSecretViewMappingsEnabled !== undefined) {
+      updateData.ssoSecretViewMappingsEnabled = data.ssoSecretViewMappingsEnabled;
+    }
+    if (data.ssoUnredactedAuditMappingsEnabled !== undefined) {
+      updateData.ssoUnredactedAuditMappingsEnabled = data.ssoUnredactedAuditMappingsEnabled;
+    }
+    if (data.ssoPermanentDeleteMappingsEnabled !== undefined) {
+      updateData.ssoPermanentDeleteMappingsEnabled = data.ssoPermanentDeleteMappingsEnabled;
     }
     if (data.piiRegexEnabled !== undefined) {
       updateData.piiRegexEnabled = data.piiRegexEnabled;
@@ -232,9 +335,20 @@ export class PlatformSettingsService {
         syncPullEnabled: data.syncPullEnabled ?? false,
         gitProjectTokenSharingEnabled: data.gitProjectTokenSharingEnabled ?? false,
         defaultDeployRoles: JSON.stringify(data.defaultDeployRoles ?? ['owner', 'delegate', 'operator']),
+        engineOnboardingMode: data.engineOnboardingMode ?? DEFAULT_ENGINE_ONBOARDING_MODE,
+        projectEngineTargetMode: data.projectEngineTargetMode ?? DEFAULT_PROJECT_ENGINE_TARGET_MODE,
+        engineAccessAuthority: data.engineAccessAuthority ?? DEFAULT_ACCESS_AUTHORITY_MODE,
+        projectAccessAuthority: data.projectAccessAuthority ?? DEFAULT_ACCESS_AUTHORITY_MODE,
         inviteAllowAllDomains: data.inviteAllowAllDomains ?? true,
         inviteAllowedDomains: JSON.stringify(data.inviteAllowedDomains ?? []),
         ssoAutoRedirectSingleProvider: data.ssoAutoRedirectSingleProvider ?? false,
+        ssoAllEnginesAssignmentMappingsEnabled: data.ssoAllEnginesAssignmentMappingsEnabled ?? true,
+        ssoEngineOwnerAssignmentMappingsEnabled: data.ssoEngineOwnerAssignmentMappingsEnabled ?? false,
+        ssoEngineDelegateAssignmentMappingsEnabled: data.ssoEngineDelegateAssignmentMappingsEnabled ?? false,
+        ssoRegexClaimMappingsEnabled: data.ssoRegexClaimMappingsEnabled ?? false,
+        ssoSecretViewMappingsEnabled: data.ssoSecretViewMappingsEnabled ?? false,
+        ssoUnredactedAuditMappingsEnabled: data.ssoUnredactedAuditMappingsEnabled ?? false,
+        ssoPermanentDeleteMappingsEnabled: data.ssoPermanentDeleteMappingsEnabled ?? false,
         piiRegexEnabled: data.piiRegexEnabled ?? false,
         piiExternalProviderEnabled: data.piiExternalProviderEnabled ?? false,
         piiExternalProviderType: data.piiExternalProviderType ?? null,

@@ -19,7 +19,9 @@ describe('frontend routes index', () => {
     const tenantRoutes = routes.createProtectedChildRoutes(false);
 
     expect(rootRoutes.find((r) => r.path === '/admin/settings')).toBeDefined();
+    expect(rootRoutes.find((r) => r.path === '/admin/access-control')).toBeDefined();
     expect(tenantRoutes.find((r) => r.path === 'admin/settings')).toBeDefined();
+    expect(tenantRoutes.find((r) => r.path === 'admin/access-control')).toBeDefined();
   });
 
   it('redirects root protected routes and keeps tenant platform settings in multi-tenant mode', async () => {

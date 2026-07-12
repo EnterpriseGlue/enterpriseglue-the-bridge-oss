@@ -7,10 +7,12 @@ import { Router, type Request } from 'express';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { engineService, engineAccessService, projectMemberService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { engineService, engineAccessService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { EnginePermissions, permissionService, type EnginePermission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
 import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -21,21 +23,18 @@ import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/i
 // Invitation and Tenant entities removed - multi-tenancy is EE-only
 import { In, IsNull } from 'typeorm';
 import { addCaseInsensitiveEquals } from '@enterpriseglue/shared/db/adapters/QueryHelpers.js';
-import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES, MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
 const router = Router();
 
-async function canViewEngine(req: Request, engineId: string): Promise<boolean> {
-  return engineService.hasEngineAccess(req.user!.userId, engineId, ENGINE_VIEW_ROLES);
-}
-
-async function canManageEngine(req: Request, engineId: string): Promise<boolean> {
-  return engineService.hasEngineAccess(req.user!.userId, engineId, ENGINE_MANAGE_ROLES);
-}
-
-async function isEngineOwner(req: Request, engineId: string): Promise<boolean> {
-  return engineService.hasEngineAccess(req.user!.userId, engineId, ['owner']);
+async function canPerformEngineMemberAction(req: Request, engineId: string, permission: EnginePermission): Promise<boolean> {
+  return permissionService.hasPermission(permission, {
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
+    resourceType: 'engine',
+    resourceId: engineId,
+  });
 }
 
 // Validation schemas
@@ -188,16 +187,10 @@ router.get(
   apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
+  requireAction('engine.members.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
-      const userId = req.user!.userId;
-
-      // Check if user has access to view members
-      const hasAccess = await canViewEngine(req, engineId);
-      if (!hasAccess) {
-        throw Errors.forbidden();
-      }
 
       const members = await engineService.getEngineMembers(engineId);
       const pendingInvites = await listPendingEngineInvites(engineId);
@@ -214,13 +207,8 @@ router.get(
   apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
+  requireAction('engine.members.invite', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
-    const engineId = String(req.params.engineId);
-    const canManage = await canManageEngine(req, engineId);
-    if (!canManage) {
-      throw Errors.forbidden('Only owners and delegates can inspect invite capabilities');
-    }
-
     const emailConfig = await getEmailConfigForTenant((req as any).tenant?.tenantId);
     const ssoRequired = await invitationService.isLocalLoginDisabled();
 
@@ -237,16 +225,12 @@ router.get(
   requireAuth,
   validateParams(engineIdSchema),
   validateQuery(memberLookupSchema),
+  requireAction('engine.members.lookup', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const email = typeof req.query?.email === 'string' ? String(req.query.email).trim().toLowerCase() : '';
       const role = req.query?.role === 'delegate' ? 'delegate' : (req.query?.role === 'deployer' ? 'deployer' : 'operator');
-
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden('Only owners and delegates can look up users');
-      }
 
       if (!email) {
         return res.json({ mode: role === 'delegate' ? 'direct-add-only' : 'invite' });
@@ -308,17 +292,13 @@ router.post(
       const { email, role, deliveryMethod } = req.body;
       const granterId = req.user!.userId;
       const requestedDeliveryMethod = deliveryMethod === 'manual' ? 'manual' : 'email';
+      const canAddMembers = await canPerformEngineMemberAction(req, engineId, EnginePermissions.MEMBERS_ADD);
+      const canInviteMembers = await canPerformEngineMemberAction(req, engineId, EnginePermissions.MEMBERS_INVITE);
 
       if (typeof email !== 'string') {
         throw Errors.validation('Invalid email');
       }
       const emailLower = email.toLowerCase();
-
-      // Check if user has permission
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden('Only owners and delegates can add members');
-      }
 
       // Find user by email
       const dataSource = await getDataSource();
@@ -331,6 +311,10 @@ router.post(
       const targetUser = await targetQb.getOne();
 
       if (targetUser && targetUser.passwordHash) {
+        if (!canAddMembers) {
+          throw Errors.forbidden('Only owners, delegates, or users with engine member-add permission can add existing users');
+        }
+
         // Check if user is already a member
         const existingRole = await engineService.getEngineRole(targetUser.id, engineId);
         if (existingRole) {
@@ -357,6 +341,10 @@ router.post(
           user: { id: targetUser.id, email: targetUser.email },
           invited: false,
         });
+      }
+
+      if (!canInviteMembers) {
+        throw Errors.forbidden('Only owners, delegates, or users with engine member-invite permission can invite users');
       }
 
       const pendingUser = targetUser || await userService.createPendingUser({
@@ -427,18 +415,12 @@ router.patch(
   requireAuth,
   validateParams(userIdSchema),
   validateBody(updateMemberRoleSchema),
+  requireAction('engine.members.update-role', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const targetUserId = String(req.params.userId);
       const { role: newRole } = req.body;
-      const requesterId = req.user!.userId;
-
-      // Check if requester has permission
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden('Only owners and delegates can update roles');
-      }
 
       // Check target's current role
       const targetRole = await engineService.getEngineRole(targetUserId, engineId);
@@ -449,11 +431,14 @@ router.patch(
         throw Errors.validation('Cannot modify owner or delegate roles here');
       }
 
-      await engineService.updateEngineMemberRole(engineId, targetUserId, newRole);
+      await engineService.updateEngineMemberRole(engineId, targetUserId, newRole, req.user!.userId);
 
       res.json({ message: 'Role updated successfully' });
     } catch (error) {
       logger.error('Update engine member role error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to update role');
     }
   })
@@ -468,17 +453,11 @@ router.delete(
   apiLimiter,
   requireAuth,
   validateParams(userIdSchema),
+  requireAction('engine.members.remove', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const targetUserId = String(req.params.userId);
-      const requesterId = req.user!.userId;
-
-      // Check if requester has permission
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden();
-      }
 
       // Check target's current role
       const targetRole = await engineService.getEngineRole(targetUserId, engineId);
@@ -492,11 +471,14 @@ router.delete(
         throw Errors.validation('Use the delegate endpoint to remove delegate');
       }
 
-      await engineService.removeEngineMember(engineId, targetUserId);
+      await engineService.removeEngineMember(engineId, targetUserId, req.user!.userId);
 
       res.status(204).send();
     } catch (error) {
       logger.error('Remove engine member error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to remove member');
     }
   })
@@ -507,16 +489,12 @@ router.post(
   apiLimiter,
   requireAuth,
   validateParams(pendingInviteIdSchema),
+  requireAction('engine.members.invite', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const invitationId = String(req.params.invitationId);
       const requesterId = req.user!.userId;
-
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden('Only owners and delegates can manage invitations');
-      }
 
       const dataSource = await getDataSource();
       const invitationRepo = dataSource.getRepository(Invitation);
@@ -599,17 +577,11 @@ router.post(
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(assignDelegateSchema),
+  requireAction('engine.delegate.manage', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const { email } = req.body;
-      const ownerId = req.user!.userId;
-
-      // Only owner can assign delegate
-      const isOwner = await isEngineOwner(req, engineId);
-      if (!isOwner) {
-        throw Errors.forbidden('Only the owner can assign a delegate');
-      }
 
       let delegateId: string | null = null;
 
@@ -633,6 +605,9 @@ router.post(
       res.json({ message: delegateId ? 'Delegate assigned' : 'Delegate removed' });
     } catch (error) {
       logger.error('Assign delegate error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to assign delegate');
     }
   })
@@ -648,17 +623,11 @@ router.post(
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(z.object({ newOwnerEmail: z.string().email() })),
+  requireAction('engine.ownership.transfer', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const { newOwnerEmail } = req.body;
-      const currentOwnerId = req.user!.userId;
-
-      // Only owner can transfer
-      const isOwner = await isEngineOwner(req, engineId);
-      if (!isOwner) {
-        throw Errors.forbidden('Only the owner can transfer ownership');
-      }
 
       // Find new owner
       const dataSource = await getDataSource();
@@ -676,6 +645,9 @@ router.post(
       res.json({ message: 'Ownership transferred successfully' });
     } catch (error) {
       logger.error('Transfer ownership error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to transfer ownership');
     }
   })
@@ -691,22 +663,20 @@ router.post(
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(setEnvironmentSchema),
+  requireAction('engine.environment.set', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const { environmentTagId } = req.body;
-      const userId = req.user!.userId;
-
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden('Only owners and delegates can set environment');
-      }
 
       await engineService.setEnvironmentTag(engineId, environmentTagId);
 
       res.json({ message: 'Environment tag updated' });
     } catch (error) {
       logger.error('Set environment error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to set environment');
     }
   })
@@ -722,22 +692,20 @@ router.post(
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(setLockedSchema),
+  requireAction('engine.environment.lock', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const { locked } = req.body;
-      const userId = req.user!.userId;
-
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden('Only owners and delegates can lock/unlock');
-      }
 
       await engineService.setEnvironmentLocked(engineId, locked);
 
       res.json({ message: locked ? 'Environment locked' : 'Environment unlocked' });
     } catch (error) {
       logger.error('Lock environment error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to lock/unlock environment');
     }
   })
@@ -771,20 +739,20 @@ router.get(
   apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
+  requireAction('engine.members.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const userId = req.user!.userId;
-
-      if (!(await canViewEngine(req, engineId))) {
-        throw Errors.forbidden();
-      }
 
       const role = await engineService.getEngineRole(userId, engineId);
 
       res.json({ role });
     } catch (error) {
       logger.error('Get my role error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to get role');
     }
   })
@@ -824,22 +792,25 @@ router.post(
   requireAuth,
   validateParams(engineIdSchema),
   validateBody(z.object({ projectId: z.string().uuid() })),
+  requireAction('project-engine-target.access.request', {
+    resourceResolver: 'project.byId',
+    resourceIdFrom: 'body',
+    resourceIdKey: 'projectId',
+  }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const { projectId } = req.body;
       const userId = req.user!.userId;
 
-      const canRequest = await projectMemberService.hasRole(projectId, userId, MANAGE_ROLES);
-      if (!canRequest) {
-        throw Errors.forbidden('Only project owners and delegates can request engine access');
-      }
-
       const result = await engineAccessService.requestAccess(projectId, engineId, userId);
 
       res.json(result);
     } catch (error) {
       logger.error('Request access error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to request access');
     }
   })
@@ -854,20 +825,18 @@ router.get(
   apiLimiter,
   requireAuth,
   validateParams(engineIdSchema),
+  requireAction('engine.project-access.requests.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
-      const userId = req.user!.userId;
-
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden();
-      }
 
       const requests = await engineAccessService.getPendingRequests(engineId);
       res.json(requests);
     } catch (error) {
       logger.error('Get access requests error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to get access requests');
     }
   })
@@ -881,22 +850,20 @@ router.post(
   '/engines-api/engines/:engineId/access-requests/:requestId/approve',
   apiLimiter,
   requireAuth,
+  requireAction('engine.project-access.requests.approve', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
-      const engineId = String(req.params.engineId);
       const requestId = String(req.params.requestId);
       const userId = req.user!.userId;
-
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden();
-      }
 
       await engineAccessService.approveRequest(requestId, userId);
 
       res.json({ message: 'Access request approved' });
     } catch (error) {
       logger.error('Approve request error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to approve request');
     }
   })
@@ -910,22 +877,20 @@ router.post(
   '/engines-api/engines/:engineId/access-requests/:requestId/deny',
   apiLimiter,
   requireAuth,
+  requireAction('engine.project-access.requests.deny', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
-      const engineId = String(req.params.engineId);
       const requestId = String(req.params.requestId);
       const userId = req.user!.userId;
-
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden();
-      }
 
       await engineAccessService.denyRequest(requestId, userId);
 
       res.json({ message: 'Access request denied' });
     } catch (error) {
       logger.error('Deny request error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to deny request');
     }
   })
@@ -939,22 +904,20 @@ router.delete(
   '/engines-api/engines/:engineId/projects/:projectId',
   apiLimiter,
   requireAuth,
+  requireAction('engine.project-access.revoke', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const engineId = String(req.params.engineId);
       const projectId = String(req.params.projectId);
-      const userId = req.user!.userId;
-
-      const canManage = await canManageEngine(req, engineId);
-      if (!canManage) {
-        throw Errors.forbidden();
-      }
 
       await engineAccessService.revokeAccess(projectId, engineId);
 
       res.status(204).send();
     } catch (error) {
       logger.error('Revoke access error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to revoke access');
     }
   })

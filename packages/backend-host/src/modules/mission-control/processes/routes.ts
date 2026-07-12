@@ -2,15 +2,14 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireEngineReadOrWrite } from '@enterpriseglue/shared/middleware/engineAuth.js'
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js'
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js'
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js'
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js'
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js'
-import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js'
+import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 import {
   listProcessDefinitions,
   getProcessDefinition,
@@ -28,10 +27,31 @@ const editTargetQuerySchema = z.object({
   processDefinitionId: z.string().min(1).optional(),
 })
 
+function projectPermissionContext(req: Request, projectId: string) {
+  return {
+    userId: req.user!.userId,
+    platformRole: req.user!.platformRole || (req.user as any).role,
+    resourceType: 'project' as const,
+    resourceId: projectId,
+  }
+}
+
+function hasProjectPermission(req: Request, projectId: string, permission: Permission) {
+  return permissionService.hasPermission(permission, projectPermissionContext(req, projectId))
+}
+
+async function canViewProjectFile(req: Request, projectId: string) {
+  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_VIEW)
+}
+
+async function canEditProjectFile(req: Request, projectId: string) {
+  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_EDIT)
+}
+
 r.use(requireAuth)
 
 // List process definitions
-r.get('/mission-control-api/process-definitions', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const { key, nameLike, latest } = req.query as { key?: string; nameLike?: string; latest?: string }
   const engineId = (req as any).engineId as string
   const data = await listProcessDefinitions(engineId, {
@@ -43,8 +63,7 @@ r.get('/mission-control-api/process-definitions', requireEngineReadOrWrite({ eng
 }))
 
 // Resolve Starbase edit target for a deployed process version
-r.get('/mission-control-api/process-definitions/edit-target', validateQuery(editTargetQuerySchema), requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user!.userId
+r.get('/mission-control-api/process-definitions/edit-target', validateQuery(editTargetQuerySchema), requireAction('engine.runtime.process-definitions.edit-target.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const processKey = String(req.query.key || '').trim()
   const processDefinitionId = req.query.processDefinitionId ? String(req.query.processDefinitionId) : null
@@ -88,10 +107,10 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
     const fileId = row.fileId ? String(row.fileId) : ''
     if (!projectId || !fileId) continue
 
-    const canRead = await projectMemberService.hasAccess(projectId, userId)
+    const canRead = await canViewProjectFile(req, projectId)
     if (!canRead) continue
 
-    const canEdit = await projectMemberService.hasRole(projectId, userId, EDIT_ROLES)
+    const canEdit = await canEditProjectFile(req, projectId)
     const commitId = row.fileGitCommitId ? String(row.fileGitCommitId) : null
     let fileVersionNumber: number | null = null
     let mappingSource: 'git-commit' | 'db-timestamp' | 'db-latest' | 'deployment-timestamp' = 'db-latest'
@@ -169,10 +188,10 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
     const projectId = String(f.projectId || '')
     if (!projectId) continue
 
-    const canRead = await projectMemberService.hasAccess(projectId, userId)
+    const canRead = await canViewProjectFile(req, projectId)
     if (!canRead) continue
 
-    const canEdit = await projectMemberService.hasRole(projectId, userId, EDIT_ROLES)
+    const canEdit = await canEditProjectFile(req, projectId)
 
     let fileVersionNumber: number | null = null
     let fallbackCommitId: string | null = null
@@ -208,7 +227,7 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
 }))
 
 // Get process definition by ID
-r.get('/mission-control-api/process-definitions/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/:id', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const data = await getProcessDefinition(engineId, definitionId)
@@ -216,7 +235,7 @@ r.get('/mission-control-api/process-definitions/:id', requireEngineReadOrWrite({
 }))
 
 // Get process definition XML
-r.get('/mission-control-api/process-definitions/:id/xml', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/:id/xml', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const data = await getProcessDefinitionXml(engineId, definitionId)
@@ -224,7 +243,7 @@ r.get('/mission-control-api/process-definitions/:id/xml', requireEngineReadOrWri
 }))
 
 // Get process definition statistics (activity instance counts)
-r.get('/mission-control-api/process-definitions/key/:key/statistics', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/key/:key/statistics', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionKey = String(req.params.key)
   const data = await getProcessDefinitionStatistics(engineId, definitionKey)
@@ -232,7 +251,7 @@ r.get('/mission-control-api/process-definitions/key/:key/statistics', requireEng
 }))
 
 // Start process instance
-r.post('/mission-control-api/process-definitions/key/:key/start', requireEngineReadOrWrite({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/process-definitions/key/:key/start', requireAction('engine.runtime.process-definitions.start', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const { variables, businessKey } = req.body || {}
   const engineId = (req as any).engineId as string
   const definitionKey = String(req.params.key)

@@ -10,6 +10,7 @@ import { EngineAccessRequest } from '@enterpriseglue/shared/infrastructure/persi
 import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMember.js';
 import { In } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 
 export interface AccessRequest {
   id: string;
@@ -28,27 +29,26 @@ export class EngineAccessService {
     const dataSource = await getDataSource();
     const accessRepo = dataSource.getRepository(EngineProjectAccess);
     const access = await accessRepo.findOne({ where: { projectId, engineId } });
-    return access !== null;
+    if (access !== null) {
+      await projectEngineTargetService.ensureTargetFromLegacyAccess(projectId, engineId, access.grantedById, access.autoApproved)
+        .catch(() => undefined);
+      return true;
+    }
+    return projectEngineTargetService.hasActiveTarget(projectId, engineId, 'manual');
   }
 
   /**
    * Get all engines a project has access to
    */
   async getProjectEngines(projectId: string): Promise<string[]> {
-    const dataSource = await getDataSource();
-    const accessRepo = dataSource.getRepository(EngineProjectAccess);
-    const access = await accessRepo.find({ where: { projectId }, select: ['engineId'] });
-    return access.map(a => a.engineId);
+    return projectEngineTargetService.getProjectEngineIds(projectId);
   }
 
   /**
    * Get all projects that have access to an engine
    */
   async getEngineProjects(engineId: string): Promise<string[]> {
-    const dataSource = await getDataSource();
-    const accessRepo = dataSource.getRepository(EngineProjectAccess);
-    const access = await accessRepo.find({ where: { engineId }, select: ['projectId'] });
-    return access.map(a => a.projectId);
+    return projectEngineTargetService.getEngineProjectIds(engineId);
   }
 
   /**
@@ -145,6 +145,8 @@ export class EngineAccessService {
       createdAt: Date.now(),
     });
 
+    await projectEngineTargetService.ensureTargetFromLegacyAccess(projectId, engineId, grantedById, autoApproved);
+
     return { id };
   }
 
@@ -155,6 +157,7 @@ export class EngineAccessService {
     const dataSource = await getDataSource();
     const accessRepo = dataSource.getRepository(EngineProjectAccess);
     await accessRepo.delete({ projectId, engineId });
+    await projectEngineTargetService.archiveLegacyTarget(projectId, engineId);
   }
 
   /**

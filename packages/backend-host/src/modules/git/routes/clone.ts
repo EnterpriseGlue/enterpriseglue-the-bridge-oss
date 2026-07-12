@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -23,6 +24,7 @@ import { credentialService } from '@enterpriseglue/shared/services/git/Credentia
 import { encrypt } from '@enterpriseglue/shared/services/encryption.js';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -49,7 +51,7 @@ type GitProviderType = 'github' | 'gitlab' | 'azure-devops' | 'bitbucket';
  * POST /git-api/repo-info
  * Get repository info (branches, default branch) before cloning
  */
-router.post('/git-api/repo-info', apiLimiter, requireAuth, validateBody(repoInfoSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/repo-info', apiLimiter, requireAuth, validateBody(repoInfoSchema), requireAction('project.create.git.inspect', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const { providerId, repoUrl } = req.body as RepoInfoBody;
   const userId = req.user!.userId;
 
@@ -118,7 +120,7 @@ router.post('/git-api/repo-info', apiLimiter, requireAuth, validateBody(repoInfo
  * POST /git-api/clone
  * Clone a repository and create a new project
  */
-router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema), requireAction('project.create.git.create', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const { providerId, repoUrl, branch: requestedBranch, projectName } = req.body as CloneBody;
   const userId = req.user!.userId;
 
@@ -223,6 +225,9 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
       })
       .orIgnore()
       .execute();
+
+    await permissionService.syncLegacyRoleAssignments({ projectIds: [projectId] })
+      .catch((error) => logger.warn('Failed to sync legacy project role assignments', { projectId, error }));
 
     logger.info('Created project for clone', { projectId, projectName: finalProjectName });
 

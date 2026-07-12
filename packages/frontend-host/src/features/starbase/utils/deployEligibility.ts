@@ -10,7 +10,36 @@ type ConnectedEngine = {
   baseUrl?: string
   environment?: { name: string; color: string }
   health?: { status: string; latencyMs?: number }
+  deploymentTarget?: {
+    id: string
+    status: string
+    source: string
+    sourceRef: string | null
+    allowManualDeploy: boolean
+    allowCiDeploy: boolean
+    allowApiDeploy: boolean
+    allowImport: boolean
+    lastSeenAt: number | null
+    createdAt: number
+    updatedAt: number
+  }
   manualDeployAllowed?: boolean
+  manualDeployDeniedReasons?: string[]
+  ciDeployAllowed?: boolean
+  ciDeployDeniedReasons?: string[]
+  deploymentEligibility?: {
+    diagnosticsVisible?: boolean
+    manual?: {
+      allowed: boolean
+      reasons: string[]
+      checks?: Array<{ id: string; allowed: boolean; reason: string; remediation?: string }>
+    }
+    ci?: {
+      allowed: boolean
+      reasons: string[]
+      checks?: Array<{ id: string; allowed: boolean; reason: string; remediation?: string }>
+    }
+  }
 }
 
 export type ProjectEngineAccessData = {
@@ -28,7 +57,7 @@ export function canDeployByProjectRole(
   const effectiveRole = String(membership.role || '')
   const hasDeployRole = ['owner', 'delegate', 'developer'].includes(effectiveRole)
 
-  if (!hasDeployRole && membership.role === 'editor' && membership.deployAllowed) {
+  if (!hasDeployRole && effectiveRole === 'editor' && membership.deployAllowed) {
     return true
   }
 
@@ -37,7 +66,11 @@ export function canDeployByProjectRole(
 
 export function hasConnectedEngine(engineAccess: ProjectEngineAccessData | null | undefined): boolean {
   const connectedEngines = Array.isArray(engineAccess?.accessedEngines) ? engineAccess.accessedEngines : []
-  return connectedEngines.some((engine) => engine.engineId && engine.engineId !== '__env__')
+  return connectedEngines.some((engine) => (
+    Boolean(engine.engineId) &&
+    engine.engineId !== '__env__' &&
+    (engine.manualDeployAllowed !== false || engine.ciDeployAllowed === true)
+  ))
 }
 
 export function canDeployProject(

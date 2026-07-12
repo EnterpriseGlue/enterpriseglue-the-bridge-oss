@@ -6,31 +6,31 @@ interface BulkOperationModalsProps {
   bulkRetryOpen: boolean
   bulkRetryBusy: boolean
   onBulkRetryClose: () => void
-  onBulkRetryConfirm: () => Promise<void>
+  onBulkRetryConfirm: (reason?: string) => Promise<void>
   selectedCount: number
   
   // Bulk Delete
   bulkDeleteOpen: boolean
   bulkDeleteBusy: boolean
   onBulkDeleteClose: () => void
-  onBulkDeleteConfirm: () => Promise<void>
+  onBulkDeleteConfirm: (reason?: string) => Promise<void>
   
   // Bulk Suspend
   bulkSuspendOpen: boolean
   bulkSuspendBusy: boolean
   onBulkSuspendClose: () => void
-  onBulkSuspendConfirm: () => Promise<void>
+  onBulkSuspendConfirm: (reason?: string) => Promise<void>
   
   // Bulk Activate
   bulkActivateOpen: boolean
   bulkActivateBusy: boolean
   onBulkActivateClose: () => void
-  onBulkActivateConfirm: () => Promise<void>
+  onBulkActivateConfirm: (reason?: string) => Promise<void>
   
   // Terminate
   terminateOpen: boolean
   onTerminateClose: () => void
-  onTerminateConfirm: () => Promise<void>
+  onTerminateConfirm: (reason?: string) => Promise<void>
 }
 
 export function BulkOperationModals({
@@ -66,6 +66,8 @@ export function BulkOperationModals({
         description={`About to retry ${selectedCount} instance${selectedCount === 1 ? '' : 's'}. All failed jobs and external tasks will be retried once. A batch operation will be created and processed asynchronously.`}
         confirmText="Apply"
         busy={bulkRetryBusy}
+        requireReason
+        reasonPlaceholder="e.g., Retrying failed service task after dependency recovery."
       />
 
       {/* Bulk Delete Modal */}
@@ -80,6 +82,9 @@ export function BulkOperationModals({
         busy={bulkDeleteBusy}
         showWarning
         warningMessage="This action cannot be undone"
+        requireReason
+        reasonLabel="Cancel reason"
+        reasonPlaceholder="e.g., Business request was canceled upstream."
       />
 
       {/* Bulk Suspend Modal */}
@@ -91,6 +96,8 @@ export function BulkOperationModals({
         description={`${selectedCount} instance${selectedCount === 1 ? '' : 's'} selected for suspend operation. A batch operation will be created and processed asynchronously.`}
         confirmText="Apply"
         busy={bulkSuspendBusy}
+        requireReason
+        reasonPlaceholder="e.g., Pausing instances while the target system is unavailable."
       />
 
       {/* Bulk Activate Modal */}
@@ -102,6 +109,8 @@ export function BulkOperationModals({
         description={`${selectedCount} instance${selectedCount === 1 ? '' : 's'} selected for activate operation. A batch operation will be created and processed asynchronously.`}
         confirmText="Apply"
         busy={bulkActivateBusy}
+        requireReason
+        reasonPlaceholder="e.g., Resuming instances after maintenance completed."
       />
 
       {/* Terminate Confirmation Modal */}
@@ -115,6 +124,9 @@ export function BulkOperationModals({
         danger
         showWarning
         warningMessage="This action cannot be undone"
+        requireReason
+        reasonLabel="Cancel reason"
+        reasonPlaceholder="e.g., Duplicate process instance started by mistake."
       />
     </>
   )

@@ -8,22 +8,19 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { z } from 'zod';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireProjectRole } from '@enterpriseglue/shared/middleware/projectAuth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
 import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
-import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMember.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { credentialService } from '@enterpriseglue/shared/services/git/CredentialService.js';
 import { GitService } from '@enterpriseglue/shared/services/git/GitService.js';
 import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
-import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
-import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js';
+import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 // Validation schemas
 const syncStatusQuerySchema = z.object({
@@ -38,24 +35,53 @@ const syncBodySchema = z.object({
 
 const router = Router();
 
+async function hasProjectPermission(req: Request, projectId: string, permission: Permission): Promise<boolean> {
+  return permissionService.hasPermission(permission, {
+    userId: req.user!.userId,
+    platformRole: req.user!.platformRole || (req.user as any).role,
+    resourceType: 'project',
+    resourceId: projectId,
+  });
+}
+
+async function canViewProjectRepository(req: Request, projectId: string): Promise<boolean> {
+  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_VIEW);
+}
+
+async function canUseGitSync(req: Request, projectId: string, direction: 'push' | 'pull' | 'both' | 'status'): Promise<boolean> {
+  const needsPull = direction === 'pull' || direction === 'both' || direction === 'status';
+  const needsPush = direction === 'push' || direction === 'both' || direction === 'status';
+  const hasPull = !needsPull || await hasProjectPermission(req, projectId, ProjectPermissions.GIT_PULL);
+  const hasPush = !needsPush || await hasProjectPermission(req, projectId, ProjectPermissions.GIT_PUSH);
+
+  return direction === 'status'
+    ? hasPull || hasPush
+    : hasPull && hasPush;
+}
+
 /**
  * GET /git-api/sync/status
  * Get sync status for a project
  */
-router.get('/git-api/sync/status', apiLimiter, requireAuth, validateQuery(syncStatusQuerySchema), requireProjectRole(EDIT_ROLES, { projectIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/sync/status', apiLimiter, requireAuth, validateQuery(syncStatusQuerySchema), requireAction('project.git.sync.status', {
+  resourceIdFrom: 'query',
+  acceptedPermissions: [ProjectPermissions.GIT_PULL, ProjectPermissions.GIT_PUSH],
+}), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const projectId = req.query.projectId as string;
+
+  if (!(await canUseGitSync(req, projectId, 'status'))) {
+    throw Errors.notFound('Repository');
+  }
 
   const dataSource = await getDataSource();
   const gitRepoRepo = dataSource.getRepository(GitRepository);
 
   // Get repository
-  const repo = await gitRepoRepo.createQueryBuilder('r')
-    .innerJoin(Project, 'p', 'r.projectId = p.id')
-    .leftJoin(ProjectMember, 'pm', 'pm.projectId = p.id AND pm.userId = :userId', { userId })
-    .where('r.projectId = :projectId', { projectId })
-    .andWhere('(p.ownerId = :userId OR pm.userId = :userId)', { userId })
-    .getOne();
+  const repo = await gitRepoRepo.findOne({
+    where: { projectId },
+    order: { createdAt: 'DESC' },
+  });
 
   if (!repo) {
     throw Errors.notFound('Repository');
@@ -96,22 +122,27 @@ router.get('/git-api/sync/status', apiLimiter, requireAuth, validateQuery(syncSt
  * POST /git-api/sync
  * Sync project with remote repository
  */
-router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(syncBodySchema), requireProjectRole(EDIT_ROLES, { projectIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(syncBodySchema), requireAction('project.git.sync.run', {
+  resourceIdFrom: 'body',
+  acceptedPermissions: [ProjectPermissions.GIT_PULL, ProjectPermissions.GIT_PUSH],
+}), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const { projectId, direction, message } = req.body;
   const commitMessage = message.trim();
+
+  if (!(await canUseGitSync(req, projectId, direction))) {
+    throw Errors.notFound('Repository');
+  }
 
   const dataSource = await getDataSource();
   const gitRepoRepo = dataSource.getRepository(GitRepository);
   const gitDeploymentRepo = dataSource.getRepository(GitDeployment);
 
   // Get repository
-  const repo = await gitRepoRepo.createQueryBuilder('r')
-    .innerJoin(Project, 'p', 'r.projectId = p.id')
-    .leftJoin(ProjectMember, 'pm', 'pm.projectId = p.id AND pm.userId = :userId', { userId })
-    .where('r.projectId = :projectId', { projectId })
-    .andWhere('(p.ownerId = :userId OR pm.userId = :userId)', { userId })
-    .getOne();
+  const repo = await gitRepoRepo.findOne({
+    where: { projectId },
+    order: { createdAt: 'DESC' },
+  });
 
   if (!repo) {
     throw Errors.notFound('Repository');
@@ -347,22 +378,23 @@ router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(syncBodySchem
  * GET /git-api/repositories
  * List repositories for user's projects
  */
-router.get('/git-api/repositories', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user!.userId;
+router.get('/git-api/repositories', apiLimiter, requireAuth, requireAction('project.git.repositories.read', {
+  resourceResolver: 'project.visibleCollection',
+  collectionIdsFrom: 'query',
+  collectionIdsKey: 'projectId',
+}), asyncHandler(async (req: Request, res: Response) => {
   const { projectId } = req.query;
   const dataSource = await getDataSource();
   const gitRepoRepo = dataSource.getRepository(GitRepository);
 
   if (projectId && typeof projectId === 'string') {
-    const hasAccess = await projectMemberService.hasAccess(projectId, userId);
-    if (!hasAccess) {
+    if (!(await canViewProjectRepository(req, projectId))) {
       throw Errors.validation('Project not found');
     }
   }
 
   const qb = gitRepoRepo.createQueryBuilder('r')
     .innerJoin(Project, 'p', 'r.projectId = p.id')
-    .leftJoin(ProjectMember, 'pm', 'pm.projectId = p.id AND pm.userId = :userId', { userId })
     .select([
       'r.id AS id',
       'r.projectId AS "projectId"',
@@ -374,13 +406,18 @@ router.get('/git-api/repositories', apiLimiter, requireAuth, asyncHandler(async 
       'r.lastCommitSha AS "lastCommitSha"',
       'r.lastSyncAt AS "lastSyncAt"',
     ])
-    .where('(p.ownerId = :userId OR pm.userId = :userId)', { userId });
 
   if (projectId && typeof projectId === 'string') {
-    qb.andWhere('r.projectId = :projectId', { projectId });
+    qb.where('r.projectId = :projectId', { projectId });
   }
 
-  const repos = await qb.getRawMany();
+  const rows = await qb.getRawMany();
+  const repos = [];
+  for (const row of rows) {
+    if (await canViewProjectRepository(req, String(row.projectId))) {
+      repos.push(row);
+    }
+  }
 
   res.json(repos);
 }));

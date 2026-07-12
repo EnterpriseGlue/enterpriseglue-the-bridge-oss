@@ -23,6 +23,18 @@ export class PlatformSettings {
   @Column({ name: 'default_deploy_roles', type: 'text', default: '["owner","delegate","operator"]' })
   defaultDeployRoles!: string;
 
+  @Column({ name: 'engine_onboarding_mode', type: 'text', default: 'manual_allowed' })
+  engineOnboardingMode!: 'manual_allowed' | 'external_only' | 'hybrid';
+
+  @Column({ name: 'project_engine_target_mode', type: 'text', default: 'manual_allowed' })
+  projectEngineTargetMode!: 'manual_allowed' | 'external_only' | 'hybrid';
+
+  @Column({ name: 'engine_access_authority', type: 'text', default: 'manual' })
+  engineAccessAuthority!: 'manual' | 'transition_to_sso' | 'sso_managed';
+
+  @Column({ name: 'project_access_authority', type: 'text', default: 'manual' })
+  projectAccessAuthority!: 'manual' | 'transition_to_sso' | 'sso_managed';
+
   @Column({ name: 'invite_allow_all_domains', type: 'boolean', default: true })
   inviteAllowAllDomains!: boolean;
 
@@ -31,6 +43,27 @@ export class PlatformSettings {
 
   @Column({ name: 'sso_auto_redirect_single_provider', type: 'boolean', default: false })
   ssoAutoRedirectSingleProvider!: boolean;
+
+  @Column({ name: 'sso_all_engines_assignment_mappings_enabled', type: 'boolean', default: true })
+  ssoAllEnginesAssignmentMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_engine_owner_assignment_mappings_enabled', type: 'boolean', default: false })
+  ssoEngineOwnerAssignmentMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_engine_delegate_assignment_mappings_enabled', type: 'boolean', default: false })
+  ssoEngineDelegateAssignmentMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_regex_claim_mappings_enabled', type: 'boolean', default: false })
+  ssoRegexClaimMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_secret_view_mappings_enabled', type: 'boolean', default: false })
+  ssoSecretViewMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_unredacted_audit_mappings_enabled', type: 'boolean', default: false })
+  ssoUnredactedAuditMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_permanent_delete_mappings_enabled', type: 'boolean', default: false })
+  ssoPermanentDeleteMappingsEnabled!: boolean;
 
   @Column({ name: 'pii_regex_enabled', type: 'boolean', default: false })
   piiRegexEnabled!: boolean;

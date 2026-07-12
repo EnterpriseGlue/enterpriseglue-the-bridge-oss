@@ -31,6 +31,47 @@ export type ActivityCountsByState = {
   completed: Record<string, number>
 }
 
+export type SavedProcessFilter = {
+  id: string
+  name: string
+  engineId: string
+  defKeys: string[]
+  version?: number | string | null
+  active: boolean
+  incidents: boolean
+  completed: boolean
+  canceled: boolean
+  createdAt?: number
+}
+
+export type CreateSavedProcessFilterRequest = {
+  name: string
+  engineId: string
+  defKeys: string[]
+  version?: string | null
+  active: boolean
+  incidents: boolean
+  completed: boolean
+  canceled: boolean
+}
+
+function normalizeSavedProcessFilter(filter: any): SavedProcessFilter {
+  return {
+    id: String(filter?.id || ''),
+    name: String(filter?.name || ''),
+    engineId: String(filter?.engineId || ''),
+    defKeys: Array.isArray(filter?.defKeys)
+      ? filter.defKeys.map((key: unknown) => String(key)).filter(Boolean)
+      : [],
+    version: filter?.version ?? null,
+    active: Boolean(filter?.active),
+    incidents: Boolean(filter?.incidents),
+    completed: Boolean(filter?.completed),
+    canceled: Boolean(filter?.canceled),
+    createdAt: typeof filter?.createdAt === 'number' ? filter.createdAt : undefined,
+  }
+}
+
 // API Functions
 export async function listProcessDefinitions(engineId?: string): Promise<ProcessDefinition[]> {
   const params = new URLSearchParams()
@@ -80,6 +121,20 @@ export async function listProcessInstances(params: GetProcessInstancesParams): P
 
 export async function fetchPreviewCount(body: Record<string, unknown>): Promise<{ count: number }> {
   return apiClient.post<{ count: number }>('/mission-control-api/process-instances/preview-count', body, { credentials: 'include' })
+}
+
+export async function listSavedProcessFilters(): Promise<SavedProcessFilter[]> {
+  const filters = await apiClient.get<any[]>('/engines-api/saved-filters', undefined, { credentials: 'include' })
+  return Array.isArray(filters) ? filters.map(normalizeSavedProcessFilter).filter((filter) => filter.id) : []
+}
+
+export async function createSavedProcessFilter(body: CreateSavedProcessFilterRequest): Promise<SavedProcessFilter> {
+  const filter = await apiClient.post<any>('/engines-api/saved-filters', body, { credentials: 'include' })
+  return normalizeSavedProcessFilter(filter)
+}
+
+export async function deleteSavedProcessFilter(filterId: string): Promise<void> {
+  await apiClient.delete(`/engines-api/saved-filters/${encodeURIComponent(filterId)}`, { credentials: 'include' })
 }
 
 // Instance-specific APIs

@@ -64,6 +64,32 @@ describe('auth middleware', () => {
       expect(next).toHaveBeenCalled();
     });
 
+    it('runs enterprise tenant authorization resolver after user validation', async () => {
+      const resolver = vi.fn(async (request: Request) => {
+        request.tenantRole = 'tenant_admin';
+      });
+      req = {
+        ...req,
+        headers: { authorization: `Bearer ${TEST_BEARER_TOKEN}` },
+        app: { locals: { enterpriseTenantAuthorizationResolver: resolver } } as any,
+      };
+      const user = { id: 'user-1', isActive: true, isEmailVerified: true, email: 'user@example.com', platformRole: 'user' };
+      const tokenPayload = { userId: 'user-1', type: 'access', platformRole: 'user', email: 'user@example.com' };
+      (jwt.verifyToken as any).mockReturnValue(tokenPayload);
+      (getDataSource as any).mockResolvedValue({
+        getRepository: (entity: unknown) => {
+          if (entity === User) return { findOneBy: vi.fn().mockResolvedValue(user) };
+          throw new Error('Unexpected repository');
+        },
+      });
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(resolver).toHaveBeenCalledWith(req, { tokenPayload, user });
+      expect(req.tenantRole).toBe('tenant_admin');
+      expect(next).toHaveBeenCalled();
+    });
+
     it('reports missing token', async () => {
       await requireAuth(req as Request, res as Response, next);
 

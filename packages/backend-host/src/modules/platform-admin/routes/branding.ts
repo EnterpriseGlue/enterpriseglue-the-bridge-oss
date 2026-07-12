@@ -159,7 +159,7 @@ router.put(
  * Reset platform branding to defaults
  * ✨ Migrated to TypeORM
  */
-router.delete('/', apiLimiter, asyncHandler(async (req, res) => {
+router.delete('/', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req, res) => {
   try {
     const dataSource = await getDataSource();
     const platformSettingsRepo = dataSource.getRepository(PlatformSettings);

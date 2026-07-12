@@ -2,8 +2,6 @@ import React from 'react'
 import {
   Button,
   DataTable,
-  OverflowMenu,
-  OverflowMenuItem,
   Table,
   TableHead,
   TableRow,
@@ -12,6 +10,7 @@ import {
   TableCell,
   TableContainer,
 } from '@carbon/react'
+import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards'
 import type { VariableHistoryTarget } from './types'
 
 const stringifyValue = (value: any) => {
@@ -26,19 +25,29 @@ const stringifyValue = (value: any) => {
   return String(value ?? '')
 }
 
+const REDACTED_VALUE = 'Restricted'
+
 /**
  * Table component for local (activity-scoped) variables
  */
-export function LocalVariablesTable({ 
-  data, 
-  status, 
+export function LocalVariablesTable({
+  data,
+  status,
   openVariableEditor,
   openVariableHistory,
-}: { 
+  redactValues = false,
+  valueUnavailableReason = null,
+  canViewVariableHistory = true,
+  variableHistoryUnavailableReason = null,
+}: {
   data: any[]
   status?: string
   openVariableEditor?: (name: string, value: any) => void
   openVariableHistory?: (target: VariableHistoryTarget) => void
+  redactValues?: boolean
+  valueUnavailableReason?: string | null
+  canViewVariableHistory?: boolean
+  variableHistoryUnavailableReason?: string | null
 }) {
   const copyToClipboard = (text: string) => {
     try {
@@ -56,7 +65,7 @@ export function LocalVariablesTable({
 
   const rows = (data || []).map((v: any, idx: number) => {
     const type = v?.type || (v?.value !== null && v?.value !== undefined ? typeof v.value : 'Unknown')
-    const value = stringifyValue(v?.value)
+    const value = redactValues ? REDACTED_VALUE : stringifyValue(v?.value)
     const activityInstanceId = v?.activityInstanceId || '—'
     return {
       id: String(v?.id || `${v?.name || 'var'}-${activityInstanceId}-${idx}`),
@@ -101,27 +110,34 @@ export function LocalVariablesTable({
                       if (cell.info.header === 'actions') {
                         return (
                           <TableCell key={cell.id} style={{ width: '1%', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                            <OverflowMenu
+                            <GuardedOverflowMenu
                               size="xs"
                               aria-label={`Actions for ${row.id}`}
                               iconDescription=""
                               wrapperClasses="eg-no-tooltip"
                               flipped
                             >
-                              <OverflowMenuItem
+                              <GuardedOverflowMenuItem
                                 itemText="History"
+                                unavailableReason={!canViewVariableHistory ? variableHistoryUnavailableReason || 'Action unavailable' : null}
                                 onClick={() => openVariableHistory?.({
                                   variableInstanceId: rawVar?.id || null,
                                   variableName: rawVar?.name || row.name,
                                   scope: 'local',
                                   activityInstanceId: rawVar?.activityInstanceId || null,
                                   currentType: rawVar?.type || row.type,
-                                  currentValue: rawVar?.value,
+                                  currentValue: redactValues ? undefined : rawVar?.value,
                                 })}
                               />
-                              <OverflowMenuItem itemText="Copy name" onClick={() => copyToClipboard(String(row.name))} />
-                              <OverflowMenuItem itemText="Copy value" onClick={() => copyToClipboard(valueToCopy)} />
-                            </OverflowMenu>
+                              <GuardedOverflowMenuItem itemText="Copy name" onClick={() => copyToClipboard(String(row.name))} />
+                              <GuardedOverflowMenuItem
+                                itemText="Copy value"
+                                unavailableReason={redactValues ? valueUnavailableReason || 'Value unavailable' : null}
+                                onClick={() => {
+                                  if (!redactValues) copyToClipboard(valueToCopy)
+                                }}
+                              />
+                            </GuardedOverflowMenu>
                           </TableCell>
                         )
                       }
@@ -142,18 +158,30 @@ export function LocalVariablesTable({
 /**
  * Table component for global (process-scoped) variables
  */
-export function GlobalVariablesTable({ 
-  data, 
-  status, 
+export function GlobalVariablesTable({
+  data,
+  status,
   openVariableEditor,
   openVariableHistory,
   historyTargetsByName,
-}: { 
+  canEditVariables = true,
+  variableEditUnavailableReason = null,
+  redactValues = false,
+  valueUnavailableReason = null,
+  canViewVariableHistory = true,
+  variableHistoryUnavailableReason = null,
+}: {
   data: Record<string, any>
   status?: string
   openVariableEditor?: (name: string, value: any) => void
   openVariableHistory?: (target: VariableHistoryTarget) => void
   historyTargetsByName?: Record<string, VariableHistoryTarget>
+  canEditVariables?: boolean
+  variableEditUnavailableReason?: string | null
+  redactValues?: boolean
+  valueUnavailableReason?: string | null
+  canViewVariableHistory?: boolean
+  variableHistoryUnavailableReason?: string | null
 }) {
   const copyToClipboard = (text: string) => {
     try {
@@ -169,7 +197,7 @@ export function GlobalVariablesTable({
   ]
 
   const baseRows = Object.entries(data || {}).map(([k, v]: any) => {
-    const value = stringifyValue(v?.value)
+    const value = redactValues ? REDACTED_VALUE : stringifyValue(v?.value)
 
     return {
       id: k,
@@ -182,7 +210,9 @@ export function GlobalVariablesTable({
 
   const rows = baseRows
 
-  const canEdit = (status === 'ACTIVE' || status === 'SUSPENDED') && !!openVariableEditor
+  const canAttemptEdit = (status === 'ACTIVE' || status === 'SUSPENDED') && !!openVariableEditor
+  const canEdit = canAttemptEdit && canEditVariables && !redactValues
+  const editUnavailableReason = redactValues ? valueUnavailableReason : variableEditUnavailableReason
 
   return (
     <DataTable rows={rows} headers={headers as any} size="xs">
@@ -221,28 +251,39 @@ export function GlobalVariablesTable({
                           scope: 'global' as const,
                           activityInstanceId: null,
                           currentType: rawVar?.type || row.type,
-                          currentValue: rawVar?.value,
+                          currentValue: redactValues ? undefined : rawVar?.value,
                         }
 
                         return (
                           <TableCell key={cell.id} style={{ width: '1%', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                            <OverflowMenu
+                            <GuardedOverflowMenu
                               size="xs"
                               aria-label={`Actions for ${row.id}`}
                               iconDescription=""
                               wrapperClasses="eg-no-tooltip"
                               flipped
                             >
-                              {canEdit ? (
-                                <OverflowMenuItem
+                              {canAttemptEdit ? (
+                                <GuardedOverflowMenuItem
                                   itemText="Edit"
+                                  unavailableReason={!canEdit ? editUnavailableReason || 'Action unavailable' : null}
                                   onClick={() => openVariableEditor?.(row.id, (data as any)?.[row.id])}
                                 />
                               ) : null}
-                              <OverflowMenuItem itemText="History" onClick={() => openVariableHistory?.(historyTarget)} />
-                              <OverflowMenuItem itemText="Copy name" onClick={() => copyToClipboard(String(row.id))} />
-                              <OverflowMenuItem itemText="Copy value" onClick={() => copyToClipboard(valueToCopy)} />
-                            </OverflowMenu>
+                              <GuardedOverflowMenuItem
+                                itemText="History"
+                                unavailableReason={!canViewVariableHistory ? variableHistoryUnavailableReason || 'Action unavailable' : null}
+                                onClick={() => openVariableHistory?.(historyTarget)}
+                              />
+                              <GuardedOverflowMenuItem itemText="Copy name" onClick={() => copyToClipboard(String(row.id))} />
+                              <GuardedOverflowMenuItem
+                                itemText="Copy value"
+                                unavailableReason={redactValues ? valueUnavailableReason || 'Value unavailable' : null}
+                                onClick={() => {
+                                  if (!redactValues) copyToClipboard(valueToCopy)
+                                }}
+                              />
+                            </GuardedOverflowMenu>
                           </TableCell>
                         )
                       }
@@ -263,14 +304,14 @@ export function GlobalVariablesTable({
 /**
  * Table component for input parameter mappings
  */
-export function InputMappingsTable({ 
-  data, 
-  formatMappingType, 
-  formatMappingValue 
-}: { 
+export function InputMappingsTable({
+  data,
+  formatMappingType,
+  formatMappingValue
+}: {
   data: any[]
   formatMappingType: (param: any) => string
-  formatMappingValue: (param: any) => string 
+  formatMappingValue: (param: any) => string
 }) {
   const headers = [
     { key: 'name', header: 'Local variable name' },
@@ -328,14 +369,14 @@ export function InputMappingsTable({
 /**
  * Table component for output parameter mappings
  */
-export function OutputMappingsTable({ 
-  data, 
-  formatMappingType, 
-  formatMappingValue 
-}: { 
+export function OutputMappingsTable({
+  data,
+  formatMappingType,
+  formatMappingValue
+}: {
   data: any[]
   formatMappingType: (param: any) => string
-  formatMappingValue: (param: any) => string 
+  formatMappingValue: (param: any) => string
 }) {
   const headers = [
     { key: 'name', header: 'Process variable' },

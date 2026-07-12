@@ -6,10 +6,16 @@
 import React, { useState, lazy, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, Button, InlineNotification, ProgressIndicator, ProgressStep, Toggle, Dropdown } from '@carbon/react';
+import { TrashCan } from '@carbon/icons-react';
 import { apiClient } from '../../../shared/api/client';
+import { evaluateStarbaseMissionControlBridge } from '../../../shared/api/bridgeAuthz';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate';
 import { LoadingState } from '../../shared/components/LoadingState';
+import { useAuth } from '../../../shared/hooks/useAuth';
+import { EnginePermission, ProjectPermission } from '../../../shared/auth/permissions';
+import { evaluateActionSnapshot } from '../../../shared/auth/guards';
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 
 // Lazy load the viewers
 const Viewer = lazy(() => import('../../shared/components/Viewer'));
@@ -25,6 +31,8 @@ interface GitVersionsPanelProps {
   saveMode?: 'git' | 'local';
   beforeVersionSave?: () => Promise<void>;
   onVersionSaveSuccess?: () => void;
+  canRestoreVersion?: boolean;
+  restoreVersionUnavailableReason?: string | null;
 }
 
 interface VcsCommit {
@@ -101,14 +109,30 @@ interface EngineWithAccess {
   myRole?: string;
 }
 
+type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean;
+type EngineActionCheck = (engineId: string | null | undefined, actionId: string) => boolean;
+
 interface LatestDeploymentByFile {
   engineId?: string;
+  engineDeploymentId?: string | null;
   engineName?: string | null;
   environmentTag?: string | null;
   deployedAt?: number | null;
   fileId?: string | null;
   fileGitCommitId?: string | null;
   artifacts?: Array<{ kind?: string; key?: string; version?: number }>;
+}
+
+interface DeploymentBadge {
+  label: string;
+  tone: string;
+  versionLabel: string;
+  title: string;
+  target: MissionControlTarget | null;
+  color: string | null;
+  engineId: string;
+  engineDeploymentId: string;
+  deleteDecision: UiAuthzDecision;
 }
 
 type MissionControlTarget = {
@@ -276,15 +300,70 @@ function normalizeTimestamp(value: number): number {
   return value > 1_000_000_000_000 ? value : value * 1000;
 }
 
-export default function GitVersionsPanel({ projectId, fileId, fileName, fileType = 'bpmn', hasUnsavedVersion, lastEditedAt, saveMode = 'git', beforeVersionSave, onVersionSaveSuccess }: GitVersionsPanelProps) {
+export function canViewDeploymentHistoryForEngine(
+  engine: EngineWithAccess,
+  hasPermission: EnginePermissionCheck,
+  hasAction?: EngineActionCheck
+): boolean {
+  const role = String(engine?.myRole || '').toLowerCase();
+  return ENGINE_ACCESS_ROLES.has(role) ||
+    hasPermission(engine?.id, EnginePermission.DEPLOY_VIEW) ||
+    Boolean(hasAction?.(engine?.id, 'engine.deployments.read'));
+}
+
+export default function GitVersionsPanel({
+  projectId,
+  fileId,
+  fileName,
+  fileType = 'bpmn',
+  hasUnsavedVersion,
+  lastEditedAt,
+  saveMode = 'git',
+  beforeVersionSave,
+  onVersionSaveSuccess,
+  canRestoreVersion = true,
+  restoreVersionUnavailableReason,
+}: GitVersionsPanelProps) {
   const queryClient = useQueryClient();
   const { tenantNavigate } = useTenantNavigate();
+  const { hasEnginePermission, hasProjectPermission, permissions } = useAuth();
   const [selectedCommit, setSelectedCommit] = useState<VcsCommit | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewXml, setPreviewXml] = useState<string | null>(null);
+  const [deploymentPendingDelete, setDeploymentPendingDelete] = useState<DeploymentBadge | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
   const [showSystemVersions, setShowSystemVersions] = useState(false);
   const [environmentFilter, setEnvironmentFilter] = useState<{ id: string; label: string } | null>({ id: 'all', label: 'All environments' });
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const projectResource = React.useMemo(() => ({ type: 'project' as const, id: projectId }), [projectId]);
+  const localVersionsReadDecision = evaluateActionSnapshot(permissions, 'project.versions.read', projectResource);
+  const localVersionsRestoreDecision = evaluateActionSnapshot(permissions, 'project.versions.restore', projectResource);
+  const localFilesRestoreDecision = evaluateActionSnapshot(permissions, 'project.files.restore', projectResource);
+  const vcsCommitsReadDecision = evaluateActionSnapshot(permissions, 'project.vcs.commits.read', projectResource);
+  const vcsCommitCreateDecision = evaluateActionSnapshot(permissions, 'project.vcs.commit.create', projectResource);
+  const vcsCommitRestoreDecision = evaluateActionSnapshot(permissions, 'project.vcs.commit.restore', projectResource);
+  const projectDeploymentsReadDecision = evaluateActionSnapshot(permissions, 'project.deployments.read', projectResource);
+  const canReadVcsCommits = saveMode === 'local'
+    ? localVersionsReadDecision.allowed || hasProjectPermission(projectId, ProjectPermission.FILES_VIEW)
+    : vcsCommitsReadDecision.allowed || hasProjectPermission(projectId, ProjectPermission.FILES_VIEW);
+  const canReadProjectDeployments = projectDeploymentsReadDecision.allowed ||
+    hasProjectPermission(projectId, ProjectPermission.FILES_VIEW);
+  const canCreateVcsCommit = saveMode === 'local' ||
+    vcsCommitCreateDecision.allowed ||
+    hasProjectPermission(projectId, ProjectPermission.VERSIONS_CREATE);
+  const canRestoreVcsCommit = saveMode === 'local'
+    ? localVersionsRestoreDecision.allowed ||
+      localFilesRestoreDecision.allowed ||
+      hasProjectPermission(projectId, ProjectPermission.VERSIONS_RESTORE)
+    : vcsCommitRestoreDecision.allowed || hasProjectPermission(projectId, ProjectPermission.VERSIONS_RESTORE);
+  const vcsCommitCreateUnavailableReason = canCreateVcsCommit
+    ? null
+    : vcsCommitCreateDecision.reason || `Missing permission ${ProjectPermission.VERSIONS_CREATE}`;
+  const vcsCommitRestoreUnavailableReason = canRestoreVcsCommit
+    ? null
+    : saveMode === 'local'
+      ? localVersionsRestoreDecision.reason || localFilesRestoreDecision.reason || `Missing permission ${ProjectPermission.VERSIONS_RESTORE}`
+      : vcsCommitRestoreDecision.reason || `Missing permission ${ProjectPermission.VERSIONS_RESTORE}`;
 
   // Fetch VCS commit history filtered to this specific file
   const commitsQuery = useQuery({
@@ -325,7 +404,7 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
 
       return { commits: filteredCommits };
     },
-    enabled: saveMode === 'local' ? !!fileId : !!projectId,
+    enabled: saveMode === 'local' ? !!fileId : !!projectId && canReadVcsCommits,
     staleTime: 10000, // 10 seconds
     refetchInterval: 30000, // Refresh every 30 seconds
   });
@@ -338,13 +417,15 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
 
   const hasEngineAccess = React.useMemo(() => {
     const engines = Array.isArray(enginesQuery.data) ? enginesQuery.data : [];
-    return saveMode === 'git' && engines.some((engine) => ENGINE_ACCESS_ROLES.has(String(engine?.myRole || '')));
-  }, [enginesQuery.data]);
+    const hasEngineAction = (engineId: string | null | undefined, actionId: string) =>
+      evaluateActionSnapshot(permissions, actionId, { type: 'engine', id: engineId }).allowed;
+    return saveMode === 'git' && engines.some((engine) => canViewDeploymentHistoryForEngine(engine, hasEnginePermission, hasEngineAction));
+  }, [enginesQuery.data, hasEnginePermission, permissions, saveMode]);
 
   const deploymentsQuery = useQuery({
     queryKey: ['engine-deployments', projectId, fileId, 'history'],
     queryFn: () => apiClient.get<LatestDeploymentByFile[]>(`/starbase-api/projects/${projectId}/files/${fileId}/deployments/history`),
-    enabled: !!projectId && !!fileId && hasEngineAccess,
+    enabled: !!projectId && !!fileId && hasEngineAccess && canReadProjectDeployments,
     staleTime: 10000,
   });
 
@@ -380,7 +461,7 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
         `/vcs-api/projects/${projectId}/commits/${selectedCommit!.id}/files`
       );
     },
-    enabled: !!selectedCommit && previewOpen && (saveMode === 'local' ? !!fileId : !!projectId),
+    enabled: !!selectedCommit && previewOpen && (saveMode === 'local' ? !!fileId : !!projectId && canReadVcsCommits),
   });
 
   // Restore mutation
@@ -400,6 +481,10 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
       queryClient.invalidateQueries({ queryKey: ['versions', fileId] });
       queryClient.invalidateQueries({ queryKey: ['versions-panel', 'local', projectId, fileId] });
     } else {
+      if (vcsCommitCreateUnavailableReason) {
+        throw new Error(vcsCommitCreateUnavailableReason);
+      }
+
       const body: { message: string; fileIds?: string[] } = { message: AUTO_SAVE_BEFORE_RESTORE_MESSAGE };
       if (fileId) {
         body.fileIds = [fileId];
@@ -423,10 +508,21 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
     }
 
     onVersionSaveSuccess?.();
-  }, [beforeVersionSave, fileId, hasUnsavedVersion, onVersionSaveSuccess, projectId, queryClient, saveMode]);
+  }, [beforeVersionSave, fileId, hasUnsavedVersion, onVersionSaveSuccess, projectId, queryClient, saveMode, vcsCommitCreateUnavailableReason]);
+
+  const baseRestoreUnavailableReason = restoreVersionUnavailableReason || (
+    canRestoreVersion ? null : `Missing permission ${ProjectPermission.VERSIONS_RESTORE}`
+  );
+  const restoreUnavailableReason = saveMode === 'local'
+    ? baseRestoreUnavailableReason
+    : baseRestoreUnavailableReason || vcsCommitRestoreUnavailableReason;
 
   const restoreMutation = useMutation({
     mutationFn: async (commitId: string) => {
+      if (restoreUnavailableReason) {
+        throw new Error(restoreUnavailableReason);
+      }
+
       await autoSaveBeforeRestore();
       if (saveMode === 'local') {
         if (!fileId) throw new Error('Missing fileId for local restore');
@@ -463,6 +559,31 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
     },
   });
 
+  const deleteDeploymentMutation = useMutation({
+    mutationFn: async (deployment: DeploymentBadge) => {
+      if (!deployment.engineDeploymentId || !deployment.engineId) {
+        throw new Error('Deployment delete unavailable for this record');
+      }
+      if (!deployment.deleteDecision.allowed) {
+        throw new Error(deployment.deleteDecision.reason || 'Deployment delete unavailable');
+      }
+      const params = new URLSearchParams({
+        engineId: deployment.engineId,
+        cascade: 'false',
+      });
+      return apiClient.delete(
+        `/starbase-api/deployments/${encodeURIComponent(deployment.engineDeploymentId)}?${params.toString()}`,
+        { credentials: 'include' }
+      );
+    },
+    onSuccess: () => {
+      setDeploymentPendingDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId, 'latest'] });
+      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId, fileId, 'history'] });
+    },
+  });
+
   const openCommitPreview = React.useCallback((commit: VcsCommit) => {
     setSelectedCommit(commit);
     setPreviewXml(null); // Reset preview XML
@@ -480,6 +601,7 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
   };
 
   const handleRestore = () => {
+    if (restoreUnavailableReason) return;
     if (selectedCommit) {
       restoreMutation.mutate(selectedCommit.id);
     }
@@ -528,13 +650,23 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
     ? environmentFilter.id
     : null;
 
+  const getDeploymentDeleteDecision = React.useCallback((row: LatestDeploymentByFile): UiAuthzDecision => {
+    return evaluateActionSnapshot(
+      permissions,
+      'engine.deployments.delete',
+      { type: 'engine', id: row.engineId || null }
+    );
+  }, [permissions]);
+
   const deploymentsByCommit = React.useMemo(() => {
-    if (!hasEngineAccess) return new Map<string, Array<{ label: string; tone: string; versionLabel: string; title: string; target: MissionControlTarget | null; color: string | null }>>();
-    const map = new Map<string, Array<{ label: string; tone: string; versionLabel: string; title: string; target: MissionControlTarget | null; color: string | null }>>();
+    if (!hasEngineAccess) return new Map<string, DeploymentBadge[]>();
+    const map = new Map<string, DeploymentBadge[]>();
     const seenByCommit = new Map<string, Set<string>>();
     for (const row of deploymentsForFile) {
       const commitId = String(row?.fileGitCommitId || '').trim();
       if (!commitId) continue;
+      const engineId = String(row?.engineId || '').trim();
+      const engineDeploymentId = String(row?.engineDeploymentId || '').trim();
       const envLabel = getEnvironmentLabel(row);
       if (activeEnvironment && envLabel !== activeEnvironment) continue;
       const tone = getEnvironmentTone(envLabel);
@@ -550,11 +682,21 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
       const deployedAt = typeof row.deployedAt === 'number' ? formatTimeExact(row.deployedAt) : null;
       const title = deployedAt ? `${envLabel} ${versionLabel} • ${deployedAt}` : `${envLabel} ${versionLabel}`;
       const list = map.get(commitId) ?? [];
-      list.push({ label: envLabel, tone, versionLabel, title, target, color });
+      list.push({
+        label: envLabel,
+        tone,
+        versionLabel,
+        title,
+        target,
+        color,
+        engineId,
+        engineDeploymentId,
+        deleteDecision: getDeploymentDeleteDecision(row),
+      });
       map.set(commitId, list);
     }
     return map;
-  }, [deploymentsForFile, fileType, activeEnvironment, environmentColorByName, hasEngineAccess]);
+  }, [deploymentsForFile, fileType, activeEnvironment, environmentColorByName, getDeploymentDeleteDecision, hasEngineAccess]);
 
   // Extract XML from snapshots when loaded
   React.useEffect(() => {
@@ -619,27 +761,60 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
     openCommitPreview(commit);
   }, [openCommitPreview]);
 
-  const handleOpenMissionControl = React.useCallback((target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleOpenMissionControl = React.useCallback(async (target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
     if (!target) return;
     event.preventDefault();
     event.stopPropagation();
+    setBridgeError(null);
+    try {
+      const bridgeDecision = await evaluateStarbaseMissionControlBridge({
+        projectId,
+        fileId,
+        engineId: target.engineId,
+        definitionKey: target.keyParam === 'process' ? target.key : undefined,
+        decisionDefinitionKey: target.keyParam === 'decision' ? target.key : undefined,
+        kind: target.keyParam === 'decision' || fileType === 'dmn' ? 'decision' : 'process',
+      });
+      if (!bridgeDecision.allowed) {
+        setBridgeError(bridgeDecision.reason || 'Mission Control is unavailable for this deployment.');
+        return;
+      }
+    } catch (error) {
+      setBridgeError(parseApiError(error, 'Unable to evaluate Mission Control access').message);
+      return;
+    }
     const params = new URLSearchParams({
       engineId: target.engineId,
       [target.keyParam]: target.key,
       version: String(target.version),
     });
     tenantNavigate(`${target.path}?${params.toString()}`);
-  }, [tenantNavigate]);
+  }, [fileId, fileType, projectId, tenantNavigate]);
 
   const handleDeploymentClick = React.useCallback((commit: VcsCommit, target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
     if (target) {
-      handleOpenMissionControl(target, event);
+      void handleOpenMissionControl(target, event);
       return;
     }
+    setBridgeError(null);
     handleJumpToCommit(commit, event);
   }, [handleOpenMissionControl, handleJumpToCommit]);
 
-  const showDeploymentUi = saveMode === 'git' && hasEngineAccess;
+  const showDeploymentUi = saveMode === 'git' && hasEngineAccess && canReadProjectDeployments;
+
+  if (saveMode !== 'local' && !canReadVcsCommits) {
+    return (
+      <div style={{ padding: 'var(--spacing-4)' }}>
+        <InlineNotification
+          kind="warning"
+          title="Version history unavailable"
+          subtitle={vcsCommitsReadDecision.reason || `Missing permission ${ProjectPermission.FILES_VIEW}`}
+          lowContrast
+          hideCloseButton
+        />
+      </div>
+    );
+  }
 
   if (commitsQuery.isLoading) {
     return <div style={{ padding: 'var(--spacing-4)', fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>Loading versions...</div>;
@@ -716,6 +891,16 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
           msOverflowStyle: 'none',
         }}
       >
+        {bridgeError && (
+          <InlineNotification
+            kind="warning"
+            title="Mission Control unavailable"
+            subtitle={bridgeError}
+            lowContrast
+            hideCloseButton
+            style={{ marginBottom: 'var(--spacing-3)' }}
+          />
+        )}
         <style>{`
           .git-versions-progress .cds--progress--vertical,
           .git-versions-progress .bx--progress--vertical {
@@ -868,17 +1053,58 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
                       {showDeploymentUi && deploymentBadges.map((deployment, index) => {
                         const badgeStyle = { ...getEnvironmentBadgeStyle(deployment.color), cursor: 'pointer' } as React.CSSProperties;
                         const title = deployment.target ? 'Open in Mission Control' : 'Jump to Starbase version';
+                        const canDeleteDeployment = Boolean(deployment.engineId && deployment.engineDeploymentId);
+                        const deleteDisabled = deleteDeploymentMutation.isPending ||
+                          !canDeleteDeployment ||
+                          !deployment.deleteDecision.allowed;
+                        const deleteTitle = !canDeleteDeployment
+                          ? 'Deployment delete unavailable for this record'
+                          : deployment.deleteDecision.allowed
+                            ? `Delete deployment ${deployment.label} ${deployment.versionLabel}`
+                            : deployment.deleteDecision.reason || 'Deployment delete unavailable';
                         return (
-                          <InlineTagButton
+                          <span
                             key={`${commit.id}-${deployment.label}-${index}`}
-                            className="git-versions-pill"
-                            type={deployment.tone}
-                            title={title}
-                            onClick={(event) => handleDeploymentClick(commit, deployment.target, event)}
-                            style={badgeStyle}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}
                           >
-                            <span title={deployment.title}>{deployment.label} {deployment.versionLabel}</span>
-                          </InlineTagButton>
+                            <InlineTagButton
+                              className="git-versions-pill"
+                              type={deployment.tone}
+                              title={title}
+                              onClick={(event) => handleDeploymentClick(commit, deployment.target, event)}
+                              style={badgeStyle}
+                            >
+                              <span title={deployment.title}>{deployment.label} {deployment.versionLabel}</span>
+                            </InlineTagButton>
+                            {deployment.engineDeploymentId && (
+                              <button
+                                type="button"
+                                aria-label={`Delete deployment ${deployment.label} ${deployment.versionLabel}`}
+                                title={deleteTitle}
+                                disabled={deleteDisabled}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  if (deleteDisabled) return;
+                                  setDeploymentPendingDelete(deployment);
+                                }}
+                                style={{
+                                  width: 18,
+                                  height: 18,
+                                  border: 'none',
+                                  padding: 0,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: 'transparent',
+                                  color: deleteDisabled ? 'var(--color-text-tertiary)' : 'var(--cds-support-error, #da1e28)',
+                                  cursor: deleteDisabled ? 'not-allowed' : 'pointer',
+                                }}
+                              >
+                                <TrashCan size={12} />
+                              </button>
+                            )}
+                          </span>
                         );
                       })}
                       <span style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>{timeText}</span>
@@ -946,7 +1172,7 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
         secondaryButtonText="Close"
         onRequestSubmit={handleRestore}
         onRequestClose={handleClosePreview}
-        primaryButtonDisabled={restoreMutation.isPending || !previewXml}
+        primaryButtonDisabled={restoreMutation.isPending || !previewXml || Boolean(restoreUnavailableReason)}
       >
         <div style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
           {/* Loading state */}
@@ -970,6 +1196,16 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
               kind="error"
               title="Restore failed"
               subtitle={parseApiError(restoreMutation.error, 'Restore failed').message}
+              lowContrast
+              style={{ marginBottom: 'var(--spacing-3)' }}
+            />
+          )}
+
+          {restoreUnavailableReason && (
+            <InlineNotification
+              kind="warning"
+              title="Restore unavailable"
+              subtitle={restoreUnavailableReason}
               lowContrast
               style={{ marginBottom: 'var(--spacing-3)' }}
             />
@@ -1021,6 +1257,51 @@ export default function GitVersionsPanel({ projectId, fileId, fileName, fileType
             }}>
               No diagram content found in this version
             </div>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(deploymentPendingDelete)}
+        danger
+        modalHeading="Delete deployment record"
+        modalLabel={deploymentPendingDelete ? `${deploymentPendingDelete.label} ${deploymentPendingDelete.versionLabel}` : ''}
+        primaryButtonText={deleteDeploymentMutation.isPending ? 'Deleting...' : 'Delete deployment'}
+        secondaryButtonText="Cancel"
+        onRequestSubmit={() => {
+          if (deploymentPendingDelete) {
+            deleteDeploymentMutation.mutate(deploymentPendingDelete);
+          }
+        }}
+        onRequestClose={() => {
+          if (!deleteDeploymentMutation.isPending) {
+            setDeploymentPendingDelete(null);
+          }
+        }}
+        primaryButtonDisabled={deleteDeploymentMutation.isPending || !deploymentPendingDelete?.deleteDecision.allowed}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
+          {deleteDeploymentMutation.isError && (
+            <InlineNotification
+              kind="error"
+              title="Delete failed"
+              subtitle={parseApiError(deleteDeploymentMutation.error, 'Delete failed').message}
+              lowContrast
+              hideCloseButton
+            />
+          )}
+          {deploymentPendingDelete?.deleteDecision.allowed ? (
+            <p style={{ margin: 0 }}>
+              This removes the deployment record from the selected engine. It does not delete the Starbase version.
+            </p>
+          ) : (
+            <InlineNotification
+              kind="warning"
+              title="Delete unavailable"
+              subtitle={deploymentPendingDelete?.deleteDecision.reason || 'Missing deployment delete permission'}
+              lowContrast
+              hideCloseButton
+            />
           )}
         </div>
       </Modal>

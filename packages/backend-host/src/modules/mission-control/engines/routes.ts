@@ -1,26 +1,50 @@
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response, type NextFunction } from 'express'
 import { existsSync } from 'fs'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { z } from 'zod'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
+import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js'
+import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js'
+import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js'
 import { SavedFilter } from '@enterpriseglue/shared/infrastructure/persistence/entities/SavedFilter.js'
 import { EngineHealth } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineHealth.js'
-import { In, Not, IsNull } from 'typeorm'
+import { In, Not, IsNull, type DataSource } from 'typeorm'
 import { fetch } from 'undici'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
+import { requireApiClientAction } from '@enterpriseglue/shared/middleware/apiClientAuth.js'
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js'
 import { apiLimiter, engineLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
-import { engineService } from '@enterpriseglue/shared/services/platform-admin/index.js'
-import { withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
-import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js'
+import { engineService, engineSetService, platformSettingsService, projectEngineTargetService, ApiClientScopes } from '@enterpriseglue/shared/services/platform-admin/index.js'
+import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
+import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
+import { resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { config } from '@enterpriseglue/shared/config/index.js'
+import { logAudit } from '@enterpriseglue/shared/services/audit.js'
+import { logger } from '@enterpriseglue/shared/utils/logger.js'
+
+type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[] }
 
 // Validation schemas
 const engineIdParamSchema = z.object({ id: z.string().min(1) })
 const engineTypeSchema = z.enum(['ion', 'operaton', 'camunda7'])
 const engineAuthTypeSchema = z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials'])
+const engineLabelsSchema = z.record(z.string().min(1).max(128), z.string().max(512))
+const engineManagementModeSchema = z.enum(['external_managed', 'hybrid'])
+const engineLifecycleStatusSchema = z.enum(['active', 'disabled', 'stale', 'decommissioned'])
+const engineFieldOwnerSchema = z.enum(['manual', 'external'])
+const engineFieldOwnershipSchema = z.record(z.string().min(1).max(128), engineFieldOwnerSchema)
+const externalEngineCapabilitiesSchema = z.object({
+  operations: z.array(z.enum(ENGINE_OPERATION_CAPABILITIES)).optional(),
+  supportLevel: z.string().max(128).nullable().optional(),
+  compatibilityProfile: z.string().max(128).nullable().optional(),
+}).passthrough()
+type EngineFieldOwner = z.infer<typeof engineFieldOwnerSchema>
+type EngineFieldOwnership = Record<string, EngineFieldOwner>
+type EngineLifecycleStatus = z.infer<typeof engineLifecycleStatusSchema>
+type ExternalEngineCapabilities = z.infer<typeof externalEngineCapabilitiesSchema>
 
 const isLocalOrPrivate = (raw: string): boolean => {
   try {
@@ -63,15 +87,98 @@ const getDockerLoopbackEngineError = (raw?: string): string | null => {
   return `This EnterpriseGlue instance is running in Docker. Engine URLs using localhost or 127.0.0.1 point to the container itself. Use ${suggested} instead.`
 }
 
+function parseIpv4(host: string): number[] | null {
+  const parts = host.split('.')
+  if (parts.length !== 4) return null
+  const octets = parts.map((part) => Number(part))
+  if (octets.some((octet, index) => !/^\d+$/.test(parts[index]) || octet < 0 || octet > 255)) return null
+  return octets
+}
+
+function isBlockedIpv4Literal(host: string): boolean {
+  const octets = parseIpv4(host)
+  if (!octets) return false
+  const [first, second] = octets
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 100 && second >= 64 && second <= 127) ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 198 && (second === 18 || second === 19)) ||
+    first >= 224
+  )
+}
+
+function isBlockedIpv6Literal(host: string): boolean {
+  const normalized = host.replace(/^\[|\]$/g, '').toLowerCase()
+  return (
+    normalized === '::' ||
+    normalized === '::1' ||
+    normalized.startsWith('fe80:') ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd') ||
+    normalized.startsWith('ff') ||
+    normalized.startsWith('::ffff:127.') ||
+    normalized.startsWith('::ffff:10.') ||
+    normalized.startsWith('::ffff:169.254.') ||
+    normalized.startsWith('::ffff:192.168.')
+  )
+}
+
+function getExternalRegistrationUrlError(raw: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return 'Engine URL must be a valid URL'
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return 'External engine URLs must use HTTP or HTTPS'
+  }
+  if (parsed.username || parsed.password) {
+    return 'External engine URLs must not include embedded credentials'
+  }
+
+  const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  if (
+    host === 'localhost' ||
+    host === 'host.docker.internal' ||
+    host === 'metadata.google.internal' ||
+    host === 'metadata' ||
+    host.endsWith('.local') ||
+    !host.includes('.')
+  ) {
+    return 'External engine URL host is not allowed'
+  }
+  if (isBlockedIpv4Literal(host) || isBlockedIpv6Literal(host)) {
+    return 'External engine URL host resolves to a blocked local, private, link-local, or reserved address literal'
+  }
+
+  return null
+}
+
 const baseUrlSchema = z.string().min(1).url().refine(
   (url) => config.nodeEnv !== 'production' || url.startsWith('https://') || isLocalOrPrivate(url),
   { message: 'Engine base URL must use HTTPS in production (HTTP allowed for localhost/private networks)' }
 )
 
+const externalRegistrationUrlSchema = baseUrlSchema.superRefine((url, ctx) => {
+  const error = getExternalRegistrationUrlError(url)
+  if (error) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: error })
+  }
+})
+
 const createEngineBodySchema = z.object({
   name: z.string().min(1).max(255),
   baseUrl: baseUrlSchema,
   type: engineTypeSchema.default('ion'),
+  externalId: z.string().min(1).max(255).nullable().optional(),
+  labels: engineLabelsSchema.optional(),
   authType: engineAuthTypeSchema.optional(),
   username: z.string().nullable().optional(),
   passwordEnc: z.string().nullable().optional(),
@@ -86,6 +193,8 @@ const updateEngineBodySchema = z.object({
   name: z.string().min(1).max(255).optional(),
   baseUrl: baseUrlSchema.optional(),
   type: engineTypeSchema.optional(),
+  externalId: z.string().min(1).max(255).nullable().optional(),
+  labels: engineLabelsSchema.optional(),
   authType: engineAuthTypeSchema.optional(),
   username: z.string().nullable().optional(),
   passwordEnc: z.string().nullable().optional(),
@@ -94,6 +203,114 @@ const updateEngineBodySchema = z.object({
   oauthAudience: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
   environmentTagId: z.string().nullable().optional(),
+})
+
+const DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP: EngineFieldOwnership = {
+  identity: 'external',
+  connection: 'external',
+  metadata: 'external',
+  labels: 'external',
+  auth: 'external',
+  version: 'external',
+  display: 'manual',
+  environment: 'manual',
+}
+
+const ENGINE_UPDATE_FIELD_GROUPS: Record<string, string> = {
+  name: 'display',
+  baseUrl: 'connection',
+  type: 'metadata',
+  externalId: 'identity',
+  labels: 'labels',
+  authType: 'auth',
+  username: 'auth',
+  passwordEnc: 'auth',
+  oauthTokenUrl: 'auth',
+  oauthScopes: 'auth',
+  oauthAudience: 'auth',
+  version: 'version',
+  environmentTagId: 'environment',
+}
+
+const EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD: Record<string, string> = {
+  name: 'name',
+  baseUrl: 'baseUrl',
+  type: 'type',
+  externalId: 'externalId',
+  labels: 'labelsJson',
+  authType: 'authType',
+  username: 'username',
+  passwordEnc: 'passwordEnc',
+  oauthTokenUrl: 'oauthTokenUrl',
+  oauthScopes: 'oauthScopes',
+  oauthAudience: 'oauthAudience',
+  version: 'version',
+  environmentTagId: 'environmentTagId',
+}
+
+const ENGINE_SECRET_UPDATE_FIELDS = [
+  'authType',
+  'username',
+  'passwordEnc',
+  'oauthTokenUrl',
+  'oauthScopes',
+  'oauthAudience',
+] as const
+
+const externalRegisterEngineBodySchema = createEngineBodySchema.extend({
+  baseUrl: externalRegistrationUrlSchema,
+  externalId: z.string().min(1).max(255),
+  oauthTokenUrl: externalRegistrationUrlSchema.nullable().optional(),
+  externalSystemId: z.string().min(1).nullable().optional(),
+  managementMode: engineManagementModeSchema.optional(),
+  fieldOwnership: engineFieldOwnershipSchema.optional(),
+  lifecycleStatus: engineLifecycleStatusSchema.exclude(['decommissioned']).optional(),
+  capabilities: externalEngineCapabilitiesSchema.optional(),
+  testConnection: z.boolean().optional(),
+})
+
+const decommissionExternalEngineBodySchema = z.object({
+  externalId: z.string().min(1).max(255),
+  externalSystemId: z.string().min(1).nullable().optional(),
+  reason: z.string().max(2000).nullable().optional(),
+})
+
+const externalProjectEngineTargetModeFlagsSchema = z.object({
+  allowManualDeploy: z.boolean().optional(),
+  allowCiDeploy: z.boolean().optional(),
+  allowApiDeploy: z.boolean().optional(),
+  allowImport: z.boolean().optional(),
+})
+
+const externalProjectEngineTargetBaseObjectSchema = externalProjectEngineTargetModeFlagsSchema.extend({
+  externalSystemId: z.string().min(1),
+  projectId: z.string().min(1),
+  engineId: z.string().min(1).optional(),
+  externalEngineId: z.string().min(1).max(255).optional(),
+  externalProjectId: z.string().min(1).max(255).optional(),
+  externalTargetId: z.string().min(1).max(255).optional(),
+  approvalStatus: z.enum(['not_required', 'pending', 'approved', 'rejected']).optional(),
+  policyTags: z.array(z.string().min(1).max(128)).optional(),
+  diagnostics: z.record(z.string(), z.unknown()).nullable().optional(),
+})
+
+const externalProjectEngineTargetUpsertBodySchema = externalProjectEngineTargetBaseObjectSchema.extend({
+  status: z.enum(['active', 'disabled']).optional(),
+}).refine((value) => Boolean(value.engineId || value.externalEngineId), {
+  message: 'engineId or externalEngineId is required',
+  path: ['engineId'],
+})
+
+const externalProjectEngineTargetDecommissionBodySchema = externalProjectEngineTargetBaseObjectSchema.pick({
+  externalSystemId: true,
+  projectId: true,
+  engineId: true,
+  externalEngineId: true,
+  externalProjectId: true,
+  externalTargetId: true,
+}).refine((value) => Boolean(value.engineId || value.externalEngineId), {
+  message: 'engineId or externalEngineId is required',
+  path: ['engineId'],
 })
 
 const createSavedFilterBodySchema = z.object({
@@ -121,11 +338,62 @@ const updateSavedFilterBodySchema = z.object({
 const r = Router()
 
 async function canViewEngine(req: Request, engineId: string): Promise<boolean> {
-  return engineService.hasEngineAccess(req.user!.userId, engineId, ENGINE_VIEW_ROLES)
+  return permissionService.hasPermission(EnginePermissions.INSTANCE_VIEW, {
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
+    resourceType: 'engine',
+    resourceId: engineId,
+  })
 }
 
-async function canManageEngine(req: Request, engineId: string): Promise<boolean> {
-  return engineService.hasEngineAccess(req.user!.userId, engineId, ENGINE_MANAGE_ROLES)
+async function canEditEngine(req: Request, engineId: string): Promise<boolean> {
+  return permissionService.hasPermission(EnginePermissions.ENGINE_EDIT, {
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
+    resourceType: 'engine',
+    resourceId: engineId,
+  })
+}
+
+async function canViewEngineSecrets(req: Request, engineId: string): Promise<boolean> {
+  return permissionService.hasPermission(EnginePermissions.SECRETS_VIEW, {
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
+    resourceType: 'engine',
+    resourceId: engineId,
+  })
+}
+
+async function canManageEngineSecrets(req: Request, engineId: string): Promise<boolean> {
+  return permissionService.hasPermission(EnginePermissions.SECRETS_MANAGE, {
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
+    resourceType: 'engine',
+    resourceId: engineId,
+  })
+}
+
+function requestContainsAnyField(req: Request, fields: readonly string[]): boolean {
+  return fields.some((field) => req.body[field] !== undefined)
+}
+
+async function getEngineOnboardingMode(): Promise<'manual_allowed' | 'external_only' | 'hybrid'> {
+  return (await platformSettingsService.get()).engineOnboardingMode
+}
+
+const requireEngineInventoryReadById = requireAction('engine.inventory.read', {
+  resourceResolver: 'engine.byId',
+  resourceIdFrom: 'params',
+  resourceIdKey: 'id',
+})
+
+function requireEngineInventoryReadOrEnvHealth(req: Request, res: Response, next: NextFunction) {
+  if (String(req.params.id) === '__env__') return next()
+  return requireEngineInventoryReadById(req, res, next)
 }
 
 function redactEngineSecrets<T extends { username?: string | null; passwordEnc?: string | null }>(engine: T): T {
@@ -137,21 +405,435 @@ function redactEngineSecrets<T extends { username?: string | null; passwordEnc?:
   }
 }
 
-r.get('/engines-api/engines', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const dataSource = await getDataSource()
+function normalizeEngineLabels(labels: Record<string, string> | undefined): Record<string, string> {
+  if (!labels) return {}
+  return Object.fromEntries(
+    Object.entries(labels)
+      .map(([key, value]) => [key.trim(), value.trim()])
+      .filter(([key, value]) => key.length > 0 && value.length > 0)
+      .sort(([left], [right]) => left.localeCompare(right))
+  )
+}
+
+function labelsToJson(labels: Record<string, string> | undefined): string | null {
+  const normalized = normalizeEngineLabels(labels)
+  return Object.keys(normalized).length > 0 ? JSON.stringify(normalized) : null
+}
+
+function parseEngineLabels(labelsJson: string | null | undefined): Record<string, string> {
+  if (!labelsJson) return {}
+  try {
+    const parsed = JSON.parse(labelsJson)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    )
+  } catch {
+    return {}
+  }
+}
+
+function normalizeEngineFieldOwnership(ownership: EngineFieldOwnership | undefined): EngineFieldOwnership {
+  if (!ownership) return {}
+  return Object.fromEntries(
+    Object.entries(ownership)
+      .filter((entry): entry is [string, EngineFieldOwner] => entry[1] === 'manual' || entry[1] === 'external')
+      .sort(([left], [right]) => left.localeCompare(right))
+  )
+}
+
+function fieldOwnershipToJson(ownership: EngineFieldOwnership | undefined): string | null {
+  const normalized = normalizeEngineFieldOwnership(ownership)
+  return Object.keys(normalized).length > 0 ? JSON.stringify(normalized) : null
+}
+
+function normalizeExternalEngineCapabilities(capabilities: ExternalEngineCapabilities | undefined): ExternalEngineCapabilities | null {
+  if (!capabilities) return null
+  const operations = Array.from(new Set(capabilities.operations || [])).sort()
+  return {
+    ...capabilities,
+    operations,
+    supportLevel: capabilities.supportLevel ?? null,
+    compatibilityProfile: capabilities.compatibilityProfile ?? null,
+  }
+}
+
+function capabilitiesToJson(capabilities: ExternalEngineCapabilities | null): string | null {
+  return capabilities ? JSON.stringify(capabilities) : null
+}
+
+function parseExternalEngineCapabilities(value: string | null | undefined): ExternalEngineCapabilities | null {
+  if (!value) return null
+  try {
+    const parsed = externalEngineCapabilitiesSchema.safeParse(JSON.parse(value))
+    return parsed.success ? normalizeExternalEngineCapabilities(parsed.data) : null
+  } catch {
+    return null
+  }
+}
+
+function getCapabilityStatus(type: unknown, capabilities: ExternalEngineCapabilities | null): 'unknown' | 'in_sync' | 'mismatch' {
+  return getCapabilityDiagnostics(type, capabilities).status
+}
+
+function getCapabilityDiagnostics(type: unknown, capabilities: ExternalEngineCapabilities | null) {
+  const expected = getEngineCapabilities(type)
+  const expectedOperations = [...expected.operations].sort()
+  if (!capabilities || !Array.isArray(capabilities.operations) || capabilities.operations.length === 0) {
+    return {
+      status: 'unknown' as const,
+      expectedOperations,
+      reportedOperations: [] as string[],
+      missingOperations: expectedOperations,
+      extraOperations: [] as string[],
+      expectedSupportLevel: expected.supportLevel,
+      reportedSupportLevel: null,
+      expectedCompatibilityProfile: expected.compatibilityProfile,
+      reportedCompatibilityProfile: null,
+      issues: ['No operation capabilities were reported by the external system.'],
+      recommendation: 'Update the external registration payload to report supported operations, then run reconcile again.',
+    }
+  }
+  const reportedOperations = Array.from(new Set(capabilities.operations)).sort()
+  const reported = new Set(reportedOperations)
+  const expectedSet = new Set(expectedOperations)
+  const missingOperations = expectedOperations.filter((operation) => !reported.has(operation))
+  const extraOperations = reportedOperations.filter((operation) => !expectedSet.has(operation))
+  const status = missingOperations.length > 0 ? 'mismatch' as const : 'in_sync' as const
+  const issues = [
+    missingOperations.length > 0 ? `Missing expected operations: ${missingOperations.join(', ')}.` : '',
+    extraOperations.length > 0 ? `Reported unsupported operations: ${extraOperations.join(', ')}.` : '',
+  ].filter(Boolean)
+
+  return {
+    status,
+    expectedOperations,
+    reportedOperations,
+    missingOperations,
+    extraOperations,
+    expectedSupportLevel: expected.supportLevel,
+    reportedSupportLevel: capabilities.supportLevel ?? null,
+    expectedCompatibilityProfile: expected.compatibilityProfile,
+    reportedCompatibilityProfile: capabilities.compatibilityProfile ?? null,
+    issues,
+    recommendation: status === 'in_sync'
+      ? 'No capability action required.'
+      : 'Update the external registration payload to report the missing operations, then run reconcile again.',
+  }
+}
+
+function parseEngineFieldOwnership(fieldOwnershipJson: string | null | undefined): EngineFieldOwnership {
+  if (!fieldOwnershipJson) return {}
+  try {
+    const parsed = JSON.parse(fieldOwnershipJson)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return normalizeEngineFieldOwnership(parsed as EngineFieldOwnership)
+  } catch {
+    return {}
+  }
+}
+
+function mergeFieldOwnership(ownership: EngineFieldOwnership | undefined): EngineFieldOwnership {
+  return {
+    ...DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP,
+    ...normalizeEngineFieldOwnership(ownership),
+  }
+}
+
+function getExternalOwnedUpdateFields(engine: Engine, body: Record<string, unknown>): string[] {
+  const registrationSource = engine.registrationSource || ''
+  const managementMode = engine.managementMode || (registrationSource === 'external_api' ? 'external_managed' : 'manual')
+  if (managementMode === 'manual' && registrationSource !== 'external_api') return []
+
+  const ownership = mergeFieldOwnership(parseEngineFieldOwnership(engine.fieldOwnershipJson))
+  return Object.keys(ENGINE_UPDATE_FIELD_GROUPS).filter((field) => {
+    if (body[field] === undefined) return false
+    const group = ENGINE_UPDATE_FIELD_GROUPS[field]
+    const owner = ownership[field] || ownership[group] || DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP[group] || 'external'
+    return owner === 'external'
+  })
+}
+
+function getFieldOwner(ownership: EngineFieldOwnership, field: string): EngineFieldOwner {
+  const group = ENGINE_UPDATE_FIELD_GROUPS[field]
+  return ownership[field] || ownership[group] || DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP[group] || 'external'
+}
+
+function comparableValue(value: unknown): string {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function applyExternalFieldOwnership(
+  existing: Engine,
+  payload: Record<string, unknown>,
+  requestBody: Record<string, unknown>,
+  ownership: EngineFieldOwnership,
+): { payload: Record<string, unknown>; driftStatus: string } {
+  const next = { ...payload }
+  let hasManualOwnedDifference = false
+
+  for (const [requestField, payloadField] of Object.entries(EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD)) {
+    if (requestBody[requestField] === undefined || getFieldOwner(ownership, requestField) !== 'manual') {
+      continue
+    }
+
+    const currentValue = (existing as unknown as Record<string, unknown>)[payloadField]
+    const externalValue = payload[payloadField]
+    if (comparableValue(currentValue) !== comparableValue(externalValue)) {
+      hasManualOwnedDifference = true
+    }
+    delete next[payloadField]
+  }
+
+  return {
+    payload: next,
+    driftStatus: hasManualOwnedDifference ? 'manual_override' : 'in_sync',
+  }
+}
+
+function serializeEngine<T extends { labelsJson?: string | null; fieldOwnershipJson?: string | null; capabilitiesJson?: string | null; type?: unknown }>(
+  engine: T
+): Omit<T, 'labelsJson' | 'fieldOwnershipJson' | 'capabilitiesJson'> & {
+  labels: Record<string, string>
+  fieldOwnership: EngineFieldOwnership
+  reportedCapabilities: ExternalEngineCapabilities | null
+  capabilityDiagnostics: ReturnType<typeof getCapabilityDiagnostics>
+} {
+  const { labelsJson, fieldOwnershipJson, capabilitiesJson, ...rest } = engine
+  const reportedCapabilities = parseExternalEngineCapabilities(capabilitiesJson)
+  return {
+    ...rest,
+    labels: parseEngineLabels(labelsJson),
+    fieldOwnership: parseEngineFieldOwnership(fieldOwnershipJson),
+    reportedCapabilities,
+    capabilityDiagnostics: getCapabilityDiagnostics(rest.type, reportedCapabilities),
+  }
+}
+
+async function resolveExternalEngineSystem(
+  dataSource: DataSource,
+  externalSystemId: string | null | undefined,
+  tenantId: string | null,
+): Promise<ExternalEngineSystem | null> {
+  if (!externalSystemId) return null
+  const tenantWhere = tenantId === null ? IsNull() : tenantId
+  const system = await dataSource.getRepository(ExternalEngineSystem).findOne({
+    where: [
+      { id: externalSystemId, tenantId: tenantWhere },
+      { id: externalSystemId, tenantId: IsNull() },
+    ],
+  })
+  if (!system || !system.isActive) {
+    throw Errors.validation('External engine system does not exist or is disabled')
+  }
+  return system
+}
+
+function externalProjectEngineTargetSourceRef(externalSystemId: string, projectId: string, engineId: string, externalTargetId?: string | null): string {
+  const targetKey = externalTargetId?.trim() || `${projectId}:${engineId}`
+  return `external_engine_system:${externalSystemId}:project_engine_target:${targetKey}`
+}
+
+async function resolveExternalProjectEngineTargetEngine(
+  dataSource: DataSource,
+  input: { engineId?: string; externalEngineId?: string; externalSystemId: string },
+  tenantId: string | null,
+): Promise<Engine> {
   const engineRepo = dataSource.getRepository(Engine)
+  let engine: Engine | null = null
+  let registeredSystemId: string | null = null
+
+  if (input.engineId) {
+    engine = await engineRepo.findOneBy({ id: input.engineId })
+    registeredSystemId = engine?.externalSystemId || null
+  } else if (input.externalEngineId) {
+    const registration = await dataSource.getRepository(ExternalEngineRegistration).findOne({
+      where: { externalId: input.externalEngineId },
+    })
+    registeredSystemId = registration?.externalSystemId || null
+    engine = registration
+      ? await engineRepo.findOneBy({ id: registration.engineId })
+      : await engineRepo.findOne({ where: { externalId: input.externalEngineId } })
+    registeredSystemId = registeredSystemId || engine?.externalSystemId || null
+  }
+
+  if (!engine) throw Errors.notFound('Engine')
+  if (tenantId && engine.tenantId && engine.tenantId !== tenantId) {
+    throw Errors.notFound('Engine')
+  }
+  if (registeredSystemId !== input.externalSystemId) {
+    throw Errors.validation('External engine system does not match the registered engine')
+  }
+  if (engine.lifecycleStatus === 'decommissioned') {
+    throw Errors.validation('Cannot register deployment targets for a decommissioned engine')
+  }
+  return engine
+}
+
+async function assertExternalProjectEngineTargetCanBeOwnedBySystem(
+  projectId: string,
+  engineId: string,
+  tenantId: string | null,
+  sourceRef: string,
+): Promise<{ existingId: string | null; created: boolean }> {
+  const existingTargets = await projectEngineTargetService.listTargets({
+    tenantId,
+    projectId,
+    engineId,
+    status: 'all',
+  })
+  const existing = existingTargets[0] || null
+  if (!existing) return { existingId: null, created: true }
+  if (existing.source === 'external' && existing.sourceRef === sourceRef) {
+    return { existingId: existing.id, created: false }
+  }
+  throw Errors.conflict('Project-engine target is already managed by another source')
+}
+
+async function syncExternalEngineRegistration(
+  dataSource: DataSource,
+  input: {
+    engineId: string
+    externalId: string | null
+    labelsJson: string | null
+    registrationSource: string
+    apiClientId: string | null
+    externalSystemId: string | null
+    managementMode: string | null
+    fieldOwnershipJson: string | null
+    driftStatus: string | null
+    lifecycleStatus: string | null
+    lastExternalSyncAt: number | null
+    capabilitiesJson: string | null
+    capabilityStatus: string | null
+    lastRegisteredAt: number | null
+    now: number
+  }
+): Promise<void> {
+  const registrationRepo = dataSource.getRepository(ExternalEngineRegistration)
+
+  if (!input.externalId) {
+    await registrationRepo.delete({ engineId: input.engineId })
+    return
+  }
+
+  const existingForEngine = await registrationRepo.findOne({ where: { engineId: input.engineId } })
+  const existingForExternalId = await registrationRepo.findOne({ where: { externalId: input.externalId } })
+  if (existingForExternalId && existingForExternalId.engineId !== input.engineId) {
+    throw Errors.conflict('An engine with this externalId already exists')
+  }
+
+  const payload = {
+    engineId: input.engineId,
+    externalId: input.externalId,
+    labelsJson: input.labelsJson,
+    registrationSource: input.registrationSource,
+    apiClientId: input.apiClientId,
+    externalSystemId: input.externalSystemId,
+    managementMode: input.managementMode,
+    fieldOwnershipJson: input.fieldOwnershipJson,
+    driftStatus: input.driftStatus,
+    lifecycleStatus: input.lifecycleStatus,
+    lastExternalSyncAt: input.lastExternalSyncAt,
+    capabilitiesJson: input.capabilitiesJson,
+    capabilityStatus: input.capabilityStatus,
+    lastRegisteredAt: input.lastRegisteredAt,
+    updatedAt: input.now,
+  }
+
+  const existing = existingForEngine || existingForExternalId
+  if (existing) {
+    await registrationRepo.update({ id: existing.id }, payload)
+    return
+  }
+
+  await registrationRepo.insert({
+    id: generateId(),
+    ...payload,
+    createdAt: input.now,
+  })
+}
+
+async function refreshEngineSetMaterializationsForEngine(engineId: string, tenantId?: string | null): Promise<void> {
+  try {
+    await engineSetService.materializeEngineSetsForEngine(engineId, tenantId)
+  } catch (error) {
+    logger.warn('Failed to refresh Engine Set materializations', { engineId, error })
+  }
+}
+
+async function testEngineConnectionAndRecord(
+  dataSource: Awaited<ReturnType<typeof getDataSource>>,
+  eng: Pick<Engine, 'id' | 'baseUrl' | 'username' | 'passwordEnc'>
+) {
+  const engineRepo = dataSource.getRepository(Engine)
+  const healthRepo = dataSource.getRepository(EngineHealth)
+  const url = resolveBpmnEngineRequestUrl(String(eng.baseUrl || ''), '/version')
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (eng.username) {
+    const token = Buffer.from(`${eng.username}:${eng.passwordEnc || ''}`).toString('base64')
+    headers['Authorization'] = `Basic ${token}`
+  }
+  const started = Date.now()
+  let status: 'connected'|'disconnected'|'unknown' = 'unknown'
+  let version: string | null = null
+  let message: string | null = null
+
+  try {
+    const response = await fetch(url, { method: 'GET', headers })
+    const latencyMs = Date.now() - started
+    if (response.ok) {
+      status = 'connected'
+      try {
+        const data: any = await response.json()
+        version = data?.version || null
+      } catch {
+        version = null
+      }
+      await engineRepo.update({ id: eng.id }, { version: version || null, updatedAt: Date.now() })
+      const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message: null, checkedAt: Date.now() }
+      await healthRepo.insert(rec)
+      return { status, latencyMs, version, checkedAt: rec.checkedAt }
+    }
+
+    status = 'disconnected'
+    message = `${response.status} ${response.statusText}`
+    const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
+    await healthRepo.insert(rec)
+    return { status, latencyMs, version: null, message, checkedAt: rec.checkedAt }
+  } catch (e: any) {
+    const latencyMs = Date.now() - started
+    status = 'disconnected'
+    message = e?.message || 'Failed to connect'
+    const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
+    await healthRepo.insert(rec)
+    return { status, latencyMs, version: null, message, checkedAt: rec.checkedAt }
+  }
+}
+
+r.get('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine.inventory.read', { resourceResolver: 'engine.visibleCollection' }), asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenant?.tenantId
 
   // Filter engines by tenant context (including null tenantId for legacy data)
+  const authorizedEngineIds = new Set((req as RequestWithAuthorizedEngineIds).authorizedEngineIds || [])
   const userEngines = await engineService.getUserEngines(req.user!.userId, tenantId)
-  res.json(userEngines.map(({ engine, role }) => {
-    const out = withEngineCapabilities({ ...engine, myRole: role })
-    if (role !== 'owner' && role !== 'delegate') return redactEngineSecrets(out)
+  const rows = await Promise.all(userEngines.filter(({ engine }) => authorizedEngineIds.has(String(engine.id))).map(async ({ engine, role }) => {
+    const out = withEngineCapabilities({ ...serializeEngine(engine), myRole: role })
+    if (!(await canViewEngineSecrets(req, String(engine.id)))) {
+      return redactEngineSecrets(out)
+    }
     return out
   }))
+  res.json(rows)
 }))
 
-r.post('/engines-api/engines', engineLimiter, requireAuth, validateBody(createEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine.inventory.create', { resourceResolver: 'platform.self' }), validateBody(createEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  if ((await getEngineOnboardingMode()) === 'external_only') {
+    throw Errors.forbidden('Manual engine registration is disabled by the current onboarding policy')
+  }
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const now = Date.now()
@@ -160,13 +842,32 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, validateBody(createEn
   if (dockerLoopbackError) {
     return res.status(400).json({ error: dockerLoopbackError, field: 'baseUrl' })
   }
-  // Set tenantId from request context (OSS: default-tenant-id, EE: actual tenant)
+  // Set tenantId from request context (OSS: tenant-default, EE: actual tenant)
   const tenantId = req.tenant?.tenantId || null
+  const externalId = req.body.externalId?.trim() || null
+  if (externalId) {
+    const existingExternal = await engineRepo.findOne({ where: { externalId }, select: ['id'] })
+    if (existingExternal) {
+      throw Errors.conflict('An engine with this externalId already exists')
+    }
+  }
   const payload = {
     id,
     name: req.body.name,
     baseUrl: req.body.baseUrl,
     type: req.body.type,
+    externalId,
+    labelsJson: labelsToJson(req.body.labels),
+    registrationSource: 'user',
+    externalSystemId: null,
+    managementMode: 'manual',
+    fieldOwnershipJson: null,
+    driftStatus: null,
+    lifecycleStatus: 'active',
+    lastExternalSyncAt: null,
+    capabilitiesJson: null,
+    capabilityStatus: null,
+    externalUpdatedAt: null,
     authType: req.body.authType || (req.body.username ? 'basic' : 'none'),
     username: req.body.username ?? null,
     passwordEnc: req.body.passwordEnc ?? null,
@@ -183,32 +884,459 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, validateBody(createEn
     updatedAt: now,
   }
   await engineRepo.insert(payload)
-  res.status(201).json(withEngineCapabilities(payload))
+  await permissionService.syncLegacyRoleAssignments({ engineIds: [id] })
+    .catch((error) => logger.warn('Failed to sync legacy engine role assignments', { engineId: id, error }))
+  if (externalId) {
+    await syncExternalEngineRegistration(dataSource, {
+      engineId: id,
+      externalId,
+      labelsJson: payload.labelsJson,
+      registrationSource: 'user',
+      apiClientId: null,
+      externalSystemId: null,
+      managementMode: 'manual',
+      fieldOwnershipJson: null,
+      driftStatus: null,
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: null,
+      capabilitiesJson: null,
+      capabilityStatus: null,
+      lastRegisteredAt: null,
+      now,
+    })
+  }
+  await refreshEngineSetMaterializationsForEngine(id, tenantId)
+  res.status(201).json(withEngineCapabilities(serializeEngine(payload)))
 }))
 
-r.get('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(ApiClientScopes.ENGINE_REGISTER, 'engine.external-registration.upsert', {
+  permissionId: ExternalEngineSystemPermissions.ENGINE_REGISTRATION_MANAGE,
+  resourceType: 'external_engine_system',
+  resourceIdFrom: 'body',
+  resourceIdKey: 'externalSystemId',
+}), validateBody(externalRegisterEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const dataSource = await getDataSource()
+  const engineRepo = dataSource.getRepository(Engine)
+  const now = Date.now()
+  const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
+  if (dockerLoopbackError) {
+    return res.status(400).json({ error: dockerLoopbackError, field: 'baseUrl' })
+  }
+
+  const tenantId = req.tenant?.tenantId || null
+  const externalId = req.body.externalId.trim()
+  const externalSystem = await resolveExternalEngineSystem(dataSource, req.body.externalSystemId ?? null, tenantId)
+  const externalSystemManagementMode = engineManagementModeSchema.safeParse(externalSystem?.defaultManagementMode).success
+    ? externalSystem?.defaultManagementMode
+    : undefined
+  const managementMode = req.body.managementMode || externalSystemManagementMode || 'external_managed'
+  const fieldOwnership = mergeFieldOwnership(req.body.fieldOwnership || parseEngineFieldOwnership(externalSystem?.defaultFieldOwnershipJson))
+  const fieldOwnershipJson = fieldOwnershipToJson(fieldOwnership)
+  const lifecycleStatus: EngineLifecycleStatus = req.body.lifecycleStatus || 'active'
+  const reportedCapabilities = normalizeExternalEngineCapabilities(req.body.capabilities)
+  const capabilitiesJson = capabilitiesToJson(reportedCapabilities)
+  const capabilityStatus = getCapabilityStatus(req.body.type, reportedCapabilities)
+  const existing = await engineRepo.findOne({ where: { externalId } })
+  const payload = {
+    name: req.body.name,
+    baseUrl: req.body.baseUrl,
+    type: req.body.type,
+    externalId,
+    labelsJson: labelsToJson(req.body.labels),
+    registrationSource: 'external_api',
+    externalSystemId: externalSystem?.id || null,
+    managementMode,
+    fieldOwnershipJson,
+    driftStatus: 'in_sync',
+    lifecycleStatus,
+    lastExternalSyncAt: now,
+    capabilitiesJson,
+    capabilityStatus,
+    externalUpdatedAt: now,
+    authType: req.body.authType || (req.body.username ? 'basic' : 'none'),
+    username: req.body.username ?? null,
+    passwordEnc: req.body.passwordEnc ?? null,
+    oauthTokenUrl: req.body.oauthTokenUrl ?? null,
+    oauthScopes: req.body.oauthScopes ?? null,
+    oauthAudience: req.body.oauthAudience ?? null,
+    version: req.body.version ?? null,
+    environmentTagId: req.body.environmentTagId || null,
+    updatedAt: now,
+  }
+
+  if (existing) {
+    const nextCapabilitiesJson = req.body.capabilities === undefined ? existing.capabilitiesJson || null : capabilitiesJson
+    const nextCapabilityStatus = req.body.capabilities === undefined
+      ? existing.capabilityStatus || getCapabilityStatus(existing.type || req.body.type, parseExternalEngineCapabilities(existing.capabilitiesJson))
+      : capabilityStatus
+    const ownedUpdate = applyExternalFieldOwnership(existing, payload, req.body, fieldOwnership)
+    const updatePayload: Partial<Engine> = {
+      ...(ownedUpdate.payload as Partial<Engine>),
+      driftStatus: ownedUpdate.driftStatus,
+      lifecycleStatus,
+      lastExternalSyncAt: now,
+      capabilitiesJson: nextCapabilitiesJson,
+      capabilityStatus: nextCapabilityStatus,
+      externalUpdatedAt: now,
+      updatedAt: now,
+    }
+    await engineRepo.update({ id: existing.id }, updatePayload)
+    await syncExternalEngineRegistration(dataSource, {
+      engineId: String(existing.id),
+      externalId,
+      labelsJson: (updatePayload.labelsJson as string | null | undefined) ?? existing.labelsJson,
+      registrationSource: 'external_api',
+      apiClientId: req.apiClient?.id || null,
+      externalSystemId: payload.externalSystemId,
+      managementMode: payload.managementMode,
+      fieldOwnershipJson: payload.fieldOwnershipJson,
+      driftStatus: ownedUpdate.driftStatus,
+      lifecycleStatus,
+      lastExternalSyncAt: now,
+      capabilitiesJson: nextCapabilitiesJson,
+      capabilityStatus: nextCapabilityStatus,
+      lastRegisteredAt: now,
+      now,
+    })
+    await refreshEngineSetMaterializationsForEngine(String(existing.id), tenantId)
+    const updated = await engineRepo.findOneBy({ id: existing.id })
+    if (!updated) throw Errors.notFound('Engine')
+    const health = req.body.testConnection ? await testEngineConnectionAndRecord(dataSource, updated) : null
+    await logAudit({
+      tenantId: tenantId || undefined,
+      userId: req.apiClient?.createdById || undefined,
+      action: 'engine.external_registration.update',
+      resourceType: 'engine',
+      resourceId: existing.id,
+      details: {
+        apiClientId: req.apiClient?.id,
+        externalSystemId: payload.externalSystemId,
+        managementMode,
+        fieldOwnership,
+        driftStatus: ownedUpdate.driftStatus,
+        lifecycleStatus,
+        capabilityStatus: nextCapabilityStatus,
+        capabilities: req.body.capabilities === undefined ? parseExternalEngineCapabilities(existing.capabilitiesJson) : reportedCapabilities,
+        externalId,
+        labels: normalizeEngineLabels(req.body.labels),
+        connectionTest: health ? { status: health.status, latencyMs: health.latencyMs, version: health.version ?? null } : undefined,
+      },
+    })
+    const responseEngine = health?.version ? { ...updated, version: health.version } : updated
+    return res.status(200).json({ created: false, engine: withEngineCapabilities(serializeEngine(responseEngine)), health })
+  }
+
+  const id = generateId()
+  const created = {
+    id,
+    ...payload,
+    ownerId: req.apiClient?.createdById || null,
+    delegateId: null,
+    environmentLocked: false,
+    tenantId,
+    createdAt: now,
+  }
+  await engineRepo.insert(created)
+  await permissionService.syncLegacyRoleAssignments({ engineIds: [id] })
+    .catch((error) => logger.warn('Failed to sync legacy engine role assignments', { engineId: id, error }))
+  await syncExternalEngineRegistration(dataSource, {
+    engineId: id,
+    externalId,
+    labelsJson: payload.labelsJson,
+    registrationSource: 'external_api',
+    apiClientId: req.apiClient?.id || null,
+    externalSystemId: payload.externalSystemId,
+    managementMode: payload.managementMode,
+    fieldOwnershipJson: payload.fieldOwnershipJson,
+    driftStatus: payload.driftStatus,
+    lifecycleStatus: payload.lifecycleStatus,
+    lastExternalSyncAt: payload.lastExternalSyncAt,
+    capabilitiesJson: payload.capabilitiesJson,
+    capabilityStatus: payload.capabilityStatus,
+    lastRegisteredAt: now,
+    now,
+  })
+  await refreshEngineSetMaterializationsForEngine(id, tenantId)
+  const health = req.body.testConnection ? await testEngineConnectionAndRecord(dataSource, created) : null
+  await logAudit({
+    tenantId: tenantId || undefined,
+    userId: req.apiClient?.createdById || undefined,
+    action: 'engine.external_registration.create',
+    resourceType: 'engine',
+    resourceId: id,
+    details: {
+      apiClientId: req.apiClient?.id,
+      externalSystemId: payload.externalSystemId,
+      managementMode,
+      fieldOwnership,
+      driftStatus: payload.driftStatus,
+      lifecycleStatus,
+      capabilityStatus,
+      capabilities: reportedCapabilities,
+      externalId,
+      labels: normalizeEngineLabels(req.body.labels),
+      connectionTest: health ? { status: health.status, latencyMs: health.latencyMs, version: health.version ?? null } : undefined,
+    },
+  })
+  const responseEngine = health?.version ? { ...created, version: health.version } : created
+  return res.status(201).json({ created: true, engine: withEngineCapabilities(serializeEngine(responseEngine)), health })
+}))
+
+r.post('/engines-api/external/engines/decommission', engineLimiter, requireApiClientAction(ApiClientScopes.ENGINE_REGISTER, 'engine.external-registration.decommission', {
+  permissionId: ExternalEngineSystemPermissions.ENGINE_REGISTRATION_MANAGE,
+  resourceType: 'external_engine_system',
+  resourceIdFrom: 'body',
+  resourceIdKey: 'externalSystemId',
+}), validateBody(decommissionExternalEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const dataSource = await getDataSource()
+  const engineRepo = dataSource.getRepository(Engine)
+  const registrationRepo = dataSource.getRepository(ExternalEngineRegistration)
+  const now = Date.now()
+  const externalId = req.body.externalId.trim()
+  const tenantId = req.tenant?.tenantId || null
+
+  const registration = await registrationRepo.findOne({ where: { externalId } })
+  const engine = registration
+    ? await engineRepo.findOneBy({ id: registration.engineId })
+    : await engineRepo.findOne({ where: { externalId } })
+  if (!engine) throw Errors.notFound('Engine')
+  if (engine.registrationSource !== 'external_api') {
+    throw Errors.validation('Only externally registered engines can be decommissioned through the external registration API')
+  }
+  const requestedSystemId = req.body.externalSystemId?.trim() || null
+  const registeredSystemId = engine.externalSystemId || registration?.externalSystemId || null
+  if (requestedSystemId && registeredSystemId !== requestedSystemId) {
+    throw Errors.validation('External engine system does not match the registered engine')
+  }
+
+  const lifecycleStatus = 'decommissioned'
+  const updates = {
+    lifecycleStatus,
+    driftStatus: 'decommissioned',
+    externalUpdatedAt: now,
+    lastExternalSyncAt: now,
+    updatedAt: now,
+  }
+  await engineRepo.update({ id: engine.id }, updates)
+  if (registration) {
+    await registrationRepo.update({ id: registration.id }, {
+      apiClientId: req.apiClient?.id || registration.apiClientId,
+      lifecycleStatus,
+      driftStatus: 'decommissioned',
+      lastExternalSyncAt: now,
+      lastRegisteredAt: now,
+      updatedAt: now,
+    })
+  }
+  await dataSource.getRepository(EngineSetMaterialization).delete({ engineId: engine.id })
+  await logAudit({
+    tenantId: tenantId || undefined,
+    userId: req.apiClient?.createdById || undefined,
+    action: 'engine.external_registration.decommission',
+    resourceType: 'engine',
+    resourceId: engine.id,
+    details: {
+      apiClientId: req.apiClient?.id,
+      externalId,
+      externalSystemId: registeredSystemId,
+      reason: req.body.reason || null,
+    },
+  })
+
+  res.json({
+    decommissioned: true,
+    engineId: engine.id,
+    externalId,
+    lifecycleStatus,
+  })
+}))
+
+r.post('/engines-api/external/project-engine-targets', engineLimiter, requireApiClientAction(ApiClientScopes.ENGINE_REGISTER, 'project-engine-target.external-registration.upsert', {
+  permissionId: ExternalEngineSystemPermissions.PROJECT_TARGETS_MANAGE,
+  resourceType: 'external_engine_system',
+  resourceIdFrom: 'body',
+  resourceIdKey: 'externalSystemId',
+  allowActionPermissionFallback: false,
+}), validateBody(externalProjectEngineTargetUpsertBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const dataSource = await getDataSource()
+  const tenantId = req.tenant?.tenantId || null
+  const externalSystem = await resolveExternalEngineSystem(dataSource, req.body.externalSystemId, tenantId)
+  if (!externalSystem) throw Errors.validation('externalSystemId is required')
+
+  const engine = await resolveExternalProjectEngineTargetEngine(dataSource, {
+    engineId: req.body.engineId,
+    externalEngineId: req.body.externalEngineId,
+    externalSystemId: externalSystem.id,
+  }, tenantId)
+  const projectId = String(req.body.projectId)
+  const engineId = String(engine.id)
+  const externalEngineId = req.body.externalEngineId || engine.externalId || null
+  const sourceRef = externalProjectEngineTargetSourceRef(externalSystem.id, projectId, engineId, req.body.externalTargetId)
+  const ownership = await assertExternalProjectEngineTargetCanBeOwnedBySystem(projectId, engineId, tenantId, sourceRef)
+
+  const result = await projectEngineTargetService.createTarget({
+    tenantId,
+    projectId,
+    engineId,
+    status: req.body.status || 'active',
+    source: 'external',
+    sourceRef,
+    externalSystemId: externalSystem.id,
+    externalProjectId: req.body.externalProjectId || null,
+    externalEngineId,
+    externalTargetId: req.body.externalTargetId || null,
+    allowManualDeploy: req.body.allowManualDeploy ?? true,
+    allowCiDeploy: req.body.allowCiDeploy ?? false,
+    allowApiDeploy: req.body.allowApiDeploy ?? false,
+    allowImport: req.body.allowImport ?? true,
+    createdById: req.apiClient?.createdById || null,
+    approvedById: req.apiClient?.createdById || null,
+    approvalStatus: req.body.approvalStatus || 'approved',
+    policyTags: req.body.policyTags,
+    diagnostics: req.body.diagnostics ?? {
+      source: 'external_registration_api',
+      externalSystemId: externalSystem.id,
+      externalProjectId: req.body.externalProjectId || null,
+      externalEngineId,
+      externalTargetId: req.body.externalTargetId || null,
+    },
+    allowSourceOwnedMutation: true,
+  })
+  const target = await projectEngineTargetService.getTarget(result.id, tenantId)
+  if (!target) throw Errors.notFound('Project Engine Target')
+
+  await logAudit({
+    tenantId: tenantId || undefined,
+    userId: req.apiClient?.createdById || undefined,
+    action: ownership.created ? 'project_engine_target.external_registration.create' : 'project_engine_target.external_registration.update',
+    resourceType: 'project_engine_target',
+    resourceId: result.id,
+    details: {
+      apiClientId: req.apiClient?.id,
+      externalSystemId: externalSystem.id,
+      externalProjectId: req.body.externalProjectId || null,
+      externalTargetId: req.body.externalTargetId || null,
+      projectId,
+      engineId,
+      externalEngineId,
+      sourceRef,
+      status: target.status,
+      approvalStatus: target.approvalStatus,
+      policyTags: target.policyTags,
+      allowManualDeploy: target.allowManualDeploy,
+      allowCiDeploy: target.allowCiDeploy,
+      allowApiDeploy: target.allowApiDeploy,
+      allowImport: target.allowImport,
+    },
+  })
+
+  res.status(ownership.created ? 201 : 200).json({
+    created: ownership.created,
+    target,
+  })
+}))
+
+r.post('/engines-api/external/project-engine-targets/decommission', engineLimiter, requireApiClientAction(ApiClientScopes.ENGINE_REGISTER, 'project-engine-target.external-registration.decommission', {
+  permissionId: ExternalEngineSystemPermissions.PROJECT_TARGETS_MANAGE,
+  resourceType: 'external_engine_system',
+  resourceIdFrom: 'body',
+  resourceIdKey: 'externalSystemId',
+  allowActionPermissionFallback: false,
+}), validateBody(externalProjectEngineTargetDecommissionBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const dataSource = await getDataSource()
+  const tenantId = req.tenant?.tenantId || null
+  const externalSystem = await resolveExternalEngineSystem(dataSource, req.body.externalSystemId, tenantId)
+  if (!externalSystem) throw Errors.validation('externalSystemId is required')
+
+  const engine = await resolveExternalProjectEngineTargetEngine(dataSource, {
+    engineId: req.body.engineId,
+    externalEngineId: req.body.externalEngineId,
+    externalSystemId: externalSystem.id,
+  }, tenantId)
+  const projectId = String(req.body.projectId)
+  const engineId = String(engine.id)
+  const externalEngineId = req.body.externalEngineId || engine.externalId || null
+  const sourceRef = externalProjectEngineTargetSourceRef(externalSystem.id, projectId, engineId, req.body.externalTargetId)
+  const targets = await projectEngineTargetService.listTargets({
+    tenantId,
+    projectId,
+    engineId,
+    status: 'all',
+  })
+  const target = targets[0] || null
+  if (!target) {
+    return res.json({ archived: false, targetId: null, reason: 'Project-engine target was not found' })
+  }
+  if (target.source !== 'external' || target.sourceRef !== sourceRef) {
+    throw Errors.conflict('Project-engine target is not managed by this external system')
+  }
+
+  await projectEngineTargetService.archiveTarget(target.id, tenantId, true)
+  await logAudit({
+    tenantId: tenantId || undefined,
+    userId: req.apiClient?.createdById || undefined,
+    action: 'project_engine_target.external_registration.decommission',
+    resourceType: 'project_engine_target',
+    resourceId: target.id,
+    details: {
+      apiClientId: req.apiClient?.id,
+      externalSystemId: externalSystem.id,
+      externalProjectId: req.body.externalProjectId || null,
+      externalTargetId: req.body.externalTargetId || null,
+      projectId,
+      engineId,
+      externalEngineId,
+      sourceRef,
+    },
+  })
+
+  res.json({ archived: true, targetId: target.id })
+}))
+
+r.get('/engines-api/engines/:id', engineLimiter, requireAuth, requireEngineInventoryReadById, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const engineId = String(req.params.id)
   const engine = await engineRepo.findOneBy({ id: engineId })
   if (!engine) throw Errors.notFound('Engine')
-  if (!(await canViewEngine(req, String(engine.id)))) throw Errors.forbidden()
 
-  const role = await engineService.getEngineRole(req.user!.userId, String(engine.id))
-  if (role !== 'owner' && role !== 'delegate') {
-    return res.json(redactEngineSecrets(withEngineCapabilities(engine)))
+  if (!(await canViewEngineSecrets(req, String(engine.id)))) {
+    return res.json(redactEngineSecrets(withEngineCapabilities(serializeEngine(engine))))
   }
 
-  res.json(withEngineCapabilities(engine))
+  res.json(withEngineCapabilities(serializeEngine(engine)))
 }))
 
-r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(engineIdParamSchema), validateBody(updateEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/engines/:id/project-targets', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.project-access.requests.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.PROJECT_ACCESS_VIEW, EnginePermissions.MEMBERS_MANAGE] }), asyncHandler(async (req: Request, res: Response) => {
+  const targets = await projectEngineTargetService.listTargets({
+    engineId: String(req.params.id),
+    status: 'all',
+    tenantId: req.tenant?.tenantId || null,
+  })
+  res.json(targets)
+}))
+
+r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT, EnginePermissions.SECRETS_MANAGE] }), validateBody(updateEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const engineId = String(req.params.id)
   const existing = await engineRepo.findOneBy({ id: engineId })
   if (!existing) throw Errors.notFound('Engine')
-  if (!(await canManageEngine(req, String(existing.id)))) throw Errors.forbidden()
+  if ((await getEngineOnboardingMode()) === 'external_only' && existing.registrationSource !== 'external_api') {
+    throw Errors.forbidden('Manual engine updates are disabled by the current onboarding policy')
+  }
+  const containsSecretUpdate = requestContainsAnyField(req, ENGINE_SECRET_UPDATE_FIELDS)
+  const containsInventoryUpdate = Object.keys(req.body).some((field) => !ENGINE_SECRET_UPDATE_FIELDS.includes(field as typeof ENGINE_SECRET_UPDATE_FIELDS[number]))
+  if (containsSecretUpdate && !(await canManageEngineSecrets(req, engineId))) {
+    throw Errors.forbidden('Engine secret management permission is required to update authentication fields')
+  }
+  if (containsInventoryUpdate && !(await canEditEngine(req, engineId))) {
+    throw Errors.forbidden('Engine edit permission is required to update inventory fields')
+  }
+  const externallyOwnedUpdateFields = getExternalOwnedUpdateFields(existing, req.body)
+  if (externallyOwnedUpdateFields.length > 0) {
+    throw Errors.validation(`Externally managed engine fields are read-only: ${externallyOwnedUpdateFields.join(', ')}`)
+  }
   const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
   if (dockerLoopbackError) {
     return res.status(400).json({ error: dockerLoopbackError, field: 'baseUrl' })
@@ -219,6 +1347,8 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
     name: req.body.name,
     baseUrl: req.body.baseUrl,
     type: req.body.type,
+    externalId: req.body.externalId === undefined ? undefined : req.body.externalId?.trim() || null,
+    labelsJson: req.body.labels === undefined ? undefined : labelsToJson(req.body.labels),
     authType: req.body.authType,
     username: req.body.username,
     passwordEnc: req.body.passwordEnc,
@@ -226,38 +1356,78 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
     oauthScopes: req.body.oauthScopes,
     oauthAudience: req.body.oauthAudience,
     version: req.body.version,
-    environmentTagId: req.body.environmentTagId || null,
+    environmentTagId: req.body.environmentTagId === undefined ? undefined : req.body.environmentTagId || null,
     updatedAt: now,
   }
   await engineRepo.update({ id: engineId }, updates)
+  if (req.body.externalId !== undefined || req.body.labels !== undefined) {
+    const nextExternalId = updates.externalId === undefined ? existing.externalId : updates.externalId
+    const nextLabelsJson = updates.labelsJson === undefined ? existing.labelsJson : updates.labelsJson
+    await syncExternalEngineRegistration(dataSource, {
+      engineId,
+      externalId: nextExternalId,
+      labelsJson: nextLabelsJson,
+      registrationSource: existing.registrationSource || 'user',
+      apiClientId: null,
+      externalSystemId: existing.externalSystemId || null,
+      managementMode: existing.managementMode || (existing.registrationSource === 'external_api' ? 'external_managed' : 'manual'),
+      fieldOwnershipJson: existing.fieldOwnershipJson || null,
+      driftStatus: existing.driftStatus || null,
+      lifecycleStatus: existing.lifecycleStatus || 'active',
+      lastExternalSyncAt: existing.lastExternalSyncAt || null,
+      capabilitiesJson: existing.capabilitiesJson || null,
+      capabilityStatus: existing.capabilityStatus || null,
+      lastRegisteredAt: existing.externalUpdatedAt,
+      now,
+    })
+  }
+  if (req.body.externalId !== undefined || req.body.labels !== undefined) {
+    await refreshEngineSetMaterializationsForEngine(engineId, existing.tenantId)
+  }
   const updated = await engineRepo.findOneBy({ id: engineId })
   if (!updated) throw Errors.notFound('Engine')
-  res.json(withEngineCapabilities(updated))
+  res.json(withEngineCapabilities(serializeEngine(updated)))
 }))
 
-r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, requireAction('engine.inventory.delete', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const engineId = String(req.params.id)
   const existing = await engineRepo.findOneBy({ id: engineId })
   if (!existing) throw Errors.notFound('Engine')
-  if (!(await canManageEngine(req, String(existing.id)))) throw Errors.forbidden()
+  if ((await getEngineOnboardingMode()) === 'external_only') {
+    throw Errors.forbidden('Manual engine deletion is disabled by the current onboarding policy')
+  }
+  if (existing.registrationSource === 'external_api') {
+    throw Errors.conflict('Externally registered engines cannot be deleted through manual engine deletion; decommission them from Access Control or the owning external system')
+  }
+  if (existing.lifecycleStatus === 'decommissioned') {
+    throw Errors.conflict('Decommissioned engines cannot be deleted through manual engine deletion; reactivate or manage them through the external registration lifecycle')
+  }
+  await dataSource.getRepository(ExternalEngineRegistration).delete({ engineId })
+  await dataSource.getRepository(EngineSetMaterialization).delete({ engineId })
   await engineRepo.delete({ id: engineId })
+  await permissionService.syncLegacyRoleAssignments({ engineIds: [engineId] })
+    .catch((error) => logger.warn('Failed to prune legacy engine role assignments', { engineId, error }))
   res.status(204).end()
 }))
 
 // Test connection and record health
-r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const healthRepo = dataSource.getRepository(EngineHealth)
   const engineId = String(req.params.id)
   const eng = await engineRepo.findOneBy({ id: engineId })
   if (!eng) throw Errors.notFound('Engine')
+  if (eng.lifecycleStatus === 'decommissioned') {
+    throw Errors.validation('Cannot test a decommissioned engine; reactivate it from Access Control before testing the connection')
+  }
+  if (eng.lifecycleStatus === 'disabled') {
+    throw Errors.validation('Cannot test a disabled engine; reactivate it from Access Control before testing the connection')
+  }
 
-  if (!(await canManageEngine(req, String(eng.id)))) throw Errors.forbidden()
-  const base = String(eng.baseUrl || '')
-  const url = base.replace(/\/$/, '') + '/version'
+  const url = resolveBpmnEngineRequestUrl(String(eng.baseUrl || ''), '/version')
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (eng.username) {
     const token = Buffer.from(`${eng.username}:${eng.passwordEnc || ''}`).toString('base64')
@@ -295,20 +1465,17 @@ r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, asyncHandler
 }))
 
 // Get last health entry
-r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, requireEngineInventoryReadOrEnvHealth, asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const healthRepo = dataSource.getRepository(EngineHealth)
-  // Check authorization (skip for __env__ which is public)
+  // Authorization is enforced before this handler, except __env__ which is authenticated environment health.
   const engineId = String(req.params.id)
-  if (engineId !== '__env__' && !(await canViewEngine(req, engineId))) {
-    throw Errors.forbidden()
-  }
   if (engineId === '__env__') {
     const baseUrl = process.env.CAMUNDA_BASE_URL || 'http://localhost:8080/engine-rest'
     const started = Date.now()
     try {
-      const r = await fetch(baseUrl.replace(/\/$/, '') + '/version', { headers: { 'Content-Type': 'application/json' } })
+      const r = await fetch(resolveBpmnEngineRequestUrl(baseUrl, '/version'), { headers: { 'Content-Type': 'application/json' } })
       const latencyMs = Date.now() - started
       if (r.ok) {
         let version: string | null = null
@@ -335,7 +1502,7 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, asyncHandle
       }
       const started = Date.now()
       try {
-        const r = await fetch(String(eng.baseUrl || '').replace(/\/$/, '') + '/version', { headers })
+        const r = await fetch(resolveBpmnEngineRequestUrl(String(eng.baseUrl || ''), '/version'), { headers })
         const latencyMs = Date.now() - started
         let version: string | null = null
         let status: 'connected' | 'disconnected' = 'disconnected'
@@ -362,12 +1529,10 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, asyncHandle
   res.json(last || null)
 }))
 
-r.get('/engines-api/saved-filters', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/saved-filters', apiLimiter, requireAuth, requireAction('engine.saved-filters.read', { resourceResolver: 'engine.visibleCollection' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
-  const tenantId = req.tenant?.tenantId
-  const userEngines = await engineService.getUserEngines(req.user!.userId, tenantId)
-  const engineIds = userEngines.map((e) => String(e.engine.id))
+  const engineIds = (req as RequestWithAuthorizedEngineIds).authorizedEngineIds || []
   if (engineIds.length === 0) {
     return res.json([])
   }
@@ -379,14 +1544,12 @@ r.get('/engines-api/saved-filters', apiLimiter, requireAuth, asyncHandler(async 
   })))
 }))
 
-r.post('/engines-api/saved-filters', apiLimiter, requireAuth, validateBody(createSavedFilterBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/saved-filters', apiLimiter, requireAuth, validateBody(createSavedFilterBodySchema), requireAction('engine.saved-filters.manage', { resourceResolver: 'engine.byId', resourceIdFrom: 'body', resourceIdKey: 'engineId' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
   const now = Date.now()
   const id = generateId()
   const { engineId, name, defKeys, version, active, incidents, completed, canceled } = req.body
-
-  if (!(await canViewEngine(req, engineId))) throw Errors.forbidden()
 
   const payload = {
     id,
@@ -404,25 +1567,22 @@ r.post('/engines-api/saved-filters', apiLimiter, requireAuth, validateBody(creat
   res.status(201).json({ ...payload, defKeys: JSON.parse(payload.defKeys) })
 }))
 
-r.get('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/saved-filters/:id', apiLimiter, requireAuth, requireAction('engine.saved-filters.read', { resourceResolver: 'engine.bySavedFilterId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
   const filterId = String(req.params.id)
   const filter = await filterRepo.findOneBy({ id: filterId })
   if (!filter) throw Errors.notFound('Saved filter')
 
-  if (!(await canViewEngine(req, String(filter.engineId)))) throw Errors.forbidden()
-
   res.json({ ...filter, defKeys: JSON.parse(filter.defKeys || '[]') })
 }))
 
-r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, validateParams(engineIdParamSchema), validateBody(updateSavedFilterBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.saved-filters.manage', { resourceResolver: 'engine.bySavedFilterId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateBody(updateSavedFilterBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
   const filterId = String(req.params.id)
   const existing = await filterRepo.findOneBy({ id: filterId })
   if (!existing) throw Errors.notFound('Saved filter')
-  if (!(await canViewEngine(req, String(existing.engineId)))) throw Errors.forbidden()
 
   const newEngineId = req.body.engineId || null
   if (newEngineId && !(await canViewEngine(req, newEngineId))) throw Errors.forbidden()
@@ -443,13 +1603,12 @@ r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, validateParams(
   res.json({ ...updated, defKeys: JSON.parse(updated.defKeys || '[]') })
 }))
 
-r.delete('/engines-api/saved-filters/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.delete('/engines-api/saved-filters/:id', apiLimiter, requireAuth, requireAction('engine.saved-filters.manage', { resourceResolver: 'engine.bySavedFilterId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const filterRepo = dataSource.getRepository(SavedFilter)
   const filterId = String(req.params.id)
   const existing = await filterRepo.findOneBy({ id: filterId })
   if (!existing) throw Errors.notFound('Saved filter')
-  if (!(await canViewEngine(req, String(existing.engineId)))) throw Errors.forbidden()
   await filterRepo.delete({ id: filterId })
   res.status(204).end()
 }))

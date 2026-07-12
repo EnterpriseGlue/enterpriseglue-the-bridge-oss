@@ -4,7 +4,8 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireDeployPermission } from '@enterpriseglue/shared/middleware/deployAuth.js'
+import { requireApiDeploymentEligibility } from '@enterpriseglue/shared/middleware/apiClientAuth.js'
+import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
@@ -16,7 +17,7 @@ import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence
 import { In } from 'typeorm'
 import { fetch, FormData } from 'undici'
 import { Buffer } from 'node:buffer'
-import { engineService } from '@enterpriseglue/shared/services/platform-admin/index.js'
+import { resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import {
@@ -39,7 +40,6 @@ import type {
   DmnDebugMeta,
   FileGitCommitInfo,
 } from '../../../types/deployment.js'
-import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js'
 
 // Validation schemas
 const deployResourcesSchema = z.object({
@@ -90,6 +90,13 @@ function authHeaders(e: { username?: string|null; passwordEnc?: string|null }): 
     h['Authorization'] = `Basic ${token}`
   }
   return h
+}
+
+function deploymentActorId(req: Request): string {
+  if (req.user?.userId) return req.user.userId
+  if (req.apiClient?.id) return `api_client:${req.apiClient.id}`
+  if (req.serviceAccount?.id) return `service_account:${req.serviceAccount.id}`
+  throw Errors.unauthorized('Deployment actor required')
 }
 
 /**
@@ -234,7 +241,12 @@ async function inferDeployAuthIds(req: Request, res: Response, next: NextFunctio
   }
 }
 
-r.post('/engines-api/engines/:engineId/deployments/preview', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireDeployPermission(), asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines/:engineId/deployments/preview', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireCompositeAction('project.deploy.create', {
+  kind: 'deployment',
+  mode: 'manual',
+  projectIdFrom: 'body',
+  engineIdFrom: 'body',
+}), asyncHandler(async (req: Request, res: Response) => {
   try {
     const files = await resolveFilesFromRequest(req)
     const folderMap = await buildFolderLookup()
@@ -356,7 +368,7 @@ r.post('/engines-api/engines/:engineId/deployments/preview', apiLimiter, require
   }
 }))
 
-r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireDeployPermission(), asyncHandler(async (req: Request, res: Response) => {
+async function createEngineDeployment(req: Request, res: Response) {
   try {
     const deployTotalStart = Date.now()
     const engine = await getEngineById(String(req.params.engineId))
@@ -432,7 +444,7 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
     logger.info('Engine deploy: form built', { resources: used.size, ms: Date.now() - formBuildStart })
 
     const camundaStart = Date.now()
-    const url = String(engine.baseUrl || '').replace(/\/$/, '') + '/deployment/create'
+    const url = resolveBpmnEngineRequestUrl(String(engine.baseUrl || ''), '/deployment/create')
     const r2 = await fetch(url, { method: 'POST', headers: { ...authHeaders(engine) }, body: form as any })
     const text = await r2.text()
     logger.info('Engine deploy: Camunda response', { status: r2.status, ms: Date.now() - camundaStart })
@@ -558,7 +570,7 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
         camundaDeploymentId: data && typeof data === 'object' && data.id ? String(data.id) : null,
         camundaDeploymentName: data && typeof data === 'object' && data.name ? String(data.name) : null,
         camundaDeploymentTime: data && typeof data === 'object' && data.deploymentTime ? String(data.deploymentTime) : null,
-        deployedBy: req.user!.userId,
+        deployedBy: deploymentActorId(req),
         deployedAt: now,
         enableDuplicateFiltering: !!duplicate,
         deployChangedOnly: !!changedOnly,
@@ -650,19 +662,31 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
   } catch (e: any) {
     res.status(e?.status || 500).json({ message: e?.message || 'Deployment failed' })
   }
-}))
+}
+
+r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireCompositeAction('project.deploy.create', {
+  kind: 'deployment',
+  mode: 'manual',
+  projectIdFrom: 'body',
+  engineIdFrom: 'body',
+}), asyncHandler(createEngineDeployment))
+
+r.post(
+  '/engines-api/external/engines/:engineId/deployments',
+  apiLimiter,
+  validateBody(deployResourcesSchema),
+  inferDeployAuthIds,
+  requireApiDeploymentEligibility({ engineIdFrom: 'params', projectIdFrom: 'body' }),
+  asyncHandler(createEngineDeployment)
+)
 
 // Passthroughs to engine for listing/reading/deleting deployments
-r.get('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-const userId = req.user!.userId
+r.get('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
 const engineId = String(req.params.engineId)
 
-if (!engineId || !(await engineService.hasEngineAccess(userId, engineId, ENGINE_VIEW_ROLES))) {
-  throw Errors.engineNotFound();
-}
 try {
   const engine = await getEngineById(engineId)
-  const url = new URL(String(engine.baseUrl || '').replace(/\/$/, '') + '/deployment')
+  const url = new URL(resolveBpmnEngineRequestUrl(String(engine.baseUrl || ''), '/deployment'))
   for (const [k,v] of Object.entries(req.query)) url.searchParams.set(k, String(v))
   const r2 = await fetch(url.toString(), { headers: { 'Content-Type': 'application/json', ...authHeaders(engine) } })
   const text = await r2.text()
@@ -672,16 +696,12 @@ try {
 }
 }))
 
-r.get('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-const userId = req.user!.userId
+r.get('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
 const engineId = String(req.params.engineId)
 
-if (!engineId || !(await engineService.hasEngineAccess(userId, engineId, ENGINE_VIEW_ROLES))) {
-  throw Errors.engineNotFound();
-}
 try {
   const engine = await getEngineById(engineId)
-  const url = String(engine.baseUrl || '').replace(/\/$/, '') + `/deployment/${encodeURIComponent(String(req.params.id))}`
+  const url = resolveBpmnEngineRequestUrl(String(engine.baseUrl || ''), `/deployment/${encodeURIComponent(String(req.params.id))}`)
   const r2 = await fetch(url, { headers: { 'Content-Type': 'application/json', ...authHeaders(engine) } })
   const text = await r2.text()
   sendUpstream(res, r2.status, text)
@@ -690,17 +710,13 @@ try {
 }
 }))
 
-r.delete('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-const userId = req.user!.userId
+r.delete('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth, requireAction('engine.deployments.delete', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
 const engineId = String(req.params.engineId)
 
-if (!engineId || !(await engineService.hasEngineAccess(userId, engineId, ENGINE_MANAGE_ROLES))) {
-  throw Errors.engineNotFound();
-}
 try {
   const engine = await getEngineById(engineId)
   const cascade = req.query.cascade === 'true'
-  const url = String(engine.baseUrl || '').replace(/\/$/, '') + `/deployment/${encodeURIComponent(String(req.params.id))}` + (cascade ? '?cascade=true' : '')
+  const url = resolveBpmnEngineRequestUrl(String(engine.baseUrl || ''), `/deployment/${encodeURIComponent(String(req.params.id))}${cascade ? '?cascade=true' : ''}`)
   const r2 = await fetch(url, { method: 'DELETE', headers: { ...authHeaders(engine) } })
   if (r2.status === 204) return res.status(204).end()
   const text = await r2.text()

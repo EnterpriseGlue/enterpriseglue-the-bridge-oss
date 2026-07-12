@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button, ComboBox, Tile } from '@carbon/react'
+import { Button, ComboBox, InlineNotification, Tile } from '@carbon/react'
 import { Folder, UserAvatar } from '@carbon/icons-react'
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid'
 import type { ProjectGovernanceItem } from '../../../api/platform-admin'
@@ -13,6 +13,10 @@ interface ProjectsSettingsSectionProps {
   setProjectComboKey: React.Dispatch<React.SetStateAction<number>>
   onAssignOwner: (target: { id: string; name: string }) => void
   onAssignDelegate: (target: { id: string; name: string }) => void
+  canReadGovernance?: boolean
+  canManageGovernance?: boolean
+  governanceReadUnavailableReason?: string | null
+  governanceManageUnavailableReason?: string | null
 }
 
 export function ProjectsSettingsSection({
@@ -24,7 +28,14 @@ export function ProjectsSettingsSection({
   setProjectComboKey,
   onAssignOwner,
   onAssignDelegate,
+  canReadGovernance = true,
+  canManageGovernance = true,
+  governanceReadUnavailableReason,
+  governanceManageUnavailableReason,
 }: ProjectsSettingsSectionProps) {
+  const assignDisabledReason = governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
+  const canAssign = canReadGovernance && canManageGovernance
+
   return (
     <PlatformGrid style={{ paddingInline: 0 }}>
       <PlatformRow>
@@ -42,6 +53,28 @@ export function ProjectsSettingsSection({
               </div>
             </div>
 
+            {!canReadGovernance && (
+              <InlineNotification
+                kind="error"
+                title="Project governance unavailable"
+                subtitle={governanceReadUnavailableReason || 'Missing permission platform:governance:read'}
+                hideCloseButton
+                lowContrast
+              />
+            )}
+
+            {canReadGovernance && !canManageGovernance && (
+              <InlineNotification
+                kind="warning"
+                title="Project governance is read-only"
+                subtitle={assignDisabledReason}
+                hideCloseButton
+                lowContrast
+                style={{ marginBottom: 'var(--spacing-4)' }}
+              />
+            )}
+
+            {canReadGovernance && (
             <div style={{ display: 'flex', gap: 'var(--spacing-4)', alignItems: 'flex-end' }}>
               <div style={{ flex: 1, maxWidth: '400px' }}>
                 <ComboBox
@@ -66,7 +99,8 @@ export function ProjectsSettingsSection({
                 <Button
                   kind="tertiary"
                   size="md"
-                  disabled={!selectedProject}
+                  disabled={!selectedProject || !canAssign}
+                  title={!canAssign ? assignDisabledReason : undefined}
                   onClick={() => selectedProject && onAssignOwner({ id: selectedProject.id, name: selectedProject.name })}
                 >
                   Assign Owner
@@ -74,15 +108,17 @@ export function ProjectsSettingsSection({
                 <Button
                   kind="tertiary"
                   size="md"
-                  disabled={!selectedProject}
+                  disabled={!selectedProject || !canAssign}
+                  title={!canAssign ? assignDisabledReason : undefined}
                   onClick={() => selectedProject && onAssignDelegate({ id: selectedProject.id, name: selectedProject.name })}
                 >
                   Assign Delegate
                 </Button>
               </div>
             </div>
+            )}
 
-            {selectedProject && (
+            {canReadGovernance && selectedProject && (
               <Tile style={{ marginTop: 'var(--spacing-4)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-3)' }}>
                   <Folder size={20} style={{ color: 'var(--cds-interactive-01, #0f62fe)' }} />

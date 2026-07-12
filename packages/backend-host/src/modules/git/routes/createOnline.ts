@@ -8,6 +8,7 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { z } from 'zod';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
@@ -26,6 +27,7 @@ import {
   assertUserCanImportFromEngine,
   prepareLatestEngineImport,
 } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -77,7 +79,7 @@ const checkRepoExistsSchema = z.object({
  * 5. Initialize VCS
  * 6. Link repository to project
  */
-router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(createOnlineSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(createOnlineSchema), requireAction('project.create.git.create', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const {
     projectName,
@@ -217,6 +219,9 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
       .orIgnore()
       .execute();
 
+    await permissionService.syncLegacyRoleAssignments({ projectIds: [projectId] })
+      .catch((error) => logger.warn('Failed to sync legacy project role assignments', { projectId, error }));
+
     if (preparedImport) {
       await applyPreparedEngineImportToProject({
         manager: dataSource.manager,
@@ -299,7 +304,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
  * POST /git-api/check-repo-exists
  * Check if a repository name already exists
  */
-router.post('/git-api/check-repo-exists', apiLimiter, requireAuth, validateBody(checkRepoExistsSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/check-repo-exists', apiLimiter, requireAuth, validateBody(checkRepoExistsSchema), requireAction('project.create.git.inspect', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const { providerId, repositoryName, namespace, token } = req.body;
 

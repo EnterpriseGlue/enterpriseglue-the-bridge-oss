@@ -24,10 +24,13 @@ import { Copy, Launch } from '@carbon/icons-react'
 import { PageLoader } from '../../../../shared/components/PageLoader'
 import { BreadcrumbBar } from '../../../shared/components/BreadcrumbBar'
 import { apiClient } from '../../../../shared/api/client'
+import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
+import { evaluateMissionControlStarbaseBridge } from '../../../../shared/api/bridgeAuthz'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import styles from '../../process-instance-detail/styles/InstanceDetail.module.css'
 import { SplitPane, Pane } from 'react-split-pane'
 import { LoadingState } from '../../../shared/components/LoadingState'
+import { useActionDecision, WhyUnavailableLink } from '../../../../shared/auth/guards'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -75,9 +78,17 @@ export default function DecisionHistoryDetail() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const selectedEngineId = useSelectedEngine()
+  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
   const searchParams = new URLSearchParams(location.search)
   const fromInstanceId = searchParams.get('fromInstance') || (location?.state?.fromInstanceId as string | undefined)
   const processLabel = searchParams.get('processLabel') || null
+  const selectedEngineResource = React.useMemo(
+    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
+    [selectedEngineId]
+  )
+  const historyDecisionsReadDecision = useActionDecision('engine.runtime.history.decisions.read', selectedEngineResource)
+  const decisionInputsReadDecision = useActionDecision('engine.runtime.history.decisions.inputs.read', selectedEngineResource)
+  const decisionOutputsReadDecision = useActionDecision('engine.runtime.history.decisions.outputs.read', selectedEngineResource)
 
   const histQ = useQuery({
     queryKey: ['mission-control', 'decision-hist', id, selectedEngineId],
@@ -92,7 +103,7 @@ export default function DecisionHistoryDetail() {
       )
       return data[0] || null
     },
-    enabled: !!id && !!selectedEngineId,
+    enabled: !!id && !!selectedEngineId && historyDecisionsReadDecision.allowed,
   })
 
   const decision = histQ.data as HistoricDecisionInstance | null
@@ -115,7 +126,7 @@ export default function DecisionHistoryDetail() {
       )
       return data
     },
-    enabled: !!rootDecisionInstanceId && !!selectedEngineId,
+    enabled: !!rootDecisionInstanceId && !!selectedEngineId && historyDecisionsReadDecision.allowed,
   })
 
   const versionLabel = React.useMemo(() => {
@@ -154,7 +165,7 @@ export default function DecisionHistoryDetail() {
         { credentials: 'include' },
       )
     },
-    enabled: !!id && !!selectedEngineId,
+    enabled: !!id && !!selectedEngineId && decisionInputsReadDecision.allowed,
   })
 
   const outputsQ = useQuery<DecisionIo[]>({
@@ -168,7 +179,7 @@ export default function DecisionHistoryDetail() {
         { credentials: 'include' },
       )
     },
-    enabled: !!id && !!selectedEngineId,
+    enabled: !!id && !!selectedEngineId && decisionOutputsReadDecision.allowed,
   })
 
   const title = decision?.decisionDefinitionName || decision?.decisionDefinitionKey || 'Decision'
@@ -251,8 +262,28 @@ export default function DecisionHistoryDetail() {
     decisionEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(() => {
+  const handleEditInStarbase = React.useCallback(async () => {
     if (!decisionEditTarget?.fileId || decisionVersion === null || !decisionKey) return
+    setBridgeError(null)
+    try {
+      const bridgeDecision = await evaluateMissionControlStarbaseBridge({
+        engineId: String(selectedEngineId || decisionEditTarget.engineId || ''),
+        projectId: decisionEditTarget.projectId,
+        fileId: decisionEditTarget.fileId,
+        definitionId: decision?.decisionDefinitionId || undefined,
+        definitionKey: decisionKey,
+        decisionDefinitionId: decision?.decisionDefinitionId || undefined,
+        decisionDefinitionKey: decisionKey,
+        kind: 'decision',
+      })
+      if (!bridgeDecision.allowed) {
+        setBridgeError(bridgeDecision.reason || 'Starbase edit is unavailable for this deployment.')
+        return
+      }
+    } catch (error) {
+      setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'))
+      return
+    }
 
     const params = new URLSearchParams({
       source: 'mission-control',
@@ -271,10 +302,27 @@ export default function DecisionHistoryDetail() {
     }
 
     tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(decisionEditTarget.fileId))}?${params.toString()}`)
-  }, [decisionEditTarget, decisionVersion, decisionKey, selectedEngineId, tenantNavigate])
+  }, [decisionEditTarget, decisionVersion, decisionKey, decision?.decisionDefinitionId, selectedEngineId, tenantNavigate])
 
   // Check if initial data is loading
   const isInitialLoading = histQ.isLoading || xmlQ.isLoading
+
+  if (selectedEngineId && !historyDecisionsReadDecision.allowed) {
+    return (
+      <div style={{ padding: 'var(--spacing-4)' }}>
+        <InlineNotification
+          lowContrast
+          kind="warning"
+          title="Decision history unavailable"
+          subtitle={historyDecisionsReadDecision.reason || 'Missing permission to view decision history on this engine.'}
+          hideCloseButton
+        />
+        <div style={{ marginTop: 'var(--spacing-2)', fontSize: 12 }}>
+          <WhyUnavailableLink decision={historyDecisionsReadDecision} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <PageLoader isLoading={isInitialLoading} skeletonType="instance-detail">
@@ -351,6 +399,15 @@ export default function DecisionHistoryDetail() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
+      {bridgeError && (
+        <InlineNotification
+          kind="warning"
+          title="Starbase edit unavailable"
+          subtitle={bridgeError}
+          lowContrast
+          hideCloseButton
+        />
+      )}
       
       {/* SplitPane wrapper to fill remaining height */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
@@ -540,7 +597,15 @@ export default function DecisionHistoryDetail() {
               <div style={{ fontSize: 'var(--text-14)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-2)' }}>
                 Inputs
               </div>
-              {inputsQ.isLoading ? (
+              {!decisionInputsReadDecision.allowed ? (
+                <InlineNotification
+                  kind="warning"
+                  title="Inputs redacted"
+                  subtitle={decisionInputsReadDecision.reason || 'Missing permission to view decision input payloads.'}
+                  lowContrast
+                  hideCloseButton
+                />
+              ) : inputsQ.isLoading ? (
                 <div style={{ padding: 'var(--spacing-2)' }}>Loading inputs...</div>
               ) : inputsQ.isError ? (
                 <InlineNotification
@@ -609,7 +674,15 @@ export default function DecisionHistoryDetail() {
               <div style={{ fontSize: 'var(--text-14)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-2)' }}>
                 Outputs
               </div>
-              {outputsQ.isLoading ? (
+              {!decisionOutputsReadDecision.allowed ? (
+                <InlineNotification
+                  kind="warning"
+                  title="Outputs redacted"
+                  subtitle={decisionOutputsReadDecision.reason || 'Missing permission to view decision output payloads.'}
+                  lowContrast
+                  hideCloseButton
+                />
+              ) : outputsQ.isLoading ? (
                 <div style={{ padding: 'var(--spacing-2)' }}>Loading outputs...</div>
               ) : outputsQ.isError ? (
                 <InlineNotification

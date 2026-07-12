@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireEngineDeployer } from '@enterpriseglue/shared/middleware/engineAuth.js'
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import {
   deleteProcessInstancesDirect,
   suspendActivateProcessInstancesDirect,
@@ -16,7 +16,7 @@ const r = Router()
 r.use(requireAuth)
 
 // Delete instances directly (no batch)
-r.post('/mission-control-api/direct/process-instances/delete', requireEngineDeployer({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/process-instances/delete', requireAction('engine.runtime.direct.process-instances.delete', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const {
       processInstanceIds = [],
@@ -42,7 +42,7 @@ r.post('/mission-control-api/direct/process-instances/delete', requireEngineDepl
 }))
 
 // Suspend/Activate directly
-r.post('/mission-control-api/direct/process-instances/suspend', requireEngineDeployer({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/process-instances/suspend', requireAction('engine.runtime.direct.process-instances.suspend', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const ids: string[] = (req.body?.processInstanceIds || []) as string[]
     const engineId = (req as any).engineId as string
@@ -53,7 +53,7 @@ r.post('/mission-control-api/direct/process-instances/suspend', requireEngineDep
   }
 }))
 
-r.post('/mission-control-api/direct/process-instances/activate', requireEngineDeployer({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/process-instances/activate', requireAction('engine.runtime.direct.process-instances.activate', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const ids: string[] = (req.body?.processInstanceIds || []) as string[]
     const engineId = (req as any).engineId as string
@@ -65,7 +65,7 @@ r.post('/mission-control-api/direct/process-instances/activate', requireEngineDe
 }))
 
 // Set retries directly
-r.post('/mission-control-api/direct/jobs/retries', requireEngineDeployer({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/jobs/retries', requireAction('engine.runtime.direct.jobs.retry', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { processInstanceIds = [], retries = 1, onlyFailed = true } = req.body || {}
     const engineId = (req as any).engineId as string
@@ -77,7 +77,7 @@ r.post('/mission-control-api/direct/jobs/retries', requireEngineDeployer({ engin
 }))
 
 // Migration execute (sync)
-r.post('/mission-control-api/migration/execute-direct', requireEngineDeployer({ engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/execute-direct', requireAction('engine.runtime.migrations.execute-direct', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { plan, processInstanceIds, skipCustomListeners, skipIoMappings } = req.body || {}
     const engineId = (req as any).engineId as string

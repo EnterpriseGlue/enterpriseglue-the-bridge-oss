@@ -4,6 +4,8 @@ import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
 import { addCaseInsensitiveLike } from '@enterpriseglue/shared/db/adapters/index.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { permissionService } from './permissions.js';
 
 class GovernanceServiceImpl {
   async searchUsers(query: string, limit = 10) {
@@ -97,6 +99,8 @@ class GovernanceServiceImpl {
       delegateId: userId || null,
       updatedAt: now,
     });
+    await permissionService.syncLegacyRoleAssignments({ engineIds: [engineId] })
+      .catch((error) => logger.warn('Failed to sync legacy engine role assignments', { engineId, error }));
 
     return {
       previousDelegateId: previousDelegateId || null,

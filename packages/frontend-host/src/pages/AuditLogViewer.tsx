@@ -16,9 +16,12 @@ import {
   TextInput,
   Button,
   Tag,
+  Toggle,
 } from '@carbon/react';
 import { Renew, Document } from '@carbon/icons-react';
 import { useAuth } from '../shared/hooks/useAuth';
+import { evaluateActionSnapshot } from '../shared/auth/guards';
+import { PlatformPermission } from '../shared/auth/permissions';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../shared/components/PageLayout';
 import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
@@ -52,20 +55,32 @@ interface AuditStats {
  * Admin-only page to view and monitor system audit logs
  */
 export default function AuditLogViewer() {
-  const { user } = useAuth();
+  const { permissions, hasPlatformPermission } = useAuth();
   const location = useLocation();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [stats, setStats] = useState<AuditStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const canViewAuditLogs = Boolean(user?.capabilities?.canViewAuditLogs);
+  const auditReadDecision = evaluateActionSnapshot(
+    permissions,
+    'platform.audit.read',
+    { type: 'platform' }
+  );
+  const auditReadAllowed = auditReadDecision.allowed || hasPlatformPermission(PlatformPermission.AUDIT_VIEW);
+  const unredactedAuditDecision = evaluateActionSnapshot(
+    permissions,
+    'platform.audit.unredacted.read',
+    { type: 'platform' }
+  );
+  const canViewUnredactedAuditLogs = unredactedAuditDecision.allowed ||
+    hasPlatformPermission(PlatformPermission.AUDIT_UNREDACTED_VIEW);
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
   const tenantSlug = rawTenantSlug && /^[a-zA-Z0-9_-]+$/.test(rawTenantSlug) ? rawTenantSlug : null;
   const [isTenantAdmin, setIsTenantAdmin] = useState(false);
   const [tenantAdminChecked, setTenantAdminChecked] = useState(false);
-  const canView = canViewAuditLogs || (tenantSlug && isTenantAdmin);
+  const canView = auditReadAllowed || (tenantSlug && isTenantAdmin);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -77,9 +92,10 @@ export default function AuditLogViewer() {
   const [userIdFilter, setUserIdFilter] = useState('');
   const [resourceTypeFilter, setResourceTypeFilter] = useState('');
   const [availableActions, setAvailableActions] = useState<string[]>([]);
+  const [showUnredactedPii, setShowUnredactedPii] = useState(false);
 
   useEffect(() => {
-    if (!tenantSlug || canViewAuditLogs) {
+    if (!tenantSlug || auditReadAllowed) {
       setIsTenantAdmin(false);
       setTenantAdminChecked(true);
       return;
@@ -107,9 +123,15 @@ export default function AuditLogViewer() {
     return () => {
       cancelled = true;
     };
-  }, [tenantSlug, canViewAuditLogs]);
+  }, [tenantSlug, auditReadAllowed]);
 
-  if (!canViewAuditLogs && tenantSlug && !tenantAdminChecked) {
+  useEffect(() => {
+    if (!canViewUnredactedAuditLogs && showUnredactedPii) {
+      setShowUnredactedPii(false);
+    }
+  }, [canViewUnredactedAuditLogs, showUnredactedPii]);
+
+  if (!auditReadAllowed && tenantSlug && !tenantAdminChecked) {
     return (
       <PageLayout>
         <h1>Checking permissions</h1>
@@ -132,7 +154,7 @@ export default function AuditLogViewer() {
     loadLogs();
     loadStats();
     loadAvailableActions();
-  }, [page, pageSize, actionFilter, userIdFilter, resourceTypeFilter, canView]);
+  }, [page, pageSize, actionFilter, userIdFilter, resourceTypeFilter, showUnredactedPii, canView]);
 
   const loadLogs = async () => {
     try {
@@ -147,6 +169,7 @@ export default function AuditLogViewer() {
       if (actionFilter) params.action = actionFilter;
       if (userIdFilter) params.userId = userIdFilter;
       if (resourceTypeFilter) params.resourceType = resourceTypeFilter;
+      if (showUnredactedPii && canViewUnredactedAuditLogs) params.includePii = true;
       const data = await apiClient.get<{ logs: AuditLog[]; pagination: { total: number } }>(
         '/api/audit/logs',
         params
@@ -325,6 +348,19 @@ export default function AuditLogViewer() {
             Clear Filters
           </Button>
         </div>
+
+        {canViewUnredactedAuditLogs && (
+          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end', minHeight: '4rem' }}>
+            <Toggle
+              id="audit-unredacted-pii"
+              labelText="Show unredacted PII"
+              labelA="Redacted"
+              labelB="Unredacted"
+              toggled={showUnredactedPii}
+              onToggle={setShowUnredactedPii}
+            />
+          </div>
+        )}
       </div>
 
       {/* Error Message */}

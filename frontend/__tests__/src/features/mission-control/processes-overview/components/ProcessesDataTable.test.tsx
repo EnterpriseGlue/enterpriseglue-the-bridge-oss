@@ -7,7 +7,21 @@ import { ProcessesDataTable } from '../../../../../../../packages/frontend-host/
 
 type ProcessesDataTableData = React.ComponentProps<typeof ProcessesDataTable>['data'];
 
-function renderTable(searchValue: string, data?: ProcessesDataTableData) {
+const deniedDecision = (actionId: string, permissionId: string) => ({
+  actionId,
+  permissionId,
+  resourceType: 'engine' as const,
+  resourceId: 'engine-1',
+  allowed: false,
+  state: 'disabled' as const,
+  reason: `Missing permission ${permissionId}`,
+});
+
+function renderTable(
+  searchValue: string,
+  data?: ProcessesDataTableData,
+  actionDecisions?: React.ComponentProps<typeof ProcessesDataTable>['actionDecisions']
+) {
   const onActivate = vi.fn(async () => undefined);
   const onSuspend = vi.fn(async () => undefined);
 
@@ -32,6 +46,7 @@ function renderTable(searchValue: string, data?: ProcessesDataTableData) {
         onRetry={vi.fn()}
         onActivate={onActivate}
         onSuspend={onSuspend}
+        actionDecisions={actionDecisions}
         selectedMap={{}}
         setSelectedMap={vi.fn() as React.Dispatch<React.SetStateAction<Record<string, boolean>>>}
         retryingMap={{}}
@@ -75,5 +90,39 @@ describe('ProcessesDataTable', () => {
     ]);
 
     expect(screen.getByText('1 min 1 sec')).toBeInTheDocument();
+  });
+
+  it('does not crash when an instance row is missing an id', () => {
+    renderTable('', [
+      {
+        processDefinitionKey: 'invoice-receipt',
+        state: 'ACTIVE',
+      } as any,
+    ]);
+
+    expect(screen.getByText('Invoice Receipt')).toBeInTheDocument();
+    expect(screen.getAllByText('--').length).toBeGreaterThan(0);
+  });
+
+  it('keeps denied runtime row actions visible but disabled with reasons', () => {
+    renderTable('', [
+      {
+        id: 'pi-1',
+        processDefinitionKey: 'invoice-receipt',
+        state: 'ACTIVE',
+        hasIncident: true,
+      },
+    ], {
+      retry: deniedDecision('engine.runtime.process-instances.retry', 'engine:instance:retry'),
+      suspension: deniedDecision('engine.runtime.process-instances.suspension.update', 'engine:process:modify'),
+      terminate: deniedDecision('engine.runtime.process-instances.delete', 'engine:instance:delete'),
+    });
+
+    expect(screen.getByLabelText('Retry')).toBeDisabled();
+    expect(screen.getByLabelText('Retry')).toHaveAttribute('title', 'Missing permission engine:instance:retry');
+    expect(screen.getByLabelText('Suspend')).toBeDisabled();
+    expect(screen.getByLabelText('Suspend')).toHaveAttribute('title', 'Missing permission engine:process:modify');
+    expect(screen.getByLabelText('Cancel')).toBeDisabled();
+    expect(screen.getByLabelText('Cancel')).toHaveAttribute('title', 'Missing permission engine:instance:delete');
   });
 });

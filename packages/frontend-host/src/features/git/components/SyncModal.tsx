@@ -23,6 +23,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings';
+import { useAuth } from '../../../shared/hooks/useAuth';
+import { ProjectPermission } from '../../../shared/auth/permissions';
+import { evaluateActionSnapshot } from '../../../shared/auth/guards';
 
 interface SyncModalProps {
   open: boolean;
@@ -62,6 +65,7 @@ export default function SyncModal({
   const queryClient = useQueryClient();
   const nav = useNavigate();
   const location = useLocation();
+  const { permissions, hasProjectPermission } = useAuth();
   const pathname = location?.pathname ?? '';
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
@@ -73,6 +77,12 @@ export default function SyncModal({
   const [direction, setDirection] = useState<SyncDirection>('push');
   const [commitMessage, setCommitMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const projectResource = { type: 'project' as const, id: projectId };
+  const syncStatusDecision = evaluateActionSnapshot(permissions, 'project.git.sync.status', projectResource);
+  const syncRunDecision = evaluateActionSnapshot(permissions, 'project.git.sync.run', projectResource);
+  const canReadSyncStatus = syncStatusDecision.allowed ||
+    hasProjectPermission(projectId, ProjectPermission.GIT_PULL) ||
+    hasProjectPermission(projectId, ProjectPermission.GIT_PUSH);
 
   // Fetch platform settings to determine which sync options are enabled
   const { data: platformSettings } = usePlatformSyncSettings();
@@ -117,12 +127,15 @@ export default function SyncModal({
     queryFn: async () => {
       return apiClient.get<SyncStatus>('/git-api/sync/status', { projectId }).catch(() => null);
     },
-    enabled: open && !!repoQuery.data,
+    enabled: open && !!repoQuery.data && canReadSyncStatus,
   });
 
   // Sync mutation
   const syncMutation = useMutation({
     mutationFn: async () => {
+      if (syncUnavailableReason) {
+        throw new Error(syncUnavailableReason);
+      }
       return apiClient.post('/git-api/sync', {
         projectId,
         direction,
@@ -148,6 +161,10 @@ export default function SyncModal({
 
   const handleSync = () => {
     setError(null);
+    if (syncUnavailableReason) {
+      setError(syncUnavailableReason);
+      return;
+    }
     syncMutation.mutate();
   };
 
@@ -159,8 +176,13 @@ export default function SyncModal({
   const requiresPersonalToken = !sharingEnabled;
   const personalTokenValid = !requiresPersonalToken || (credentialValidQuery.data?.valid ?? false);
   const tokenCheckLoading = requiresPersonalToken && credentialValidQuery.isLoading;
+  const requiredSyncPermission = direction === 'pull' ? ProjectPermission.GIT_PULL : ProjectPermission.GIT_PUSH;
+  const canRunSyncAction = syncRunDecision.allowed || hasProjectPermission(projectId, requiredSyncPermission);
+  const syncUnavailableReason = canRunSyncAction
+    ? null
+    : syncRunDecision.reason || `Missing permission ${requiredSyncPermission}`;
 
-  const canSubmit = !isLoading && !noRepo && commitMessage.trim().length > 0 && personalTokenValid && !tokenCheckLoading;
+  const canSubmit = !isLoading && !noRepo && commitMessage.trim().length > 0 && personalTokenValid && !tokenCheckLoading && !syncUnavailableReason;
 
   const formatLastSync = (timestamp: number | null) => {
     if (!timestamp) return 'Never';
@@ -198,6 +220,16 @@ export default function SyncModal({
         />
       ) : (
         <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
+          {syncUnavailableReason && (
+            <InlineNotification
+              kind="warning"
+              title="Sync unavailable"
+              subtitle={syncUnavailableReason}
+              lowContrast
+              hideCloseButton
+            />
+          )}
+
           {!sharingEnabled && !tokenCheckLoading && !personalTokenValid && (
             <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
               <InlineNotification

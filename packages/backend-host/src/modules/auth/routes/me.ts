@@ -8,6 +8,11 @@ import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import {
+  normalizeEngineOnboardingMode,
+  normalizeProjectEngineTargetMode,
+  normalizeAccessAuthorityMode,
+} from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
@@ -21,7 +26,7 @@ const router = Router();
 router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res) => {
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
-  
+
   const user = await userRepo.findOneBy({ id: req.user!.userId });
 
   if (!user) {
@@ -127,12 +132,12 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
     const settings = await settingsRepo.findOneBy({ id: 'default' });
 
     if (!settings) {
-      return res.json({ 
-        logoUrl: null, 
+      return res.json({
+        logoUrl: null,
         loginLogoUrl: null,
         loginTitleVerticalOffset: 0,
         loginTitleColor: null,
-        logoTitle: null, 
+        logoTitle: null,
         logoScale: 100,
         titleFontUrl: null,
         titleFontWeight: '600',
@@ -182,6 +187,17 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
         syncPullEnabled: false,
         gitProjectTokenSharingEnabled: false,
         defaultDeployRoles: ['owner', 'delegate', 'operator'],
+        engineOnboardingMode: 'manual_allowed',
+        projectEngineTargetMode: 'manual_allowed',
+        engineAccessAuthority: 'manual',
+        projectAccessAuthority: 'manual',
+        ssoAllEnginesAssignmentMappingsEnabled: true,
+        ssoEngineOwnerAssignmentMappingsEnabled: false,
+        ssoEngineDelegateAssignmentMappingsEnabled: false,
+        ssoRegexClaimMappingsEnabled: false,
+        ssoSecretViewMappingsEnabled: false,
+        ssoUnredactedAuditMappingsEnabled: false,
+        ssoPermanentDeleteMappingsEnabled: false,
       });
     }
 
@@ -199,6 +215,17 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
       syncPullEnabled: settings.syncPullEnabled ?? false,
       gitProjectTokenSharingEnabled: settings.gitProjectTokenSharingEnabled ?? false,
       defaultDeployRoles,
+      engineOnboardingMode: normalizeEngineOnboardingMode((settings as any).engineOnboardingMode),
+      projectEngineTargetMode: normalizeProjectEngineTargetMode((settings as any).projectEngineTargetMode),
+      engineAccessAuthority: normalizeAccessAuthorityMode((settings as any).engineAccessAuthority),
+      projectAccessAuthority: normalizeAccessAuthorityMode((settings as any).projectAccessAuthority),
+      ssoAllEnginesAssignmentMappingsEnabled: (settings as any).ssoAllEnginesAssignmentMappingsEnabled ?? true,
+      ssoEngineOwnerAssignmentMappingsEnabled: (settings as any).ssoEngineOwnerAssignmentMappingsEnabled ?? false,
+      ssoEngineDelegateAssignmentMappingsEnabled: (settings as any).ssoEngineDelegateAssignmentMappingsEnabled ?? false,
+      ssoRegexClaimMappingsEnabled: (settings as any).ssoRegexClaimMappingsEnabled ?? false,
+      ssoSecretViewMappingsEnabled: (settings as any).ssoSecretViewMappingsEnabled ?? false,
+      ssoUnredactedAuditMappingsEnabled: (settings as any).ssoUnredactedAuditMappingsEnabled ?? false,
+      ssoPermanentDeleteMappingsEnabled: (settings as any).ssoPermanentDeleteMappingsEnabled ?? false,
     });
   } catch (error) {
     logger.error('Get platform settings error:', error);

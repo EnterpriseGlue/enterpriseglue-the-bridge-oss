@@ -1,23 +1,23 @@
 /**
  * Deploy Authorization Middleware
  * Multi-level check for deployment permissions:
- * 1. User has deploy role in project
- * 2. Project has access to engine
- * 3. Engine environment allows manual deployment
+ * 1. User has deploy permission in project
+ * 2. User has deploy permission on engine
+ * 3. Project has an active target for the requested engine and mode
+ * 4. Engine environment allows manual deployment
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { In } from 'typeorm';
 import { Errors } from './errorHandler.js';
-import { projectMemberService } from '../services/platform-admin/ProjectMemberService.js';
 import { engineAccessService } from '../services/platform-admin/EngineAccessService.js';
-import { engineService } from '../services/platform-admin/EngineService.js';
+import {
+  deploymentEligibilityService,
+  type DeploymentEligibilityResult,
+} from '../services/platform-admin/DeploymentEligibilityService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
-import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
-import { PermissionGrant } from '@enterpriseglue/shared/infrastructure/persistence/entities/PermissionGrant.js';
-import { ENGINE_MEMBER_ROLES } from '@enterpriseglue/shared/constants/roles.js';
+import { EnginePermissions, permissionService } from '../services/platform-admin/permissions.js';
 
 export interface DeployContext {
   projectId: string;
@@ -27,18 +27,110 @@ export interface DeployContext {
   environmentTag: string | null;
 }
 
-async function hasProjectDeployGrant(userId: string, projectId: string): Promise<boolean> {
-  const dataSource = await getDataSource();
-  const repo = dataSource.getRepository(PermissionGrant);
-  const count = await repo.count({
-    where: {
+async function canViewEngineForDeploy(userId: string, engineId: string, tenantId?: string | null): Promise<boolean> {
+  return permissionService.hasPermission(EnginePermissions.DEPLOY_VIEW, {
+    userId,
+    tenantId,
+    resourceType: 'engine',
+    resourceId: engineId,
+  }) ||
+    permissionService.hasPermission(EnginePermissions.INSTANCE_VIEW, {
       userId,
-      permission: In(['project.deploy', 'project:deploy']),
-      resourceType: 'project',
-      resourceId: projectId,
-    },
+      tenantId,
+      resourceType: 'engine',
+      resourceId: engineId,
+    });
+}
+
+async function canAutoGrantProjectAccess(userId: string, engineId: string, tenantId?: string | null): Promise<boolean> {
+  return permissionService.hasPermission(EnginePermissions.PROJECT_ACCESS_APPROVE, {
+    userId,
+    tenantId,
+    resourceType: 'engine',
+    resourceId: engineId,
   });
-  return count > 0;
+}
+
+function hasDeniedCheck(result: DeploymentEligibilityResult, checkId: string): boolean {
+  return result.checks.some((check) => check.id === checkId && !check.allowed);
+}
+
+function deniedCheckIds(result: DeploymentEligibilityResult): string[] {
+  return result.checks
+    .filter((check) => !check.allowed)
+    .map((check) => check.id);
+}
+
+async function evaluateManualDeployment(
+  userId: string,
+  tenantId: string | null,
+  projectId: string,
+  engineId: string
+): Promise<DeploymentEligibilityResult> {
+  return deploymentEligibilityService.evaluate({
+    userId,
+    tenantId,
+    projectId,
+    engineId,
+    mode: 'manual',
+  });
+}
+
+async function evaluateManualDeploymentWithLegacyAutoGrant(
+  userId: string,
+  tenantId: string | null,
+  projectId: string,
+  engineId: string
+): Promise<DeploymentEligibilityResult> {
+  let result = await evaluateManualDeployment(userId, tenantId, projectId, engineId);
+  if (result.allowed) {
+    return result;
+  }
+
+  const failedChecks = deniedCheckIds(result);
+  if (failedChecks.length === 1 && failedChecks[0] === 'project_engine_target.active') {
+    const canAutoGrant = await canAutoGrantProjectAccess(userId, engineId, tenantId);
+    if (canAutoGrant) {
+      await engineAccessService.grantAccess(projectId, engineId, userId, true);
+      result = await evaluateManualDeployment(userId, tenantId, projectId, engineId);
+    }
+  }
+
+  return result;
+}
+
+function deploymentDeniedPayload(result: DeploymentEligibilityResult) {
+  const remediation = result.checks.find((check) => !check.allowed && check.remediation)?.remediation;
+  return {
+    error: result.reasons[0] || 'Deployment is not allowed',
+    reasons: result.reasons,
+    checks: result.checks,
+    ...(remediation ? { hint: remediation } : {}),
+  };
+}
+
+async function loadDeployContext(projectId: string, engineId: string): Promise<DeployContext> {
+  const dataSource = await getDataSource();
+  const engineRepo = dataSource.getRepository(Engine);
+  const engine = await engineRepo.findOneBy({ id: engineId });
+  if (!engine) {
+    throw Errors.engineNotFound();
+  }
+
+  let envTagName: string | null = null;
+  if (engine.environmentTagId) {
+    const envTagRepo = dataSource.getRepository(EnvironmentTag);
+    const envTag = await envTagRepo.findOneBy({ id: engine.environmentTagId });
+    envTagName = envTag?.name || null;
+  }
+
+  return {
+    projectId,
+    engineId,
+    projectRole: 'permission',
+    engineName: engine.name,
+    environmentTag: envTagName,
+  };
 }
 
 /**
@@ -58,103 +150,36 @@ export function requireDeployPermission() {
     }
 
     const userId = req.user.userId;
-    const dataSource = await getDataSource();
+    const tenantId = req.tenant?.tenantId || null;
 
     try {
-      // Check 1: User has deploy permission in project
-      const membership = await projectMemberService.getMembership(projectId, userId);
-      if (!membership) {
-        throw Errors.projectNotFound();
-      }
+      const result = await evaluateManualDeploymentWithLegacyAutoGrant(userId, tenantId, projectId, engineId);
+      (req as any).deploymentEligibility = result;
 
-      // Get platform settings for default deploy roles
-      const platformRepo = dataSource.getRepository(PlatformSettings);
-      const settings = await platformRepo.findOneBy({ id: 'default' });
-
-      // Project deploy roles (configurable via membership grants)
-      const defaultProjectDeployRoles = ['owner', 'delegate', 'developer'];
-
-      let hasDeployRole = defaultProjectDeployRoles.includes(membership.role);
-      if (!hasDeployRole && membership.role === 'editor') {
-        hasDeployRole = await hasProjectDeployGrant(userId, projectId);
-      }
-
-      if (!hasDeployRole) {
-        throw Errors.forbidden('User does not have deploy permission in this project');
-      }
-
-      // Check 2b: User has engine deploy role (platform-configured)
-      const engineDeployRoles = JSON.parse(
-        settings?.defaultDeployRoles || '["owner","delegate","operator"]'
-      );
-      const hasEngineRole = await engineService.hasEngineAccess(userId, engineId, engineDeployRoles);
-      if (!hasEngineRole) {
-        const canViewEngine = await engineService.hasEngineAccess(userId, engineId, ENGINE_MEMBER_ROLES);
-        if (!canViewEngine) {
+      if (!result.allowed) {
+        if (hasDeniedCheck(result, 'project.exists')) {
+          throw Errors.projectNotFound();
+        }
+        if (hasDeniedCheck(result, 'engine.exists')) {
           throw Errors.engineNotFound();
         }
-        throw Errors.forbidden('No deploy permission on this engine');
-      }
-
-      // Check 2: Project has access to engine
-      // If the caller is engine owner/delegate, we can auto-grant access (explicit approval) to unblock deployments.
-      let hasAccess = await engineAccessService.hasProjectAccess(projectId, engineId);
-      if (!hasAccess) {
-        const canAutoGrant = await engineService.hasEngineAccess(userId, engineId, ['owner', 'delegate']);
-        if (canAutoGrant) {
-          await engineAccessService.grantAccess(projectId, engineId, userId, true);
-          hasAccess = true;
-        }
-      }
-      if (!hasAccess) {
-        return res.status(403).json({
-          error: 'Project not connected to this engine',
-          hint: 'Ask the engine owner or delegate to grant this project access',
-        });
-      }
-
-      // Check 3: Engine environment allows manual deployment
-      const engineRepo = dataSource.getRepository(Engine);
-      const engine = await engineRepo.findOneBy({ id: engineId });
-
-      if (!engine) {
-        throw Errors.engineNotFound();
-      }
-
-      // Check if environment is locked
-      if (engine.environmentLocked) {
-        throw Errors.forbidden('Engine environment is locked');
-      }
-
-      // Check environment tag settings
-      let envTagName: string | null = null;
-      if (engine.environmentTagId) {
-        const envTagRepo = dataSource.getRepository(EnvironmentTag);
-        const envTag = await envTagRepo.findOneBy({ id: engine.environmentTagId });
-
-        if (envTag) {
-          envTagName = envTag.name;
-          if (!envTag.manualDeployAllowed) {
-            return res.status(403).json({
-              error: 'Manual deployment not allowed for this environment',
-              environment: envTag.name,
-              hint: 'Use CI/CD pipeline for this environment',
-            });
+        if (hasDeniedCheck(result, 'engine.permission.deploy')) {
+          const canViewEngine = await canViewEngineForDeploy(userId, engineId, tenantId);
+          if (!canViewEngine) {
+            throw Errors.engineNotFound();
           }
         }
+        return res.status(403).json(deploymentDeniedPayload(result));
       }
 
       // All checks passed - attach context to request
-      (req as any).deployContext = {
-        projectId,
-        engineId,
-        projectRole: membership.role,
-        engineName: engine.name,
-        environmentTag: envTagName,
-      } as DeployContext;
+      (req as any).deployContext = await loadDeployContext(projectId, engineId);
 
       next();
-    } catch (error) {
+    } catch (error: any) {
+      if (typeof error?.statusCode === 'number') {
+        throw error;
+      }
       console.error('Deploy auth error:', error);
       throw Errors.internal('Failed to check deploy permissions');
     }
@@ -176,64 +201,10 @@ export function checkDeployPermission() {
 
     try {
       const userId = req.user.userId;
-      const dataSource = await getDataSource();
-
-      // Quick checks
-      const membership = await projectMemberService.getMembership(projectId, userId);
-      if (!membership) {
-        (req as any).canDeploy = false;
-        return next();
-      }
-
-      const platformRepo = dataSource.getRepository(PlatformSettings);
-      const settings = await platformRepo.findOneBy({ id: 'default' });
-
-      const defaultProjectDeployRoles = ['owner', 'delegate', 'developer'];
-
-      let hasDeployRole = defaultProjectDeployRoles.includes(membership.role);
-      if (!hasDeployRole && membership.role === 'editor') {
-        hasDeployRole = await hasProjectDeployGrant(userId, projectId);
-      }
-      const hasAccess = await engineAccessService.hasProjectAccess(projectId, engineId);
-
-      if (!hasDeployRole || !hasAccess) {
-        (req as any).canDeploy = false;
-        return next();
-      }
-
-      const engineDeployRoles = JSON.parse(
-        settings?.defaultDeployRoles || '["owner","delegate","operator"]'
-      );
-      const hasEngineRole = await engineService.hasEngineAccess(userId, engineId, engineDeployRoles);
-      if (!hasEngineRole) {
-        (req as any).canDeploy = false;
-        return next();
-      }
-
-      const engineRepo = dataSource.getRepository(Engine);
-      const engine = await engineRepo.findOneBy({ id: engineId });
-
-      if (!engine) {
-        (req as any).canDeploy = false;
-        return next();
-      }
-
-      if (engine.environmentLocked) {
-        (req as any).canDeploy = false;
-        return next();
-      }
-
-      if (engine.environmentTagId) {
-        const envTagRepo = dataSource.getRepository(EnvironmentTag);
-        const envTag = await envTagRepo.findOneBy({ id: engine.environmentTagId });
-
-        if (envTag && !envTag.manualDeployAllowed) {
-          (req as any).canDeploy = false;
-          return next();
-        }
-      }
-
-      (req as any).canDeploy = true;
+      const tenantId = req.tenant?.tenantId || null;
+      const result = await evaluateManualDeployment(userId, tenantId, projectId, engineId);
+      (req as any).deploymentEligibility = result;
+      (req as any).canDeploy = result.allowed;
       next();
     } catch {
       (req as any).canDeploy = false;

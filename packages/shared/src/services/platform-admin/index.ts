@@ -1,8 +1,8 @@
 /**
  * Platform Admin Services
- * 
+ *
  * Organization-level administration services for the platform.
- * 
+ *
  * Services included:
  * - ProjectMemberService: Manage project collaboration and membership
  * - EngineService: Engine ownership, membership, access control
@@ -17,10 +17,22 @@
 export * from './ProjectMemberService.js';
 export * from './EngineService.js';
 export * from './EngineAccessService.js';
+export * from './ProjectEngineTargetService.js';
+export * from './DeploymentEligibilityService.js';
 export * from './EnvironmentTagService.js';
 export * from './PlatformSettingsService.js';
+export * from './AuthzGroupService.js';
+export * from './EngineSetService.js';
 export * from './permissions.js';
+export * from './ApiClientService.js';
+export * from './ServiceAccountService.js';
 export * from './SsoClaimsMappingService.js';
+export * from './SsoAssignmentMappingService.js';
+export * from './SsoEngineAccessSnapshotService.js';
+export * from './SsoGroupMappingService.js';
+export * from './SsoNormalizedIdentityService.js';
+export * from './SsoProviderIdentityCheckService.js';
+export * from './SsoSyncDiagnosticsService.js';
 export * from './PolicyService.js';
 export * from './UserService.js';
 

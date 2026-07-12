@@ -59,6 +59,12 @@ describe('Backend host contract conformance', () => {
     const hostContext: EnterpriseBackendContext = {
       connectionPool: mockPool,
       config: {},
+      authz: {
+        requireAction: () => () => undefined,
+        requireCompositeAction: () => () => undefined,
+        requireDeclaredAction: () => () => undefined,
+        buildOpenApiAuthzMetadata: () => [],
+      },
     };
 
     // Runtime shape checks — if the contract adds a required property,
@@ -68,6 +74,10 @@ describe('Backend host contract conformance', () => {
     expect(typeof hostContext.connectionPool.close).toBe('function');
     expect(typeof hostContext.connectionPool.getNativePool).toBe('function');
     expect(hostContext.config).toBeDefined();
+    expect(typeof hostContext.authz.requireAction).toBe('function');
+    expect(typeof hostContext.authz.requireCompositeAction).toBe('function');
+    expect(typeof hostContext.authz.requireDeclaredAction).toBe('function');
+    expect(typeof hostContext.authz.buildOpenApiAuthzMetadata).toBe('function');
   });
 
   it('ConnectionPool.query returns expected shape', async () => {

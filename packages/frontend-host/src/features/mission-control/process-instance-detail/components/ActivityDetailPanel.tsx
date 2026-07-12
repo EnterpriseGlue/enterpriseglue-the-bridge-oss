@@ -5,6 +5,7 @@ import { ExecutionTrailPanel } from './ExecutionTrailPanel'
 import { ActivityDetailsPanel } from './ActivityDetailsPanel'
 import { ModificationPlanPanel } from './ModificationPlanPanel'
 import { buildActivityGroups, buildHistoryContext } from './activityDetailUtils'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 interface ActivityDetailPanelProps {
   instanceId: string
@@ -46,6 +47,16 @@ interface ActivityDetailPanelProps {
   showAlert: (message: string, kind?: 'info' | 'warning' | 'error', title?: string) => void
   onAddVariable?: () => void
   onBulkUploadVariables?: () => void
+  variablesReadDecision?: UiAuthzDecision
+  historicVariablesReadDecision?: UiAuthzDecision
+  variableHistoryReadDecision?: UiAuthzDecision
+  variablesUpdateDecision?: UiAuthzDecision
+  executionDetailsReadDecision?: UiAuthzDecision
+  historyTasksReadDecision?: UiAuthzDecision
+  historyUserOperationsReadDecision?: UiAuthzDecision
+  historyDecisionsReadDecision?: UiAuthzDecision
+  decisionInputsReadDecision?: UiAuthzDecision
+  decisionOutputsReadDecision?: UiAuthzDecision
   
   // Decision data
   selectedDecisionInstance: HistoricDecisionInstanceLite | null
@@ -115,6 +126,16 @@ export function ActivityDetailPanel({
   showAlert,
   onAddVariable,
   onBulkUploadVariables,
+  variablesReadDecision,
+  historicVariablesReadDecision,
+  variableHistoryReadDecision,
+  variablesUpdateDecision,
+  executionDetailsReadDecision,
+  historyTasksReadDecision,
+  historyUserOperationsReadDecision,
+  historyDecisionsReadDecision,
+  decisionInputsReadDecision,
+  decisionOutputsReadDecision,
   selectedDecisionInstance,
   decisionInputs,
   decisionOutputs,
@@ -187,6 +208,9 @@ export function ActivityDetailPanel({
       resolveBpmnLoopMarkerVisual={resolveBpmnLoopMarkerVisual}
       buildHistoryContext={buildHistoryContext}
       onNavigateToProcessInstance={onNavigateToProcessInstance}
+      executionDetailsReadDecision={executionDetailsReadDecision}
+      historyTasksReadDecision={historyTasksReadDecision}
+      historyUserOperationsReadDecision={historyUserOperationsReadDecision}
     />,
     <div key="details" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {isModMode ? (
@@ -207,7 +231,7 @@ export function ActivityDetailPanel({
             applyModifications={applyModifications}
             setDiscardConfirmOpen={setDiscardConfirmOpen}
             applyBusy={applyBusy}
-            instanceVariables={varsQ?.data ? Object.entries(varsQ.data).map(([name, meta]: [string, any]) => ({ name, type: meta?.type ?? 'String', value: meta?.value })) : null}
+            instanceVariables={(variablesReadDecision?.allowed ?? true) && varsQ?.data ? Object.entries(varsQ.data).map(([name, meta]: [string, any]) => ({ name, type: meta?.type ?? 'String', value: meta?.value })) : null}
             onExitModificationMode={onExitModificationMode}
           />
         </div>
@@ -229,6 +253,13 @@ export function ActivityDetailPanel({
             showAlert={showAlert}
             onAddVariable={onAddVariable}
             onBulkUploadVariables={onBulkUploadVariables}
+            variablesReadDecision={variablesReadDecision}
+            historicVariablesReadDecision={historicVariablesReadDecision}
+            variableHistoryReadDecision={variableHistoryReadDecision}
+            variablesUpdateDecision={variablesUpdateDecision}
+            historyDecisionsReadDecision={historyDecisionsReadDecision}
+            decisionInputsReadDecision={decisionInputsReadDecision}
+            decisionOutputsReadDecision={decisionOutputsReadDecision}
             selectedDecisionInstance={selectedDecisionInstance}
             decisionInputs={decisionInputs}
             decisionOutputs={decisionOutputs}

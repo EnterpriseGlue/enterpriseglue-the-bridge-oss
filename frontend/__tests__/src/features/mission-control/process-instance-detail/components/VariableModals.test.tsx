@@ -105,4 +105,46 @@ describe('VariableModals', () => {
     expect(screen.getByText(/History unavailable/)).toBeInTheDocument();
     expect(screen.getByText(/No historic variable instance was found/)).toBeInTheDocument();
   });
+
+  it('redacts variable history values when history read is denied', () => {
+    render(
+      <VariableHistoryModal
+        target={{
+          variableInstanceId: 'var-1',
+          variableName: 'amount',
+          scope: 'global',
+          currentType: 'Integer',
+          currentValue: 250,
+        }}
+        entries={[
+          {
+            id: 'detail-1',
+            variableInstanceId: 'var-1',
+            variableName: 'amount',
+            value: 100,
+            type: 'Integer',
+            time: '2026-03-08T10:00:00.000Z',
+            revision: 1,
+          },
+        ]}
+        isLoading={false}
+        error={null}
+        readDecision={{
+          actionId: 'engine.runtime.process-instances.variable-history.read',
+          permissionId: 'engine:instance:view',
+          resourceType: 'engine',
+          resourceId: 'engine-1',
+          allowed: false,
+          state: 'redacted',
+          reason: 'Missing permission engine:instance:view',
+        }}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Current value: Restricted/)).toBeInTheDocument();
+    expect(screen.getByText(/Variable history redacted/)).toBeInTheDocument();
+    expect(screen.getByText(/Missing permission engine:instance:view/)).toBeInTheDocument();
+    expect(screen.queryByText('100')).not.toBeInTheDocument();
+  });
 });

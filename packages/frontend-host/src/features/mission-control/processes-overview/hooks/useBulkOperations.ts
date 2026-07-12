@@ -45,13 +45,13 @@ export function useBulkOperations({
     }
   }, [showAlert])
 
-  const bulkRetry = useCallback(async () => {
+  const bulkRetry = useCallback(async (auditReason?: string) => {
     const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
     if (ids.length === 0) return
 
     setBulkRetryBusy(true)
     try {
-      await createBulkRetryBatch(ids, engineId || undefined)
+      await createBulkRetryBatch(ids, engineId || undefined, auditReason)
       tenantNavigate('/mission-control/batches')
       setSelectedMap({})
     } catch (e: any) {
@@ -64,13 +64,13 @@ export function useBulkOperations({
     }
   }, [selectedMap, setSelectedMap, tenantNavigate, showAlert])
 
-  const bulkDelete = useCallback(async () => {
+  const bulkDelete = useCallback(async (deleteReason?: string) => {
     const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
     if (ids.length === 0) return
 
     setBulkDeleteBusy(true)
     try {
-      await createBulkDeleteBatch(ids, undefined, engineId || undefined)
+      await createBulkDeleteBatch(ids, deleteReason, engineId || undefined)
       tenantNavigate('/mission-control/batches')
       setSelectedMap({})
     } catch (e: any) {
@@ -83,13 +83,13 @@ export function useBulkOperations({
     }
   }, [selectedMap, setSelectedMap, tenantNavigate, showAlert])
 
-  const bulkSuspend = useCallback(async () => {
+  const bulkSuspend = useCallback(async (auditReason?: string) => {
     const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
     if (ids.length === 0) return
 
     setBulkSuspendBusy(true)
     try {
-      await createBulkSuspendBatch(ids, engineId || undefined)
+      await createBulkSuspendBatch(ids, engineId || undefined, auditReason)
       tenantNavigate('/mission-control/batches')
       setSelectedMap({})
     } catch (e: any) {
@@ -102,13 +102,13 @@ export function useBulkOperations({
     }
   }, [selectedMap, setSelectedMap, tenantNavigate, showAlert])
 
-  const bulkActivate = useCallback(async () => {
+  const bulkActivate = useCallback(async (auditReason?: string) => {
     const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
     if (ids.length === 0) return
 
     setBulkActivateBusy(true)
     try {
-      await createBulkActivateBatch(ids, engineId || undefined)
+      await createBulkActivateBatch(ids, engineId || undefined, auditReason)
       tenantNavigate('/mission-control/batches')
       setSelectedMap({})
     } catch (e: any) {

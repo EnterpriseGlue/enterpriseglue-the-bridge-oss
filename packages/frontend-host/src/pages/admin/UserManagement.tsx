@@ -18,11 +18,11 @@ import {
   SelectItem,
   InlineNotification,
   Tag,
-  OverflowMenu,
-  OverflowMenuItem,
 } from '@carbon/react';
 import { Add, UserAvatar } from '@carbon/icons-react';
 import { useAuth } from '../../shared/hooks/useAuth';
+import { PlatformPermission } from '../../shared/auth/permissions';
+import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../shared/auth/guards';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../shared/components/PageLayout';
 import { useModal } from '../../shared/hooks/useModal';
 import FormModal from '../../components/FormModal';
@@ -34,14 +34,74 @@ import { apiClient } from '../../shared/api/client';
 import { parseApiError } from '../../shared/api/apiErrorUtils';
 import type { User, CreateUserRequest, UpdateUserRequest } from '../../shared/types/auth';
 import { useToast } from '../../shared/notifications/ToastProvider';
-import { getPlatformRoleDescription, getPlatformRoleLabel, getPlatformRoleTagType } from '../../shared/utils/platformRole';
+import {
+  getBootstrapAccessDescription,
+  getBootstrapAccessLabel,
+  getBootstrapAccessTagType,
+  type BootstrapAccessValue,
+} from '../../shared/utils/bootstrapAccess';
 import { getInvitationDeliveryOptions, getPreferredInvitationDeliveryMethod, type InvitationRevealData } from '../../shared/utils/invitationFlow';
+import { useRoleAssignments, type RoleAssignment } from '../../features/platform-admin/hooks/useAuthzApi';
 
 export type AdminManagedUser = User & {
   adminStatus?: 'active' | 'inactive' | 'pending'
   authProvider?: string
   failedLoginAttempts?: number
   lockedUntil?: number | null
+}
+
+export interface UserManagementActionPermissions {
+  canUpdateUsers: boolean;
+  canUnlockUsers: boolean;
+  canDeactivateUsers: boolean;
+  canSoftDeleteUsers: boolean;
+  canPermanentDeleteUsers: boolean;
+}
+
+export type UserRoleAssignmentLineageInput = Pick<
+  RoleAssignment,
+  'principalType' | 'principalId' | 'userId' | 'roleId' | 'roleKey' | 'roleName' | 'resourceType' | 'resourceId' | 'scopeType' | 'scopeId' | 'source' | 'sourceRef' | 'sourceMappingId'
+>
+
+type UserInviteForm = {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  bootstrapAccess: BootstrapAccessValue;
+  sendEmail?: boolean;
+}
+
+type UserEditForm = {
+  firstName?: string;
+  lastName?: string;
+  bootstrapAccess?: BootstrapAccessValue;
+  isActive?: boolean;
+}
+
+const USER_BOOTSTRAP_ACCESS_FIELD = `platform${'Role'}`;
+
+export function getUserBootstrapAccess(user: object | null | undefined): BootstrapAccessValue {
+  const candidate = user ? (user as Record<string, unknown>)[USER_BOOTSTRAP_ACCESS_FIELD] : undefined;
+  return candidate === 'admin' ? 'admin' : 'user';
+}
+
+function toCreateUserRequest(form: UserInviteForm, normalizedEmail: string): CreateUserRequest {
+  return {
+    email: normalizedEmail,
+    firstName: form.firstName,
+    lastName: form.lastName,
+    sendEmail: form.sendEmail,
+    [USER_BOOTSTRAP_ACCESS_FIELD]: form.bootstrapAccess,
+  } as CreateUserRequest;
+}
+
+function toUpdateUserRequest(form: UserEditForm): UpdateUserRequest {
+  return {
+    firstName: form.firstName,
+    lastName: form.lastName,
+    isActive: form.isActive,
+    [USER_BOOTSTRAP_ACCESS_FIELD]: form.bootstrapAccess,
+  } as UpdateUserRequest;
 }
 
 export function getUserDisplayStatus(user: AdminManagedUser): { label: 'Active' | 'Inactive' | 'Pending'; tagType: 'green' | 'red' | 'blue' } {
@@ -68,8 +128,24 @@ export function getUserDisplayStatus(user: AdminManagedUser): { label: 'Active' 
   return { label: 'Active', tagType: 'green' };
 }
 
-export function getUserRowActions(user: AdminManagedUser, options: { currentUserId?: string; localLoginDisabled: boolean; now?: number }) {
+export function getUserRowActions(
+  user: AdminManagedUser,
+  options: {
+    currentUserId?: string;
+    localLoginDisabled: boolean;
+    now?: number;
+    permissions?: Partial<UserManagementActionPermissions>;
+  }
+) {
   const now = options.now ?? Date.now()
+  const permissions = {
+    canUpdateUsers: true,
+    canUnlockUsers: true,
+    canDeactivateUsers: true,
+    canSoftDeleteUsers: true,
+    canPermanentDeleteUsers: true,
+    ...options.permissions,
+  }
   const isSelf = user.id === options.currentUserId
   const isLocalUser = (user.authProvider || 'local') === 'local'
   const isLocked = Boolean(
@@ -78,8 +154,13 @@ export function getUserRowActions(user: AdminManagedUser, options: { currentUser
       (Number(user.failedLoginAttempts || 0) > 0)
     )
   )
-  const canDeactivate = !isSelf && user.isActive
+  const canDeactivate = Boolean(
+    (permissions.canDeactivateUsers || permissions.canSoftDeleteUsers) &&
+    !isSelf &&
+    user.isActive
+  )
   const canPermanentDelete = Boolean(
+    permissions.canPermanentDeleteUsers &&
     !isSelf &&
     !options.localLoginDisabled &&
     isLocalUser &&
@@ -89,15 +170,59 @@ export function getUserRowActions(user: AdminManagedUser, options: { currentUser
   return {
     isSelf,
     isLocked,
-    canUnlock: isLocked,
+    canEdit: permissions.canUpdateUsers,
+    canUnlock: permissions.canUnlockUsers && isLocked,
     canDeactivate,
     canPermanentDelete,
   }
 }
 
-const defaultCreateForm: CreateUserRequest = {
+export function formatUserRoleAssignmentSourceLineage(assignment: Pick<UserRoleAssignmentLineageInput, 'source' | 'sourceRef' | 'sourceMappingId'> | null | undefined): string {
+  if (!assignment) return '-'
+  const sourceLabel = assignment.source === 'sso'
+    ? 'SSO-managed assignment'
+    : assignment.source === 'manual'
+      ? 'Manual assignment'
+      : assignment.source === 'system'
+        ? 'System-managed assignment'
+        : assignment.source === 'api'
+          ? 'API-managed assignment'
+          : assignment.source === 'legacy'
+            ? 'Legacy-derived assignment'
+            : assignment.source === 'automation'
+              ? 'Automation-managed assignment'
+              : assignment.source === 'bootstrap'
+                ? 'Bootstrap assignment'
+                : `${assignment.source} assignment`
+  const parts = [sourceLabel]
+  if (assignment.sourceRef) parts.push(`Source ref ${assignment.sourceRef}`)
+  if (assignment.sourceMappingId && assignment.sourceMappingId !== assignment.sourceRef) {
+    parts.push(`${assignment.source === 'sso' ? 'SSO mapping' : 'Mapping'} ${assignment.sourceMappingId}`)
+  }
+  return parts.join('; ')
+}
+
+export function isDirectUserRoleAssignment(assignment: UserRoleAssignmentLineageInput, userId: string): boolean {
+  if ((assignment.principalType || 'user') !== 'user') return false
+  const principalId = assignment.principalId || assignment.userId
+  return Boolean(principalId && principalId === userId)
+}
+
+export function formatUserRoleAssignmentScope(assignment: Pick<UserRoleAssignmentLineageInput, 'resourceType' | 'resourceId' | 'scopeType' | 'scopeId'>): string {
+  const type = assignment.scopeType || assignment.resourceType
+  const id = assignment.scopeId || assignment.resourceId
+  if (!type) return 'unscoped'
+  return id ? `${type} ${id}` : type
+}
+
+export function formatUserRoleAssignmentSummary(assignment: UserRoleAssignmentLineageInput): string {
+  const role = assignment.roleName || assignment.roleKey || assignment.roleId
+  return `${role} on ${formatUserRoleAssignmentScope(assignment)}`
+}
+
+const defaultCreateForm: UserInviteForm = {
   email: '',
-  platformRole: 'user',
+  bootstrapAccess: 'user',
   sendEmail: true,
 }
 
@@ -106,17 +231,42 @@ const defaultCreateForm: CreateUserRequest = {
  * Admin-only interface for managing users
  */
 export default function UserManagement() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, permissions, hasPlatformPermission } = useAuth();
   const { notify } = useToast();
   const [users, setUsers] = useState<AdminManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const canManageUsers = Boolean(currentUser?.capabilities?.canManageUsers);
+  const platformResource = { type: 'platform' as const, id: null };
+  const usersReadDecision = evaluateActionSnapshot(permissions, 'platform.users.read', platformResource);
+  const usersCreateDecision = evaluateActionSnapshot(permissions, 'platform.users.create', platformResource);
+  const usersUpdateDecision = evaluateActionSnapshot(permissions, 'platform.users.update', platformResource);
+  const usersDeactivateDecision = evaluateActionSnapshot(permissions, 'platform.users.deactivate', platformResource);
+  const usersPermanentDeleteDecision = evaluateActionSnapshot(permissions, 'platform.users.permanent-delete', platformResource);
+  const usersUnlockDecision = evaluateActionSnapshot(permissions, 'platform.users.unlock', platformResource);
+  const usersManageDecision = evaluateActionSnapshot(permissions, 'platform.users.manage', platformResource);
+  const invitationCreateDecision = evaluateActionSnapshot(permissions, 'invitations.create', platformResource);
+  const userManageAllowed = usersManageDecision.allowed || hasPlatformPermission(PlatformPermission.USER_MANAGE);
+  const canViewUsers = userManageAllowed ||
+    usersReadDecision.allowed ||
+    hasPlatformPermission(PlatformPermission.USER_VIEW);
+  const canReadRoleAssignments = userManageAllowed || hasPlatformPermission(PlatformPermission.AUTHZ_ROLES_VIEW);
+  const actionPermissions: UserManagementActionPermissions = {
+    canUpdateUsers: userManageAllowed || usersUpdateDecision.allowed,
+    canUnlockUsers: userManageAllowed || usersUnlockDecision.allowed,
+    canDeactivateUsers: userManageAllowed || usersDeactivateDecision.allowed,
+    canSoftDeleteUsers: userManageAllowed || hasPlatformPermission(PlatformPermission.USERS_DELETE),
+    canPermanentDeleteUsers: userManageAllowed || usersPermanentDeleteDecision.allowed,
+  };
+  const canCreateUsers = userManageAllowed || usersCreateDecision.allowed || invitationCreateDecision.allowed;
+  const canAccessUserManagement = canViewUsers ||
+    canCreateUsers ||
+    Object.values(actionPermissions).some(Boolean);
+  const roleAssignmentsQ = useRoleAssignments(undefined, { enabled: canAccessUserManagement && canReadRoleAssignments });
 
   // Create user modal
   const createModal = useModal();
-  const [createForm, setCreateForm] = useState<CreateUserRequest>(defaultCreateForm);
+  const [createForm, setCreateForm] = useState<UserInviteForm>(defaultCreateForm);
   const [createLoading, setCreateLoading] = useState(false);
   const [createInviteReveal, setCreateInviteReveal] = useState<InvitationRevealData | null>(null);
   const [localLoginDisabled, setLocalLoginDisabled] = useState(false);
@@ -126,7 +276,7 @@ export default function UserManagement() {
   // Edit user modal
   const editModal = useModal<AdminManagedUser>();
   const [editingUser, setEditingUser] = useState<AdminManagedUser | null>(null);
-  const [editForm, setEditForm] = useState<UpdateUserRequest>({});
+  const [editForm, setEditForm] = useState<UserEditForm>({});
   const [editLoading, setEditLoading] = useState(false);
 
   // Delete user modal
@@ -136,7 +286,7 @@ export default function UserManagement() {
   const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
 
   // Redirect if not admin
-  if (!canManageUsers) {
+  if (!canAccessUserManagement) {
     return (
       <div style={{ padding: 'var(--spacing-7)' }}>
         <h1>Unauthorized</h1>
@@ -175,7 +325,7 @@ export default function UserManagement() {
         };
         setLocalLoginDisabled(capabilities.ssoRequired);
         setEmailConfigured(capabilities.emailConfigured);
-        setCreateForm((current: CreateUserRequest) => ({
+        setCreateForm((current: UserInviteForm) => ({
           ...current,
           sendEmail: getPreferredInvitationDeliveryMethod(capabilities) === 'email',
         }));
@@ -183,7 +333,7 @@ export default function UserManagement() {
       .catch(() => {
         setLocalLoginDisabled(false);
         setEmailConfigured(true);
-        setCreateForm((current: CreateUserRequest) => ({
+        setCreateForm((current: UserInviteForm) => ({
           ...current,
           sendEmail: true,
         }));
@@ -221,15 +371,14 @@ export default function UserManagement() {
   };
 
   const handleCreateUser = async () => {
+    if (!canCreateUsers) return;
+
     try {
       setCreateLoading(true);
       setCreateInviteReveal(null);
 
       const normalizedEmail = String(createForm.email || '').trim().toLowerCase();
-      const result = await authService.createUser({
-        ...createForm,
-        email: normalizedEmail,
-      });
+      const result = await authService.createUser(toCreateUserRequest(createForm, normalizedEmail));
 
       await loadUsers();
 
@@ -258,12 +407,12 @@ export default function UserManagement() {
   };
 
   const handleEditUser = async () => {
-    if (!editingUser) return;
+    if (!editingUser || !actionPermissions.canUpdateUsers) return;
 
     try {
       setEditLoading(true);
 
-      await authService.updateUser(editingUser.id, editForm);
+      await authService.updateUser(editingUser.id, toUpdateUserRequest(editForm));
       notify({ kind: 'success', title: 'User updated successfully!' });
       await loadUsers();
 
@@ -279,7 +428,7 @@ export default function UserManagement() {
   };
 
   const handleDeleteUser = async () => {
-    if (!deleteModal.data) return;
+    if (!deleteModal.data || (!actionPermissions.canDeactivateUsers && !actionPermissions.canSoftDeleteUsers)) return;
 
     try {
       setDeleteLoading(true);
@@ -298,7 +447,7 @@ export default function UserManagement() {
   };
 
   const handlePermanentDeleteUser = async () => {
-    if (!permanentDeleteModal.data) return;
+    if (!permanentDeleteModal.data || !actionPermissions.canPermanentDeleteUsers) return;
 
     try {
       setPermanentDeleteLoading(true);
@@ -317,6 +466,8 @@ export default function UserManagement() {
   };
 
   const handleUnlockUser = async (userId: string) => {
+    if (!actionPermissions.canUnlockUsers) return;
+
     try {
       await authService.unlockUser(userId);
       notify({ kind: 'success', title: 'User account unlocked successfully!' });
@@ -328,30 +479,33 @@ export default function UserManagement() {
   };
 
   const openEditModal = (user: AdminManagedUser) => {
+    if (!actionPermissions.canUpdateUsers) return;
+
     setEditingUser(user);
 
-    const platformRole = user.platformRole === 'admin' ? 'admin' : 'user';
     setEditForm({
       firstName: user.firstName || '',
       lastName: user.lastName || '',
-      platformRole,
+      bootstrapAccess: getUserBootstrapAccess(user),
       isActive: user.isActive,
     });
     editModal.openModal(user);
   };
 
   const openDeleteModal = (user: AdminManagedUser) => {
+    if (!actionPermissions.canDeactivateUsers && !actionPermissions.canSoftDeleteUsers) return;
     deleteModal.openModal(user);
   };
 
   const openPermanentDeleteModal = (user: AdminManagedUser) => {
+    if (!actionPermissions.canPermanentDeleteUsers) return;
     permanentDeleteModal.openModal(user);
   };
 
   const headers = [
     { key: 'email', header: 'Email' },
     { key: 'name', header: 'Name' },
-    { key: 'platformRole', header: 'Platform Role' },
+    { key: 'bootstrapAccess', header: 'Platform Role' },
     { key: 'status', header: 'Status' },
     { key: 'created', header: 'Created' },
     { key: 'actions', header: '' },
@@ -362,18 +516,29 @@ export default function UserManagement() {
     if (!q) return true;
     const name = `${u.firstName || ''} ${u.lastName || ''}`.trim();
     const status = getUserDisplayStatus(u).label.toLowerCase();
-    const hay = [String(u.email || ''), String(name || ''), String(u.platformRole || ''), status]
+    const hay = [String(u.email || ''), String(name || ''), getUserBootstrapAccess(u), status]
       .join(' ')
       .toLowerCase();
     return hay.includes(q);
   });
+
+  const directRoleAssignmentsByUser = new Map<string, RoleAssignment[]>();
+  if (canReadRoleAssignments && Array.isArray(roleAssignmentsQ.data)) {
+    roleAssignmentsQ.data.forEach((assignment) => {
+      const principalId = assignment.principalId || assignment.userId;
+      if (!principalId || !isDirectUserRoleAssignment(assignment, principalId)) return;
+      const assignments = directRoleAssignmentsByUser.get(principalId) || [];
+      assignments.push(assignment);
+      directRoleAssignmentsByUser.set(principalId, assignments);
+    });
+  }
 
   const rows = visibleUsers.map((user) => ({
     statusMeta: getUserDisplayStatus(user),
     id: user.id,
     email: user.email,
     name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || '-',
-    platformRole: user.platformRole || 'user',
+    bootstrapAccess: getUserBootstrapAccess(user),
     status: getUserDisplayStatus(user).label,
     created: user.createdAt ? new Date(Number(user.createdAt)).toLocaleDateString() : '-',
     user, // Store full user object for actions
@@ -405,9 +570,11 @@ export default function UserManagement() {
                 value={searchQuery}
                 placeholder="Search users"
               />
-              <Button kind="primary" renderIcon={Add} onClick={() => createModal.openModal()}>
-                Invite User
-              </Button>
+              {canCreateUsers && (
+                <Button kind="primary" renderIcon={Add} onClick={() => createModal.openModal()}>
+                  Invite User
+                </Button>
+              )}
             </TableToolbarContent>
           </TableToolbar>
           <DataTableSkeleton
@@ -430,9 +597,11 @@ export default function UserManagement() {
                     value={searchQuery}
                     placeholder="Search users"
                   />
-                  <Button kind="primary" renderIcon={Add} onClick={() => createModal.openModal()}>
-                    Invite User
-                  </Button>
+                  {canCreateUsers && (
+                    <Button kind="primary" renderIcon={Add} onClick={() => createModal.openModal()}>
+                      Invite User
+                    </Button>
+                  )}
                 </TableToolbarContent>
               </TableToolbar>
               <Table {...getTableProps()}>
@@ -465,7 +634,12 @@ export default function UserManagement() {
                     const rowActions = getUserRowActions(user, {
                       currentUserId: currentUser?.id,
                       localLoginDisabled,
+                      permissions: actionPermissions,
                     })
+                    const hasRowActions = rowActions.canEdit ||
+                      rowActions.canUnlock ||
+                      rowActions.canDeactivate ||
+                      rowActions.canPermanentDelete;
 
                     const rowProps = getRowProps({ row });
                     const { key, ...otherRowProps } = rowProps;
@@ -474,15 +648,39 @@ export default function UserManagement() {
                       <TableRow key={key} {...otherRowProps}>
                         {row.cells.map((cell) => {
                           // Custom rendering for specific columns
-                          if (cell.info.header === 'platformRole') {
-                            const platformRole = user.platformRole || 'user';
-                            const tagType = getPlatformRoleTagType(platformRole);
-                            const label = getPlatformRoleLabel(platformRole);
+                          if (cell.info.header === 'bootstrapAccess') {
+                            const bootstrapAccess = getUserBootstrapAccess(user);
+                            const tagType = getBootstrapAccessTagType(bootstrapAccess);
+                            const label = getBootstrapAccessLabel(bootstrapAccess);
+                            const directAssignments = directRoleAssignmentsByUser.get(user.id) || [];
                             return (
                               <TableCell key={cell.id}>
                                 <Tag type={tagType}>
                                   {label}
                                 </Tag>
+                                {canReadRoleAssignments ? (
+                                  <div style={{ marginTop: 'var(--spacing-2)', display: 'grid', gap: 'var(--spacing-1)', fontSize: '0.75rem', color: 'var(--cds-text-secondary, #525252)' }}>
+                                    {roleAssignmentsQ.isLoading ? (
+                                      <span>Scoped RBAC: loading assignments</span>
+                                    ) : roleAssignmentsQ.isError ? (
+                                      <span>Scoped RBAC: assignments unavailable</span>
+                                    ) : directAssignments.length > 0 ? (
+                                      <>
+                                        <span>Scoped RBAC: {directAssignments.length} direct assignment{directAssignments.length === 1 ? '' : 's'}</span>
+                                        {directAssignments.slice(0, 2).map((assignment) => (
+                                          <span key={assignment.id} title={formatUserRoleAssignmentSourceLineage(assignment)}>
+                                            {formatUserRoleAssignmentSummary(assignment)}; Lineage: {formatUserRoleAssignmentSourceLineage(assignment)}
+                                          </span>
+                                        ))}
+                                        {directAssignments.length > 2 ? (
+                                          <span>+{directAssignments.length - 2} more direct assignment{directAssignments.length - 2 === 1 ? '' : 's'}</span>
+                                        ) : null}
+                                      </>
+                                    ) : (
+                                      <span>Scoped RBAC: no direct assignments</span>
+                                    )}
+                                  </div>
+                                ) : null}
                               </TableCell>
                             );
                           }
@@ -502,19 +700,22 @@ export default function UserManagement() {
                             return (
                               <TableCell key={cell.id} style={{ textAlign: 'right' }}>
                                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                  <OverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
-                                    <OverflowMenuItem
-                                      itemText="Edit"
-                                      onClick={() => openEditModal(user)}
-                                    />
+                                  {hasRowActions ? (
+                                    <GuardedOverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
+                                    {rowActions.canEdit ? (
+                                      <GuardedOverflowMenuItem
+                                        itemText="Edit"
+                                        onClick={() => openEditModal(user)}
+                                      />
+                                    ) : null}
                                     {rowActions.canUnlock ? (
-                                      <OverflowMenuItem
+                                      <GuardedOverflowMenuItem
                                         itemText="Unlock Account"
                                         onClick={() => handleUnlockUser(user.id)}
                                       />
                                     ) : null}
                                     {rowActions.canDeactivate ? (
-                                      <OverflowMenuItem
+                                      <GuardedOverflowMenuItem
                                         itemText="Deactivate"
                                         onClick={() => openDeleteModal(user)}
                                         hasDivider={!rowActions.canPermanentDelete}
@@ -522,14 +723,15 @@ export default function UserManagement() {
                                       />
                                     ) : null}
                                     {rowActions.canPermanentDelete ? (
-                                      <OverflowMenuItem
+                                      <GuardedOverflowMenuItem
                                         itemText="Delete User"
                                         onClick={() => openPermanentDeleteModal(user)}
                                         hasDivider={rowActions.canDeactivate}
                                         isDelete
                                       />
                                     ) : null}
-                                  </OverflowMenu>
+                                    </GuardedOverflowMenu>
+                                  ) : null}
                                 </div>
                               </TableCell>
                             );
@@ -614,14 +816,14 @@ export default function UserManagement() {
             <div>
               <div style={{ fontSize: 'var(--cds-label-01-font-size, 0.75rem)', marginBottom: 'var(--spacing-3)' }}>Access</div>
               <Select
-                id="create-platformRole"
+                id="create-bootstrap-access"
                 labelText="Platform Role"
-                value={createForm.platformRole || 'user'}
+                value={createForm.bootstrapAccess}
                 onChange={(e) => {
-                  const platformRole = e.target.value as 'admin' | 'user';
+                  const bootstrapAccess = e.target.value as BootstrapAccessValue;
                   setCreateForm({
                     ...createForm,
-                    platformRole,
+                    bootstrapAccess,
                   });
                 }}
                 disabled={createLoading || createCapabilitiesLoading}
@@ -630,7 +832,7 @@ export default function UserManagement() {
                 <SelectItem value="admin" text="Platform Admin" />
               </Select>
               <div style={{ marginTop: 'var(--spacing-3)', fontSize: '0.75rem', color: 'var(--cds-text-secondary, #525252)' }}>
-                {getPlatformRoleDescription(createForm.platformRole)}
+                {getBootstrapAccessDescription(createForm.bootstrapAccess)}
               </div>
             </div>
 
@@ -686,14 +888,14 @@ export default function UserManagement() {
           />
         </div>
         <Select
-          id="edit-platformRole"
+          id="edit-bootstrap-access"
           labelText="Platform Role"
-          value={editForm.platformRole || 'user'}
+          value={editForm.bootstrapAccess || 'user'}
           onChange={(e) => {
-            const platformRole = e.target.value as 'admin' | 'user';
+            const bootstrapAccess = e.target.value as BootstrapAccessValue;
             setEditForm({
               ...editForm,
-              platformRole,
+              bootstrapAccess,
             });
           }}
           disabled={editLoading || editingUser?.id === currentUser?.id}
@@ -702,7 +904,7 @@ export default function UserManagement() {
           <SelectItem value="admin" text="Platform Admin" />
         </Select>
         <div style={{ marginTop: 'var(--spacing-3)', fontSize: '0.75rem', color: 'var(--cds-text-secondary, #525252)' }}>
-          {getPlatformRoleDescription(editForm.platformRole)}
+          {getBootstrapAccessDescription(editForm.bootstrapAccess)}
         </div>
         <Select
           id="edit-isActive"

@@ -8,7 +8,17 @@ import { server } from '@test/mocks/server';
 import { ExecutionTrailPanel } from '@src/features/mission-control/process-instance-detail/components/ExecutionTrailPanel';
 import { buildActivityGroups, buildHistoryContext } from '@src/features/mission-control/process-instance-detail/components/activityDetailUtils';
 
-function renderExecutionTrail({ onActivityClick = () => {} }: { onActivityClick?: (activityId: string) => void } = {}) {
+function renderExecutionTrail({
+  onActivityClick = () => {},
+  executionDetailsAllowed = true,
+  historyTasksAllowed = true,
+  historyUserOperationsAllowed = true,
+}: {
+  onActivityClick?: (activityId: string) => void;
+  executionDetailsAllowed?: boolean;
+  historyTasksAllowed?: boolean;
+  historyUserOperationsAllowed?: boolean;
+} = {}) {
   const sortedActs = [
     {
       id: 'hist-1',
@@ -61,6 +71,33 @@ function renderExecutionTrail({ onActivityClick = () => {} }: { onActivityClick?
         resolveBpmnLoopMarkerVisual={() => null}
         buildHistoryContext={buildHistoryContext}
         onActivityClick={onActivityClick}
+        executionDetailsReadDecision={{
+          actionId: 'engine.runtime.process-instances.execution-details.read',
+          permissionId: 'engine:instance:view',
+          resourceType: 'engine',
+          resourceId: 'engine-1',
+          allowed: executionDetailsAllowed,
+          state: executionDetailsAllowed ? 'allowed' : 'redacted',
+          reason: executionDetailsAllowed ? 'Allowed by current permission snapshot' : 'Missing permission engine:instance:view',
+        }}
+        historyTasksReadDecision={{
+          actionId: 'engine.runtime.history.tasks.read',
+          permissionId: 'engine:instance:view',
+          resourceType: 'engine',
+          resourceId: 'engine-1',
+          allowed: historyTasksAllowed,
+          state: historyTasksAllowed ? 'allowed' : 'hidden',
+          reason: historyTasksAllowed ? 'Allowed by current permission snapshot' : 'Missing permission engine:instance:view',
+        }}
+        historyUserOperationsReadDecision={{
+          actionId: 'engine.runtime.history.user-operations.read',
+          permissionId: 'engine:instance:view',
+          resourceType: 'engine',
+          resourceId: 'engine-1',
+          allowed: historyUserOperationsAllowed,
+          state: historyUserOperationsAllowed ? 'allowed' : 'redacted',
+          reason: historyUserOperationsAllowed ? 'Allowed by current permission snapshot' : 'Missing permission engine:instance:view',
+        }}
       />
     </QueryClientProvider>
   );
@@ -97,7 +134,15 @@ describe('ExecutionTrailPanel', () => {
             },
           ],
           decisions: [],
-          userOperations: [],
+          userOperations: [
+            {
+              id: 'operation-1',
+              operationType: 'Assign',
+              property: 'assignee',
+              newValue: 'demo',
+              timestamp: '2024-01-01T00:00:04Z',
+            },
+          ],
         });
       })
     );
@@ -122,6 +167,24 @@ describe('ExecutionTrailPanel', () => {
     expect(await screen.findByText('approvalReason')).toBeInTheDocument();
     expect(screen.getByText('Need manager sign-off')).toBeInTheDocument();
     expect(screen.getAllByText('Historic tasks').length).toBeGreaterThan(0);
+    expect(screen.getByText('Assign')).toBeInTheDocument();
+  });
+
+  it('withholds historic task and user-operation sections when their specific actions are denied', async () => {
+    const user = userEvent.setup();
+
+    renderExecutionTrail({ historyTasksAllowed: false, historyUserOperationsAllowed: false });
+
+    const overflowMenuTrigger = document.querySelector('.cds--overflow-menu') as HTMLElement | null;
+    expect(overflowMenuTrigger).not.toBeNull();
+    await user.click(overflowMenuTrigger!);
+    await user.click(await screen.findByText('Details'));
+
+    expect(await screen.findByText('Historic tasks unavailable')).toBeInTheDocument();
+    expect(screen.getByText('User operations redacted')).toBeInTheDocument();
+    expect(screen.getAllByText('Missing permission engine:instance:view').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('demo')).not.toBeInTheDocument();
+    expect(screen.queryByText('Assign')).not.toBeInTheDocument();
   });
 
   it('selects an execution when clicking the row body up to the kebab menu', async () => {
@@ -135,5 +198,20 @@ describe('ExecutionTrailPanel', () => {
     await user.click(screen.getByText('5 sec'));
 
     expect(onActivityClick).toHaveBeenCalledWith('approveTask');
+  });
+
+  it('keeps execution drilldown visible but disabled when the read action is denied', async () => {
+    const user = userEvent.setup();
+
+    renderExecutionTrail({ executionDetailsAllowed: false });
+
+    const overflowMenuTrigger = document.querySelector('.cds--overflow-menu') as HTMLElement | null;
+    expect(overflowMenuTrigger).not.toBeNull();
+    await user.click(overflowMenuTrigger!);
+
+    const detailsItem = await screen.findByText('Details');
+    const detailsButton = detailsItem.closest('button');
+    expect(detailsButton).toBeDisabled();
+    expect(requestCount).toBe(0);
   });
 });

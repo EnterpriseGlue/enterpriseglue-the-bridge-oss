@@ -9,6 +9,19 @@ import { server } from '@test/mocks/server';
 import { apiClient } from '@src/shared/api/client';
 import ProjectOverview from '@src/features/starbase/pages/ProjectOverview';
 
+const authMocks = vi.hoisted(() => ({
+  hasPlatformPermission: vi.fn(),
+  hasProjectPermission: vi.fn(),
+}));
+
+vi.mock('@src/shared/hooks/useAuth', () => ({
+  useAuth: () => ({
+    hasPlatformPermission: authMocks.hasPlatformPermission,
+    hasProjectPermission: authMocks.hasProjectPermission,
+    hasEnginePermission: vi.fn(() => false),
+  }),
+}));
+
 vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
   usePlatformSyncSettings: () => ({
     data: {
@@ -51,6 +64,8 @@ describe('ProjectOverview actions', () => {
 
   beforeEach(() => {
     projectName = 'Alpha Project';
+    authMocks.hasPlatformPermission.mockReturnValue(true);
+    authMocks.hasProjectPermission.mockReturnValue(false);
     server.use(
       http.get('/starbase-api/projects', () => {
         return HttpResponse.json([
@@ -150,6 +165,22 @@ describe('ProjectOverview actions', () => {
     expect(Boolean(screen.getByRole('heading', { name: /create project/i }))).toBe(true);
   });
 
+  it('disables create project when project creation permission is missing', async () => {
+    authMocks.hasPlatformPermission.mockReturnValue(false);
+    renderWithProviders();
+
+    await waitFor(() => {
+      expect(Boolean(screen.getByText('Alpha Project'))).toBe(true);
+    });
+
+    const newButton = screen.getByRole('button', { name: /new project/i });
+    expect(newButton).toBeDisabled();
+    expect(newButton).toHaveAttribute('title', 'Missing permission project:create');
+
+    await userEvent.click(newButton);
+    expect(screen.queryByRole('heading', { name: /create project/i })).not.toBeInTheDocument();
+  });
+
   it('renames a project via inline edit', { timeout: 15_000 }, async () => {
     renderWithProviders();
 
@@ -192,4 +223,5 @@ describe('ProjectOverview actions', () => {
       expect(getBlobSpy).toHaveBeenCalledWith('/starbase-api/projects/project-1/download');
     });
   });
+
 });

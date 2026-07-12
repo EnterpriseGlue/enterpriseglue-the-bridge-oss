@@ -3,8 +3,7 @@ import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js'
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js'
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js'
-import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js'
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js'
+import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 
 export type DeployedEditTargetMappingSource = 'git-commit' | 'db-timestamp' | 'db-latest' | 'deployment-timestamp' | 'file-key-match'
 
@@ -64,6 +63,22 @@ async function findLatestFileVersion(fileCommitVersionRepo: any, fileId: string)
     .getRawOne() as Promise<{ versionNumber?: number; commitId?: string } | null>
 }
 
+function hasProjectPermission(userId: string, projectId: string, permission: Permission) {
+  return permissionService.hasPermission(permission, {
+    userId,
+    resourceType: 'project',
+    resourceId: projectId,
+  })
+}
+
+async function canViewProjectFile(userId: string, projectId: string) {
+  return hasProjectPermission(userId, projectId, ProjectPermissions.FILES_VIEW)
+}
+
+async function canEditProjectFile(userId: string, projectId: string) {
+  return hasProjectPermission(userId, projectId, ProjectPermissions.FILES_EDIT)
+}
+
 export async function resolveDeployedEditTarget(params: ResolveDeployedEditTargetParams): Promise<DeployedEditTargetResolution | null> {
   const dataSource = await getDataSource()
   const artifactRepo = dataSource.getRepository(EngineDeploymentArtifact)
@@ -96,10 +111,10 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
     const fileId = toStringValue(row.fileId)
     if (!projectId || !fileId) continue
 
-    const canRead = await projectMemberService.hasAccess(projectId, params.userId)
+    const canRead = await canViewProjectFile(params.userId, projectId)
     if (!canRead) continue
 
-    const canEdit = await projectMemberService.hasRole(projectId, params.userId, EDIT_ROLES)
+    const canEdit = await canEditProjectFile(params.userId, projectId)
     const commitId = toNullableString(row.fileGitCommitId)
     const engineDeploymentId = toStringValue(row.engineDeploymentId)
     const deploymentRow = engineDeploymentId
@@ -165,10 +180,10 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
     const projectId = toStringValue(file.projectId)
     if (!projectId) continue
 
-    const canRead = await projectMemberService.hasAccess(projectId, params.userId)
+    const canRead = await canViewProjectFile(params.userId, projectId)
     if (!canRead) continue
 
-    const canEdit = await projectMemberService.hasRole(projectId, params.userId, EDIT_ROLES)
+    const canEdit = await canEditProjectFile(params.userId, projectId)
     const latestVersion = await findLatestFileVersion(fileCommitVersionRepo, file.id)
     const fileVersionNumber = toFiniteNumber(latestVersion?.versionNumber)
     const commitId = toNullableString(latestVersion?.commitId)

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
@@ -9,7 +10,6 @@ import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js';
 import { In } from 'typeorm';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { engineService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 
 // Type definitions
@@ -28,15 +28,10 @@ interface FolderRow {
 
 const r = Router();
 
-r.get('/starbase-api/projects/:projectId/engine-deployments', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/engine-deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
-
-  const canRead = await projectMemberService.hasAccess(projectId, userId);
-  if (!canRead) {
-    throw Errors.projectNotFound();
-  }
 
   const userEngines = await engineService.getUserEngines(userId);
   const visibleEngineIds = userEngines.map((e) => String(e.engine.id));
@@ -61,17 +56,12 @@ r.get('/starbase-api/projects/:projectId/engine-deployments', apiLimiter, requir
   })));
 }));
 
-r.get('/starbase-api/projects/:projectId/files/:fileId/deployments', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/files/:fileId/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
   const scanLimit = Math.min(5000, Math.max(1, parseInt(String(req.query.scanLimit || '1000'), 10) || 1000));
-
-  const canRead = await projectMemberService.hasAccess(projectId, userId);
-  if (!canRead) {
-    throw Errors.projectNotFound();
-  }
 
   const userEngines = await engineService.getUserEngines(userId);
   const visibleEngineIds = userEngines.map((e) => String(e.engine.id));
@@ -211,17 +201,12 @@ r.get('/starbase-api/projects/:projectId/files/:fileId/deployments', apiLimiter,
   res.json(out);
 }));
 
-r.get('/starbase-api/projects/:projectId/files/:fileId/deployments/history', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/files/:fileId/deployments/history', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit || '200'), 10) || 200));
   const scanLimit = Math.min(20000, Math.max(1, parseInt(String(req.query.scanLimit || '5000'), 10) || 5000));
-
-  const canRead = await projectMemberService.hasAccess(projectId, userId);
-  if (!canRead) {
-    throw Errors.projectNotFound();
-  }
 
   const userEngines = await engineService.getUserEngines(userId);
   const visibleEngineIds = userEngines.map((e) => String(e.engine.id));
@@ -355,15 +340,10 @@ r.get('/starbase-api/projects/:projectId/files/:fileId/deployments/history', api
   res.json(out);
 }));
 
-r.get('/starbase-api/projects/:projectId/engine-deployments/latest', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/engine-deployments/latest', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const scanLimit = Math.min(20000, Math.max(1, parseInt(String(req.query.limit || '5000'), 10) || 5000));
-
-  const canRead = await projectMemberService.hasAccess(projectId, userId);
-  if (!canRead) {
-    throw Errors.projectNotFound();
-  }
 
   const userEngines = await engineService.getUserEngines(userId);
   const visibleEngineIds = userEngines.map((e) => String(e.engine.id));

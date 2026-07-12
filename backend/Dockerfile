@@ -15,7 +15,8 @@ COPY --chown=node:node packages/frontend-host/package.json packages/frontend-hos
 COPY --chown=node:node frontend/package.json frontend/
 
 RUN apk upgrade --no-cache zlib \
-    && pnpm install --frozen-lockfile
+    && pnpm install --frozen-lockfile \
+    && chown -R node:node /repo/node_modules
 
 COPY --chown=node:node backend backend
 

@@ -121,6 +121,30 @@ describe('bpmn-engine-client', () => {
     });
   });
 
+  it('rewrites loopback engine URLs for Docker outbound calls when enabled', async () => {
+    const previousRewrite = process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS;
+    process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS = 'true';
+
+    try {
+      await camundaGet('engine-1', '/version');
+
+      expect(fetch).toHaveBeenCalledWith('http://host.docker.internal:8080/engine-rest/version', {
+        method: 'GET',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          'X-EnterpriseGlue-Engine-Id': 'engine-1',
+          'X-EnterpriseGlue-Operation-Class': 'engine.read',
+        }),
+      });
+    } finally {
+      if (typeof previousRewrite === 'undefined') {
+        delete process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS;
+      } else {
+        process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS = previousRewrite;
+      }
+    }
+  });
+
   it('obtains OAuth2 client credentials tokens server-side before calling the engine', async () => {
     const engineRepo = {
       findOneBy: vi.fn().mockResolvedValue({

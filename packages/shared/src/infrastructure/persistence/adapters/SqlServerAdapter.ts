@@ -5,29 +5,31 @@ import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, RbacRolePermission, SsoAssignmentMapping, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineSet, EngineSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 } from '../entities/index.js';
 
 const entities = [
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, RbacRolePermission, SsoAssignmentMapping, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineSet, EngineSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 ];
@@ -35,7 +37,7 @@ const entities = [
 /**
  * Microsoft SQL Server Database Adapter
  * Implements database-specific operations for SQL Server
- * 
+ *
  * Driver: mssql (pnpm add mssql)
  */
 export class SqlServerAdapter implements DatabaseAdapter {
@@ -45,7 +47,7 @@ export class SqlServerAdapter implements DatabaseAdapter {
   constructor() {
     this.schema = config.mssqlSchema || 'dbo';
     this.logging = config.nodeEnv === 'development';
-    
+
     this.checkDriverAvailability();
     this.normalizeColumnsForSqlServer();
   }
@@ -173,12 +175,12 @@ export class SqlServerAdapter implements DatabaseAdapter {
       'sequences',    // SQL Server 2012+ supports sequences
       'uuid',         // SQL Server has UNIQUEIDENTIFIER
     ];
-    
+
     // Features NOT supported or different in SQL Server:
     // - 'ilike': SQL Server uses COLLATE for case-insensitive, or LIKE with proper collation
     // - 'onConflict': SQL Server uses MERGE instead
     // - 'jsonb': SQL Server has JSON functions but no JSONB type
-    
+
     return supportedFeatures.includes(feature);
   }
 

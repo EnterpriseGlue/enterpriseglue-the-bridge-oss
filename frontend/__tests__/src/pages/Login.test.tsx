@@ -133,7 +133,7 @@ describe('Login', () => {
     );
 
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/', { replace: true });
+      expect(navigateMock).toHaveBeenCalledWith('/t/default/', { replace: true });
     });
   });
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useContext } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Modal,
@@ -16,6 +16,9 @@ import {
 import { Information, ConnectionSignal, TrashCan, Renew } from '@carbon/icons-react'
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
+import { ProjectPermission } from '../../../shared/auth/permissions'
+import { AuthContext } from '../../../contexts/AuthContext'
+import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 
 interface GitConnectionInfo {
   connected: boolean
@@ -35,6 +38,8 @@ interface ProjectGitSettingsProps {
   projectId: string
   open: boolean
   onClose: () => void
+  canManageConnection?: boolean
+  manageConnectionUnavailableReason?: string | null
 }
 
 const PROVIDER_OPTIONS = [
@@ -71,8 +76,30 @@ function TokenInfoPanel() {
   )
 }
 
-export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSettingsProps) {
+export function ProjectGitSettings({
+  projectId,
+  open,
+  onClose,
+  canManageConnection = true,
+  manageConnectionUnavailableReason,
+}: ProjectGitSettingsProps) {
   const queryClient = useQueryClient()
+  const authContext = useContext(AuthContext)
+  const projectResource = { type: 'project' as const, id: projectId }
+  const hasPermissionSnapshot = Boolean(authContext?.permissions)
+  const readConnectionDecision = evaluateActionSnapshot(
+    authContext?.permissions ?? null,
+    'project.git.repositories.read',
+    projectResource
+  )
+  const manageConnectionDecision = evaluateActionSnapshot(
+    authContext?.permissions ?? null,
+    'project.git.repositories.manage',
+    projectResource
+  )
+  const readConnectionUnavailableReason = hasPermissionSnapshot && !readConnectionDecision.allowed
+    ? readConnectionDecision.reason
+    : null
 
   // Form state
   const [providerId, setProviderId] = useState('github')
@@ -88,10 +115,18 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
   const connectionQ = useQuery({
     queryKey: ['git-connection', projectId],
     queryFn: () => apiClient.get<GitConnectionInfo>('/git-api/project-connection', { projectId }),
-    enabled: open && !!projectId,
+    enabled: open && !!projectId && !readConnectionUnavailableReason,
   })
 
   const conn = connectionQ.data
+  const cleanManageConnectionUnavailableReason = hasPermissionSnapshot && !manageConnectionDecision.allowed
+    ? manageConnectionDecision.reason
+    : null
+  const legacyManageConnectionUnavailableReason = manageConnectionUnavailableReason || (
+    canManageConnection ? null : `Missing permission ${ProjectPermission.GIT_CONNECT}`
+  )
+  const gitConnectionUnavailableReason = cleanManageConnectionUnavailableReason || legacyManageConnectionUnavailableReason
+  const canMutateConnection = !gitConnectionUnavailableReason
 
   // Reset form when opening
   useEffect(() => {
@@ -151,6 +186,10 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
   })
 
   const handleConnect = () => {
+    if (gitConnectionUnavailableReason) {
+      setError(gitConnectionUnavailableReason)
+      return
+    }
     if (!repoName.trim() || !token.trim()) return
     setError(null)
     connectMutation.mutate({
@@ -164,12 +203,20 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
   }
 
   const handleUpdateToken = () => {
+    if (gitConnectionUnavailableReason) {
+      setError(gitConnectionUnavailableReason)
+      return
+    }
     if (!updateToken.trim()) return
     setError(null)
     updateTokenMutation.mutate({ projectId, token: updateToken.trim() })
   }
 
   const handleDisconnect = () => {
+    if (gitConnectionUnavailableReason) {
+      setError(gitConnectionUnavailableReason)
+      return
+    }
     if (!confirm('Disconnect this project from Git? The repository will not be deleted.')) return
     disconnectMutation.mutate()
   }
@@ -218,8 +265,28 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
           />
         )}
 
+        {gitConnectionUnavailableReason && (
+          <InlineNotification
+            kind="info"
+            title="Git connection changes unavailable"
+            subtitle={gitConnectionUnavailableReason}
+            hideCloseButton
+            lowContrast
+          />
+        )}
+
+        {readConnectionUnavailableReason && (
+          <InlineNotification
+            kind="info"
+            title="Git connection status unavailable"
+            subtitle={readConnectionUnavailableReason}
+            hideCloseButton
+            lowContrast
+          />
+        )}
+
         {/* Connected state */}
-        {isConnected && conn && (
+        {!readConnectionUnavailableReason && isConnected && conn && (
           <>
             <Tile>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-3)' }}>
@@ -269,6 +336,7 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
                     value={updateToken}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUpdateToken(e.target.value)}
                     placeholder="ghp_... or glpat-..."
+                    disabled={!canMutateConnection}
                     style={{ flex: 1 }}
                   />
                   <Toggletip align="bottom">
@@ -281,7 +349,12 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
                   </Toggletip>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
-                  <Button size="sm" onClick={handleUpdateToken} disabled={!updateToken.trim() || isBusy}>
+                  <Button
+                    size="sm"
+                    onClick={handleUpdateToken}
+                    disabled={!updateToken.trim() || isBusy || !canMutateConnection}
+                    title={gitConnectionUnavailableReason ?? undefined}
+                  >
                     {updateTokenMutation.isPending ? 'Validating...' : 'Test & Save'}
                   </Button>
                   <Button size="sm" kind="ghost" onClick={() => { setShowUpdateToken(false); setUpdateToken('') }}>
@@ -291,10 +364,24 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
               </div>
             ) : (
               <div style={{ display: 'flex', gap: 'var(--spacing-3)' }}>
-                <Button size="sm" kind="tertiary" renderIcon={Renew} onClick={() => setShowUpdateToken(true)}>
+                <Button
+                  size="sm"
+                  kind="tertiary"
+                  renderIcon={Renew}
+                  onClick={() => setShowUpdateToken(true)}
+                  disabled={isBusy || !canMutateConnection}
+                  title={gitConnectionUnavailableReason ?? undefined}
+                >
                   Update Token
                 </Button>
-                <Button size="sm" kind="danger--ghost" renderIcon={TrashCan} onClick={handleDisconnect} disabled={isBusy}>
+                <Button
+                  size="sm"
+                  kind="danger--ghost"
+                  renderIcon={TrashCan}
+                  onClick={handleDisconnect}
+                  disabled={isBusy || !canMutateConnection}
+                  title={gitConnectionUnavailableReason ?? undefined}
+                >
                   Disconnect
                 </Button>
               </div>
@@ -303,7 +390,7 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
         )}
 
         {/* Not connected state */}
-        {!connectionQ.isLoading && !isConnected && (
+        {!readConnectionUnavailableReason && !connectionQ.isLoading && !isConnected && (
           <>
             <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: 0 }}>
               Connect this project to a Git repository. A service token will be used for all push/pull operations — team members don't need their own GitHub account.
@@ -317,6 +404,7 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
               itemToString={(item: typeof PROVIDER_OPTIONS[number] | null) => item?.text || ''}
               selectedItem={PROVIDER_OPTIONS.find(p => p.id === providerId)}
               onChange={({ selectedItem }: any) => setProviderId(selectedItem?.id || 'github')}
+              disabled={!canMutateConnection}
               size="md"
             />
 
@@ -327,6 +415,7 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
                 value={namespace}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNamespace(e.target.value)}
                 placeholder="e.g. my-org"
+                disabled={!canMutateConnection}
                 style={{ flex: 1 }}
               />
               <TextInput
@@ -335,6 +424,7 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
                 value={repoName}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRepoName(e.target.value)}
                 placeholder="e.g. my-project"
+                disabled={!canMutateConnection}
                 style={{ flex: 1 }}
                 invalid={!repoName.trim() && repoName !== ''}
                 invalidText="Required"
@@ -347,6 +437,7 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
               value={branch}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranch(e.target.value)}
               placeholder="main"
+              disabled={!canMutateConnection}
             />
 
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--spacing-3)' }}>
@@ -357,6 +448,7 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
                 value={token}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setToken(e.target.value)}
                 placeholder="ghp_... or glpat-..."
+                disabled={!canMutateConnection}
                 style={{ flex: 1 }}
                 invalid={!token.trim() && token !== ''}
                 invalidText="Required"
@@ -373,7 +465,8 @@ export function ProjectGitSettings({ projectId, open, onClose }: ProjectGitSetti
 
             <Button
               onClick={handleConnect}
-              disabled={!repoName.trim() || !token.trim() || isBusy}
+              disabled={!repoName.trim() || !token.trim() || isBusy || !canMutateConnection}
+              title={gitConnectionUnavailableReason ?? undefined}
             >
               {connectMutation.isPending ? 'Validating & Connecting...' : 'Test & Connect'}
             </Button>

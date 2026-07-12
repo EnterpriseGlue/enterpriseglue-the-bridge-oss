@@ -55,6 +55,8 @@ interface UseProcessesDataProps {
   varOp: 'equals' | 'notEquals' | 'like' | 'greaterThan' | 'lessThan' | 'greaterThanOrEquals' | 'lessThanOrEquals'
   varValue: string
   advancedOpen: boolean
+  processDefinitionsEnabled?: boolean
+  processInstancesEnabled?: boolean
 }
 
 export function useProcessesData({
@@ -76,15 +78,17 @@ export function useProcessesData({
   varOp,
   varValue,
   advancedOpen,
+  processDefinitionsEnabled = true,
+  processInstancesEnabled = true,
 }: UseProcessesDataProps) {
   // Get selected engine from global store
   const selectedEngineId = useSelectedEngine()
 
   // Fetch all process definitions (filtered by engine)
-  const defsQ = useQuery({ 
-    queryKey: ['mission-control', 'defs', selectedEngineId], 
+  const defsQ = useQuery({
+    queryKey: ['mission-control', 'defs', selectedEngineId],
     queryFn: () => listProcessDefinitions(selectedEngineId || undefined),
-    enabled: !!selectedEngineId,
+    enabled: processDefinitionsEnabled && !!selectedEngineId,
   })
 
   // Build list of unique processes for dropdown
@@ -112,15 +116,15 @@ export function useProcessesData({
 
   // Track previous process key to detect process changes
   const prevKeyRef = useRef<string | null>(null)
-  
+
   // Auto-select latest version only when process changes (not on initial load with persisted state)
   useEffect(() => {
     // Skip if definitions haven't loaded yet - don't reset persisted state
     if (!defsQ.data) return
-    
+
     const processChanged = prevKeyRef.current !== null && prevKeyRef.current !== currentKey
     prevKeyRef.current = currentKey
-    
+
     // If no process selected or no versions available, clear version
     if (!currentKey || versions.length === 0) {
       if (selectedVersion !== null) {
@@ -128,7 +132,7 @@ export function useProcessesData({
       }
       return
     }
-    
+
     // Only auto-select if:
     // 1. Process just changed (user selected a different process), OR
     // 2. Selected version doesn't exist in available versions (invalid persisted state)
@@ -148,7 +152,7 @@ export function useProcessesData({
       console.warn(`Process definition not found for key=${currentKey}, version=${selectedVersion}`)
       return null
     },
-    enabled: !!currentKey && !!defsQ.data,
+    enabled: processDefinitionsEnabled && !!currentKey && !!defsQ.data,
   })
 
   const defIdForVersion = defIdQ.data || null
@@ -157,21 +161,21 @@ export function useProcessesData({
   const xmlQ = useQuery({
     queryKey: ['mission-control', 'def-xml', defIdForVersion, selectedEngineId],
     queryFn: () => fetchProcessDefinitionXml(defIdForVersion!, selectedEngineId),
-    enabled: !!defIdForVersion && !!selectedEngineId,
+    enabled: processDefinitionsEnabled && !!defIdForVersion && !!selectedEngineId,
   })
 
   // Fetch activity counts for badges (legacy - active only)
   const countsQ = useQuery({
     queryKey: ['mission-control', 'def-counts', defIdForVersion, selectedEngineId],
     queryFn: () => getActiveActivityCounts(defIdForVersion!, selectedEngineId),
-    enabled: !!defIdForVersion && !!selectedEngineId,
+    enabled: processDefinitionsEnabled && !!defIdForVersion && !!selectedEngineId,
   })
 
   // Fetch activity counts by state for badges
   const countsByStateQ = useQuery({
     queryKey: ['mission-control', 'def-counts-by-state', defIdForVersion, selectedEngineId],
     queryFn: () => fetchActivityCountsByState(defIdForVersion!, selectedEngineId),
-    enabled: !!defIdForVersion && !!selectedEngineId,
+    enabled: processDefinitionsEnabled && !!defIdForVersion && !!selectedEngineId,
   })
 
   // Build preview count body for advanced filters
@@ -183,7 +187,7 @@ export function useProcessesData({
     if (active) body.active = true
     if (suspended) body.suspended = true
     if (incidents) body.withIncident = true
-    
+
     const name = varName.trim()
     if (name) {
       let value: any = varValue
@@ -203,7 +207,7 @@ export function useProcessesData({
   const previewCountQ = useQuery({
     queryKey: ['mission-control', 'proc', 'preview-count', defIdForVersion, currentKey, active, suspended, incidents, varName, varType, varOp, varValue],
     queryFn: () => fetchPreviewCount(previewBody),
-    enabled: advancedOpen && (!!defIdForVersion || !!currentKey),
+    enabled: processInstancesEnabled && advancedOpen && (!!defIdForVersion || !!currentKey),
   })
 
   // Fetch process instances based on filters (filtered by engine)
@@ -212,7 +216,7 @@ export function useProcessesData({
     queryFn: () => {
       const startedAfter = toIso(dateFrom, timeFrom, 'from')
       const startedBefore = toIso(dateTo, timeTo, 'to')
-      
+
       return listProcessInstances({
         engineId: selectedEngineId || undefined,
         active: active || undefined,
@@ -227,7 +231,7 @@ export function useProcessesData({
         startedBefore: startedBefore || undefined,
       })
     },
-    enabled: !!selectedEngineId && (!selectedVersion || !!defIdForVersion),
+    enabled: processInstancesEnabled && !!selectedEngineId && (!selectedVersion || !!defIdForVersion),
   })
 
 

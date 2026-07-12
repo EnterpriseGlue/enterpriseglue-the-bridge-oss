@@ -2,6 +2,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import authzRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/authz.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import {
+  deploymentEligibilityService,
+  engineSetService,
+  permissionService,
+  projectEngineTargetService,
+  serviceAccountService,
+  ssoAssignmentMappingService,
+  ssoEngineAccessSnapshotService,
+  ssoSyncDiagnosticsService,
+} from '@enterpriseglue/shared/services/platform-admin/index.js';
+
+const sharedPermissionServiceMock = vi.hoisted(() => ({
+  hasPermission: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
+  apiLimiter: (_req: any, _res: any, next: any) => next(),
+}));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -10,17 +29,359 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@enterpriseglue/shared/middleware/platformAuth.js', () => ({
-  isPlatformAdmin: vi.fn().mockReturnValue(true),
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
+  getDataSource: vi.fn(),
+}));
+
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
+  logAudit: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  permissionService: sharedPermissionServiceMock,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   policyService: {
     evaluateAndLog: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'User is admin' }),
+    evaluate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'role:platform:admin' }),
+    getAllPolicies: vi.fn().mockResolvedValue([]),
+    createPolicy: vi.fn().mockResolvedValue({ id: 'policy-1' }),
+    updatePolicy: vi.fn().mockResolvedValue(undefined),
+    deletePolicy: vi.fn().mockResolvedValue(undefined),
+    getAuditLog: vi.fn().mockResolvedValue([]),
   },
-  ssoClaimsMappingService: {},
+  permissionService: {
+    getPermissionCatalog: vi.fn().mockReturnValue([{ key: 'platform:authz:check', scope: 'platform', category: 'Access Control', label: 'Check', description: 'Check access' }]),
+    getRoles: vi.fn().mockResolvedValue([
+      { id: 'system.platform.admin', key: 'system.platform.admin', name: 'Platform Admin', scope: 'platform', kind: 'system', isAssignable: true, isArchived: false, permissionCount: 1 },
+      { id: 'system.engine.operator', key: 'system.engine.operator', name: 'Engine Operator', scope: 'engine', kind: 'system', isAssignable: true, isArchived: false, permissionCount: 1 },
+      { id: 'system.engine.deployer', key: 'system.engine.deployer', name: 'Engine Deployer', scope: 'engine', kind: 'system', isAssignable: true, isArchived: false, permissionCount: 1 },
+      { id: 'system.engine.owner', key: 'system.engine.owner', name: 'Engine Owner', scope: 'engine', kind: 'system', isAssignable: false, isArchived: false, permissionCount: 1 },
+      { id: 'custom.engine.operator-lite', key: 'custom.engine.operator-lite', name: 'Operator Lite', scope: 'engine', kind: 'custom', isAssignable: true, isArchived: false, permissionCount: 1 },
+    ]),
+    getRole: vi.fn().mockResolvedValue({ id: 'system.platform.admin', tenantId: null, key: 'system.platform.admin', name: 'Platform Admin', scope: 'platform', kind: 'system', isAssignable: true, isArchived: false, permissionCount: 1, permissions: ['platform:authz:check'] }),
+    createCustomPermission: vi.fn().mockResolvedValue({ id: 'project:custom:approve-release', key: 'project:custom:approve-release' }),
+    createCustomRole: vi.fn().mockResolvedValue({ id: '00000000-0000-4000-8000-000000000010' }),
+    updateCustomRole: vi.fn().mockResolvedValue(undefined),
+    archiveCustomRole: vi.fn().mockResolvedValue(undefined),
+    listRoleAssignments: vi.fn().mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000020', userId: '00000000-0000-4000-8000-000000000001', roleId: 'system.engine.operator', roleName: 'Engine Operator', resourceType: 'engine', resourceId: 'engine-1', source: 'manual' }]),
+    assignRole: vi.fn().mockResolvedValue({ id: '00000000-0000-4000-8000-000000000020' }),
+    removeRoleAssignment: vi.fn().mockResolvedValue(undefined),
+    hasPermission: sharedPermissionServiceMock.hasPermission,
+    getCurrentUserPermissions: vi.fn().mockResolvedValue({
+      userId: 'user-1',
+      platform: ['platform:authz:check'],
+      projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
+      engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
+      authorizationVersion: 'authz:123:test',
+      generatedAt: 123,
+    }),
+    evaluatePermission: vi.fn().mockResolvedValue({ allowed: true, reason: 'role:platform:admin', sources: [{ type: 'legacy-role', role: 'admin' }] }),
+  },
+  apiClientService: {
+    listClients: vi.fn().mockResolvedValue([{ id: 'client-1', name: 'Engine registration', tokenPrefix: 'egac_client', scopes: ['engine:register'], isActive: true }]),
+    createClient: vi.fn().mockResolvedValue({ client: { id: 'client-1', name: 'Engine registration', tokenPrefix: 'egac_client', scopes: ['engine:register'], isActive: true }, token: 'egac_client-1_secret' }),
+    rotateClient: vi.fn().mockResolvedValue({ client: { id: '00000000-0000-4000-8000-000000000040', name: 'Engine registration', tokenPrefix: 'egac_client', scopes: ['engine:register'], isActive: true }, token: 'egac_client-1_new-secret' }),
+    revokeClient: vi.fn().mockResolvedValue(undefined),
+  },
+  serviceAccountService: {
+    listServiceAccounts: vi.fn().mockResolvedValue([{ id: 'service-account-1', name: 'CI deployer', tokenPrefix: 'egsa_service', scopes: ['deployment:execute'], description: 'Deploys from CI', isActive: true }]),
+    createServiceAccount: vi.fn().mockResolvedValue({ account: { id: 'service-account-1', name: 'Release service', tokenPrefix: 'egsa_service', scopes: ['deployment:execute'], description: 'Release automation', isActive: true }, token: 'egsa_service-account-1_secret' }),
+    rotateServiceAccountToken: vi.fn().mockResolvedValue({ account: { id: 'service-account-1', name: 'Release service', tokenPrefix: 'egsa_service', scopes: ['deployment:execute'], description: 'Release automation', isActive: true }, token: 'egsa_service-account-1_new-secret' }),
+    revokeServiceAccount: vi.fn().mockResolvedValue(undefined),
+  },
+  ServiceAccountScopes: {
+    DEPLOYMENT_EXECUTE: 'deployment:execute',
+  },
+  ApiClientScopes: {
+    ENGINE_REGISTER: 'engine:register',
+    DEPLOYMENT_EXECUTE: 'deployment:execute',
+  },
+  ssoClaimsMappingService: {
+    getAllMappings: vi.fn().mockResolvedValue([]),
+    createMapping: vi.fn().mockResolvedValue({ id: 'sso-mapping-1' }),
+    updateMapping: vi.fn().mockResolvedValue(undefined),
+    deleteMapping: vi.fn().mockResolvedValue(undefined),
+    testClaims: vi.fn().mockResolvedValue({ matchedMapping: null, role: 'user' }),
+  },
+  ssoAssignmentMappingService: {
+    getAllMappings: vi.fn().mockResolvedValue([]),
+    createMapping: vi.fn().mockResolvedValue({ id: 'mapping-1' }),
+    updateMapping: vi.fn().mockResolvedValue(undefined),
+    deleteMapping: vi.fn().mockResolvedValue(undefined),
+    testClaims: vi.fn().mockResolvedValue({ matchedMappings: [], assignments: [] }),
+  },
+  ssoEngineAccessSnapshotService: {
+    listSnapshots: vi.fn().mockResolvedValue([
+      {
+        id: 'snapshot-1',
+        tenantId: null,
+        providerId: 'microsoft',
+        mappingId: 'mapping-1',
+        principalType: 'user',
+        principalId: 'user-1',
+        engineId: 'engine-1',
+        providerSubjectIds: ['subject-1'],
+        providerGroupIds: ['group-1'],
+        providerAppRoleIds: [],
+        currentRoleIds: ['system.engine.operator'],
+        previousRoleIds: [],
+        status: 'active',
+        cleanupReason: null,
+        lastSeenAt: 1000,
+        lastSyncedAt: 1000,
+        removedAt: null,
+        details: { source: 'sso' },
+        createdAt: 900,
+        updatedAt: 1000,
+      },
+    ]),
+    listSnapshotsForEngine: vi.fn().mockResolvedValue([
+      {
+        id: 'snapshot-1',
+        tenantId: null,
+        providerId: 'microsoft',
+        mappingId: 'mapping-1',
+        principalType: 'user',
+        principalId: 'user-1',
+        engineId: 'engine-1',
+        providerSubjectIds: ['subject-1'],
+        providerGroupIds: ['group-1'],
+        providerAppRoleIds: [],
+        currentRoleIds: ['system.engine.operator'],
+        previousRoleIds: [],
+        status: 'active',
+        cleanupReason: null,
+        lastSeenAt: 1000,
+        lastSyncedAt: 1000,
+        removedAt: null,
+        details: { source: 'sso' },
+        createdAt: 900,
+        updatedAt: 1000,
+      },
+    ]),
+    previewTransitionCleanup: vi.fn().mockResolvedValue({
+      previewCorrelationId: 'preview-1',
+      engineId: 'engine-1',
+      candidates: [
+        {
+          manualAssignmentId: 'manual-1',
+          ssoAssignmentId: 'sso-1',
+          principalType: 'user',
+          principalId: 'user-1',
+          engineId: 'engine-1',
+          manualRoleId: 'system.engine.operator',
+          ssoRoleId: 'system.engine.operator',
+          sourceMappingId: 'mapping-1',
+          lastSnapshotStatus: 'active',
+          recommendedAction: 'remove_manual_duplicate',
+        },
+      ],
+    }),
+    applyTransitionCleanup: vi.fn().mockResolvedValue({
+      previewCorrelationId: 'preview-1',
+      engineId: 'engine-1',
+      removedAssignmentIds: ['manual-1'],
+      removedCount: 1,
+    }),
+  },
+  ssoSyncDiagnosticsService: {
+    listRuns: vi.fn().mockResolvedValue([
+      {
+        id: '00000000-0000-4000-8000-000000000070',
+        tenantId: null,
+        providerId: 'microsoft',
+        userId: '00000000-0000-4000-8000-000000000001',
+        trigger: 'login',
+        status: 'failed',
+        startedAt: 1000,
+        completedAt: 1500,
+        groupMembershipsCreated: 1,
+        groupMembershipsUpdated: 0,
+        groupMembershipsRemoved: 0,
+        assignmentsCreated: 1,
+        assignmentsUpdated: 0,
+        assignmentsRemoved: 0,
+        errorCode: 'sync_failed',
+        errorMessage: 'Engine materialization failed',
+        details: '{}',
+      },
+    ]),
+    listEvents: vi.fn().mockResolvedValue([
+      {
+        id: '00000000-0000-4000-8000-000000000071',
+        tenantId: null,
+        providerId: 'microsoft',
+        runId: '00000000-0000-4000-8000-000000000070',
+        severity: 'error',
+        type: 'engine_assignment.materialization_failed',
+        userId: '00000000-0000-4000-8000-000000000001',
+        mappingType: 'sso_assignment',
+        mappingId: 'mapping-1',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+        message: 'Engine materialization failed',
+        details: '{}',
+        createdAt: 1400,
+      },
+    ]),
+    runReconciliationDiagnostics: vi.fn().mockResolvedValue({
+      runId: '00000000-0000-4000-8000-000000000072',
+      scannedGroupMappings: 1,
+      scannedAssignmentMappings: 2,
+      scannedGroupMemberships: 3,
+      scannedAssignments: 4,
+      warnings: 1,
+      errors: 0,
+    }),
+    runProviderIdentityCheck: vi.fn().mockResolvedValue({
+      runId: '00000000-0000-4000-8000-000000000073',
+      scannedIdentities: 2,
+      checkedIdentities: 1,
+      unsupportedIdentities: 1,
+      activeIdentities: 1,
+      inactiveIdentities: 0,
+      deletedIdentities: 0,
+      unknownIdentities: 0,
+      failedIdentities: 0,
+    }),
+    runSnapshotReconciliation: vi.fn().mockResolvedValue({
+      runId: '00000000-0000-4000-8000-000000000074',
+      scannedIdentities: 2,
+      replayedIdentities: 1,
+      skippedIdentities: 1,
+      failedIdentities: 0,
+      refreshedIdentities: 1,
+      refreshUnsupportedIdentities: 0,
+      refreshFailedIdentities: 0,
+      groupMembershipsCreated: 1,
+      groupMembershipsUpdated: 0,
+      groupMembershipsRemoved: 0,
+      assignmentsCreated: 1,
+      assignmentsUpdated: 0,
+      assignmentsRemoved: 0,
+    }),
+    runReconciliationCleanup: vi.fn().mockResolvedValue({
+      runId: '00000000-0000-4000-8000-000000000075',
+      scannedGroupMemberships: 3,
+      scannedAssignments: 4,
+      groupMembershipsRemoved: 1,
+      assignmentsRemoved: 2,
+    }),
+  },
+  projectEngineTargetService: {
+    listTargets: vi.fn().mockResolvedValue([
+      {
+        id: 'target-1',
+        tenantId: null,
+        projectId: 'project-1',
+        projectName: 'Project One',
+        engineId: 'engine-1',
+        engineName: 'Engine One',
+        engineBaseUrl: 'https://engine.example.com',
+        environment: null,
+        status: 'active',
+        source: 'manual',
+        sourceRef: null,
+        externalSystemId: null,
+        externalProjectId: null,
+        externalEngineId: null,
+        externalTargetId: null,
+        allowManualDeploy: true,
+        allowCiDeploy: false,
+        allowApiDeploy: false,
+        allowImport: true,
+        createdById: 'user-1',
+        approvedById: null,
+        approvalStatus: 'not_required',
+        approvedAt: null,
+        policyTags: [],
+        diagnostics: null,
+        lastSeenAt: 123,
+        createdAt: 100,
+        updatedAt: 123,
+      },
+    ]),
+    getTarget: vi.fn().mockResolvedValue({
+      id: 'target-1',
+      tenantId: null,
+      projectId: 'project-1',
+      projectName: 'Project One',
+      engineId: 'engine-1',
+      engineName: 'Engine One',
+      engineBaseUrl: 'https://engine.example.com',
+      environment: null,
+      status: 'active',
+      source: 'manual',
+      sourceRef: null,
+      allowManualDeploy: true,
+      allowCiDeploy: false,
+      allowApiDeploy: false,
+      allowImport: true,
+      createdById: 'user-1',
+      approvedById: null,
+      lastSeenAt: 123,
+      createdAt: 100,
+      updatedAt: 123,
+    }),
+    createTarget: vi.fn().mockResolvedValue({ id: 'target-1' }),
+    updateTarget: vi.fn().mockResolvedValue(undefined),
+    archiveTarget: vi.fn().mockResolvedValue(undefined),
+    syncLegacyAccessForProject: vi.fn().mockResolvedValue({ createdOrUpdated: 1 }),
+  },
+  deploymentEligibilityService: {
+    evaluate: vi.fn().mockResolvedValue({
+      allowed: true,
+      decision: 'allow',
+      mode: 'manual',
+      projectId: 'project-1',
+      engineId: 'engine-1',
+      checks: [{ id: 'project_engine_target.active', allowed: true, reason: 'Project-engine target allows manual mode' }],
+      reasons: [],
+    }),
+  },
+  engineSetService: {
+    materializeEngineSetsForEngine: vi.fn().mockResolvedValue([{ engineSetId: 'set-1', matched: 1, created: 0, updated: 1, removed: 0 }]),
+  },
+  AllPermissions: {
+    AUTHZ_CHECK: 'platform:authz:check',
+  },
+  EnginePermissions: {
+    MEMBERS_MANAGE: 'engine:members:manage',
+    MEMBERS_VIEW: 'engine:members:view',
+    INSTANCE_VIEW: 'engine:instance:view',
+  },
+  PlatformPermissions: {
+    ENGINE_REGISTRATION_MANAGE: 'platform:engine-registration:manage',
+    ENGINE_SETS_VIEW: 'platform:engine-sets:view',
+    ENGINE_SETS_MANAGE: 'platform:engine-sets:manage',
+    PROJECT_ENGINE_TARGETS_VIEW: 'platform:project-engine-targets:view',
+    PROJECT_ENGINE_TARGETS_MANAGE: 'platform:project-engine-targets:manage',
+    SETTINGS_MANAGE: 'platform:settings:manage',
+    AUDIT_VIEW: 'platform:audit:view',
+    AUTHZ_ROLES_VIEW: 'platform:authz:roles:view',
+    AUTHZ_ROLES_MANAGE: 'platform:authz:roles:manage',
+    AUTHZ_CHECK: 'platform:authz:check',
+    SSO_ASSIGNMENTS_VIEW: 'platform:sso-assignments:view',
+    SSO_ASSIGNMENTS_MANAGE: 'platform:sso-assignments:manage',
+  },
+  ProjectPermissions: {
+    MEMBERS_MANAGE: 'project:members:manage',
+    MEMBERS_VIEW: 'project:members:view',
+    FILES_VIEW: 'project:files:view',
+    FILES_EDIT: 'project:files:edit',
+  },
   Permission: {},
   EvaluationContext: {},
+  SYSTEM_ROLE_IDS: {
+    PROJECT_DEVELOPER: 'system.project.developer',
+    PROJECT_DEPLOYER: 'system.project.deployer',
+    PROJECT_EDITOR: 'system.project.editor',
+    PROJECT_VIEWER: 'system.project.viewer',
+    ENGINE_OPERATOR: 'system.engine.operator',
+    ENGINE_DEPLOYER: 'system.engine.deployer',
+  },
 }));
 
 describe('platform-admin authz routes', () => {
@@ -32,6 +393,212 @@ describe('platform-admin authz routes', () => {
     app.use(express.json());
     app.use(authzRouter);
     vi.clearAllMocks();
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity.name === 'ExternalEngineRegistration') {
+          return {
+            find: vi.fn().mockResolvedValue([
+              {
+                id: 'registration-1',
+                engineId: 'engine-1',
+                externalId: 'cluster-a/prod',
+                labelsJson: JSON.stringify({ environment: 'prod', region: 'eu' }),
+                registrationSource: 'external_api',
+                apiClientId: 'client-1',
+                externalSystemId: 'system-1',
+                managementMode: 'hybrid',
+                fieldOwnershipJson: JSON.stringify({ connection: 'external', auth: 'external', display: 'manual' }),
+                driftStatus: 'in_sync',
+                lifecycleStatus: 'active',
+                lastExternalSyncAt: 1000,
+                capabilitiesJson: JSON.stringify({ operations: ['engine.read'], supportLevel: 'compatible' }),
+                capabilityStatus: 'mismatch',
+                lastRegisteredAt: 1000,
+                createdAt: 900,
+                updatedAt: 1000,
+              },
+            ]),
+          };
+        }
+        if (entity.name === 'ExternalEngineSystem') {
+          const system = {
+            id: 'system-1',
+            tenantId: null,
+            key: 'fleet-manager',
+            name: 'Fleet Manager',
+            description: 'External CMDB',
+            defaultManagementMode: 'hybrid',
+            defaultFieldOwnershipJson: JSON.stringify({ connection: 'external', auth: 'external', display: 'manual' }),
+            isActive: true,
+            createdById: 'user-1',
+            createdAt: 900,
+            updatedAt: 1000,
+          };
+          return {
+            find: vi.fn().mockResolvedValue([system]),
+            findOne: vi.fn().mockResolvedValue(null),
+            findOneBy: vi.fn().mockResolvedValue(system),
+            insert: vi.fn().mockResolvedValue(undefined),
+            update: vi.fn().mockResolvedValue(undefined),
+          };
+        }
+        if (entity.name === 'Engine') {
+          const engine = {
+            id: 'engine-1',
+            tenantId: null,
+            name: 'External Engine',
+            baseUrl: 'https://engine.example.com',
+            type: 'camunda8',
+            externalId: 'cluster-a/prod',
+            labelsJson: JSON.stringify({ environment: 'prod', region: 'eu' }),
+            registrationSource: 'external_api',
+            externalSystemId: 'system-1',
+            managementMode: 'hybrid',
+            fieldOwnershipJson: JSON.stringify({ connection: 'external', auth: 'external', display: 'manual' }),
+            driftStatus: 'in_sync',
+            lifecycleStatus: 'active',
+            lastExternalSyncAt: 1000,
+            capabilitiesJson: JSON.stringify({ operations: ['engine.read'], supportLevel: 'compatible' }),
+            capabilityStatus: 'mismatch',
+            externalUpdatedAt: 1000,
+            createdAt: 900,
+            updatedAt: 1000,
+          };
+          return {
+            find: vi.fn().mockResolvedValue([engine]),
+            findOne: vi.fn().mockResolvedValue(engine),
+          };
+        }
+        if (entity.name === 'File') {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'file-1',
+              projectId: 'project-1',
+              name: 'process.bpmn',
+              type: 'bpmn',
+              bpmnProcessId: 'invoice',
+              dmnDecisionId: null,
+            }),
+          };
+        }
+        if (entity.name === 'Project') {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'project-1',
+              tenantId: null,
+              name: 'Project One',
+            }),
+          };
+        }
+        if (entity.name === 'ProjectEngineTarget') {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'target-1',
+              tenantId: null,
+              projectId: 'project-1',
+              engineId: 'engine-1',
+              status: 'active',
+            }),
+          };
+        }
+        if (entity.name === 'AuditLog') {
+          return {
+            find: vi.fn().mockResolvedValue([
+              {
+                id: 'audit-1',
+                userId: 'admin-1',
+                action: 'engine.external_registration.update',
+                resourceType: 'engine',
+                resourceId: 'engine-1',
+                ipAddress: '127.0.0.1',
+                userAgent: 'vitest',
+                details: JSON.stringify({ externalId: 'cluster-a/prod', labels: { environment: 'prod' } }),
+                createdAt: 1000,
+              },
+            ]),
+          };
+        }
+        if (entity.name === 'RbacRoleAssignment') {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: '00000000-0000-4000-8000-000000000020',
+              userId: '00000000-0000-4000-8000-000000000001',
+              roleId: 'custom.engine.operator-lite',
+              resourceType: 'engine',
+              resourceId: 'engine-1',
+              source: 'manual',
+            }),
+          };
+        }
+        return { find: vi.fn().mockResolvedValue([]) };
+      },
+    });
+    vi.mocked(permissionService.getRole).mockResolvedValue({
+      id: 'system.platform.admin',
+      tenantId: null,
+      key: 'system.platform.admin',
+      name: 'Platform Admin',
+      description: null,
+      scope: 'platform',
+      kind: 'system',
+      isEditable: false,
+      isAssignable: true,
+      isArchived: false,
+      permissionCount: 1,
+      permissions: ['platform:authz:check'] as any,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    sharedPermissionServiceMock.hasPermission.mockResolvedValue(true);
+    vi.mocked(projectEngineTargetService.listTargets).mockResolvedValue([
+      {
+        id: 'target-1',
+        tenantId: null,
+        projectId: 'project-1',
+        projectName: 'Project One',
+        engineId: 'engine-1',
+        engineName: 'Engine One',
+        engineBaseUrl: 'https://engine.example.com',
+        environment: null,
+        status: 'active',
+        source: 'manual',
+        sourceRef: null,
+        externalSystemId: null,
+        externalProjectId: null,
+        externalEngineId: null,
+        externalTargetId: null,
+        allowManualDeploy: true,
+        allowCiDeploy: false,
+        allowApiDeploy: false,
+        allowImport: true,
+        createdById: 'user-1',
+        approvedById: null,
+        approvalStatus: 'not_required',
+        approvedAt: null,
+        policyTags: [],
+        diagnostics: null,
+        lastSeenAt: 123,
+        createdAt: 100,
+        updatedAt: 123,
+      },
+    ]);
+    vi.mocked(projectEngineTargetService.createTarget).mockResolvedValue({ id: 'target-1' });
+    vi.mocked(projectEngineTargetService.updateTarget).mockResolvedValue(undefined);
+    vi.mocked(projectEngineTargetService.archiveTarget).mockResolvedValue(undefined);
+    vi.mocked(projectEngineTargetService.syncLegacyAccessForProject).mockResolvedValue({ createdOrUpdated: 1 });
+    vi.mocked(deploymentEligibilityService.evaluate).mockResolvedValue({
+      allowed: true,
+      decision: 'allow',
+      mode: 'manual',
+      projectId: 'project-1',
+      engineId: 'engine-1',
+      checks: [{ id: 'project_engine_target.active', allowed: true, reason: 'Project-engine target allows manual mode' }],
+      reasons: [],
+    });
+    vi.mocked(ssoAssignmentMappingService.createMapping).mockResolvedValue({ id: 'mapping-1' });
+    vi.mocked(ssoAssignmentMappingService.updateMapping).mockResolvedValue(undefined);
+    vi.mocked(ssoAssignmentMappingService.deleteMapping).mockResolvedValue(undefined);
+    vi.mocked(ssoAssignmentMappingService.testClaims).mockResolvedValue({ matchedMappings: [], assignments: [] });
   });
 
   it('checks authorization', async () => {
@@ -41,5 +608,1283 @@ describe('platform-admin authz routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.allowed).toBeDefined();
+  });
+
+  it('returns current user effective permissions', async () => {
+    const response = await request(app).get('/api/authz/me/permissions');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      userId: 'user-1',
+      platform: ['platform:authz:check'],
+      projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
+      engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
+      authorizationVersion: 'authz:123:test',
+      generatedAt: 123,
+    });
+  });
+
+  it('lists the permission catalog', async () => {
+    const response = await request(app).get('/api/authz/permissions');
+
+    expect(response.status).toBe(200);
+    expect(response.body[0].key).toBe('platform:authz:check');
+  });
+
+  it('blocks platform admin routes through action middleware before handlers run', async () => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(false);
+    vi.mocked(permissionService.getPermissionCatalog).mockClear();
+
+    const response = await request(app).get('/api/authz/permissions');
+
+    expect(response.status).toBe(403);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'platform:authz:roles:view',
+      expect.objectContaining({
+        userId: 'user-1',
+        resourceType: 'platform',
+      })
+    );
+    expect(permissionService.getPermissionCatalog).not.toHaveBeenCalled();
+  });
+
+  it('creates custom permissions', async () => {
+    const response = await request(app)
+      .post('/api/authz/permissions')
+      .send({
+        key: 'project:custom:approve-release',
+        scope: 'project',
+        category: 'Release',
+        label: 'Approve release',
+        description: 'Allows approving a release gate.',
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({
+      id: 'project:custom:approve-release',
+      key: 'project:custom:approve-release',
+    });
+    expect(permissionService.createCustomPermission).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'project:custom:approve-release',
+      scope: 'project',
+      createdById: 'user-1',
+    }));
+  });
+
+  it('lists RBAC roles', async () => {
+    const response = await request(app).get('/api/authz/roles');
+
+    expect(response.status).toBe(200);
+    expect(response.body[0].id).toBe('system.platform.admin');
+  });
+
+  it('gets role details', async () => {
+    const response = await request(app).get('/api/authz/roles/system.platform.admin');
+
+    expect(response.status).toBe(200);
+    expect(response.body.permissions).toContain('platform:authz:check');
+  });
+
+  it('creates custom roles', async () => {
+    const response = await request(app)
+      .post('/api/authz/roles')
+      .send({
+        name: 'Engine Operators',
+        scope: 'engine',
+        permissionIds: ['engine:deploy'],
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.id).toBe('00000000-0000-4000-8000-000000000010');
+  });
+
+  it('rejects deny fields on custom role creation', async () => {
+    const response = await request(app)
+      .post('/api/authz/roles')
+      .send({
+        name: 'Deny Role',
+        scope: 'engine',
+        permissionIds: ['engine:deploy:view'],
+        denyPermissionIds: ['engine:deploy'],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: 'denyPermissionIds',
+        message: 'Custom roles are allow-only; use authorization policies for deny rules',
+      }),
+    ]));
+    expect(permissionService.createCustomRole).not.toHaveBeenCalled();
+  });
+
+  it('assigns and removes manual roles', async () => {
+    const createResponse = await request(app)
+      .post('/api/authz/role-assignments')
+      .send({
+        principalType: 'user',
+        principalId: '00000000-0000-4000-8000-000000000001',
+        roleId: 'system.engine.operator',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+      });
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.id).toBe('00000000-0000-4000-8000-000000000020');
+
+    const listResponse = await request(app).get('/api/authz/role-assignments');
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body[0].source).toBe('manual');
+
+    const deleteResponse = await request(app).delete('/api/authz/role-assignments/00000000-0000-4000-8000-000000000020');
+    expect(deleteResponse.status).toBe(204);
+  });
+
+  it('allows scoped resource managers to list assignable custom roles for their resource scope', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'engine:members:manage'
+    );
+
+    const response = await request(app)
+      .get('/api/authz/roles?scope=engine&kind=custom&assignable=true&resourceType=engine&resourceId=engine-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      expect.objectContaining({
+        id: 'custom.engine.operator-lite',
+        scope: 'engine',
+        kind: 'custom',
+      }),
+    ]);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'engine:members:manage',
+      expect.objectContaining({
+        userId: 'user-1',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+      })
+    );
+  });
+
+  it('allows scoped resource managers to manage manual custom role assignments for their resource', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'engine:members:manage'
+    );
+    vi.mocked(permissionService.getRole).mockResolvedValue({
+      id: 'custom.engine.operator-lite',
+      tenantId: null,
+      key: 'custom.engine.operator-lite',
+      name: 'Operator Lite',
+      description: null,
+      scope: 'engine',
+      kind: 'custom',
+      isEditable: true,
+      isAssignable: true,
+      isArchived: false,
+      permissionCount: 1,
+      permissions: ['engine:instance:view'] as any,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    const listResponse = await request(app)
+      .get('/api/authz/role-assignments?resourceType=engine&resourceId=engine-1');
+    expect(listResponse.status).toBe(200);
+
+    const createResponse = await request(app)
+      .post('/api/authz/role-assignments')
+      .send({
+        principalType: 'user',
+        principalId: '00000000-0000-4000-8000-000000000001',
+        roleId: 'custom.engine.operator-lite',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+      });
+    expect(createResponse.status).toBe(201);
+
+    const deleteResponse = await request(app).delete('/api/authz/role-assignments/00000000-0000-4000-8000-000000000020');
+    expect(deleteResponse.status).toBe(204);
+  });
+
+  it('allows scoped resource managers to list and assign delegated system roles for their resource', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'engine:members:manage'
+    );
+    vi.mocked(permissionService.getRole).mockResolvedValue({
+      id: 'system.engine.operator',
+      tenantId: null,
+      key: 'system.engine.operator',
+      name: 'Engine Operator',
+      description: null,
+      scope: 'engine',
+      kind: 'system',
+      isEditable: false,
+      isAssignable: true,
+      isArchived: false,
+      permissionCount: 1,
+      permissions: ['engine:instance:view'] as any,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    const rolesResponse = await request(app)
+      .get('/api/authz/roles?scope=engine&assignable=true&resourceType=engine&resourceId=engine-1');
+    expect(rolesResponse.status).toBe(200);
+    expect(rolesResponse.body.map((role: any) => role.id)).toEqual([
+      'system.engine.operator',
+      'system.engine.deployer',
+      'custom.engine.operator-lite',
+    ]);
+
+    const createResponse = await request(app)
+      .post('/api/authz/role-assignments')
+      .send({
+        principalType: 'group',
+        principalId: 'group-1',
+        roleId: 'system.engine.operator',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+      });
+    expect(createResponse.status).toBe(201);
+    expect(permissionService.assignRole).toHaveBeenCalledWith(expect.objectContaining({
+      principalType: 'group',
+      principalId: 'group-1',
+      roleId: 'system.engine.operator',
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+    }));
+
+    const deleteResponse = await request(app).delete('/api/authz/role-assignments/00000000-0000-4000-8000-000000000020');
+    expect(deleteResponse.status).toBe(204);
+  });
+
+  it('blocks scoped resource managers from assigning protected owner and delegate system roles', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'engine:members:manage'
+    );
+    vi.mocked(permissionService.getRole).mockResolvedValue({
+      id: 'system.engine.owner',
+      tenantId: null,
+      key: 'system.engine.owner',
+      name: 'Engine Owner',
+      description: null,
+      scope: 'engine',
+      kind: 'system',
+      isEditable: false,
+      isAssignable: false,
+      isArchived: false,
+      permissionCount: 1,
+      permissions: ['engine:members:manage'] as any,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    const createResponse = await request(app)
+      .post('/api/authz/role-assignments')
+      .send({
+        principalType: 'user',
+        principalId: '00000000-0000-4000-8000-000000000001',
+        roleId: 'system.engine.owner',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+      });
+    expect(createResponse.status).toBe(403);
+    expect(permissionService.assignRole).not.toHaveBeenCalled();
+  });
+
+  it('rejects legacy userId-only role assignment create bodies', async () => {
+    const response = await request(app)
+      .post('/api/authz/role-assignments')
+      .send({
+        userId: '00000000-0000-4000-8000-000000000001',
+        roleId: 'system.engine.operator',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+      });
+
+    expect(response.status).toBe(400);
+    expect(permissionService.assignRole).not.toHaveBeenCalled();
+  });
+
+  it('allows access control readers to read roles and permissions without platform admin role', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:authz:roles:view'
+    );
+
+    const permissionsResponse = await request(app).get('/api/authz/permissions');
+    expect(permissionsResponse.status).toBe(200);
+
+    const rolesResponse = await request(app).get('/api/authz/roles');
+    expect(rolesResponse.status).toBe(200);
+
+    const roleResponse = await request(app).get('/api/authz/roles/system.platform.admin');
+    expect(roleResponse.status).toBe(200);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'platform:authz:roles:view',
+      expect.objectContaining({
+        userId: 'user-1',
+        resourceType: 'platform',
+      })
+    );
+  });
+
+  it('allows access control managers to mutate custom role catalog without platform admin role', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:authz:roles:manage'
+    );
+
+    const roleResponse = await request(app)
+      .post('/api/authz/roles')
+      .send({
+        name: 'Engine Operators',
+        scope: 'engine',
+        permissionIds: ['engine:deploy'],
+      });
+    expect(roleResponse.status).toBe(201);
+
+    const permissionResponse = await request(app)
+      .post('/api/authz/permissions')
+      .send({
+        key: 'project:custom:approve-release',
+        scope: 'project',
+        category: 'Release',
+        label: 'Approve release',
+      });
+    expect(permissionResponse.status).toBe(201);
+  });
+
+  it('allows effective access evaluators to evaluate permissions without platform admin role', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:authz:check'
+    );
+
+    const response = await request(app)
+      .post('/api/authz/evaluate')
+      .send({ userId: '00000000-0000-4000-8000-000000000001', permission: 'platform:authz:check', resourceType: 'platform' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.allowed).toBe(true);
+  });
+
+  it('allows external engine registration managers to manage registration inventory without platform admin role', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:engine-registration:manage' ||
+      permission === 'platform:api-clients:view'
+    );
+
+    const clientsResponse = await request(app).get('/api/authz/api-clients');
+    expect(clientsResponse.status).toBe(200);
+
+    const enginesResponse = await request(app).get('/api/authz/external-engines');
+    expect(enginesResponse.status).toBe(200);
+  });
+
+  it('allows SSO assignment viewers and managers without platform admin role', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:sso-assignments:view'
+    );
+
+    const listResponse = await request(app).get('/api/authz/sso-assignment-mappings');
+    expect(listResponse.status).toBe(200);
+
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:sso-assignments:manage'
+    );
+    const createResponse = await request(app)
+      .post('/api/authz/sso-assignment-mappings')
+      .send({
+        claimType: 'group',
+        claimKey: 'groups',
+        claimValue: 'Camunda Operators',
+        targetSelectorType: 'all_engines',
+        targetRoleId: 'system.engine.operator',
+        riskAcknowledged: true,
+      });
+
+    expect(createResponse.status).toBe(201);
+  });
+
+  it('lists SSO sync diagnostics with SSO assignment read permission', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:sso-assignments:view'
+    );
+
+    const runsResponse = await request(app)
+      .get('/api/authz/sso-sync-runs')
+      .query({ providerId: 'microsoft', status: 'failed', trigger: 'login', limit: 5 });
+
+    expect(runsResponse.status).toBe(200);
+    expect(runsResponse.body[0]).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000070',
+      status: 'failed',
+      errorMessage: 'Engine materialization failed',
+    });
+    expect(ssoSyncDiagnosticsService.listRuns).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'microsoft',
+      status: 'failed',
+      trigger: 'login',
+      limit: 5,
+    }));
+
+    const eventsResponse = await request(app)
+      .get('/api/authz/sso-sync-runs/00000000-0000-4000-8000-000000000070/events')
+      .query({ severity: 'error', limit: 25 });
+
+    expect(eventsResponse.status).toBe(200);
+    expect(eventsResponse.body[0]).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000071',
+      severity: 'error',
+      type: 'engine_assignment.materialization_failed',
+    });
+    expect(ssoSyncDiagnosticsService.listEvents).toHaveBeenCalledWith(expect.objectContaining({
+      runId: '00000000-0000-4000-8000-000000000070',
+      severity: 'error',
+      limit: 25,
+    }));
+  });
+
+  it('lists SSO engine access snapshots with SSO assignment read permission', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:sso-assignments:view'
+    );
+
+    const listResponse = await request(app)
+      .get('/api/authz/sso-engine-access-snapshots')
+      .query({ providerId: 'microsoft', status: 'active', limit: 25 });
+
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body[0]).toMatchObject({
+      id: 'snapshot-1',
+      mappingId: 'mapping-1',
+      engineId: 'engine-1',
+      status: 'active',
+    });
+    expect(ssoEngineAccessSnapshotService.listSnapshots).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: 'microsoft',
+      status: 'active',
+      limit: 25,
+    }));
+
+    const detailResponse = await request(app).get('/api/authz/sso-engine-access-snapshots/engine-1');
+
+    expect(detailResponse.status).toBe(200);
+    expect(ssoEngineAccessSnapshotService.listSnapshotsForEngine).toHaveBeenCalledWith('engine-1', null);
+  });
+
+  it('previews and applies explicit engine access transition cleanup with SSO assignment manage permission', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:sso-assignments:manage'
+    );
+
+    const previewResponse = await request(app).post('/api/engines/engine-1/access/transition-cleanup-preview');
+    expect(previewResponse.status).toBe(200);
+    expect(previewResponse.body).toMatchObject({
+      previewCorrelationId: 'preview-1',
+      engineId: 'engine-1',
+      candidates: [expect.objectContaining({ manualAssignmentId: 'manual-1', ssoAssignmentId: 'sso-1' })],
+    });
+    expect(ssoEngineAccessSnapshotService.previewTransitionCleanup).toHaveBeenCalledWith('engine-1', null);
+
+    const applyResponse = await request(app)
+      .post('/api/engines/engine-1/access/transition-cleanup')
+      .send({ assignmentIds: ['manual-1'], previewCorrelationId: 'preview-1' });
+
+    expect(applyResponse.status).toBe(200);
+    expect(applyResponse.body).toMatchObject({
+      previewCorrelationId: 'preview-1',
+      engineId: 'engine-1',
+      removedAssignmentIds: ['manual-1'],
+      removedCount: 1,
+    });
+    expect(ssoEngineAccessSnapshotService.applyTransitionCleanup).toHaveBeenCalledWith(
+      'engine-1',
+      ['manual-1'],
+      'user-1',
+      null,
+      'preview-1',
+    );
+  });
+
+  it('evaluates Mission Control to Starbase bridge access', async () => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(true);
+
+    const response = await request(app)
+      .post('/api/mission-control/bridge/starbase-edit/evaluate')
+      .send({
+        engineId: 'engine-1',
+        projectId: 'project-1',
+        fileId: 'file-1',
+        definitionKey: 'invoice',
+        kind: 'process',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      allowed: true,
+      reasonCode: 'allowed',
+      projectId: 'project-1',
+      fileId: 'file-1',
+      engineId: 'engine-1',
+      targetId: 'target-1',
+    });
+  });
+
+  it('denies Mission Control to Starbase bridge access when project edit permission is missing', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission !== 'project:files:edit'
+    );
+
+    const response = await request(app)
+      .post('/api/mission-control/bridge/starbase-edit/evaluate')
+      .send({
+        engineId: 'engine-1',
+        projectId: 'project-1',
+        fileId: 'file-1',
+        definitionKey: 'invoice',
+        kind: 'process',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      allowed: false,
+      reasonCode: 'missing_project_file_edit_permission',
+      missingActions: ['project.files.update'],
+    });
+  });
+
+  it('evaluates Starbase to Mission Control bridge access', async () => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(true);
+
+    const response = await request(app)
+      .post('/api/starbase/bridge/mission-control/evaluate')
+      .send({
+        engineId: 'engine-1',
+        projectId: 'project-1',
+        fileId: 'file-1',
+        definitionKey: 'invoice',
+        kind: 'process',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      allowed: true,
+      reasonCode: 'allowed',
+      projectId: 'project-1',
+      fileId: 'file-1',
+      engineId: 'engine-1',
+      targetId: 'target-1',
+    });
+  });
+
+  it('denies Starbase to Mission Control bridge access when engine runtime permission is missing', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission !== 'engine:instance:view'
+    );
+
+    const response = await request(app)
+      .post('/api/starbase/bridge/mission-control/evaluate')
+      .send({
+        engineId: 'engine-1',
+        projectId: 'project-1',
+        fileId: 'file-1',
+        definitionKey: 'invoice',
+        kind: 'process',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      allowed: false,
+      reasonCode: 'missing_engine_runtime_read_permission',
+      missingActions: ['engine.runtime.process-definitions.read'],
+    });
+  });
+
+  it('denies bridge access when the project-engine target is inactive', async () => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(true);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity.name === 'File') {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'file-1',
+              projectId: 'project-1',
+              name: 'process.bpmn',
+              type: 'bpmn',
+            }),
+          };
+        }
+        if (entity.name === 'Project') {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'project-1',
+              tenantId: null,
+              name: 'Project One',
+            }),
+          };
+        }
+        if (entity.name === 'ProjectEngineTarget') {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'target-1',
+              tenantId: null,
+              projectId: 'project-1',
+              engineId: 'engine-1',
+              status: 'inactive',
+            }),
+          };
+        }
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/starbase/bridge/mission-control/evaluate')
+      .send({
+        engineId: 'engine-1',
+        projectId: 'project-1',
+        fileId: 'file-1',
+        definitionKey: 'invoice',
+        kind: 'process',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      allowed: false,
+      reasonCode: 'missing_active_project_engine_target',
+      missingActions: ['project.deployment-targets.read'],
+    });
+  });
+
+  it('denies Starbase to Mission Control bridge access when engine lineage is missing', async () => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(true);
+
+    const response = await request(app)
+      .post('/api/starbase/bridge/mission-control/evaluate')
+      .send({
+        projectId: 'project-1',
+        fileId: 'file-1',
+        definitionKey: 'invoice',
+        kind: 'process',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      allowed: false,
+      reasonCode: 'missing_engine_lineage',
+      missingActions: ['engine.runtime.process-definitions.read'],
+    });
+  });
+
+  it('runs non-destructive SSO reconciliation diagnostics with SSO assignment manage permission', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:sso-assignments:manage'
+    );
+
+    const response = await request(app)
+      .post('/api/authz/sso-sync-runs/reconcile')
+      .send({ providerId: 'microsoft', trigger: 'manual' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      runId: '00000000-0000-4000-8000-000000000072',
+      scannedAssignmentMappings: 2,
+      warnings: 1,
+      errors: 0,
+    });
+    expect(ssoSyncDiagnosticsService.runReconciliationDiagnostics).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: null,
+      providerId: 'microsoft',
+      trigger: 'manual',
+      details: expect.objectContaining({
+        actorUserId: 'user-1',
+        source: 'admin_access_control',
+      }),
+    }));
+  });
+
+  it('runs optional SSO provider, snapshot replay, and cleanup diagnostics when requested', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'platform:sso-assignments:manage'
+    );
+
+    const response = await request(app)
+      .post('/api/authz/sso-sync-runs/reconcile')
+      .send({
+        providerId: 'microsoft',
+        trigger: 'manual',
+        includeProviderChecks: true,
+        includeSnapshotReplay: true,
+        refreshProviderClaims: true,
+        includeCleanup: true,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      runId: '00000000-0000-4000-8000-000000000072',
+      providerIdentityCheck: {
+        runId: '00000000-0000-4000-8000-000000000073',
+        checkedIdentities: 1,
+      },
+      snapshotReconciliation: {
+        runId: '00000000-0000-4000-8000-000000000074',
+        replayedIdentities: 1,
+        refreshedIdentities: 1,
+      },
+      cleanup: {
+        runId: '00000000-0000-4000-8000-000000000075',
+        assignmentsRemoved: 2,
+      },
+    });
+    const expectedInput = expect.objectContaining({
+      tenantId: null,
+      providerId: 'microsoft',
+      trigger: 'manual',
+      details: expect.objectContaining({
+        actorUserId: 'user-1',
+        source: 'admin_access_control',
+      }),
+    });
+    expect(ssoSyncDiagnosticsService.runProviderIdentityCheck).toHaveBeenCalledWith(expectedInput);
+    expect(ssoSyncDiagnosticsService.runSnapshotReconciliation).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: null,
+      providerId: 'microsoft',
+      trigger: 'manual',
+      refreshProviderClaims: true,
+    }));
+    expect(ssoSyncDiagnosticsService.runReconciliationCleanup).toHaveBeenCalledWith(expectedInput);
+  });
+
+  it('evaluates effective access', async () => {
+    const response = await request(app)
+      .post('/api/authz/evaluate')
+      .send({ userId: '00000000-0000-4000-8000-000000000001', permission: 'platform:authz:check', resourceType: 'platform' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.allowed).toBe(true);
+    expect(response.body.baseReason).toBe('role:platform:admin');
+  });
+
+  it('manages external registration API clients', async () => {
+    const listResponse = await request(app).get('/api/authz/api-clients');
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body[0]).toMatchObject({ id: 'client-1', scopes: ['engine:register'] });
+    expect(listResponse.body[0]).not.toHaveProperty('secretHash');
+
+    const createResponse = await request(app)
+      .post('/api/authz/api-clients')
+      .send({ name: 'Engine registration', scopes: ['engine:register'] });
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.token).toBe('egac_client-1_secret');
+
+    const rotateResponse = await request(app)
+      .post('/api/authz/api-clients/00000000-0000-4000-8000-000000000040/rotate');
+    expect(rotateResponse.status).toBe(200);
+    expect(rotateResponse.body.token).toBe('egac_client-1_new-secret');
+
+    const revokeResponse = await request(app)
+      .delete('/api/authz/api-clients/00000000-0000-4000-8000-000000000040');
+    expect(revokeResponse.status).toBe(204);
+  });
+
+  it('manages service accounts for machine role assignment', async () => {
+    const listResponse = await request(app).get('/api/authz/service-accounts');
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body[0]).toMatchObject({
+      id: 'service-account-1',
+      name: 'CI deployer',
+      isActive: true,
+    });
+
+    const createResponse = await request(app)
+      .post('/api/authz/service-accounts')
+      .send({ name: 'Release service', description: 'Release automation', scopes: ['deployment:execute'] });
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.token).toBe('egsa_service-account-1_secret');
+    expect(serviceAccountService.createServiceAccount).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Release service',
+      description: 'Release automation',
+      scopes: ['deployment:execute'],
+      createdById: 'user-1',
+    }));
+
+    const rotateResponse = await request(app)
+      .post('/api/authz/service-accounts/00000000-0000-4000-8000-000000000041/rotate');
+    expect(rotateResponse.status).toBe(200);
+    expect(rotateResponse.body.token).toBe('egsa_service-account-1_new-secret');
+    expect(serviceAccountService.rotateServiceAccountToken).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000041');
+
+    const revokeResponse = await request(app)
+      .delete('/api/authz/service-accounts/00000000-0000-4000-8000-000000000041');
+    expect(revokeResponse.status).toBe(204);
+    expect(serviceAccountService.revokeServiceAccount).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000041');
+  });
+
+  it('manages external engine systems', async () => {
+    const listResponse = await request(app).get('/api/authz/external-engine-systems');
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body[0]).toMatchObject({
+      id: 'system-1',
+      key: 'fleet-manager',
+      name: 'Fleet Manager',
+      defaultManagementMode: 'hybrid',
+      defaultFieldOwnership: { connection: 'external', auth: 'external', display: 'manual' },
+      isActive: true,
+    });
+
+    const system = {
+      id: 'system-2',
+      tenantId: null,
+      key: 'cmdb',
+      name: 'CMDB',
+      description: null,
+      defaultManagementMode: 'external_managed',
+      defaultFieldOwnershipJson: JSON.stringify({ connection: 'external', auth: 'external', display: 'manual' }),
+      isActive: true,
+      createdById: 'user-1',
+      createdAt: 1000,
+      updatedAt: 1000,
+    };
+    const insert = vi.fn().mockResolvedValue(undefined);
+    const update = vi.fn().mockResolvedValue(undefined);
+    const createFindOne = vi.fn().mockResolvedValue(null);
+    const updateFindOne = vi.fn().mockResolvedValue(system);
+    const findOneBy = vi.fn().mockResolvedValue({ ...system, name: 'Updated CMDB', updatedAt: 1200 });
+
+    (getDataSource as any).mockResolvedValueOnce({
+      getRepository: () => ({
+        findOne: createFindOne,
+        insert,
+      }),
+    });
+    const createResponse = await request(app)
+      .post('/api/authz/external-engine-systems')
+      .send({
+        key: 'cmdb',
+        name: 'CMDB',
+        defaultManagementMode: 'external_managed',
+        defaultFieldOwnership: { connection: 'external', auth: 'external', display: 'manual' },
+      });
+    expect(createResponse.status).toBe(201);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'cmdb',
+      defaultManagementMode: 'external_managed',
+      defaultFieldOwnershipJson: expect.stringContaining('connection'),
+    }));
+
+    (getDataSource as any).mockResolvedValueOnce({
+      getRepository: () => ({
+        findOne: updateFindOne,
+        findOneBy,
+        update,
+      }),
+    });
+    const updateResponse = await request(app)
+      .put('/api/authz/external-engine-systems/system-2')
+      .send({ name: 'Updated CMDB', defaultManagementMode: 'hybrid' });
+    expect(updateResponse.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({ id: 'system-2' }, expect.objectContaining({
+      name: 'Updated CMDB',
+      defaultManagementMode: 'hybrid',
+    }));
+
+    (getDataSource as any).mockResolvedValueOnce({
+      getRepository: () => ({
+        findOne: updateFindOne,
+        update,
+      }),
+    });
+    const archiveResponse = await request(app).delete('/api/authz/external-engine-systems/system-2');
+    expect(archiveResponse.status).toBe(204);
+    expect(update).toHaveBeenCalledWith({ id: 'system-2' }, expect.objectContaining({ isActive: false }));
+  });
+
+  it('lists externally registered engines and registration audit entries', async () => {
+    const listResponse = await request(app).get('/api/authz/external-engines');
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body[0]).toMatchObject({
+      id: 'engine-1',
+      registrationId: 'registration-1',
+      externalId: 'cluster-a/prod',
+      labels: { environment: 'prod', region: 'eu' },
+      registrationSource: 'external_api',
+      apiClientId: 'client-1',
+      externalSystemId: 'system-1',
+      externalSystemName: 'Fleet Manager',
+      managementMode: 'hybrid',
+      fieldOwnership: { connection: 'external', auth: 'external', display: 'manual' },
+      driftStatus: 'in_sync',
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: 1000,
+      capabilities: { operations: ['engine.read'], supportLevel: 'compatible' },
+      capabilityStatus: 'mismatch',
+      capabilityDiagnostics: {
+        status: 'mismatch',
+        reportedOperations: ['engine.read'],
+        missingOperations: expect.arrayContaining(['engine.deploy', 'engine.admin']),
+        extraOperations: [],
+        recommendation: 'Update the external registration payload to report the missing operations, then run reconcile again.',
+      },
+    });
+    expect(listResponse.body[0]).not.toHaveProperty('passwordEnc');
+
+    const auditResponse = await request(app).get('/api/authz/external-engines/engine-1/audit');
+    expect(auditResponse.status).toBe(200);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'platform:engine-registration:manage',
+      expect.objectContaining({
+        userId: 'user-1',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+      })
+    );
+    expect(auditResponse.body[0]).toMatchObject({
+      id: 'audit-1',
+      action: 'engine.external_registration.update',
+      details: {
+        externalId: 'cluster-a/prod',
+        labels: { environment: 'prod' },
+      },
+    });
+  });
+
+  it('filters external engine registration audit entries', async () => {
+    const auditFind = vi.fn().mockResolvedValue([
+      {
+        id: 'audit-2',
+        userId: 'admin-1',
+        action: 'engine.external_registration.decommission',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+        ipAddress: '127.0.0.1',
+        userAgent: 'vitest',
+        details: JSON.stringify({ externalId: 'cluster-a/prod' }),
+        createdAt: 1001,
+      },
+    ]);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity.name === 'Engine') {
+          return {
+            findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }),
+          };
+        }
+        if (entity.name === 'AuditLog') {
+          return { find: auditFind };
+        }
+        return { find: vi.fn().mockResolvedValue([]) };
+      },
+    });
+
+    const response = await request(app).get('/api/authz/external-engines/engine-1/audit?action=engine.external_registration.decommission&limit=10');
+
+    expect(response.status).toBe(200);
+    expect(auditFind).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        action: 'engine.external_registration.decommission',
+      }),
+      take: 10,
+    }));
+    expect(response.body[0]).toMatchObject({
+      action: 'engine.external_registration.decommission',
+    });
+  });
+
+  it('reconciles external engine capability and materialization state', async () => {
+    const engineUpdate = vi.fn().mockResolvedValue(undefined);
+    const registrationUpdate = vi.fn().mockResolvedValue(undefined);
+    const registration = {
+      id: 'registration-1',
+      engineId: 'engine-1',
+      externalId: 'cluster-a/prod',
+      externalSystemId: 'system-1',
+      lifecycleStatus: 'active',
+      capabilitiesJson: JSON.stringify({ operations: ['engine.read', 'engine.deploy', 'engine.instance.mutate', 'engine.task.mutate', 'engine.job.mutate', 'engine.batch.admin', 'engine.admin'] }),
+      capabilityStatus: 'mismatch',
+    };
+    const engine = {
+      id: 'engine-1',
+      tenantId: null,
+      type: 'ion',
+      externalId: 'cluster-a/prod',
+      externalSystemId: 'system-1',
+      registrationSource: 'external_api',
+      lifecycleStatus: 'active',
+      capabilitiesJson: registration.capabilitiesJson,
+      capabilityStatus: 'mismatch',
+    };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity.name === 'ExternalEngineRegistration') {
+          return {
+            findOne: vi.fn().mockResolvedValue(registration),
+            update: registrationUpdate,
+          };
+        }
+        if (entity.name === 'Engine') {
+          return {
+            findOne: vi.fn().mockResolvedValue(engine),
+            findOneBy: vi.fn().mockResolvedValue(engine),
+            update: engineUpdate,
+          };
+        }
+        return { find: vi.fn().mockResolvedValue([]) };
+      },
+    });
+    vi.mocked(engineSetService.materializeEngineSetsForEngine).mockResolvedValueOnce([
+      { engineSetId: 'set-1', matched: 1, created: 0, updated: 1, removed: 0 } as any,
+    ]);
+
+    const response = await request(app).post('/api/authz/external-engines/engine-1/reconcile');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      engineId: 'engine-1',
+      externalId: 'cluster-a/prod',
+      lifecycleStatus: 'active',
+      capabilityStatus: 'in_sync',
+      capabilityDiagnostics: {
+        status: 'in_sync',
+        missingOperations: [],
+        reportedOperations: expect.arrayContaining(['engine.read', 'engine.deploy']),
+      },
+      materializationDiagnostics: {
+        engineSetCount: 1,
+        matched: 1,
+        created: 0,
+        updated: 1,
+        removed: 0,
+        status: 'ok',
+      },
+    });
+    expect(engineUpdate).toHaveBeenCalledWith({ id: 'engine-1' }, expect.objectContaining({
+      capabilityStatus: 'in_sync',
+    }));
+    expect(registrationUpdate).toHaveBeenCalledWith({ id: 'registration-1' }, expect.objectContaining({
+      capabilityStatus: 'in_sync',
+    }));
+    expect(engineSetService.materializeEngineSetsForEngine).toHaveBeenCalledWith('engine-1', null);
+  });
+
+  it('decommissions and reactivates externally registered engines from Access Control', async () => {
+    const engineUpdate = vi.fn().mockResolvedValue(undefined);
+    const registrationUpdate = vi.fn().mockResolvedValue(undefined);
+    const materializationDelete = vi.fn().mockResolvedValue({ affected: 1 });
+    const registration = {
+      id: 'registration-1',
+      engineId: 'engine-1',
+      externalId: 'cluster-a/prod',
+      externalSystemId: 'system-1',
+      lifecycleStatus: 'active',
+      driftStatus: 'in_sync',
+    };
+    const engine = {
+      id: 'engine-1',
+      tenantId: null,
+      type: 'camunda8',
+      externalId: 'cluster-a/prod',
+      externalSystemId: 'system-1',
+      registrationSource: 'external_api',
+      lifecycleStatus: 'active',
+      driftStatus: 'in_sync',
+    };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity.name === 'ExternalEngineRegistration') {
+          return {
+            findOne: vi.fn().mockResolvedValue(registration),
+            update: registrationUpdate,
+          };
+        }
+        if (entity.name === 'Engine') {
+          return {
+            findOne: vi.fn().mockResolvedValue(engine),
+            findOneBy: vi.fn().mockResolvedValue(engine),
+            update: engineUpdate,
+          };
+        }
+        if (entity.name === 'EngineSetMaterialization') {
+          return { delete: materializationDelete };
+        }
+        return { find: vi.fn().mockResolvedValue([]) };
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/authz/external-engines/engine-1/decommission')
+      .send({ reason: 'Retired cluster' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      decommissioned: true,
+      engineId: 'engine-1',
+      lifecycleStatus: 'decommissioned',
+    });
+    expect(engineUpdate).toHaveBeenCalledWith({ id: 'engine-1' }, expect.objectContaining({
+      lifecycleStatus: 'decommissioned',
+      driftStatus: 'decommissioned',
+    }));
+    expect(registrationUpdate).toHaveBeenCalledWith({ id: 'registration-1' }, expect.objectContaining({
+      lifecycleStatus: 'decommissioned',
+      driftStatus: 'decommissioned',
+    }));
+    expect(materializationDelete).toHaveBeenCalledWith({ engineId: 'engine-1' });
+
+    const decommissionedRegistration = { ...registration, lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned' };
+    const decommissionedEngine = { ...engine, lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned' };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity.name === 'ExternalEngineRegistration') {
+          return {
+            findOne: vi.fn().mockResolvedValue(decommissionedRegistration),
+            update: registrationUpdate,
+          };
+        }
+        if (entity.name === 'Engine') {
+          return {
+            findOne: vi.fn().mockResolvedValue(decommissionedEngine),
+            findOneBy: vi.fn().mockResolvedValue(decommissionedEngine),
+            update: engineUpdate,
+          };
+        }
+        return { find: vi.fn().mockResolvedValue([]) };
+      },
+    });
+    vi.mocked(engineSetService.materializeEngineSetsForEngine).mockResolvedValueOnce([
+      { engineSetId: 'set-1', matched: 1, created: 1, updated: 0, removed: 0 } as any,
+    ]);
+
+    const reactivateResponse = await request(app)
+      .post('/api/authz/external-engines/engine-1/reactivate')
+      .send({ reason: 'Cluster restored' });
+
+    expect(reactivateResponse.status).toBe(200);
+    expect(reactivateResponse.body).toMatchObject({
+      reactivated: true,
+      engineId: 'engine-1',
+      lifecycleStatus: 'active',
+      driftStatus: 'in_sync',
+    });
+    expect(engineUpdate).toHaveBeenCalledWith({ id: 'engine-1' }, expect.objectContaining({
+      lifecycleStatus: 'active',
+      driftStatus: 'in_sync',
+    }));
+    expect(registrationUpdate).toHaveBeenCalledWith({ id: 'registration-1' }, expect.objectContaining({
+      lifecycleStatus: 'active',
+      driftStatus: 'in_sync',
+    }));
+    expect(engineSetService.materializeEngineSetsForEngine).toHaveBeenCalledWith('engine-1', null);
+  });
+
+  it('manages project-engine targets and evaluates deployment eligibility', async () => {
+    const listResponse = await request(app).get('/api/authz/project-engine-targets?projectId=project-1');
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body[0]).toMatchObject({
+      id: 'target-1',
+      projectId: 'project-1',
+      engineId: 'engine-1',
+      allowManualDeploy: true,
+    });
+    expect(projectEngineTargetService.listTargets).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+    }));
+
+    const createResponse = await request(app)
+      .post('/api/authz/project-engine-targets')
+      .send({
+        projectId: 'project-1',
+        engineId: 'engine-1',
+        allowManualDeploy: true,
+        allowCiDeploy: true,
+      });
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.id).toBe('target-1');
+
+    const evaluateResponse = await request(app)
+      .post('/api/authz/project-engine-targets/evaluate')
+      .send({
+        userId: 'user-1',
+        projectId: 'project-1',
+        engineId: 'engine-1',
+        mode: 'manual',
+      });
+    expect(evaluateResponse.status).toBe(200);
+    expect(evaluateResponse.body.allowed).toBe(true);
+    expect(deploymentEligibilityService.evaluate).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      projectId: 'project-1',
+      engineId: 'engine-1',
+      mode: 'manual',
+    }));
+
+    const syncResponse = await request(app)
+      .post('/api/authz/project-engine-targets/sync-legacy')
+      .send({ projectId: 'project-1' });
+    expect(syncResponse.status).toBe(200);
+    expect(syncResponse.body.createdOrUpdated).toBe(1);
+
+    const updateResponse = await request(app)
+      .put('/api/authz/project-engine-targets/target-1')
+      .send({ allowApiDeploy: true });
+    expect(updateResponse.status).toBe(200);
+
+    const deleteResponse = await request(app).delete('/api/authz/project-engine-targets/target-1');
+    expect(deleteResponse.status).toBe(204);
+  });
+
+  it('creates SSO engine assignment mappings', async () => {
+    const response = await request(app)
+      .post('/api/authz/sso-assignment-mappings')
+      .send({
+        claimType: 'group',
+        claimKey: 'groups',
+        claimValue: 'Camunda Operators',
+        targetSelectorType: 'all_engines',
+        targetRoleId: 'system.engine.operator',
+        riskAcknowledged: true,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.id).toBe('mapping-1');
+  });
+
+  it('creates SSO engine assignment mappings for external engine selectors', async () => {
+    const response = await request(app)
+      .post('/api/authz/sso-assignment-mappings')
+      .send({
+        claimType: 'role',
+        claimKey: 'roles',
+        claimValue: 'operator',
+        targetSelectorType: 'external_engine_id',
+        targetExternalEngineId: 'cluster-a/prod',
+        targetRoleId: 'system.engine.operator',
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.id).toBe('mapping-1');
+  });
+
+  it('updates, tests, and deletes SSO engine assignment mappings', async () => {
+    const updateResponse = await request(app)
+      .put('/api/authz/sso-assignment-mappings/00000000-0000-4000-8000-000000000030')
+      .send({
+        targetSelectorType: 'engine_label',
+        targetLabelKey: 'environment',
+        targetLabelValue: 'prod',
+      });
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.success).toBe(true);
+
+    const testResponse = await request(app)
+      .post('/api/authz/sso-assignment-mappings/test')
+      .send({ claims: { groups: ['Camunda Operators'] } });
+
+    expect(testResponse.status).toBe(200);
+    expect(testResponse.body.assignments).toEqual([]);
+
+    const deleteResponse = await request(app)
+      .delete('/api/authz/sso-assignment-mappings/00000000-0000-4000-8000-000000000030');
+
+    expect(deleteResponse.status).toBe(204);
   });
 });

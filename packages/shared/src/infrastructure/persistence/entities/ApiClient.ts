@@ -1,0 +1,37 @@
+import { Entity, Column, Index } from 'typeorm';
+import { AppBaseEntity } from './BaseEntity.js';
+
+@Entity({ name: 'api_clients', schema: 'main' })
+@Index('idx_api_clients_active', ['isActive'])
+@Index('idx_api_clients_created_by', ['createdById'])
+export class ApiClient extends AppBaseEntity {
+  @Column({ type: 'text' })
+  name!: string;
+
+  @Column({ name: 'token_prefix', type: 'text' })
+  tokenPrefix!: string;
+
+  @Column({ name: 'secret_hash', type: 'text' })
+  secretHash!: string;
+
+  @Column({ name: 'scopes_json', type: 'text' })
+  scopesJson!: string;
+
+  @Column({ name: 'is_active', type: 'boolean', default: true })
+  isActive!: boolean;
+
+  @Column({ name: 'created_by_id', type: 'text', nullable: true })
+  createdById!: string | null;
+
+  @Column({ name: 'last_used_at', type: 'bigint', nullable: true })
+  lastUsedAt!: number | null;
+
+  @Column({ name: 'revoked_at', type: 'bigint', nullable: true })
+  revokedAt!: number | null;
+
+  @Column({ name: 'created_at', type: 'bigint' })
+  createdAt!: number;
+
+  @Column({ name: 'updated_at', type: 'bigint' })
+  updatedAt!: number;
+}

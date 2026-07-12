@@ -4,6 +4,7 @@ import {
   getProcessInstanceVariables,
   getProcessInstanceVariableHistory,
   getProcessInstanceActivityHistory,
+  getProcessInstanceActivityTree,
   getProcessInstanceIncidents,
   getProcessInstanceJobs,
   getProcessInstanceExternalTasks,
@@ -140,6 +141,27 @@ describe('processInstances API', () => {
         { credentials: 'include' }
       );
       expect(result).toEqual(mockHistory);
+    });
+  });
+
+  describe('getProcessInstanceActivityTree', () => {
+    it('gets runtime activity tree and appends engineId to the query string', async () => {
+      const mockTree = {
+        id: 'root',
+        childActivityInstances: [
+          { id: 'act-1', activityId: 'reviewTask', activityName: 'Review order' },
+        ],
+      };
+      vi.mocked(apiClient.get).mockResolvedValue(mockTree);
+
+      const result = await getProcessInstanceActivityTree('pi1', 'engine-1');
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/mission-control-api/process-instances/pi1/activity-instances?engineId=engine-1',
+        undefined,
+        { credentials: 'include' }
+      );
+      expect(result).toEqual(mockTree);
     });
   });
 

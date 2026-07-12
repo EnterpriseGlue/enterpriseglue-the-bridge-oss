@@ -24,19 +24,23 @@ export type InstructionReport = {
 }
 
 export type MigrationExecution = {
+  engineId?: string
   migrationPlan: MigrationPlan
   processInstanceIds?: string[]
   processInstanceQuery?: Record<string, unknown>
   skipCustomListeners?: boolean
   skipIoMappings?: boolean
+  auditReason: string
 }
 
 // API Functions
 export async function generateMigrationPlan(
   sourceDefinitionId: string,
-  targetDefinitionId: string
+  targetDefinitionId: string,
+  engineId?: string
 ): Promise<MigrationPlan> {
   return apiClient.post<MigrationPlan>('/mission-control-api/migration/generate', {
+    ...(engineId ? { engineId } : {}),
     sourceProcessDefinitionId: sourceDefinitionId,
     targetProcessDefinitionId: targetDefinitionId,
   }, { credentials: 'include' })
@@ -44,18 +48,22 @@ export async function generateMigrationPlan(
 
 export async function validateMigrationPlan(
   plan: MigrationPlan,
-  processInstanceIds?: string[]
+  processInstanceIds?: string[],
+  engineId?: string
 ): Promise<MigrationValidationReport> {
-  return apiClient.post<MigrationValidationReport>('/mission-control-api/migration/validate', {
-    migrationPlan: plan,
+  return apiClient.post<MigrationValidationReport>('/mission-control-api/migration/plan/validate', {
+    ...(engineId ? { engineId } : {}),
+    plan,
     processInstanceIds,
   }, { credentials: 'include' })
 }
 
 export async function executeMigration(execution: MigrationExecution): Promise<void> {
-  await apiClient.post<void>('/mission-control-api/migration/execute', execution, { credentials: 'include' })
+  const { migrationPlan, ...rest } = execution
+  await apiClient.post<void>('/mission-control-api/migration/execute-direct', { ...rest, plan: migrationPlan }, { credentials: 'include' })
 }
 
 export async function executeMigrationAsync(execution: MigrationExecution): Promise<{ id: string }> {
-  return apiClient.post<{ id: string }>('/mission-control-api/migration/executeAsync', execution, { credentials: 'include' })
+  const { migrationPlan, ...rest } = execution
+  return apiClient.post<{ id: string }>('/mission-control-api/migration/execute-async', { ...rest, plan: migrationPlan }, { credentials: 'include' })
 }

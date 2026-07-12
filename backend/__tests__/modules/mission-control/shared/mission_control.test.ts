@@ -1,11 +1,20 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import missionControlRouter from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission_control.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import {
+  getActiveActivityCounts,
   getProcessInstanceVariableHistory,
   getProcessInstanceExecutionDetails,
+  suspendProcessInstanceById,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
+
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
+  getDataSource: vi.fn(),
+}));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -14,10 +23,23 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@enterpriseglue/shared/middleware/engineAuth.js', () => ({
-  requireEngineReadOrWrite: () => (req: any, _res: any, next: any) => {
-    req.engineId = req.query.engineId || 'engine-1';
-    next();
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  EnginePermissions: {
+    INSTANCE_VIEW: 'engine:instance:view',
+    INSTANCE_DELETE: 'engine:instance:delete',
+    INSTANCE_RETRY: 'engine:instance:retry',
+    PROCESS_MODIFY: 'engine:process:modify',
+    MEMBERS_MANAGE: 'engine:members:manage',
+  },
+  PlatformPermissions: {
+    USER_MANAGE: 'platform:user:manage',
+    USERS_CREATE: 'platform:users:create',
+  },
+  ProjectPermissions: {
+    MEMBERS_MANAGE: 'project:members:manage',
+  },
+  permissionService: {
+    hasPermission: vi.fn().mockResolvedValue(false),
   },
 }));
 
@@ -70,6 +92,41 @@ describe('mission-control shared mission_control routes', () => {
     app.use(express.json());
     app.use(missionControlRouter);
     vi.clearAllMocks();
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) {
+          return {
+            findOne: vi.fn(async ({ where }: any) => ({
+              id: String(where?.id || 'engine-77'),
+              tenantId: null,
+            })),
+          };
+        }
+        return { findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission.startsWith('engine:')
+    );
+  });
+
+  it('reads process-definition active activity counts through process-definition action permission', async () => {
+    vi.mocked(getActiveActivityCounts).mockResolvedValueOnce({ approve: 2 } as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/pd-1/active-activity-counts')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ approve: 2 });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'engine',
+      resourceId: 'engine-77',
+    }));
+    expect(getActiveActivityCounts).toHaveBeenCalledWith('engine-77', 'pd-1');
   });
 
   it('returns variable history for a process instance variable and allows engineId in query', async () => {
@@ -100,6 +157,10 @@ describe('mission-control shared mission_control routes', () => {
         variableName: 'amount',
       }),
     ]);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      resourceType: 'engine',
+      resourceId: 'engine-77',
+    }));
     expect(getProcessInstanceVariableHistory).toHaveBeenCalledWith('engine-77', 'pi-1', 'var-1');
   });
 
@@ -115,7 +176,7 @@ describe('mission-control shared mission_control routes', () => {
   it('returns lazy execution details for a process instance activity instance', async () => {
     const response = await request(app)
       .get('/mission-control-api/process-instances/pi1/execution-details')
-      .query({ activityInstanceId: 'act-inst-1', executionId: 'exec-1', taskId: 'task-1' });
+      .query({ engineId: 'engine-77', activityInstanceId: 'act-inst-1', executionId: 'exec-1', taskId: 'task-1' });
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
@@ -124,10 +185,34 @@ describe('mission-control shared mission_control routes', () => {
       taskId: 'task-1',
       variables: [{ id: 'var-1', name: 'approvalReason' }],
     });
-    expect(getProcessInstanceExecutionDetails).toHaveBeenCalledWith('engine-1', 'pi1', {
+    expect(getProcessInstanceExecutionDetails).toHaveBeenCalledWith('engine-77', 'pi1', {
       activityInstanceId: 'act-inst-1',
       executionId: 'exec-1',
       taskId: 'task-1',
     });
+  });
+
+  it('updates process instance suspension through process modify permission', async () => {
+    const response = await request(app)
+      .put('/mission-control-api/process-instances/pi-1/suspend')
+      .send({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(204);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:process:modify', expect.objectContaining({
+      resourceType: 'engine',
+      resourceId: 'engine-77',
+    }));
+    expect(suspendProcessInstanceById).toHaveBeenCalledWith('engine-77', 'pi-1');
+  });
+
+  it('denies shared process instance reads when instance view permission is missing', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/pi-1/variable-history')
+      .query({ engineId: 'engine-77', variableInstanceId: 'var-1' });
+
+    expect(response.status).toBe(403);
+    expect(getProcessInstanceVariableHistory).not.toHaveBeenCalled();
   });
 });

@@ -20,7 +20,7 @@ vi.mock('@carbon/react', () => ({
     getRowProps: ({ row }: any) => ({ key: row.id }),
   }),
   OverflowMenu: ({ children }: any) => <div>{children}</div>,
-  OverflowMenuItem: ({ itemText, onClick }: any) => <button onClick={onClick}>{itemText}</button>,
+  OverflowMenuItem: ({ itemText, onClick, disabled, title }: any) => <button onClick={onClick} disabled={disabled} title={title}>{itemText}</button>,
   Table: ({ children }: any) => <table>{children}</table>,
   TableHead: ({ children }: any) => <thead>{children}</thead>,
   TableRow: ({ children, ...props }: any) => <tr {...props}>{children}</tr>,
@@ -100,5 +100,63 @@ describe('TableComponents', () => {
         activityInstanceId: 'act-1',
       })
     );
+  });
+
+  it('keeps global variable edit visible but disabled when variable updates are denied', () => {
+    const openVariableEditor = vi.fn();
+
+    render(
+      <GlobalVariablesTable
+        data={{ amount: { value: 100, type: 'Integer' } }}
+        status="ACTIVE"
+        openVariableEditor={openVariableEditor}
+        canEditVariables={false}
+        variableEditUnavailableReason="Missing permission engine:variables:edit"
+      />
+    );
+
+    const editButton = screen.getByRole('button', { name: 'Edit' });
+    expect(editButton).toBeDisabled();
+    expect(editButton).toHaveAttribute('title', 'Missing permission engine:variables:edit');
+
+    fireEvent.click(editButton);
+    expect(openVariableEditor).not.toHaveBeenCalled();
+  });
+
+  it('redacts global variable values and disables value actions when variable reads are denied', () => {
+    const openVariableEditor = vi.fn();
+    const openVariableHistory = vi.fn();
+
+    render(
+      <GlobalVariablesTable
+        data={{ amount: { value: 100, type: 'Integer' } }}
+        status="ACTIVE"
+        openVariableEditor={openVariableEditor}
+        openVariableHistory={openVariableHistory}
+        redactValues
+        valueUnavailableReason="Missing permission engine:instance:view"
+        canViewVariableHistory={false}
+        variableHistoryUnavailableReason="Missing permission engine:instance:view"
+      />
+    );
+
+    expect(screen.getByText('Restricted')).toBeInTheDocument();
+
+    const editButton = screen.getByRole('button', { name: 'Edit' });
+    expect(editButton).toBeDisabled();
+    expect(editButton).toHaveAttribute('title', 'Missing permission engine:instance:view');
+
+    const historyButton = screen.getByRole('button', { name: 'History' });
+    expect(historyButton).toBeDisabled();
+    expect(historyButton).toHaveAttribute('title', 'Missing permission engine:instance:view');
+
+    const copyValueButton = screen.getByRole('button', { name: 'Copy value' });
+    expect(copyValueButton).toBeDisabled();
+    expect(copyValueButton).toHaveAttribute('title', 'Missing permission engine:instance:view');
+
+    fireEvent.click(editButton);
+    fireEvent.click(historyButton);
+    expect(openVariableEditor).not.toHaveBeenCalled();
+    expect(openVariableHistory).not.toHaveBeenCalled();
   });
 });

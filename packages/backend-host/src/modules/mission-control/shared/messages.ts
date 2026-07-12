@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireEngineReadOrWrite } from '@enterpriseglue/shared/middleware/engineAuth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { sendMessage, sendSignal } from './messages-service.js';
 import { CorrelateMessageRequest, SignalEventSchema } from '@enterpriseglue/shared/schemas/mission-control/message.js';
 
@@ -11,14 +11,14 @@ const r = Router();
 r.use(requireAuth);
 
 // Correlate message
-r.post('/mission-control-api/messages', requireEngineReadOrWrite({ engineIdFrom: 'body' }), validateBody(CorrelateMessageRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/messages', requireAction('engine.runtime.messages.correlate', { resourceIdFrom: 'body' }), validateBody(CorrelateMessageRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const data = await sendMessage(engineId, req.body);
   res.json(data);
 }));
 
 // Deliver signal
-r.post('/mission-control-api/signals', requireEngineReadOrWrite({ engineIdFrom: 'body' }), validateBody(SignalEventSchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/signals', requireAction('engine.runtime.signals.deliver', { resourceIdFrom: 'body' }), validateBody(SignalEventSchema), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   await sendSignal(engineId, req.body);
   res.status(204).end();

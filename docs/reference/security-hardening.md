@@ -4,6 +4,8 @@ Summary: Minimum security steps before running in production.
 
 Audience: Developers and architects.
 
+The target config-bundle and customer-sidecar security controls, including secret references, config API scopes, SSRF/TLS policy, audit redaction, and downstream peer-token exclusion, are tracked in [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md) and [Configure Authorization, Identity, And Engines](../how-to/configure-authorization-and-engines.md).
+
 ## Secrets and Credentials
 - Set a strong `JWT_SECRET` (no dev defaults).
 - Use a strong `ADMIN_PASSWORD`.

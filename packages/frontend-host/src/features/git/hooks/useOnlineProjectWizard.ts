@@ -7,6 +7,9 @@ import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import type { Repository } from '../types/git'
 import { toSafePathSegment } from '../../../utils/safeNavigation'
 import { sanitizePathParam, safeRelativePath } from '../../../shared/utils/sanitize'
+import { useAuth } from '../../../shared/hooks/useAuth'
+import { EnginePermission } from '../../../shared/auth/permissions'
+import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 
 export type AuthMethod = 'oauth' | 'pat'
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -32,14 +35,46 @@ type CreateOnlineResponse = {
 
 type CreateLocalResponse = { id: string; name: string }
 
-type EngineForImport = {
+export type EngineForImport = {
   id: string
   name?: string | null
   baseUrl?: string | null
   myRole?: string | null
 }
 
+export type EngineImportPreview = {
+  engineId: string
+  allowed: true
+  targetAction: 'create_import_target'
+  counts: {
+    bpmn: number
+    dmn: number
+  }
+  files: Array<{
+    name: string
+    type: 'bpmn' | 'dmn'
+    bpmnProcessId: string | null
+    dmnDecisionId: string | null
+  }>
+  warnings: string[]
+}
+
 const IMPORT_FROM_ENGINE_ROLES = new Set(['owner', 'delegate', 'operator', 'deployer'])
+
+type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean
+
+export function canImportFromEngineRow(engine: EngineForImport, hasPermission: EnginePermissionCheck): boolean {
+  const role = String(engine?.myRole || '').toLowerCase()
+  return IMPORT_FROM_ENGINE_ROLES.has(role) || hasPermission(engine?.id, EnginePermission.DEPLOY_VIEW)
+}
+
+export function formatImportPreviewSummary(preview: EngineImportPreview): string {
+  const total = preview.counts.bpmn + preview.counts.dmn
+  if (total === 0) {
+    return 'No latest BPMN or DMN definitions found. The project-engine import target will be created.'
+  }
+  return `${preview.counts.bpmn} BPMN and ${preview.counts.dmn} DMN definitions found. The project-engine import target will be created.`
+}
 
 interface UseOnlineProjectWizardProps {
   open: boolean
@@ -57,7 +92,10 @@ export function useOnlineProjectWizard({
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const queryClient = useQueryClient()
+  const { hasEnginePermission, permissions } = useAuth()
   const isExistingProject = !!existingProjectId
+  const gitCreateDecision = evaluateActionSnapshot(permissions, 'project.create.git.create', { type: 'platform', id: null })
+  const gitInspectDecision = evaluateActionSnapshot(permissions, 'project.create.git.inspect', { type: 'platform', id: null })
 
   const [existingRepo, setExistingRepo] = React.useState<Repository | null>(null)
   const isEditConnectedProject = isExistingProject && !!existingRepo
@@ -115,6 +153,9 @@ export function useOnlineProjectWizard({
   // Error state
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
   const [generalError, setGeneralError] = React.useState<string | null>(null)
+  const gitInspectDeniedReason = !isExistingProject && connectToGit && repoMode === 'existing' && !gitInspectDecision.allowed
+    ? gitInspectDecision.reason || 'Missing permission to inspect remote Git repositories'
+    : null
 
   // Reset connection when provider changes
   React.useEffect(() => {
@@ -178,6 +219,12 @@ export function useOnlineProjectWizard({
         setRepoFetchError(null)
         return
       }
+      if (gitInspectDeniedReason) {
+        setExistingRepos([])
+        setRepoFetchError(gitInspectDeniedReason)
+        setLoadingRepos(false)
+        return
+      }
       setLoadingRepos(true)
       setRepoFetchError(null)
       try {
@@ -199,7 +246,7 @@ export function useOnlineProjectWizard({
       }
     }
     fetchProviderRepos()
-  }, [providerId, repoMode])
+  }, [gitInspectDeniedReason, providerId, repoMode])
 
   // Auto-fill repository name from project name
   React.useEffect(() => {
@@ -289,16 +336,50 @@ export function useOnlineProjectWizard({
   const importableEngines = React.useMemo(() => {
     const rows = importableEnginesQuery.data || []
     return rows
-      .filter((engine: EngineForImport) => IMPORT_FROM_ENGINE_ROLES.has(String(engine?.myRole || '').toLowerCase()))
+      .filter((engine: EngineForImport) => {
+        const importPreviewDecision = evaluateActionSnapshot(permissions, 'project.import.preview', { type: 'engine', id: engine.id })
+        return canImportFromEngineRow(engine, hasEnginePermission) || importPreviewDecision.allowed
+      })
       .map((engine: EngineForImport) => ({
         id: String(engine.id),
         name: String(engine.name || engine.baseUrl || 'Unnamed engine'),
         role: String(engine.myRole || '').toLowerCase(),
       }))
       .sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))
-  }, [importableEnginesQuery.data])
+  }, [hasEnginePermission, importableEnginesQuery.data, permissions])
 
   const canImportFromEngine = !isExistingProject && !(connectToGit && repoMode === 'existing')
+  const selectedImportEngine = React.useMemo(
+    () => (importableEnginesQuery.data || []).find((engine: EngineForImport) => String(engine.id) === String(selectedImportEngineId)) || null,
+    [importableEnginesQuery.data, selectedImportEngineId]
+  )
+  const importPreviewDecision = React.useMemo(
+    () => evaluateActionSnapshot(permissions, 'project.import.preview', { type: 'engine', id: selectedImportEngineId || null }),
+    [permissions, selectedImportEngineId]
+  )
+  const canPreviewSelectedImportEngine = !selectedImportEngineId ||
+    importPreviewDecision.allowed ||
+    Boolean(selectedImportEngine && canImportFromEngineRow(selectedImportEngine, hasEnginePermission))
+  const importPreviewDeniedReason = selectedImportEngineId && !canPreviewSelectedImportEngine
+    ? importPreviewDecision.reason || 'Missing permission to preview imports from this engine'
+    : null
+  const gitCreateDeniedReason = !isExistingProject && !gitCreateDecision.allowed
+    ? gitCreateDecision.reason || 'Missing permission to create Git-backed projects'
+    : null
+
+  const importPreviewQuery = useQuery({
+    queryKey: ['starbase', 'projects', 'import-preview', selectedImportEngineId],
+    queryFn: () => apiClient.post<EngineImportPreview>('/starbase-api/projects/import-preview', {
+      engineId: selectedImportEngineId,
+    }),
+    enabled: open && canImportFromEngine && importFromEngine && !!selectedImportEngineId && canPreviewSelectedImportEngine,
+    retry: false,
+  })
+
+  const importPreviewErrorMessage = React.useMemo(() => {
+    if (!importPreviewQuery.isError) return null
+    return parseApiError(importPreviewQuery.error, 'Unable to preview engine import').message
+  }, [importPreviewQuery.error, importPreviewQuery.isError])
 
   React.useEffect(() => {
     if (canImportFromEngine) return
@@ -428,6 +509,10 @@ export function useOnlineProjectWizard({
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      if (!gitCreateDecision.allowed) {
+        throw new Error(gitCreateDeniedReason || 'Missing permission to create Git-backed projects')
+      }
+
       try {
         return await apiClient.post<CreateOnlineResponse>('/git-api/create-online', {
           projectName: projectName.trim(),
@@ -526,6 +611,10 @@ export function useOnlineProjectWizard({
 
   const cloneNewProjectMutation = useMutation({
     mutationFn: async (remoteUrl: string) => {
+      if (!gitCreateDecision.allowed) {
+        throw new Error(gitCreateDeniedReason || 'Missing permission to create Git-backed projects')
+      }
+
       return gitApi.cloneFromGit({
         providerId,
         repoUrl: remoteUrl,
@@ -601,6 +690,20 @@ export function useOnlineProjectWizard({
       setFieldErrors((prev: Record<string, string>) => ({ ...prev, importEngineId: 'Select an engine to import from' }))
       return
     }
+    if (importFromEngine && canImportFromEngine && selectedImportEngineId) {
+      if (!canPreviewSelectedImportEngine) {
+        setFieldErrors((prev: Record<string, string>) => ({ ...prev, importEngineId: importPreviewDeniedReason || 'Selected engine is not available for import' }))
+        return
+      }
+      if (importPreviewQuery.isLoading) {
+        setFieldErrors((prev: Record<string, string>) => ({ ...prev, importEngineId: 'Import preview is still loading' }))
+        return
+      }
+      if (importPreviewQuery.isError || !importPreviewQuery.data?.allowed) {
+        setFieldErrors((prev: Record<string, string>) => ({ ...prev, importEngineId: 'Selected engine is not available for import' }))
+        return
+      }
+    }
 
     const remoteUrl = repoMode === 'existing'
       ? (selectedExistingRepoUrl || customRepoUrl.trim())
@@ -619,6 +722,10 @@ export function useOnlineProjectWizard({
       return
     }
 
+    if (gitInspectDeniedReason) {
+      setGeneralError(gitInspectDeniedReason)
+      return
+    }
     if (repoMode === 'existing' && !remoteUrl) {
       setFieldErrors((prev: Record<string, string>) => ({ ...prev, repositoryName: 'Select or enter a repository to connect' }))
       return
@@ -628,6 +735,10 @@ export function useOnlineProjectWizard({
       if (isExistingProject) {
         initExistingMutation.mutate()
       } else {
+        if (!gitCreateDecision.allowed) {
+          setGeneralError(gitCreateDeniedReason || 'Missing permission to create Git-backed projects')
+          return
+        }
         createMutation.mutate()
       }
     } else {
@@ -638,27 +749,40 @@ export function useOnlineProjectWizard({
           setFieldErrors((prev: Record<string, string>) => ({ ...prev, projectName: 'Project name is required' }))
           return
         }
+        if (!gitCreateDecision.allowed) {
+          setGeneralError(gitCreateDeniedReason || 'Missing permission to create Git-backed projects')
+          return
+        }
         cloneNewProjectMutation.mutate(remoteUrl!)
       }
     }
-  }, [canImportFromEngine, connectToGit, createLocalMutation, createMutation, customRepoUrl, generateRemoteUrl, importFromEngine, initExistingMutation, isEditConnectedProject, isExistingProject, onClose, projectName, repoMode, selectedExistingRepoUrl, selectedImportEngineId, cloneExistingMutation, cloneNewProjectMutation])
+  }, [canImportFromEngine, canPreviewSelectedImportEngine, cloneExistingMutation, cloneNewProjectMutation, connectToGit, createLocalMutation, createMutation, customRepoUrl, generateRemoteUrl, gitCreateDecision.allowed, gitCreateDeniedReason, gitInspectDeniedReason, importFromEngine, importPreviewDeniedReason, importPreviewQuery.data?.allowed, importPreviewQuery.isError, importPreviewQuery.isLoading, initExistingMutation, isEditConnectedProject, isExistingProject, onClose, projectName, repoMode, selectedExistingRepoUrl, selectedImportEngineId])
 
   const isConnected = connectionStatus === 'connected'
   const isValid = React.useMemo(() => {
     if (isEditConnectedProject) return true
-    const importValid = !importFromEngine || !canImportFromEngine || !!selectedImportEngineId
+    const importPreviewRequired = importFromEngine && canImportFromEngine && !!selectedImportEngineId
+    const importPreviewReady = !importPreviewRequired || (
+      canPreviewSelectedImportEngine &&
+      importPreviewQuery.data?.allowed === true &&
+      !importPreviewQuery.isError &&
+      !importPreviewQuery.isLoading
+    )
+    const importValid = !importFromEngine || !canImportFromEngine || (!!selectedImportEngineId && importPreviewReady)
     if (!importValid) return false
     if (!connectToGit) {
       return isExistingProject ? true : !!projectName.trim()
     }
+    if (!isExistingProject && !gitCreateDecision.allowed) return false
     if (!providerId || !isConnected) return false
     if (!repoMode) return false
+    if (gitInspectDeniedReason) return false
     if (repoMode === 'new') {
       return (!!repositoryName.trim()) && (isExistingProject ? true : !!projectName.trim())
     }
     const remoteUrl = generateRemoteUrl()
     return !!remoteUrl && (isExistingProject ? true : !!projectName.trim())
-  }, [canImportFromEngine, connectToGit, generateRemoteUrl, importFromEngine, isConnected, isEditConnectedProject, isExistingProject, projectName, providerId, repoMode, repositoryName, selectedImportEngineId])
+  }, [canImportFromEngine, canPreviewSelectedImportEngine, connectToGit, generateRemoteUrl, gitCreateDecision.allowed, gitInspectDeniedReason, importFromEngine, importPreviewQuery.data?.allowed, importPreviewQuery.isError, importPreviewQuery.isLoading, isConnected, isEditConnectedProject, isExistingProject, projectName, providerId, repoMode, repositoryName, selectedImportEngineId])
 
   const isLoading =
     createMutation.isPending ||
@@ -682,7 +806,12 @@ export function useOnlineProjectWizard({
     setSelectedImportEngineId,
     importableEngines,
     importableEnginesQuery,
+    importPreviewQuery,
+    importPreviewErrorMessage,
+    importPreviewDeniedReason,
     canImportFromEngine,
+    gitInspectDeniedReason,
+    gitCreateDeniedReason,
     connectToGit,
     setConnectToGit,
     repoMode,

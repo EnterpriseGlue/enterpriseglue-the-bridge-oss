@@ -2,14 +2,18 @@ import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { safeRelativePath, sanitizePathParam } from '../shared/utils/sanitize'
 import { useQuery } from '@tanstack/react-query'
-import { Button, ClickableTile, Tile, Dropdown, SkeletonPlaceholder } from '@carbon/react'
+import { Button, ClickableTile, Tile, Dropdown, InlineNotification, SkeletonPlaceholder } from '@carbon/react'
 import { UserAvatar, FolderOpen, Chip, Activity, Checkmark, Time, WarningAlt } from '@carbon/icons-react'
 import { useDashboardFilterStore } from '../stores/dashboardFilterStore'
 import { apiClient } from '../shared/api/client'
 import { EngineSelector, useSelectedEngine } from '../components/EngineSelector'
+import { useAuth } from '../shared/hooks/useAuth'
+import { EnginePermission, PlatformPermission } from '../shared/auth/permissions'
+import { evaluateActionSnapshot, WhyUnavailableLink } from '../shared/auth/guards'
 
 type DashboardContext = {
   isPlatformAdmin: boolean
+  projectMemberships?: Array<{ projectId: string; projectName?: string; role?: string }>
   canViewActiveUsers: boolean
   canViewEngines: boolean
   canViewProcessData: boolean
@@ -52,6 +56,9 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { timePeriod, setTimePeriod } = useDashboardFilterStore()
   const selectedEngineId = useSelectedEngine()
+  const { hasPlatformPermission, hasAnyEnginePermission, permissions } = useAuth()
+  const dashboardReadDecision = evaluateActionSnapshot(permissions, 'platform.dashboard.read', { type: 'platform', id: null })
+  const canReadDashboard = dashboardReadDecision.allowed
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null
@@ -80,26 +87,38 @@ export default function Dashboard() {
   const contextQuery = useQuery({
     queryKey: ['dashboard-context'],
     queryFn: () => apiClient.get<DashboardContext>('/api/dashboard/context'),
+    enabled: canReadDashboard,
     staleTime: 60000,
   })
   const ctx = contextQuery.data
+  const canViewActiveUsers = Boolean(ctx?.canViewActiveUsers) ||
+    hasPlatformPermission(PlatformPermission.USERS_VIEW) ||
+    hasPlatformPermission(PlatformPermission.USER_VIEW) ||
+    hasPlatformPermission(PlatformPermission.USER_MANAGE)
+  const canViewProcessData = Boolean(ctx?.canViewProcessData) ||
+    hasAnyEnginePermission([EnginePermission.INSTANCE_VIEW])
+  const canViewMetrics = Boolean(ctx?.canViewMetrics) ||
+    hasAnyEnginePermission([EnginePermission.INSTANCE_VIEW])
 
   // Fetch dashboard stats
   const statsQuery = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => apiClient.get<DashboardStatsResponse>('/api/dashboard/stats'),
+    enabled: canReadDashboard,
   })
 
   // Fetch engines
   const enginesQuery = useQuery({
     queryKey: ['engines'],
     queryFn: () => apiClient.get<any[]>('/engines-api/engines').catch(() => []),
+    enabled: canReadDashboard,
   })
 
   // Fetch users
   const usersQuery = useQuery({
     queryKey: ['users'],
     queryFn: () => apiClient.get<any[]>('/api/users').catch(() => []),
+    enabled: canReadDashboard && canViewActiveUsers,
   })
 
   // Fetch process instances
@@ -114,7 +133,7 @@ export default function Dashboard() {
       engineId: selectedEngineId || undefined,
       startedAfter: timePeriod ? startedAfter : undefined,
     }).catch(() => []),
-    enabled: !!selectedEngineId,
+    enabled: canReadDashboard && !!selectedEngineId && canViewProcessData,
   })
 
   // Compute stats
@@ -170,6 +189,23 @@ export default function Dashboard() {
   }
 
   const chartTileStyle: React.CSSProperties = { padding: '1rem', minHeight: '200px' }
+
+  if (!canReadDashboard) {
+    return (
+      <div style={{ padding: '2rem' }}>
+        <InlineNotification
+          kind="warning"
+          title="Dashboard unavailable"
+          subtitle={dashboardReadDecision.reason || 'Missing permission to view dashboard data.'}
+          lowContrast
+          hideCloseButton
+        />
+        <div style={{ marginTop: 'var(--spacing-2)', fontSize: 12 }}>
+          <WhyUnavailableLink decision={dashboardReadDecision} />
+        </div>
+      </div>
+    )
+  }
 
   if (contextQuery.isLoading) {
     return <div style={{ padding: '2rem' }}><SkeletonPlaceholder style={{ height: '400px' }} /></div>
@@ -235,7 +271,7 @@ export default function Dashboard() {
                   Add engine
                 </Button>
               )}
-              {connectedEngines > 0 && !ctx?.canViewProcessData && (
+              {connectedEngines > 0 && !canViewProcessData && (
                 <Button kind="tertiary" size="sm" onClick={() => safeNavigate(toTenantPath('/engines'))}>
                   Request access
                 </Button>
@@ -247,7 +283,7 @@ export default function Dashboard() {
 
       {/* KPI Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-        {ctx?.canViewActiveUsers && (
+        {canViewActiveUsers && (
           <ClickableTile style={tileStyle} onClick={() => safeNavigate(toTenantPath('/admin/users'))}>
             <UserAvatar size={24} style={{ color: 'var(--cds-link-primary)', marginBottom: '0.5rem' }} />
             <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Active Users</span>
@@ -264,14 +300,14 @@ export default function Dashboard() {
           <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Engines</span>
           <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{connectedEngines}</span>
         </ClickableTile>
-        {ctx?.canViewProcessData && (
+        {canViewProcessData && (
           <ClickableTile style={tileStyle} onClick={() => safeNavigate(toTenantPath('/mission-control/processes'))}>
             <Activity size={24} style={{ color: '#24a148', marginBottom: '0.5rem' }} />
             <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Instances</span>
             <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{instances.length}</span>
           </ClickableTile>
         )}
-        {ctx?.canViewMetrics && (
+        {canViewMetrics && (
           <>
             <Tile style={tileStyle}>
               <Time size={24} style={{ color: '#0f62fe', marginBottom: '0.5rem' }} />
@@ -312,7 +348,7 @@ export default function Dashboard() {
         )}
 
         {/* Process States */}
-        {ctx?.canViewProcessData && (
+        {canViewProcessData && (
           <Tile style={chartTileStyle}>
             <h4 style={{ margin: '0 0 1rem', fontSize: '0.875rem', fontWeight: 600 }}>Process States</h4>
             <SimpleBar label="Active" value={instanceStates.active} max={maxState} color="#24a148" />
@@ -324,7 +360,7 @@ export default function Dashboard() {
         )}
 
         {/* Quick Stats */}
-        {ctx?.canViewMetrics && (
+        {canViewMetrics && (
           <Tile style={chartTileStyle}>
             <h4 style={{ margin: '0 0 1rem', fontSize: '0.875rem', fontWeight: 600 }}>Summary</h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { Modal, InlineNotification, Checkbox, Loading } from '@carbon/react'
 import { apiClient } from '../../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 interface RetryModalProps {
   open: boolean
@@ -28,6 +29,7 @@ interface RetryModalProps {
   retryExtTasksQRefetch: () => void
   instQRefetch: () => void
   engineId?: string
+  retryDecision?: UiAuthzDecision | null
 }
 
 export function RetryModal({
@@ -55,12 +57,20 @@ export function RetryModal({
   retryExtTasksQRefetch,
   instQRefetch,
   engineId,
+  retryDecision,
 }: RetryModalProps) {
+  const retryDeniedReason = retryDecision && !retryDecision.allowed ? retryDecision.reason || 'Action unavailable' : null
+
   const handleSubmit = async () => {
     if (!instanceId || retryModalBusy) return
 
     if (retryModalSuccess) {
       onClose()
+      return
+    }
+
+    if (retryDeniedReason) {
+      setRetryModalError(retryDeniedReason)
       return
     }
 
@@ -114,9 +124,20 @@ export function RetryModal({
       modalHeading="Retry Failed Jobs & Tasks"
       primaryButtonText={retryModalBusy ? 'Retrying...' : (retryModalSuccess ? 'Done' : 'Retry')}
       secondaryButtonText="Cancel"
+      primaryButtonDisabled={retryModalBusy || !!retryDeniedReason}
       onRequestClose={() => !retryModalBusy && onClose()}
       onRequestSubmit={handleSubmit}
     >
+      {retryDeniedReason && (
+        <InlineNotification
+          kind="warning"
+          title="Retry unavailable"
+          subtitle={retryDeniedReason}
+          lowContrast
+          hideCloseButton
+          style={{ marginBottom: 'var(--spacing-3)' }}
+        />
+      )}
       {retryModalSuccess && (
         <InlineNotification
           kind="success"

@@ -4,6 +4,8 @@ Summary: Deploy EnterpriseGlue using the Docker Compose stack defined in the rep
 
 Audience: Developers and architects.
 
+Current Compose deployments do not mount or apply authorization configuration bundles. The target optional mount, bootstrap/apply, readiness, secret, and rollback workflow is tracked in [Deploy Authorization Configuration](./deploy-authorization-config.md).
+
 ## Services (Dev)
 The default compose file `infra/docker/compose/docker-compose.yml` defines:
 - **db**: PostgreSQL 18 container

@@ -2,8 +2,12 @@ import { Entity, Column, Index } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'authz_policies', schema: 'main' })
+@Index('idx_authz_policies_tenant', ['tenantId'])
 @Index('idx_authz_policies_eval', ['resourceType', 'action', 'isActive', 'priority'])
 export class AuthzPolicy extends AppBaseEntity {
+  @Column({ name: 'tenant_id', type: 'text', nullable: true })
+  tenantId!: string | null;
+
   @Column({ type: 'text' })
   name!: string;
 

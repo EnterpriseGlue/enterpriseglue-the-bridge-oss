@@ -5,9 +5,15 @@ import { ensureSchemaExists, initializeDatabase } from '@enterpriseglue/shared/d
 import { bootstrapAdmin, bootstrapDefaultEmailConfig, backfillKnownUserProfiles, backfillMissingPlatformRoles } from '@enterpriseglue/shared/db/bootstrap.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requirePlatformAdmin } from '@enterpriseglue/shared/middleware/platformAuth.js';
+import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { startBatchPollerIfActive } from './poller/batchPoller.js';
+import { startSsoDiagnosticsPollerIfEnabled } from './poller/ssoDiagnosticsPoller.js';
 import { getConnectionPool, ConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
-import { loadEnterpriseBackendPlugin } from './enterprise/loadEnterpriseBackendPlugin.js';
+import {
+  buildEnterpriseBackendRouteOpenApiAuthzMetadata,
+  loadEnterpriseBackendPlugin,
+  requireDeclaredEnterpriseBackendRouteAction,
+} from './enterprise/loadEnterpriseBackendPlugin.js';
 
 export { createApp, registerBaseRoutes, registerFinalMiddleware } from './app.js';
 export { loadEnterpriseBackendPlugin } from './enterprise/loadEnterpriseBackendPlugin.js';
@@ -18,11 +24,21 @@ export async function startServer() {
   // Expose middleware to enterprise plugin via app.locals
   app.locals.requireAuth = requireAuth;
   app.locals.requirePlatformAdmin = requirePlatformAdmin;
+  app.locals.requireAction = requireAction;
+  app.locals.requireCompositeAction = requireCompositeAction;
 
   const enterprisePlugin = await loadEnterpriseBackendPlugin();
   const enterpriseContext = {
     connectionPool: getConnectionPool(),
     config,
+    authz: {
+      requireAction: (actionId: string, options?: Record<string, unknown>) =>
+        requireAction(actionId, options as never),
+      requireCompositeAction: (actionId: string, options?: Record<string, unknown>) =>
+        requireCompositeAction(actionId, options as never),
+      requireDeclaredAction: requireDeclaredEnterpriseBackendRouteAction,
+      buildOpenApiAuthzMetadata: buildEnterpriseBackendRouteOpenApiAuthzMetadata,
+    },
   } as any;
   const notificationTenantResolver = await enterprisePlugin.getNotificationTenantResolver?.(enterpriseContext);
   app.locals.enterprisePluginLoaded = Boolean(
@@ -53,7 +69,7 @@ export async function startServer() {
   if (enterprisePlugin.migrateEnterpriseDatabase) {
     try {
       const schema = config.enterpriseSchema;
-      
+
       // Create enterprise schema if configured (and not 'public')
       if (schema && schema !== 'public') {
         await ensureSchemaExists(schema);
@@ -96,7 +112,7 @@ export async function startServer() {
     // eslint-disable-next-line no-console
     console.log(`Voyager API listening on http://localhost:${config.port}`);
     console.log(`API docs: http://localhost:${config.port}/api/docs`);
-    
+
     // Debug: Check Microsoft Entra ID configuration
     if (config.microsoftClientId && config.microsoftClientSecret && config.microsoftTenantId) {
       console.log('✅ Microsoft Entra ID: Configured');
@@ -114,6 +130,7 @@ export async function startServer() {
 
   // Start background pollers
   void startBatchPollerIfActive();
+  void startSsoDiagnosticsPollerIfEnabled();
 
   // Graceful shutdown
   process.on('SIGINT', () => process.exit(0));

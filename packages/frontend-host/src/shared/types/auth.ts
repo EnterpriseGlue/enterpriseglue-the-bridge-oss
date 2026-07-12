@@ -7,6 +7,8 @@ export type {
   ChangePasswordRequest,
   CreateUserRequest,
   CreateUserResponse,
+  CurrentUserPermissions,
+  EffectiveResourcePermissions,
   ForgotPasswordRequest,
   LoginRequest,
   LoginResponse,

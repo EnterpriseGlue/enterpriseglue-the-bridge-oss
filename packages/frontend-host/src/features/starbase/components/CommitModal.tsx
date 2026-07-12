@@ -1,8 +1,11 @@
 import React from 'react'
-import { Modal, TextArea, InlineLoading } from '@carbon/react'
+import { Modal, TextArea, InlineLoading, InlineNotification } from '@carbon/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
+import { useAuth } from '../../../shared/hooks/useAuth'
+import { ProjectPermission } from '../../../shared/auth/permissions'
+import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 
 interface CommitModalProps {
   open: boolean
@@ -19,6 +22,18 @@ interface CommitModalProps {
 
 export default function CommitModal({ open, onClose, projectId, fileId, saveMode = 'git', onSuccess, beforeSubmit, defaultMessage, hotfixFromCommitId, hotfixFromFileVersion }: CommitModalProps) {
   const [message, setMessage] = React.useState('')
+  const { permissions, hasProjectPermission } = useAuth()
+  const createVersionActionId = saveMode === 'local' ? 'project.versions.create' : 'project.vcs.commit.create'
+  const createVersionDecision = evaluateActionSnapshot(
+    permissions,
+    createVersionActionId,
+    { type: 'project', id: projectId }
+  )
+  const canCreateVersion = createVersionDecision.allowed ||
+    hasProjectPermission(projectId, ProjectPermission.VERSIONS_CREATE)
+  const createVersionUnavailableReason = canCreateVersion
+    ? null
+    : createVersionDecision.reason || `Missing permission ${ProjectPermission.VERSIONS_CREATE}`
 
   // Pre-fill message from defaultMessage when modal opens
   React.useEffect(() => {
@@ -33,6 +48,10 @@ export default function CommitModal({ open, onClose, projectId, fileId, saveMode
   const commitMutation = useMutation({
     mutationFn: async (commitMessage: string) => {
       try {
+        if (createVersionUnavailableReason) {
+          throw new Error(createVersionUnavailableReason)
+        }
+
         if (saveMode === 'local') {
           if (!fileId) {
             throw new Error('Missing fileId for local version save')
@@ -94,6 +113,10 @@ export default function CommitModal({ open, onClose, projectId, fileId, saveMode
 
   const handleSubmit = async () => {
     if (commitMutation.isPending || preparing) return
+    if (createVersionUnavailableReason) {
+      setPreSubmitError(createVersionUnavailableReason)
+      return
+    }
     setPreparing(true)
     setPreSubmitError(null)
     try {
@@ -125,7 +148,7 @@ export default function CommitModal({ open, onClose, projectId, fileId, saveMode
       modalHeading="Create Version"
       primaryButtonText={(commitMutation.isPending || preparing) ? 'Saving...' : 'Create'}
       secondaryButtonText="Cancel"
-      primaryButtonDisabled={commitMutation.isPending || preparing}
+      primaryButtonDisabled={commitMutation.isPending || preparing || Boolean(createVersionUnavailableReason)}
       size="sm"
     >
       <div style={{ marginBottom: 'var(--spacing-4)' }}>
@@ -135,6 +158,17 @@ export default function CommitModal({ open, onClose, projectId, fileId, saveMode
             : 'Save a version of all files that you can restore later.'
           }
         </p>
+
+        {createVersionUnavailableReason && (
+          <InlineNotification
+            kind="warning"
+            title="Create version unavailable"
+            subtitle={createVersionUnavailableReason}
+            lowContrast
+            hideCloseButton
+            style={{ marginBottom: 'var(--spacing-3)' }}
+          />
+        )}
         
         <TextArea
           id="commit-message"
@@ -143,7 +177,7 @@ export default function CommitModal({ open, onClose, projectId, fileId, saveMode
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           rows={3}
-          disabled={commitMutation.isPending || preparing}
+          disabled={commitMutation.isPending || preparing || Boolean(createVersionUnavailableReason)}
         />
         
         {(preSubmitError || commitMutation.isError) && (

@@ -106,6 +106,8 @@ export default function MigrationWizard() {
     varsObj,
     lockSource,
     generating,
+    hasVariablePayload,
+    actionDecisions,
     srcKey,
     setSrcKey,
     srcVer,
@@ -148,6 +150,23 @@ export default function MigrationWizard() {
     pinnedIdx,
     setPinnedIdx,
   } = migrationData
+  const planGenerateDeniedReason = actionDecisions.planGenerate.allowed ? null : actionDecisions.planGenerate.reason || 'Action unavailable'
+  const validateDeniedReason = actionDecisions.planValidate.allowed ? null : actionDecisions.planValidate.reason || 'Action unavailable'
+  const variablesDeniedReason = actionDecisions.variablesUpdate.allowed ? null : actionDecisions.variablesUpdate.reason || 'Action unavailable'
+  const executionVariableDeniedReason = hasVariablePayload ? variablesDeniedReason : null
+  const batchExecutionDeniedReason =
+    executionVariableDeniedReason ||
+    (actionDecisions.executeAsync.allowed ? null : actionDecisions.executeAsync.reason || 'Action unavailable')
+  const directExecutionDeniedReason =
+    executionVariableDeniedReason ||
+    (actionDecisions.executeDirect.allowed ? null : actionDecisions.executeDirect.reason || 'Action unavailable')
+  const reviewDeniedReason =
+    validateDeniedReason ||
+    (batchExecutionDeniedReason && directExecutionDeniedReason
+      ? batchExecutionDeniedReason === directExecutionDeniedReason
+        ? batchExecutionDeniedReason
+        : `${batchExecutionDeniedReason} ${directExecutionDeniedReason}`
+      : null)
 
   // Diagram control APIs
   const srcViewerApi = React.useRef<any>(null)
@@ -263,6 +282,7 @@ export default function MigrationWizard() {
 
   // Gated Review & Execute: validate first, open modal only if clean
   const handleReviewAndExecute = React.useCallback(async () => {
+    if (reviewDeniedReason) return
     try {
       const data = await validateMutation.mutateAsync()
       const reports: any[] = data?.instructionReports || []
@@ -276,7 +296,7 @@ export default function MigrationWizard() {
     } catch {
       // error already handled by onError in the mutation
     }
-  }, [validateMutation, setValidation])
+  }, [reviewDeniedReason, validateMutation, setValidation])
 
   return (
     <div style={{ padding: 'var(--spacing-4)', display: 'grid', gap: 'var(--spacing-4)' }}>
@@ -340,6 +360,14 @@ export default function MigrationWizard() {
             />
           </div>
         </div>
+        {planGenerateDeniedReason && (
+          <InlineNotification
+            lowContrast
+            kind="warning"
+            title="Migration plan generation unavailable"
+            subtitle={planGenerateDeniedReason}
+          />
+        )}
       </div>
 
       <div style={{ background: 'var(--color-bg-primary)', border: '1px solid var(--color-border-primary)', padding: 'var(--spacing-2)' }}>
@@ -639,8 +667,27 @@ export default function MigrationWizard() {
           <div>Affected instances: {previewQ.data?.count ?? '—'}</div>
         </div>
         <div className={styles.centeredBtn} style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'center' }}>
-          <Button size="md" kind="primary" disabled={!plan || validateMutation.isPending} onClick={handleReviewAndExecute}>{validateMutation.isPending ? 'Validating…' : 'Review & Execute'}</Button>
-          <Button size="md" kind="tertiary" onClick={() => setVarsOpen(true)}>Set variables</Button>
+          <Button
+            size="md"
+            kind="primary"
+            disabled={!plan || validateMutation.isPending || !!reviewDeniedReason}
+            title={reviewDeniedReason || undefined}
+            onClick={handleReviewAndExecute}
+          >
+            {validateMutation.isPending ? 'Validating…' : 'Review & Execute'}
+          </Button>
+          <Button
+            size="md"
+            kind="tertiary"
+            disabled={!!variablesDeniedReason}
+            title={variablesDeniedReason || undefined}
+            onClick={() => {
+              if (variablesDeniedReason) return
+              setVarsOpen(true)
+            }}
+          >
+            Set variables
+          </Button>
           <Button size="md" kind="ghost" onClick={() => tenantNavigate('/mission-control/processes')}>Cancel</Button>
         </div>
       </div>
@@ -773,10 +820,12 @@ export default function MigrationWizard() {
         }).length}
         payload={{ plan: migrationData.planWithOverrides, processInstanceIds: instanceIds, skipCustomListeners, skipIoMappings, variables: varsObj }}
         onClose={() => setReviewModalOpen(false)}
-        onExecuteBatch={() => { executeMutation.mutate(); setReviewModalOpen(false) }}
-        onExecuteDirect={() => { executeDirectMutation.mutate(); setReviewModalOpen(false) }}
+        onExecuteBatch={(auditReason) => { executeMutation.mutate(auditReason); setReviewModalOpen(false) }}
+        onExecuteDirect={(auditReason) => { executeDirectMutation.mutate(auditReason); setReviewModalOpen(false) }}
         batchPending={executeMutation.isPending}
         directPending={executeDirectMutation.isPending}
+        batchDeniedReason={batchExecutionDeniedReason}
+        directDeniedReason={directExecutionDeniedReason}
       />
 
       <Modal

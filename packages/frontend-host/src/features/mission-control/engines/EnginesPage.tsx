@@ -4,6 +4,7 @@ import { safeRelativePath } from '../../../shared/utils/sanitize'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
+  InlineLoading,
   InlineNotification,
   TextInput,
   Dropdown,
@@ -20,8 +21,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  OverflowMenu,
-  OverflowMenuItem,
 } from '@carbon/react'
 import { Add, Chip } from '@carbon/icons-react'
 import FormModal from '../../../components/FormModal'
@@ -33,6 +32,9 @@ import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
 import { apiClient } from '../../../shared/api/client'
 import EngineMembersModal from './components/EngineMembersModal'
+import { EnginePermission } from '../../../shared/auth/permissions'
+import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
+import type { AccessAuthorityMode, EngineOnboardingMode } from '../../../api/platform-admin'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -58,12 +60,942 @@ function normalizeEngineType(type: unknown): EngineTypeId {
   return 'camunda7'
 }
 
+type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean
+type EngineActionCheck = (engineId: string | null | undefined, actionId: string) => boolean
+
+function legacyEngineRole(engine: any): string {
+  return String(engine?.myRole || '')
+}
+
+const LEGACY_ENGINE_FULL_ACCESS_ROLES = new Set(['admin', 'owner'])
+const LEGACY_ENGINE_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+  delegate: [
+    EnginePermission.ENGINE_EDIT,
+    EnginePermission.ENGINE_DELETE,
+    EnginePermission.ENGINE_ACTIVATE,
+    EnginePermission.SECRETS_VIEW,
+    EnginePermission.SECRETS_MANAGE,
+    EnginePermission.ENVIRONMENT_SET,
+    EnginePermission.ENVIRONMENT_LOCK,
+    EnginePermission.MEMBERS_MANAGE,
+    EnginePermission.MEMBERS_VIEW,
+    EnginePermission.MEMBERS_LOOKUP,
+    EnginePermission.MEMBERS_INVITE,
+    EnginePermission.MEMBERS_ADD,
+    EnginePermission.MEMBERS_UPDATE_ROLE,
+    EnginePermission.MEMBERS_REMOVE,
+    EnginePermission.PROJECT_ACCESS_VIEW,
+    EnginePermission.PROJECT_ACCESS_APPROVE,
+    EnginePermission.PROJECT_ACCESS_DENY,
+    EnginePermission.PROJECT_ACCESS_REVOKE,
+    EnginePermission.DEPLOY,
+    EnginePermission.DEPLOY_VIEW,
+    EnginePermission.PROCESS_START,
+    EnginePermission.PROCESS_CANCEL,
+    EnginePermission.PROCESS_MODIFY,
+    EnginePermission.INSTANCE_VIEW,
+    EnginePermission.INSTANCE_DELETE,
+    EnginePermission.INSTANCE_RETRY,
+    EnginePermission.VARIABLES_EDIT,
+  ],
+  operator: [
+    EnginePermission.MEMBERS_VIEW,
+    EnginePermission.DEPLOY,
+    EnginePermission.DEPLOY_VIEW,
+    EnginePermission.PROCESS_START,
+    EnginePermission.PROCESS_CANCEL,
+    EnginePermission.PROCESS_MODIFY,
+    EnginePermission.INSTANCE_VIEW,
+    EnginePermission.INSTANCE_DELETE,
+    EnginePermission.INSTANCE_RETRY,
+    EnginePermission.VARIABLES_EDIT,
+  ],
+  deployer: [
+    EnginePermission.DEPLOY,
+    EnginePermission.DEPLOY_VIEW,
+  ],
+}
+
+export function legacyEngineRoleHasPermission(engine: any, permission: string): boolean {
+  const role = legacyEngineRole(engine)
+  if (LEGACY_ENGINE_FULL_ACCESS_ROLES.has(role)) return true
+  return Boolean(LEGACY_ENGINE_ROLE_PERMISSIONS[role]?.includes(permission))
+}
+
+export function getEngineActionPermissions(engine: any, hasPermission: EnginePermissionCheck, hasAction?: EngineActionCheck) {
+  const engineId = engine?.id
+  const hasActionDecision = (actionId: string) => Boolean(engineId && hasAction?.(engineId, actionId))
+  const hasPermissionOrActionOrLegacy = (permission: string, actionId?: string) =>
+    hasPermission(engineId, permission) || Boolean(actionId && hasActionDecision(actionId)) || legacyEngineRoleHasPermission(engine, permission)
+  const canManageMembers = hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_MANAGE)
+  const canLookupMembers = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_LOOKUP, 'engine.members.lookup')
+  const canInviteMembers = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_INVITE, 'engine.members.invite')
+  const canAddMembers = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_ADD, 'engine.members.add')
+  const canUpdateMemberRoles = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_UPDATE_ROLE, 'engine.members.update-role')
+  const canRemoveMembers = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_REMOVE, 'engine.members.remove')
+  const canManageDelegate = hasPermissionOrActionOrLegacy(EnginePermission.DELEGATE_MANAGE, 'engine.delegate.manage')
+  const canViewProjectAccess = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.PROJECT_ACCESS_VIEW, 'engine.project-access.requests.read')
+  const canApproveProjectAccess = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.PROJECT_ACCESS_APPROVE, 'engine.project-access.requests.approve')
+  const canDenyProjectAccess = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.PROJECT_ACCESS_DENY, 'engine.project-access.requests.deny')
+  const canRevokeProjectAccess = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.PROJECT_ACCESS_REVOKE, 'engine.project-access.revoke')
+  const canSetEnvironment = hasPermissionOrActionOrLegacy(EnginePermission.ENVIRONMENT_SET, 'engine.environment.set')
+  const canLockEnvironment = hasPermissionOrActionOrLegacy(EnginePermission.ENVIRONMENT_LOCK, 'engine.environment.lock')
+  const canTransferOwnership = hasPermissionOrActionOrLegacy(EnginePermission.OWNERSHIP_TRANSFER, 'engine.ownership.transfer')
+  const canViewMembers = hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_VIEW, 'engine.members.read') || canLookupMembers
+  const canManageSecrets = hasPermissionOrActionOrLegacy(EnginePermission.SECRETS_MANAGE, 'engine.secrets.manage')
+  const canViewSecrets = hasPermissionOrActionOrLegacy(EnginePermission.SECRETS_VIEW, 'engine.secrets.view') || canManageSecrets
+
+  return {
+    canEdit: hasPermissionOrActionOrLegacy(EnginePermission.ENGINE_EDIT, 'engine.inventory.update'),
+    canDelete: hasPermission(engineId, EnginePermission.ENGINE_DELETE) || hasActionDecision('engine.inventory.delete') || legacyEngineRole(engine) === 'admin' || legacyEngineRole(engine) === 'owner' || legacyEngineRole(engine) === 'delegate',
+    canTest: hasPermissionOrActionOrLegacy(EnginePermission.ENGINE_EDIT, 'engine.inventory.update'),
+    canViewSecrets,
+    canManageSecrets,
+    canViewMembers,
+    canManageMembers,
+    canLookupMembers,
+    canInviteMembers,
+    canAddMembers,
+    canUpdateMemberRoles,
+    canRemoveMembers,
+    canManageDelegate,
+    canTransferOwnership,
+    canViewProjectAccess,
+    canApproveProjectAccess,
+    canDenyProjectAccess,
+    canRevokeProjectAccess,
+    canSetEnvironment,
+    canLockEnvironment,
+    canOpenMembers: canViewMembers || canManageMembers || canInviteMembers || canAddMembers || canUpdateMemberRoles || canRemoveMembers || canManageDelegate || canViewProjectAccess,
+  }
+}
+
+type EngineActionPermissions = ReturnType<typeof getEngineActionPermissions>
+
+function getEngineInventoryReadDecision(engine: any, permissions: any) {
+  const decision = evaluateActionSnapshot(permissions, 'engine.inventory.read', { type: 'engine', id: engine?.id ?? null })
+  if (decision.allowed || !legacyEngineRoleHasPermission(engine, EnginePermission.INSTANCE_VIEW)) return decision
+  return {
+    ...decision,
+    allowed: true,
+    state: 'allowed' as const,
+    reason: 'Allowed by legacy engine role compatibility',
+    diagnostics: undefined,
+  }
+}
+
+export type EngineDetailSectionId = 'registration' | 'access' | 'deployment'
+
+export function resolveEngineDetailSections(options: {
+  isEditing?: boolean
+  canViewMembers?: boolean
+  canViewProjectAccess?: boolean
+}): EngineDetailSectionId[] {
+  const sections: EngineDetailSectionId[] = []
+  if (options.isEditing) sections.push('registration')
+  if (options.canViewMembers) sections.push('access')
+  if (options.canViewProjectAccess) sections.push('deployment')
+  return sections
+}
+
+export type EngineRowDiagnosticTag = {
+  label: string
+  type: any
+  title?: string
+}
+
+export function isExternallyRegisteredEngine(engine: any): boolean {
+  return engine?.registrationSource === 'external_api' || Boolean(engine?.externalId)
+}
+
+export function isExternallyManagedEngine(engine: any): boolean {
+  return engine?.registrationSource === 'external_api'
+}
+
+export function formatEngineRegistrationSource(engine: any): string {
+  if (engine?.registrationSource === 'external_api') return 'External API'
+  if (engine?.registrationSource === 'user' || engine?.registrationSource === 'manual') return 'Manual'
+  if (engine?.externalId) return 'External ID'
+  return 'Manual'
+}
+
+export function formatEngineRegistrationStatus(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return '-'
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+export function formatEngineLabels(labels: unknown): string {
+  if (!labels || typeof labels !== 'object' || Array.isArray(labels)) return '-'
+  const entries = Object.entries(labels as Record<string, unknown>)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[0].trim().length > 0 && entry[1].trim().length > 0)
+    .sort(([left], [right]) => left.localeCompare(right))
+  return entries.length > 0 ? entries.map(([key, value]) => `${key}=${value}`).join(', ') : '-'
+}
+
+export function formatEngineFieldOwnership(ownership: unknown): string {
+  if (!ownership || typeof ownership !== 'object' || Array.isArray(ownership)) return '-'
+  const entries = Object.entries(ownership as Record<string, unknown>)
+    .filter((entry): entry is [string, 'manual' | 'external'] => entry[1] === 'manual' || entry[1] === 'external')
+    .sort(([left], [right]) => left.localeCompare(right))
+  if (entries.length === 0) return '-'
+  const external = entries.filter(([, owner]) => owner === 'external').map(([key]) => key)
+  const manual = entries.filter(([, owner]) => owner === 'manual').map(([key]) => key)
+  return [
+    external.length ? `External: ${external.join(', ')}` : '',
+    manual.length ? `Manual: ${manual.join(', ')}` : '',
+  ].filter(Boolean).join(' | ') || '-'
+}
+
+export function formatEngineTimestamp(value: unknown): string {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return '-'
+  return new Date(value).toISOString().replace('T', ' ').replace('.000Z', ' UTC')
+}
+
+export function formatEngineCapabilitySummary(capabilities: any): string {
+  if (!capabilities || typeof capabilities !== 'object') return '-'
+  const profile = typeof capabilities.compatibilityProfile === 'string' ? capabilities.compatibilityProfile : ''
+  const support = typeof capabilities.supportLevel === 'string' ? capabilities.supportLevel : ''
+  const operations = Array.isArray(capabilities.operations) ? capabilities.operations.length : 0
+  return [
+    profile || null,
+    support ? formatEngineRegistrationStatus(support) : null,
+    operations ? `${operations} operation${operations === 1 ? '' : 's'}` : null,
+  ].filter(Boolean).join(', ') || '-'
+}
+
+export function formatEngineCapabilityDiagnostics(diagnostics: any): string {
+  if (!diagnostics || typeof diagnostics !== 'object') return '-'
+  if (diagnostics.status === 'in_sync') return 'All expected operations reported'
+  if (Array.isArray(diagnostics.missingOperations) && diagnostics.missingOperations.length > 0) {
+    return `Missing: ${diagnostics.missingOperations.join(', ')}`
+  }
+  if (Array.isArray(diagnostics.extraOperations) && diagnostics.extraOperations.length > 0) {
+    return `Extra: ${diagnostics.extraOperations.join(', ')}`
+  }
+  if (Array.isArray(diagnostics.reportedOperations) && diagnostics.reportedOperations.length === 0) {
+    return 'No operation capabilities reported'
+  }
+  if (Array.isArray(diagnostics.issues) && typeof diagnostics.issues[0] === 'string') {
+    return diagnostics.issues[0]
+  }
+  return typeof diagnostics.recommendation === 'string' ? diagnostics.recommendation : '-'
+}
+
+function getStringStatus(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+export function getEngineRowDiagnosticTags(engine: any): EngineRowDiagnosticTag[] {
+  if (!engine) return []
+  const tags: EngineRowDiagnosticTag[] = []
+  if (isExternallyManagedEngine(engine)) {
+    tags.push({ label: 'External API', type: getRegistrationTagType('external_api'), title: 'Registered by external API' })
+  } else if (isExternallyRegisteredEngine(engine)) {
+    tags.push({ label: 'External ID', type: getRegistrationTagType('external_api'), title: 'Has an external engine identifier' })
+  }
+
+  const lifecycleStatus = getStringStatus(engine.lifecycleStatus)
+  if (lifecycleStatus && lifecycleStatus !== 'active') {
+    tags.push({
+      label: `Lifecycle: ${formatEngineRegistrationStatus(lifecycleStatus)}`,
+      type: getRegistrationTagType(lifecycleStatus),
+      title: 'Engine lifecycle state',
+    })
+  }
+
+  const driftStatus = getStringStatus(engine.driftStatus)
+  if (driftStatus && driftStatus !== 'in_sync' && driftStatus !== 'synced') {
+    tags.push({
+      label: `Drift: ${formatEngineRegistrationStatus(driftStatus)}`,
+      type: getRegistrationTagType(driftStatus),
+      title: 'External registration drift state',
+    })
+  }
+
+  const capabilityStatus = getStringStatus(engine.capabilityStatus)
+  if (capabilityStatus && capabilityStatus !== 'compatible') {
+    tags.push({
+      label: `Capability: ${formatEngineRegistrationStatus(capabilityStatus)}`,
+      type: getRegistrationTagType(capabilityStatus),
+      title: 'Reported engine capability status',
+    })
+  }
+
+  return tags
+}
+
+export function getEngineLifecycleUnavailableReason(engine: any, actionLabel: string): string | null {
+  const lifecycleStatus = getStringStatus(engine?.lifecycleStatus || 'active')
+  if (lifecycleStatus === 'decommissioned') {
+    return `Engine is decommissioned. Reactivate it from Access Control before ${actionLabel}.`
+  }
+  if (lifecycleStatus === 'disabled') {
+    return `Engine is disabled. Reactivate it from Access Control before ${actionLabel}.`
+  }
+  return null
+}
+
+export function getEngineTestUnavailableReason(
+  actions: Pick<EngineActionPermissions, 'canTest'> | null | undefined,
+  engine?: any
+): string | null {
+  if (!actions?.canTest) return `Missing permission ${EnginePermission.ENGINE_EDIT}`
+  return getEngineLifecycleUnavailableReason(engine, 'testing the connection')
+}
+
+export function getEngineMembersUnavailableReason(actions: Pick<EngineActionPermissions, 'canOpenMembers'> | null | undefined): string | null {
+  return actions?.canOpenMembers ? null : `Missing permission ${EnginePermission.MEMBERS_VIEW}`
+}
+
+export function getEngineDeleteUnavailableReason(
+  actions: Pick<EngineActionPermissions, 'canDelete'> | null | undefined,
+  manualEngineOnboardingAllowed: boolean,
+  engine?: any
+): string | null {
+  if (!actions?.canDelete) return `Missing permission ${EnginePermission.ENGINE_DELETE}`
+  if (!manualEngineOnboardingAllowed) return 'Manual engine deletion is disabled by the current onboarding policy'
+  if (isExternallyManagedEngine(engine)) {
+    return 'Externally registered engines must be decommissioned from Access Control or the owning external system.'
+  }
+  const lifecycleReason = getEngineLifecycleUnavailableReason(engine, 'deleting the engine')
+  if (lifecycleReason) return lifecycleReason
+  return null
+}
+
+type ProjectEngineTargetView = {
+  id: string
+  projectId: string
+  projectName?: string | null
+  environment?: { name?: string | null; color?: string | null; manualDeployAllowed?: boolean } | null
+  status?: string | null
+  source?: string | null
+  sourceRef?: string | null
+  allowManualDeploy?: boolean
+  allowCiDeploy?: boolean
+  allowApiDeploy?: boolean
+  allowImport?: boolean
+  lastSeenAt?: number | null
+  updatedAt?: number | null
+}
+
+type EngineAccessMember = {
+  id: string
+  engineId: string
+  userId: string
+  role: string
+  grantedById?: string | null
+  grantedAt?: number | null
+  createdAt?: number | null
+  user?: { id: string; email: string; firstName?: string | null; lastName?: string | null } | null
+}
+
+type EngineMembersResponse = {
+  members?: EngineAccessMember[]
+  pendingInvites?: Array<{ invitationId: string; email: string; role: string; status: string }>
+}
+
+type EngineRoleAssignment = {
+  id: string
+  userId?: string | null
+  principalType?: string | null
+  principalId?: string | null
+  roleId: string
+  roleName?: string | null
+  roleScope?: string | null
+  resourceType?: string | null
+  resourceId?: string | null
+  scopeType?: string | null
+  scopeId?: string | null
+  source: string
+  sourceMappingId?: string | null
+  sourceRef?: string | null
+  expiresAt?: number | null
+  lastSeenAt?: number | null
+  createdAt?: number | null
+  updatedAt?: number | null
+}
+
+type SsoEngineAccessSnapshot = {
+  id: string
+  providerId: string | null
+  mappingId: string
+  principalType: string
+  principalId: string
+  engineId: string
+  providerSubjectIds: string[]
+  providerGroupIds: string[]
+  providerAppRoleIds: string[]
+  currentRoleIds: string[]
+  previousRoleIds: string[]
+  status: string
+  cleanupReason: string | null
+  lastSeenAt: number
+  lastSyncedAt: number
+  removedAt: number | null
+  details?: Record<string, unknown>
+}
+
+export function formatProjectEngineTargetProject(target: ProjectEngineTargetView | null | undefined): string {
+  return target?.projectName || target?.projectId || '-'
+}
+
+export function formatProjectEngineTargetModes(target: ProjectEngineTargetView | null | undefined): string {
+  if (!target) return '-'
+  const modes = [
+    target.allowManualDeploy ? 'Manual' : null,
+    target.allowCiDeploy ? 'CI' : null,
+    target.allowApiDeploy ? 'API' : null,
+    target.allowImport ? 'Import' : null,
+  ].filter(Boolean)
+  return modes.length > 0 ? modes.join(', ') : '-'
+}
+
+export function formatProjectEngineTargetStatus(value: unknown): string {
+  return formatEngineRegistrationStatus(value || 'active')
+}
+
+export function formatEngineAccessMemberName(member: EngineAccessMember | null | undefined): string {
+  if (!member) return '-'
+  const fullName = `${member.user?.firstName || ''}${member.user?.firstName && member.user?.lastName ? ' ' : ''}${member.user?.lastName || ''}`.trim()
+  return fullName || member.user?.email || member.userId || '-'
+}
+
+export function formatEngineAccessPrincipal(assignment: EngineRoleAssignment | null | undefined): string {
+  if (!assignment) return '-'
+  const type = assignment.principalType || (assignment.userId ? 'user' : 'principal')
+  const id = assignment.principalId || assignment.userId || '-'
+  const label = type === 'api_client'
+    ? 'API client'
+    : type === 'service_account'
+      ? 'Service account'
+      : type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ')
+  return `${label}: ${id}`
+}
+
+export function formatEngineAccessRole(value: string | null | undefined): string {
+  if (!value) return '-'
+  if (value.startsWith('system.engine.')) {
+    return formatEngineRegistrationStatus(value.replace('system.engine.', ''))
+  }
+  return formatEngineRegistrationStatus(value)
+}
+
+export function formatEngineAccessSourceLineage(assignment: EngineRoleAssignment | null | undefined): string {
+  if (!assignment) return '-'
+  const source = String(assignment.source || '').toLowerCase()
+  const sourceLabel = source === 'sso'
+    ? 'SSO-managed assignment'
+    : source === 'manual'
+      ? 'Manual assignment'
+      : source === 'system'
+        ? 'System-managed assignment'
+        : source === 'api'
+          ? 'API-managed assignment'
+          : source === 'legacy'
+            ? 'Legacy-derived assignment'
+            : `${formatEngineRegistrationStatus(source || 'unknown')} assignment`
+  const parts = [sourceLabel]
+  if (assignment.sourceRef) parts.push(`Source ref ${assignment.sourceRef}`)
+  if (assignment.sourceMappingId && assignment.sourceMappingId !== assignment.sourceRef) {
+    parts.push(`${source === 'sso' ? 'SSO mapping' : 'Mapping'} ${assignment.sourceMappingId}`)
+  }
+  return parts.join('; ')
+}
+
+export function isEngineGovernanceRoleAssignment(assignment: EngineRoleAssignment | null | undefined): boolean {
+  return assignment?.roleId === 'system.engine.owner' || assignment?.roleId === 'system.engine.delegate'
+}
+
+const ENGINE_MEMBER_GOVERNANCE_LABELS: Record<string, string> = {
+  owner: 'Accountable owner',
+  delegate: 'Governance delegate',
+}
+
+export function formatEngineAccessMemberGovernance(member: EngineAccessMember | null | undefined): string {
+  return ENGINE_MEMBER_GOVERNANCE_LABELS[String(member?.role || '')] || 'Scoped user access'
+}
+
+function isAccountableOwnerMember(member: EngineAccessMember): boolean {
+  return String(member.role || '') === 'owner'
+}
+
+export function getEngineAccountableOwnerLabels(members: EngineAccessMember[]): string[] {
+  return members
+    .filter(isAccountableOwnerMember)
+    .map(formatEngineAccessMemberName)
+    .filter((label) => label !== '-')
+}
+
+export function getEngineEffectiveOwnerLabels(members: EngineAccessMember[], assignments: EngineRoleAssignment[]): string[] {
+  const accountableOwnerMembers = members.filter(isAccountableOwnerMember)
+  const accountableOwnerIds = new Set(accountableOwnerMembers.map((member) => member.userId).filter(Boolean))
+  const labels = [
+    ...accountableOwnerMembers.map(formatEngineAccessMemberName),
+    ...assignments
+      .filter((assignment) => assignment.roleId === 'system.engine.owner')
+      .filter((assignment) => !accountableOwnerIds.has(String(assignment.principalId || assignment.userId || '')))
+      .map(formatEngineAccessPrincipal),
+  ].filter((label) => label !== '-')
+  return Array.from(new Set(labels))
+}
+
+function isManualEngineOnboardingAllowed(mode: EngineOnboardingMode | undefined): boolean {
+  return (mode || 'manual_allowed') !== 'external_only'
+}
+
+const ENGINE_SECRET_FORM_FIELDS = [
+  'authType',
+  'username',
+  'passwordEnc',
+  'oauthTokenUrl',
+  'oauthScopes',
+  'oauthAudience',
+] as const
+
+function getRegistrationTagType(value: unknown): any {
+  if (value === 'external_api') return 'purple'
+  if (value === 'decommissioned' || value === 'mismatch') return 'red'
+  if (value === 'manual_override' || value === 'stale') return 'magenta'
+  if (value === 'active' || value === 'in_sync') return 'green'
+  if (value === 'external_managed') return 'cyan'
+  if (value === 'hybrid') return 'blue'
+  return 'gray'
+}
+
+function getTargetStatusTagType(value: unknown): any {
+  if (value === 'active') return 'green'
+  if (value === 'disabled') return 'magenta'
+  if (value === 'archived') return 'gray'
+  return 'gray'
+}
+
+function getSnapshotStatusTagType(value: unknown): any {
+  if (value === 'active') return 'green'
+  if (value === 'stale') return 'magenta'
+  if (value === 'removed_by_sso' || value === 'removed_by_admin' || value === 'mapping_disabled') return 'purple'
+  if (value === 'provider_identity_missing' || value === 'provider_group_missing' || value === 'engine_no_longer_matches_selector') return 'red'
+  return 'gray'
+}
+
+function EngineRegistrationDetail({ label, value, tagValue }: { label: string; value: React.ReactNode; tagValue?: unknown }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: 4 }}>{label}</div>
+      {tagValue ? (
+        <Tag type={getRegistrationTagType(tagValue)} size="sm">{value}</Tag>
+      ) : (
+        <div style={{ fontSize: '13px', color: 'var(--color-text-primary)', overflowWrap: 'anywhere' }}>{value}</div>
+      )}
+    </div>
+  )
+}
+
+function EngineDeploymentSection({
+  canViewProjectAccess,
+  error,
+  isLoading,
+  targets,
+}: {
+  canViewProjectAccess: boolean
+  error: unknown
+  isLoading: boolean
+  targets: ProjectEngineTargetView[]
+}) {
+  return (
+    <section
+      aria-label="Deployment targets"
+      style={{
+        border: '1px solid var(--color-border-primary)',
+        borderRadius: 8,
+        padding: 'var(--spacing-4)',
+        background: 'var(--color-bg-secondary)',
+        display: 'grid',
+        gap: 'var(--spacing-4)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)' }}>Deployment targets</h3>
+        {canViewProjectAccess && <Tag type="cyan" size="sm">{targets.length} targets</Tag>}
+      </div>
+
+      {!canViewProjectAccess ? (
+        <InlineNotification
+          lowContrast
+          kind="info"
+          title="Deployment targets unavailable"
+          subtitle="Viewing project-engine deployment targets requires engine project access visibility permission."
+          hideCloseButton
+        />
+      ) : isLoading ? (
+        <InlineLoading description="Loading deployment targets" />
+      ) : error ? (
+        <InlineNotification
+          lowContrast
+          kind="error"
+          title="Failed to load deployment targets"
+          subtitle={getUiErrorMessage(error, 'Failed to load deployment targets')}
+          hideCloseButton
+        />
+      ) : targets.length === 0 ? (
+        <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+          No project targets are configured for this engine.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+          {targets.map((target) => (
+            <div
+              key={target.id}
+              style={{
+                border: '1px solid var(--color-border-subtle)',
+                borderRadius: 6,
+                padding: 'var(--spacing-3)',
+                display: 'grid',
+                gap: 'var(--spacing-3)',
+                background: 'var(--color-bg-primary)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-primary)', overflowWrap: 'anywhere' }}>
+                    {formatProjectEngineTargetProject(target)}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
+                    {target.projectId}
+                  </div>
+                </div>
+                <Tag type={getTargetStatusTagType(target.status)} size="sm">
+                  {formatProjectEngineTargetStatus(target.status)}
+                </Tag>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--spacing-3)' }}>
+                <EngineRegistrationDetail label="Allowed modes" value={formatProjectEngineTargetModes(target)} />
+                <EngineRegistrationDetail label="Source" value={formatEngineRegistrationStatus(target.source)} />
+                <EngineRegistrationDetail label="Environment" value={target.environment?.name || '-'} />
+                <EngineRegistrationDetail label="Last seen" value={formatEngineTimestamp(target.lastSeenAt)} />
+                <EngineRegistrationDetail label="Updated" value={formatEngineTimestamp(target.updatedAt)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function EngineAccessSection({
+  assignments,
+  assignmentsError,
+  assignmentsLoading,
+  canViewMembers,
+  membersError,
+  membersLoading,
+  membersResponse,
+  snapshots,
+  snapshotsError,
+  snapshotsLoading,
+}: {
+  assignments: EngineRoleAssignment[]
+  assignmentsError: unknown
+  assignmentsLoading: boolean
+  canViewMembers: boolean
+  membersError: unknown
+  membersLoading: boolean
+  membersResponse: EngineMembersResponse | undefined
+  snapshots: SsoEngineAccessSnapshot[]
+  snapshotsError: unknown
+  snapshotsLoading: boolean
+}) {
+  const members = Array.isArray(membersResponse?.members) ? membersResponse!.members! : []
+  const pendingInvites = Array.isArray(membersResponse?.pendingInvites) ? membersResponse!.pendingInvites! : []
+  const governanceAssignments = assignments.filter(isEngineGovernanceRoleAssignment)
+  const scopedAccessAssignments = assignments.filter((assignment) => !isEngineGovernanceRoleAssignment(assignment))
+  const accountableOwnerLabels = getEngineAccountableOwnerLabels(members)
+  const effectiveOwnerLabels = getEngineEffectiveOwnerLabels(members, assignments)
+
+  return (
+    <section
+      aria-label="Access"
+      style={{
+        border: '1px solid var(--color-border-primary)',
+        borderRadius: 8,
+        padding: 'var(--spacing-4)',
+        background: 'var(--color-bg-secondary)',
+        display: 'grid',
+        gap: 'var(--spacing-4)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)' }}>Access</h3>
+        {canViewMembers && (
+          <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
+            <Tag type="blue" size="sm">{members.length} people</Tag>
+            <Tag type="magenta" size="sm">{governanceAssignments.length} governance</Tag>
+            <Tag type="cyan" size="sm">{scopedAccessAssignments.length} assignments</Tag>
+            {snapshots.length > 0 && <Tag type="purple" size="sm">{snapshots.length} SSO snapshots</Tag>}
+          </div>
+        )}
+      </div>
+
+      {!canViewMembers ? (
+        <InlineNotification
+          lowContrast
+          kind="info"
+          title="Access details unavailable"
+          subtitle="Viewing engine access requires engine member visibility permission."
+          hideCloseButton
+        />
+      ) : membersLoading || assignmentsLoading ? (
+        <InlineLoading description="Loading access details" />
+      ) : membersError || assignmentsError ? (
+        <InlineNotification
+          lowContrast
+          kind="error"
+          title="Failed to load access details"
+          subtitle={getUiErrorMessage(membersError || assignmentsError, 'Failed to load access details')}
+          hideCloseButton
+        />
+      ) : members.length === 0 && governanceAssignments.length === 0 && scopedAccessAssignments.length === 0 && pendingInvites.length === 0 && snapshots.length === 0 ? (
+        <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+          No engine access entries are configured.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--spacing-3)' }}>
+            <EngineRegistrationDetail
+              label="Accountable owner"
+              value={accountableOwnerLabels.length > 0 ? accountableOwnerLabels.join(', ') : 'Not assigned'}
+            />
+            <EngineRegistrationDetail
+              label="Effective owners"
+              value={effectiveOwnerLabels.length > 0 ? effectiveOwnerLabels.join(', ') : 'None'}
+            />
+          </div>
+
+          {members.length > 0 && (
+            <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>People</div>
+              <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+                {members.slice(0, 6).map((member) => (
+                  <div key={member.id || member.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', color: 'var(--color-text-primary)', overflowWrap: 'anywhere' }}>{formatEngineAccessMemberName(member)}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
+                        {member.user?.email || member.userId} · {formatEngineAccessMemberGovernance(member)}
+                      </div>
+                    </div>
+                    <Tag type={getRegistrationTagType(member.role)} size="sm">{formatEngineAccessRole(member.role)}</Tag>
+                  </div>
+                ))}
+                {members.length > 6 && (
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>+{members.length - 6} more people</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {governanceAssignments.length > 0 && (
+            <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>Governance grants</div>
+              <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+                {governanceAssignments.slice(0, 6).map((assignment) => (
+                  <div key={assignment.id} style={{ display: 'grid', gap: 'var(--spacing-2)', borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-2)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: '13px', color: 'var(--color-text-primary)', overflowWrap: 'anywhere' }}>{formatEngineAccessPrincipal(assignment)}</div>
+                      <Tag type="magenta" size="sm">Managed governance</Tag>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--spacing-3)' }}>
+                      <EngineRegistrationDetail label="Role" value={assignment.roleName || formatEngineAccessRole(assignment.roleId)} />
+                      <EngineRegistrationDetail label="Source" value={formatEngineRegistrationStatus(assignment.source)} />
+                      <EngineRegistrationDetail label="Lineage" value={formatEngineAccessSourceLineage(assignment)} />
+                      <EngineRegistrationDetail label="Expires" value={formatEngineTimestamp(assignment.expiresAt)} />
+                    </div>
+                  </div>
+                ))}
+                {governanceAssignments.length > 6 && (
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>+{governanceAssignments.length - 6} more governance grants</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {scopedAccessAssignments.length > 0 && (
+            <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>Scoped assignments</div>
+              <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+                {scopedAccessAssignments.slice(0, 6).map((assignment) => (
+                  <div key={assignment.id} style={{ display: 'grid', gap: 'var(--spacing-2)', borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-2)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: '13px', color: 'var(--color-text-primary)', overflowWrap: 'anywhere' }}>{formatEngineAccessPrincipal(assignment)}</div>
+                      <Tag type={assignment.source === 'manual' ? 'blue' : assignment.source === 'sso' ? 'purple' : 'gray'} size="sm">{formatEngineRegistrationStatus(assignment.source)}</Tag>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--spacing-3)' }}>
+                      <EngineRegistrationDetail label="Role" value={assignment.roleName || formatEngineAccessRole(assignment.roleId)} />
+                      <EngineRegistrationDetail label="Principal" value={assignment.principalType || 'user'} />
+                      <EngineRegistrationDetail label="Lineage" value={formatEngineAccessSourceLineage(assignment)} />
+                      <EngineRegistrationDetail label="Expires" value={formatEngineTimestamp(assignment.expiresAt)} />
+                    </div>
+                  </div>
+                ))}
+                {scopedAccessAssignments.length > 6 && (
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>+{scopedAccessAssignments.length - 6} more assignments</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {snapshotsLoading && (
+            <InlineLoading description="Loading SSO snapshot diagnostics" />
+          )}
+
+          {Boolean(snapshotsError) && (
+            <InlineNotification
+              lowContrast
+              kind="warning"
+              title="SSO snapshot diagnostics unavailable"
+              subtitle={getUiErrorMessage(snapshotsError, 'Unable to load SSO engine access snapshots')}
+              hideCloseButton
+            />
+          )}
+
+          {!snapshotsError && snapshots.length > 0 && (
+            <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>SSO engine access snapshots</div>
+              <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+                {snapshots.slice(0, 6).map((snapshot) => (
+                  <div key={snapshot.id} style={{ display: 'grid', gap: 'var(--spacing-2)', borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-2)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: '13px', color: 'var(--color-text-primary)', overflowWrap: 'anywhere' }}>
+                        {snapshot.principalType}: {snapshot.principalId}
+                      </div>
+                      <Tag type={getSnapshotStatusTagType(snapshot.status)} size="sm">{formatEngineRegistrationStatus(snapshot.status)}</Tag>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--spacing-3)' }}>
+                      <EngineRegistrationDetail label="Current roles" value={snapshot.currentRoleIds.map(formatEngineAccessRole).join(', ') || '-'} />
+                      <EngineRegistrationDetail label="Previous roles" value={snapshot.previousRoleIds.map(formatEngineAccessRole).join(', ') || '-'} />
+                      <EngineRegistrationDetail label="Mapping" value={snapshot.mappingId} />
+                      <EngineRegistrationDetail label="Last sync" value={formatEngineTimestamp(snapshot.lastSyncedAt)} />
+                      <EngineRegistrationDetail label="Provider groups" value={snapshot.providerGroupIds.length > 0 ? `${snapshot.providerGroupIds.length} recorded` : '-'} />
+                      <EngineRegistrationDetail label="Cleanup reason" value={snapshot.cleanupReason ? formatEngineRegistrationStatus(snapshot.cleanupReason) : '-'} />
+                    </div>
+                  </div>
+                ))}
+                {snapshots.length > 6 && (
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>+{snapshots.length - 6} more SSO snapshots</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {pendingInvites.length > 0 && (
+            <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              {pendingInvites.length} pending invite{pendingInvites.length === 1 ? '' : 's'} also {pendingInvites.length === 1 ? 'exists' : 'exist'} for this engine.
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function EngineRegistrationSection({ engine }: { engine: any }) {
+  if (!engine) return null
+  return (
+    <section
+      aria-label="Registration"
+      style={{
+        border: '1px solid var(--color-border-primary)',
+        borderRadius: 8,
+        padding: 'var(--spacing-4)',
+        background: 'var(--color-bg-secondary)',
+        display: 'grid',
+        gap: 'var(--spacing-4)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)' }}>Registration</h3>
+        <Tag type={getRegistrationTagType(engine.registrationSource)} size="sm">{formatEngineRegistrationSource(engine)}</Tag>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--spacing-4)' }}>
+        <EngineRegistrationDetail label="External system" value={engine.externalSystemId || '-'} />
+        <EngineRegistrationDetail label="External ID" value={engine.externalId || '-'} />
+        <EngineRegistrationDetail label="Management mode" value={formatEngineRegistrationStatus(engine.managementMode)} tagValue={engine.managementMode || undefined} />
+        <EngineRegistrationDetail label="Lifecycle" value={formatEngineRegistrationStatus(engine.lifecycleStatus || 'active')} tagValue={engine.lifecycleStatus || 'active'} />
+        <EngineRegistrationDetail label="Drift" value={formatEngineRegistrationStatus(engine.driftStatus)} tagValue={engine.driftStatus || undefined} />
+        <EngineRegistrationDetail label="Capability status" value={formatEngineRegistrationStatus(engine.capabilityStatus)} tagValue={engine.capabilityStatus || undefined} />
+        <EngineRegistrationDetail label="Last external sync" value={formatEngineTimestamp(engine.lastExternalSyncAt)} />
+        <EngineRegistrationDetail label="External updated" value={formatEngineTimestamp(engine.externalUpdatedAt)} />
+      </div>
+      <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+        <EngineRegistrationDetail label="Labels" value={formatEngineLabels(engine.labels)} />
+        <EngineRegistrationDetail label="Field ownership" value={formatEngineFieldOwnership(engine.fieldOwnership)} />
+        <EngineRegistrationDetail label="Expected capabilities" value={formatEngineCapabilitySummary(engine.capabilities)} />
+        <EngineRegistrationDetail label="Reported capabilities" value={formatEngineCapabilitySummary(engine.reportedCapabilities)} />
+        <EngineRegistrationDetail label="Capability diagnostics" value={formatEngineCapabilityDiagnostics(engine.capabilityDiagnostics)} />
+      </div>
+    </section>
+  )
+}
+
+export function buildEngineMutationPayload(
+  form: any,
+  editing?: any | null,
+  options: { canManageSecrets?: boolean } = {}
+): any {
+  if (editing && isExternallyManagedEngine(editing)) {
+    return {
+      name: form.name,
+      environmentTagId: form.environmentTagId || null,
+    }
+  }
+
+  const payload: any = { ...form }
+  if (editing && options.canManageSecrets === false) {
+    for (const field of ENGINE_SECRET_FORM_FIELDS) {
+      payload[field] = undefined
+    }
+    return payload
+  }
+
+  if (payload.authType === 'bearer') {
+    // Bearer auth only uses token (stored in passwordEnc), not username.
+    payload.username = undefined
+  }
+  if (payload.authType === 'none') {
+    payload.username = undefined
+    payload.passwordEnc = undefined
+    payload.oauthTokenUrl = undefined
+    payload.oauthScopes = undefined
+    payload.oauthAudience = undefined
+  }
+  if (payload.authType !== 'oauth2-client-credentials') {
+    payload.oauthTokenUrl = undefined
+    payload.oauthScopes = undefined
+    payload.oauthAudience = undefined
+  }
+  return payload
+}
+
 
 export default function Engines() {
   const location = useLocation() as any
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { refreshUser } = useAuth()
+  const { refreshUser, hasEnginePermission, permissions } = useAuth()
+  const createEngineDecision = useActionDecision('engine.inventory.create', { type: 'platform' })
+  const platformSettingsQ = useQuery({
+    queryKey: ['platform', 'sync-settings'],
+    queryFn: () => apiClient.get<{ engineOnboardingMode?: EngineOnboardingMode; engineAccessAuthority?: AccessAuthorityMode }>('/api/auth/platform-settings', undefined, { credentials: 'include' }),
+  })
+  const engineOnboardingMode = platformSettingsQ.data?.engineOnboardingMode || 'manual_allowed'
+  const engineAccessAuthority = platformSettingsQ.data?.engineAccessAuthority || 'manual'
+  const manualEngineOnboardingAllowed = isManualEngineOnboardingAllowed(engineOnboardingMode)
+  const createEngineUnavailableReason = manualEngineOnboardingAllowed
+    ? createEngineDecision.reason
+    : 'Manual engine registration is disabled by the current onboarding policy.'
+  const canCreateEngine = createEngineDecision.allowed && manualEngineOnboardingAllowed
   const engineModal = useModal<any>()
   const { notify } = useToast()
   const [editing, setEditing] = React.useState<any | null>(null)
@@ -105,8 +1037,7 @@ export default function Engines() {
   const hasMultipleTags = Array.isArray(envTags) && envTags.length > 1
 
   const listQ = useQuery({ queryKey: ['engines'], queryFn: () => apiClient.get<any[]>('/engines-api/engines', undefined, { credentials: 'include' }) })
-  const isOAuth2ClientCredentialsIncomplete = form.authType === 'oauth2-client-credentials'
-    && (!form.username || !form.passwordEnc || !form.oauthTokenUrl)
+  const areSourceOwnedFieldsReadOnly = Boolean(editing && isExternallyManagedEngine(editing))
 
   const createM = useMutation({
     mutationFn: (payload: any) => apiClient.post<any>('/engines-api/engines', payload, { credentials: 'include' }),
@@ -135,6 +1066,21 @@ export default function Engines() {
     },
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to update engine', subtitle: getUiErrorMessage(e, 'Failed to update') })
   })
+  const setEnvironmentM = useMutation({
+    mutationFn: ({ engineId, environmentTagId }: { engineId: string; environmentTagId: string | null }) => apiClient.post<any>(
+      `/engines-api/engines/${encodeURIComponent(engineId)}/environment`,
+      { environmentTagId },
+      { credentials: 'include' }
+    ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['engines'] })
+      qc.invalidateQueries({ queryKey: ['engines','active'] })
+      engineModal.closeModal()
+      setEditing(null)
+      notify({ kind: 'success', title: 'Engine environment updated' })
+    },
+    onError: (e: any) => notify({ kind: 'error', title: 'Failed to update engine environment', subtitle: getUiErrorMessage(e, 'Failed to update engine environment') })
+  })
   const deleteM = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/engines-api/engines/${encodeURIComponent(id)}`, { credentials: 'include' }),
     onSuccess: () => {
@@ -150,6 +1096,7 @@ export default function Engines() {
   })
 
   const openNew = React.useCallback(() => {
+    if (!canCreateEngine) return
     setEditing(null)
     // Auto-assign environment tag if there's only one
     const autoTagId = hasSingleTag ? envTags![0].id : ''
@@ -166,7 +1113,7 @@ export default function Engines() {
       environmentTagId: autoTagId,
     })
     engineModal.openModal()
-  }, [hasSingleTag, envTags, engineModal])
+  }, [canCreateEngine, hasSingleTag, envTags, engineModal])
 
   const didHandleOpenNewEngine = React.useRef(false)
   React.useEffect(() => {
@@ -176,7 +1123,75 @@ export default function Engines() {
     openNew()
     navigate(safeRelativePath(`${location.pathname || ''}${location.search || ''}`), { replace: true, state: {} })
   }, [location, navigate, openNew])
-  function openEdit(row: any) {
+
+  const rows = listQ.data || []
+  const [isAddFirstEngineHover, setIsAddFirstEngineHover] = React.useState(false)
+
+  const hasEngineAction = React.useCallback((engineId: string | null | undefined, actionId: string) => {
+    return evaluateActionSnapshot(permissions, actionId, { type: 'engine', id: engineId }).allowed
+  }, [permissions])
+
+  function getActionsForEngine(engine: any) {
+    return getEngineActionPermissions(engine, hasEnginePermission, hasEngineAction)
+  }
+
+  const editingActions = editing ? getActionsForEngine(editing) : null
+  const isEngineEnvironmentOnlyEditable = Boolean(editing && !editingActions?.canEdit && editingActions?.canSetEnvironment)
+  const isEngineFormReadOnly = Boolean(editing && !editingActions?.canEdit && !editingActions?.canSetEnvironment)
+  const canViewEditingProjectAccess = editing ? Boolean(editingActions?.canViewProjectAccess) : false
+  const canViewEditingSecrets = editing ? Boolean(editingActions?.canViewSecrets) : true
+  const canManageEditingSecrets = editing ? Boolean(editingActions?.canManageSecrets) : true
+  const canSetEditingEnvironment = editing ? Boolean(editingActions?.canSetEnvironment || editingActions?.canEdit) : true
+  const areAuthFieldsReadOnly = areSourceOwnedFieldsReadOnly || Boolean(editing && !canManageEditingSecrets)
+  const isOAuth2ClientCredentialsIncomplete = form.authType === 'oauth2-client-credentials'
+    && (!form.username || !form.passwordEnc || !form.oauthTokenUrl)
+  const deploymentTargetsQ = useQuery({
+    queryKey: ['engines', editing?.id, 'project-targets'],
+    enabled: Boolean(engineModal.isOpen && editing?.id && canViewEditingProjectAccess),
+    queryFn: () => apiClient.get<ProjectEngineTargetView[]>(
+      `/engines-api/engines/${encodeURIComponent(String(editing?.id))}/project-targets`,
+      undefined,
+      { credentials: 'include' }
+    ),
+  })
+  const accessMembersQ = useQuery({
+    queryKey: ['engines', editing?.id, 'access-members'],
+    enabled: Boolean(engineModal.isOpen && editing?.id && editingActions?.canViewMembers),
+    queryFn: () => apiClient.get<EngineMembersResponse>(
+      `/engines-api/engines/${encodeURIComponent(String(editing?.id))}/members`,
+      undefined,
+      { credentials: 'include' }
+    ),
+  })
+  const accessAssignmentsQ = useQuery({
+    queryKey: ['engines', editing?.id, 'access-assignments'],
+    enabled: Boolean(engineModal.isOpen && editing?.id && editingActions?.canViewMembers),
+    queryFn: () => apiClient.get<EngineRoleAssignment[]>(
+      `/api/authz/role-assignments?resourceType=engine&resourceId=${encodeURIComponent(String(editing?.id))}`,
+      undefined,
+      { credentials: 'include' }
+    ),
+  })
+  const accessSnapshotsQ = useQuery({
+    queryKey: ['engines', editing?.id, 'sso-access-snapshots'],
+    enabled: Boolean(engineModal.isOpen && editing?.id && editingActions?.canViewMembers),
+    retry: false,
+    queryFn: () => apiClient.get<SsoEngineAccessSnapshot[]>(
+      `/api/authz/sso-engine-access-snapshots/${encodeURIComponent(String(editing?.id))}`,
+      undefined,
+      { credentials: 'include' }
+    ),
+  })
+  const engineDetailSections = React.useMemo(() => resolveEngineDetailSections({
+    isEditing: Boolean(editing),
+    canViewMembers: Boolean(editingActions?.canViewMembers),
+    canViewProjectAccess: canViewEditingProjectAccess,
+  }), [canViewEditingProjectAccess, editing, editingActions?.canViewMembers])
+
+  function openEngineDetails(row: any) {
+    if (!row?.id) return
+    const actions = getActionsForEngine(row)
+    if (!actions.canEdit && !getEngineInventoryReadDecision(row, permissions).allowed) return
     setEditing(row)
     setForm({
       name: row.name || '',
@@ -193,17 +1208,26 @@ export default function Engines() {
     engineModal.openModal()
   }
 
-  const rows = listQ.data || []
-  const [isAddFirstEngineHover, setIsAddFirstEngineHover] = React.useState(false)
-
-  function canManageEngine(engine: any): boolean {
-    const r = String(engine?.myRole || '')
-    return r === 'owner' || r === 'delegate' || r === 'admin'
+  function openEdit(row: any) {
+    if (!getActionsForEngine(row).canEdit) return
+    openEngineDetails(row)
   }
 
   function openMembersPanel(engine: any) {
+    const permissions = getActionsForEngine(engine)
+    if (!permissions.canOpenMembers) return
     setSelectedEngine(engine)
     setMembersOpen(true)
+  }
+
+  function testEngine(engine: any) {
+    if (!engine || !getActionsForEngine(engine).canTest) return
+    testM.mutate(engine.id)
+  }
+
+  function deleteEngine(engine: any) {
+    if (!engine || !manualEngineOnboardingAllowed || !getActionsForEngine(engine).canDelete) return
+    deleteM.mutate(engine.id)
   }
 
   function closeMembersPanel() {
@@ -279,9 +1303,11 @@ export default function Engines() {
                 value={searchQuery}
                 placeholder="Search engines"
               />
-              <Button kind="primary" renderIcon={Add} onClick={openNew}>
-                Add engine
-              </Button>
+              {manualEngineOnboardingAllowed && (
+                <Button kind="primary" renderIcon={Add} onClick={openNew} disabled={!canCreateEngine} title={canCreateEngine ? undefined : createEngineUnavailableReason}>
+                  Add engine
+                </Button>
+              )}
             </TableToolbarContent>
           </TableToolbar>
           <DataTableSkeleton
@@ -296,11 +1322,11 @@ export default function Engines() {
 
       {/* Empty State */}
       {!listQ.isLoading && rows.length === 0 && (
-        <div style={{ 
-          background: 'var(--color-bg-secondary)', 
-          border: '2px dashed var(--color-border-primary)', 
-          borderRadius: '8px', 
-          padding: 'var(--spacing-8)', 
+        <div style={{
+          background: 'var(--color-bg-secondary)',
+          border: '2px dashed var(--color-border-primary)',
+          borderRadius: '8px',
+          padding: 'var(--spacing-8)',
           textAlign: 'center',
           display: 'flex',
           flexDirection: 'column',
@@ -309,22 +1335,30 @@ export default function Engines() {
         }}>
           <Chip size={48} style={{ color: 'var(--color-text-tertiary)' }} />
           <div>
-            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--color-text-primary)' }}>No engines configured</h3>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              {manualEngineOnboardingAllowed ? 'No engines configured' : 'No engines registered'}
+            </h3>
             <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: 'var(--color-text-secondary)', maxWidth: '400px' }}>
-              Get started by adding your first workflow engine connection
+              {manualEngineOnboardingAllowed
+                ? 'Get started by adding your first workflow engine connection'
+                : 'Engines are registered by external systems for this platform.'}
             </p>
           </div>
-          <Button 
-            kind="secondary" 
-            size="md"
-            style={isAddFirstEngineHover ? { backgroundColor: '#474747', cursor: 'pointer' } : undefined}
-            onMouseEnter={() => setIsAddFirstEngineHover(true)}
-            onMouseLeave={() => setIsAddFirstEngineHover(false)}
-            renderIcon={Add} 
-            onClick={openNew}
-          >
-            Add your first engine
-          </Button>
+          {manualEngineOnboardingAllowed && (
+            <Button
+              kind="secondary"
+              size="md"
+              style={isAddFirstEngineHover ? { backgroundColor: '#474747', cursor: 'pointer' } : undefined}
+              onMouseEnter={() => setIsAddFirstEngineHover(true)}
+              onMouseLeave={() => setIsAddFirstEngineHover(false)}
+              renderIcon={Add}
+              onClick={openNew}
+              disabled={!canCreateEngine}
+              title={canCreateEngine ? undefined : createEngineUnavailableReason}
+            >
+              Add your first engine
+            </Button>
+          )}
         </div>
       )}
 
@@ -357,9 +1391,11 @@ export default function Engines() {
                       value={searchQuery}
                       placeholder="Search engines"
                     />
-                    <Button kind="primary" renderIcon={Add} onClick={openNew}>
-                      Add engine
-                    </Button>
+                    {manualEngineOnboardingAllowed && (
+                      <Button kind="primary" renderIcon={Add} onClick={openNew} disabled={!canCreateEngine} title={canCreateEngine ? undefined : createEngineUnavailableReason}>
+                        Add engine
+                      </Button>
+                    )}
                   </TableToolbarContent>
                 </TableToolbar>
                 <Table {...getTableProps()} size="md" useZebraStyles>
@@ -387,12 +1423,33 @@ export default function Engines() {
                     )}
                     {tableRows.map((row) => {
                       const engine = rows.find((e: any) => e.id === row.id)
-                      const canManage = !!engine && canManageEngine(engine)
+                      const actions = getActionsForEngine(engine)
+                      const testUnavailableReason = getEngineTestUnavailableReason(actions, engine)
+                      const membersUnavailableReason = getEngineMembersUnavailableReason(actions)
+                      const deleteUnavailableReason = getEngineDeleteUnavailableReason(actions, manualEngineOnboardingAllowed, engine)
+                      const inventoryReadDecision = getEngineInventoryReadDecision(engine, permissions)
+                      const hasActions = Boolean(engine?.id) || actions.canEdit || actions.canTest || actions.canOpenMembers || actions.canDelete
 
                       return (
                         <TableRow {...getRowProps({ row })}>
                           {row.cells.map((cell) => {
                             const key = cell.info.header
+
+                            if (key === 'name') {
+                              const diagnosticTags = getEngineRowDiagnosticTags(engine)
+                              return (
+                                <TableCell key={cell.id}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
+                                    <span>{cell.value}</span>
+                                    {diagnosticTags.map((tag) => (
+                                      <Tag key={tag.label} type={tag.type} size="sm" title={tag.title}>
+                                        {tag.label}
+                                      </Tag>
+                                    ))}
+                                  </div>
+                                </TableCell>
+                              )
+                            }
 
                             if (key === 'baseUrl') {
                               const url = engine?.baseUrl
@@ -475,29 +1532,38 @@ export default function Engines() {
                             if (key === 'actions') {
                               return (
                                 <TableCell key={cell.id} onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
-                                  <OverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
-                                    {canManage && (
-                                      <OverflowMenuItem
-                                        itemText="Edit"
-                                        onClick={() => openEdit(engine)}
+                                  {hasActions && (
+                                    <GuardedOverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
+                                      <GuardedOverflowMenuItem
+                                        itemText={actions.canEdit ? 'Edit' : 'View details'}
+                                        decision={actions.canEdit ? null : inventoryReadDecision}
+                                        onClick={() => actions.canEdit ? openEdit(engine) : openEngineDetails(engine)}
                                       />
-                                    )}
-                                    {canManage && (
-                                      <OverflowMenuItem itemText="Test connection" onClick={() => testM.mutate(row.id)} />
-                                    )}
-                                    <OverflowMenuItem
-                                      itemText="Manage members"
-                                      onClick={() => openMembersPanel(engine)}
-                                    />
-                                    {canManage && (
-                                      <OverflowMenuItem
+                                      <GuardedOverflowMenuItem
+                                        itemText="Test connection"
+                                        unavailableReason={testUnavailableReason}
+                                        onClick={() => {
+                                          testEngine(engine)
+                                        }}
+                                      />
+                                      <GuardedOverflowMenuItem
+                                        itemText={actions.canManageMembers || actions.canAddMembers || actions.canInviteMembers || actions.canUpdateMemberRoles || actions.canRemoveMembers || actions.canManageDelegate ? 'Manage members' : 'View members'}
+                                        unavailableReason={membersUnavailableReason}
+                                        onClick={() => {
+                                          openMembersPanel(engine)
+                                        }}
+                                      />
+                                      <GuardedOverflowMenuItem
                                         itemText="Delete"
                                         isDelete
                                         hasDivider
-                                        onClick={() => deleteM.mutate(row.id)}
+                                        unavailableReason={deleteUnavailableReason}
+                                        onClick={() => {
+                                          deleteEngine(engine)
+                                        }}
                                       />
-                                    )}
-                                  </OverflowMenu>
+                                    </GuardedOverflowMenu>
+                                  )}
                                 </TableCell>
                               )
                             }
@@ -519,7 +1585,18 @@ export default function Engines() {
       <EngineMembersModal
         open={membersOpen}
         engine={selectedEngine}
-        canManage={selectedEngine ? canManageEngine(selectedEngine) : false}
+        canManage={selectedEngine ? getActionsForEngine(selectedEngine).canManageMembers : false}
+        engineAccessAuthority={engineAccessAuthority}
+        canViewMembers={selectedEngine ? getActionsForEngine(selectedEngine).canViewMembers : false}
+        canLookupMembers={selectedEngine ? getActionsForEngine(selectedEngine).canLookupMembers : false}
+        canInviteMembers={selectedEngine ? getActionsForEngine(selectedEngine).canInviteMembers : false}
+        canAddMembers={selectedEngine ? getActionsForEngine(selectedEngine).canAddMembers : false}
+        canUpdateMemberRoles={selectedEngine ? getActionsForEngine(selectedEngine).canUpdateMemberRoles : false}
+        canRemoveMembers={selectedEngine ? getActionsForEngine(selectedEngine).canRemoveMembers : false}
+        canManageDelegate={selectedEngine ? getActionsForEngine(selectedEngine).canManageDelegate : false}
+        canViewProjectAccess={selectedEngine ? getActionsForEngine(selectedEngine).canViewProjectAccess : false}
+        canApproveProjectAccess={selectedEngine ? getActionsForEngine(selectedEngine).canApproveProjectAccess : false}
+        canDenyProjectAccess={selectedEngine ? getActionsForEngine(selectedEngine).canDenyProjectAccess : false}
         onClose={closeMembersPanel}
       />
 
@@ -530,38 +1607,63 @@ export default function Engines() {
           setEditing(null)
         }}
         onSubmit={() => {
-          const payload: any = { ...form }
-          if (payload.authType === 'bearer') {
-            // Bearer auth only uses token (stored in passwordEnc), not username
-            payload.username = undefined
+          const payload = buildEngineMutationPayload(form, editing, { canManageSecrets: canManageEditingSecrets })
+          if (editing) {
+            if (isEngineFormReadOnly) {
+              engineModal.closeModal()
+              setEditing(null)
+              return
+            }
+            if (isEngineEnvironmentOnlyEditable) {
+              setEnvironmentM.mutate({
+                engineId: String(editing.id),
+                environmentTagId: form.environmentTagId || null,
+              })
+              return
+            }
+            if (!getActionsForEngine(editing).canEdit) return
+            updateM.mutate(payload)
           }
-          if (payload.authType === 'none') {
-            payload.username = undefined
-            payload.passwordEnc = undefined
-            payload.oauthTokenUrl = undefined
-            payload.oauthScopes = undefined
-            payload.oauthAudience = undefined
+          else {
+            if (!canCreateEngine) return
+            createM.mutate(payload)
           }
-          if (payload.authType !== 'oauth2-client-credentials') {
-            payload.oauthTokenUrl = undefined
-            payload.oauthScopes = undefined
-            payload.oauthAudience = undefined
-          }
-          if (editing) updateM.mutate(payload)
-          else createM.mutate(payload)
         }}
-        title={editing ? 'Edit engine' : 'Add engine'}
-        submitText={editing ? 'Save' : 'Create'}
-        busy={createM.isPending || updateM.isPending}
-        submitDisabled={!form.name || !form.baseUrl || isOAuth2ClientCredentialsIncomplete}
+        title={editing ? (isEngineFormReadOnly ? 'Engine details' : isEngineEnvironmentOnlyEditable ? 'Edit engine environment' : 'Edit engine') : 'Add engine'}
+        submitText={editing ? (isEngineFormReadOnly ? 'Close' : 'Save') : 'Create'}
+        busy={createM.isPending || updateM.isPending || setEnvironmentM.isPending}
+        submitDisabled={isEngineFormReadOnly ? false : isEngineEnvironmentOnlyEditable ? setEnvironmentM.isPending : (!form.name || (!areSourceOwnedFieldsReadOnly && !form.baseUrl) || (!areAuthFieldsReadOnly && isOAuth2ClientCredentialsIncomplete) || (!editing && !canCreateEngine))}
         size="lg"
       >
+        {editing && engineDetailSections.includes('registration') && <EngineRegistrationSection engine={editing} />}
+        {editing && engineDetailSections.includes('access') && (
+          <EngineAccessSection
+            assignments={accessAssignmentsQ.data || []}
+            assignmentsError={accessAssignmentsQ.error}
+            assignmentsLoading={accessAssignmentsQ.isLoading}
+            canViewMembers={Boolean(editingActions?.canViewMembers)}
+            membersError={accessMembersQ.error}
+            membersLoading={accessMembersQ.isLoading}
+            membersResponse={accessMembersQ.data}
+            snapshots={accessSnapshotsQ.data || []}
+            snapshotsError={accessSnapshotsQ.error}
+            snapshotsLoading={accessSnapshotsQ.isLoading}
+          />
+        )}
+        {editing && engineDetailSections.includes('deployment') && (
+          <EngineDeploymentSection
+            canViewProjectAccess={canViewEditingProjectAccess}
+            error={deploymentTargetsQ.error}
+            isLoading={deploymentTargetsQ.isLoading}
+            targets={deploymentTargetsQ.data || []}
+          />
+        )}
         <TextInput
           id="eng-name"
           labelText="Name"
           value={form.name}
           onChange={(e) => setForm((f: any) => ({ ...f, name: (e.target as any).value }))}
-          disabled={createM.isPending || updateM.isPending}
+          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
         <TextInput
           id="eng-url"
@@ -569,8 +1671,35 @@ export default function Engines() {
           placeholder="http://localhost:8080/engine-rest"
           value={form.baseUrl}
           onChange={(e) => setForm((f: any) => ({ ...f, baseUrl: (e.target as any).value }))}
-          disabled={createM.isPending || updateM.isPending}
+          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
+        {editing && isExternallyManagedEngine(editing) && (
+          <InlineNotification
+            lowContrast
+            kind="info"
+            title="Externally registered engine"
+            subtitle="Connection, authentication, labels, external id, and version are managed by the external registration source. Local display name and environment remain editable here."
+            hideCloseButton
+          />
+        )}
+        {editing && !canViewEditingSecrets && (
+          <InlineNotification
+            lowContrast
+            kind="info"
+            title="Authentication fields redacted"
+            subtitle="Current authentication values are hidden because this role does not include engine secret view permission."
+            hideCloseButton
+          />
+        )}
+        {editing && !canManageEditingSecrets && !areSourceOwnedFieldsReadOnly && (
+          <InlineNotification
+            lowContrast
+            kind="info"
+            title="Authentication fields read-only"
+            subtitle="Changing authentication values requires engine secret management permission."
+            hideCloseButton
+          />
+        )}
         {dockerLoopbackSuggestion && (
           <InlineNotification
             lowContrast
@@ -588,7 +1717,7 @@ export default function Engines() {
           itemToString={(it: any) => it ? it.label : ''}
           selectedItem={TYPE_ITEMS.find(i => i.id === form.type)}
           onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, type: selectedItem?.id }))}
-          disabled={createM.isPending || updateM.isPending}
+          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
         <Dropdown
           id="eng-auth"
@@ -598,7 +1727,7 @@ export default function Engines() {
           itemToString={(it: any) => it ? it.label : ''}
           selectedItem={AUTH_ITEMS.find(i => i.id === form.authType)}
           onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, authType: selectedItem?.id }))}
-          disabled={createM.isPending || updateM.isPending}
+          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
         {/* Environment Tag - only show dropdown if multiple tags exist */}
         {hasMultipleTags && (
@@ -610,7 +1739,7 @@ export default function Engines() {
             itemToString={(it: any) => it ? it.label : ''}
             selectedItem={envTags!.map(t => ({ id: t.id, label: t.name, color: t.color })).find(i => i.id === form.environmentTagId)}
             onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, environmentTagId: selectedItem?.id || '' }))}
-            disabled={createM.isPending || updateM.isPending || (editing && editing.environmentLocked)}
+            disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || (editing && editing.environmentLocked) || !canSetEditingEnvironment}
           />
         )}
         {/* Show read-only environment info when single tag */}
@@ -633,7 +1762,7 @@ export default function Engines() {
               labelText="Username"
               value={form.username}
               onChange={(e) => setForm((f: any) => ({ ...f, username: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
             />
             <TextInput
               id="eng-pass"
@@ -641,7 +1770,7 @@ export default function Engines() {
               labelText="Password"
               value={form.passwordEnc}
               onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
             />
           </>
         )}
@@ -653,7 +1782,7 @@ export default function Engines() {
             placeholder="Enter your API token"
             value={form.passwordEnc}
             onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
-            disabled={createM.isPending || updateM.isPending}
+            disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
           />
         )}
         {form.authType === 'oauth2-client-credentials' && (
@@ -663,7 +1792,7 @@ export default function Engines() {
               labelText="Client ID"
               value={form.username}
               onChange={(e) => setForm((f: any) => ({ ...f, username: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
             />
             <TextInput
               id="eng-oauth-secret"
@@ -671,7 +1800,7 @@ export default function Engines() {
               labelText="Client Secret"
               value={form.passwordEnc}
               onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
             />
             <TextInput
               id="eng-oauth-token-url"
@@ -679,21 +1808,21 @@ export default function Engines() {
               placeholder="https://keycloak.example.com/realms/acme/protocol/openid-connect/token"
               value={form.oauthTokenUrl}
               onChange={(e) => setForm((f: any) => ({ ...f, oauthTokenUrl: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
             />
             <TextInput
               id="eng-oauth-scopes"
               labelText="Scopes"
               value={form.oauthScopes}
               onChange={(e) => setForm((f: any) => ({ ...f, oauthScopes: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
             />
             <TextInput
               id="eng-oauth-audience"
               labelText="Audience"
               value={form.oauthAudience}
               onChange={(e) => setForm((f: any) => ({ ...f, oauthAudience: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
             />
           </>
         )}

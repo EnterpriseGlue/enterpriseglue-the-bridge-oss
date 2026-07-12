@@ -3,7 +3,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { caseInsensitiveColumn } from '@enterpriseglue/shared/infrastructure/persistence/adapters/QueryHelpers.js'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireProjectAccess, requireProjectRole } from '@enterpriseglue/shared/middleware/projectAuth.js'
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { raw } from 'express'
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js'
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
@@ -13,14 +13,11 @@ import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js'
 import { In, IsNull, Raw } from 'typeorm'
 import archiver from 'archiver'
-import { AuthorizationService } from '@enterpriseglue/shared/services/authorization.js'
 import { ResourceService } from '@enterpriseglue/shared/services/resources.js'
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js'
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { logger } from '@enterpriseglue/shared/utils/logger.js'
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js'
 import { applyProjectArchiveToProject } from '@enterpriseglue/shared/services/starbase/index.js'
-import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js'
 import { unixTimestamp } from '@enterpriseglue/shared/utils/id.js'
 import { projectIdParamSchema, folderIdParamSchema, createFolderBodySchema, renameFolderBodySchema, uuidSchema } from '@enterpriseglue/shared/schemas/common.js'
 import { buildStarbaseFileName, sanitizeFileNameSegment } from '@enterpriseglue/shared/utils/starbase-filenames.js'
@@ -325,7 +322,7 @@ const downloadSelectionBodySchema = z.object({
  * GET project contents (folders + files) under optional parent folder
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/projects/:projectId/contents', apiLimiter, requireAuth, requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/contents', apiLimiter, requireAuth, requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const folderId = typeof req.query?.folderId === 'string' ? String(req.query.folderId) : null;
   const dataSource = await getDataSource();
@@ -383,7 +380,7 @@ r.get('/starbase-api/projects/:projectId/contents', apiLimiter, requireAuth, req
  * GET all folders for a project (flat list)
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
@@ -401,7 +398,7 @@ r.get('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, requ
  * POST create folder
  * ✨ Migrated to TypeORM
  */
-r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(createFolderBodySchema), requireProjectRole(EDIT_ROLES), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(createFolderBodySchema), requireAction('project.files.create', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const { name, parentFolderId } = req.body;
@@ -445,7 +442,7 @@ r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, val
  * PATCH update (rename/move)
  * ✨ Migrated to TypeORM
  */
-r.patch('/starbase-api/folders/:folderId', apiLimiter, requireAuth, validateParams(folderIdParamSchema), validateBody(renameFolderBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.patch('/starbase-api/folders/:folderId', apiLimiter, requireAuth, validateParams(folderIdParamSchema), validateBody(renameFolderBodySchema), requireAction('project.files.update', { resourceResolver: 'project.byFolderId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const folderId = String(req.params.folderId);
   const userId = req.user!.userId;
   const { name, parentFolderId } = req.body;
@@ -462,13 +459,6 @@ r.patch('/starbase-api/folders/:folderId', apiLimiter, requireAuth, validatePara
   if (!row) throw Errors.notFound('Folder', folderId);
   
   const projectId = String(row.projectId);
-
-  const canEditProject = await projectMemberService.hasRole(
-    projectId,
-    userId,
-    EDIT_ROLES
-  )
-  if (!canEditProject) throw Errors.notFound('Folder', folderId);
 
   const currentName = String(row.name);
   const currentParent = row.parentFolderId || null;
@@ -509,25 +499,11 @@ r.patch('/starbase-api/folders/:folderId', apiLimiter, requireAuth, validatePara
  * GET delete preview
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/folders/:folderId/delete-preview', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/folders/:folderId/delete-preview', apiLimiter, requireAuth, requireAction('project.files.delete', { resourceResolver: 'project.byFolderId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const folderId = String(req.params.folderId);
-  const userId = req.user!.userId;
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
   const fileRepo = dataSource.getRepository(File);
-
-  // Verify user owns the project containing this folder
-  const folderRow = await folderRepo.findOne({
-    where: { id: folderId },
-    select: ['projectId']
-  });
-  if (!folderRow) throw Errors.notFound('Folder');
-  const canEditProject = await projectMemberService.hasRole(
-    String(folderRow.projectId),
-    userId,
-    EDIT_ROLES
-  )
-  if (!canEditProject) throw Errors.notFound('Folder');
 
   // Ensure exists
   await ResourceService.getFolderOrThrow(folderId);
@@ -571,7 +547,7 @@ r.get('/starbase-api/folders/:folderId/delete-preview', apiLimiter, requireAuth,
  * DELETE folder (cascade)
  * ✨ Migrated to TypeORM
  */
-r.delete('/starbase-api/folders/:folderId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.delete('/starbase-api/folders/:folderId', apiLimiter, requireAuth, requireAction('project.files.delete', { resourceResolver: 'project.byFolderId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const folderId = String(req.params.folderId);
   const userId = req.user!.userId;
   const dataSource = await getDataSource();
@@ -583,12 +559,6 @@ r.delete('/starbase-api/folders/:folderId', apiLimiter, requireAuth, asyncHandle
     select: ['projectId', 'name']
   });
   if (!ownerCheck) throw Errors.notFound('Folder');
-  const canEditProject = await projectMemberService.hasRole(
-    String(ownerCheck.projectId),
-    userId,
-    EDIT_ROLES
-  )
-  if (!canEditProject) throw Errors.notFound('Folder');
 
   const { projectId, name: folderName } = ownerCheck;
 
@@ -608,9 +578,8 @@ r.delete('/starbase-api/folders/:folderId', apiLimiter, requireAuth, asyncHandle
  * Download a folder (and its subtree) as a zip file
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/folders/:folderId/download', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/folders/:folderId/download', apiLimiter, requireAuth, requireAction('project.files.read', { resourceResolver: 'project.byFolderId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const folderId = String(req.params.folderId);
-  const userId = req.user!.userId;
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
   const fileRepo = dataSource.getRepository(File);
@@ -621,10 +590,6 @@ r.get('/starbase-api/folders/:folderId/download', apiLimiter, requireAuth, async
     select: ['projectId', 'name']
   });
   if (!ownerCheck) throw Errors.notFound('Folder');
-
-  if (!(await AuthorizationService.verifyProjectAccess(String(ownerCheck.projectId), userId))) {
-    throw Errors.notFound('Folder');
-  }
 
   const folderName = String(ownerCheck.name || 'folder');
   const subtree = await collectSubtree(folderId);
@@ -675,7 +640,7 @@ r.get('/starbase-api/folders/:folderId/download', apiLimiter, requireAuth, async
  * Download entire project as a zip (all folders/files)
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/projects/:projectId/download', apiLimiter, requireAuth, requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/download', apiLimiter, requireAuth, requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
 
   const dataSource = await getDataSource();
@@ -721,7 +686,7 @@ r.get('/starbase-api/projects/:projectId/download', apiLimiter, requireAuth, req
   })
 }));
 
-r.post('/starbase-api/projects/:projectId/import-zip', apiLimiter, requireAuth, raw({ type: ['application/zip', 'application/octet-stream'], limit: '25mb' }), validateParams(projectIdParamSchema), requireProjectRole(EDIT_ROLES), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/projects/:projectId/import-zip', apiLimiter, requireAuth, raw({ type: ['application/zip', 'application/octet-stream'], limit: '25mb' }), validateParams(projectIdParamSchema), requireAction('project.files.create', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId)
   const userId = req.user!.userId
   const zipBuffer = Buffer.isBuffer(req.body)
@@ -745,7 +710,7 @@ r.post('/starbase-api/projects/:projectId/import-zip', apiLimiter, requireAuth, 
   res.status(201).json(result)
 }))
 
-r.post('/starbase-api/projects/:projectId/download-selection', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(downloadSelectionBodySchema), requireProjectAccess(), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/projects/:projectId/download-selection', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(downloadSelectionBodySchema), requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId)
   const body = downloadSelectionBodySchema.parse(req.body)
   const fileIds = Array.from(new Set(body.fileIds.map((id) => String(id))))

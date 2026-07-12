@@ -4,6 +4,8 @@ Summary: Required and optional environment variables for the platform.
 
 Audience: Developers and architects.
 
+This matrix lists current executable settings. Planned authorization bundle settings must be added here, shared config validation, and every env template in the same implementation change; see [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md).
+
 ## Backend (Common Required)
 | Variable | Required | Default (Docker) | Notes |
 | --- | --- | --- | --- |

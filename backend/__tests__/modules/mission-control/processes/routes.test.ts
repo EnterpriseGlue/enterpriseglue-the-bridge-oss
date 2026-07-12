@@ -3,9 +3,16 @@ import request from 'supertest';
 import express from 'express';
 import processesRouter from '../../../../../packages/backend-host/src/modules/mission-control/processes/routes.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/db/entities/EngineDeploymentArtifact.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import {
+  listProcessDefinitions,
+  getProcessDefinition,
+  startProcessInstance,
+} from '../../../../../packages/backend-host/src/modules/mission-control/processes/service.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -18,17 +25,47 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   },
 }));
 
-vi.mock('@enterpriseglue/shared/middleware/engineAuth.js', () => ({
-  requireEngineReadOrWrite: () => (req: any, _res: any, next: any) => {
-    req.engineId = 'engine-1';
-    next();
-  },
-}));
-
 vi.mock('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js', () => ({
   projectMemberService: {
     hasAccess: vi.fn().mockResolvedValue(true),
     hasRole: vi.fn().mockResolvedValue(true),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  EnginePermissions: {
+    INSTANCE_VIEW: 'engine:instance:view',
+    DEPLOY_VIEW: 'engine:deploy:view',
+    PROJECT_ACCESS_APPROVE: 'engine:project-access:approve',
+    PROCESS_START: 'engine:process:start',
+    MEMBERS_MANAGE: 'engine:members:manage',
+  },
+  PlatformPermissions: {
+    USER_MANAGE: 'platform:user:manage',
+    USERS_CREATE: 'platform:users:create',
+  },
+  ProjectPermissions: {
+    FILES_VIEW: 'project:files:view',
+    FILES_EDIT: 'project:files:edit',
+    MEMBERS_MANAGE: 'project:members:manage',
+  },
+  SYSTEM_ROLE_IDS: {
+    ENGINE_OWNER: 'system.engine.owner',
+    ENGINE_DELEGATE: 'system.engine.delegate',
+    ENGINE_OPERATOR: 'system.engine.operator',
+    ENGINE_DEPLOYER: 'system.engine.deployer',
+  },
+  ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE: {
+    'system.engine.owner': 'owner',
+    'system.engine.delegate': 'delegate',
+    'system.engine.operator': 'operator',
+    'system.engine.deployer': 'deployer',
+  },
+  permissionService: {
+    hasPermission: vi.fn().mockResolvedValue(false),
+    getKnownProjectIdsForUser: vi.fn().mockResolvedValue([]),
+    getKnownEngineIdsForUser: vi.fn().mockResolvedValue([]),
+    syncLegacyRoleAssignments: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -71,6 +108,14 @@ describe('mission-control processes routes', () => {
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
+        if (entity === Engine) {
+          return {
+            findOne: vi.fn(async ({ where }: any) => ({
+              id: String(where?.id || 'engine-1'),
+              tenantId: null,
+            })),
+          };
+        }
         if (entity === EngineDeploymentArtifact) {
           return { find: artifactFind };
         }
@@ -83,20 +128,72 @@ describe('mission-control processes routes', () => {
 
     (projectMemberService.hasAccess as unknown as Mock).mockResolvedValue(true);
     (projectMemberService.hasRole as unknown as Mock).mockResolvedValue(true);
+	    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+	      permission.startsWith('engine:') ||
+	      permission === 'project:files:view' ||
+	      permission === 'project:files:edit'
+	    );
   });
 
   it('lists process definitions', async () => {
-    const response = await request(app).get('/mission-control-api/process-definitions');
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions')
+      .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([]);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+    }));
+    expect(listProcessDefinitions).toHaveBeenCalledWith('engine-1', {
+      key: undefined,
+      nameLike: undefined,
+      latestVersion: false,
+    });
   });
 
   it('returns process definition details', async () => {
-    const response = await request(app).get('/mission-control-api/process-definitions/pd1');
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/pd1')
+      .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ id: 'pd1', key: 'process1' });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+    }));
+    expect(getProcessDefinition).toHaveBeenCalledWith('engine-1', 'pd1');
+  });
+
+  it('starts process instances through process start permission', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/process-definitions/key/invoice/start')
+      .send({ engineId: 'engine-1', businessKey: 'case-1', variables: { amount: { value: 100 } } });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ id: 'pi1' });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:process:start', expect.objectContaining({
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+    }));
+    expect(startProcessInstance).toHaveBeenCalledWith('engine-1', 'invoice', {
+      businessKey: 'case-1',
+      variables: { amount: { value: 100 } },
+    });
+  });
+
+  it('denies process definition reads when instance view permission is missing', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(403);
+    expect(listProcessDefinitions).not.toHaveBeenCalled();
   });
 
   it('validates edit-target query params', async () => {
@@ -257,10 +354,12 @@ describe('mission-control processes routes', () => {
         createdAt: 1700000000000,
       },
     ]);
-    (projectMemberService.hasAccess as unknown as Mock)
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
-    (projectMemberService.hasRole as unknown as Mock).mockResolvedValueOnce(false);
+	    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string, context: { resourceId?: string }) => {
+	      if (permission.startsWith('engine:')) return true;
+	      if (permission === 'project:files:view') return context.resourceId === 'project-allowed';
+	      if (permission === 'project:files:edit') return false;
+	      return false;
+	    });
     fileVersionQbGetRawOne
       .mockResolvedValueOnce({ versionNumber: 10 });
 
@@ -277,6 +376,48 @@ describe('mission-control processes routes', () => {
     });
   });
 
+  it('resolves edit-target through scoped project file permissions without legacy project membership', async () => {
+    artifactFind.mockResolvedValueOnce([
+      {
+        projectId: 'project-scoped',
+        fileId: 'file-scoped',
+        fileGitCommitId: 'commit-scoped',
+        engineDeploymentId: 'dep-scoped',
+        createdAt: 1700000000000,
+      },
+    ]);
+    (projectMemberService.hasAccess as unknown as Mock).mockResolvedValue(false);
+    (projectMemberService.hasRole as unknown as Mock).mockResolvedValue(false);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission === 'engine:instance:view' || permission === 'project:files:view' || permission === 'project:files:edit'
+    );
+    fileVersionFindOne.mockResolvedValueOnce({ versionNumber: 12 });
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/edit-target')
+      .query({ engineId: 'engine-1', key: 'invoice', version: 3 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      canShowEditButton: true,
+      canEdit: true,
+      projectId: 'project-scoped',
+      fileId: 'file-scoped',
+      fileVersionNumber: 12,
+      mappingSource: 'git-commit',
+    });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'project',
+      resourceId: 'project-scoped',
+    }));
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:edit', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'project',
+      resourceId: 'project-scoped',
+    }));
+  });
+
   it('returns 404 when no accessible deployed process mapping exists', async () => {
     artifactFind.mockResolvedValueOnce([
       {
@@ -287,7 +428,9 @@ describe('mission-control processes routes', () => {
         createdAt: 1700000000000,
       },
     ]);
-    (projectMemberService.hasAccess as unknown as Mock).mockResolvedValueOnce(false);
+	    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+	      permission.startsWith('engine:')
+	    );
 
     const response = await request(app)
       .get('/mission-control-api/process-definitions/edit-target')

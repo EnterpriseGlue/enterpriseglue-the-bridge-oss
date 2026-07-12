@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import type { ProcessDefinition } from '../types'
+import type { ActivityInstance, ProcessDefinition } from '../types'
 import { useSelectedEngine } from '../../../../../components/EngineSelector'
 import {
   getProcessInstance,
   getProcessInstanceVariables,
   getProcessInstanceActivityHistory,
+  getProcessInstanceActivityTree,
   getProcessInstanceIncidents,
   getProcessInstanceJobs,
   getProcessInstanceExternalTasks,
@@ -16,14 +17,75 @@ import {
   listProcessDefinitions,
 } from '../../api/processInstances'
 
-export function useInstanceData(instanceId: string) {
+interface UseInstanceDataOptions {
+  historyProcessInstanceEnabled?: boolean
+  variablesEnabled?: boolean
+  historicVariablesEnabled?: boolean
+  activityTreeEnabled?: boolean
+  activityHistoryEnabled?: boolean
+  incidentsEnabled?: boolean
+  jobsEnabled?: boolean
+  externalTasksEnabled?: boolean
+}
+
+type RuntimeActivityTreeNode = {
+  id?: string | null
+  activityId?: string | null
+  activityName?: string | null
+  activityType?: string | null
+  parentActivityInstanceId?: string | null
+  childActivityInstances?: RuntimeActivityTreeNode[] | null
+  childTransitionInstances?: RuntimeActivityTreeNode[] | null
+  executionIds?: string[] | null
+}
+
+export function flattenRuntimeActivityTree(tree: unknown): ActivityInstance[] {
+  const flattened: ActivityInstance[] = []
+  const visit = (node: RuntimeActivityTreeNode | null | undefined, parentId?: string | null) => {
+    if (!node) return
+    const nodeId = node.id ? String(node.id) : ''
+    const activityId = node.activityId ? String(node.activityId) : ''
+    const activityInstanceId = nodeId || activityId
+    if (activityId && activityInstanceId) {
+      flattened.push({
+        id: activityInstanceId,
+        activityId,
+        activityName: node.activityName ? String(node.activityName) : undefined,
+        activityType: node.activityType ? String(node.activityType) : undefined,
+        activityInstanceId,
+        parentActivityInstanceId: node.parentActivityInstanceId ? String(node.parentActivityInstanceId) : parentId || null,
+        executionId: Array.isArray(node.executionIds) && node.executionIds[0] ? String(node.executionIds[0]) : null,
+      })
+    }
+
+    for (const child of node.childActivityInstances || []) {
+      visit(child, nodeId || parentId || null)
+    }
+    for (const transition of node.childTransitionInstances || []) {
+      visit(transition, nodeId || parentId || null)
+    }
+  }
+
+  visit(tree as RuntimeActivityTreeNode)
+  return flattened
+}
+
+export function useInstanceData(instanceId: string, options: UseInstanceDataOptions = {}) {
   const selectedEngineId = useSelectedEngine()
+  const historyProcessInstanceEnabled = options.historyProcessInstanceEnabled ?? true
+  const variablesEnabled = options.variablesEnabled ?? true
+  const historicVariablesEnabled = options.historicVariablesEnabled ?? true
+  const activityTreeEnabled = options.activityTreeEnabled ?? true
+  const activityHistoryEnabled = options.activityHistoryEnabled ?? true
+  const incidentsEnabled = options.incidentsEnabled ?? true
+  const jobsEnabled = options.jobsEnabled ?? true
+  const externalTasksEnabled = options.externalTasksEnabled ?? true
 
   // Historical instance data
   const histQ = useQuery({
     queryKey: ['mission-control', 'hist-inst', instanceId, selectedEngineId],
     queryFn: () => getHistoricalProcessInstance(instanceId, selectedEngineId),
-    enabled: !!instanceId && !!selectedEngineId,
+    enabled: historyProcessInstanceEnabled && !!instanceId && !!selectedEngineId,
     retry: false,
   })
 
@@ -61,14 +123,14 @@ export function useInstanceData(instanceId: string) {
   const varsQ = useQuery({
     queryKey: ['mission-control', 'vars', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceVariables(instanceId, selectedEngineId),
-    enabled: !!instanceId && !!selectedEngineId,
+    enabled: variablesEnabled && !!instanceId && !!selectedEngineId,
   })
 
   // Historical variables
   const histVarsQ = useQuery({
     queryKey: ['mission-control', 'hist-vars', instanceId, selectedEngineId],
     queryFn: () => getHistoricalVariableInstances(instanceId, selectedEngineId),
-    enabled: !!instanceId && !!selectedEngineId,
+    enabled: historicVariablesEnabled && !!instanceId && !!selectedEngineId,
   })
 
   // Variable type map
@@ -100,8 +162,20 @@ export function useInstanceData(instanceId: string) {
   const actQ = useQuery({
     queryKey: ['mission-control', 'act', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceActivityHistory(instanceId, selectedEngineId),
-    enabled: !!instanceId && !!selectedEngineId,
+    enabled: activityHistoryEnabled && !!instanceId && !!selectedEngineId,
   })
+
+  const activityTreeQ = useQuery({
+    queryKey: ['mission-control', 'activity-tree', instanceId, selectedEngineId],
+    queryFn: () => getProcessInstanceActivityTree(instanceId, selectedEngineId),
+    enabled: activityTreeEnabled && !!instanceId && !!selectedEngineId && histQ.isFetched && !(histQ.data as any)?.endTime,
+    retry: false,
+  })
+
+  const runtimeActivityInstances = useMemo(
+    () => flattenRuntimeActivityTree(activityTreeQ.data),
+    [activityTreeQ.data]
+  )
 
   // Sorted activities
   const sortedActs = useMemo(() => {
@@ -126,21 +200,21 @@ export function useInstanceData(instanceId: string) {
   const incidentsQ = useQuery({
     queryKey: ['mission-control', 'inc', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceIncidents(instanceId, selectedEngineId),
-    enabled: !!instanceId && !!selectedEngineId,
+    enabled: incidentsEnabled && !!instanceId && !!selectedEngineId,
   })
 
   // Retry jobs
   const retryJobsQ = useQuery({
     queryKey: ['mission-control', 'jobs', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceJobs(instanceId, selectedEngineId),
-    enabled: !!instanceId && !!selectedEngineId,
+    enabled: jobsEnabled && !!instanceId && !!selectedEngineId,
   })
 
   // Retry external tasks
   const retryExtTasksQ = useQuery({
     queryKey: ['mission-control', 'external-tasks', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceExternalTasks(instanceId, selectedEngineId),
-    enabled: !!instanceId && !!selectedEngineId,
+    enabled: externalTasksEnabled && !!instanceId && !!selectedEngineId,
   })
 
   // All retry items
@@ -172,14 +246,14 @@ export function useInstanceData(instanceId: string) {
   // Activity ID to instances map
   const activityIdToInstances = useMemo(() => {
     const map = new Map<string, string[]>()
-    for (const inst of actQ.data || []) {
+    for (const inst of [...(actQ.data || []), ...runtimeActivityInstances]) {
       if (!inst?.activityId || !inst?.id) continue
       const list = map.get(inst.activityId) || []
       list.push(inst.id)
       map.set(inst.activityId, list)
     }
     return map
-  }, [actQ.data])
+  }, [actQ.data, runtimeActivityInstances])
 
   // Clickable activity IDs (include incident activities so they're selectable in mod mode)
   const clickableActivityIds = useMemo(() => {
@@ -210,6 +284,7 @@ export function useInstanceData(instanceId: string) {
     varsQ,
     histVarsQ,
     actQ,
+    activityTreeQ,
     incidentsQ,
     retryJobsQ,
     retryExtTasksQ,
@@ -220,6 +295,7 @@ export function useInstanceData(instanceId: string) {
     defKey,
     defName,
     sortedActs,
+    runtimeActivityInstances,
     allRetryItems,
     jobById,
     incidentActivityIds,

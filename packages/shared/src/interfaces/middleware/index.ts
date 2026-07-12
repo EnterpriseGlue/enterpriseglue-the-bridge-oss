@@ -9,6 +9,7 @@
 
 // Authentication & Authorization
 export { requireAuth, requireAdmin, requireOnboarding, optionalAuth } from './auth.js';
+export { requireApiClientAction, requireApiClientScope } from './apiClientAuth.js';
 export { errorHandler, asyncHandler, Errors } from './errorHandler.js';
 export { apiLimiter, authLimiter } from './rateLimiter.js';
 export { 
@@ -37,6 +38,7 @@ export { requireProjectRole } from './projectAuth.js';
 
 // Permission
 export { requirePermission } from './requirePermission.js';
+export { requireAction, requireInvitationCreateAction } from './requireAction.js';
 
 // Authorization helper
 export { authorize, auth } from './authorize.js';

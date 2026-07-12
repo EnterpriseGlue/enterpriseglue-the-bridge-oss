@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { UserSummarySchema } from './project-member.js';
 
 // Engine roles
-export const EngineRoleSchema = z.enum(['owner', 'delegate', 'operator', 'deployer']);
+export const EngineRoleSchema = z.enum(['owner', 'delegate', 'operator', 'deployer', 'custom']);
 
 // Engine member schema (read responses)
 export const EngineMemberSchema = z.object({

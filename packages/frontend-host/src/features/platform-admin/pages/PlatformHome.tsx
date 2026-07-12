@@ -22,6 +22,13 @@ export default function PlatformHome() {
       color: '#0f62fe'
     },
     {
+      title: 'Access Control',
+      description: 'Review system roles, permission catalog, effective access, and SSO engine assignments.',
+      icon: Security,
+      path: '/admin/access-control',
+      color: '#0043ce'
+    },
+    {
       title: 'SSO Role Mappings',
       description: 'Map SSO claims (groups, roles, email domains) to platform roles for automatic provisioning.',
       icon: UserMultiple,

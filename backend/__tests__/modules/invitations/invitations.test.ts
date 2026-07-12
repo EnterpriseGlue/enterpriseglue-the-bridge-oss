@@ -13,9 +13,14 @@ import { invitationService } from '@enterpriseglue/shared/services/invitations.j
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { engineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
+
+const authState = vi.hoisted(() => ({
+  user: { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' } as any,
+}));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -26,7 +31,7 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', async () => {
   return {
     ...actual,
     requireAuth: (req: any, _res: any, next: any) => {
-      req.user = { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' };
+      req.user = authState.user;
       next();
     },
     requireOnboarding: (req: any, _res: any, next: any) => {
@@ -76,6 +81,22 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js'
 vi.mock('@enterpriseglue/shared/services/platform-admin/EngineService.js', () => ({
   engineService: {
     hasEngineAccess: vi.fn(),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  PlatformPermissions: {
+    USER_MANAGE: 'platform:user:manage',
+    USERS_CREATE: 'platform:users:create',
+  },
+  ProjectPermissions: {
+    MEMBERS_MANAGE: 'project:members:manage',
+  },
+  EnginePermissions: {
+    MEMBERS_MANAGE: 'engine:members:manage',
+  },
+  permissionService: {
+    hasPermission: vi.fn(),
   },
 }));
 
@@ -132,6 +153,7 @@ describe('invitation and onboarding routes', () => {
     app.use(onboardingRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
+    authState.user = { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' };
 
     userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
@@ -168,6 +190,9 @@ describe('invitation and onboarding routes', () => {
 
     (projectMemberService.getMembership as unknown as Mock).mockResolvedValue({ role: 'owner', roles: ['owner'] });
     (engineService.hasEngineAccess as unknown as Mock).mockResolvedValue(true);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (_permission: string, context: any) =>
+      context?.platformRole === 'admin'
+    );
     (getEmailConfigForTenant as unknown as Mock).mockResolvedValue(null);
     (userService.createPendingUser as unknown as Mock).mockResolvedValue({ id: 'user-1', email: 'invitee@example.com' });
     (invitationService.createInvitation as unknown as Mock).mockResolvedValue({
@@ -247,6 +272,114 @@ describe('invitation and onboarding routes', () => {
       resourceName: 'Project One',
       resourceRole: 'viewer',
       deliveryMethod: 'manual',
+    }));
+  });
+
+  it('creates a tenant invitation through scoped platform users-create permission', async () => {
+    authState.user = { userId: 'user-manager-1', email: 'manager@example.com', platformRole: 'user' };
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission === 'platform:users:create'
+    );
+
+    const response = await request(app)
+      .post('/api/t/default/invitations')
+      .send({
+        email: 'invitee@example.com',
+        resourceType: 'tenant',
+        deliveryMethod: 'manual',
+      });
+
+    expect(response.status).toBe(201);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('platform:users:create', expect.objectContaining({
+      userId: 'user-manager-1',
+      platformRole: 'user',
+    }));
+    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
+      resourceType: 'tenant',
+      createdByUserId: 'user-manager-1',
+    }));
+  });
+
+  it('creates a project invitation through scoped project member-management permission', async () => {
+    (projectMemberService.getMembership as unknown as Mock).mockResolvedValue({ role: 'viewer', roles: ['viewer'] });
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission === 'project:members:manage'
+    );
+
+    const response = await request(app)
+      .post('/api/t/default/invitations')
+      .send({
+        email: 'invitee@example.com',
+        resourceType: 'project',
+        resourceId: 'project-1',
+        role: 'viewer',
+        deliveryMethod: 'manual',
+      });
+
+    expect(response.status).toBe(201);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('project:members:manage', expect.objectContaining({
+      userId: 'admin-1',
+      resourceType: 'project',
+      resourceId: 'project-1',
+    }));
+    expect(projectMemberService.getMembership).not.toHaveBeenCalled();
+    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
+      resourceType: 'project',
+      resourceId: 'project-1',
+    }));
+  });
+
+  it('denies project invitations through action middleware before creating pending users', async () => {
+    authState.user = { userId: 'project-viewer-1', email: 'viewer@example.com', platformRole: 'user' };
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app)
+      .post('/api/t/default/invitations')
+      .send({
+        email: 'invitee@example.com',
+        resourceType: 'project',
+        resourceId: 'project-1',
+        role: 'viewer',
+        deliveryMethod: 'manual',
+      });
+
+    expect(response.status).toBe(403);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('project:members:manage', expect.objectContaining({
+      userId: 'project-viewer-1',
+      resourceType: 'project',
+      resourceId: 'project-1',
+    }));
+    expect(projectMemberService.getMembership).not.toHaveBeenCalled();
+    expect(userService.createPendingUser).not.toHaveBeenCalled();
+    expect(invitationService.createInvitation).not.toHaveBeenCalled();
+  });
+
+  it('creates an engine invitation through scoped engine member-management permission', async () => {
+    (engineService.hasEngineAccess as unknown as Mock).mockResolvedValue(false);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission === 'engine:members:manage'
+    );
+
+    const response = await request(app)
+      .post('/api/t/default/invitations')
+      .send({
+        email: 'invitee@example.com',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+        role: 'operator',
+        deliveryMethod: 'manual',
+      });
+
+    expect(response.status).toBe(201);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:members:manage', expect.objectContaining({
+      userId: 'admin-1',
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+    }));
+    expect(engineService.hasEngineAccess).not.toHaveBeenCalled();
+    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
+      resourceType: 'engine',
+      resourceId: 'engine-1',
     }));
   });
 

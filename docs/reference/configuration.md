@@ -4,6 +4,8 @@ Summary: Environment variables for backend and frontend configuration.
 
 Audience: Developers and architects.
 
+Planned `EG_CONFIG_*` bundle, drift, fail-closed, and secret-provider settings are intentionally excluded from the current executable reference until implemented. Their target contract is documented in [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md).
+
 ## Backend Configuration
 Primary sources:
 - `.local/docker/env/docker.env` (Docker Compose, Postgres default)

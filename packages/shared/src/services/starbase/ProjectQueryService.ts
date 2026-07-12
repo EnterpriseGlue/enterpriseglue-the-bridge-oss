@@ -16,6 +16,7 @@ import { EnvironmentTag } from '@enterpriseglue/shared/db/entities/EnvironmentTa
 import { In, IsNull } from 'typeorm';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { applyPreparedEngineImportToProject, type PreparedEngineImport } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { toQueryNumber, toQueryString } from './query-normalization.js';
 
@@ -352,6 +353,9 @@ class ProjectQueryServiceImpl {
         });
       }
     });
+
+    await permissionService.syncLegacyRoleAssignments({ projectIds: [id] })
+      .catch((error) => logger.warn('Failed to sync legacy project role assignments', { projectId: id, error }));
 
     return { id, name: input.name, ownerId: input.ownerId, createdAt: now, updatedAt: now };
   }

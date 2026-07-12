@@ -1,0 +1,508 @@
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
+import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { SYSTEM_ROLE_IDS } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { In, type DataSource } from 'typeorm';
+
+export type AuthzGroupSource = 'manual' | 'sso' | 'api' | 'automation' | 'system';
+
+export interface AuthzGroupView {
+  id: string;
+  tenantId: string | null;
+  key: string;
+  name: string;
+  description: string | null;
+  source: AuthzGroupSource;
+  sourceRef: string | null;
+  isSystem: boolean;
+  isArchived: boolean;
+  createdById: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AuthzGroupMembershipView {
+  id: string;
+  tenantId: string | null;
+  groupId: string;
+  groupKey: string | null;
+  groupName: string | null;
+  userId: string;
+  source: AuthzGroupSource;
+  sourceRef: string | null;
+  expiresAt: number | null;
+  createdById: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CreateAuthzGroupInput {
+  tenantId?: string | null;
+  key?: string;
+  name: string;
+  description?: string | null;
+  source?: AuthzGroupSource;
+  sourceRef?: string | null;
+  isSystem?: boolean;
+  createdById?: string | null;
+}
+
+export interface UpdateAuthzGroupInput {
+  tenantId?: string | null;
+  name?: string;
+  description?: string | null;
+  isArchived?: boolean;
+  updatedById?: string | null;
+}
+
+export interface AddAuthzGroupMembershipInput {
+  tenantId?: string | null;
+  groupId: string;
+  userId: string;
+  source?: AuthzGroupSource;
+  sourceRef?: string | null;
+  expiresAt?: number | null;
+  createdById?: string | null;
+}
+
+export const DEFAULT_PLATFORM_GROUP_IDS = {
+  PLATFORM_ADMINISTRATORS: 'system.group.platform_administrators',
+  AUTHENTICATED_USERS: 'system.group.authenticated_users',
+  ACCESS_ADMINISTRATORS: 'system.group.access_administrators',
+  ACCESS_AUDITORS: 'system.group.access_auditors',
+  USER_ADMINISTRATORS: 'system.group.user_administrators',
+  SSO_ADMINISTRATORS: 'system.group.sso_administrators',
+  ENGINE_REGISTRY_ADMINISTRATORS: 'system.group.engine_registry_administrators',
+  API_CLIENT_ADMINISTRATORS: 'system.group.api_client_administrators',
+} as const;
+
+export const DEFAULT_PLATFORM_GROUPS = [
+  {
+    id: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+    key: 'platform-administrators',
+    name: 'Platform Administrators',
+    description: 'Bootstrap and full platform administration.',
+    roleId: SYSTEM_ROLE_IDS.PLATFORM_ADMIN,
+  },
+  {
+    id: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS,
+    key: 'authenticated-users',
+    name: 'Authenticated Users',
+    description: 'Baseline group for every active local or SSO user.',
+    roleId: SYSTEM_ROLE_IDS.PLATFORM_USER,
+  },
+  {
+    id: DEFAULT_PLATFORM_GROUP_IDS.ACCESS_ADMINISTRATORS,
+    key: 'access-administrators',
+    name: 'Access Administrators',
+    description: 'Day-to-day Access Control administration without full platform admin.',
+    roleId: SYSTEM_ROLE_IDS.PLATFORM_ACCESS_ADMIN,
+  },
+  {
+    id: DEFAULT_PLATFORM_GROUP_IDS.ACCESS_AUDITORS,
+    key: 'access-auditors',
+    name: 'Access Auditors',
+    description: 'Read-only authorization and audit review.',
+    roleId: SYSTEM_ROLE_IDS.PLATFORM_ACCESS_AUDITOR,
+  },
+  {
+    id: DEFAULT_PLATFORM_GROUP_IDS.USER_ADMINISTRATORS,
+    key: 'user-administrators',
+    name: 'User Administrators',
+    description: 'User lifecycle administration without full platform admin.',
+    roleId: SYSTEM_ROLE_IDS.PLATFORM_USER_ADMIN,
+  },
+  {
+    id: DEFAULT_PLATFORM_GROUP_IDS.SSO_ADMINISTRATORS,
+    key: 'sso-administrators',
+    name: 'SSO Administrators',
+    description: 'SSO provider and SSO assignment mapping administration.',
+    roleId: SYSTEM_ROLE_IDS.PLATFORM_SSO_ADMIN,
+  },
+  {
+    id: DEFAULT_PLATFORM_GROUP_IDS.ENGINE_REGISTRY_ADMINISTRATORS,
+    key: 'engine-registry-administrators',
+    name: 'Engine Registry Administrators',
+    description: 'Engine inventory, Engine Set, and project-engine target registry administration.',
+    roleId: SYSTEM_ROLE_IDS.PLATFORM_ENGINE_REGISTRY_ADMIN,
+  },
+  {
+    id: DEFAULT_PLATFORM_GROUP_IDS.API_CLIENT_ADMINISTRATORS,
+    key: 'api-client-administrators',
+    name: 'API Client Administrators',
+    description: 'API client and service account administration.',
+    roleId: SYSTEM_ROLE_IDS.PLATFORM_API_CLIENT_ADMIN,
+  },
+] as const;
+
+function normalizeTenantId(tenantId?: string | null): string | null {
+  const normalized = tenantId?.trim();
+  return normalized || null;
+}
+
+function groupKeyFromName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function toGroupView(group: AuthzGroup): AuthzGroupView {
+  return {
+    id: group.id,
+    tenantId: group.tenantId,
+    key: group.key,
+    name: group.name,
+    description: group.description,
+    source: group.source as AuthzGroupSource,
+    sourceRef: group.sourceRef,
+    isSystem: group.isSystem,
+    isArchived: group.isArchived,
+    createdById: group.createdById,
+    createdAt: Number(group.createdAt),
+    updatedAt: Number(group.updatedAt),
+  };
+}
+
+async function recordGroupAudit(
+  dataSource: DataSource,
+  entry: {
+    tenantId?: string | null;
+    userId?: string | null;
+    action: string;
+    resourceType: string;
+    resourceId: string;
+    details?: Record<string, unknown>;
+  }
+): Promise<void> {
+  try {
+    await dataSource.getRepository(AuditLog).insert({
+      id: generateId(),
+      tenantId: normalizeTenantId(entry.tenantId),
+      userId: entry.userId || null,
+      action: entry.action,
+      resourceType: entry.resourceType,
+      resourceId: entry.resourceId,
+      ipAddress: null,
+      userAgent: null,
+      details: entry.details ? JSON.stringify(entry.details) : null,
+      createdAt: Date.now(),
+    });
+  } catch (error) {
+    logger.error('Failed to write authorization group audit log:', error);
+  }
+}
+
+export class AuthzGroupService {
+  async seedDefaultPlatformGroups(
+    providedDataSource?: DataSource,
+    now: number = Date.now()
+  ): Promise<{ groups: number; assignments: number }> {
+    const dataSource = providedDataSource || await getDataSource();
+    const groupRepo = dataSource.getRepository(AuthzGroup);
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+
+    await groupRepo.upsert(
+      DEFAULT_PLATFORM_GROUPS.map((group) => ({
+        id: group.id,
+        tenantId: null,
+        key: group.key,
+        name: group.name,
+        description: group.description,
+        source: 'system',
+        sourceRef: 'default-platform-groups',
+        isSystem: true,
+        isArchived: false,
+        createdById: null,
+        createdAt: now,
+        updatedAt: now,
+      })),
+      { conflictPaths: ['id'], skipUpdateIfNoValuesChanged: true }
+    );
+
+    await assignmentRepo.upsert(
+      DEFAULT_PLATFORM_GROUPS.map((group) => ({
+        id: `bootstrap.assignment.${group.id}.${group.roleId}`,
+        tenantId: null,
+        userId: group.id,
+        principalType: 'group',
+        principalId: group.id,
+        roleId: group.roleId,
+        resourceType: 'platform',
+        resourceId: null,
+        scopeType: 'platform',
+        scopeId: null,
+        source: 'bootstrap',
+        sourceMappingId: null,
+        sourceRef: 'default-platform-groups',
+        expiresAt: null,
+        lastSeenAt: null,
+        createdById: null,
+        createdAt: now,
+        updatedAt: now,
+      })),
+      { conflictPaths: ['id'], skipUpdateIfNoValuesChanged: true }
+    );
+
+    return {
+      groups: DEFAULT_PLATFORM_GROUPS.length,
+      assignments: DEFAULT_PLATFORM_GROUPS.length,
+    };
+  }
+
+  async listGroups(filters: { tenantId?: string | null; includeArchived?: boolean } = {}): Promise<AuthzGroupView[]> {
+    const dataSource = await getDataSource();
+    const qb = dataSource.getRepository(AuthzGroup)
+      .createQueryBuilder('group')
+      .orderBy('group.name', 'ASC');
+    const tenantId = normalizeTenantId(filters.tenantId);
+    if (tenantId) {
+      qb.andWhere('(group.tenantId = :tenantId OR group.tenantId IS NULL)', { tenantId });
+    }
+    if (!filters.includeArchived) {
+      qb.andWhere('group.isArchived = :isArchived', { isArchived: false });
+    }
+    const groups = await qb.getMany();
+    return groups.map(toGroupView);
+  }
+
+  async createGroup(input: CreateAuthzGroupInput): Promise<{ id: string }> {
+    const name = input.name.trim();
+    if (!name) throw Errors.validation('Group name is required');
+    const key = (input.key?.trim() || groupKeyFromName(name));
+    if (!key) throw Errors.validation('Group key is required');
+
+    const tenantId = normalizeTenantId(input.tenantId);
+    const dataSource = await getDataSource();
+    const repo = dataSource.getRepository(AuthzGroup);
+    const duplicateQb = repo.createQueryBuilder('group')
+      .where('group.key = :key', { key });
+    if (tenantId) {
+      duplicateQb.andWhere('group.tenantId = :tenantId', { tenantId });
+    } else {
+      duplicateQb.andWhere('group.tenantId IS NULL');
+    }
+    if (await duplicateQb.getOne()) {
+      throw Errors.conflict('Group key already exists');
+    }
+
+    const id = generateId();
+    const now = Date.now();
+    await repo.insert({
+      id,
+      tenantId,
+      key,
+      name,
+      description: input.description?.trim() || null,
+      source: input.source || 'manual',
+      sourceRef: input.sourceRef || null,
+      isSystem: Boolean(input.isSystem),
+      isArchived: false,
+      createdById: input.createdById || null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await recordGroupAudit(dataSource, {
+      tenantId,
+      userId: input.createdById || null,
+      action: 'authz.group.create',
+      resourceType: 'authz_group',
+      resourceId: id,
+      details: {
+        groupId: id,
+        tenantId,
+        key,
+        name,
+        source: input.source || 'manual',
+        sourceRef: input.sourceRef || null,
+        isSystem: Boolean(input.isSystem),
+      },
+    });
+    return { id };
+  }
+
+  async updateGroup(id: string, input: UpdateAuthzGroupInput): Promise<void> {
+    const dataSource = await getDataSource();
+    const repo = dataSource.getRepository(AuthzGroup);
+    const group = await repo.findOneBy({ id });
+    if (!group) throw Errors.notFound('Group');
+    if (group.isSystem && input.isArchived) {
+      throw Errors.validation('System groups cannot be archived');
+    }
+
+    const isArchive = input.isArchived === true && !group.isArchived;
+    await repo.update({ id }, {
+      name: input.name?.trim() || group.name,
+      description: input.description !== undefined ? input.description?.trim() || null : group.description,
+      isArchived: input.isArchived ?? group.isArchived,
+      updatedAt: Date.now(),
+    });
+    await recordGroupAudit(dataSource, {
+      tenantId: group.tenantId,
+      userId: input.updatedById || null,
+      action: isArchive ? 'authz.group.archive' : 'authz.group.update',
+      resourceType: 'authz_group',
+      resourceId: id,
+      details: {
+        groupId: id,
+        tenantId: group.tenantId,
+        key: group.key,
+        previousName: group.name,
+        nextName: input.name?.trim() || group.name,
+        isArchived: input.isArchived ?? group.isArchived,
+      },
+    });
+  }
+
+  async listMemberships(filters: { tenantId?: string | null; groupId?: string; userId?: string } = {}): Promise<AuthzGroupMembershipView[]> {
+    const dataSource = await getDataSource();
+    const qb = dataSource.getRepository(AuthzGroupMembership)
+      .createQueryBuilder('membership')
+      .orderBy('membership.createdAt', 'DESC');
+    const tenantId = normalizeTenantId(filters.tenantId);
+    if (tenantId) {
+      qb.andWhere('(membership.tenantId = :tenantId OR membership.tenantId IS NULL)', { tenantId });
+    }
+    if (filters.groupId) {
+      qb.andWhere('membership.groupId = :groupId', { groupId: filters.groupId });
+    }
+    if (filters.userId) {
+      qb.andWhere('membership.userId = :userId', { userId: filters.userId });
+    }
+
+    const memberships = await qb.getMany();
+    const groupIds = Array.from(new Set(memberships.map((membership) => membership.groupId)));
+    const groups = groupIds.length
+      ? await dataSource.getRepository(AuthzGroup).find({ where: { id: In(groupIds) } })
+      : [];
+    const groupsById = new Map(groups.map((group) => [group.id, group]));
+
+    return memberships.map((membership) => {
+      const group = groupsById.get(membership.groupId);
+      return {
+        id: membership.id,
+        tenantId: membership.tenantId,
+        groupId: membership.groupId,
+        groupKey: group?.key || null,
+        groupName: group?.name || null,
+        userId: membership.userId,
+        source: membership.source as AuthzGroupSource,
+        sourceRef: membership.sourceRef,
+        expiresAt: membership.expiresAt,
+        createdById: membership.createdById,
+        createdAt: Number(membership.createdAt),
+        updatedAt: Number(membership.updatedAt),
+      };
+    });
+  }
+
+  async addMembership(input: AddAuthzGroupMembershipInput): Promise<{ id: string }> {
+    const tenantId = normalizeTenantId(input.tenantId);
+    const dataSource = await getDataSource();
+    const group = await dataSource.getRepository(AuthzGroup).findOneBy({ id: input.groupId });
+    if (!group || group.isArchived) throw Errors.notFound('Group');
+    if (tenantId && group.tenantId && group.tenantId !== tenantId) {
+      throw Errors.forbidden('Group is not available in this tenant');
+    }
+    const user = await dataSource.getRepository(User).findOne({ where: { id: input.userId }, select: ['id'] });
+    if (!user) throw Errors.notFound('User');
+
+    const source = input.source || 'manual';
+    const sourceRef = input.sourceRef || null;
+    const repo = dataSource.getRepository(AuthzGroupMembership);
+    const duplicateQb = repo.createQueryBuilder('membership')
+      .where('membership.groupId = :groupId', { groupId: input.groupId })
+      .andWhere('membership.userId = :userId', { userId: input.userId })
+      .andWhere('membership.source = :source', { source });
+    if (sourceRef) {
+      duplicateQb.andWhere('membership.sourceRef = :sourceRef', { sourceRef });
+    } else {
+      duplicateQb.andWhere('membership.sourceRef IS NULL');
+    }
+    const existing = await duplicateQb.getOne();
+    if (existing) return { id: existing.id };
+
+    const id = generateId();
+    const now = Date.now();
+    await repo.insert({
+      id,
+      tenantId,
+      groupId: input.groupId,
+      userId: input.userId,
+      source,
+      sourceRef,
+      expiresAt: input.expiresAt ?? null,
+      createdById: input.createdById || null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await recordGroupAudit(dataSource, {
+      tenantId,
+      userId: input.createdById || null,
+      action: 'authz.group_membership.create',
+      resourceType: 'authz_group_membership',
+      resourceId: id,
+      details: {
+        membershipId: id,
+        tenantId,
+        groupId: input.groupId,
+        userId: input.userId,
+        source,
+        sourceRef,
+        expiresAt: input.expiresAt ?? null,
+      },
+    });
+    return { id };
+  }
+
+  async removeMembership(id: string, removedById?: string | null): Promise<void> {
+    const dataSource = await getDataSource();
+    const repo = dataSource.getRepository(AuthzGroupMembership);
+    const membership = await repo.findOneBy({ id });
+    if (!membership) throw Errors.notFound('Group membership');
+    await repo.delete({ id });
+    await recordGroupAudit(dataSource, {
+      tenantId: membership.tenantId,
+      userId: removedById || null,
+      action: 'authz.group_membership.delete',
+      resourceType: 'authz_group_membership',
+      resourceId: id,
+      details: {
+        membershipId: id,
+        tenantId: membership.tenantId,
+        groupId: membership.groupId,
+        userId: membership.userId,
+        source: membership.source,
+        sourceRef: membership.sourceRef,
+      },
+    });
+  }
+
+  async getUserGroupIds(userId: string, tenantId?: string | null): Promise<string[]> {
+    const dataSource = await getDataSource();
+    const now = Date.now();
+    const qb = dataSource.getRepository(AuthzGroupMembership)
+      .createQueryBuilder('membership')
+      .innerJoin(AuthzGroup, 'group', 'group.id = membership.groupId')
+      .where('membership.userId = :userId', { userId })
+      .andWhere('(membership.expiresAt IS NULL OR membership.expiresAt > :now)', { now })
+      .andWhere('group.isArchived = :isArchived', { isArchived: false });
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    if (normalizedTenantId) {
+      qb.andWhere('(membership.tenantId = :tenantId OR membership.tenantId IS NULL)', { tenantId: normalizedTenantId });
+      qb.andWhere('(group.tenantId = :tenantId OR group.tenantId IS NULL)', { tenantId: normalizedTenantId });
+    }
+
+    const memberships = await qb.getMany();
+    return Array.from(new Set(memberships.map((membership) => membership.groupId))).sort();
+  }
+}
+
+export const authzGroupService = new AuthzGroupService();

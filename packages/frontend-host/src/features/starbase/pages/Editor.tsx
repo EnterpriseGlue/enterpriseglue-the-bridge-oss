@@ -17,6 +17,7 @@ import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import type { File as StarbaseFile } from '../../../shared/api/types'
 import { buildEditorBreadcrumbBackState, buildEditorNavigationState, getEditorBreadcrumbTrail } from '../utils/editorBreadcrumbs'
 import { buildProjectFileIndex, resolveLinkedFile, type ProjectFileMeta } from '../utils/linkResolution'
+import { resolveEditorModeTabIndex } from '../utils/editorAuthz'
 import type { FolderSummary, ProjectMember } from '../components/project-detail/project-detail-utils'
 import { FolderLoader, CurrentPath, TreePicker } from '../components/project-detail/FolderTreeHelpers'
 import { useElementLinkOverlay } from '../hooks/useElementLinkOverlay'
@@ -36,6 +37,8 @@ import { useSelectedEngine } from '../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../stores/engineSelectorStore'
 import { useToast } from '../../../shared/notifications/ToastProvider'
 import { useAuth } from '../../../shared/hooks/useAuth'
+import { ProjectPermission } from '../../../shared/auth/permissions'
+import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { toSafeInternalPath } from '../../../utils/safeNavigation'
 import { redirectTo, replaceAndReloadToInternalPath } from '../../../utils/redirect'
 import { canDeployProject, type ProjectEngineAccessData } from '../utils/deployEligibility'
@@ -127,12 +130,83 @@ type RestoreFromCommitResponse = {
 type CollaborationLock = LockResponse
 type CollaborationHolder = LockHolder
 
+function getProjectMemberRoles(membership: ProjectMember | null | undefined): string[] {
+  if (!membership) return []
+  if (Array.isArray((membership as any).roles) && (membership as any).roles.length > 0) {
+    return (membership as any).roles.map((role: unknown) => String(role))
+  }
+  return membership.role ? [membership.role] : []
+}
+
+function legacyProjectRoleHasPermission(roles: string[], permission: string): boolean {
+  const normalized = new Set(roles)
+  if (normalized.has('owner')) return true
+
+  if (normalized.has('delegate')) {
+    return [
+      ProjectPermission.PROJECT_SETTINGS,
+      ProjectPermission.MEMBERS_MANAGE,
+      ProjectPermission.MEMBERS_VIEW,
+      ProjectPermission.MEMBERS_SEARCH,
+      ProjectPermission.MEMBERS_INVITE,
+      ProjectPermission.MEMBERS_ADD,
+      ProjectPermission.MEMBERS_UPDATE_ROLE,
+      ProjectPermission.MEMBERS_REMOVE,
+      ProjectPermission.MEMBERS_MANAGE_DEPLOY_GRANT,
+      ProjectPermission.FILES_CREATE,
+      ProjectPermission.FILES_EDIT,
+      ProjectPermission.FILES_DELETE,
+      ProjectPermission.FILES_VIEW,
+      ProjectPermission.VERSIONS_CREATE,
+      ProjectPermission.VERSIONS_RESTORE,
+      ProjectPermission.GIT_PUSH,
+      ProjectPermission.GIT_PULL,
+      ProjectPermission.GIT_CONNECT,
+      ProjectPermission.DEPLOY,
+    ].includes(permission as any)
+  }
+
+  if (normalized.has('developer')) {
+    return [
+      ProjectPermission.MEMBERS_VIEW,
+      ProjectPermission.FILES_CREATE,
+      ProjectPermission.FILES_EDIT,
+      ProjectPermission.FILES_DELETE,
+      ProjectPermission.FILES_VIEW,
+      ProjectPermission.VERSIONS_CREATE,
+      ProjectPermission.VERSIONS_RESTORE,
+      ProjectPermission.GIT_PUSH,
+      ProjectPermission.GIT_PULL,
+      ProjectPermission.DEPLOY,
+    ].includes(permission as any)
+  }
+
+  if (normalized.has('editor')) {
+    return [
+      ProjectPermission.MEMBERS_VIEW,
+      ProjectPermission.FILES_CREATE,
+      ProjectPermission.FILES_EDIT,
+      ProjectPermission.FILES_VIEW,
+      ProjectPermission.VERSIONS_CREATE,
+    ].includes(permission as any)
+  }
+
+  if (normalized.has('viewer')) {
+    return [
+      ProjectPermission.MEMBERS_VIEW,
+      ProjectPermission.FILES_VIEW,
+    ].includes(permission as any)
+  }
+
+  return false
+}
+
 export default function Editor() {
   const { fileId } = useParams()
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as { state?: any; search: string }
   const { notify } = useToast()
-  const { user } = useAuth()
+  const { user, hasProjectPermission, permissions } = useAuth()
   const queryClient = useQueryClient()
   const currentUserId = String(user?.id || '')
   const phase2Params = React.useMemo(() => new URLSearchParams(location.search || ''), [location.search])
@@ -202,6 +276,58 @@ export default function Editor() {
     refetchOnMount: 'always',
     refetchOnWindowFocus: false, // Prevent refetch on tab switch which would reset canvas
   })
+  const currentProjectId = fileQ.data?.projectId ?? null
+  const currentFolderId = fileQ.data?.folderId ?? null
+
+  const projectMembershipQ = useQuery({
+    queryKey: ['project-members', currentProjectId, 'me'],
+    queryFn: () => apiClient.get<ProjectMember | null>(`/starbase-api/projects/${currentProjectId}/members/me`),
+    enabled: !!currentProjectId,
+    staleTime: 60 * 1000,
+  })
+
+  const projectMemberRoles = React.useMemo(() => getProjectMemberRoles(projectMembershipQ.data), [projectMembershipQ.data])
+  const hasProjectPermissionOrLegacy = React.useCallback((permission: string) => (
+    hasProjectPermission(currentProjectId, permission) || legacyProjectRoleHasPermission(projectMemberRoles, permission)
+  ), [currentProjectId, hasProjectPermission, projectMemberRoles])
+  const projectWriteAuthorizationPending = Boolean(currentProjectId && projectMembershipQ.isLoading)
+  const canEditCurrentFile = hasProjectPermissionOrLegacy(ProjectPermission.FILES_EDIT)
+  const canCreateProjectFiles = hasProjectPermissionOrLegacy(ProjectPermission.FILES_CREATE)
+  const canCreateVersions = hasProjectPermissionOrLegacy(ProjectPermission.VERSIONS_CREATE)
+  const canRestoreVersions = hasProjectPermissionOrLegacy(ProjectPermission.VERSIONS_RESTORE)
+  const currentProjectResource = React.useMemo(
+    () => ({ type: 'project' as const, id: currentProjectId }),
+    [currentProjectId]
+  )
+  const vcsStatusReadDecision = evaluateActionSnapshot(permissions, 'project.vcs.status.read', currentProjectResource)
+  const vcsCommitsReadDecision = evaluateActionSnapshot(permissions, 'project.vcs.commits.read', currentProjectResource)
+  const gitLocksReadDecision = evaluateActionSnapshot(permissions, 'project.git.locks.read', currentProjectResource)
+  const gitLocksAcquireDecision = evaluateActionSnapshot(permissions, 'project.git.locks.acquire', currentProjectResource)
+  const gitLocksReleaseDecision = evaluateActionSnapshot(permissions, 'project.git.locks.release', currentProjectResource)
+  const gitLocksHeartbeatDecision = evaluateActionSnapshot(permissions, 'project.git.locks.heartbeat', currentProjectResource)
+  const canReadVcsStatus = vcsStatusReadDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_VIEW)
+  const canReadVcsCommits = vcsCommitsReadDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_VIEW)
+  const canReadProjectGitLocks = gitLocksReadDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_VIEW)
+  const canAcquireProjectGitLock = gitLocksAcquireDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_EDIT)
+  const canReleaseProjectGitLock = gitLocksReleaseDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_EDIT)
+  const canHeartbeatProjectGitLock = gitLocksHeartbeatDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_EDIT)
+  const editorPermissionReadOnly = Boolean(currentProjectId) && !projectWriteAuthorizationPending && !canEditCurrentFile
+  const editorWriteUnavailableReason = editorPermissionReadOnly
+    ? `Missing permission ${ProjectPermission.FILES_EDIT}`
+    : null
+  const collaborationLockUnavailableReason = React.useMemo(() => {
+    if (!currentProjectId || projectWriteAuthorizationPending) return null
+    if (!canReadProjectGitLocks) return gitLocksReadDecision.reason || `Missing permission ${ProjectPermission.FILES_VIEW}`
+    if (!canAcquireProjectGitLock) return gitLocksAcquireDecision.reason || `Missing permission ${ProjectPermission.FILES_EDIT}`
+    return null
+  }, [
+    canAcquireProjectGitLock,
+    canReadProjectGitLocks,
+    currentProjectId,
+    gitLocksAcquireDecision.reason,
+    gitLocksReadDecision.reason,
+    projectWriteAuthorizationPending,
+  ])
 
   const editorBreadcrumbTrail = React.useMemo(
     () => getEditorBreadcrumbTrail(location.state, fileId ? String(fileId) : null),
@@ -293,8 +419,8 @@ export default function Editor() {
   const acquireInFlightRef = React.useRef(false)
   const blockingTakeoverPromptFileRef = React.useRef<string | null>(null)
 
-  const collaborationCanWrite = collaborationMode === 'owner'
-  const collaborationReadOnly = editorMode === 'view' || !collaborationCanWrite
+  const collaborationCanWrite = collaborationMode === 'owner' && !collaborationLockUnavailableReason
+  const collaborationReadOnly = editorMode === 'view' || !collaborationCanWrite || editorPermissionReadOnly
   const collaborationReadOnlyRef = React.useRef(collaborationReadOnly)
   React.useEffect(() => {
     collaborationReadOnlyRef.current = collaborationReadOnly
@@ -554,13 +680,10 @@ export default function Editor() {
     [selectedElement, elementLinkInfo?.linkType, lastEditedAt]
   )
   const createActionLabel = elementLinkInfo?.linkType === 'decision' ? 'Create decision' : 'Create process'
-  const currentProjectId = fileQ.data?.projectId ?? null
-  const currentFolderId = fileQ.data?.folderId ?? null
-
   const collaborationLocksQ = useQuery({
     queryKey: ['git-locks', currentProjectId],
     queryFn: () => gitApi.getLocks(String(currentProjectId)),
-    enabled: Boolean(currentProjectId && fileQ.data?.id),
+    enabled: Boolean(currentProjectId && fileQ.data?.id && canReadProjectGitLocks),
     staleTime: 0,
     refetchInterval: 30_000,
     refetchOnWindowFocus: false,
@@ -645,6 +768,14 @@ export default function Editor() {
       }
     }
 
+    if (editorPermissionReadOnly) {
+      return {
+        label: 'View only',
+        background: '#f4f4f4',
+        color: '#525252',
+      }
+    }
+
     if (collaborationMode === 'acquiring') {
       return {
         label: 'Connecting',
@@ -674,11 +805,42 @@ export default function Editor() {
       background: '#f4f4f4',
       color: '#525252',
     }
-  }, [editorMode, collaborationMode, collaborationLock?.sessionStatus])
+  }, [editorMode, editorPermissionReadOnly, collaborationMode, collaborationLock?.sessionStatus])
 
   const shouldRenderCollaborationOverlay = React.useMemo(() => {
     return editorMode !== 'view' && collaborationReadOnly && collaborationMode === 'superseded'
   }, [editorMode, collaborationReadOnly, collaborationMode])
+
+  const collaborationUnavailableReason = React.useMemo(() => {
+    if (editorMode === 'view') return 'Editor is in view-only mode'
+    if (editorWriteUnavailableReason) return editorWriteUnavailableReason
+    if (collaborationLockUnavailableReason) return collaborationLockUnavailableReason
+    if (!collaborationCanWrite) return 'This draft is currently read-only because another user owns the editing session'
+    return null
+  }, [collaborationCanWrite, collaborationLockUnavailableReason, editorMode, editorWriteUnavailableReason])
+
+  const createVersionUnavailableReason = React.useMemo(() => {
+    if (collaborationUnavailableReason) return collaborationUnavailableReason
+    return canCreateVersions ? null : `Missing permission ${ProjectPermission.VERSIONS_CREATE}`
+  }, [canCreateVersions, collaborationUnavailableReason])
+  const implementTabUnavailableReason = editorWriteUnavailableReason
+  const handleEditorModeTabChange = React.useCallback(({ selectedIndex }: { selectedIndex: number }) => {
+    setTabIndex(resolveEditorModeTabIndex(selectedIndex, implementTabUnavailableReason))
+  }, [implementTabUnavailableReason])
+
+  React.useEffect(() => {
+    setTabIndex((current) => resolveEditorModeTabIndex(current, implementTabUnavailableReason))
+  }, [implementTabUnavailableReason])
+
+  const restoreVersionUnavailableReason = React.useMemo(() => {
+    if (collaborationUnavailableReason) return collaborationUnavailableReason
+    return canRestoreVersions ? null : `Missing permission ${ProjectPermission.VERSIONS_RESTORE}`
+  }, [canRestoreVersions, collaborationUnavailableReason])
+
+  const hotfixRestoreUnavailableReason = React.useMemo(() => {
+    if (editorWriteUnavailableReason) return editorWriteUnavailableReason
+    return canRestoreVersions ? null : `Missing permission ${ProjectPermission.VERSIONS_RESTORE}`
+  }, [canRestoreVersions, editorWriteUnavailableReason])
 
   const openBlockingTakeoverPrompt = React.useCallback(() => {
     const targetFileId = String(fileQ.data?.id || fileId || '')
@@ -690,6 +852,12 @@ export default function Editor() {
 
   const acquireCollaborationLock = React.useCallback(async (force = false) => {
     if (!fileQ.data?.id || !currentUserId || acquireInFlightRef.current) return null
+    if (collaborationLockUnavailableReason) {
+      setCollaborationError(collaborationLockUnavailableReason)
+      setCollaborationMode('blocked')
+      setTakeoverModalOpen(false)
+      return null
+    }
     acquireInFlightRef.current = true
     setCollaborationError(null)
     try {
@@ -751,19 +919,35 @@ export default function Editor() {
     } finally {
       acquireInFlightRef.current = false
     }
-  }, [fileQ.data?.id, currentUserId, notify, collaborationLocksQ, openBlockingTakeoverPrompt, queryClient])
+  }, [collaborationLockUnavailableReason, fileQ.data?.id, currentUserId, notify, collaborationLocksQ, openBlockingTakeoverPrompt, queryClient])
 
   const releaseCollaborationLock = React.useCallback(async () => {
     const lockId = collaborationLockIdRef.current
     if (!lockId) return
     collaborationLockIdRef.current = null
+    if (!canReleaseProjectGitLock) return
     try {
       await gitApi.releaseLock(lockId)
     } catch {}
-  }, [])
+  }, [canReleaseProjectGitLock])
 
   React.useEffect(() => {
     if (!fileQ.data?.id || !currentUserId) return
+    if (projectWriteAuthorizationPending) return
+    if (editorPermissionReadOnly || collaborationLockUnavailableReason) {
+      if (collaborationLockIdRef.current && canReleaseProjectGitLock) {
+        void releaseCollaborationLock()
+      }
+      collaborationLockIdRef.current = null
+      setCollaborationLock(null)
+      setCollaborationHolder(null)
+      setCollaborationMode('blocked')
+      setTakeoverModalOpen(false)
+      if (collaborationLockUnavailableReason) {
+        setCollaborationError(collaborationLockUnavailableReason)
+      }
+      return
+    }
     if (collaborationMode === 'superseded' && remoteFileLock && String(remoteFileLock.userId) === currentUserId) {
       return
     }
@@ -789,7 +973,7 @@ export default function Editor() {
     if (editorMode !== 'view' && collaborationMode !== 'owner') {
       acquireCollaborationLock(false)
     }
-  }, [fileQ.data?.id, currentUserId, remoteFileLock, buildHolderFromLock, acquireCollaborationLock, collaborationMode, editorMode, openBlockingTakeoverPrompt])
+  }, [fileQ.data?.id, currentUserId, projectWriteAuthorizationPending, editorPermissionReadOnly, collaborationLockUnavailableReason, canReleaseProjectGitLock, remoteFileLock, buildHolderFromLock, acquireCollaborationLock, collaborationMode, editorMode, openBlockingTakeoverPrompt, releaseCollaborationLock])
 
   React.useEffect(() => {
     lastInteractionAtRef.current = Date.now()
@@ -808,7 +992,7 @@ export default function Editor() {
   }, [fileId])
 
   React.useEffect(() => {
-    if (!collaborationLockIdRef.current || collaborationMode !== 'owner') return
+    if (!collaborationLockIdRef.current || collaborationMode !== 'owner' || !canHeartbeatProjectGitLock) return
     let cancelled = false
     const sendHeartbeat = async () => {
       const hasInteraction = lastInteractionAtRef.current > lastHeartbeatInteractionAtRef.current
@@ -832,13 +1016,14 @@ export default function Editor() {
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [collaborationMode, collaborationLock?.id])
+  }, [canHeartbeatProjectGitLock, collaborationMode, collaborationLock?.id])
 
   // SSE: Subscribe to lock events for instant takeover notification + live canvas sync
   React.useEffect(() => {
     const targetFileId = fileQ.data?.id
     if (!targetFileId || collaborationMode === 'acquiring') return
     if (editorMode === 'view') return
+    if (!canReadProjectGitLocks) return
 
     // Build the SSE URL with tenant prefix (EventSource doesn't go through fetch interceptor)
     const tenantMatch = window.location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
@@ -915,7 +1100,7 @@ export default function Editor() {
         es = null
       }
     }
-  }, [fileQ.data?.id, collaborationMode, editorMode, queryClient])
+  }, [fileQ.data?.id, collaborationMode, editorMode, canReadProjectGitLocks, queryClient])
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return
@@ -935,12 +1120,18 @@ export default function Editor() {
   }, [releaseCollaborationLock])
 
   const ensureCollaborationWriteAllowed = React.useCallback(() => {
+    if (editorPermissionReadOnly) {
+      throw new Error(editorWriteUnavailableReason || `Missing permission ${ProjectPermission.FILES_EDIT}`)
+    }
+    if (collaborationLockUnavailableReason) {
+      throw new Error(collaborationLockUnavailableReason)
+    }
     if (collaborationCanWrite) return
     if (collaborationMode === 'superseded') {
       throw new Error('Another user has taken over this draft. Your local changes are preserved, but editing is read-only until you take over again.')
     }
     throw new Error('This draft is currently read-only because another user owns the editing session.')
-  }, [collaborationCanWrite, collaborationMode])
+  }, [collaborationCanWrite, collaborationLockUnavailableReason, collaborationMode, editorPermissionReadOnly, editorWriteUnavailableReason])
 
   const handleTakeover = React.useCallback(async () => {
     setTakeoverPending(true)
@@ -989,6 +1180,14 @@ export default function Editor() {
 
   const handleSaveLocalWorkAsCopy = React.useCallback(async () => {
     if (!currentProjectId || !fileQ.data) return
+    if (!canCreateProjectFiles) {
+      notify({
+        kind: 'error',
+        title: 'Cannot save copy',
+        subtitle: `Missing permission ${ProjectPermission.FILES_CREATE}`,
+      })
+      return
+    }
 
     setRecoveryPending('copy')
     try {
@@ -1048,7 +1247,7 @@ export default function Editor() {
     } finally {
       setRecoveryPending(null)
     }
-  }, [currentProjectId, fileQ.data, readCurrentEditorXml, currentFolderId, queryClient, notify, tenantNavigate, buildCurrentEditorNavigationState])
+  }, [currentProjectId, fileQ.data, canCreateProjectFiles, readCurrentEditorXml, currentFolderId, queryClient, notify, tenantNavigate, buildCurrentEditorNavigationState])
 
   const buildFileCallersQueryKey = React.useCallback(
     (targetFile: Pick<ProjectFileMeta, 'id' | 'type' | 'bpmnProcessId' | 'dmnDecisionId'> | null | undefined) => {
@@ -1349,7 +1548,7 @@ export default function Editor() {
       `/vcs-api/projects/${fileQ.data?.projectId}/uncommitted-files`,
       { baseline: 'draft' }
     ),
-    enabled: !!fileQ.data?.projectId && hasGitRepository,
+    enabled: !!fileQ.data?.projectId && hasGitRepository && canReadVcsStatus,
     refetchInterval: 30000, // Refresh every 30 seconds
   })
   
@@ -1380,7 +1579,7 @@ export default function Editor() {
       const nonAuto = commits.filter((commit: any) => !isAutoCommitMessage(commit?.message))
       return nonAuto.length > 0 ? nonAuto[0] : null
     },
-    enabled: !!fileQ.data?.projectId && !!fileId && hasGitRepository,
+    enabled: !!fileQ.data?.projectId && !!fileId && hasGitRepository && canReadVcsCommits,
     staleTime: 10_000,
     refetchOnMount: 'always',
   })
@@ -1453,14 +1652,22 @@ export default function Editor() {
   // DMN evaluate mutation
   const selectedEngineId = useSelectedEngine()
   const setSelectedEngineId = useEngineSelectorStore((s) => s.setSelectedEngineId)
+  const decisionEvaluateDecision = evaluateActionSnapshot(
+    permissions,
+    'engine.runtime.decisions.evaluate',
+    { type: 'engine', id: selectedEngineId || null }
+  )
+  const decisionEvaluateUnavailableReason = selectedEngineId
+    ? (decisionEvaluateDecision.allowed ? null : decisionEvaluateDecision.reason || 'Decision evaluation unavailable')
+    : 'Select an engine before evaluating decisions'
   const { data: platformSettings } = usePlatformSyncSettings()
-
-  const deployMembershipQ = useQuery({
-    queryKey: ['project-members', fileQ.data?.projectId, 'me'],
-    queryFn: () => apiClient.get<ProjectMember | null>(`/starbase-api/projects/${fileQ.data?.projectId}/members/me`),
-    enabled: !!fileQ.data?.projectId,
-    staleTime: 60 * 1000,
-  })
+  const projectDeploymentsReadDecision = evaluateActionSnapshot(
+    permissions,
+    'project.deployments.read',
+    { type: 'project', id: fileQ.data?.projectId || null }
+  )
+  const canReadProjectDeployments = projectDeploymentsReadDecision.allowed ||
+    hasProjectPermission(fileQ.data?.projectId ?? null, ProjectPermission.FILES_VIEW)
 
   const deployEngineAccessQ = useQuery({
     queryKey: ['project-engine-access', fileQ.data?.projectId],
@@ -1471,16 +1678,16 @@ export default function Editor() {
 
   const canDeployCurrentFile = React.useMemo(() => {
     return canDeployProject(
-      deployMembershipQ.data,
+      projectMembershipQ.data,
       deployEngineAccessQ.data,
       platformSettings?.defaultDeployRoles
     )
-  }, [deployEngineAccessQ.data, deployMembershipQ.data, platformSettings?.defaultDeployRoles])
+  }, [deployEngineAccessQ.data, projectMembershipQ.data, platformSettings?.defaultDeployRoles])
 
   const engineDeploymentsLatestQ = useQuery({
     queryKey: ['engine-deployments', fileQ.data?.projectId, 'latest'],
     queryFn: () => apiClient.get<LatestDeploymentByFile[]>(`/starbase-api/projects/${fileQ.data?.projectId}/engine-deployments/latest`),
-    enabled: !!fileQ.data?.projectId,
+    enabled: !!fileQ.data?.projectId && canReadProjectDeployments,
     staleTime: 30_000,
     retry: false,
   })
@@ -1602,6 +1809,7 @@ export default function Editor() {
   const evaluateMutation = useMutation({
     mutationFn: async (variables: Record<string, { value: any; type: string }>) => {
       if (!decisionKey) throw new Error('No decision key')
+      if (decisionEvaluateUnavailableReason) throw new Error(decisionEvaluateUnavailableReason)
       return apiClient.post(
         `/mission-control-api/decision-definitions/key/${decisionKey}/evaluate`,
         { variables, engineId: selectedEngineId }
@@ -1749,6 +1957,7 @@ export default function Editor() {
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         return
       }
+      if (collaborationReadOnlyRef.current) return
       
       // Ctrl+Z or Cmd+Z for undo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -2014,6 +2223,14 @@ export default function Editor() {
     ensureCollaborationWriteAllowed()
     if (!elementLinkInfo || !selectedElement || !modelerRef.current) return
     if (!currentProjectId) return
+    if (!canCreateProjectFiles) {
+      notify({
+        kind: 'error',
+        title: 'Cannot create linked file',
+        subtitle: `Missing permission ${ProjectPermission.FILES_CREATE}`,
+      })
+      return
+    }
     const linkedFileName = createLinkedProcessName
     if (!linkedFileName) return
 
@@ -2146,6 +2363,9 @@ export default function Editor() {
 
   const restoreFromDeploymentMutation = useMutation({
     mutationFn: async () => {
+      if (hotfixRestoreUnavailableReason) {
+        throw new Error(hotfixRestoreUnavailableReason)
+      }
       ensureCollaborationWriteAllowed()
       if (!fileId) throw new Error('Missing fileId')
 
@@ -2190,6 +2410,7 @@ export default function Editor() {
   }, [clearPendingAutosave])
 
   const handleStartHotfix = React.useCallback(() => {
+    if (hotfixRestoreUnavailableReason) return
     // If there are unsaved changes (local edits or uncommitted server draft), prompt to save first
     if (localDirty || fileIsUncommitted) {
       setShowSaveFirstPrompt(true)
@@ -2201,7 +2422,7 @@ export default function Editor() {
     const ctx = { fromCommitId: phase2CommitId, fromFileVersion: phase2FileVersion }
     try { sessionStorage.setItem(`hotfix-context-${fileId}`, JSON.stringify(ctx)) } catch {}
     restoreFromDeploymentMutation.mutate()
-  }, [localDirty, fileIsUncommitted, phase2CanRestore, restoreFromDeploymentMutation, phase2CommitId, phase2FileVersion, fileId])
+  }, [hotfixRestoreUnavailableReason, localDirty, fileIsUncommitted, phase2CanRestore, restoreFromDeploymentMutation, phase2CommitId, phase2FileVersion, fileId])
 
   const handleCancelHotfix = React.useCallback(() => {
     if (!fileId) return
@@ -2389,7 +2610,13 @@ export default function Editor() {
           </span>
           <div style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
             <Button kind="ghost" size="sm" onClick={handleBackToDraft}>Back to draft</Button>
-            <Button kind="primary" size="sm" disabled={!phase2CanRestore || restoreFromDeploymentMutation.isPending} onClick={handleStartHotfix}>
+            <Button
+              kind="primary"
+              size="sm"
+              disabled={!phase2CanRestore || restoreFromDeploymentMutation.isPending || Boolean(hotfixRestoreUnavailableReason)}
+              title={hotfixRestoreUnavailableReason ?? undefined}
+              onClick={handleStartHotfix}
+            >
               {restoreFromDeploymentMutation.isPending ? 'Starting hotfix…' : 'Start Hotfix'}
             </Button>
           </div>
@@ -2409,6 +2636,17 @@ export default function Editor() {
       {collaborationError && (
         <div style={{ padding: 'var(--spacing-3) var(--spacing-4) 0' }}>
           <InlineNotification lowContrast kind="error" title="Collaboration session issue" subtitle={collaborationError} />
+        </div>
+      )}
+
+      {editorPermissionReadOnly && (
+        <div style={{ padding: 'var(--spacing-3) var(--spacing-4) 0' }}>
+          <InlineNotification
+            lowContrast
+            kind="info"
+            title="Read-only editor"
+            subtitle={editorWriteUnavailableReason || `Missing permission ${ProjectPermission.FILES_EDIT}`}
+          />
         </div>
       )}
 
@@ -2439,10 +2677,10 @@ export default function Editor() {
       {f.type === 'bpmn' ? (
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-2) var(--spacing-4)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-4)' }}>
-            <Tabs selectedIndex={tabIndex} onChange={({ selectedIndex }: { selectedIndex: number }) => setTabIndex(selectedIndex)}>
+            <Tabs selectedIndex={tabIndex} onChange={handleEditorModeTabChange}>
               <TabList aria-label="Editor modes">
                 <Tab>Design</Tab>
-                <Tab>Implement</Tab>
+                <Tab disabled={Boolean(implementTabUnavailableReason)} title={implementTabUnavailableReason ?? undefined}>Implement</Tab>
               </TabList>
               {/* Empty panels to satisfy Tabs API; we render canvas below */}
               <TabPanels>
@@ -2530,7 +2768,7 @@ export default function Editor() {
             >
               <Redo size={20} />
             </button>
-            <Button kind="ghost" size="sm" onClick={() => setVersionsPanelOpen(!versionsPanelOpen)} disabled={collaborationReadOnly}>Versions</Button>
+            <Button kind="ghost" size="sm" onClick={() => setVersionsPanelOpen(!versionsPanelOpen)}>Versions</Button>
           </div>
         </div>
       ) : (
@@ -2603,7 +2841,7 @@ export default function Editor() {
             >
               <Redo size={20} />
             </button>
-            <Button kind="ghost" size="sm" onClick={() => setVersionsPanelOpen(!versionsPanelOpen)} disabled={collaborationReadOnly}>Versions</Button>
+            <Button kind="ghost" size="sm" onClick={() => setVersionsPanelOpen(!versionsPanelOpen)}>Versions</Button>
           </div>
         </div>
       )}
@@ -2769,6 +3007,7 @@ export default function Editor() {
                   result={evaluateMutation.data}
                   error={evaluateMutation.error?.message}
                   isEvaluating={evaluateMutation.isPending}
+                  evaluateUnavailableReason={decisionEvaluateUnavailableReason}
                 />
               </React.Suspense>
             </div>
@@ -2832,11 +3071,12 @@ export default function Editor() {
               kind="tertiary"
               size="sm" 
               onClick={() => {
-                if (collaborationReadOnly) return
+                if (createVersionUnavailableReason) return
                 captureFocus()
                 commitModal.openModal()
               }}
-              disabled={collaborationReadOnly}
+              disabled={Boolean(createVersionUnavailableReason)}
+              title={createVersionUnavailableReason ?? undefined}
               style={{ background: '#24a148', borderColor: '#24a148', color: 'white', borderRadius: '4px', padding: '4px 12px', minHeight: 'auto', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
               <Branch size={16} /> {hasUnsavedVersion ? 'Save version' : 'New version'}
@@ -2857,6 +3097,8 @@ export default function Editor() {
                   saveMode={hasGitRepository ? 'git' : 'local'}
                   beforeVersionSave={prepareVersionSave}
                   onVersionSaveSuccess={handleVersionSaveSuccess}
+                  canRestoreVersion={!restoreVersionUnavailableReason}
+                  restoreVersionUnavailableReason={restoreVersionUnavailableReason}
                 />
               ) : null}
             </div>
@@ -3149,7 +3391,10 @@ export default function Editor() {
                 <Button
                   kind="tertiary"
                   size="sm"
+                  disabled={Boolean(createVersionUnavailableReason)}
+                  title={createVersionUnavailableReason ?? undefined}
                   onClick={() => {
+                    if (createVersionUnavailableReason) return
                     setPhase2Dismissed(true)
                     captureFocus()
                     commitModal.openModal()
@@ -3184,7 +3429,8 @@ export default function Editor() {
           </Button>
           <Button
             kind="primary"
-            disabled={!phase2CanRestore || restoreFromDeploymentMutation.isPending}
+            disabled={!phase2CanRestore || restoreFromDeploymentMutation.isPending || Boolean(hotfixRestoreUnavailableReason)}
+            title={hotfixRestoreUnavailableReason ?? undefined}
             onClick={handleStartHotfix}
           >
             {restoreFromDeploymentMutation.isPending ? 'Starting…' : `Hotfix v${phase2FileVersion ?? '?'}`}
@@ -3206,7 +3452,10 @@ export default function Editor() {
           </Button>
           <Button
             kind="tertiary"
+            disabled={Boolean(hotfixRestoreUnavailableReason)}
+            title={hotfixRestoreUnavailableReason ?? undefined}
             onClick={() => {
+              if (hotfixRestoreUnavailableReason) return
               setShowSaveFirstPrompt(false)
               // Discard unsaved changes and proceed with hotfix
               setLocalDirty(false)
@@ -3220,7 +3469,10 @@ export default function Editor() {
           </Button>
           <Button
             kind="primary"
+            disabled={Boolean(createVersionUnavailableReason)}
+            title={createVersionUnavailableReason ?? undefined}
             onClick={() => {
+              if (createVersionUnavailableReason) return
               setShowSaveFirstPrompt(false)
               captureFocus()
               commitModal.openModal()
