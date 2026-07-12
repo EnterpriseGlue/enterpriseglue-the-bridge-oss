@@ -20,6 +20,9 @@ import { buildEngineCredentialHeaders, resolveBpmnEngineRequestUrl } from '@ente
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
+import { deploymentReceiptService } from '@enterpriseglue/shared/services/platform-admin/DeploymentReceiptService.js'
+import { DeploymentReceiptCreateSchema } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import { auditLog } from '@enterpriseglue/shared/services/audit.js'
 import {
   sanitize,
   hashContent,
@@ -675,6 +678,43 @@ r.post(
   inferDeployAuthIds,
   requireApiDeploymentEligibility({ engineIdFrom: 'params', projectIdFrom: 'body' }),
   asyncHandler(createEngineDeployment)
+)
+
+r.post(
+  '/engines-api/external/engines/:engineId/deployment-receipts',
+  apiLimiter,
+  validateBody(DeploymentReceiptCreateSchema),
+  requireApiDeploymentEligibility({ engineIdFrom: 'params', projectIdFrom: 'body' }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const principal = req.apiClient
+      ? { source: 'api_client' as const, id: req.apiClient.id }
+      : req.serviceAccount
+        ? { source: 'service_account' as const, id: req.serviceAccount.id }
+        : null;
+    if (!principal) throw Errors.unauthorized('Deployment receipt principal required');
+
+    const result = await deploymentReceiptService.record({
+      ...req.body,
+      tenantId: req.tenant?.tenantId || null,
+      engineId: String(req.params.engineId),
+      source: principal.source,
+      sourcePrincipalId: principal.id,
+    });
+    await auditLog(req, {
+      action: 'engine.deployment-receipts.create',
+      resourceType: 'engine',
+      resourceId: String(req.params.engineId),
+      details: {
+        receiptId: result.receiptId,
+        idempotent: result.idempotent,
+        projectId: req.body.projectId,
+        engineDeploymentId: req.body.engineDeploymentId,
+        source: principal.source,
+        sourcePrincipalId: principal.id,
+      },
+    });
+    res.status(result.idempotent ? 200 : 201).json(result);
+  })
 )
 
 // Passthroughs to engine for listing/reading/deleting deployments

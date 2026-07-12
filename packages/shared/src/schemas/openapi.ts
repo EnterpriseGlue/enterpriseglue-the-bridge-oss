@@ -1132,6 +1132,26 @@ registry.registerPath({
   },
 })
 
+const {
+  DeploymentReceiptCreateSchema,
+  DeploymentReceiptResponseSchema,
+} = await import('./platform-admin/deployment-receipt.js');
+registry.registerPath({
+  method: 'post',
+  path: '/engines-api/external/engines/{engineId}/deployment-receipts',
+  ...authzExtension('engine.deployment-receipts.create', 'POST', '/engines-api/external/engines/{engineId}/deployment-receipts'),
+  request: {
+    params: z.object({ engineId: z.string() }),
+    body: { content: { 'application/json': { schema: DeploymentReceiptCreateSchema } } },
+  },
+  responses: {
+    200: { description: 'Existing idempotent deployment receipt', content: { 'application/json': { schema: DeploymentReceiptResponseSchema } } },
+    201: { description: 'Deployment receipt recorded', content: { 'application/json': { schema: DeploymentReceiptResponseSchema } } },
+    401: { description: 'API client bearer token required' },
+    403: { description: 'API deployment is not allowed' },
+  },
+})
+
 registry.registerPath({
   method: 'get',
   path: '/engines-api/engines/{engineId}/deployments',

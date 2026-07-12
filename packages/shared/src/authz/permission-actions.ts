@@ -1276,6 +1276,23 @@ export const AUTHZ_ACTIONS = [
     ],
   },
   {
+    actionId: 'engine.deployment-receipts.create',
+    permissionId: 'engine:deploy',
+    resourceType: 'engine',
+    operation: 'create',
+    risk: 'high',
+    audit: true,
+    category: 'Deployments',
+    description: 'Record an externally completed deployment receipt and its sanitized runtime resource lineage.',
+    ui: [{ surfaceId: 'engine.deployment-receipts.ingest', behavior: 'disable', coverage: 'api-only' }],
+    routes: [{
+      method: 'POST',
+      route: '/engines-api/external/engines/{engineId}/deployment-receipts',
+      resourceResolver: 'projectEngineTarget.fromProjectAndEngine',
+      additionalChecks: ['project.deploy.create', 'engine.deploy.create', 'target.mode.api', 'api-client.deployment.execute'],
+    }],
+  },
+  {
     actionId: 'engine.inventory.read',
     permissionId: 'engine:instance:view',
     resourceType: 'engine',

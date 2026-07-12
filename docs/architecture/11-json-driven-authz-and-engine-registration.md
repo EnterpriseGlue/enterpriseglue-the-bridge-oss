@@ -503,7 +503,7 @@ Persist one deployment record per `engineId + engineDeploymentId` and merge rich
 
 - [ ] ⬜ Extend `EngineDeployment` with ingestion source, lineage quality, reporting principal, reconciliation timestamps, nullable project lineage, and an `engineId + engineDeploymentId` uniqueness rule.
 - [ ] ⬜ Make `EngineDeploymentArtifact.projectId` nullable for engine-discovered artifacts and preserve process/decision key, version, tenant, and resource-name metadata.
-- [ ] ⬜ Add an idempotent deployment receipt API for direct pipelines.
+- [x] ✅ Add `POST /engines-api/external/engines/:engineId/deployment-receipts`: machine-authenticated, API-target-eligible, idempotent receipt ingestion that persists sanitized pipeline lineage and reports process/decision metadata into the runtime inventory. Linking receipts into the legacy `EngineDeployment` history remains pending.
 - [ ] ⬜ Add scheduled and on-demand deployment/runtime inventory reconciliation.
 - [ ] ⬜ Never infer project/file lineage solely from a process key unless a configured convention resolves uniquely.
 - [ ] ⬜ Require `complete` or validated `reported` lineage for Mission Control-Starbase edit navigation.
@@ -1786,14 +1786,14 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Add a shared engine `ConnectionResolver` used by health, metadata, deployment, Mission Control, and reconciliation calls. It must distinguish direct versus customer-sidecar endpoints without changing authorization semantics.
 - [ ] ⬜ Complete provider-id-bound auth start/callback orchestration for every protocol. Generic OIDC is implemented with provider-bound state, PKCE, nonce, discovery, JWKS verification, and normalized provisioning; direct LDAP supports LDAPS service lookup, user bind verification, and normalized group output. Legacy Microsoft/Google migration remains pending.
 - [ ] ⬜ Converge platform-role, group, and direct-engine SSO mapping services into group-first identity mappings; UI convenience flows create a managed internal group plus normal scoped assignment.
-- [ ] ⬜ Add runtime inventory, runtime resource-set materialization, runtime authorization filtering, deployment receipt, and deployment reconciliation services under `packages/shared/src/services/platform-admin/` or a dedicated shared engine-runtime service boundary.
+- [x] ✅ Add shared runtime inventory, runtime-resource-set materialization, and deployment-receipt services. Runtime authorization filtering and scheduled deployment reconciliation remain pending.
 - [ ] ⬜ Extend `DeploymentEligibilityService` only for deployment eligibility; do not mix deployment metadata discovery into the eligibility evaluator.
 - [ ] ⬜ Extend permission/effective-access services to resolve engine-wide versus resource-aware runtime scopes and explain broad-grant shadowing.
 
 ### Backend Host
 
 - [ ] ⬜ Split `packages/backend-host/src/modules/platform-admin/routes/authz.ts` first, then add focused identity/config/runtime-resource routers.
-- [ ] ⬜ Extend engine management and deployment routes for runtime scope settings, deployment receipts, inventory reads, and reconciliation.
+- [x] ✅ Add the external machine-authenticated deployment receipt route with API deployment eligibility, action/OpenAPI metadata, audit logging, and inventory materialization. Runtime scope settings, inventory reads, and reconciliation routes remain pending.
 - [ ] ⬜ Update `packages/backend-host/src/modules/mission-control/engines/routes.ts` manual engine create/update/list/detail schemas and serializers, not only the platform-admin engine-management routes.
 - [ ] ⬜ Update auth start/callback routes and provider services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit.
 - [ ] ⬜ Update Mission Control process, process-instance, decision, batch, migration, job, incident, history, variable, and dashboard routes to use authorized-subset filtering and inherited runtime-resource resolvers.
@@ -1848,8 +1848,8 @@ The implementation should extend existing packages rather than introduce an auth
   - Lists authorized inventory or admin diagnostics by runtime kind, key, tenant, lineage, and status.
 - [ ] ⬜ `POST /engines-api/engines/:engineId/runtime-resources/reconcile`
   - Runs idempotent deployment/process/decision metadata discovery and resource-set rematerialization.
-- [ ] ⬜ `POST /engines-api/engines/:engineId/deployment-receipts`
-  - Accepts an idempotent machine-authenticated receipt for a direct pipeline deployment.
+- [x] ✅ `POST /engines-api/external/engines/:engineId/deployment-receipts`
+  - Accepts an idempotent API-client or service-account receipt for a direct pipeline deployment only after API deployment eligibility passes; it stores sanitized lineage and updates runtime inventory.
 - [ ] ⬜ `GET /engines-api/engines/:engineId/deployments/:deploymentId/lineage`
   - Returns sanitized ingestion source, lineage quality, project/file references, runtime keys, and reconciliation status.
 

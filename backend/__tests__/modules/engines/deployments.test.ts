@@ -455,4 +455,26 @@ describe('engines deployments routes', () => {
       status: 'success',
     });
   });
+
+  it('records an idempotent external deployment receipt through API deployment eligibility', async () => {
+    const response = await request(app)
+      .post('/engines-api/external/engines/e1/deployment-receipts')
+      .set('Authorization', 'Bearer token-1')
+      .send({
+        idempotencyKey: 'release-2026-07-12-001',
+        projectId: 'project-1',
+        engineDeploymentId: 'camunda-deployment-1',
+        artifacts: [{ resourceKind: 'process_definition', resourceKey: 'payments-order', version: 1 }],
+        lineage: { pipelineRunId: 'run-1', commitSha: 'abc123' },
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ idempotent: false, inventory: { created: 1, updated: 0 } });
+    expect(apiClientService.authenticateToken).toHaveBeenCalledWith('token-1', 'deployment:execute');
+    expect(deploymentEligibilityService.evaluate).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      engineId: 'e1',
+      mode: 'api',
+    }));
+  });
 });
