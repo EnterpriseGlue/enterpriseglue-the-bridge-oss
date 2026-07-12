@@ -27,6 +27,8 @@ import EnginesPage, {
   getEngineTestUnavailableReason,
   resolveEngineDetailSections,
   isEngineGovernanceRoleAssignment,
+  isConfigLockedEngine,
+  isConfigWarnEngine,
   isExternallyManagedEngine,
   isExternallyRegisteredEngine,
   legacyEngineRoleHasPermission,
@@ -734,6 +736,9 @@ describe('EnginesPage', () => {
     expect(isExternallyManagedEngine({ registrationSource: 'external_api' })).toBe(true);
     expect(isExternallyManagedEngine({ registrationSource: 'user', externalId: 'cluster-a/prod' })).toBe(false);
     expect(isExternallyManagedEngine({ externalId: 'cluster-a/prod' })).toBe(false);
+    expect(isConfigLockedEngine({ registrationSource: 'config', ownershipMode: 'config_locked' })).toBe(true);
+    expect(isConfigLockedEngine({ registrationSource: 'config', ownershipMode: 'config_warn' })).toBe(false);
+    expect(isConfigWarnEngine({ registrationSource: 'config', ownershipMode: 'config_warn' })).toBe(true);
   });
 
   it('strips source-owned fields from externally managed engine update payloads', () => {

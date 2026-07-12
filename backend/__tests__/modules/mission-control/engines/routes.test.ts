@@ -431,6 +431,67 @@ describe('mission-control engines routes', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('rejects manual updates to config-locked engine fields', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Config Engine',
+      registrationSource: 'config',
+      ownershipMode: 'config_locked',
+      tenantId: null,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({ findOne, findOneBy, update }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ name: 'Changed locally' });
+
+    expect(response.status).toBe(403);
+    expect(String(response.body.error || '')).toContain('Configuration-managed engine fields are read-only: name');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('marks config-warn engine updates as manual drift', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOneBy = vi.fn()
+      .mockResolvedValueOnce({
+        id: 'e1',
+        name: 'Config Engine',
+        registrationSource: 'config',
+        ownershipMode: 'config_warn',
+        tenantId: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'e1',
+        name: 'Changed locally',
+        registrationSource: 'config',
+        ownershipMode: 'config_warn',
+        driftStatus: 'manual_override',
+        tenantId: null,
+      });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({ findOne, findOneBy, update }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ name: 'Changed locally' });
+
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
+      name: 'Changed locally',
+      driftStatus: 'manual_override',
+    }));
+  });
+
   it('allows manual updates to hybrid engines when field ownership is manual', async () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');

@@ -219,6 +219,14 @@ export function isExternallyManagedEngine(engine: any): boolean {
   return engine?.registrationSource === 'external_api'
 }
 
+export function isConfigLockedEngine(engine: any): boolean {
+  return engine?.registrationSource === 'config' && engine?.ownershipMode === 'config_locked'
+}
+
+export function isConfigWarnEngine(engine: any): boolean {
+  return engine?.registrationSource === 'config' && engine?.ownershipMode === 'config_warn'
+}
+
 export function formatEngineRegistrationSource(engine: any): string {
   if (engine?.registrationSource === 'config') return 'Configuration'
   if (engine?.registrationSource === 'external_api') return 'External API'
@@ -1119,7 +1127,7 @@ export default function Engines() {
   const hasMultipleTags = Array.isArray(envTags) && envTags.length > 1
 
   const listQ = useQuery({ queryKey: ['engines'], queryFn: () => apiClient.get<any[]>('/engines-api/engines', undefined, { credentials: 'include' }) })
-  const areSourceOwnedFieldsReadOnly = Boolean(editing && isExternallyManagedEngine(editing))
+  const areSourceOwnedFieldsReadOnly = Boolean(editing && (isExternallyManagedEngine(editing) || isConfigLockedEngine(editing)))
 
   const createM = useMutation({
     mutationFn: (payload: any) => apiClient.post<any>('/engines-api/engines', payload, { credentials: 'include' }),
@@ -1220,8 +1228,9 @@ export default function Engines() {
   }
 
   const editingActions = editing ? getActionsForEngine(editing) : null
+  const isConfigLocked = Boolean(editing && isConfigLockedEngine(editing))
   const isEngineEnvironmentOnlyEditable = Boolean(editing && !editingActions?.canEdit && editingActions?.canSetEnvironment)
-  const isEngineFormReadOnly = Boolean(editing && !editingActions?.canEdit && !editingActions?.canSetEnvironment)
+  const isEngineFormReadOnly = Boolean(editing && (isConfigLocked || (!editingActions?.canEdit && !editingActions?.canSetEnvironment)))
   const canViewEditingProjectAccess = editing ? Boolean(editingActions?.canViewProjectAccess) : false
   const canViewEditingDeployments = editing ? Boolean(editingActions?.canViewDeployments) : false
   const canViewEditingSecrets = editing ? Boolean(editingActions?.canViewSecrets) : true
@@ -1786,6 +1795,24 @@ export default function Engines() {
             kind="info"
             title="Externally registered engine"
             subtitle="Connection, authentication, labels, external id, and version are managed by the external registration source. Local display name and environment remain editable here."
+            hideCloseButton
+          />
+        )}
+        {editing && isConfigLockedEngine(editing) && (
+          <InlineNotification
+            lowContrast
+            kind="info"
+            title="Managed by configuration"
+            subtitle="This engine is config-locked. Update its configuration bundle to change inventory, runtime access, deployment, or connection settings."
+            hideCloseButton
+          />
+        )}
+        {editing && isConfigWarnEngine(editing) && (
+          <InlineNotification
+            lowContrast
+            kind="warning"
+            title="Configuration override"
+            subtitle="Saving local changes is allowed, but the engine will be marked as drifted from its configuration bundle."
             hideCloseButton
           />
         )}

@@ -570,6 +570,17 @@ function getExternalOwnedUpdateFields(engine: Engine, body: Record<string, unkno
   })
 }
 
+function getConfigLockedUpdateFields(engine: Engine, body: Record<string, unknown>): string[] {
+  if (engine.registrationSource !== 'config' || engine.ownershipMode !== 'config_locked') return []
+  return Object.keys(ENGINE_UPDATE_FIELD_GROUPS).filter((field) => body[field] !== undefined)
+}
+
+function isConfigWarnUpdate(engine: Engine, body: Record<string, unknown>): boolean {
+  return engine.registrationSource === 'config'
+    && engine.ownershipMode === 'config_warn'
+    && Object.keys(ENGINE_UPDATE_FIELD_GROUPS).some((field) => body[field] !== undefined)
+}
+
 function getFieldOwner(ownership: EngineFieldOwnership, field: string): EngineFieldOwner {
   const group = ENGINE_UPDATE_FIELD_GROUPS[field]
   return ownership[field] || ownership[group] || DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP[group] || 'external'
@@ -1398,6 +1409,10 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
   if (externallyOwnedUpdateFields.length > 0) {
     throw Errors.validation(`Externally managed engine fields are read-only: ${externallyOwnedUpdateFields.join(', ')}`)
   }
+  const configLockedUpdateFields = getConfigLockedUpdateFields(existing, req.body)
+  if (configLockedUpdateFields.length > 0) {
+    throw Errors.forbidden(`Configuration-managed engine fields are read-only: ${configLockedUpdateFields.join(', ')}`)
+  }
   if (req.body.runtimeAccessScope === 'engine_wide' && existing.runtimeAccessScope === 'resource_aware') {
     await assertEngineCanUseEngineWideAccess(dataSource, engineId)
   }
@@ -1423,6 +1438,7 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
     environmentTagId: req.body.environmentTagId === undefined ? undefined : req.body.environmentTagId || null,
     runtimeAccessScope: req.body.runtimeAccessScope,
     deploymentIntegration: req.body.deploymentIntegration,
+    driftStatus: isConfigWarnUpdate(existing, req.body) ? 'manual_override' : undefined,
     updatedAt: now,
   }
   await engineRepo.update({ id: engineId }, updates)
