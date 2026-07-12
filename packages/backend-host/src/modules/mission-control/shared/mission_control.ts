@@ -58,6 +58,7 @@ const requireProcessInstanceAction = (actionId: string) => requireRuntimeDefinit
   resourceKind: 'process_definition',
   definitionPath: 'process-instance',
   resourceKeyFields: ['definitionKey', 'processDefinitionKey'],
+  engineIdFrom: 'any',
 })
 
 const requireHistoricProcessInstanceAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {

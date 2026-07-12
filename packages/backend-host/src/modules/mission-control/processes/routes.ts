@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js'
@@ -50,8 +50,22 @@ async function canEditProjectFile(req: Request, projectId: string) {
 
 r.use(requireAuth)
 
+const requireProcessDefinitionAction = (actionId: string, engineIdFrom: 'query' | 'body' = 'query') => requireRuntimeDefinitionAction(actionId, {
+  resourceKind: 'process_definition',
+  definitionPath: 'process-definition',
+  engineIdFrom,
+})
+
+const requireProcessDefinitionKeyAction = (actionId: string, engineIdFrom: 'query' | 'body' = 'query') => requireRuntimeDefinitionAction(actionId, {
+  resourceKind: 'process_definition',
+  definitionPath: 'process-definition',
+  definitionLookup: 'key',
+  definitionIdKey: 'key',
+  engineIdFrom,
+})
+
 // List process definitions
-r.get('/mission-control-api/process-definitions', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   const { key, nameLike, latest } = req.query as { key?: string; nameLike?: string; latest?: string }
   const engineId = (req as any).engineId as string
   const data = await listProcessDefinitions(engineId, {
@@ -59,11 +73,18 @@ r.get('/mission-control-api/process-definitions', requireAction('engine.runtime.
     nameLike,
     latestVersion: latest === 'true' || latest === '1',
   })
-  res.json(data)
+  const keys = req.authorizedRuntimeResourceKeys
+  res.json(keys ? data.filter((definition: any) => keys.includes(String(definition?.key || ''))) : data)
 }))
 
 // Resolve Starbase edit target for a deployed process version
-r.get('/mission-control-api/process-definitions/edit-target', validateQuery(editTargetQuerySchema), requireAction('engine.runtime.process-definitions.edit-target.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/edit-target', validateQuery(editTargetQuerySchema), requireRuntimeDefinitionAction('engine.runtime.process-definitions.edit-target.read', {
+  resourceKind: 'process_definition',
+  definitionPath: 'process-definition',
+  definitionLookup: 'key',
+  definitionIdFrom: 'query',
+  definitionIdKey: 'key',
+}), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const processKey = String(req.query.key || '').trim()
   const processDefinitionId = req.query.processDefinitionId ? String(req.query.processDefinitionId) : null
@@ -227,7 +248,7 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
 }))
 
 // Get process definition by ID
-r.get('/mission-control-api/process-definitions/:id', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/:id', requireProcessDefinitionAction('engine.runtime.process-definitions.read'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const data = await getProcessDefinition(engineId, definitionId)
@@ -235,7 +256,7 @@ r.get('/mission-control-api/process-definitions/:id', requireAction('engine.runt
 }))
 
 // Get process definition XML
-r.get('/mission-control-api/process-definitions/:id/xml', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/:id/xml', requireProcessDefinitionAction('engine.runtime.process-definitions.read'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const data = await getProcessDefinitionXml(engineId, definitionId)
@@ -243,7 +264,7 @@ r.get('/mission-control-api/process-definitions/:id/xml', requireAction('engine.
 }))
 
 // Get process definition statistics (activity instance counts)
-r.get('/mission-control-api/process-definitions/key/:key/statistics', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/key/:key/statistics', requireProcessDefinitionKeyAction('engine.runtime.process-definitions.read'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionKey = String(req.params.key)
   const data = await getProcessDefinitionStatistics(engineId, definitionKey)
@@ -251,7 +272,7 @@ r.get('/mission-control-api/process-definitions/key/:key/statistics', requireAct
 }))
 
 // Start process instance
-r.post('/mission-control-api/process-definitions/key/:key/start', requireAction('engine.runtime.process-definitions.start', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/process-definitions/key/:key/start', requireProcessDefinitionKeyAction('engine.runtime.process-definitions.start', 'body'), asyncHandler(async (req: Request, res: Response) => {
   const { variables, businessKey } = req.body || {}
   const engineId = (req as any).engineId as string
   const definitionKey = String(req.params.key)
