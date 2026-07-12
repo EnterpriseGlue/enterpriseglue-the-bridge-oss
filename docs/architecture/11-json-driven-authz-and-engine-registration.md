@@ -2207,6 +2207,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Ensure runtime resource set materialization refreshes after deployment lineage, engine label, runtime tenant, or selector changes.
 - [ ] ⬜ Ensure deployment dropdown uses project-engine targets plus project and engine evaluator checks.
 - [ ] ⬜ Ensure Mission Control collection endpoints filter by engine runtime resource authorization for central shared engines.
+- [x] ✅ Filter Mission Control process-definition and decision-definition collections through a bounded runtime-inventory guard for `resource_aware` engines; broad engine grants keep the existing fast path. Detail, count, instance, history, batch, migration, and dashboard collection filtering remains pending.
 - [ ] ⬜ Keep `engine_wide` distributed-engine behavior on the fast path and invoke resource filtering only for `resource_aware` engines.
 - [ ] ⬜ Ensure process instance, job, incident, batch, and migration mutations resolve inherited process definition or decision scopes before authorization.
 - [ ] ⬜ Ensure EnterpriseGlue denial prevents engine calls even when the engine might allow the request.
