@@ -251,7 +251,11 @@ r.post('/mission-control-api/decision-definitions/:id/evaluate', requireRuntimeD
 }));
 
 // Evaluate decision by key
-r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireAction('engine.runtime.decisions.evaluate', { resourceIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireRuntimeDefinitionAction('engine.runtime.decisions.evaluate', {
+  resourceKind: 'decision_definition',
+  definitionPath: 'decision-definition',
+  definitionLookup: 'key',
+}), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionKey = String(req.params.key);
   const data = await evaluateDecisionByKey(engineId, definitionKey, req.body);

@@ -64,8 +64,11 @@ export interface RequireRuntimeCollectionActionOptions {
  */
 export interface RequireRuntimeDefinitionActionOptions extends RequireRuntimeCollectionActionOptions {
   definitionPath: 'process-definition' | 'decision-definition';
+  definitionLookup?: 'id' | 'key';
   definitionIdFrom?: ResourceIdLocation;
   definitionIdKey?: string;
+  definitionVersionFrom?: ResourceIdLocation;
+  definitionVersionKey?: string;
 }
 
 export type CompositeActionKind = 'deployment';
@@ -927,8 +930,13 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
       const engineId = readRequestValue(req, options.engineIdKey || 'engineId', options.engineIdFrom || 'query')
         || (req as Request & { engineId?: string }).engineId;
       if (!engineId) throw Errors.validation('engineId is required');
-      const definitionId = readRequestValue(req, options.definitionIdKey || 'id', options.definitionIdFrom || 'params');
-      if (!definitionId) throw Errors.validation(`${options.definitionIdKey || 'id'} is required`);
+      const definitionLookup = options.definitionLookup || 'id';
+      const definitionId = readRequestValue(
+        req,
+        options.definitionIdKey || (definitionLookup === 'key' ? 'key' : 'id'),
+        options.definitionIdFrom || 'params'
+      );
+      if (!definitionId) throw Errors.validation(`${options.definitionIdKey || (definitionLookup === 'key' ? 'key' : 'id')} is required`);
 
       const tenantId = req.tenant?.tenantId || null;
       const dataSource = await getDataSource();
@@ -952,10 +960,12 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
 
       let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
       if (!broad) {
-        const definition = await camundaGet<Record<string, unknown>>(
-          engineId,
-          `/${options.definitionPath}/${encodeURIComponent(definitionId)}`
-        );
+        const definition = definitionLookup === 'id'
+          ? await camundaGet<Record<string, unknown>>(
+            engineId,
+            `/${options.definitionPath}/${encodeURIComponent(definitionId)}`
+          )
+          : await resolveRuntimeDefinitionByKey(engineId, options, definitionId, req);
         const resourceKey = typeof definition.key === 'string' ? definition.key.trim() : '';
         if (!resourceKey) throw Errors.forbidden('Runtime definition cannot be resolved for authorization');
         const runtimeTenantId = typeof definition.tenantId === 'string' ? definition.tenantId : '';
@@ -989,4 +999,24 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
       return next(error instanceof Error ? error : Errors.internal('Runtime definition authorization failed'));
     }
   };
+}
+
+async function resolveRuntimeDefinitionByKey(
+  engineId: string,
+  options: RequireRuntimeDefinitionActionOptions,
+  definitionKey: string,
+  req: Request
+): Promise<Record<string, unknown>> {
+  const versionRaw = readRequestValue(req, options.definitionVersionKey || 'version', options.definitionVersionFrom || 'query');
+  const version = versionRaw ? Number(versionRaw) : null;
+  if (versionRaw && (!Number.isInteger(version) || version! <= 0)) {
+    throw Errors.validation(`${options.definitionVersionKey || 'version'} must be a positive integer`);
+  }
+  const definitions = await camundaGet<Record<string, unknown>[]>(engineId, `/${options.definitionPath}`, {
+    key: definitionKey,
+    ...(version ? { version } : { latestVersion: true }),
+  });
+  const definition = definitions.find((candidate) => candidate && candidate.key === definitionKey);
+  if (!definition) throw Errors.notFound('Runtime definition not found');
+  return definition;
 }

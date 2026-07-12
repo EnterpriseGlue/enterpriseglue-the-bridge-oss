@@ -83,6 +83,24 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
   }
 }))
 
+// Resolve a process definition by key + version. This must precede `:id`.
+r.get('/mission-control-api/process-definitions/resolve', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', {
+  resourceKind: 'process_definition',
+  definitionPath: 'process-definition',
+  definitionLookup: 'key',
+  definitionIdFrom: 'query',
+  definitionIdKey: 'key',
+  definitionVersionFrom: 'query',
+}), asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const engineId = (req as any).engineId as string
+    const data = await resolveProcessDefinition(engineId, req.query as { key?: string; version?: string })
+    res.json(data)
+  } catch (e: any) {
+    throw Errors.internal(e?.message || 'Failed to resolve process definition')
+  }
+}))
+
 r.get('/mission-control-api/process-definitions/:id', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition', definitionPath: 'process-definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
@@ -102,17 +120,6 @@ r.get('/mission-control-api/process-definitions/:id/xml', requireRuntimeDefiniti
     res.json(data)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process definition XML')
-  }
-}))
-
-// Resolve a process definition by key + version
-r.get('/mission-control-api/process-definitions/resolve', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const engineId = (req as any).engineId as string
-    const data = await resolveProcessDefinition(engineId, req.query as { key?: string; version?: string })
-    res.json(data)
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Failed to resolve process definition')
   }
 }))
 

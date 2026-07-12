@@ -162,6 +162,13 @@ describe('requireAction project resource resolvers', () => {
     }), (req: any, res) => {
       res.json({ resource: req.authzResource, engineId: req.engineId });
     });
+    app.get('/runtime-definitions-by-key/:key', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', {
+      resourceKind: 'process_definition',
+      definitionPath: 'process-definition',
+      definitionLookup: 'key',
+    }), (req: any, res) => {
+      res.json({ resource: req.authzResource, engineId: req.engineId });
+    });
     app.post('/deploy', requireCompositeAction('project.deploy.create', {
       kind: 'deployment',
       projectIdFrom: 'body',
@@ -246,6 +253,18 @@ describe('requireAction project resource resolvers', () => {
     expect(response.status).toBe(200);
     expect(camundaGet).not.toHaveBeenCalled();
     expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
+  });
+
+  it('resolves a key-based definition before authorizing it', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    camundaGet.mockResolvedValue([{ id: 'definition-2', key: 'payments', tenantId: null }]);
+
+    const response = await request(app).get(`/runtime-definitions-by-key/payments?engineId=${engineId}&version=2`);
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).toHaveBeenCalledWith(engineId, '/process-definition', { key: 'payments', version: 2 });
+    expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
   it('authorizes deployment composite actions through deployment eligibility', async () => {
