@@ -45,6 +45,7 @@ Current config-as-code status:
 - [ ] ⬜ Implement deterministic identity adapter contract tests and protocol-faithful mock OIDC, SAML, and LDAP services for integration and end-to-end testing.
 - [x] ✅ Expose side-effect-free strict config-bundle preview at `POST /api/authz/config-bundles/preview`, protected by `platform.authz.roles.manage`, with OpenAPI and route-inventory coverage.
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
+- [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
 - [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.
@@ -383,7 +384,7 @@ Interface requirements:
 
 - [ ] ⬜ Accept a single JSON document or a ZIP containing the declared imported JSON files.
 - [ ] ⬜ Reject undeclared files, path traversal, duplicate object keys, unknown schema versions, plaintext secrets, and test-only fixture files.
-- [ ] ⬜ Return object-addressable validation errors with file, JSON pointer, object key, severity, and remediation.
+- [ ] ⬜ Extend current file-and-path validation errors with object keys, severity, and remediation guidance.
 - [x] ✅ Make the current schema preview side-effect free; provider connectivity checks are explicit optional operations, never implicit network calls during schema validation.
 - [ ] ⬜ Bind apply to the exact canonical preview hash and reject stale previews.
 - [ ] ⬜ Execute domain writes through existing role/group/engine/assignment/mapping/target services or shared lower-level commands used by both UI and bundle apply.

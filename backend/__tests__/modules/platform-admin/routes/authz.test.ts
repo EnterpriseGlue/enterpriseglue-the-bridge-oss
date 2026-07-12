@@ -39,6 +39,12 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
   permissionService: sharedPermissionServiceMock,
+  PermissionCatalog: [
+    { key: 'engine:deploy', scope: 'engine' },
+  ],
+  SystemRoleDefinitions: [
+    { key: 'system.engine.operator' },
+  ],
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
