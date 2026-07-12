@@ -14,7 +14,7 @@ import {
 } from './PlatformSettingsService.js';
 
 export type ProjectEngineTargetMode = 'manual' | 'ci' | 'api' | 'import';
-export type ProjectEngineTargetSource = 'manual' | 'legacy' | 'ci' | 'api' | 'import' | 'deployment_history' | 'external' | 'system' | 'automation';
+export type ProjectEngineTargetSource = 'manual' | 'legacy' | 'ci' | 'api' | 'import' | 'deployment_history' | 'external' | 'system' | 'automation' | 'config';
 export type ProjectEngineTargetStatus = 'active' | 'disabled' | 'archived';
 export type ProjectEngineTargetApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected';
 
@@ -24,6 +24,7 @@ const SOURCE_OWNED_TARGET_SOURCES = new Set<ProjectEngineTargetSource>([
   'external',
   'system',
   'automation',
+  'config',
 ]);
 
 export function isSourceOwnedProjectEngineTarget(source: string | null | undefined): boolean {

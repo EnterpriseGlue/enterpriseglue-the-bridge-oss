@@ -656,7 +656,7 @@ export const EngineSetMaterializationResultSchema = z.object({
 
 export const ProjectEngineTargetModeSchema = z.enum(['manual', 'ci', 'api', 'import']);
 export const ProjectEngineTargetStatusSchema = z.enum(['active', 'disabled', 'archived']);
-export const ProjectEngineTargetSourceSchema = z.enum(['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation']);
+export const ProjectEngineTargetSourceSchema = z.enum(['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation', 'config']);
 export const ProjectEngineTargetApprovalStatusSchema = z.enum(['not_required', 'pending', 'approved', 'rejected']);
 export const ProjectEngineTargetDiagnosticsSchema = z.record(z.string(), z.unknown());
 
