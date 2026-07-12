@@ -574,6 +574,9 @@ importers:
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.3
+      ldapts:
+        specifier: ^9.0.0
+        version: 9.0.0
       nodemailer:
         specifier: ^9.0.1
         version: 9.0.1
@@ -3549,6 +3552,10 @@ packages:
     resolution: {integrity: sha512-b94GiNHQNy6JNTrt5w6zNyffMrNkXZb3KTkCZJb2V1xaEGCk093vkZ2jk3tpaeP33/OiXC+WvK9AxUebnf5nbw==}
     engines: {node: '>= 0.6.3'}
 
+  ldapts@9.0.0:
+    resolution: {integrity: sha512-OaaoYBSuan7g0Nm2e1wsRl+9xol41zY+pDlRRSsBq36iKCd2tG/K8WifevNRDjyEfhz4bvkxKdDvJ6xHXwj7+Q==}
+    engines: {node: '>=22'}
+
   lines-and-columns@1.2.4:
     resolution: {integrity: sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==}
 
@@ -4348,6 +4355,9 @@ packages:
 
   streamx@2.25.0:
     resolution: {integrity: sha512-0nQuG6jf1w+wddNEEXCF4nTg3LtufWINB5eFEN+5TNZW7KWJp6x87+JFL43vaAUPyCfH1wID+mNVyW6OHtFamg==}
+
+  strict-event-emitter-types@2.0.0:
+    resolution: {integrity: sha512-Nk/brWYpD85WlOgzw5h173aci0Teyv8YdIAEtV+N88nDB0dLlazZyJMIsN6eo1/AR61l+p6CJTG1JIyFaoNEEA==}
 
   strict-event-emitter@0.5.1:
     resolution: {integrity: sha512-vMgjE/GGEPEFnhFub6pa4FmJBRBVOLpIII2hvCZ8Kzb7K0hlHo7mQv6xYrBvCL2LtAIBwFUK8wvuJgTVSQ5MFQ==}
@@ -5230,7 +5240,7 @@ snapshots:
 
   '@camunda/element-templates-json-schema@0.21.0': {}
 
-  '@camunda/example-data-properties-provider@1.4.0(@bpmn-io/properties-panel@3.41.3)(@bpmn-io/variable-resolver@3.0.1(bpmn-js@18.16.1))(bpmn-js-properties-panel@5.54.0(@bpmn-io/properties-panel@3.41.3)(bpmn-js@17.11.1)(camunda-bpmn-js-behaviors@1.14.1(bpmn-js@17.11.1)(camunda-bpmn-moddle@7.0.1)(zeebe-bpmn-moddle@1.13.0))(diagram-js@15.14.0))(bpmn-js@18.16.1)':
+  '@camunda/example-data-properties-provider@1.4.0(@bpmn-io/properties-panel@3.41.3)(@bpmn-io/variable-resolver@3.0.1(bpmn-js@17.11.1))(bpmn-js-properties-panel@5.54.0(@bpmn-io/properties-panel@3.41.3)(bpmn-js@17.11.1)(camunda-bpmn-js-behaviors@1.14.1(bpmn-js@17.11.1)(camunda-bpmn-moddle@7.0.1)(zeebe-bpmn-moddle@1.13.0))(diagram-js@15.14.0))(bpmn-js@18.16.1)':
     dependencies:
       '@bpmn-io/properties-panel': 3.41.3
       '@bpmn-io/variable-resolver': 3.0.1(bpmn-js@18.16.1)
@@ -7014,7 +7024,7 @@ snapshots:
       '@bpmn-io/element-template-icon-renderer': 1.0.0(bpmn-js@18.16.1)(diagram-js@15.14.0)
       '@bpmn-io/properties-panel': 3.41.3
       '@bpmn-io/variable-resolver': 3.0.1(bpmn-js@18.16.1)
-      '@camunda/example-data-properties-provider': 1.4.0(@bpmn-io/properties-panel@3.41.3)(@bpmn-io/variable-resolver@3.0.1(bpmn-js@18.16.1))(bpmn-js-properties-panel@5.54.0(@bpmn-io/properties-panel@3.41.3)(bpmn-js@17.11.1)(camunda-bpmn-js-behaviors@1.14.1(bpmn-js@17.11.1)(camunda-bpmn-moddle@7.0.1)(zeebe-bpmn-moddle@1.13.0))(diagram-js@15.14.0))(bpmn-js@18.16.1)
+      '@camunda/example-data-properties-provider': 1.4.0(@bpmn-io/properties-panel@3.41.3)(@bpmn-io/variable-resolver@3.0.1(bpmn-js@17.11.1))(bpmn-js-properties-panel@5.54.0(@bpmn-io/properties-panel@3.41.3)(bpmn-js@17.11.1)(camunda-bpmn-js-behaviors@1.14.1(bpmn-js@17.11.1)(camunda-bpmn-moddle@7.0.1)(zeebe-bpmn-moddle@1.13.0))(diagram-js@15.14.0))(bpmn-js@18.16.1)
       bpmn-js: 18.16.1
       bpmn-js-color-picker: 0.7.2(bpmn-js@18.16.1)
       bpmn-js-copy-as-image: 0.4.1(bpmn-js@18.16.1)
@@ -8310,6 +8320,10 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
+  ldapts@9.0.0:
+    dependencies:
+      strict-event-emitter-types: 2.0.0
+
   lines-and-columns@1.2.4: {}
 
   lodash-es@4.18.1: {}
@@ -9075,6 +9089,8 @@ snapshots:
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a
+
+  strict-event-emitter-types@2.0.0: {}
 
   strict-event-emitter@0.5.1: {}
 

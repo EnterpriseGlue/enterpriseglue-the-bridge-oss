@@ -6,11 +6,13 @@ import identityOidcRoute from '../../../../../packages/backend-host/src/modules/
 
 const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn() }));
 const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn() }));
-const identityProviderProvisioningService = vi.hoisted(() => ({ provisionOidcUser: vi.fn() }));
+const identityProviderProvisioningService = vi.hoisted(() => ({ provisionOidcUser: vi.fn(), provisionLdapUser: vi.fn() }));
+const directLdapIdentityService = vi.hoisted(() => ({ authenticate: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js', () => ({ identityProviderProvisioningService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService }));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ AuditActions: { LOGIN_SUCCESS: 'auth.login.success' }, auditFromRequest: vi.fn(() => ({})), logAudit: vi.fn() }));
 vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({ generateAccessToken: vi.fn(() => 'access'), generateRefreshToken: vi.fn(() => 'refresh') }));
 
@@ -27,7 +29,10 @@ describe('provider-neutral OIDC routes', () => {
     genericOidcService.createAuthorizationRequest.mockResolvedValue({ url: 'https://issuer.example.test/authorize', codeVerifier: 'verifier' });
     genericOidcService.exchangeCode.mockResolvedValue({ sub: 'subject-1', email: 'person@example.test', nonce: 'nonce' });
     identityProviderProvisioningService.provisionOidcUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', platformRole: 'user', isActive: true });
+    identityProviderProvisioningService.provisionLdapUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', platformRole: 'user', isActive: true });
+    directLdapIdentityService.authenticate.mockResolvedValue({ subjectId: 'ldap-user-1', email: 'person@example.test', displayName: 'Person', firstName: 'Person', lastName: 'Example', groups: ['ops'] });
     app = express();
+    app.use(express.json());
     app.use(cookieParser());
     app.use(identityOidcRoute);
     app.use((error: any, _req: any, res: any, _next: any) => res.status(error.statusCode || 500).json({ error: error.message }));
@@ -60,5 +65,14 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.status).toBe(302);
     expect(identityProviderService.getByKey).toHaveBeenLastCalledWith('identity.oidc.main', null);
     expect(genericOidcService.exchangeCode).toHaveBeenCalledWith(expect.any(Object), { code: 'code-1', codeVerifier: 'verifier', nonce: 'nonce' });
+  });
+
+  it('authenticates a direct LDAP provider without returning directory credentials', async () => {
+    identityProviderService.getByKey.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
+    const response = await request(app).post('/api/auth/identity/identity.oidc.main/ldap/login').send({ username: 'person@example.test', password: 'directory-password' });
+    expect(response.status).toBe(200);
+    expect(directLdapIdentityService.authenticate).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'ldap' }), 'person@example.test', 'directory-password');
+    expect(response.body.user.email).toBe('person@example.test');
+    expect(response.headers['set-cookie']).toEqual(expect.arrayContaining([expect.stringContaining('accessToken='), expect.stringContaining('refreshToken=')]));
   });
 });

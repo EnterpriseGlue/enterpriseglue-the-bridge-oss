@@ -1,9 +1,13 @@
 import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { authLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
+import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
 import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { auditFromRequest, logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
@@ -12,6 +16,7 @@ import { buildSsoState, getSsoRedirectUrl, parseSsoState } from './sso-state.js'
 const router = Router();
 const stateCookie = 'identity_oidc_state';
 const verifierCookie = 'identity_oidc_verifier';
+const ldapLoginSchema = z.object({ username: z.string().min(1).max(320), password: z.string().min(1).max(4096) });
 
 function configuration(provider: { configurationJson: string }): Record<string, unknown> {
   try {
@@ -67,6 +72,27 @@ router.get('/api/auth/identity/callback', apiLimiter, asyncHandler(async (req: R
   res.cookie('accessToken', generateAccessToken(user as any), cookieOptions);
   res.cookie('refreshToken', generateRefreshToken(user as any), { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
   res.redirect(getSsoRedirectUrl(parsed));
+}));
+
+router.post('/api/auth/identity/:key/ldap/login', apiLimiter, authLimiter, validateBody(ldapLoginSchema), asyncHandler(async (req: Request, res: Response) => {
+  const providerKey = typeof req.params.key === 'string' ? req.params.key : '';
+  if (!providerKey) throw Errors.validation('Identity provider key is required');
+  const provider = await identityProviderService.getByKey(providerKey, req.tenant?.tenantId || null);
+  if (!provider || provider.protocol !== 'ldap' || !provider.isEnabled || provider.authenticationMode !== 'direct') throw Errors.unauthorized('Invalid directory credentials');
+  try {
+    const identity = await directLdapIdentityService.authenticate(provider, req.body.username, req.body.password);
+    const user = await identityProviderProvisioningService.provisionLdapUser(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
+    if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
+    await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap' } }));
+    const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: config.jwtAccessTokenExpires * 1000, path: '/' };
+    res.cookie('accessToken', generateAccessToken(user as any), cookieOptions);
+    res.cookie('refreshToken', generateRefreshToken(user as any), { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, platformRole: user.platformRole }, expiresIn: config.jwtAccessTokenExpires });
+  } catch (error) {
+    if ((error as any)?.statusCode === 403) throw error;
+    await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_FAILED, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap', reason: 'invalid_directory_credentials' } }));
+    throw Errors.unauthorized('Invalid directory credentials');
+  }
 }));
 
 export default router;

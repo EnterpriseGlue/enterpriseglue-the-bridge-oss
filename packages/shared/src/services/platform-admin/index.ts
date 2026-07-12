@@ -36,6 +36,7 @@ export * from './IdentityProviderAdapter.js';
 export * from './IdentityProviderService.js';
 export * from './GenericOidcService.js';
 export * from './IdentityProviderProvisioningService.js';
+export * from './DirectLdapIdentityService.js';
 export * from './IdentityEntitlementMappingService.js';
 export * from './SsoProviderIdentityCheckService.js';
 export * from './SsoSyncDiagnosticsService.js';

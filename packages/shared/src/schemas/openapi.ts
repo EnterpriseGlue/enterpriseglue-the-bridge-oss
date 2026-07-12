@@ -2944,6 +2944,9 @@ registry.registerPath({ method: 'get', path: '/api/auth/saml', responses: { 302:
 registry.registerPath({ method: 'post', path: '/api/auth/saml/callback', responses: { 302: { description: 'SAML assertion callback redirect' } } });
 registry.registerPath({ method: 'get', path: '/api/auth/saml/metadata', responses: { 200: { description: 'SAML SP metadata XML', content: { 'application/xml': { schema: z.string() } } } } });
 registry.registerPath({ method: 'get', path: '/api/auth/saml/status', responses: { 200: { description: 'SAML config status', content: { 'application/json': { schema: z.object({ enabled: z.boolean() }) } } } } });
+registry.registerPath({ method: 'get', path: '/api/auth/identity/{key}/start', request: { params: z.object({ key: z.string() }) }, responses: { 302: { description: 'Redirect to the selected OIDC identity provider' } } });
+registry.registerPath({ method: 'get', path: '/api/auth/identity/callback', responses: { 302: { description: 'Provider-neutral OIDC callback redirect' } } });
+registry.registerPath({ method: 'post', path: '/api/auth/identity/{key}/ldap/login', request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'LDAP identity login', content: { 'application/json': { schema: z.object({ user: z.object({ id: z.string(), email: z.string(), firstName: z.string().nullable(), lastName: z.string().nullable(), platformRole: z.string() }), expiresIn: z.number() }) } } }, 401: { description: 'Invalid directory credentials' } } });
 
 // Tenant SSO config
 registry.registerPath({
