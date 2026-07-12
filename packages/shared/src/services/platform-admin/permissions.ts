@@ -2572,6 +2572,44 @@ class PermissionServiceClass {
   }
 
   /**
+   * Returns the runtime inventory rows a principal may act on. This is used
+   * only for resource-aware engines; callers must use engine query pushdown
+   * where available and must not substitute an unbounded post-filter.
+   */
+  async getVisibleRuntimeResources(input: {
+    userId: string;
+    tenantId?: string | null;
+    engineId: string;
+    resourceKind: 'process_definition' | 'decision_definition';
+    permission: Permission;
+    limit?: number;
+  }): Promise<RuntimeResource[]> {
+    const maxRows = input.limit ?? 500;
+    if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > 5_000) {
+      throw new Error('Runtime resource authorization limit must be between 1 and 5000');
+    }
+    const dataSource = await getDataSource();
+    const rows = await dataSource.getRepository(RuntimeResource).find({
+      where: tenantScopedWhere({ engineId: input.engineId, resourceKind: input.resourceKind, isActive: true }, input.tenantId),
+      take: maxRows + 1,
+      order: { resourceKey: 'ASC', id: 'ASC' },
+    });
+    if (rows.length > maxRows) {
+      throw new Error('Runtime resource authorization requires engine query pushdown or a bounded result set');
+    }
+    const decisions = await Promise.all(rows.map(async (resource) => ({
+      resource,
+      allowed: (await this.evaluatePermission(input.permission, {
+        userId: input.userId,
+        tenantId: input.tenantId,
+        resourceType: 'engine_runtime_resource',
+        resourceId: resource.id,
+      })).allowed,
+    })));
+    return decisions.filter((decision) => decision.allowed).map((decision) => decision.resource);
+  }
+
+  /**
    * Check if a role implicitly grants a permission
    */
   roleHasPermission(
