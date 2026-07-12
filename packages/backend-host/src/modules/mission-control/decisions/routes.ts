@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
@@ -55,7 +55,13 @@ async function canEditProjectFile(req: Request, projectId: string) {
 r.use(requireAuth);
 
 // Resolve Starbase edit target for a deployed decision version
-r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(editTargetQuerySchema), requireAction('engine.runtime.decisions.edit-target.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(editTargetQuerySchema), requireRuntimeDefinitionAction('engine.runtime.decisions.edit-target.read', {
+  resourceKind: 'decision_definition',
+  definitionPath: 'decision-definition',
+  definitionLookup: 'key',
+  definitionIdFrom: 'query',
+  definitionIdKey: 'key',
+}), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const decisionKey = String(req.query.key || '').trim();
   const decisionDefinitionId = req.query.decisionDefinitionId ? String(req.query.decisionDefinitionId) : null;
@@ -243,7 +249,7 @@ r.get('/mission-control-api/decision-definitions/:id/xml', requireRuntimeDefinit
 }));
 
 // Evaluate decision
-r.post('/mission-control-api/decision-definitions/:id/evaluate', requireRuntimeDefinitionAction('engine.runtime.decisions.evaluate', { resourceKind: 'decision_definition', definitionPath: 'decision-definition' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/decision-definitions/:id/evaluate', requireRuntimeDefinitionAction('engine.runtime.decisions.evaluate', { resourceKind: 'decision_definition', definitionPath: 'decision-definition', engineIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await evaluateDecisionById(engineId, definitionId, req.body);
@@ -255,6 +261,7 @@ r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireRun
   resourceKind: 'decision_definition',
   definitionPath: 'decision-definition',
   definitionLookup: 'key',
+  engineIdFrom: 'body',
 }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionKey = String(req.params.key);
