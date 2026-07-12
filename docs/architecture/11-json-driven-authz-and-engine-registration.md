@@ -507,7 +507,7 @@ Persist one deployment record per `engineId + engineDeploymentId` and merge rich
 - [x] ✅ Extend `EngineDeployment` with ingestion source, lineage quality, reporting principal, reconciliation timestamps, nullable project lineage, canonical lineage JSON, and a unique engine/deployment identity. Proxy deployments record `complete` lineage and receipt processing never downgrades that quality.
 - [x] ✅ Make `EngineDeploymentArtifact.projectId` nullable for engine-discovered artifacts and preserve process/decision key, version, tenant, and resource-name metadata.
 - [x] ✅ Add `POST /engines-api/external/engines/:engineId/deployment-receipts`: machine-authenticated, API-target-eligible, idempotent receipt ingestion that persists sanitized pipeline lineage, reports process/decision metadata into the runtime inventory, and creates or enriches the canonical `EngineDeployment` history with `reported` lineage.
-- [ ] ⬜ Add scheduled and on-demand deployment/runtime inventory reconciliation.
+- [ ] ⬜ Add scheduled and on-demand deployment/runtime inventory reconciliation. The permission-gated on-demand runtime reconciliation endpoint is complete: it preserves proxy/receipt lineage, refreshes materializations, and deactivates only resources absent from a successful engine listing. Scheduling and deployment-level discovery remain pending.
 - [ ] ⬜ Never infer project/file lineage solely from a process key unless a configured convention resolves uniquely.
 - [ ] ⬜ Require `complete` or validated `reported` lineage for Mission Control-Starbase edit navigation.
 
@@ -2242,7 +2242,7 @@ Phase 0 exit criteria:
 ### Phase 5: APIs And OpenAPI
 
 - [x] ✅ Add config bundle preview/diff/apply APIs, hash-bound apply audit events, recent apply-run history API, server-side export of config-owned roles/groups/engines, and `pnpm authz:config` CI preview/apply command. Multi-file folder/ZIP import and export of the remaining config families remain pending.
-- [ ] ⬜ Add runtime resource inventory and runtime resource set read/preview/reconcile APIs.
+- [x] ✅ Add runtime resource inventory and runtime resource set read/preview/reconcile APIs. On-demand reconciliation preserves richer lineage and deactivates only definitions absent from a confirmed engine response.
 - [ ] ⬜ Add provider-neutral identity provider, identity mapping, mapping test, sync-run, and sync-event APIs.
 - [x] ✅ Add direct deployment receipt and deployment lineage APIs with machine-principal authorization and idempotency keys. Receipts are merged into the canonical deployment history, so proxy and externally reported deployment lineage use one model.
 - [ ] ⬜ Add OpenAPI schemas for every config object. The config-bundle lifecycle now has typed manifest, preview, diff, hash-bound apply, and apply-history contracts; individual imported file schemas and export response coverage remain pending.

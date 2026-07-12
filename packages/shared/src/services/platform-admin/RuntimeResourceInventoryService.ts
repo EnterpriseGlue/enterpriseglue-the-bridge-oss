@@ -76,7 +76,7 @@ function matchResource(resource: RuntimeResource, selector: RuntimeResourceSetSe
 
 /** Shared reconciliation boundary for discovered/reported runtime metadata. */
 class RuntimeResourceInventoryService {
-  async reconcileEngine(engineId: string, tenantId?: string | null): Promise<{ created: number; updated: number; materializedSets: number }> {
+  async reconcileEngine(engineId: string, tenantId?: string | null): Promise<{ created: number; updated: number; deactivated: number; materializedSets: number }> {
     const [processes, decisions] = await Promise.all([
       camundaGet<Array<{ id?: string; key?: string; version?: number; tenantId?: string | null; deploymentId?: string | null }>>(engineId, '/process-definition'),
       getDecisionDefinitions<Array<{ id?: string; key?: string; version?: number; tenantId?: string | null; deploymentId?: string | null }>>(engineId),
@@ -86,8 +86,9 @@ class RuntimeResourceInventoryService {
       ...(decisions || []).filter((item) => item.key).map((item) => ({ resourceKind: 'decision_definition' as const, resourceKey: item.key!, engineResourceId: item.id || null, version: item.version || null, runtimeTenantId: item.tenantId || null, deploymentId: item.deploymentId || null })),
     ];
     const observed = await this.observe(engineId, tenantId, observations);
+    const deactivated = await this.deactivateMissing(engineId, tenantId, observations);
     const materializations = await this.materializeForEngine(engineId, tenantId);
-    return { ...observed, materializedSets: materializations.length };
+    return { ...observed, deactivated, materializedSets: materializations.length };
   }
   async observe(engineId: string, tenantId: string | null | undefined, observations: RuntimeResourceObservation[]): Promise<{ created: number; updated: number }> {
     const dataSource = await getDataSource();
@@ -100,18 +101,43 @@ class RuntimeResourceInventoryService {
       if (!resourceKey) throw new Error('Runtime resource key is required');
       const runtimeTenantId = observation.runtimeTenantId?.trim() || '';
       const existing = await repo.findOne({ where: { engineId, resourceKind: observation.resourceKind, resourceKey, runtimeTenantId } });
+      // Discovery confirms the engine's current state but must never erase
+      // richer pipeline/proxy project and file lineage already recorded here.
+      const source = observation.source || 'engine_discovery';
+      const preservesExistingLineage = source === 'engine_discovery' && Boolean(existing);
       const values = {
         tenantId: tenantId || null, engineId, resourceKind: observation.resourceKind, resourceKey, runtimeTenantId,
-        engineResourceId: observation.engineResourceId || null, deploymentId: observation.deploymentId || null,
-        projectId: observation.projectId || null, fileId: observation.fileId || null, version: observation.version ?? null,
-        labelsJson: stableJson(observation.labels || {}), lineageJson: stableJson(observation.lineage || {}),
-        source: observation.source || 'engine_discovery', sourceRef: observation.sourceRef || null,
+        engineResourceId: observation.engineResourceId || existing?.engineResourceId || null,
+        deploymentId: observation.deploymentId || existing?.deploymentId || null,
+        projectId: observation.projectId || (preservesExistingLineage ? existing?.projectId : null) || null,
+        fileId: observation.fileId || (preservesExistingLineage ? existing?.fileId : null) || null,
+        version: observation.version ?? existing?.version ?? null,
+        labelsJson: stableJson({ ...(preservesExistingLineage ? parseObject(existing?.labelsJson) : {}), ...(observation.labels || {}) }),
+        lineageJson: stableJson(preservesExistingLineage ? parseObject(existing?.lineageJson) : (observation.lineage || {})),
+        source: preservesExistingLineage ? existing!.source : source,
+        sourceRef: preservesExistingLineage ? existing!.sourceRef : (observation.sourceRef || null),
         observedAt: now, isActive: true, updatedAt: now,
       };
       if (existing) { await repo.update({ id: existing.id }, values); updated += 1; }
       else { await repo.insert({ id: generateId(), ...values, createdAt: now }); created += 1; }
     }
     return { created, updated };
+  }
+
+  /** Mark only successfully listed runtime definitions as stale; failed fetches never revoke access. */
+  private async deactivateMissing(engineId: string, tenantId: string | null | undefined, observations: RuntimeResourceObservation[]): Promise<number> {
+    const dataSource = await getDataSource();
+    const repo = dataSource.getRepository(RuntimeResource);
+    const observed = new Set(observations.map((item) => `${item.resourceKind}|${item.resourceKey.trim()}|${item.runtimeTenantId?.trim() || ''}`));
+    const active = await repo.find({ where: { engineId, isActive: true } });
+    const stale = active.filter((resource) => (resource.tenantId || null) === (tenantId || null)
+      && ['process_definition', 'decision_definition'].includes(resource.resourceKind)
+      && !observed.has(`${resource.resourceKind}|${resource.resourceKey}|${resource.runtimeTenantId || ''}`));
+    if (stale.length) {
+      const now = Date.now();
+      await Promise.all(stale.map((resource) => repo.update({ id: resource.id }, { isActive: false, updatedAt: now })));
+    }
+    return stale.length;
   }
 
   async materialize(runtimeResourceSetId: string, tenantId?: string | null): Promise<RuntimeResourceMaterializationResult> {
