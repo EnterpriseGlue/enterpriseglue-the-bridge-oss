@@ -366,7 +366,7 @@ export interface EngineSetSummary {
   description: string | null;
   selector: EngineSetSelector;
   selectorFingerprint: string;
-  source: 'manual' | 'sso' | 'api' | 'external' | 'system' | 'automation';
+  source: 'manual' | 'sso' | 'api' | 'external' | 'system' | 'automation' | 'config';
   sourceRef: string | null;
   isArchived: boolean;
   createdById: string | null;

@@ -1183,6 +1183,15 @@ function isSourceOwnedProjectTarget(target: ProjectEngineTarget) {
   return SOURCE_OWNED_PROJECT_TARGET_SOURCES.has(target.source);
 }
 
+function isSourceOwnedEngineSet(engineSet: EngineSetSummary) {
+  return engineSet.source !== 'manual';
+}
+
+function engineSetSourceOwnershipReason(engineSet: EngineSetSummary) {
+  const owner = engineSet.source.replace(/_/g, ' ');
+  return `Managed by ${owner}${engineSet.sourceRef ? ` (${engineSet.sourceRef})` : ''}`;
+}
+
 function formatProjectEngineTargetModes(target: ProjectEngineTarget) {
   return [
     target.allowManualDeploy ? 'Manual' : '',
@@ -4953,11 +4962,17 @@ function EngineSetsPanel({
                     </TableRow>
                   ) : rows.map((row) => {
                     const engineSet = engineSets.find((item) => item.id === row.id);
+                    const sourceOwned = engineSet ? isSourceOwnedEngineSet(engineSet) : false;
+                    const rowManageUnavailableReason = !canManage
+                      ? manageUnavailableReason
+                      : sourceOwned && engineSet
+                        ? engineSetSourceOwnershipReason(engineSet)
+                        : undefined;
                     return (
                       <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                         {row.cells.map((cell) => {
                           if (cell.info.header === 'source') {
-                            return <TableCell key={cell.id}><Tag type="gray">{cell.value}</Tag></TableCell>;
+                            return <TableCell key={cell.id}><Tag type={engineSet?.source === 'config' ? 'purple' : sourceOwned ? 'cyan' : 'gray'}>{engineSet?.source === 'config' ? 'Managed by config' : cell.value}</Tag></TableCell>;
                           }
                           if (cell.info.header === 'status') {
                             const status = String(cell.value);
@@ -4970,10 +4985,10 @@ function EngineSetsPanel({
                                 {engineSet && (
                                   <>
                                     <Button kind="ghost" size="sm" onClick={() => onSelect(engineSet.id)}>Details</Button>
-                                    <Button kind="ghost" size="sm" disabled={pending || !canManage} title={manageUnavailableReason} onClick={() => onEdit(engineSet)}>Edit</Button>
+                                    <Button kind="ghost" size="sm" disabled={pending || Boolean(rowManageUnavailableReason)} title={rowManageUnavailableReason} onClick={() => onEdit(engineSet)}>Edit</Button>
                                     <Button kind="ghost" size="sm" disabled={pending || !canManage || engineSet.isArchived} title={!canManage ? manageUnavailableReason : engineSet.isArchived ? 'Archived Engine Sets cannot be materialized' : undefined} onClick={() => onMaterialize(engineSet.id)}>Materialize</Button>
                                     {!engineSet.isArchived && (
-                                      <Button kind="ghost" size="sm" disabled={pending || !canManage} title={manageUnavailableReason} renderIcon={TrashCan} onClick={() => onArchive(engineSet.id)}>Archive</Button>
+                                      <Button kind="ghost" size="sm" disabled={pending || Boolean(rowManageUnavailableReason)} title={rowManageUnavailableReason} renderIcon={TrashCan} onClick={() => onArchive(engineSet.id)}>Archive</Button>
                                     )}
                                   </>
                                 )}

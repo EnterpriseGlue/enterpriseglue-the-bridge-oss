@@ -42,6 +42,15 @@ export interface EngineSetUpdateInput {
   riskAcknowledged?: boolean;
 }
 
+export function isSourceOwnedEngineSet(source: string | null | undefined): boolean {
+  return Boolean(source && source !== 'manual');
+}
+
+export function engineSetOwnershipReason(source: string | null | undefined, sourceRef?: string | null): string {
+  const owner = source ? source.replace(/_/g, ' ') : 'source';
+  return `Engine Set is managed by ${owner}${sourceRef ? ` (${sourceRef})` : ''} and cannot be changed through manual Engine Set management`;
+}
+
 export interface EngineSetSummary {
   id: string;
   tenantId: string | null;
@@ -360,6 +369,9 @@ class EngineSetServiceClass {
     const existing = await repo.findOneBy({ id });
     if (!existing || !this.isTenantVisible(existing.tenantId, input.tenantId)) {
       throw Errors.notFound('Engine Set');
+    }
+    if (isSourceOwnedEngineSet(existing.source)) {
+      throw Errors.conflict(engineSetOwnershipReason(existing.source, existing.sourceRef));
     }
 
     const selector = input.selector ? normalizeSelector(input.selector) : parseSelector(existing.selectorJson);

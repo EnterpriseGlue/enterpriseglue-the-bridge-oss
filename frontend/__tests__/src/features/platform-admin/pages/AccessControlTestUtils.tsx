@@ -20,6 +20,11 @@ import type {
 } from '@src/features/platform-admin/hooks/useAuthzApi';
 import type { CurrentUserPermissions } from '@src/shared/types/auth';
 
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useMutation: () => ({ isPending: false, mutate: vi.fn(), mutateAsync: vi.fn(), reset: vi.fn() }),
+}));
+
 const ssoAssignmentTestState = vi.hoisted(() => ({
   data: null as null | {
     matchedMappings: Array<SsoAssignmentMapping & { targetResourceId: string | null; targetResourceIds: Array<string | null> }>;

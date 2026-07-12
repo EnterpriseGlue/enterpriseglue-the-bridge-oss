@@ -98,6 +98,29 @@ describe('engineSetService', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('rejects manual mutation of configuration-managed Engine Sets', async () => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === EngineSet) return {
+          findOneBy: vi.fn().mockResolvedValue({
+            id: 'set-config', tenantId: null, key: 'configured-engines', name: 'Configured engines',
+            description: null, selectorJson: JSON.stringify({ mode: 'all' }), source: 'config',
+            sourceRef: 'config_bundle:acme.authz', isArchived: false,
+          }),
+          update,
+        };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(engineSetService.updateEngineSet('set-config', { name: 'Changed' })).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Engine Set is managed by config (config_bundle:acme.authz) and cannot be changed through manual Engine Set management',
+    });
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('previews label selectors using external registration labels', async () => {
     const engineFind = vi.fn().mockResolvedValue([
       { id: 'engine-prod', name: 'Prod Engine', labelsJson: null, externalId: 'cluster/prod', tenantId: null },
