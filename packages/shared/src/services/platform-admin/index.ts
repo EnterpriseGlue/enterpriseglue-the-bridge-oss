@@ -38,6 +38,7 @@ export * from './GenericOidcService.js';
 export * from './IdentityProviderProvisioningService.js';
 export * from './DirectLdapIdentityService.js';
 export * from './IdentityEntitlementMappingService.js';
+export * from './IdentityReconciliationCheckpointService.js';
 export * from './SsoProviderIdentityCheckService.js';
 export * from './SsoSyncDiagnosticsService.js';
 export * from './config-bundle-hash.js';
