@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import {
   fetchAndLockTasks,
   listExternalTasks,
@@ -20,28 +20,62 @@ import {
   ExtendLockRequest,
   ExternalTaskQueryParams,
 } from '@enterpriseglue/shared/schemas/mission-control/external-task.js';
+import { filterRuntimeItemsByProcessDefinitionKeys } from './runtime-resource-filter.js';
 
 const r = Router();
+
+const requireExternalTaskAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {
+  resourceKind: 'process_definition',
+  definitionPath: 'external-task',
+  definitionReferenceField: 'processDefinitionId',
+  definitionReferencePath: 'process-definition',
+  engineIdFrom: 'body',
+});
 
 // Apply auth middleware only to /mission-control-api routes (not globally)
 r.use('/mission-control-api', requireAuth);
 
 // Fetch and lock external tasks
-r.post('/mission-control-api/external-tasks/fetchAndLock', requireAction('engine.runtime.external-tasks.fetch-and-lock', { resourceIdFrom: 'body' }), validateBody(FetchAndLockRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/external-tasks/fetchAndLock', requireRuntimeCollectionAction('engine.runtime.external-tasks.fetch-and-lock', {
+  resourceKind: 'process_definition',
+  engineIdFrom: 'body',
+}), validateBody(FetchAndLockRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await fetchAndLockTasks(engineId, req.body);
-  res.json(data);
+  const keys = req.authorizedRuntimeResourceKeys;
+  if (!keys) return res.json(await fetchAndLockTasks(engineId, req.body));
+  const topics = req.body.topics.flatMap((topic: Record<string, unknown>) => {
+    if (typeof topic.processDefinitionId === 'string' || Array.isArray(topic.processDefinitionIdIn)) {
+      throw Errors.validation('Resource-aware external task fetch requires processDefinitionKey filters');
+    }
+    if (typeof topic.processDefinitionKey === 'string') {
+      return keys.includes(topic.processDefinitionKey) ? [topic] : [];
+    }
+    if (Array.isArray(topic.processDefinitionKeyIn)) {
+      return topic.processDefinitionKeyIn
+        .filter((key): key is string => typeof key === 'string' && keys.includes(key))
+        .map((processDefinitionKey) => ({ ...topic, processDefinitionKey, processDefinitionKeyIn: undefined }));
+    }
+    return keys.map((processDefinitionKey) => ({ ...topic, processDefinitionKey }));
+  });
+  if (!topics.length) throw Errors.forbidden('No authorized runtime resources match the requested external task topics');
+  const data = await fetchAndLockTasks(engineId, { ...req.body, topics });
+  res.json(await filterRuntimeItemsByProcessDefinitionKeys(engineId, data, keys));
 }));
 
 // Query external tasks
-r.get('/mission-control-api/external-tasks', requireAction('engine.runtime.external-tasks.read', { resourceIdFrom: 'query' }), validateQuery(ExternalTaskQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/external-tasks', requireRuntimeCollectionAction('engine.runtime.external-tasks.read', { resourceKind: 'process_definition' }), validateQuery(ExternalTaskQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await listExternalTasks(engineId, req.query);
+  const keys = req.authorizedRuntimeResourceKeys;
+  const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
+  const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
+  const data = visibleKeys
+    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listExternalTasks(engineId, { ...req.query, processDefinitionKey })))).flat()
+    : await listExternalTasks(engineId, req.query);
   res.json(data);
 }));
 
 // Complete external task
-r.post('/mission-control-api/external-tasks/:id/complete', requireAction('engine.runtime.external-tasks.complete', { resourceIdFrom: 'body' }), validateBody(CompleteExternalTaskRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/external-tasks/:id/complete', requireExternalTaskAction('engine.runtime.external-tasks.complete'), validateBody(CompleteExternalTaskRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   await completeTask(engineId, taskId, req.body);
@@ -49,7 +83,7 @@ r.post('/mission-control-api/external-tasks/:id/complete', requireAction('engine
 }));
 
 // Handle external task failure
-r.post('/mission-control-api/external-tasks/:id/failure', requireAction('engine.runtime.external-tasks.failure', { resourceIdFrom: 'body' }), validateBody(ExternalTaskFailureRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/external-tasks/:id/failure', requireExternalTaskAction('engine.runtime.external-tasks.failure'), validateBody(ExternalTaskFailureRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   await failTask(engineId, taskId, req.body);
@@ -57,7 +91,7 @@ r.post('/mission-control-api/external-tasks/:id/failure', requireAction('engine.
 }));
 
 // Handle external task BPMN error
-r.post('/mission-control-api/external-tasks/:id/bpmnError', requireAction('engine.runtime.external-tasks.bpmn-error', { resourceIdFrom: 'body' }), validateBody(ExternalTaskBpmnErrorRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/external-tasks/:id/bpmnError', requireExternalTaskAction('engine.runtime.external-tasks.bpmn-error'), validateBody(ExternalTaskBpmnErrorRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   await bpmnErrorTask(engineId, taskId, req.body);
@@ -65,7 +99,7 @@ r.post('/mission-control-api/external-tasks/:id/bpmnError', requireAction('engin
 }));
 
 // Extend external task lock
-r.post('/mission-control-api/external-tasks/:id/extendLock', requireAction('engine.runtime.external-tasks.extend-lock', { resourceIdFrom: 'body' }), validateBody(ExtendLockRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/external-tasks/:id/extendLock', requireExternalTaskAction('engine.runtime.external-tasks.extend-lock'), validateBody(ExtendLockRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   await extendTaskLock(engineId, taskId, req.body);
@@ -73,7 +107,7 @@ r.post('/mission-control-api/external-tasks/:id/extendLock', requireAction('engi
 }));
 
 // Unlock external task
-r.post('/mission-control-api/external-tasks/:id/unlock', requireAction('engine.runtime.external-tasks.unlock', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/external-tasks/:id/unlock', requireExternalTaskAction('engine.runtime.external-tasks.unlock'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   await unlockTask(engineId, taskId);

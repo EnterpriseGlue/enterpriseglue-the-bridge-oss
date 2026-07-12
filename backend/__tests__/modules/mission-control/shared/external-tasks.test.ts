@@ -37,6 +37,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(true),
+    getVisibleRuntimeResources: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -108,6 +109,23 @@ describe('mission-control external task routes', () => {
       workerId: 'worker-1',
       topics: [{ topicName: 'topic-a', lockDuration: 1000 }],
     });
+  });
+
+  it('limits external task queries to authorized process definition keys on resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : {},
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/external-tasks')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(listExternalTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments' });
   });
 
   it('completes external tasks through process modify permission', async () => {

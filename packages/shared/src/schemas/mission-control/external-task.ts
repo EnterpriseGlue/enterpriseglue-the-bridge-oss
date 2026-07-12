@@ -101,6 +101,7 @@ export const ExternalTaskQueryParams = z.object({
   executionId: z.string().optional(),
   processInstanceId: z.string().optional(),
   processDefinitionId: z.string().optional(),
+  processDefinitionKey: z.string().optional(),
   active: z.boolean().optional(),
   suspended: z.boolean().optional(),
   priorityHigherThanOrEquals: z.number().optional(),
