@@ -1144,6 +1144,8 @@ The provider-neutral model should evolve the existing SSO-specific persistence i
 | Current concept | Target concept | Required change |
 | --- | --- | --- |
 | `SsoProvider` | `IdentityProvider` | Add `ldap`; separate protocol-specific configuration from common provider identity. |
+
+- [x] ✅ Add the tenant-scoped provider-neutral `IdentityProvider` persistence entity, adapter registration, and migration with protocol, authentication mode, directory tenant, secret-reference configuration, sync configuration, and config-ownership fields. Service, API, UI, and bundle lifecycle migration remain pending.
 | `SsoNormalizedIdentity` | `ExternalIdentitySnapshot` | Store normalized entitlements and source fingerprint, not protocol-specific claim assumptions. |
 | `SsoGroupMapping` | `IdentityEntitlementMapping` | Replace claim-only matcher fields with normalized entitlement type, external id, and guarded operator. |
 | `SsoSyncRun` / `SsoSyncEvent` | `IdentitySyncRun` / `IdentitySyncEvent` | Reuse diagnostics for login, scheduled LDAP, and provider API reconciliation. |
