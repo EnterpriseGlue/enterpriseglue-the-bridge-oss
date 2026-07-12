@@ -2258,11 +2258,11 @@ Phase 0 exit criteria:
 
 - [x] ✅ Add Platform Settings Configuration tab with pasted JSON preview/diff and exact-hash apply. Export, run history, upload/ZIP import, and CI CLI remain pending.
 - [x] ✅ Add paste and JSON file import/export controls using Carbon components. ZIP and multi-file folder import remain pending.
-- [ ] ⬜ Add diff viewer with filters and risk grouping.
+- [x] ✅ Add diff viewer with search, operation/object-type/priority filters, and attention-first risk grouping.
 - [x] ✅ Bind apply to the exact canonical preview hash.
 - [x] ✅ Add recent config apply-run history.
 - [x] ✅ Add JSON export of the current editor payload.
-- [ ] ⬜ Complete managed-by-config badges across Access Control and Engine UI surfaces. Engine inventory and registration detail show configuration ownership/provenance; config-locked engines are read-only and config-warn edits are marked as drift. Access Control roles, identity mappings, groups, memberships, role assignments, and Engine Set assignment usage show `Managed by config`. Config-sourced groups/memberships and custom roles reject manual mutation at the shared service boundary. Engine Set and project-target ownership-specific controls remain pending.
+- [ ] ⬜ Complete managed-by-config badges across Access Control and Engine UI surfaces. Engine inventory and registration detail show configuration ownership/provenance; config-locked engines are read-only and config-warn edits are marked as drift. Access Control roles, identity mappings, groups, memberships, role assignments, and Engine Set assignment usage show `Managed by config`. Config-sourced groups/memberships and custom roles reject manual mutation at the shared service boundary. Project-target ownership controls are now source-owned and read-only; Engine Set ownership-specific controls remain pending.
 - [x] ✅ Add the Role Library and single-role editor; it avoids page-level horizontal scrolling for normal role management. Legacy Access Control matrix removal remains pending.
 - [ ] ⬜ Add role-editor search, grouped permission accordions, selected-only/risk filters, responsive checkboxes, sticky save/cancel, system-role duplication, and config ownership states.
 - [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Direct LDAPS configuration now includes bind identity, secret reference, user/group base DNs, user filter, and membership lookup fields. Mapping connection health and reconciliation history remain pending.

@@ -1,12 +1,19 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Button, InlineNotification, Tag, TextArea, Tile } from '@carbon/react';
+import { Button, InlineNotification, Select, SelectItem, Tag, TextArea, TextInput, Tile } from '@carbon/react';
 import { Download, Play, Time, Upload, View } from '@carbon/icons-react';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
+import {
+  filterConfigBundleChanges,
+  getConfigBundleChangeRisk,
+  groupConfigBundleChanges,
+  type ConfigBundleChangeRisk,
+  type ConfigBundleDiffChange,
+} from './configBundleDiff';
 
 type Preview = { valid: boolean; canonicalHash?: string; errors: Array<{ path: string; message: string }>; counts: Record<string, number> };
-type Diff = Preview & { changes: Array<{ objectType: string; key: string; operation: string; reason: string }> };
+type Diff = Preview & { changes: ConfigBundleDiffChange[] };
 type ApplyRun = { id: string; bundleKey: string; actorId: string | null; createdAt: number; canonicalHash?: string; created?: number; updated?: number; archived?: number; mode?: string | null };
 const placeholder = '{\n  "bundle": {\n    "apiVersion": "enterpriseglue.ai/v1alpha1",\n    "kind": "EnterpriseGlueConfigBundle",\n    "metadata": { "key": "example.authz", "owner": "platform" },\n    "tenantKey": "default",\n    "mode": "preview_only",\n    "settings": {},\n    "imports": ["./groups.json"]\n  },\n  "files": { "./groups.json": { "groups": [] } }\n}';
 
@@ -20,6 +27,10 @@ export default function ConfigurationBundleSettingsTab() {
   const [busy, setBusy] = useState<'preview' | 'apply' | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [runs, setRuns] = useState<ApplyRun[]>([]);
+  const [changeQuery, setChangeQuery] = useState('');
+  const [changeOperation, setChangeOperation] = useState('all');
+  const [changeObjectType, setChangeObjectType] = useState('all');
+  const [changeRisk, setChangeRisk] = useState<ConfigBundleChangeRisk | 'all'>('all');
   const parse = (): { bundle: unknown; files: Record<string, unknown> } => {
     const value = JSON.parse(source) as { bundle: unknown; files: Record<string, unknown> };
     if (!value || !value.bundle || !value.files || typeof value.files !== 'object') throw new Error('Configuration must contain bundle and files objects.');
@@ -60,6 +71,25 @@ export default function ConfigurationBundleSettingsTab() {
     const href = URL.createObjectURL(blob);
     const anchor = document.createElement('a'); anchor.href = href; anchor.download = 'enterpriseglue-config-bundle.json'; anchor.click(); URL.revokeObjectURL(href);
   };
+  const changeOperations = Array.from(new Set(diff?.changes.map((change) => change.operation) || [])).sort();
+  const changeObjectTypes = Array.from(new Set(diff?.changes.map((change) => change.objectType) || [])).sort();
+  const filteredChanges = filterConfigBundleChanges(diff?.changes || [], {
+    query: changeQuery,
+    operation: changeOperation,
+    objectType: changeObjectType,
+    risk: changeRisk,
+  });
+  const groupedChanges = groupConfigBundleChanges(filteredChanges);
+  const riskLabel: Record<ConfigBundleChangeRisk, string> = {
+    requires_attention: 'Requires attention',
+    review: 'Review changes',
+    informational: 'Informational changes',
+  };
+  const riskTagType: Record<ConfigBundleChangeRisk, 'red' | 'purple' | 'cool-gray'> = {
+    requires_attention: 'red',
+    review: 'purple',
+    informational: 'cool-gray',
+  };
   if (!manage.allowed) return <UnauthorizedEmptyState title="Configuration unavailable" reason={manage.reason || 'Missing configuration management permission.'} />;
   return <Tile>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}><div><h3 style={{ margin: 0, fontSize: '1rem' }}>Configuration Bundles</h3><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Validate, review, and apply JSON-managed authorization, identity, engine, and deployment-target configuration.</p></div>{preview?.valid && <Tag type="green">Preview valid</Tag>}</div>
@@ -68,7 +98,16 @@ export default function ConfigurationBundleSettingsTab() {
     <input ref={uploadRef} type="file" accept="application/json,.json" onChange={importJson} style={{ display: 'none' }} />
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}><Button kind="tertiary" renderIcon={Upload} disabled={busy !== null} onClick={() => uploadRef.current?.click()}>Import JSON</Button><Button kind="tertiary" renderIcon={Download} disabled={busy !== null} onClick={exportJson}>Export JSON</Button><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="secondary" renderIcon={View} disabled={busy !== null} onClick={previewBundle}>Preview changes</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="primary" renderIcon={Play} disabled={!preview?.valid || !preview.canonicalHash || busy !== null} onClick={applyBundle}>Apply exact preview</Button></GuardedAction><Button kind="ghost" renderIcon={Time} disabled={busy !== null} onClick={loadRuns}>Refresh history</Button></div>
     {preview && <div style={{ marginTop: 'var(--spacing-6)' }}><h4 style={{ margin: 0 }}>Preview</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{preview.valid ? `Hash ${preview.canonicalHash}` : 'Validation failed'}</p>{preview.errors.map((issue) => <InlineNotification key={`${issue.path}:${issue.message}`} kind="error" title={issue.path} subtitle={issue.message} hideCloseButton style={{ marginBottom: 'var(--spacing-3)' }} />)}{Object.entries(preview.counts).map(([path, count]) => <Tag key={path} type="cool-gray" style={{ marginRight: 'var(--spacing-2)' }}>{path}: {count}</Tag>)}</div>}
-    {diff?.changes?.length ? <div style={{ marginTop: 'var(--spacing-6)' }}><h4 style={{ margin: 0 }}>Planned changes</h4>{diff.changes.map((change) => <div key={`${change.objectType}:${change.key}`} style={{ display: 'flex', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-3)', borderBottom: '1px solid var(--cds-border-subtle)' }}><Tag type={change.operation === 'conflict' ? 'red' : change.operation === 'archive' ? 'warm-gray' : 'blue'}>{change.operation}</Tag><strong>{change.objectType}:{change.key}</strong><span style={{ color: 'var(--cds-text-secondary)' }}>{change.reason}</span></div>)}</div> : null}
+    {diff?.changes?.length ? <div style={{ marginTop: 'var(--spacing-6)', display: 'grid', gap: 'var(--spacing-4)' }}>
+      <div><h4 style={{ margin: 0 }}>Planned changes</h4><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Review attention-required changes before applying this exact preview.</p></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))', gap: 'var(--spacing-3)', alignItems: 'end' }}>
+        <TextInput id="configuration-change-search" labelText="Search changes" value={changeQuery} onChange={(event) => setChangeQuery(event.target.value)} />
+        <Select id="configuration-change-operation" labelText="Operation" value={changeOperation} onChange={(event) => setChangeOperation(event.target.value)}><SelectItem value="all" text="All operations" />{changeOperations.map((operation) => <SelectItem key={operation} value={operation} text={operation} />)}</Select>
+        <Select id="configuration-change-object" labelText="Object type" value={changeObjectType} onChange={(event) => setChangeObjectType(event.target.value)}><SelectItem value="all" text="All object types" />{changeObjectTypes.map((objectType) => <SelectItem key={objectType} value={objectType} text={objectType} />)}</Select>
+        <Select id="configuration-change-risk" labelText="Review priority" value={changeRisk} onChange={(event) => setChangeRisk(event.target.value as ConfigBundleChangeRisk | 'all')}><SelectItem value="all" text="All priorities" /><SelectItem value="requires_attention" text="Requires attention" /><SelectItem value="review" text="Review changes" /><SelectItem value="informational" text="Informational" /></Select>
+      </div>
+      {groupedChanges.length === 0 ? <InlineNotification kind="info" title="No planned changes match the current filters" hideCloseButton lowContrast /> : groupedChanges.map((group) => <section key={group.risk} aria-label={riskLabel[group.risk]}><div style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'center', marginBottom: 'var(--spacing-2)' }}><h5 style={{ margin: 0 }}>{riskLabel[group.risk]}</h5><Tag type={riskTagType[group.risk]}>{group.changes.length}</Tag></div>{group.changes.map((change) => <div key={`${change.objectType}:${change.key}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-3)', borderBottom: '1px solid var(--cds-border-subtle)' }}><Tag type={change.operation === 'conflict' ? 'red' : change.operation === 'archive' ? 'warm-gray' : 'blue'}>{change.operation}</Tag><strong>{change.objectType}:{change.key}</strong><span style={{ color: 'var(--cds-text-secondary)', flex: '1 1 16rem' }}>{change.reason}</span></div>)}</section>)}
+    </div> : null}
     {runs.length > 0 && <div style={{ marginTop: 'var(--spacing-6)' }}><h4 style={{ margin: 0 }}>Recent applies</h4>{runs.map((run) => <div key={run.id} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-3)', borderBottom: '1px solid var(--cds-border-subtle)' }}><strong>{run.bundleKey}</strong><Tag type="cool-gray">{run.mode || 'unknown'}</Tag><span style={{ color: 'var(--cds-text-secondary)' }}>{new Date(run.createdAt).toLocaleString()}</span><span style={{ color: 'var(--cds-text-secondary)' }}>{run.canonicalHash}</span></div>)}</div>}
   </Tile>;
 }
