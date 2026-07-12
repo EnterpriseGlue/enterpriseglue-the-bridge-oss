@@ -1797,7 +1797,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Add the external machine-authenticated deployment receipt route with API deployment eligibility, action/OpenAPI metadata, audit logging, and inventory materialization. Runtime scope settings, inventory reads, and reconciliation routes remain pending.
 - [ ] ⬜ Update `packages/backend-host/src/modules/mission-control/engines/routes.ts` manual engine create/update/list/detail schemas and serializers, not only the platform-admin engine-management routes.
 - [ ] ⬜ Update auth start/callback routes and provider services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit.
-- [ ] ⬜ Update Mission Control process, process-instance, decision, batch, migration, job, incident, history, variable, and dashboard routes to use authorized-subset filtering and inherited runtime-resource resolvers.
+- [ ] ⬜ Complete authorized-subset filtering and inherited runtime-resource resolvers across every Mission Control route family. Process, process-instance, decision, batch, migration, job, incident, history, variable, and the legacy compatibility process-instance router now use runtime-aware guards; metrics and final route-family audit remain pending.
 - [ ] ⬜ Update deployment query services and `edit-target-resolution.ts` for nullable project lineage and remove authorization through file-key fallback.
 - [ ] ⬜ Register every route in OpenAPI with `x-enterpriseglue-authz`, collection filter mode, lineage requirements, and audit risk.
 
