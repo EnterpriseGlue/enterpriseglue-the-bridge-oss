@@ -48,6 +48,7 @@ Current config-as-code status:
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
 - [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply will persist the expanded permission list later.
 - [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group create, update, no-op, conflict, and authoritative-archive previews. Other config object families remain pending.
+- [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for the role/group vertical. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, and refuses unsupported object families rather than ignoring them.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
 - [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.
@@ -1337,14 +1338,14 @@ sequenceDiagram
   participant Audit as Audit log
 
   Dev->>CI: Pull request updates JSON bundle
-  CI->>API: POST /api/config-bundles/preview
+  CI->>API: POST /api/authz/config-bundles/preview then /diff
   API->>Validator: Validate schema, references, permissions, engines, groups
   Validator->>DB: Resolve existing objects and ownership
   API-->>CI: Diff with warnings and errors
   CI-->>Dev: Block merge on validation errors
 
   Dev->>CI: Merge approved config
-  CI->>API: POST /api/config-bundles/apply
+  CI->>API: POST /api/authz/config-bundles/apply
   API->>DB: Upsert config-managed engines, groups, roles, mappings, targets
   API->>DB: Materialize Engine Sets and refresh authorization version
   API->>Audit: Record apply run, actor, sourceRef, diff summary
@@ -1805,10 +1806,10 @@ The implementation should extend existing packages rather than introduce an auth
 
 ## Proposed APIs
 
-- [ ] ⬜ `POST /api/config-bundles/preview`
-  - Validates a bundle and returns a diff, warnings, risk acknowledgements, and affected objects.
-- [ ] ⬜ `POST /api/config-bundles/apply`
-  - Applies an exact previewed bundle hash or inline bundle payload.
+- [x] ✅ `POST /api/authz/config-bundles/preview` and `POST /api/authz/config-bundles/diff`
+  - Preview validates the bundle; diff currently covers persisted roles/groups and reports source-ownership conflicts and authoritative archives. Broader object-family diffs, warnings, acknowledgements, and affected-object analysis remain pending.
+- [x] ✅ `POST /api/authz/config-bundles/apply`
+  - Applies an exact previewed bundle hash for config-owned roles/groups only. It rejects unsupported object families until their compiler/apply support is implemented.
 - [ ] ⬜ `GET /api/config-bundles/runs`
   - Lists preview/apply runs.
 - [ ] ⬜ `GET /api/config-bundles/runs/:id`
@@ -2170,12 +2171,12 @@ Phase 0 exit criteria:
 
 ### Phase 3: Apply Service
 
-- [ ] ⬜ Add `ConfigBundleApplyService`.
-- [ ] ⬜ Require preview hash on apply.
-- [ ] ⬜ Apply in one transaction where possible.
-- [ ] ⬜ Upsert config-managed custom roles and permissions.
-- [ ] ⬜ Store expanded custom-role permission lists after `copyFromRoleKey` resolution.
-- [ ] ⬜ Upsert config-managed groups.
+- [x] ✅ Add `ConfigBundleApplyService` for roles and groups; extend it to all remaining config object families.
+- [x] ✅ Require the exact canonical preview hash on the implemented apply endpoint.
+- [x] ✅ Apply the implemented role/group vertical in one transaction.
+- [x] ✅ Upsert config-managed custom roles and explicit/template-expanded permissions.
+- [x] ✅ Store expanded custom-role permission lists after `copyFromRoleKey` resolution for the implemented role apply path.
+- [x] ✅ Upsert config-managed groups.
 - [ ] ⬜ Upsert provider-neutral identity providers and entitlement mappings with encrypted/secret-ref provider configuration.
 - [ ] ⬜ Upsert config-managed engines using the current engine field shape.
 - [ ] ⬜ Persist engine runtime access scope and deployment integration settings.

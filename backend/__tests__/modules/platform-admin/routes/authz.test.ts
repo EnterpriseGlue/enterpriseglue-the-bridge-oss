@@ -17,6 +17,9 @@ import {
 const sharedPermissionServiceMock = vi.hoisted(() => ({
   hasPermission: vi.fn().mockResolvedValue(true),
 }));
+const configBundleApplyMock = vi.hoisted(() => ({
+  apply: vi.fn().mockResolvedValue({ canonicalHash: 'preview-hash', created: 2, updated: 0, archived: 0, changes: [] }),
+}));
 
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
@@ -45,6 +48,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   SystemRoleDefinitions: [
     { key: 'system.engine.operator' },
   ],
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js', () => ({
+  configBundleApplyService: configBundleApplyMock,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
@@ -1939,6 +1946,23 @@ describe('platform-admin authz routes', () => {
       canonicalHash: expect.any(String),
       changes: [expect.objectContaining({ objectType: 'group', key: 'group.ops', operation: 'create' })],
     });
+  });
+
+  it('applies a configuration bundle only through the hash-bound apply contract', async () => {
+    const response = await request(app)
+      .post('/api/authz/config-bundles/apply')
+      .send({
+        bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle' },
+        files: {},
+        expectedPreviewHash: 'preview-hash',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ canonicalHash: 'preview-hash', created: 2 });
+    expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
+      expectedPreviewHash: 'preview-hash',
+      actorId: 'user-1',
+    }));
   });
 
   it('updates, tests, and deletes SSO engine assignment mappings', async () => {

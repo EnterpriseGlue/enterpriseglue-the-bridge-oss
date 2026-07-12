@@ -50,6 +50,7 @@ import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { getEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
+import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import {
   evaluateMissionControlStarbaseBridge,
   evaluateStarbaseMissionControlBridge,
@@ -73,6 +74,9 @@ const authzCheckBatchSchema = z.object({
 const configBundlePreviewSchema = z.object({
   bundle: z.unknown(),
   files: z.record(z.string(), z.unknown()),
+});
+const configBundleApplySchema = configBundlePreviewSchema.extend({
+  expectedPreviewHash: z.string().min(1),
 });
 
 const idParamSchema = z.object({ id: z.string().uuid() });
@@ -1304,6 +1308,16 @@ router.post('/api/authz/config-bundles/preview', apiLimiter, requireAuth, requir
 router.post('/api/authz/config-bundles/diff', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
   const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null);
   res.status(diff.valid ? 200 : 422).json(diff);
+}));
+
+/** Apply a hash-bound config bundle after a successful persisted-state diff. */
+router.post('/api/authz/config-bundles/apply', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(configBundleApplySchema), asyncHandler(async (req: Request, res: Response) => {
+  const result = await configBundleApplyService.apply({
+    ...req.body,
+    tenantId: req.tenant?.tenantId || null,
+    actorId: req.user!.userId,
+  });
+  res.status(200).json(result);
 }));
 
 // ============================================================================
