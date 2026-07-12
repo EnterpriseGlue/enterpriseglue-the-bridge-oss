@@ -1121,6 +1121,7 @@ LDAP may be used in either of two ways:
 - [x] ✅ Add provider-neutral entitlement reconciliation that creates `identity_provider` group memberships with mapping lineage and removes only the exact mapping-owned row in authoritative mode.
 - [ ] ⬜ Preserve manual, API, automation, and other-provider memberships during identity reconciliation.
 - [ ] ⬜ Run OIDC/SAML synchronization at login and optionally through provider APIs; run LDAP synchronization at login plus scheduled reconciliation.
+- [x] ✅ Invoke provider-neutral entitlement-to-group reconciliation from the existing normalized identity provisioning path, so current OIDC-family and SAML login flows synchronize mapped memberships at login. LDAP transport and scheduled reconciliation remain in progress.
 - [ ] ⬜ Fail login closed when the configured provider requires authoritative entitlement synchronization and normalization or persistence fails.
 - [ ] ⬜ Keep additive and authoritative modes per mapping.
 - [ ] ⬜ Keep `scope` entitlements restricted to API/machine use unless a product use case explicitly approves human mapping.

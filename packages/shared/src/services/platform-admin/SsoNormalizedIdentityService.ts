@@ -3,6 +3,8 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { externalIdentityService } from './ExternalIdentityService.js';
+import { getIdentityProviderAdapter, type IdentityProviderType } from './IdentityProviderAdapter.js';
+import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
 import type { SsoClaims } from './SsoClaimsMappingService.js';
 
 type SsoNormalizedIdentityStore = DataSource | EntityManager;
@@ -51,6 +53,12 @@ function stringifyJson(value: unknown, fallback: string): string {
   } catch {
     return fallback;
   }
+}
+
+function adapterType(providerType: string): IdentityProviderType {
+  if (providerType === 'saml') return 'saml';
+  if (providerType === 'ldap') return 'ldap';
+  return 'oidc';
 }
 
 class SsoNormalizedIdentityServiceClass {
@@ -108,6 +116,17 @@ class SsoNormalizedIdentityServiceClass {
     };
 
     const existing = await qb.getOne();
+    const normalized = getIdentityProviderAdapter(adapterType(update.providerType)).normalizeIdentity({
+      providerKey: providerId,
+      subjectId: providerSubject,
+      claims: input.claims as Record<string, unknown>,
+      username: update.email,
+      email: update.email,
+      directoryTenantId: update.providerTenantId,
+      observedAt: now,
+    });
+    await identityEntitlementMappingService.syncMembershipsInStore(store, update.userId, tenantId, normalized);
+
     if (existing) {
       await repo.update({ id: existing.id }, update);
       await externalIdentityService.upsertInStore(store, {

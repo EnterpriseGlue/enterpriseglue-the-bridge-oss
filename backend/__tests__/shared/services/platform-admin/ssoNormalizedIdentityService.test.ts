@@ -6,6 +6,10 @@ import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/pl
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
+const syncMembershipsInStore = vi.hoisted(() => vi.fn().mockResolvedValue({ created: 0, removed: 0 }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js', () => ({
+  identityEntitlementMappingService: { syncMembershipsInStore },
+}));
 
 describe('ssoNormalizedIdentityService', () => {
   beforeEach(() => {
@@ -83,6 +87,7 @@ describe('ssoNormalizedIdentityService', () => {
     expect(externalRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       providerId: 'provider-1', subjectId: 'subject-1', userId: 'user-1', emailHint: 'user@example.com', identityKey: expect.any(String),
     }));
+    expect(syncMembershipsInStore).toHaveBeenCalledWith(dataSource, 'user-1', 'tenant-a', expect.objectContaining({ providerKey: 'provider-1', providerType: 'saml' }));
   });
 
   it('updates an existing normalized identity snapshot by provider subject', async () => {
@@ -140,5 +145,6 @@ describe('ssoNormalizedIdentityService', () => {
     expect(externalRepo.update).toHaveBeenCalledWith({ id: 'external-identity-1' }, expect.objectContaining({
       providerId: 'microsoft', subjectId: 'oid-1', userId: 'user-1', lastSeenAt: 5678,
     }));
+    expect(syncMembershipsInStore).toHaveBeenCalledWith(dataSource, 'user-1', null, expect.objectContaining({ providerKey: 'microsoft', providerType: 'oidc' }));
   });
 });
