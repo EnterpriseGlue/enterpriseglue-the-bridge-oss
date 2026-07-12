@@ -38,6 +38,7 @@ export * from './SsoProviderIdentityCheckService.js';
 export * from './SsoSyncDiagnosticsService.js';
 export * from './config-bundle-hash.js';
 export * from './ConfigBundlePreviewService.js';
+export * from './ConfigBundleDiffService.js';
 export * from './SecretResolver.js';
 export * from './PolicyService.js';
 export * from './UserService.js';

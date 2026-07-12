@@ -29,6 +29,12 @@ export interface ConfigBundlePreview {
   expandedRolePermissions?: Record<string, string[]>;
 }
 
+export interface ConfigBundleCompilation {
+  preview: ConfigBundlePreview;
+  manifest?: Record<string, unknown>;
+  files?: Record<string, unknown>;
+}
+
 function issues(prefix: string, error: z.ZodError): Array<{ path: string; message: string }> {
   return error.issues.map((issue) => ({ path: [prefix, ...issue.path].join('.'), message: issue.message }));
 }
@@ -195,9 +201,9 @@ function expandRoleTemplates(normalizedFiles: Record<string, unknown>): {
 }
 
 class ConfigBundlePreviewService {
-  preview(input: ConfigBundlePreviewInput): ConfigBundlePreview {
+  compile(input: ConfigBundlePreviewInput): ConfigBundleCompilation {
     const parsedBundle = EnterpriseGlueConfigBundleSchema.safeParse(input.bundle);
-    if (!parsedBundle.success) return { valid: false, errors: issues('bundle', parsedBundle.error), counts: {} };
+    if (!parsedBundle.success) return { preview: { valid: false, errors: issues('bundle', parsedBundle.error), counts: {} } };
     const errors: Array<{ path: string; message: string }> = [];
     const counts: Record<string, number> = {};
     const normalizedFiles: Record<string, unknown> = {};
@@ -219,14 +225,22 @@ class ConfigBundlePreviewService {
         expandedRolePermissions = expanded.expandedRolePermissions;
       }
     }
-    if (errors.length > 0) return { valid: false, errors, counts };
+    if (errors.length > 0) return { preview: { valid: false, errors, counts } };
     return {
-      valid: true,
-      canonicalHash: hashCanonicalConfig({ bundle: parsedBundle.data, files: normalizedFiles }),
-      errors: [],
-      counts,
-      expandedRolePermissions,
+      preview: {
+        valid: true,
+        canonicalHash: hashCanonicalConfig({ bundle: parsedBundle.data, files: normalizedFiles }),
+        errors: [],
+        counts,
+        expandedRolePermissions,
+      },
+      manifest: parsedBundle.data,
+      files: normalizedFiles,
     };
+  }
+
+  preview(input: ConfigBundlePreviewInput): ConfigBundlePreview {
+    return this.compile(input).preview;
   }
 }
 

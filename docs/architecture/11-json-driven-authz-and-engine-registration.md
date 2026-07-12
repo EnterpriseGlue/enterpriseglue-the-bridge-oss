@@ -47,6 +47,7 @@ Current config-as-code status:
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
 - [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply will persist the expanded permission list later.
+- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group create, update, no-op, conflict, and authoritative-archive previews. Other config object families remain pending.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
 - [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.
@@ -2156,7 +2157,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Load multi-file folder bundle and single-file bundle.
 - [ ] ⬜ Resolve imports with path traversal protection.
 - [ ] ⬜ Resolve all references against current database state and staged objects in the same bundle.
-- [ ] ⬜ Produce create/update/archive/no-op diffs.
+- [ ] ⬜ Extend the implemented role/group create/update/archive/no-op diff to engines, Engine Sets, runtime resource sets, assignments, identity providers/mappings, and project-engine targets.
 - [ ] ⬜ Produce role permission diffs with additions, removals, expanded template permissions, and affected assignments.
 - [ ] ⬜ Produce runtime resource set diffs with matched, unmatched, newly matched, and no-longer-matched process or decision keys.
 - [ ] ⬜ Validate identity provider references and preview normalized entitlement-to-group matches without contacting providers unless an explicit connectivity test is requested.

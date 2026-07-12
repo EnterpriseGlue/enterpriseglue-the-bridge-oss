@@ -49,6 +49,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { getEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
+import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 import {
   evaluateMissionControlStarbaseBridge,
   evaluateStarbaseMissionControlBridge,
@@ -1297,6 +1298,12 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
 router.post('/api/authz/config-bundles/preview', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
   const preview = configBundlePreviewService.preview(req.body);
   res.status(preview.valid ? 200 : 422).json(preview);
+}));
+
+/** Compare a validated bundle with persisted config-owned role and group state. */
+router.post('/api/authz/config-bundles/diff', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+  const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null);
+  res.status(diff.valid ? 200 : 422).json(diff);
 }));
 
 // ============================================================================

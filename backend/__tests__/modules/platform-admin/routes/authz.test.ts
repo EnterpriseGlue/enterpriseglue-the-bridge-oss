@@ -1915,6 +1915,32 @@ describe('platform-admin authz routes', () => {
     expect(invalidResponse.body).toMatchObject({ valid: false });
   });
 
+  it('returns a persisted-state diff for validated configuration bundles', async () => {
+    const response = await request(app)
+      .post('/api/authz/config-bundles/diff')
+      .send({
+        bundle: {
+          apiVersion: 'enterpriseglue.ai/v1alpha1',
+          kind: 'EnterpriseGlueConfigBundle',
+          metadata: { key: 'acme.authz', owner: 'platform' },
+          tenantKey: 'acme',
+          mode: 'preview_only',
+          settings: {},
+          imports: ['./groups.json'],
+        },
+        files: {
+          './groups.json': { groups: [{ key: 'group.ops', name: 'Operations' }] },
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      valid: true,
+      canonicalHash: expect.any(String),
+      changes: [expect.objectContaining({ objectType: 'group', key: 'group.ops', operation: 'create' })],
+    });
+  });
+
   it('updates, tests, and deletes SSO engine assignment mappings', async () => {
     const updateResponse = await request(app)
       .put('/api/authz/sso-assignment-mappings/00000000-0000-4000-8000-000000000030')
