@@ -1,4 +1,5 @@
 import React from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Button,
   Checkbox,
@@ -31,6 +32,7 @@ import {
 import { Add, Security, TrashCan } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
+import { apiClient } from '../../../shared/api/client';
 import { UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { usePlatformSyncSettings } from '../hooks/usePlatformSyncSettings';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
@@ -178,6 +180,23 @@ interface ResourceSummary {
   groupAssignmentCount: number;
   machineAssignmentCount: number;
   status: string;
+}
+
+interface RuntimeResourceInventoryRow {
+  id: string;
+  engineId: string;
+  resourceKind: 'process_definition' | 'decision_definition';
+  resourceKey: string;
+  runtimeTenantId: string;
+  projectId: string | null;
+  source: string;
+  observedAt: number;
+  isActive: boolean;
+}
+
+interface RuntimeResourceEngineOption {
+  id: string;
+  name: string;
 }
 
 const CLAIM_TYPES = [
@@ -600,6 +619,7 @@ type AccessControlTabId =
   | 'sso_mappings'
   | 'sso_engine_assignments'
   | 'engine_sets'
+  | 'runtime_resources'
   | 'project_targets'
   | 'policies'
   | 'audit'
@@ -622,6 +642,7 @@ const ACCESS_CONTROL_TAB_LABELS: Record<AccessControlTabId, string> = {
   sso_mappings: 'SSO Mappings',
   sso_engine_assignments: 'SSO Engine Assignments',
   engine_sets: 'Engine Sets',
+  runtime_resources: 'Runtime Resources',
   project_targets: 'Project Targets',
   policies: 'Policies',
   audit: 'Audit',
@@ -4685,6 +4706,88 @@ function GroupsPanel({
   );
 }
 
+function RuntimeResourcesPanel({
+  engines,
+  selectedEngineId,
+  resources,
+  loading,
+  error,
+  canManage,
+  reconcilePending,
+  reconcileError,
+  onSelectEngine,
+  onReconcile,
+}: {
+  engines: RuntimeResourceEngineOption[];
+  selectedEngineId: string;
+  resources: RuntimeResourceInventoryRow[];
+  loading: boolean;
+  error: unknown;
+  canManage: boolean;
+  reconcilePending: boolean;
+  reconcileError: unknown;
+  onSelectEngine: (id: string) => void;
+  onReconcile: () => void;
+}) {
+  const selectedEngine = engines.find((engine) => engine.id === selectedEngineId) || null;
+  const processCount = resources.filter((resource) => resource.resourceKind === 'process_definition').length;
+  const decisionCount = resources.filter((resource) => resource.resourceKind === 'decision_definition').length;
+
+  return (
+    <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
+      <div>
+        <h3 style={{ margin: 0 }}>Runtime Resources</h3>
+        <p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>
+          Sanitized process and decision inventory for resource-aware central engines. Inventory supports authorization decisions; it is not a copy of engine payload data.
+        </p>
+      </div>
+      <div style={{ display: 'flex', gap: 'var(--spacing-4)', alignItems: 'end', flexWrap: 'wrap' }}>
+        <Dropdown
+          id="runtime-resource-engine"
+          titleText="Engine"
+          label="Select an engine"
+          items={engines}
+          selectedItem={selectedEngine}
+          itemToString={(item) => item?.name || ''}
+          onChange={({ selectedItem }) => onSelectEngine(selectedItem?.id || '')}
+          style={{ minWidth: 280 }}
+        />
+        <Button kind="secondary" size="sm" disabled={!selectedEngineId || !canManage || reconcilePending} onClick={onReconcile}>
+          Reconcile inventory
+        </Button>
+        {selectedEngine && <Tag type="cool-gray">{processCount} processes</Tag>}
+        {selectedEngine && <Tag type="cool-gray">{decisionCount} decisions</Tag>}
+      </div>
+      {Boolean(reconcileError) && <InlineNotification kind="error" lowContrast title="Runtime inventory could not be reconciled" subtitle={parseApiError(reconcileError, 'Request failed').message} hideCloseButton />}
+      {loading ? <DataTableSkeleton headers={[{ key: 'key', header: 'Resource' }]} rowCount={6} /> : error ? (
+        <InlineNotification kind="error" lowContrast title="Runtime resources could not be loaded" subtitle={parseApiError(error, 'Request failed').message} hideCloseButton />
+      ) : !selectedEngine ? (
+        <InlineNotification kind="info" lowContrast title="Select an engine" subtitle="Choose an engine to inspect its runtime resource inventory." hideCloseButton />
+      ) : resources.length === 0 ? (
+        <InlineNotification kind="info" lowContrast title="No runtime resources recorded" subtitle="Reconcile inventory after the engine is reachable or a deployment receipt has been received." hideCloseButton />
+      ) : (
+        <TableContainer>
+          <Table size="md">
+            <TableHead><TableRow>
+              <TableHeader>Resource</TableHeader><TableHeader>Kind</TableHeader><TableHeader>Runtime tenant</TableHeader><TableHeader>Project</TableHeader><TableHeader>Source</TableHeader><TableHeader>Observed</TableHeader>
+            </TableRow></TableHead>
+            <TableBody>{resources.map((resource) => (
+              <TableRow key={resource.id}>
+                <TableCell style={{ overflowWrap: 'anywhere' }}>{resource.resourceKey}</TableCell>
+                <TableCell><Tag type={resource.resourceKind === 'process_definition' ? 'blue' : 'purple'} size="sm">{resource.resourceKind === 'process_definition' ? 'Process' : 'Decision'}</Tag></TableCell>
+                <TableCell>{resource.runtimeTenantId || '-'}</TableCell>
+                <TableCell>{resource.projectId || '-'}</TableCell>
+                <TableCell>{resource.source}</TableCell>
+                <TableCell>{new Date(resource.observedAt).toLocaleString()}</TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </div>
+  );
+}
+
 function EngineSetsPanel({
   engineSets,
   selectedEngineSet,
@@ -6217,6 +6320,7 @@ export default function AccessControl() {
   const [engineSetModalOpen, setEngineSetModalOpen] = React.useState(false);
   const [editingEngineSet, setEditingEngineSet] = React.useState<EngineSetSummary | null>(null);
   const [selectedEngineSetId, setSelectedEngineSetId] = React.useState('');
+  const [selectedRuntimeEngineId, setSelectedRuntimeEngineId] = React.useState('');
   const [engineSetMaterializeSummary, setEngineSetMaterializeSummary] = React.useState<string | null>(null);
   const [engineSetRiskAcknowledged, setEngineSetRiskAcknowledged] = React.useState(false);
   const [projectTargetModalOpen, setProjectTargetModalOpen] = React.useState(false);
@@ -6290,6 +6394,20 @@ export default function AccessControl() {
   const externalEngineApiDecommissionDecision = useActionDecision('engine.external-registration.decommission', platformAuthzResource);
   const externalProjectTargetApiUpsertDecision = useActionDecision('project-engine-target.external-registration.upsert', platformAuthzResource);
   const externalProjectTargetApiDecommissionDecision = useActionDecision('project-engine-target.external-registration.decommission', platformAuthzResource);
+  const runtimeResourceEnginesQ = useQuery({
+    queryKey: ['authz-runtime-resource-engines'],
+    enabled: engineSetsReadDecision.allowed,
+    queryFn: () => apiClient.get<RuntimeResourceEngineOption[]>('/engines-api/engines'),
+  });
+  const runtimeResourcesQ = useQuery({
+    queryKey: ['authz-runtime-resources', selectedRuntimeEngineId],
+    enabled: engineSetsReadDecision.allowed && Boolean(selectedRuntimeEngineId),
+    queryFn: () => apiClient.get<RuntimeResourceInventoryRow[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(selectedRuntimeEngineId)}`),
+  });
+  const reconcileRuntimeResourcesM = useMutation({
+    mutationFn: () => apiClient.post(`/api/authz/runtime-resources/${encodeURIComponent(selectedRuntimeEngineId)}/reconcile`, {}),
+    onSuccess: () => { void runtimeResourcesQ.refetch(); },
+  });
   const assignmentsReadUnavailableReason = unavailableReason(assignmentsReadDecision, 'Missing permission platform:authz:roles:view');
   const ssoAssignmentsManageUnavailableReason = unavailableReason(ssoAssignmentsManageDecision, 'Missing permission platform:sso-assignments:manage');
   const engineSetsManageUnavailableReason = unavailableReason(engineSetsManageDecision, 'Missing permission platform:engine-sets:manage');
@@ -6357,7 +6475,7 @@ export default function AccessControl() {
     if (effectiveAccessDecision.allowed) tabIds.push('effective_access');
     if (showSsoMappingsTab) tabIds.push('sso_mappings');
     if (ssoAssignmentsReadDecision.allowed) tabIds.push('sso_engine_assignments');
-    if (engineSetsReadDecision.allowed) tabIds.push('engine_sets');
+    if (engineSetsReadDecision.allowed) tabIds.push('engine_sets', 'runtime_resources');
     if (projectTargetsReadDecision.allowed) tabIds.push('project_targets');
     if (policiesReadDecision.allowed) tabIds.push('policies');
     if (auditReadDecision.allowed) tabIds.push('audit');
@@ -6486,6 +6604,17 @@ export default function AccessControl() {
       setSelectedSsoSyncRunId(ssoSyncRuns[0].id);
     }
   }, [selectedSsoSyncRunId, ssoAssignmentsReadDecision.allowed, ssoSyncRuns]);
+
+  React.useEffect(() => {
+    const engines = runtimeResourceEnginesQ.data || [];
+    if (!engineSetsReadDecision.allowed || engines.length === 0) {
+      if (selectedRuntimeEngineId) setSelectedRuntimeEngineId('');
+      return;
+    }
+    if (!engines.some((engine) => engine.id === selectedRuntimeEngineId)) {
+      setSelectedRuntimeEngineId(engines[0].id);
+    }
+  }, [engineSetsReadDecision.allowed, runtimeResourceEnginesQ.data, selectedRuntimeEngineId]);
   const ssoAllEnginesBlockedBySettings =
     form.targetSelectorType === 'all_engines' &&
     form.isActive &&
@@ -7810,6 +7939,22 @@ export default function AccessControl() {
                 auditReadUnavailableReason={auditReadUnavailableReason}
               />
             )}
+          </TabPanel>
+          )}
+          {engineSetsReadDecision.allowed && (
+          <TabPanel>
+            <RuntimeResourcesPanel
+              engines={runtimeResourceEnginesQ.data || []}
+              selectedEngineId={selectedRuntimeEngineId}
+              resources={runtimeResourcesQ.data || []}
+              loading={runtimeResourceEnginesQ.isLoading || runtimeResourcesQ.isLoading}
+              error={runtimeResourceEnginesQ.error || runtimeResourcesQ.error}
+              canManage={engineSetsManageDecision.allowed}
+              reconcilePending={reconcileRuntimeResourcesM.isPending}
+              reconcileError={reconcileRuntimeResourcesM.error}
+              onSelectEngine={setSelectedRuntimeEngineId}
+              onReconcile={() => reconcileRuntimeResourcesM.mutate()}
+            />
           </TabPanel>
           )}
           {projectTargetsReadDecision.allowed && (
