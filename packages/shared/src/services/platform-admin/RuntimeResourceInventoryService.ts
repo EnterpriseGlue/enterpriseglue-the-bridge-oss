@@ -5,6 +5,7 @@ import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persisten
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { camundaGet, getDecisionDefinitions } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 
 export type RuntimeResourceKind = 'process_definition' | 'decision_definition';
 export type RuntimeResourceSetSelector =
@@ -75,6 +76,19 @@ function matchResource(resource: RuntimeResource, selector: RuntimeResourceSetSe
 
 /** Shared reconciliation boundary for discovered/reported runtime metadata. */
 class RuntimeResourceInventoryService {
+  async reconcileEngine(engineId: string, tenantId?: string | null): Promise<{ created: number; updated: number; materializedSets: number }> {
+    const [processes, decisions] = await Promise.all([
+      camundaGet<Array<{ id?: string; key?: string; version?: number; tenantId?: string | null; deploymentId?: string | null }>>(engineId, '/process-definition'),
+      getDecisionDefinitions<Array<{ id?: string; key?: string; version?: number; tenantId?: string | null; deploymentId?: string | null }>>(engineId),
+    ]);
+    const observations: RuntimeResourceObservation[] = [
+      ...(processes || []).filter((item) => item.key).map((item) => ({ resourceKind: 'process_definition' as const, resourceKey: item.key!, engineResourceId: item.id || null, version: item.version || null, runtimeTenantId: item.tenantId || null, deploymentId: item.deploymentId || null })),
+      ...(decisions || []).filter((item) => item.key).map((item) => ({ resourceKind: 'decision_definition' as const, resourceKey: item.key!, engineResourceId: item.id || null, version: item.version || null, runtimeTenantId: item.tenantId || null, deploymentId: item.deploymentId || null })),
+    ];
+    const observed = await this.observe(engineId, tenantId, observations);
+    const materializations = await this.materializeForEngine(engineId, tenantId);
+    return { ...observed, materializedSets: materializations.length };
+  }
   async observe(engineId: string, tenantId: string | null | undefined, observations: RuntimeResourceObservation[]): Promise<{ created: number; updated: number }> {
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(RuntimeResource);
