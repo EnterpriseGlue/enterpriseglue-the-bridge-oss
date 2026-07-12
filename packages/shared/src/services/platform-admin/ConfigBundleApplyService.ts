@@ -4,6 +4,8 @@ import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { engineSetService } from './EngineSetService.js';
 import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
@@ -92,7 +94,7 @@ class ConfigBundleApplyService {
     if (input.expectedPreviewHash !== compilation.preview.canonicalHash) {
       return fail('Preview hash does not match the submitted configuration bundle', 409);
     }
-    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-sets.json'].includes(path));
+    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-sets.json', './assignments.json'].includes(path));
     if (unsupported.length > 0) {
       return fail(`Config apply does not yet support: ${unsupported.join(', ')}`, 422);
     }
@@ -109,6 +111,7 @@ class ConfigBundleApplyService {
     const desiredGroups = new Map(entries(compilation.files, './groups.json', 'groups').map((group) => [group.key, group]));
     const desiredEngines = new Map(entries(compilation.files, './engines.json', 'engines').map((engine) => [engine.key, engine]));
     const desiredEngineSets = new Map(entries(compilation.files, './engine-sets.json', 'engineSets').map((set) => [set.key, set]));
+    const desiredAssignments = entries(compilation.files, './assignments.json', 'assignments');
     const materializeIds: string[] = [];
     const now = Date.now();
     let created = 0;
@@ -121,6 +124,7 @@ class ConfigBundleApplyService {
       const groupRepo = manager.getRepository(AuthzGroup);
       const engineRepo = manager.getRepository(Engine);
       const engineSetRepo = manager.getRepository(EngineSet);
+      const assignmentRepo = manager.getRepository(RbacRoleAssignment);
       const rolePermissionRepo = manager.getRepository(RbacRolePermission);
 
       for (const change of diff.changes) {
@@ -266,6 +270,49 @@ class ConfigBundleApplyService {
             await engineSetRepo.update({ id: change.currentId }, { name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), isArchived: false, materializationStatus: 'pending', updatedAt: now });
             materializeIds.push(change.currentId); updated += 1;
           } else if (change.operation === 'archive' && change.currentId) { await engineSetRepo.update({ id: change.currentId }, { isArchived: true, materializationStatus: 'archived', updatedAt: now }); archived += 1; }
+        }
+      }
+
+      // Resolve references after staged role/group/engine/Engine Set writes.
+      const [roles, groups, engines, engineSets] = await Promise.all([
+        roleRepo.find(), groupRepo.find(), engineRepo.find(), engineSetRepo.find(),
+      ]);
+      const roleByKey = new Map(roles.map((role) => [role.key, role]));
+      const groupByKey = new Map(groups.map((group) => [group.key, group]));
+      const engineByKey = new Map(engines.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine]));
+      const engineSetByKey = new Map(engineSets.map((set) => [set.key, set]));
+      const sourceRef = `config_bundle:${manifest.metadata.key}`;
+      const desiredKeys = new Set<string>();
+      for (const assignment of desiredAssignments) {
+        if (assignment.principal.type !== 'group') fail('Config apply currently supports group principals only', 422);
+        if (!['platform', 'engine', 'engine_set'].includes(assignment.scope.type)) fail(`Config apply does not yet support ${assignment.scope.type} assignment scopes`, 422);
+        const role = roleByKey.get(assignment.roleKey);
+        const group = groupByKey.get(assignment.principal.key);
+        if (!role || !group) fail(`Config assignment references an unresolved role or group: ${assignment.roleKey}`, 422);
+        const scopeId = assignment.scope.type === 'platform' ? null
+          : assignment.scope.type === 'engine' ? engineByKey.get(assignment.scope.engineKey)?.id
+          : engineSetByKey.get(assignment.scope.engineSetKey)?.id;
+        if (assignment.scope.type !== 'platform' && !scopeId) fail('Config assignment references an unresolved scope', 422);
+        const assignmentKey = canonicalRoleAssignmentKey({ tenantId, principalType: 'group', principalId: group.id, roleId: role.id, scopeType: assignment.scope.type, scopeId, source: 'config', sourceRef });
+        desiredKeys.add(assignmentKey);
+        const existing = await assignmentRepo.findOne({ where: { assignmentKey } });
+        if (!existing) {
+          const assignmentId = generateId();
+          await assignmentRepo.insert({ id: assignmentId, tenantId, userId: null, principalType: 'group', principalId: group.id, assignmentKey, roleId: role.id, resourceType: null, resourceId: null, scopeType: assignment.scope.type, scopeId: scopeId || null, source: 'config', sourceMappingId: null, sourceRef, expiresAt: assignment.expiresAt || null, lastSeenAt: now, createdById: input.actorId, createdAt: now, updatedAt: now });
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.assignment.create', resourceType: 'role_assignment', resourceId: assignmentId, details: { bundleKey: manifest.metadata.key, roleKey: assignment.roleKey, principalGroupKey: assignment.principal.key, scopeType: assignment.scope.type, canonicalHash: diff.canonicalHash } });
+          created += 1;
+        } else if (existing.expiresAt !== (assignment.expiresAt || null)) {
+          await assignmentRepo.update({ id: existing.id }, { expiresAt: assignment.expiresAt || null, lastSeenAt: now, updatedAt: now });
+          updated += 1;
+        }
+      }
+      if (manifest.mode === 'authoritative') {
+        const existing = await assignmentRepo.find({ where: { source: 'config', sourceRef } });
+        const staleIds = existing.filter((assignment) => !desiredKeys.has(assignment.assignmentKey)).map((assignment) => assignment.id);
+        if (staleIds.length > 0) {
+          await assignmentRepo.delete(staleIds);
+          for (const id of staleIds) await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.assignment.delete', resourceType: 'role_assignment', resourceId: id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash } });
+          archived += staleIds.length;
         }
       }
     });
