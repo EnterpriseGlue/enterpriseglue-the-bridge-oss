@@ -2065,6 +2065,7 @@ This phase is required because the current implementation still carries compatib
 - [ ] ⬜ Make `principalType` and `principalId` required for every assignment and replace the database uniqueness constraint with tenant/principal/role/scope/source/sourceRef uniqueness.
 - [x] ✅ Add a collision-safe, non-null canonical assignment identity key and unique database constraint; active assignment writers now populate it. Required principal fields and removal of compatibility aliases remain in progress.
 - [x] ✅ Move role-assignment evaluation, effective-access lineage, and evaluator-backed visible project/engine discovery to canonical principal and scope fields.
+- [x] ✅ Change active manual, SSO, bootstrap, and engine-governance assignment writes to canonical fields; legacy aliases are now nullable and retained only for migration/diagnostic reads.
 - [ ] ⬜ Keep permission scope (`engine`) separate from assignment target type (`engine`, `engine_set`, `engine_runtime_resource`, `engine_runtime_resource_set`).
 - [ ] ⬜ Extend assignment validation and evaluator lookup for exact runtime resource and runtime resource-set materialization.
 - [ ] ⬜ Stop writing `userId`, `resourceType`, `resourceId`, and `sourceMappingId` aliases in new code, then remove them after local development data migration.

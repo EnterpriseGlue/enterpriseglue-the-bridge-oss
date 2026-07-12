@@ -1479,12 +1479,14 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'api-client-1',
+      userId: null,
       principalType: 'api_client',
       principalId: 'api-client-1',
       roleId: SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
-      resourceType: 'project',
-      resourceId: 'project-1',
+      resourceType: null,
+      resourceId: null,
+      scopeType: 'project',
+      scopeId: 'project-1',
     }));
   });
 
@@ -1530,11 +1532,11 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'api-client-1',
+      userId: null,
       principalType: 'api_client',
       principalId: 'api-client-1',
       roleId: SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
-      resourceType: 'platform',
+      resourceType: null,
       resourceId: null,
       scopeType: 'platform',
       scopeId: null,
@@ -1584,12 +1586,12 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'api-client-1',
+      userId: null,
       principalType: 'api_client',
       principalId: 'api-client-1',
       roleId: SYSTEM_ROLE_IDS.API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR,
-      resourceType: 'external_engine_system',
-      resourceId: 'system-1',
+      resourceType: null,
+      resourceId: null,
       scopeType: 'external_engine_system',
       scopeId: 'system-1',
     }));
@@ -1638,12 +1640,12 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'api-client-1',
+      userId: null,
       principalType: 'api_client',
       principalId: 'api-client-1',
       roleId: SYSTEM_ROLE_IDS.API_PROJECT_ENGINE_TARGET_REGISTRAR,
-      resourceType: 'external_engine_system',
-      resourceId: 'system-1',
+      resourceType: null,
+      resourceId: null,
       scopeType: 'external_engine_system',
       scopeId: 'system-1',
     }));
@@ -1748,12 +1750,14 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'group-1',
+      userId: null,
       principalType: 'group',
       principalId: 'group-1',
       roleId: SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
-      resourceType: 'project',
-      resourceId: 'project-1',
+      resourceType: null,
+      resourceId: null,
+      scopeType: 'project',
+      scopeId: 'project-1',
     }));
   });
 
@@ -1890,12 +1894,14 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'service-account-1',
+      userId: null,
       principalType: 'service_account',
       principalId: 'service-account-1',
       roleId: SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
-      resourceType: 'project',
-      resourceId: 'project-1',
+      resourceType: null,
+      resourceId: null,
+      scopeType: 'project',
+      scopeId: 'project-1',
     }));
   });
 

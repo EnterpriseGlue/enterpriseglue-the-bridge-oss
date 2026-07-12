@@ -232,7 +232,7 @@ export class AuthzGroupService {
       DEFAULT_PLATFORM_GROUPS.map((group) => ({
         id: `bootstrap.assignment.${group.id}.${group.roleId}`,
         tenantId: null,
-        userId: group.id,
+        userId: null,
         principalType: 'group',
         principalId: group.id,
         assignmentKey: canonicalRoleAssignmentKey({
@@ -246,7 +246,7 @@ export class AuthzGroupService {
           sourceRef: 'default-platform-groups',
         }),
         roleId: group.roleId,
-        resourceType: 'platform',
+        resourceType: null,
         resourceId: null,
         scopeType: 'platform',
         scopeId: null,

@@ -31,7 +31,7 @@ export class AddCanonicalRoleAssignmentKey1700000000045 implements MigrationInte
       const key = canonicalRoleAssignmentKey({
         tenantId: row.tenantId,
         principalType: row.principalType || 'user',
-        principalId: row.principalId || row.userId,
+        principalId: row.principalId || row.userId || '',
         roleId: row.roleId,
         scopeType: row.scopeType || row.resourceType || '',
         scopeId: row.scopeId ?? row.resourceId,

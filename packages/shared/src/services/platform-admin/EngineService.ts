@@ -187,8 +187,9 @@ export class EngineService {
       .createQueryBuilder('assignment')
       .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
       .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
-      .where('assignment.userId = :userId', { userId })
-      .andWhere('assignment.resourceType = :resourceType', { resourceType: 'engine' })
+      .where('assignment.principalType = :principalType', { principalType: 'user' })
+      .andWhere('assignment.principalId = :principalId', { principalId: userId })
+      .andWhere('assignment.scopeType = :scopeType', { scopeType: 'engine' })
       .andWhere('role.isArchived = :isArchived', { isArchived: false })
       .andWhere('rolePermission.permissionId IN (:...permissions)', { permissions: Object.values(EnginePermissions) });
     if (tenantId) {
@@ -198,10 +199,10 @@ export class EngineService {
     }
     const assignmentRows = await assignmentQb.getMany();
     const allEngineRole = assignedEngineRoles.find((assignment) => assignment.engineId === null)?.role || null;
-    const hasAllEngineAssignment = assignmentRows.some((assignment) => assignment.resourceId === null);
+    const hasAllEngineAssignment = assignmentRows.some((assignment) => assignment.scopeId === null);
     const assignedEngineIds = Array.from(new Set([
       ...assignedEngineRoles.map((assignment) => assignment.engineId),
-      ...assignmentRows.map((assignment) => assignment.resourceId),
+      ...assignmentRows.map((assignment) => assignment.scopeId),
     ].filter((engineId): engineId is string => Boolean(engineId))));
     let assignedEngines: Engine[] = [];
 
@@ -265,9 +266,9 @@ export class EngineService {
     const members = await memberRepo.find({ where: { engineId } });
     const assignmentMembers = await dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
-      .where('assignment.resourceType = :resourceType', { resourceType: 'engine' })
-      .andWhere('(assignment.resourceId = :engineId OR assignment.resourceId IS NULL)', { engineId })
-      .andWhere('(assignment.principalType = :principalType OR assignment.principalType IS NULL)', { principalType: 'user' })
+      .where('assignment.scopeType = :scopeType', { scopeType: 'engine' })
+      .andWhere('(assignment.scopeId = :engineId OR assignment.scopeId IS NULL)', { engineId })
+      .andWhere('assignment.principalType = :principalType', { principalType: 'user' })
       .andWhere('assignment.roleId IN (:...roleIds)', { roleIds: ENGINE_ACCESS_DISPLAY_SYSTEM_ROLE_IDS })
       .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .getMany();
@@ -277,7 +278,9 @@ export class EngineService {
     if (engine.ownerId) userIds.add(engine.ownerId);
     if (engine.delegateId) userIds.add(engine.delegateId);
     members.forEach(m => userIds.add(m.userId));
-    assignmentMembers.forEach(m => userIds.add(m.userId));
+    assignmentMembers.forEach((assignment) => {
+      if (assignment.principalId) userIds.add(assignment.principalId);
+    });
 
     // Get user details
     let userMap = new Map<string, { id: string; email: string; firstName: string | null; lastName: string | null }>();
@@ -336,7 +339,7 @@ export class EngineService {
 
     const existingUserIds = new Set(result.map((member) => member.userId));
     for (const assignment of assignmentMembers) {
-      if (existingUserIds.has(assignment.userId)) {
+      if (!assignment.principalId || existingUserIds.has(assignment.principalId)) {
         continue;
       }
       const role = ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE[assignment.roleId];
@@ -344,13 +347,13 @@ export class EngineService {
       result.push({
         id: assignment.id,
         engineId,
-        userId: assignment.userId,
+        userId: assignment.principalId,
         role,
         grantedById: assignment.createdById,
         createdAt: assignment.createdAt,
-        user: userMap.get(assignment.userId) || null,
+        user: userMap.get(assignment.principalId) || null,
       });
-      existingUserIds.add(assignment.userId);
+      existingUserIds.add(assignment.principalId);
     }
 
     return result;
@@ -503,10 +506,10 @@ export class EngineService {
   private async getDirectUserEngineMemberAssignments(dataSource: Awaited<ReturnType<typeof getDataSource>>, engineId: string, userId: string): Promise<RbacRoleAssignment[]> {
     return dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
-      .where('assignment.resourceType = :resourceType', { resourceType: 'engine' })
-      .andWhere('assignment.resourceId = :engineId', { engineId })
-      .andWhere('(assignment.principalType = :principalType OR assignment.principalType IS NULL)', { principalType: 'user' })
-      .andWhere('(assignment.principalId = :userId OR assignment.userId = :userId)', { userId })
+      .where('assignment.scopeType = :scopeType', { scopeType: 'engine' })
+      .andWhere('assignment.scopeId = :engineId', { engineId })
+      .andWhere('assignment.principalType = :principalType', { principalType: 'user' })
+      .andWhere('assignment.principalId = :userId', { userId })
       .andWhere('assignment.source = :source', { source: 'manual' })
       .andWhere('assignment.roleId IN (:...roleIds)', { roleIds: ENGINE_STANDARD_MEMBER_SYSTEM_ROLE_IDS })
       .getMany();
@@ -524,10 +527,10 @@ export class EngineService {
     ];
     const existing = await assignmentRepo.find({
       where: {
-        resourceType: 'engine',
-        resourceId: engine.id,
+        scopeType: 'engine',
+        scopeId: engine.id,
         source: ENGINE_GOVERNANCE_SOURCE,
-        sourceMappingId: In(sourceRefs),
+        sourceRef: In(sourceRefs),
       },
     });
 
@@ -550,8 +553,8 @@ export class EngineService {
 
     const desiredBySourceRef = new Map(desired.map((entry) => [entry.sourceRef, entry]));
     const staleAssignments = existing.filter((assignment) => {
-      const entry = desiredBySourceRef.get(assignment.sourceMappingId || assignment.sourceRef || '');
-      return !entry?.userId || assignment.userId !== entry.userId || assignment.roleId !== entry.roleId;
+      const entry = desiredBySourceRef.get(assignment.sourceRef || '');
+      return !entry?.userId || assignment.principalId !== entry.userId || assignment.roleId !== entry.roleId;
     });
     if (staleAssignments.length > 0) {
       await assignmentRepo.delete({ id: In(staleAssignments.map((assignment) => assignment.id)) });
@@ -564,17 +567,27 @@ export class EngineService {
 
       const current = existing.find((assignment) =>
         !staleAssignments.some((stale) => stale.id === assignment.id) &&
-        (assignment.sourceMappingId === entry.sourceRef || assignment.sourceRef === entry.sourceRef) &&
-        assignment.userId === entry.userId &&
+        assignment.sourceRef === entry.sourceRef &&
+        assignment.principalId === entry.userId &&
         assignment.roleId === entry.roleId
       );
 
       if (current) {
         await assignmentRepo.update({ id: current.id }, {
           tenantId: engine.tenantId ?? null,
+        principalType: 'user',
+        principalId: entry.userId,
+        assignmentKey: canonicalRoleAssignmentKey({
+          tenantId: engine.tenantId ?? null,
           principalType: 'user',
           principalId: entry.userId,
+          roleId: entry.roleId,
           scopeType: 'engine',
+          scopeId: engine.id,
+          source: ENGINE_GOVERNANCE_SOURCE,
+          sourceRef: entry.sourceRef,
+        }),
+        scopeType: 'engine',
           scopeId: engine.id,
           lastSeenAt: now,
           updatedAt: now,
@@ -585,7 +598,7 @@ export class EngineService {
       await assignmentRepo.insert({
         id: `${ENGINE_GOVERNANCE_SOURCE}:engine:${engine.id}:${entry.slot}:${entry.userId}`,
         tenantId: engine.tenantId ?? null,
-        userId: entry.userId,
+        userId: null,
         principalType: 'user',
         principalId: entry.userId,
         assignmentKey: canonicalRoleAssignmentKey({
@@ -599,12 +612,12 @@ export class EngineService {
           sourceRef: entry.sourceRef,
         }),
         roleId: entry.roleId,
-        resourceType: 'engine',
-        resourceId: engine.id,
+        resourceType: null,
+        resourceId: null,
         scopeType: 'engine',
         scopeId: engine.id,
         source: ENGINE_GOVERNANCE_SOURCE,
-        sourceMappingId: entry.sourceRef,
+        sourceMappingId: null,
         sourceRef: entry.sourceRef,
         expiresAt: null,
         lastSeenAt: now,

@@ -17,7 +17,6 @@ import {
   EnginePermissions,
   PlatformPermissions,
   SYSTEM_ROLE_IDS,
-  type RoleAssignmentSource,
 } from './permissions.js';
 import { ssoEngineAccessSnapshotService } from './SsoEngineAccessSnapshotService.js';
 import {
@@ -533,25 +532,18 @@ class SsoAssignmentMappingServiceClass {
       if (matches) {
         const targets = await this.resolveAssignmentTargets(store, mapping, tenantId);
         for (const target of targets) {
+          const assignmentKey = canonicalRoleAssignmentKey({
+            tenantId: normalizeTenantId(tenantId ?? mapping.tenantId),
+            principalType: 'user',
+            principalId: userId,
+            roleId: mapping.targetRoleId,
+            scopeType: target.scopeType,
+            scopeId: target.scopeId,
+            source: 'sso',
+            sourceRef: mapping.id,
+          });
           const existingQb = assignmentRepo.createQueryBuilder('assignment')
-            .where('assignment.userId = :userId', { userId })
-            .andWhere('assignment.roleId = :roleId', { roleId: mapping.targetRoleId })
-            .andWhere('assignment.resourceType = :resourceType', { resourceType: target.resourceType })
-            .andWhere('assignment.source = :source', { source: 'sso' satisfies RoleAssignmentSource })
-            .andWhere('assignment.sourceMappingId = :sourceMappingId', { sourceMappingId: mapping.id });
-          addTenantScopeFilter(existingQb, 'assignment', tenantId ?? mapping.tenantId);
-
-          if (target.resourceId) {
-            existingQb.andWhere('assignment.resourceId = :resourceId', { resourceId: target.resourceId });
-          } else {
-            existingQb.andWhere('assignment.resourceId IS NULL');
-          }
-          existingQb.andWhere('assignment.scopeType = :scopeType', { scopeType: target.scopeType });
-          if (target.scopeId) {
-            existingQb.andWhere('assignment.scopeId = :scopeId', { scopeId: target.scopeId });
-          } else {
-            existingQb.andWhere('assignment.scopeId IS NULL');
-          }
+            .where('assignment.assignmentKey = :assignmentKey', { assignmentKey });
 
           const existing = await existingQb.getOne();
 
@@ -559,16 +551,7 @@ class SsoAssignmentMappingServiceClass {
             await assignmentRepo.update({ id: existing.id }, {
               principalType: 'user',
               principalId: userId,
-              assignmentKey: canonicalRoleAssignmentKey({
-                tenantId: normalizeTenantId(tenantId ?? mapping.tenantId),
-                principalType: 'user',
-                principalId: userId,
-                roleId: mapping.targetRoleId,
-                scopeType: target.scopeType,
-                scopeId: target.scopeId,
-                source: 'sso',
-                sourceRef: mapping.id,
-              }),
+              assignmentKey,
               scopeType: target.scopeType,
               scopeId: target.scopeId,
               sourceRef: mapping.id,
@@ -603,16 +586,17 @@ class SsoAssignmentMappingServiceClass {
             await assignmentRepo.insert({
               id,
               tenantId: normalizeTenantId(tenantId ?? mapping.tenantId),
-              userId,
+              userId: null,
               principalType: 'user',
               principalId: userId,
+              assignmentKey,
               roleId: mapping.targetRoleId,
-              resourceType: target.resourceType,
-              resourceId: target.resourceId,
+              resourceType: null,
+              resourceId: null,
               scopeType: target.scopeType,
               scopeId: target.scopeId,
               source: 'sso',
-              sourceMappingId: mapping.id,
+              sourceMappingId: null,
               sourceRef: mapping.id,
               expiresAt: null,
               lastSeenAt: now,
@@ -662,10 +646,10 @@ class SsoAssignmentMappingServiceClass {
         const staleAssignments = await assignmentRepo.find({
           where: normalizedAssignmentTenantId
             ? [
-              { tenantId: normalizedAssignmentTenantId, userId, source: 'sso', sourceMappingId: mapping.id },
-              { tenantId: IsNull(), userId, source: 'sso', sourceMappingId: mapping.id },
+              { tenantId: normalizedAssignmentTenantId, principalType: 'user', principalId: userId, source: 'sso', sourceRef: mapping.id },
+              { tenantId: IsNull(), principalType: 'user', principalId: userId, source: 'sso', sourceRef: mapping.id },
             ]
-            : { userId, source: 'sso', sourceMappingId: mapping.id },
+            : { principalType: 'user', principalId: userId, source: 'sso', sourceRef: mapping.id },
         });
         const staleIds = staleAssignments
           .map((assignment) => assignment.id)
@@ -686,9 +670,9 @@ class SsoAssignmentMappingServiceClass {
             action: 'authz.sso_assignment.delete',
             tenantId: staleAssignment.tenantId,
             assignmentId: staleAssignment.id,
-            userId: staleAssignment.userId,
+            userId: staleAssignment.principalId || staleAssignment.userId || '',
             roleId: staleAssignment.roleId,
-            resourceId: staleAssignment.resourceId,
+            resourceId: staleAssignment.scopeId ?? staleAssignment.resourceId,
             scopeType: staleAssignment.scopeType,
             scopeId: staleAssignment.scopeId,
             mappingId: mapping.id,
@@ -1070,9 +1054,9 @@ class SsoAssignmentMappingServiceClass {
         tenantId: assignment.tenantId,
         action: 'authz.sso_assignment.delete',
         assignmentId: assignment.id,
-        userId: assignment.userId,
+        userId: assignment.principalId || assignment.userId || '',
         roleId: assignment.roleId,
-        resourceId: assignment.resourceId,
+        resourceId: assignment.scopeId ?? assignment.resourceId,
         scopeType: assignment.scopeType,
         scopeId: assignment.scopeId,
         mappingId,

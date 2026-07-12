@@ -140,12 +140,15 @@ describe('ssoAssignmentMappingService', () => {
     );
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a',
-      userId: 'user-1',
+      userId: null,
       roleId: 'system.engine.operator',
-      resourceType: 'engine',
-      resourceId: 'engine-1',
+      resourceType: null,
+      resourceId: null,
+      scopeType: 'engine',
+      scopeId: 'engine-1',
       source: 'sso',
-      sourceMappingId: 'mapping-1',
+      sourceMappingId: null,
+      sourceRef: 'mapping-1',
     }));
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
@@ -210,9 +213,10 @@ describe('ssoAssignmentMappingService', () => {
     expect(result).toMatchObject({ created: 0, updated: 0, removed: 1 });
     expect(find).toHaveBeenCalledWith({
       where: {
-        userId: 'user-1',
+        principalType: 'user',
+        principalId: 'user-1',
         source: 'sso',
-        sourceMappingId: 'mapping-1',
+        sourceRef: 'mapping-1',
       },
     });
     expect(deleteAssignment).toHaveBeenCalledWith({ id: 'stale-sso-assignment' });
@@ -326,9 +330,10 @@ describe('ssoAssignmentMappingService', () => {
     expect(result).toMatchObject({ created: 0, updated: 0, removed: 1 });
     expect(find).toHaveBeenCalledWith({
       where: {
-        userId: 'user-1',
+        principalType: 'user',
+        principalId: 'user-1',
         source: 'sso',
-        sourceMappingId: 'mapping-all-engines',
+        sourceRef: 'mapping-all-engines',
       },
     });
     expect(deleteAssignment).toHaveBeenCalledWith({ id: 'all-engines-sso-assignment' });
@@ -1157,14 +1162,15 @@ describe('ssoAssignmentMappingService', () => {
     }));
     expect(assignmentInsert).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a',
-      userId: 'user-1',
+      userId: null,
       roleId: 'system.engine.operator',
-      resourceType: 'engine',
+      resourceType: null,
       resourceId: null,
       scopeType: 'engine_set',
       scopeId: engineSetId,
       source: 'sso',
-      sourceMappingId: 'mapping-label',
+      sourceMappingId: null,
+      sourceRef: 'mapping-label',
     }));
   });
 
@@ -1245,14 +1251,15 @@ describe('ssoAssignmentMappingService', () => {
     }));
     expect(assignmentInsert).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a',
-      userId: 'user-1',
+      userId: null,
       roleId: 'system.engine.operator',
-      resourceType: 'engine',
+      resourceType: null,
       resourceId: null,
       scopeType: 'engine_set',
       scopeId: engineSetId,
       source: 'sso',
-      sourceMappingId: 'mapping-scheduled-label',
+      sourceMappingId: null,
+      sourceRef: 'mapping-scheduled-label',
     }));
   });
 

@@ -13,8 +13,9 @@ export class RbacRoleAssignment extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true })
   tenantId!: string | null;
 
-  @Column({ name: 'user_id', type: 'text' })
-  userId!: string;
+  /** Deprecated compatibility alias. Canonical assignments leave this null. */
+  @Column({ name: 'user_id', type: 'text', nullable: true })
+  userId!: string | null;
 
   @Column({ name: 'principal_type', type: 'text', nullable: true })
   principalType!: string | null;

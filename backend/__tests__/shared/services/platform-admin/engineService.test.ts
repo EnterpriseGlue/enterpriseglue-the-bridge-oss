@@ -122,7 +122,7 @@ describe('EngineService', () => {
       innerJoin: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       andWhere: vi.fn().mockReturnThis(),
-      getMany: vi.fn().mockResolvedValue([{ id: 'assignment-1', resourceId: 'engine-1' }]),
+      getMany: vi.fn().mockResolvedValue([{ id: 'assignment-1', scopeId: 'engine-1' }]),
     };
     const assignmentRepo = {
       createQueryBuilder: vi.fn().mockReturnValue(assignmentQb),
@@ -166,9 +166,9 @@ describe('EngineService', () => {
       find: vi.fn().mockResolvedValue([
         {
           id: 'system:engine:engine-1:owner:owner-1',
-          userId: 'owner-1',
+          principalType: 'user',
+          principalId: 'owner-1',
           roleId: 'system.engine.owner',
-          sourceMappingId: 'engine:engine-1:governance-owner',
           sourceRef: 'engine:engine-1:governance-owner',
         },
       ]),
@@ -206,16 +206,16 @@ describe('EngineService', () => {
     expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       id: 'system:engine:engine-1:delegate:delegate-1',
       tenantId: 'tenant-1',
-      userId: 'delegate-1',
+      userId: null,
       principalType: 'user',
       principalId: 'delegate-1',
       roleId: 'system.engine.delegate',
-      resourceType: 'engine',
-      resourceId: 'engine-1',
+      resourceType: null,
+      resourceId: null,
       scopeType: 'engine',
       scopeId: 'engine-1',
       source: 'system',
-      sourceMappingId: 'engine:engine-1:governance-delegate',
+      sourceMappingId: null,
       sourceRef: 'engine:engine-1:governance-delegate',
       createdById: null,
     }));
@@ -282,14 +282,15 @@ describe('EngineService', () => {
     expect(assignmentRepo.insert).toHaveBeenCalledTimes(1);
     expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       id: 'system:engine:engine-1:owner:new-owner',
-      userId: 'new-owner',
+      userId: null,
       principalType: 'user',
       principalId: 'new-owner',
       roleId: 'system.engine.owner',
-      resourceType: 'engine',
-      resourceId: 'engine-1',
+      resourceType: null,
+      resourceId: null,
       source: 'system',
-      sourceMappingId: 'engine:engine-1:governance-owner',
+      sourceMappingId: null,
+      sourceRef: 'engine:engine-1:governance-owner',
     }));
     expect(legacySyncSpy).toHaveBeenCalledWith({ engineIds: ['engine-1'] });
   });

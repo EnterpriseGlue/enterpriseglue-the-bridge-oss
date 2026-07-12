@@ -208,6 +208,8 @@ async function resolveAssignmentEngineIds(store: SnapshotStore, assignment: Pick
 }
 
 function roleAssignmentMatchesEngine(assignment: RbacRoleAssignment, engineId: string, materializedEngineSetIds: Set<string>): boolean {
+  // Transition diagnostics must inspect pre-canonical rows while local data
+  // migrations are still in progress. Authorization never uses this fallback.
   if (assignment.resourceType === 'engine' && assignment.resourceId === engineId) return true;
   if (assignment.scopeType === 'engine' && assignment.scopeId === engineId) return true;
   return assignment.scopeType === 'engine_set' && Boolean(assignment.scopeId && materializedEngineSetIds.has(assignment.scopeId));
@@ -325,7 +327,8 @@ export class SsoEngineAccessSnapshotService {
   }
 
   async markAssignmentRemoved(store: SnapshotStore, assignment: RbacRoleAssignment, input: SsoSnapshotRemovalInput): Promise<void> {
-    if (assignment.source !== 'sso' || !assignment.sourceMappingId) return;
+    const mappingId = assignment.sourceRef || assignment.sourceMappingId;
+    if (assignment.source !== 'sso' || !mappingId || !assignment.principalId) return;
     const snapshotRepo = store.getRepository(SsoEngineAccessSnapshot);
     const engineIds = await resolveAssignmentEngineIds(store, assignment);
     if (engineIds.length === 0) return;
@@ -333,9 +336,9 @@ export class SsoEngineAccessSnapshotService {
 
     for (const engineId of engineIds) {
       const qb = snapshotRepo.createQueryBuilder('snapshot')
-        .where('snapshot.mappingId = :mappingId', { mappingId: assignment.sourceMappingId })
+        .where('snapshot.mappingId = :mappingId', { mappingId })
         .andWhere('snapshot.principalType = :principalType', { principalType: assignment.principalType || 'user' })
-        .andWhere('snapshot.principalId = :principalId', { principalId: assignment.principalId || assignment.userId })
+        .andWhere('snapshot.principalId = :principalId', { principalId: assignment.principalId })
         .andWhere('snapshot.engineId = :engineId', { engineId });
       if (assignment.tenantId) {
         qb.andWhere('snapshot.tenantId = :tenantId', { tenantId: assignment.tenantId });
@@ -505,11 +508,13 @@ export class SsoEngineAccessSnapshotService {
         const manualPrincipalId = manualAssignment.principalId || manualAssignment.userId;
         const ssoPrincipalType = ssoAssignment.principalType || 'user';
         const ssoPrincipalId = ssoAssignment.principalId || ssoAssignment.userId;
+        if (!manualPrincipalId || !ssoPrincipalId) continue;
         if (manualPrincipalType !== ssoPrincipalType || manualPrincipalId !== ssoPrincipalId) continue;
         if (!roleAssignmentMatchesEngine(ssoAssignment, engineId, materializedEngineSetIds)) continue;
 
-        const snapshot = ssoAssignment.sourceMappingId
-          ? snapshotByPrincipalMapping.get(`${ssoPrincipalType}:${ssoPrincipalId}:${ssoAssignment.sourceMappingId}`)
+        const ssoMappingId = ssoAssignment.sourceRef || ssoAssignment.sourceMappingId;
+        const snapshot = ssoMappingId
+          ? snapshotByPrincipalMapping.get(`${ssoPrincipalType}:${ssoPrincipalId}:${ssoMappingId}`)
           : null;
         candidates.push({
           manualAssignmentId: manualAssignment.id,
@@ -519,7 +524,7 @@ export class SsoEngineAccessSnapshotService {
           engineId,
           manualRoleId: manualAssignment.roleId,
           ssoRoleId: ssoAssignment.roleId,
-          sourceMappingId: ssoAssignment.sourceMappingId,
+          sourceMappingId: ssoMappingId || null,
           lastSnapshotStatus: snapshot?.status ?? null,
           recommendedAction: manualAssignment.roleId === ssoAssignment.roleId
             ? 'remove_manual_duplicate'
