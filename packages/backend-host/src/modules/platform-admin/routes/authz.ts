@@ -1322,7 +1322,36 @@ router.post('/api/authz/config-bundles/apply', apiLimiter, requireAuth, requireP
     tenantId: req.tenant?.tenantId || null,
     actorId: req.user!.userId,
   });
+  await logAudit({
+    tenantId: req.tenant?.tenantId || undefined,
+    userId: req.user!.userId,
+    action: 'authz.config_bundle.apply',
+    resourceType: 'config_bundle',
+    resourceId: String((req.body.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
+    details: {
+      canonicalHash: result.canonicalHash,
+      created: result.created,
+      updated: result.updated,
+      archived: result.archived,
+      mode: (req.body.bundle as { mode?: string })?.mode || null,
+    },
+  });
   res.status(200).json(result);
+}));
+
+/** Recent hash-bound applies are the operational history for UI and CI diagnostics. */
+router.get('/api/authz/config-bundles/runs', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenant?.tenantId || null;
+  const rows = await (await getDataSource()).getRepository(AuditLog).find({
+    where: { action: 'authz.config_bundle.apply', ...(tenantId ? { tenantId } : { tenantId: IsNull() }) },
+    order: { createdAt: 'DESC' },
+    take: Number(req.query.limit || 25),
+  });
+  res.json(rows.map((row) => {
+    let details: Record<string, unknown> = {};
+    try { details = row.details ? JSON.parse(row.details) as Record<string, unknown> : {}; } catch { /* preserve audit availability */ }
+    return { id: row.id, bundleKey: row.resourceId, actorId: row.userId, createdAt: row.createdAt, ...details };
+  }));
 }));
 
 // ============================================================================

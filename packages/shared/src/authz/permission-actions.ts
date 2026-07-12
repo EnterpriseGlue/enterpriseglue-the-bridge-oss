@@ -326,6 +326,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'POST', route: '/api/authz/config-bundles/preview', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/authz/config-bundles/diff', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/authz/config-bundles/apply', resourceResolver: 'platform.self' },
+      { method: 'GET', route: '/api/authz/config-bundles/runs', resourceResolver: 'platform.self' },
     ],
   },
   {

@@ -2237,7 +2237,7 @@ Phase 0 exit criteria:
 
 ### Phase 5: APIs And OpenAPI
 
-- [ ] ⬜ Add config bundle preview/apply/export/run APIs.
+- [x] ✅ Add config bundle preview/diff/apply APIs, hash-bound apply audit events, and recent apply-run history API. JSON export is client-side; server-side persisted-state export and CLI remain pending.
 - [ ] ⬜ Add runtime resource inventory and runtime resource set read/preview/reconcile APIs.
 - [ ] ⬜ Add provider-neutral identity provider, identity mapping, mapping test, sync-run, and sync-event APIs.
 - [ ] ⬜ Add direct deployment receipt and deployment lineage APIs with machine-principal authorization and idempotency keys.
@@ -2253,11 +2253,11 @@ Phase 0 exit criteria:
 ### Phase 6: UI
 
 - [x] ✅ Add Platform Settings Configuration tab with pasted JSON preview/diff and exact-hash apply. Export, run history, upload/ZIP import, and CI CLI remain pending.
-- [ ] ⬜ Add upload/paste/import source controls using Carbon components.
+- [x] ✅ Add paste and JSON file import/export controls using Carbon components. ZIP and multi-file folder import remain pending.
 - [ ] ⬜ Add diff viewer with filters and risk grouping.
-- [ ] ⬜ Add apply confirmation based on preview hash.
-- [ ] ⬜ Add config run history.
-- [ ] ⬜ Add export button.
+- [x] ✅ Bind apply to the exact canonical preview hash.
+- [x] ✅ Add recent config apply-run history.
+- [x] ✅ Add JSON export of the current editor payload.
 - [ ] ⬜ Add managed-by-config badges to existing Access Control and Engine UI surfaces.
 - [x] ✅ Add the Role Library and single-role editor; it avoids page-level horizontal scrolling for normal role management. Legacy Access Control matrix removal remains pending.
 - [ ] ⬜ Add role-editor search, grouped permission accordions, selected-only/risk filters, responsive checkboxes, sticky save/cancel, system-role duplication, and config ownership states.
