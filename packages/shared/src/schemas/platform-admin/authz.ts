@@ -335,7 +335,7 @@ export const RoleAssignmentSchema = z.object({
   resourceId: z.string().nullable(),
   scopeType: AuthzResourceTypeSchema.nullable(),
   scopeId: z.string().nullable(),
-  source: z.enum(['legacy', 'manual', 'sso', 'api', 'system', 'automation', 'bootstrap']),
+  source: z.enum(['legacy', 'manual', 'sso', 'api', 'system', 'automation', 'bootstrap', 'config']),
   sourceMappingId: z.string().nullable(),
   sourceRef: z.string().nullable(),
   expiresAt: z.number().nullable(),
@@ -356,7 +356,7 @@ export const RoleAssignmentCreateSchema = z.object({
   expiresAt: z.number().nullable().optional(),
 });
 
-export const AuthzGroupSourceSchema = z.enum(['manual', 'sso', 'api', 'automation', 'system']);
+export const AuthzGroupSourceSchema = z.enum(['manual', 'sso', 'api', 'automation', 'system', 'config']);
 
 export const AuthzGroupSchema = z.object({
   id: z.string(),

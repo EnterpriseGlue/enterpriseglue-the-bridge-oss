@@ -22,7 +22,7 @@ export type AuthzResourceType =
   | 'extension';
 
 export type AuthzPrincipalType = 'user' | 'group' | 'api_client' | 'service_account';
-export type RoleAssignmentSource = 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap';
+export type RoleAssignmentSource = 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap' | 'config';
 export type SsoClaimOperator =
   | 'equals'
   | 'not_equals'
@@ -140,7 +140,7 @@ export interface RoleAssignment {
   updatedAt: number;
 }
 
-export type AuthzGroupSource = 'manual' | 'sso' | 'api' | 'automation' | 'system';
+export type AuthzGroupSource = 'manual' | 'sso' | 'api' | 'automation' | 'system' | 'config';
 
 export interface AuthzGroup {
   id: string;

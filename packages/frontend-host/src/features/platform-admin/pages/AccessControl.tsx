@@ -1756,6 +1756,16 @@ function sourceRefMappingId(sourceRef: string | null | undefined) {
   return sourceRef.includes(':') ? sourceRef.split(':').pop() || sourceRef : sourceRef;
 }
 
+function authzSourceTagType(source: unknown): 'blue' | 'purple' | 'gray' {
+  if (source === 'manual') return 'blue';
+  if (source === 'config') return 'purple';
+  return 'gray';
+}
+
+function formatAuthzSource(source: unknown): string {
+  return source === 'config' ? 'Managed by config' : String(source || '-');
+}
+
 function findSsoAssignmentMappingForAssignment(assignment: RoleAssignment, mappings: SsoAssignmentMapping[]) {
   const mappingId = assignment.sourceMappingId || sourceRefMappingId(assignment.sourceRef);
   return mappingId ? mappings.find((mapping) => mapping.id === mappingId) || null : null;
@@ -3080,7 +3090,7 @@ function RoleAssignmentsPanel({
                     return (
                       <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                         {row.cells.map((cell) => {
-                          if (cell.info.header === 'source') return <TableCell key={cell.id}><Tag type={cell.value === 'manual' ? 'blue' : 'gray'}>{cell.value}</Tag></TableCell>;
+                          if (cell.info.header === 'source') return <TableCell key={cell.id}><Tag type={authzSourceTagType(cell.value)}>{formatAuthzSource(cell.value)}</Tag></TableCell>;
                           if (cell.info.header === 'actions') {
                             return (
                               <TableCell key={cell.id}>
@@ -4631,7 +4641,7 @@ function GroupsPanel({
                       <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                         {row.cells.map((cell) => {
                           if (cell.info.header === 'source') {
-                            return <TableCell key={cell.id}><Tag type={cell.value === 'manual' ? 'blue' : 'gray'}>{cell.value}</Tag></TableCell>;
+                            return <TableCell key={cell.id}><Tag type={authzSourceTagType(cell.value)}>{formatAuthzSource(cell.value)}</Tag></TableCell>;
                           }
                           if (cell.info.header === 'status') {
                             return <TableCell key={cell.id}><Tag type={cell.value === 'Active' ? 'green' : 'gray'}>{cell.value}</Tag></TableCell>;
@@ -4721,7 +4731,7 @@ function GroupsPanel({
                           <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                             {row.cells.map((cell) => {
                               if (cell.info.header === 'source') {
-                                return <TableCell key={cell.id}><Tag type={cell.value === 'manual' ? 'blue' : 'gray'}>{cell.value}</Tag></TableCell>;
+                                return <TableCell key={cell.id}><Tag type={authzSourceTagType(cell.value)}>{formatAuthzSource(cell.value)}</Tag></TableCell>;
                               }
                               if (cell.info.header === 'actions') {
                                 return (
@@ -5057,7 +5067,7 @@ function EngineSetsPanel({
                           <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                             {row.cells.map((cell) => {
                               if (cell.info.header === 'source') {
-                                return <TableCell key={cell.id}><Tag type={cell.value === 'manual' ? 'blue' : 'gray'}>{cell.value}</Tag></TableCell>;
+                                return <TableCell key={cell.id}><Tag type={authzSourceTagType(cell.value)}>{formatAuthzSource(cell.value)}</Tag></TableCell>;
                               }
                               return <TableCell key={cell.id}>{cell.value}</TableCell>;
                             })}
