@@ -2262,7 +2262,7 @@ Phase 0 exit criteria:
 - [x] ✅ Bind apply to the exact canonical preview hash.
 - [x] ✅ Add recent config apply-run history.
 - [x] ✅ Add JSON export of the current editor payload.
-- [ ] ⬜ Add managed-by-config badges to existing Access Control and Engine UI surfaces.
+- [ ] ⬜ Complete managed-by-config badges across Access Control and Engine UI surfaces. Engine inventory and registration detail now show configuration ownership/provenance; Access Control assignment/group/Engine Set coverage remains pending.
 - [x] ✅ Add the Role Library and single-role editor; it avoids page-level horizontal scrolling for normal role management. Legacy Access Control matrix removal remains pending.
 - [ ] ⬜ Add role-editor search, grouped permission accordions, selected-only/risk filters, responsive checkboxes, sticky save/cancel, system-role duplication, and config ownership states.
 - [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Direct LDAPS configuration now includes bind identity, secret reference, user/group base DNs, user filter, and membership lookup fields. Mapping connection health and reconciliation history remain pending.

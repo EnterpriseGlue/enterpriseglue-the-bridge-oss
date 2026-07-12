@@ -608,6 +608,7 @@ describe('EnginesPage', () => {
     expect(isExternallyRegisteredEngine({ registrationSource: 'external_api' })).toBe(true);
     expect(isExternallyRegisteredEngine({ externalId: 'cluster-a/prod' })).toBe(true);
     expect(isExternallyRegisteredEngine({ registrationSource: 'manual' })).toBe(false);
+    expect(formatEngineRegistrationSource({ registrationSource: 'config' })).toBe('Configuration');
     expect(formatEngineRegistrationSource({ registrationSource: 'external_api' })).toBe('External API');
     expect(formatEngineRegistrationSource({ registrationSource: 'user' })).toBe('Manual');
     expect(formatEngineRegistrationSource({ externalId: 'cluster-a/prod' })).toBe('External ID');
@@ -694,6 +695,10 @@ describe('EnginesPage', () => {
     })).toBe('Manual, CI, Import');
     expect(formatProjectEngineTargetModes({ id: 'target-1', projectId: 'project-1' })).toBe('-');
     expect(formatProjectEngineTargetStatus('disabled')).toBe('Disabled');
+    expect(getEngineRowDiagnosticTags({
+      registrationSource: 'config',
+      ownershipMode: 'config_locked',
+    }).map((tag) => tag.label)).toEqual(['Managed by config']);
     expect(getEngineRowDiagnosticTags({
       registrationSource: 'external_api',
       lifecycleStatus: 'decommissioned',

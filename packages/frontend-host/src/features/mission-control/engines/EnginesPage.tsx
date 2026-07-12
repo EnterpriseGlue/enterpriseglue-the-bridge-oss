@@ -220,6 +220,7 @@ export function isExternallyManagedEngine(engine: any): boolean {
 }
 
 export function formatEngineRegistrationSource(engine: any): string {
+  if (engine?.registrationSource === 'config') return 'Configuration'
   if (engine?.registrationSource === 'external_api') return 'External API'
   if (engine?.registrationSource === 'user' || engine?.registrationSource === 'manual') return 'Manual'
   if (engine?.externalId) return 'External ID'
@@ -298,7 +299,9 @@ function getStringStatus(value: unknown): string {
 export function getEngineRowDiagnosticTags(engine: any): EngineRowDiagnosticTag[] {
   if (!engine) return []
   const tags: EngineRowDiagnosticTag[] = []
-  if (isExternallyManagedEngine(engine)) {
+  if (engine.registrationSource === 'config' || engine.ownershipMode === 'config_locked' || engine.ownershipMode === 'config_warn') {
+    tags.push({ label: 'Managed by config', type: 'purple', title: 'Managed by an EnterpriseGlue configuration bundle' })
+  } else if (isExternallyManagedEngine(engine)) {
     tags.push({ label: 'External API', type: getRegistrationTagType('external_api'), title: 'Registered by external API' })
   } else if (isExternallyRegisteredEngine(engine)) {
     tags.push({ label: 'External ID', type: getRegistrationTagType('external_api'), title: 'Has an external engine identifier' })
@@ -979,6 +982,9 @@ function EngineRegistrationSection({ engine }: { engine: any }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--spacing-4)' }}>
         <EngineRegistrationDetail label="External system" value={engine.externalSystemId || '-'} />
         <EngineRegistrationDetail label="External ID" value={engine.externalId || '-'} />
+        <EngineRegistrationDetail label="Config key" value={engine.configKey || '-'} />
+        <EngineRegistrationDetail label="Configuration ownership" value={engine.ownershipMode ? formatEngineRegistrationStatus(engine.ownershipMode) : '-'} />
+        <EngineRegistrationDetail label="Last configuration apply" value={formatEngineTimestamp(engine.lastAppliedAt)} />
         <EngineRegistrationDetail label="Management mode" value={formatEngineRegistrationStatus(engine.managementMode)} tagValue={engine.managementMode || undefined} />
         <EngineRegistrationDetail label="Runtime access" value={engine.runtimeAccessScope === 'resource_aware' ? 'Resource-aware (central)' : 'Engine-wide (distributed)'} />
         <EngineRegistrationDetail label="Deployment integration" value={engine.deploymentIntegration === 'direct_engine' ? 'Direct engine deployment' : 'EnterpriseGlue proxy'} />
