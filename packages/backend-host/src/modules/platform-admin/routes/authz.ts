@@ -48,6 +48,7 @@ import { In, IsNull, Not } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { getEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js';
+import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import {
   evaluateMissionControlStarbaseBridge,
   evaluateStarbaseMissionControlBridge,
@@ -67,6 +68,10 @@ const authzCheckSchema = z.object({
 
 const authzCheckBatchSchema = z.object({
   checks: z.array(authzCheckSchema).min(1),
+});
+const configBundlePreviewSchema = z.object({
+  bundle: z.unknown(),
+  files: z.record(z.string(), z.unknown()),
 });
 
 const idParamSchema = z.object({ id: z.string().uuid() });
@@ -1286,6 +1291,12 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
     logger.error('Evaluate effective access error:', error);
     throw Errors.internal('Failed to evaluate access');
   }
+}));
+
+/** Validate a config bundle for CI/CD without resolving secrets or mutating state. */
+router.post('/api/authz/config-bundles/preview', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+  const preview = configBundlePreviewService.preview(req.body);
+  res.status(preview.valid ? 200 : 422).json(preview);
 }));
 
 // ============================================================================

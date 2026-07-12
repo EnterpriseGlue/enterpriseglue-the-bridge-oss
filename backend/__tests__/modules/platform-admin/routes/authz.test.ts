@@ -1863,6 +1863,44 @@ describe('platform-admin authz routes', () => {
     expect(response.body.id).toBe('mapping-1');
   });
 
+  it('previews configuration bundles without mutating authorization state', async () => {
+    const bundle = {
+      apiVersion: 'enterpriseglue.ai/v1alpha1',
+      kind: 'EnterpriseGlueConfigBundle',
+      metadata: { key: 'acme.authz', owner: 'platform' },
+      tenantKey: 'acme',
+      mode: 'preview_only',
+      settings: {},
+      imports: ['./groups.json'],
+    };
+
+    const validResponse = await request(app)
+      .post('/api/authz/config-bundles/preview')
+      .send({
+        bundle,
+        files: {
+          './groups.json': {
+            groups: [{ key: 'group.ops', name: 'Operations' }],
+          },
+        },
+      });
+
+    expect(validResponse.status).toBe(200);
+    expect(validResponse.body).toMatchObject({
+      valid: true,
+      canonicalHash: expect.any(String),
+      counts: { './groups.json': 1 },
+      errors: [],
+    });
+
+    const invalidResponse = await request(app)
+      .post('/api/authz/config-bundles/preview')
+      .send({ bundle, files: { './roles.json': { roles: [] } } });
+
+    expect(invalidResponse.status).toBe(422);
+    expect(invalidResponse.body).toMatchObject({ valid: false });
+  });
+
   it('updates, tests, and deletes SSO engine assignment mappings', async () => {
     const updateResponse = await request(app)
       .put('/api/authz/sso-assignment-mappings/00000000-0000-4000-8000-000000000030')

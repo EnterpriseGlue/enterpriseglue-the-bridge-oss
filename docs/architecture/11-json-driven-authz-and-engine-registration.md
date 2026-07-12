@@ -41,8 +41,9 @@ Current config-as-code status:
 - [x] ✅ Target operator guides now cover platform configuration and deployment/CI-CD operationalization without presenting unimplemented interfaces as currently available.
 - [ ] ⬜ Complete the end-to-end alignment gate: clean principal assignments, external identity links, provider-id-bound login, secure secrets, config ownership fields, project-target ownership, runtime assignment semantics, and legacy authorization removal.
 - [x] ✅ Implement shared JSON config bundle schemas, strict canonical validation, deterministic config keys, and SHA-256 bundle hashing. Preview/apply persistence remains gated on Phase 0.
-- [ ] ⬜ Implement provider-neutral identity adapters and entitlement mappings for OIDC, SAML, and LDAP.
+- [x] ✅ Implement provider-neutral identity adapters and entitlement mappings for OIDC, SAML, and LDAP.
 - [ ] ⬜ Implement deterministic identity adapter contract tests and protocol-faithful mock OIDC, SAML, and LDAP services for integration and end-to-end testing.
+- [x] ✅ Expose side-effect-free strict config-bundle preview at `POST /api/authz/config-bundles/preview`, protected by `platform.authz.roles.manage`, with OpenAPI and route-inventory coverage.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
 - [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.
@@ -66,7 +67,7 @@ Current config-as-code status:
 - [x] ✅ Make `enterpriseglue_authoritative` the v1 runtime authorization mode and keep engine-native mirroring/import as later explicit modes.
 - [x] ✅ Keep engine registration separate from engine authorization, then combine them in dropdown and deployment eligibility APIs.
 - [x] ✅ Keep runtime authorization based on database records and evaluator decisions, not direct JSON reads.
-- [ ] ⬜ Add first-class JSON config bundle import, preview, apply, export, and history.
+- [x] ✅ Add the first API-only JSON config bundle preview endpoint; import, diff, apply, export, and history remain pending.
 - [ ] ⬜ Add UI and CI/CD workflows for managing config bundles.
 - [ ] ⬜ Add config-managed source ownership and drift diagnostics for imported objects.
 - [ ] ⬜ Replace the horizontally scrolling role-permission matrix with a role library and focused single-role permission editor.
@@ -344,7 +345,7 @@ Authoritative mode must only touch records with `source = "config"` and matching
 
 ### JSON Configuration Interface Status And Extension
 
-The JSON bundle is still a target interface, not an implemented endpoint in the current worktree. Today the platform exposes separate REST/UI CRUD for roles, permissions, groups, SSO mappings, engines, Engine Sets, assignments, and project-engine targets. There are no implemented `/api/config-bundles/*` routes, bundle persistence entities, canonical bundle schemas, preview/apply services, or Configuration tab yet.
+The JSON bundle is partially implemented. The platform now exposes strict schemas, canonical hashing, and the side-effect-free `POST /api/authz/config-bundles/preview` validation endpoint for CI/CD. Today it otherwise exposes separate REST/UI CRUD for roles, permissions, groups, SSO mappings, engines, Engine Sets, assignments, and project-engine targets. Bundle persistence, diff/apply/export/history routes, and a Configuration tab remain unimplemented.
 
 The implementation must provide one bundle compiler over the same domain services used by the UI. JSON apply must not write authorization tables directly or maintain a second business-rule implementation.
 
@@ -382,7 +383,7 @@ Interface requirements:
 - [ ] ⬜ Accept a single JSON document or a ZIP containing the declared imported JSON files.
 - [ ] ⬜ Reject undeclared files, path traversal, duplicate object keys, unknown schema versions, plaintext secrets, and test-only fixture files.
 - [ ] ⬜ Return object-addressable validation errors with file, JSON pointer, object key, severity, and remediation.
-- [ ] ⬜ Make preview side-effect free; provider connectivity checks are explicit optional operations, never implicit network calls during schema validation.
+- [x] ✅ Make the current schema preview side-effect free; provider connectivity checks are explicit optional operations, never implicit network calls during schema validation.
 - [ ] ⬜ Bind apply to the exact canonical preview hash and reject stale previews.
 - [ ] ⬜ Execute domain writes through existing role/group/engine/assignment/mapping/target services or shared lower-level commands used by both UI and bundle apply.
 - [ ] ⬜ Let apply select reconciliation behavior: `none`, `preview`, or asynchronous `apply`; never block a large config transaction on a full directory scan.
