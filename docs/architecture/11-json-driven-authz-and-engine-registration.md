@@ -49,6 +49,7 @@ Current config-as-code status:
 - [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply will persist the expanded permission list later.
 - [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group create, update, no-op, conflict, and authoritative-archive previews. Other config object families remain pending.
 - [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for the role/group vertical. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, and refuses unsupported object families rather than ignoring them.
+- [x] ✅ Persist engine config provenance (`configKey`, source reference/hash, ownership mode, last applied time) plus `runtimeAccessScope`, `deploymentIntegration`, and `connectionMode` with backward-compatible defaults.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
 - [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.
@@ -2140,7 +2141,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add custom-role `copyFromRoleKey` expansion with same-scope `addPermissions` and `removePermissions`.
 - [ ] ⬜ Add role baseline fingerprinting so previews show when a system-role template changed.
 - [x] ✅ Add settings schema for `engineRuntimeAuthorizationMode` with `enterpriseglue_authoritative` enabled in v1 and the other modes rejected as unsupported.
-- [ ] ⬜ Add per-engine `runtimeAccessScope` and `deploymentIntegration` schemas with distributed-engine defaults.
+- [x] ✅ Add and persist per-engine `runtimeAccessScope` and `deploymentIntegration` schemas with distributed-engine defaults.
 - [ ] ⬜ Add first-class engine `connectionMode = direct | customer_sidecar` and platform policy for credentialless private-sidecar endpoints; reject `auth.type = "none"` for direct engines.
 - [ ] ⬜ Add deployment receipt, ingestion source, lineage quality, runtime inventory observation, and reconciliation result schemas.
 - [ ] ⬜ Add config schemas for runtime resource sets with exact keys, prefix selectors, labels, project lineage, deployment lineage, and optional runtime tenant id.

@@ -10,6 +10,8 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_engines_external_system', ['externalSystemId'])
 @Index('idx_engines_lifecycle_status', ['lifecycleStatus'])
 @Index('idx_engines_capability_status', ['capabilityStatus'])
+@Index('idx_engines_source_ref', ['sourceRef'])
+@Index('uq_engines_config_key_identity', ['configKeyIdentity'], { unique: true })
 export class Engine extends AppBaseEntity {
   @Column({ type: 'text' })
   name!: string;
@@ -50,6 +52,27 @@ export class Engine extends AppBaseEntity {
   @Column({ name: 'registration_source', type: 'text', nullable: true })
   registrationSource!: string | null;
 
+  /** Owning registration/configuration source, separate from display metadata. */
+  @Column({ name: 'source_ref', type: 'text', nullable: true })
+  sourceRef!: string | null;
+
+  /** Stable key used by JSON configuration references. */
+  @Column({ name: 'config_key', type: 'text', nullable: true })
+  configKey!: string | null;
+
+  /** Tenant-scoped uniqueness key for config-managed engine keys. */
+  @Column({ name: 'config_key_identity', type: 'text', nullable: true })
+  configKeyIdentity!: string | null;
+
+  @Column({ name: 'source_hash', type: 'text', nullable: true })
+  sourceHash!: string | null;
+
+  @Column({ name: 'last_applied_at', type: 'bigint', nullable: true })
+  lastAppliedAt!: number | null;
+
+  @Column({ name: 'ownership_mode', type: 'text', nullable: true })
+  ownershipMode!: string | null;
+
   @Column({ name: 'external_system_id', type: 'text', nullable: true })
   externalSystemId!: string | null;
 
@@ -73,6 +96,17 @@ export class Engine extends AppBaseEntity {
 
   @Column({ name: 'capability_status', type: 'text', nullable: true })
   capabilityStatus!: string | null;
+
+  /** Distributed engines remain engine-wide; central engines opt into resource-aware filtering. */
+  @Column({ name: 'runtime_access_scope', type: 'text', default: 'engine_wide' })
+  runtimeAccessScope!: string;
+
+  @Column({ name: 'deployment_integration', type: 'text', default: 'enterpriseglue_proxy' })
+  deploymentIntegration!: string;
+
+  /** Direct connection or a customer-managed sidecar/gateway endpoint. */
+  @Column({ name: 'connection_mode', type: 'text', default: 'direct' })
+  connectionMode!: string;
 
   @Column({ name: 'external_updated_at', type: 'bigint', nullable: true })
   externalUpdatedAt!: number | null;
