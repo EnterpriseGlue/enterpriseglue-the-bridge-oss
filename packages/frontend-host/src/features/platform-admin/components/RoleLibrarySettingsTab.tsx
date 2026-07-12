@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Add, Copy, Save } from '@carbon/icons-react';
-import { Button, Checkbox, InlineNotification, Modal, Search, Select, SelectItem, SkeletonText, Tag, TextArea, TextInput, Tile } from '@carbon/react';
+import { Accordion, AccordionItem, Button, Checkbox, InlineNotification, Modal, Search, Select, SelectItem, SkeletonText, Tag, TextArea, TextInput, Tile } from '@carbon/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
@@ -60,24 +60,27 @@ function PermissionPicker({
       </div>
       {Object.keys(categories).length === 0 ? (
         <InlineNotification kind="info" title="No permissions match the current filters" hideCloseButton lowContrast />
-      ) : Object.entries(categories).map(([category, entries]) => (
-        <section key={category} style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-          <h5 style={{ margin: 0 }}>{category} <span style={{ color: 'var(--cds-text-secondary)', fontWeight: 400 }}>({entries.length})</span></h5>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(15rem, 1fr))', gap: 'var(--spacing-3)' }}>
-            {entries.map((permission) => (
-              <Checkbox
-                key={permission.key}
-                id={`${idPrefix}-${permission.key}`}
-                labelText={permission.label}
-                checked={draft.includes(permission.key)}
-                disabled={!editable}
-                onChange={(_event, { checked }) => onToggle(permission.key, Boolean(checked))}
-                title={permission.description}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+      ) : (
+        <Accordion>
+          {Object.entries(categories).map(([category, entries]) => (
+            <AccordionItem key={category} title={`${category} (${entries.length})`}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(15rem, 1fr))', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-3)' }}>
+                {entries.map((permission) => (
+                  <Checkbox
+                    key={permission.key}
+                    id={`${idPrefix}-${permission.key}`}
+                    labelText={permission.label}
+                    checked={draft.includes(permission.key)}
+                    disabled={!editable}
+                    onChange={(_event, { checked }) => onToggle(permission.key, Boolean(checked))}
+                    title={permission.description}
+                  />
+                ))}
+              </div>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      )}
     </div>
   );
 }
