@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
 import {
+  runScheduledLdapReconciliationOnce,
   runScheduledSsoCleanupOnce,
   runScheduledSsoDiagnosticsOnce,
   runScheduledSsoProviderIdentityCheckOnce,
@@ -8,6 +9,19 @@ import {
   startSsoDiagnosticsPollerIfEnabled,
   stopSsoDiagnosticsPoller,
 } from '../../../packages/backend-host/src/poller/ssoDiagnosticsPoller.js';
+
+const { listIdentityProviders, reconcileLdapProvider } = vi.hoisted(() => ({
+  listIdentityProviders: vi.fn(),
+  reconcileLdapProvider: vi.fn(),
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({
+  identityProviderService: { list: listIdentityProviders },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({
+  ldapReconciliationService: { reconcileProvider: reconcileLdapProvider },
+}));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({
   ssoSyncDiagnosticsService: {
@@ -97,6 +111,8 @@ describe('ssoDiagnosticsPoller', () => {
       assignmentsUpdated: 0,
       assignmentsRemoved: 0,
     });
+    listIdentityProviders.mockResolvedValue([]);
+    reconcileLdapProvider.mockResolvedValue({ processed: 0 });
     vi.useFakeTimers();
     delete process.env.SSO_DIAGNOSTICS_INTERVAL_MS;
     delete process.env.SSO_DIAGNOSTICS_TENANT_IDS;
@@ -291,5 +307,18 @@ describe('ssoDiagnosticsPoller', () => {
     expect(ssoSyncDiagnosticsService.runSnapshotReconciliation).toHaveBeenCalledWith(expect.objectContaining({
       refreshProviderClaims: true,
     }));
+  });
+
+  it('reconciles enabled LDAP providers and ignores other provider protocols', async () => {
+    listIdentityProviders.mockResolvedValue([
+      { key: 'ldap-directory', protocol: 'ldap', isEnabled: true },
+      { key: 'disabled-ldap', protocol: 'ldap', isEnabled: false },
+      { key: 'oidc', protocol: 'oidc', isEnabled: true },
+    ]);
+
+    await runScheduledLdapReconciliationOnce({ tenantIds: ['tenant-a'] });
+
+    expect(reconcileLdapProvider).toHaveBeenCalledTimes(1);
+    expect(reconcileLdapProvider).toHaveBeenCalledWith('ldap-directory', 'tenant-a');
   });
 });

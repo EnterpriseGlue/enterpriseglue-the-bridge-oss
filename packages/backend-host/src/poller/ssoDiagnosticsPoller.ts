@@ -1,5 +1,7 @@
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
+import { ldapReconciliationService } from '@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
@@ -131,6 +133,19 @@ export async function runScheduledSsoSnapshotReplayOnce(
   return results;
 }
 
+export async function runScheduledLdapReconciliationOnce(options: Pick<SsoDiagnosticsPollerOptions, 'tenantIds'> = {}) {
+  const tenantIds = options.tenantIds && options.tenantIds.length > 0 ? options.tenantIds : [null];
+  const results = [];
+  for (const tenantId of tenantIds) {
+    const providers = await identityProviderService.list(tenantId);
+    for (const provider of providers) {
+      if (provider.protocol !== 'ldap' || !provider.isEnabled) continue;
+      results.push(await ldapReconciliationService.reconcileProvider(provider.key, tenantId));
+    }
+  }
+  return results;
+}
+
 export async function startSsoDiagnosticsPollerIfEnabled(options: SsoDiagnosticsPollerOptions = {}) {
   const envOptions = readOptionsFromEnv();
   const intervalMs = options.intervalMs ?? envOptions.intervalMs;
@@ -156,6 +171,7 @@ export async function startSsoDiagnosticsPollerIfEnabled(options: SsoDiagnostics
       if (snapshotReplayEnabled) {
         await runScheduledSsoSnapshotReplayOnce({ tenantIds, providerIds, refreshClaimsEnabled });
       }
+      await runScheduledLdapReconciliationOnce({ tenantIds });
       if (cleanupEnabled) {
         await runScheduledSsoCleanupOnce({ tenantIds, providerIds });
       }

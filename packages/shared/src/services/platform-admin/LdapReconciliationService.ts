@@ -12,8 +12,9 @@ class LdapReconciliationService {
     if (!provider || !provider.isEnabled || provider.protocol !== 'ldap') return { skipped: 'provider_unavailable' };
     const configuration = sync(provider);
     if (configuration.connectorCapability !== 'ldap_directory' || configuration.scheduled !== true) return { skipped: 'connector_not_scheduled' };
-    const lease = await identityReconciliationCheckpointService.acquire(provider.id, tenantId);
-    if (!lease) return { skipped: 'lease_held' };
+    const intervalSeconds = typeof configuration.intervalSeconds === 'number' ? configuration.intervalSeconds : 60;
+    const lease = await identityReconciliationCheckpointService.acquire(provider.id, tenantId, 60_000, intervalSeconds * 1_000);
+    if (!lease) return { skipped: 'not_due_or_lease_held' };
     const runId = await ssoSyncDiagnosticsService.startRun({ tenantId, providerId: provider.id, trigger: 'scheduled', details: { source: 'ldap_reconciliation', cursor: lease.cursor } });
     try {
       const page = await directLdapIdentityService.listDirectoryPage(provider);
