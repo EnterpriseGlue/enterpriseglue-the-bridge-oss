@@ -78,7 +78,7 @@ Current config-as-code status:
 - [x] ✅ Add API-only JSON config-bundle preview, diff, and hash-bound apply endpoints; import upload, export, and run history remain pending.
 - [ ] ⬜ Add UI and CI/CD workflows for managing config bundles.
 - [ ] ⬜ Add config-managed source ownership and drift diagnostics for imported objects.
-- [ ] ⬜ Replace the horizontally scrolling role-permission matrix with a role library and focused single-role permission editor.
+- [x] ✅ Add a Role Library with a fixed-width role list and focused single-role grouped permission editor. The legacy matrix remains available in Access Control for compatibility until it can be removed.
 - [ ] ⬜ Add customer-managed sidecar transport to the existing engine configuration and runtime connection paths without creating a parallel authorization model.
 - [x] ✅ Close the frontend action inventory gap: bridge evaluation actions are referenced by the shared authoritative bridge client, while the aggregate `engine.instances.mutate` action is explicitly API-only because concrete runtime mutation actions own mounted UI controls.
 
@@ -2251,7 +2251,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add config run history.
 - [ ] ⬜ Add export button.
 - [ ] ⬜ Add managed-by-config badges to existing Access Control and Engine UI surfaces.
-- [ ] ⬜ Replace the role-permission matrix with the Role Library and single-role editor; remove page-level horizontal scrolling from role management.
+- [x] ✅ Add the Role Library and single-role editor; it avoids page-level horizontal scrolling for normal role management. Legacy Access Control matrix removal remains pending.
 - [ ] ⬜ Add role-editor search, grouped permission accordions, selected-only/risk filters, responsive checkboxes, sticky save/cancel, system-role duplication, and config ownership states.
 - [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Mapping connection health and reconciliation history remain pending.
 - [ ] ⬜ Show engine labels such as country, domain, environment, and region in engine detail and engine inventory filters.
