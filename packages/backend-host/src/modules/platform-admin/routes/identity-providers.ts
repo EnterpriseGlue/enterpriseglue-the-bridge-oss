@@ -5,6 +5,7 @@ import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.j
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
+import { ldapReconciliationService } from '@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
@@ -42,6 +43,15 @@ router.put('/api/identity/providers/:key', requireAuth, requireAction('platform.
     details: { key: provider.key, changedFields: Object.keys(req.body) },
   });
   res.json(provider);
+}));
+router.post('/api/identity/providers/:key/reconcile', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
+  const key = providerKeySchema.parse(req.params.key);
+  const provider = await identityProviderService.getByKey(key, req.tenant?.tenantId || null);
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  if (provider.protocol !== 'ldap') throw Errors.validation('Manual reconciliation is currently available only for LDAP directory providers');
+  const result = await ldapReconciliationService.reconcileProvider(key, req.tenant?.tenantId || null, 'manual');
+  await logAudit({ action: 'identity.provider.reconcile', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, protocol: provider.protocol, ...result } });
+  res.json(result);
 }));
 router.delete('/api/identity/providers/:key', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
   const key = providerKeySchema.parse(req.params.key);

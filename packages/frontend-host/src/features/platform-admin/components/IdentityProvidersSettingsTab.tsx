@@ -81,6 +81,7 @@ export default function IdentityProvidersSettingsTab() {
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to save identity provider').message),
   });
   const archive = useMutation({ mutationFn: (key: string) => apiClient.delete(`/api/identity/providers/${encodeURIComponent(key)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-providers'] }); setArchiveTarget(null); } });
+  const reconcile = useMutation({ mutationFn: (key: string) => apiClient.post(`/api/identity/providers/${encodeURIComponent(key)}/reconcile`, {}), onError: (value: unknown) => setError(parseApiError(value, 'Unable to reconcile LDAP directory').message) });
 
   const startCreate = () => { setEditing(null); setForm(emptyForm()); setError(null); setOpen(true); };
   const startEdit = (provider: IdentityProvider) => { setEditing(provider); setForm(formForProvider(provider)); setError(null); setOpen(true); };
@@ -118,6 +119,7 @@ export default function IdentityProvidersSettingsTab() {
                   <TableCell>{provider.sourceRef ? 'Managed by config' : 'Manual'}</TableCell>
                   <TableCell><GuardedOverflowMenu size="sm" iconDescription="Provider actions">
                     <GuardedOverflowMenuItem decision={manage} itemText="Edit" onClick={() => startEdit(provider)} />
+                    {provider.protocol === 'ldap' && <GuardedOverflowMenuItem decision={manage} itemText="Reconcile directory" disabled={!provider.isEnabled || reconcile.isPending} onClick={() => reconcile.mutate(provider.key)} />}
                     <GuardedOverflowMenuItem decision={manage} itemText="Archive" isDelete onClick={() => setArchiveTarget(provider)} />
                   </GuardedOverflowMenu></TableCell>
                 </TableRow>;

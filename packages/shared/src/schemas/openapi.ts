@@ -2097,6 +2097,13 @@ registry.registerPath({
   responses: { 200: { description: 'Identity provider updated', content: { 'application/json': { schema: IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found' } },
 });
 registry.registerPath({
+  method: 'post',
+  path: '/api/identity/providers/{key}/reconcile',
+  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/reconcile'),
+  request: { params: z.object({ key: z.string() }) },
+  responses: { 200: { description: 'Run one bounded LDAP directory reconciliation page', content: { 'application/json': { schema: z.object({ skipped: z.string().optional(), processed: z.number().int().optional() }) } } } },
+});
+registry.registerPath({
   method: 'delete',
   path: '/api/identity/providers/{key}',
   ...authzExtension('platform.sso.providers.manage', 'DELETE', '/api/identity/providers/{key}'),

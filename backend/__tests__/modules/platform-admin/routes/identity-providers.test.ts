@@ -9,6 +9,7 @@ const service = vi.hoisted(() => ({
   getByKey: vi.fn(),
   upsert: vi.fn(),
   archive: vi.fn(),
+  reconcile: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -22,6 +23,7 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
   requireAction: () => (_req: any, _res: any, next: any) => next(),
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService: service }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }));
 
 const provider = {
@@ -39,6 +41,7 @@ describe('identity provider routes', () => {
     service.getByKey.mockResolvedValue(provider);
     service.upsert.mockResolvedValue(provider);
     service.archive.mockResolvedValue(undefined);
+    service.reconcile.mockResolvedValue({ processed: 3 });
     app = express();
     app.use(express.json());
     app.use(identityProvidersRouter);
@@ -65,5 +68,16 @@ describe('identity provider routes', () => {
     expect(response.status).toBe(204);
     expect(service.archive).toHaveBeenCalledWith('entra', 'tenant-1');
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.archive' }));
+  });
+
+  it('runs one bounded LDAP reconciliation page and audits the action', async () => {
+    service.getByKey.mockResolvedValue({ ...provider, protocol: 'ldap' });
+
+    const response = await request(app).post('/api/identity/providers/entra/reconcile');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ processed: 3 });
+    expect(service.reconcile).toHaveBeenCalledWith('entra', 'tenant-1', 'manual');
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.reconcile' }));
   });
 });
