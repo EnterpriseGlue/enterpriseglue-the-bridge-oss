@@ -6,5 +6,6 @@ describe('platform-admin module index', () => {
     expect(platformAdminModule).toHaveProperty('platformAdminRoute');
     expect(platformAdminModule).toHaveProperty('authzRoute');
     expect(platformAdminModule).toHaveProperty('ssoProvidersRoute');
+    expect(platformAdminModule).toHaveProperty('identityProvidersRoute');
   });
 });

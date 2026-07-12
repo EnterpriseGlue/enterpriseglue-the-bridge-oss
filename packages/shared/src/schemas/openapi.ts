@@ -2023,6 +2023,67 @@ registry.registerPath({
   responses: { 200: { description: 'SSO provider enabled state toggled', content: { 'application/json': { schema: z.object({ enabled: z.boolean() }) } } }, 404: { description: 'Provider not found' } },
 });
 
+// Provider-neutral identity providers. Configuration holds only references to
+// secrets; the values behind those references are never returned by this API.
+const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);
+const IdentityProviderConfigurationSchema = z.record(z.string(), z.unknown());
+const IdentityProviderRequestSchema = z.object({
+  key: z.string().min(1).max(128),
+  protocol: IdentityProviderProtocolSchema,
+  isEnabled: z.boolean().optional(),
+  authenticationMode: z.enum(['direct', 'claims_only']).optional(),
+  directoryTenantId: z.string().nullable().optional(),
+  configuration: IdentityProviderConfigurationSchema,
+  sync: z.record(z.string(), z.unknown()).optional(),
+  ownershipMode: z.string().max(64).optional(),
+  sourceRef: z.string().nullable().optional(),
+});
+const IdentityProviderResponseSchema = IdentityProviderRequestSchema.extend({
+  id: z.string(),
+  tenantId: z.string().nullable(),
+  isEnabled: z.boolean(),
+  authenticationMode: z.enum(['direct', 'claims_only']),
+  configurationJson: z.string(),
+  syncJson: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+}).omit({ configuration: true, sync: true });
+registry.register('IdentityProvider', IdentityProviderResponseSchema);
+registry.registerPath({
+  method: 'get',
+  path: '/api/identity/providers',
+  ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers'),
+  responses: { 200: { description: 'List identity providers', content: { 'application/json': { schema: z.array(IdentityProviderResponseSchema) } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/identity/providers/{key}',
+  ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers/{key}'),
+  request: { params: z.object({ key: z.string() }) },
+  responses: { 200: { description: 'Identity provider', content: { 'application/json': { schema: IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found' } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/identity/providers',
+  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers'),
+  request: { body: { content: { 'application/json': { schema: IdentityProviderRequestSchema } } } },
+  responses: { 201: { description: 'Identity provider created', content: { 'application/json': { schema: IdentityProviderResponseSchema } } } },
+});
+registry.registerPath({
+  method: 'put',
+  path: '/api/identity/providers/{key}',
+  ...authzExtension('platform.sso.providers.manage', 'PUT', '/api/identity/providers/{key}'),
+  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: IdentityProviderRequestSchema.omit({ key: true }).partial() } } } },
+  responses: { 200: { description: 'Identity provider updated', content: { 'application/json': { schema: IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found' } },
+});
+registry.registerPath({
+  method: 'delete',
+  path: '/api/identity/providers/{key}',
+  ...authzExtension('platform.sso.providers.manage', 'DELETE', '/api/identity/providers/{key}'),
+  request: { params: z.object({ key: z.string() }) },
+  responses: { 204: { description: 'Identity provider archived' }, 404: { description: 'Identity provider not found' } },
+});
+
 // -----------------------------
 // Project Members API
 // -----------------------------
