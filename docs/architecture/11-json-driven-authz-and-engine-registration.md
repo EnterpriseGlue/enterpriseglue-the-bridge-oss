@@ -2218,6 +2218,7 @@ Phase 0 exit criteria:
 - [x] ✅ Resolve direct process-instance modification and process-definition modification/restart batch creation to their inherited or exact runtime resource before authorization. Resource-aware multi-instance batch mutations require explicit process instance ids and evaluate every inherited definition before the engine call.
 - [x] ✅ Resolve both source and target process definitions before migration preview, plan, validation, and execution authorization; explicit active-source instance requests are evaluated through inherited process-definition access. Query-based batch/migration selection remains intentionally denied for resource-aware engines until a bounded composite selector resolver is implemented.
 - [x] ✅ Resolve jobs and job definitions through their referenced process definition before authorizing detail or mutation routes; resource-aware collections filter their returned items by the authorized process-definition inventory.
+- [x] ✅ Resolve user tasks and task-scoped variables/forms through their referenced process definition; resource-aware task lists and counts query only authorized process-definition keys.
 - [ ] ⬜ Keep `engine_wide` distributed-engine behavior on the fast path and invoke resource filtering only for `resource_aware` engines.
 - [ ] ⬜ Ensure process instance, job, incident, batch, and migration mutations resolve inherited process definition or decision scopes before authorization.
 - [ ] ⬜ Ensure EnterpriseGlue denial prevents engine calls even when the engine might allow the request.

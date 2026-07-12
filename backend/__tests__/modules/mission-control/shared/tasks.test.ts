@@ -44,6 +44,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(true),
+    getVisibleRuntimeResources: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -110,6 +111,23 @@ describe('mission-control tasks routes', () => {
       resourceId: 'engine-1',
     }));
     expect(getTaskCountByQuery).toHaveBeenCalledWith('engine-1', {});
+  });
+
+  it('queries only authorized process definition keys on resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : {},
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/tasks')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(listTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments' });
   });
 
   it('gets task by id', async () => {
