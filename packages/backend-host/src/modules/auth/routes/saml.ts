@@ -52,8 +52,11 @@ router.get('/api/auth/saml', apiLimiter, asyncHandler(async (req: Request, res: 
  * SAML Service Provider metadata endpoint
  * GET /api/auth/saml/metadata
  */
-router.get('/api/auth/saml/metadata', apiLimiter, asyncHandler(async (_req: Request, res: Response) => {
-  const metadata = await generateSamlServiceProviderMetadata();
+router.get('/api/auth/saml/metadata', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const providerId = typeof req.query.providerId === 'string' ? req.query.providerId : undefined;
+  const metadata = providerId
+    ? await generateSamlServiceProviderMetadata(providerId)
+    : await generateSamlServiceProviderMetadata();
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.send(metadata);
 }));

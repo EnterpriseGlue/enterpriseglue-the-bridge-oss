@@ -303,8 +303,8 @@ export async function validateSamlPostResponse(samlResponse: string, providerId?
   };
 }
 
-export async function generateSamlServiceProviderMetadata(): Promise<string> {
-  const provider = await getEnabledSamlProvider();
+export async function generateSamlServiceProviderMetadata(providerId?: string): Promise<string> {
+  const provider = await getEnabledSamlProvider(providerId);
   const samlClient = getSamlClient(provider);
   return samlClient.generateServiceProviderMetadata(null, null);
 }
