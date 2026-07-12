@@ -49,6 +49,7 @@ export { GitRepository } from './GitRepository.js';
 export { GitTag } from './GitTag.js';
 export { Invitation } from './Invitation.js';
 export { IdentityEntitlementMapping } from './IdentityEntitlementMapping.js';
+export { IdentityProvider } from './IdentityProvider.js';
 export { Notification } from './Notification.js';
 export { PasswordResetToken } from './PasswordResetToken.js';
 export { PendingChange } from './PendingChange.js';
