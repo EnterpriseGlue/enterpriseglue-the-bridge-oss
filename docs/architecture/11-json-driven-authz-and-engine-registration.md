@@ -441,7 +441,7 @@ There is deliberately no third `mixed` value. A `resource_aware` engine already 
 
 - [ ] ⬜ Add `RuntimeAccessScopeSchema = z.enum(['engine_wide', 'resource_aware'])` with `engine_wide` as the default.
 - [ ] ⬜ Persist `engines.runtime_access_scope` and expose it through manual, external, config, list, detail, audit, and OpenAPI engine contracts.
-- [ ] ⬜ Reject runtime-resource-set assignments to an `engine_wide` engine.
+- [x] ✅ Reject exact runtime-resource and runtime-resource-set assignments unless the containing engine uses `resource_aware` runtime access. Assignment normalization preserves the requested runtime scope type.
 - [ ] ⬜ Require authorized-subset filtering for every runtime collection and count on `resource_aware` engines.
 - [ ] ⬜ Warn when a principal's broad engine runtime role makes a narrower runtime-resource assignment ineffective.
 

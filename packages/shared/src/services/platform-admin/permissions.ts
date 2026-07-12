@@ -2084,6 +2084,7 @@ class PermissionServiceClass {
     const requestedScopeId = input.scopeId !== undefined ? input.scopeId : input.resourceId;
     const { resourceType, resourceId, scopeType, scopeId } = this.normalizeAssignmentScope(scope, requestedScopeType, requestedScopeId);
     await this.assertResourceExists(dataSource, scopeType, scopeId, normalizedTenantId);
+    await this.assertRuntimeScopeEnabled(dataSource, scopeType, scopeId, normalizedTenantId);
     const source = input.source ?? 'manual';
     const sourceRef = input.sourceRef ?? input.sourceMappingId ?? null;
     const assignmentKey = canonicalRoleAssignmentKey({
@@ -2362,7 +2363,7 @@ class PermissionServiceClass {
     }
 
     if (roleScope === 'engine' && engineScopeTarget) {
-      return { resourceType: 'engine', resourceId: null, scopeType: 'engine_set', scopeId: requestedResourceId };
+      return { resourceType: 'engine', resourceId: null, scopeType, scopeId: requestedResourceId };
     }
 
     return { resourceType: roleScope, resourceId: requestedResourceId, scopeType, scopeId: requestedResourceId };
@@ -2435,6 +2436,35 @@ class PermissionServiceClass {
 
     if (!resourceId) {
       throw new Error(`${resourceType} role assignments require a resource ID`);
+    }
+  }
+
+  private async assertRuntimeScopeEnabled(
+    dataSource: DataSource,
+    scopeType: ResourceType,
+    scopeId: string | null,
+    tenantId?: string | null,
+  ): Promise<void> {
+    if (scopeType !== 'engine_runtime_resource' && scopeType !== 'engine_runtime_resource_set') return;
+
+    const runtimeScope = scopeType === 'engine_runtime_resource'
+      ? await dataSource.getRepository(RuntimeResource).findOne({
+        where: tenantScopedWhere({ id: scopeId || '', isActive: true }, tenantId),
+        select: ['engineId'],
+      })
+      : await dataSource.getRepository(RuntimeResourceSet).findOne({
+        where: tenantScopedWhere({ id: scopeId || '', isArchived: false }, tenantId),
+        select: ['engineId'],
+      });
+    if (!runtimeScope) throw new Error('Runtime resource scope not found');
+
+    const engine = await dataSource.getRepository(Engine).findOne({
+      where: { id: runtimeScope.engineId },
+      select: ['id', 'runtimeAccessScope'],
+    });
+    if (!engine) throw new Error('Runtime resource engine not found');
+    if (engine.runtimeAccessScope !== 'resource_aware') {
+      throw new Error('Runtime resource assignments require an engine with resource-aware runtime access');
     }
   }
 

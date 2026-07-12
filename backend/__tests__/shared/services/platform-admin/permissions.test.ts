@@ -31,6 +31,7 @@ import {
   RbacRole,
   RbacRoleAssignment,
   RbacRolePermission,
+  RuntimeResource,
   ServiceAccount,
   SsoAssignmentMapping,
   SsoGroupMapping,
@@ -1319,6 +1320,12 @@ describe('permissionService', () => {
       andWhere: vi.fn().mockReturnThis(),
       getMany: vi.fn().mockResolvedValue([]),
     };
+    const runtimeAssignmentQb = {
+      select: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([]),
+    };
     const grantQb = {
       select: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
@@ -1329,7 +1336,8 @@ describe('permissionService', () => {
       createQueryBuilder: vi.fn()
         .mockReturnValueOnce(projectAssignmentQb)
         .mockReturnValueOnce(engineAssignmentQb)
-        .mockReturnValueOnce(engineSetAssignmentQb),
+        .mockReturnValueOnce(engineSetAssignmentQb)
+        .mockReturnValueOnce(runtimeAssignmentQb),
     };
     const groupMembership = createGroupMembershipRepo();
 
@@ -1477,6 +1485,46 @@ describe('permissionService', () => {
       resourceId: 'engine-1',
       createdById: 'admin-1',
     })).rejects.toThrow('Role is not assignable');
+  });
+
+  it('rejects runtime-resource assignments when the containing engine is engine-wide', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { findOne: vi.fn().mockResolvedValue({ id: 'custom.engine.viewer', scope: 'engine', kind: 'custom', tenantId: null, isArchived: false, isAssignable: true }) };
+        if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue({ id: 'group-1', isArchived: false }) };
+        if (entity === RuntimeResource) return { findOne: vi.fn().mockResolvedValue({ id: 'runtime-1', engineId: 'engine-1' }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', runtimeAccessScope: 'engine_wide' }) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(permissionService.assignRole({
+      principalType: 'group', principalId: 'group-1', roleId: 'custom.engine.viewer',
+      scopeType: 'engine_runtime_resource', scopeId: 'runtime-1', createdById: 'admin-1',
+    })).rejects.toThrow('Runtime resource assignments require an engine with resource-aware runtime access');
+  });
+
+  it('preserves runtime-resource scope type for resource-aware engine assignments', async () => {
+    const insertAssignment = vi.fn().mockResolvedValue(undefined);
+    const duplicateQb = { where: vi.fn().mockReturnThis(), getOne: vi.fn().mockResolvedValue(null) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { findOne: vi.fn().mockResolvedValue({ id: 'custom.engine.viewer', scope: 'engine', kind: 'custom', tenantId: null, isArchived: false, isAssignable: true }) };
+        if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue({ id: 'group-1', isArchived: false }) };
+        if (entity === RuntimeResource) return { findOne: vi.fn().mockResolvedValue({ id: 'runtime-1', engineId: 'engine-1' }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', runtimeAccessScope: 'resource_aware' }) };
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(duplicateQb), insert: insertAssignment };
+        if (entity === AuditLog) return { insert: vi.fn().mockResolvedValue(undefined) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await permissionService.assignRole({
+      principalType: 'group', principalId: 'group-1', roleId: 'custom.engine.viewer',
+      scopeType: 'engine_runtime_resource', scopeId: 'runtime-1', createdById: 'admin-1',
+    });
+
+    expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({ scopeType: 'engine_runtime_resource', scopeId: 'runtime-1' }));
   });
 
   it('allows API clients to receive the machine-safe project deployer system role', async () => {
