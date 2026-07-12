@@ -256,6 +256,8 @@ const IdentityProviderSyncSchema = z.object({
   intervalSeconds: z.number().int().min(60).max(86_400).optional(),
   requiredForLogin: z.boolean().default(true),
   incompleteEntitlements: z.enum(['fail_closed', 'preserve_previous']).default('fail_closed'),
+  connectorCapability: z.enum(['claim_only', 'ldap_directory', 'scim', 'graph']).default('claim_only'),
+  scheduled: z.boolean().default(false),
 }).strict();
 
 const CommonIdentityProviderSchema = z.object({

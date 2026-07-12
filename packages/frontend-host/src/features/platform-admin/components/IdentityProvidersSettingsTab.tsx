@@ -65,7 +65,7 @@ export default function IdentityProvidersSettingsTab() {
 
   const save = useMutation({
     mutationFn: (payload: FormState) => {
-      const body = { ...(editing ? {} : { key: payload.key.trim() }), ...(editing ? {} : { protocol: payload.protocol }), isEnabled: payload.isEnabled, authenticationMode: payload.authenticationMode, directoryTenantId: payload.directoryTenantId.trim() || null, configuration: configuration(payload), sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' }, ownershipMode: 'manual' };
+      const body = { ...(editing ? {} : { key: payload.key.trim() }), ...(editing ? {} : { protocol: payload.protocol }), isEnabled: payload.isEnabled, authenticationMode: payload.authenticationMode, directoryTenantId: payload.directoryTenantId.trim() || null, configuration: configuration(payload), sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: payload.protocol === 'ldap' ? 'ldap_directory' : 'claim_only', scheduled: false }, ownershipMode: 'manual' };
       return editing ? apiClient.put(`/api/identity/providers/${encodeURIComponent(editing.key)}`, body) : apiClient.post('/api/identity/providers', body);
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-providers'] }); setOpen(false); setEditing(null); setError(null); },

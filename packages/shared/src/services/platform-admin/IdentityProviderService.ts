@@ -20,6 +20,8 @@ export interface IdentityProviderInput {
   sourceRef?: string | null;
 }
 
+export type IdentityConnectorCapability = 'claim_only' | 'ldap_directory' | 'scim' | 'graph';
+
 function normalized(value?: string | null): string | null { return value?.trim() || null; }
 function json(value: Record<string, unknown> | undefined): string { return JSON.stringify(value || {}); }
 function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<string, unknown>): void {
@@ -38,6 +40,17 @@ function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<
   }
 }
 
+function ensureSync(sync: Record<string, unknown> | undefined): void {
+  if (!sync) return;
+  const connector = sync.connectorCapability;
+  if (connector !== undefined && !['claim_only', 'ldap_directory', 'scim', 'graph'].includes(String(connector))) {
+    throw Errors.validation('Unsupported identity connector capability');
+  }
+  if (connector === 'ldap_directory' && sync.scheduled === true && sync.intervalSeconds !== undefined && (!Number.isInteger(sync.intervalSeconds) || Number(sync.intervalSeconds) < 60)) {
+    throw Errors.validation('Scheduled LDAP reconciliation intervalSeconds must be at least 60');
+  }
+}
+
 class IdentityProviderServiceClass {
   async list(tenantId?: string | null): Promise<IdentityProvider[]> {
     const repo = (await getDataSource()).getRepository(IdentityProvider);
@@ -50,6 +63,7 @@ class IdentityProviderServiceClass {
     const tenantId = normalized(input.tenantId); const key = input.key.trim();
     if (!key) throw Errors.validation('Identity provider key is required');
     ensureConfig(input.protocol, input.configuration);
+    ensureSync(input.sync);
     const repo = (await getDataSource()).getRepository(IdentityProvider); const now = Date.now();
     const existing = await repo.findOne({ where: tenantId ? { tenantId, key } : { tenantId: IsNull(), key } });
     const values = { protocol: input.protocol, isEnabled: input.isEnabled ?? false, authenticationMode: input.authenticationMode ?? 'claims_only', directoryTenantId: normalized(input.directoryTenantId), configurationJson: json(input.configuration), syncJson: json(input.sync), ownershipMode: input.ownershipMode || 'manual', sourceRef: normalized(input.sourceRef), updatedAt: now };
