@@ -1190,7 +1190,7 @@ ExternalIdentity
 - [ ] ⬜ Link by verified email only when the provider and platform policy permit it; ambiguous or conflicting email matches fail closed and require admin resolution.
 - [ ] ⬜ Keep local credentials independent so an approved break-glass account remains usable when external providers fail.
 - [ ] ⬜ Deactivation/unlink revokes sessions and provider-managed memberships without deleting manual access unless an explicit cleanup operation requests it.
-- [ ] ⬜ Persist only allowlisted normalized identity attributes and entitlement ids; raw JWTs, SAML assertions, LDAP responses, and unrestricted claims are not stored.
+- [x] ✅ Persist only allowlisted normalized identity attributes and entitlement ids; raw JWTs, SAML assertions, LDAP responses, unrestricted claims, and unrelated profile attributes are not stored in identity snapshots. Groups, roles, and scopes are normalized deterministically for reconciliation.
 
 ## Project-Engine Targets
 

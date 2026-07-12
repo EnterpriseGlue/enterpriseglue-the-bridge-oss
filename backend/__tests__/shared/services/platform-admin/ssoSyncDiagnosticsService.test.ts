@@ -479,7 +479,6 @@ describe('ssoSyncDiagnosticsService', () => {
       groupsJson: JSON.stringify(['group-a', 'group-b']),
       rolesJson: JSON.stringify(['deployer']),
       claimsJson: JSON.stringify({
-        email: 'refresh@example.com',
         groups: ['group-a', 'group-b'],
         roles: ['deployer'],
       }),

@@ -55,6 +55,26 @@ function stringifyJson(value: unknown, fallback: string): string {
   }
 }
 
+/**
+ * Snapshots are used only for entitlement reconciliation. Never persist the
+ * raw protocol payload: it can contain JWT assertions, SAML attributes, LDAP
+ * directory data, or unrelated PII.
+ */
+export function allowlistedIdentityClaims(claims: SsoClaims): SsoClaims {
+  const source = claims as Record<string, unknown>;
+  const groups = normalizeStringArray(source.groups ?? source.group ?? source.memberOf).sort();
+  const roles = normalizeStringArray(source.roles ?? source.role ?? source.appRoles).sort();
+  const scopes = normalizeStringArray(source.scp ?? source.scope)
+    .flatMap((scope) => scope.split(/\s+/))
+    .filter(Boolean)
+    .sort();
+  return {
+    ...(groups.length > 0 ? { groups } : {}),
+    ...(roles.length > 0 ? { roles } : {}),
+    ...(scopes.length > 0 ? { scp: Array.from(new Set(scopes)) } : {}),
+  } as SsoClaims;
+}
+
 function adapterType(providerType: string): IdentityProviderType {
   if (providerType === 'saml') return 'saml';
   if (providerType === 'ldap') return 'ldap';
@@ -93,8 +113,9 @@ class SsoNormalizedIdentityServiceClass {
       qb.andWhere('identity.tenantId IS NULL');
     }
 
-    const groups = normalizeStringArray(input.claims.groups);
-    const roles = normalizeStringArray(input.claims.roles);
+    const persistedClaims = allowlistedIdentityClaims(input.claims);
+    const groups = normalizeStringArray(persistedClaims.groups);
+    const roles = normalizeStringArray(persistedClaims.roles);
     const update = {
       tenantId,
       providerId,
@@ -109,7 +130,7 @@ class SsoNormalizedIdentityServiceClass {
       lastName: normalizeNullableText(input.lastName),
       groupsJson: stringifyJson(groups, '[]'),
       rolesJson: stringifyJson(roles, '[]'),
-      claimsJson: stringifyJson(input.claims, '{}'),
+      claimsJson: stringifyJson(persistedClaims, '{}'),
       providerStatus: 'active',
       lastSeenAt: now,
       updatedAt: now,

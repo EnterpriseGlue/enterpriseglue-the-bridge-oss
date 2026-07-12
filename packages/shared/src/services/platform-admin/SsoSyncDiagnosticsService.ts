@@ -9,6 +9,7 @@ import { SsoSyncEvent } from '@enterpriseglue/shared/infrastructure/persistence/
 import { SsoSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoSyncRun.js';
 import { SsoGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoGroupMapping.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
+import { allowlistedIdentityClaims } from './SsoNormalizedIdentityService.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
@@ -454,11 +455,12 @@ class SsoSyncDiagnosticsServiceClass {
             const refresh = await ssoProviderIdentityCheckService.refreshClaims(identity, claims);
             if (refresh.status === 'refreshed' && refresh.claims) {
               claims = refresh.claims;
+              const persistedClaims = allowlistedIdentityClaims(claims);
               result.refreshedIdentities = (result.refreshedIdentities ?? 0) + 1;
               await identityRepo.update({ id: identity.id }, {
-                groupsJson: stringifyJsonValue(normalizeClaimArray(claims.groups), '[]'),
-                rolesJson: stringifyJsonValue(normalizeClaimArray(claims.roles), '[]'),
-                claimsJson: stringifyJsonValue(claims, '{}'),
+                groupsJson: stringifyJsonValue(normalizeClaimArray(persistedClaims.groups), '[]'),
+                rolesJson: stringifyJsonValue(normalizeClaimArray(persistedClaims.roles), '[]'),
+                claimsJson: stringifyJsonValue(persistedClaims, '{}'),
                 lastProviderCheckAt: refresh.checkedAt,
                 updatedAt: Date.now(),
               });
