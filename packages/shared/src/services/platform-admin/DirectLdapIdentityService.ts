@@ -8,6 +8,10 @@ interface LdapConfiguration {
   bindPasswordRef: string;
   userBaseDn: string;
   userSearchFilter: string;
+  userEnumerationFilter: string;
+  pageSize: number;
+  subjectAttribute: string;
+  emailAttribute: string;
   groupBaseDn: string;
   groupIdAttribute: string;
   membershipMode: 'memberOf' | 'group_search';
@@ -59,7 +63,7 @@ function configuration(provider: IdentityProvider): LdapConfiguration {
   if (!url.startsWith('ldaps://')) throw new Error('LDAP URL must use LDAPS');
   const membershipMode = raw.membershipMode === 'group_search' ? 'group_search' : raw.membershipMode === 'memberOf' ? 'memberOf' : null;
   if (!membershipMode) throw new Error('LDAP membershipMode must be memberOf or group_search');
-  return { url, bindDn: required(raw.bindDn, 'bindDn'), bindPasswordRef: required(raw.bindPasswordRef, 'bindPasswordRef'), userBaseDn: required(raw.userBaseDn, 'userBaseDn'), userSearchFilter: required(raw.userSearchFilter, 'userSearchFilter'), groupBaseDn: required(raw.groupBaseDn, 'groupBaseDn'), groupIdAttribute: required(raw.groupIdAttribute, 'groupIdAttribute'), membershipMode, nestedGroups: raw.nestedGroups === true };
+  return { url, bindDn: required(raw.bindDn, 'bindDn'), bindPasswordRef: required(raw.bindPasswordRef, 'bindPasswordRef'), userBaseDn: required(raw.userBaseDn, 'userBaseDn'), userSearchFilter: required(raw.userSearchFilter, 'userSearchFilter'), userEnumerationFilter: typeof raw.userEnumerationFilter === 'string' && raw.userEnumerationFilter.trim() ? raw.userEnumerationFilter.trim() : '(objectClass=person)', pageSize: Number.isInteger(raw.pageSize) && Number(raw.pageSize) > 0 ? Math.min(Number(raw.pageSize), 1000) : 200, subjectAttribute: typeof raw.subjectAttribute === 'string' && raw.subjectAttribute.trim() ? raw.subjectAttribute.trim() : 'entryUUID', emailAttribute: typeof raw.emailAttribute === 'string' && raw.emailAttribute.trim() ? raw.emailAttribute.trim() : 'mail', groupBaseDn: required(raw.groupBaseDn, 'groupBaseDn'), groupIdAttribute: required(raw.groupIdAttribute, 'groupIdAttribute'), membershipMode, nestedGroups: raw.nestedGroups === true };
 }
 
 function userFilter(template: string, username: string): string {

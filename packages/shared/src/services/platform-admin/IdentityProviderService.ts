@@ -35,6 +35,8 @@ function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<
     for (const field of ['bindDn', 'bindPasswordRef', 'userBaseDn', 'userSearchFilter', 'groupBaseDn', 'groupIdAttribute']) {
       if (typeof configuration[field] !== 'string' || !String(configuration[field]).trim()) throw Errors.validation(`LDAP providers require ${field}`);
     }
+    if (configuration.userEnumerationFilter !== undefined && (typeof configuration.userEnumerationFilter !== 'string' || !String(configuration.userEnumerationFilter).trim())) throw Errors.validation('LDAP userEnumerationFilter must be a non-empty LDAP filter');
+    if (configuration.pageSize !== undefined && (!Number.isInteger(configuration.pageSize) || Number(configuration.pageSize) < 1 || Number(configuration.pageSize) > 1000)) throw Errors.validation('LDAP pageSize must be between 1 and 1000');
     if (!['memberOf', 'group_search'].includes(String(configuration.membershipMode))) throw Errors.validation('LDAP membershipMode must be memberOf or group_search');
     if (!String(configuration.userSearchFilter).includes('{username}')) throw Errors.validation('LDAP userSearchFilter must contain {username}');
   }
