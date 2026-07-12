@@ -211,6 +211,7 @@ export type ResourceType = AuthzResourceType;
 export type RoleScope = ResourceType;
 export type PrincipalType = AuthzPrincipalType;
 export type RoleKind = 'system' | 'custom';
+export type RoleSource = 'system' | 'manual' | 'config' | 'api' | 'automation';
 export type PermissionKind = 'system' | 'custom';
 export type RoleAssignmentSource = 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap';
 
@@ -251,6 +252,8 @@ export interface RoleSummary {
   isEditable: boolean;
   isAssignable: boolean;
   isArchived: boolean;
+  source: RoleSource;
+  sourceRef: string | null;
   permissionCount: number;
   createdAt: number;
   updatedAt: number;
@@ -262,11 +265,15 @@ export interface RoleDetail extends RoleSummary {
 
 export interface CreateCustomRoleInput {
   tenantId?: string | null;
+  /** Reserved for controlled config/API provisioning; public UI creation still generates a key. */
+  key?: string;
   name: string;
   description?: string | null;
   scope: RoleScope;
   permissionIds: Permission[];
   createdById: string;
+  source?: Exclude<RoleSource, 'system'>;
+  sourceRef?: string | null;
 }
 
 export interface CreateCustomPermissionInput {
@@ -309,6 +316,22 @@ function assertCustomRoleAllowOnlyInput(input: unknown): void {
 
 function normalizeTenantId(tenantId?: string | null): string | null {
   return normalizeTenantIdForPersistence(tenantId);
+}
+
+function normalizeRoleSource(source?: Exclude<RoleSource, 'system'>): Exclude<RoleSource, 'system'> {
+  const normalized = source || 'manual';
+  if (!['manual', 'config', 'api', 'automation'].includes(normalized)) {
+    throw new Error('Unsupported custom role source');
+  }
+  return normalized;
+}
+
+function normalizeCustomRoleKey(key: string | undefined, scope: RoleScope, name: string, id: string): string {
+  const normalized = key?.trim() || `custom.${scope}.${slugifyRoleName(name)}.${id.slice(0, 8)}`;
+  if (!/^custom\.[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(normalized)) {
+    throw new Error('Custom role keys must use a stable custom.* key');
+  }
+  return normalized;
 }
 
 function addTenantScopeFilter(qb: { andWhere: (...args: any[]) => any }, alias: string, tenantId?: string | null): void {
@@ -1437,6 +1460,8 @@ class PermissionServiceClass {
         isEditable: role.isEditable,
         isAssignable: role.isAssignable,
         isArchived: false,
+        source: 'system',
+        sourceRef: 'rbac-foundation',
         createdById: null,
         createdAt: now,
         updatedAt: now,
@@ -1723,6 +1748,8 @@ class PermissionServiceClass {
       isEditable: role.isEditable,
       isAssignable: role.isAssignable,
       isArchived: role.isArchived,
+      source: (role.source || (role.kind === 'system' ? 'system' : 'manual')) as RoleSource,
+      sourceRef: role.sourceRef || null,
       permissionCount: counts.get(role.id) || 0,
       createdAt: Number(role.createdAt),
       updatedAt: Number(role.updatedAt),
@@ -1754,6 +1781,8 @@ class PermissionServiceClass {
       isEditable: role.isEditable,
       isAssignable: role.isAssignable,
       isArchived: role.isArchived,
+      source: (role.source || (role.kind === 'system' ? 'system' : 'manual')) as RoleSource,
+      sourceRef: role.sourceRef || null,
       permissionCount: permissions.length,
       permissions: permissions.map((permission) => permission.permissionId as Permission),
       createdAt: Number(role.createdAt),
@@ -1768,16 +1797,22 @@ class PermissionServiceClass {
     const now = Date.now();
     const permissionIds = await this.validateRolePermissions(input.scope, input.permissionIds);
     const name = input.name.trim();
+    const source = normalizeRoleSource(input.source);
+    const sourceRef = input.sourceRef?.trim() || null;
 
     if (!name) {
       throw new Error('Role name is required');
     }
+    if (source === 'config' && !sourceRef) {
+      throw new Error('Config-managed roles require a source reference');
+    }
+    const key = normalizeCustomRoleKey(input.key, input.scope, name, id);
 
     await dataSource.transaction(async (manager) => {
       await manager.getRepository(RbacRole).insert({
         id,
         tenantId: normalizeTenantId(input.tenantId),
-        key: `custom.${input.scope}.${slugifyRoleName(name)}.${id.slice(0, 8)}`,
+        key,
         name,
         description: input.description?.trim() || null,
         scope: input.scope,
@@ -1785,6 +1820,8 @@ class PermissionServiceClass {
         isEditable: true,
         isAssignable: true,
         isArchived: false,
+        source,
+        sourceRef,
         createdById: input.createdById,
         createdAt: now,
         updatedAt: now,
@@ -1801,8 +1838,11 @@ class PermissionServiceClass {
           roleId: id,
           tenantId: normalizeTenantId(input.tenantId),
           name,
+          key,
           scope: input.scope,
           kind: 'custom',
+          source,
+          sourceRef,
           permissionIds,
         },
       });

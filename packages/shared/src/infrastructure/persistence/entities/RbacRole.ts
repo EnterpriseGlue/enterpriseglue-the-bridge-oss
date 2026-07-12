@@ -5,6 +5,7 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_roles_tenant', ['tenantId'])
 @Index('idx_roles_scope', ['scope'])
 @Index('idx_roles_kind', ['kind'])
+@Index('idx_roles_source', ['source', 'sourceRef'])
 export class RbacRole extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true })
   tenantId!: string | null;
@@ -32,6 +33,14 @@ export class RbacRole extends AppBaseEntity {
 
   @Column({ name: 'is_archived', type: 'boolean', default: false })
   isArchived!: boolean;
+
+  /** Identifies whether this role is system-seeded, manually managed, or config-owned. */
+  @Column({ type: 'text', default: 'manual' })
+  source!: string;
+
+  /** Stable owning source, such as a configuration bundle key. */
+  @Column({ name: 'source_ref', type: 'text', nullable: true })
+  sourceRef!: string | null;
 
   @Column({ name: 'created_by_id', type: 'text', nullable: true })
   createdById!: string | null;

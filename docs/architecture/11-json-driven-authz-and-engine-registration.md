@@ -44,6 +44,7 @@ Current config-as-code status:
 - [x] ✅ Implement provider-neutral identity adapters and entitlement mappings for OIDC, SAML, and LDAP.
 - [ ] ⬜ Implement deterministic identity adapter contract tests and protocol-faithful mock OIDC, SAML, and LDAP services for integration and end-to-end testing.
 - [x] ✅ Expose side-effect-free strict config-bundle preview at `POST /api/authz/config-bundles/preview`, protected by `platform.authz.roles.manage`, with OpenAPI and route-inventory coverage.
+- [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
 - [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.
@@ -353,7 +354,7 @@ The production bundle now needs these object families:
 
 | File/object family | Existing domain foundation | Required bundle extension |
 | --- | --- | --- |
-| `roles.json` and permissions | Custom role/permission CRUD exists | Add deterministic keys, template expansion, source ownership, permission diff, and sensitive-risk validation. |
+| `roles.json` and permissions | Custom role/permission CRUD and role source lineage exist | Add template expansion, source-ownership enforcement, permission diff, and sensitive-risk validation. |
 | `groups.json` | Internal group CRUD exists | Add config ownership and stable references from identity mappings and assignments. |
 | `identity-providers.json` | OIDC/Microsoft/SAML provider CRUD exists | Generalize provider schema, add LDAP adapter config, secret refs, sync policy, and connectivity-test metadata. |
 | `identity-mappings.json` | SSO group mappings exist | Compile normalized external entitlements to internal groups independent of protocol. |
