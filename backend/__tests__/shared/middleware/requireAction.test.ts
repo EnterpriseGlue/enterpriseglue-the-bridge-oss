@@ -3,7 +3,7 @@ import express from 'express';
 import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeDefinitionAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeDefinitionAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
@@ -174,6 +174,11 @@ describe('requireAction project resource resolvers', () => {
     }), (req: any, res) => {
       res.json({ resource: req.authzResource, engineId: req.engineId });
     });
+    app.post('/runtime-migration', requireRuntimeMigrationAction('engine.runtime.migrations.execute-async', {
+      resourceKind: 'process_definition',
+    }), (req: any, res) => {
+      res.json({ resource: req.authzResource, engineId: req.engineId });
+    });
     app.post('/deploy', requireCompositeAction('project.deploy.create', {
       kind: 'deployment',
       projectIdFrom: 'body',
@@ -294,6 +299,27 @@ describe('requireAction project resource resolvers', () => {
 
     expect(response.status).toBe(403);
     expect(camundaGet).not.toHaveBeenCalled();
+  });
+
+  it('requires both migration definitions to be authorized on resource-aware engines', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true);
+    camundaGet
+      .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1' })
+      .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
+
+    const response = await request(app).post('/runtime-migration').send({
+      engineId,
+      plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).toHaveBeenNthCalledWith(1, engineId, '/process-definition/source-v1');
+    expect(camundaGet).toHaveBeenNthCalledWith(2, engineId, '/process-definition/target-v2');
+    expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
   it('authorizes deployment composite actions through deployment eligibility', async () => {

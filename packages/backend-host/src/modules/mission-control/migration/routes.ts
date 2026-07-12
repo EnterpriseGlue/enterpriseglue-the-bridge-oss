@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import {
   toEnginePlan,
   previewMigrationCount,
@@ -18,7 +18,7 @@ const r = Router()
 r.use('/mission-control-api', requireAuth)
 
 // Preview affected instances count
-r.post('/mission-control-api/migration/preview', requireAction('engine.runtime.migrations.preview', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/preview', requireRuntimeMigrationAction('engine.runtime.migrations.preview', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { plan, processInstanceIds } = req.body || {}
     if (Array.isArray(processInstanceIds) && processInstanceIds.length > 0) {
@@ -33,7 +33,7 @@ r.post('/mission-control-api/migration/preview', requireAction('engine.runtime.m
 }))
 
 // Generate migration plan (engine auto-mapping)
-r.post('/mission-control-api/migration/generate', requireAction('engine.runtime.migrations.plan.generate', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/generate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.generate', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const enginePlan = await generateMigrationPlan(engineId, req.body)
@@ -44,7 +44,7 @@ r.post('/mission-control-api/migration/generate', requireAction('engine.runtime.
 }))
 
 // Validate migration plan
-r.post('/mission-control-api/migration/plan/validate', requireAction('engine.runtime.migrations.plan.validate', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/plan/validate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.validate', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const result = await validateMigrationPlan(engineId, req.body)
@@ -55,7 +55,7 @@ r.post('/mission-control-api/migration/plan/validate', requireAction('engine.run
 }))
 
 // Execute migration as async batch
-r.post('/mission-control-api/migration/execute-async', requireAction('engine.runtime.migrations.execute-async', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/execute-async', requireRuntimeMigrationAction('engine.runtime.migrations.execute-async', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const result = await executeMigrationAsync(engineId, req.body)
@@ -66,7 +66,7 @@ r.post('/mission-control-api/migration/execute-async', requireAction('engine.run
 }))
 
 // Execute migration directly (synchronous)
-r.post('/mission-control-api/migration/execute-direct', requireAction('engine.runtime.migrations.execute-direct', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/execute-direct', requireRuntimeMigrationAction('engine.runtime.migrations.execute-direct', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     await executeMigrationDirect(engineId, req.body)
@@ -77,7 +77,7 @@ r.post('/mission-control-api/migration/execute-direct', requireAction('engine.ru
 }))
 
 // Aggregate active source activities across selected instances
-r.post('/mission-control-api/migration/active-sources', requireAction('engine.runtime.migrations.active-sources.read', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/active-sources', requireRuntimeProcessInstanceSelectionAction('engine.runtime.migrations.active-sources.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const ids: string[] = Array.isArray(req.body?.processInstanceIds) ? req.body.processInstanceIds : []
     const engineId = (req as any).engineId as string

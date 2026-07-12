@@ -77,6 +77,10 @@ export interface RequireRuntimeProcessInstanceSelectionActionOptions extends Req
   processInstanceIdsKey?: string;
 }
 
+export interface RequireRuntimeMigrationActionOptions extends RequireRuntimeCollectionActionOptions {
+  planKey?: string;
+}
+
 export type CompositeActionKind = 'deployment';
 
 export interface RequireCompositeActionOptions {
@@ -1080,6 +1084,85 @@ export function requireRuntimeProcessInstanceSelectionAction(
       return next();
     } catch (error) {
       return next(error instanceof Error ? error : Errors.internal('Runtime batch authorization failed'));
+    }
+  };
+}
+
+/** Authorizes both sides of a process-definition migration. */
+export function requireRuntimeMigrationAction(
+  actionId: string,
+  options: RequireRuntimeMigrationActionOptions = { resourceKind: 'process_definition' }
+) {
+  return async function requireRuntimeMigration(req: Request, _res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw Errors.unauthorized('Authentication required');
+      const action = assertKnownAuthzAction(actionId);
+      const engineId = readRequestValue(req, options.engineIdKey || 'engineId', options.engineIdFrom || 'body')
+        || (req as Request & { engineId?: string }).engineId;
+      if (!engineId) throw Errors.validation('engineId is required');
+      const tenantId = req.tenant?.tenantId || null;
+      const dataSource = await getDataSource();
+      const engine = await dataSource.getRepository(Engine).findOne({
+        where: { id: engineId }, select: ['id', 'tenantId', 'runtimeAccessScope'],
+      });
+      if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+      const context: PermissionContext = {
+        userId: req.user.userId,
+        tenantId,
+        platformRole: req.user.platformRole || (req.user as { role?: string }).role,
+        resourceType: 'engine',
+        resourceId: engineId,
+      };
+      const broad = await permissionService.hasPermission(action.permissionId, context);
+      if (!broad && engine.runtimeAccessScope !== 'resource_aware') {
+        throw Errors.forbidden('Engine runtime access is not allowed');
+      }
+      let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
+      if (!broad) {
+        const plan = (req.body?.[options.planKey || 'plan'] && typeof req.body[options.planKey || 'plan'] === 'object')
+          ? req.body[options.planKey || 'plan'] as Record<string, unknown>
+          : req.body as Record<string, unknown>;
+        const sourceId = typeof plan?.sourceProcessDefinitionId === 'string'
+          ? plan.sourceProcessDefinitionId : plan?.sourceDefinitionId;
+        const targetId = typeof plan?.targetProcessDefinitionId === 'string'
+          ? plan.targetProcessDefinitionId : plan?.targetDefinitionId;
+        if (typeof sourceId !== 'string' || typeof targetId !== 'string' || !sourceId || !targetId) {
+          throw Errors.validation('sourceProcessDefinitionId and targetProcessDefinitionId are required');
+        }
+        const definitions = await Promise.all([sourceId, targetId].map((id) => camundaGet<Record<string, unknown>>(
+          engineId, `/process-definition/${encodeURIComponent(id)}`
+        )));
+        const resourceKeys = definitions.map((definition) => typeof definition.key === 'string' ? definition.key.trim() : '');
+        if (resourceKeys.some((key) => !key)) throw Errors.forbidden('Migration definitions cannot be resolved for authorization');
+        const resources = await Promise.all(resourceKeys.map((resourceKey) => dataSource.getRepository(RuntimeResource).findOne({
+          where: { engineId, resourceKind: options.resourceKind, resourceKey, isActive: true },
+          select: ['id', 'tenantId'],
+        })));
+        if (resources.some((candidate) => !candidate || !isTenantVisible(candidate.tenantId, tenantId))) {
+          throw Errors.forbidden('A migration definition is not present in the authorization inventory');
+        }
+        const allowed = await Promise.all(resources.map((candidate) => permissionService.hasPermission(action.permissionId, {
+          ...context, resourceType: 'engine_runtime_resource', resourceId: candidate!.id,
+        })));
+        if (allowed.some((candidate) => !candidate)) throw Errors.forbidden(`Access denied for action ${action.actionId}`);
+
+        const instanceIds = readRequestValues(req, 'processInstanceIds', 'body');
+        if (instanceIds.length) {
+          const instances = await Promise.all(instanceIds.map((id) => camundaGet<Record<string, unknown>>(
+            engineId, `/process-instance/${encodeURIComponent(id)}`
+          )));
+          if (instances.some((instance) => instance.definitionKey !== resourceKeys[0])) {
+            throw Errors.forbidden('A selected process instance does not belong to the authorized migration source');
+          }
+        }
+        resource = { type: 'engine_runtime_resource', id: resources[0]!.id };
+      }
+      (req as Request & { engineId?: string }).engineId = engineId;
+      req.authzAction = action;
+      req.authzResource = resource;
+      return next();
+    } catch (error) {
+      return next(error instanceof Error ? error : Errors.internal('Runtime migration authorization failed'));
     }
   };
 }
