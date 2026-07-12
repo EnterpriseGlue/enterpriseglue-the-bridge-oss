@@ -4130,7 +4130,9 @@ export const AUTHZ_ACTIONS = [
     audit: true,
     category: 'Mission Control',
     description: 'Modify, migrate, retry, cancel, or batch mutate runtime instances.',
-    ui: [{ surfaceId: 'mission-control.instances.actions', behavior: 'disable' }],
+    // This aggregate action is retained for audit/reporting. Concrete runtime
+    // operation actions own the mounted controls and their frontend guards.
+    ui: [{ surfaceId: 'mission-control.instances.actions', behavior: 'disable', coverage: 'api-only' }],
   },
   {
     actionId: 'platform.audit.read',

@@ -31,7 +31,7 @@ Current architecture status:
 - [x] ✅ Engine Sets, project-engine targets, deployment eligibility, external engine systems, external engine registration, and source-owned field enforcement.
 - [x] ✅ OpenAPI authz metadata, strict route inventory guard, backend route migration, and mounted frontend action inventory.
 - [x] ✅ Mission Control-Starbase bridge decisions and mounted Mission Control authorization coverage.
-- [ ] ⬜ Wire `mission-control.bridge.starbase-edit.evaluate` and `starbase.bridge.mission-control.evaluate` into the mounted frontend controls; the bridge APIs/UI flows exist, but the current frontend inventory reports both action ids as unreferenced.
+- [x] ✅ Bridge action inventory is wired through the shared authoritative bridge API client. The browser delegates composite project, engine, target, and lineage decisions to the backend before navigation.
 - [ ] ⬜ Phase 0 clean-contract alignment: canonical principal assignments, removal of legacy authorization fallbacks/writes, provider-neutral external identities, provider-id-bound login, secure secret resolution, source ownership metadata, one-row project-target ownership, and module decomposition.
 - [ ] ⬜ JSON config bundles for roles, groups, engines, Engine Sets, runtime resource sets, assignments, SSO mappings, and project-engine targets.
 - [ ] ⬜ Config bundle APIs, OpenAPI schemas, preview/apply/export/run history, CI/CD apply support, and source ownership/drift diagnostics.

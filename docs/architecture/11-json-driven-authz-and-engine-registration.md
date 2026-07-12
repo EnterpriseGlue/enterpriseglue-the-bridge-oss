@@ -71,6 +71,7 @@ Current config-as-code status:
 - [ ] ⬜ Add config-managed source ownership and drift diagnostics for imported objects.
 - [ ] ⬜ Replace the horizontally scrolling role-permission matrix with a role library and focused single-role permission editor.
 - [ ] ⬜ Add customer-managed sidecar transport to the existing engine configuration and runtime connection paths without creating a parallel authorization model.
+- [x] ✅ Close the frontend action inventory gap: bridge evaluation actions are referenced by the shared authoritative bridge client, while the aggregate `engine.instances.mutate` action is explicitly API-only because concrete runtime mutation actions own mounted UI controls.
 
 ## Relationship To Implemented RBAC Foundation
 

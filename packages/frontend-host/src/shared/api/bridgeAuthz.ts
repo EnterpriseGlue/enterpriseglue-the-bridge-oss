@@ -1,5 +1,14 @@
 import { apiClient } from './client';
 
+/**
+ * Composite bridge decisions are evaluated by the backend because the browser
+ * cannot determine project-target and deployment-lineage access on its own.
+ */
+export const BRIDGE_AUTHZ_ACTION_IDS = {
+  missionControlToStarbase: 'mission-control.bridge.starbase-edit.evaluate',
+  starbaseToMissionControl: 'starbase.bridge.mission-control.evaluate',
+} as const;
+
 export type BridgeDecisionPayload = {
   engineId?: string;
   projectId?: string;
