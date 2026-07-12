@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
+import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
 import {
   runScheduledRuntimeInventoryReconciliationOnce,
   startRuntimeInventoryPollerIfEnabled,
@@ -10,6 +11,9 @@ import {
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
   runtimeResourceInventoryService: { reconcileEngine: vi.fn() },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js', () => ({
+  deploymentDiscoveryService: { reconcileEngine: vi.fn() },
 }));
 
 describe('runtimeInventoryPoller', () => {
@@ -24,6 +28,7 @@ describe('runtimeInventoryPoller', () => {
     stopRuntimeInventoryPoller();
     vi.mocked(getDataSource).mockResolvedValue({ getRepository: () => engineRepo } as any);
     vi.mocked(runtimeResourceInventoryService.reconcileEngine).mockResolvedValue({ created: 0, updated: 1, deactivated: 0, materializedSets: 2 });
+    vi.mocked(deploymentDiscoveryService.reconcileEngine).mockResolvedValue({ created: 0, updated: 0, artifactsCreated: 0 });
   });
 
   afterEach(() => {
@@ -40,7 +45,7 @@ describe('runtimeInventoryPoller', () => {
     ]);
 
     await expect(runScheduledRuntimeInventoryReconciliationOnce({ tenantIds: ['tenant-a'] })).resolves.toEqual([
-      { engineId: 'central-a', tenantId: 'tenant-a', status: 'reconciled', created: 0, updated: 1, deactivated: 0, materializedSets: 2 },
+      { engineId: 'central-a', tenantId: 'tenant-a', status: 'reconciled', created: 0, updated: 1, deactivated: 0, materializedSets: 2, deploymentsCreated: 0, deploymentsUpdated: 0, deploymentArtifactsCreated: 0 },
     ]);
     expect(runtimeResourceInventoryService.reconcileEngine).toHaveBeenCalledWith('central-a', 'tenant-a');
   });
@@ -56,7 +61,7 @@ describe('runtimeInventoryPoller', () => {
 
     await expect(runScheduledRuntimeInventoryReconciliationOnce()).resolves.toEqual([
       { engineId: 'fails', tenantId: null, status: 'failed' },
-      { engineId: 'works', tenantId: null, status: 'reconciled', created: 1, updated: 0, deactivated: 0, materializedSets: 0 },
+      { engineId: 'works', tenantId: null, status: 'reconciled', created: 1, updated: 0, deactivated: 0, materializedSets: 0, deploymentsCreated: 0, deploymentsUpdated: 0, deploymentArtifactsCreated: 0 },
     ]);
   });
 

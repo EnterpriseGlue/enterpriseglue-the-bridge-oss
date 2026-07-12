@@ -49,6 +49,7 @@ export * from './ConfigBundleApplyService.js';
 export * from './ConfigBundleExportService.js';
 export * from './RuntimeResourceInventoryService.js';
 export * from './DeploymentReceiptService.js';
+export * from './DeploymentDiscoveryService.js';
 export * from './SecretResolver.js';
 export * from './PolicyService.js';
 export * from './UserService.js';

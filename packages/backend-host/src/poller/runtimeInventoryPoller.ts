@@ -1,6 +1,7 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
+import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -20,6 +21,9 @@ export interface RuntimeInventoryReconciliationResult {
   updated?: number;
   deactivated?: number;
   materializedSets?: number;
+  deploymentsCreated?: number;
+  deploymentsUpdated?: number;
+  deploymentArtifactsCreated?: number;
 }
 
 function parsePositiveInterval(value: string | undefined): number {
@@ -63,7 +67,9 @@ export async function runScheduledRuntimeInventoryReconciliationOnce(
     const tenantId = engine.tenantId || null;
     try {
       const result = await runtimeResourceInventoryService.reconcileEngine(engine.id, tenantId);
-      results.push({ engineId: engine.id, tenantId, status: 'reconciled', ...result });
+      const deployments = await deploymentDiscoveryService.reconcileEngine(engine.id, tenantId);
+      results.push({ engineId: engine.id, tenantId, status: 'reconciled', ...result,
+        deploymentsCreated: deployments.created, deploymentsUpdated: deployments.updated, deploymentArtifactsCreated: deployments.artifactsCreated });
     } catch (error) {
       logger.warn('Scheduled runtime inventory reconciliation failed', { engineId: engine.id, tenantId, error });
       results.push({ engineId: engine.id, tenantId, status: 'failed' });

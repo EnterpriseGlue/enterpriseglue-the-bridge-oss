@@ -56,6 +56,7 @@ import { configBundleDiffService } from '@enterpriseglue/shared/services/platfor
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundleExportService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleExportService.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
+import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
 import {
   evaluateMissionControlStarbaseBridge,
   evaluateStarbaseMissionControlBridge,
@@ -2044,8 +2045,11 @@ router.post('/api/authz/runtime-resource-sets/:id/materialize', apiLimiter, requ
 }));
 
 router.post('/api/authz/runtime-resources/:id/reconcile', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  const result = await runtimeResourceInventoryService.reconcileEngine(String(req.params.id), req.tenant?.tenantId || null);
-  res.json(result);
+  const engineId = String(req.params.id);
+  const tenantId = req.tenant?.tenantId || null;
+  const result = await runtimeResourceInventoryService.reconcileEngine(engineId, tenantId);
+  const deployments = await deploymentDiscoveryService.reconcileEngine(engineId, tenantId);
+  res.json({ ...result, deployments });
 }));
 
 // ============================================================================
