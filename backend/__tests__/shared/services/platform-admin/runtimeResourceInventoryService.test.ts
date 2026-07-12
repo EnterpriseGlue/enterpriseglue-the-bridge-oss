@@ -6,6 +6,8 @@ import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infras
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
+const { camundaGet, getDecisionDefinitions } = vi.hoisted(() => ({ camundaGet: vi.fn(), getDecisionDefinitions: vi.fn() }));
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({ camundaGet, getDecisionDefinitions }));
 
 function setup() {
   const resourceRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn().mockResolvedValue(undefined), update: vi.fn(), find: vi.fn().mockResolvedValue([]) };
@@ -57,5 +59,21 @@ describe('runtimeResourceInventoryService', () => {
     const { setRepo } = setup();
     setRepo.findOne.mockResolvedValue({ id: 'set-1', tenantId: 'tenant-a', isArchived: false });
     await expect(runtimeResourceInventoryService.materialize('set-1', 'tenant-b')).rejects.toThrow('Runtime Resource Set not found');
+  });
+
+  it('reconciles process and decision definitions then refreshes engine resource sets', async () => {
+    camundaGet.mockResolvedValue([{ id: 'process-1', key: 'payments-order', version: 2, tenantId: 'runtime-a', deploymentId: 'deployment-1' }]);
+    getDecisionDefinitions.mockResolvedValue([{ id: 'decision-1', key: 'payments-risk', version: 1 }]);
+    const observe = vi.spyOn(runtimeResourceInventoryService, 'observe').mockResolvedValue({ created: 2, updated: 0 });
+    const materializeForEngine = vi.spyOn(runtimeResourceInventoryService, 'materializeForEngine').mockResolvedValue([]);
+
+    const result = await runtimeResourceInventoryService.reconcileEngine('engine-1', 'tenant-a');
+
+    expect(result).toEqual({ created: 2, updated: 0, materializedSets: 0 });
+    expect(observe).toHaveBeenCalledWith('engine-1', 'tenant-a', expect.arrayContaining([
+      expect.objectContaining({ resourceKind: 'process_definition', resourceKey: 'payments-order', runtimeTenantId: 'runtime-a' }),
+      expect.objectContaining({ resourceKind: 'decision_definition', resourceKey: 'payments-risk' }),
+    ]));
+    expect(materializeForEngine).toHaveBeenCalledWith('engine-1', 'tenant-a');
   });
 });
