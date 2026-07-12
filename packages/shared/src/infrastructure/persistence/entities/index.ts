@@ -50,6 +50,8 @@ export { GitTag } from './GitTag.js';
 export { Invitation } from './Invitation.js';
 export { IdentityEntitlementMapping } from './IdentityEntitlementMapping.js';
 export { IdentityProvider } from './IdentityProvider.js';
+export { IdentityReconciliationCheckpoint } from './IdentityReconciliationCheckpoint.js';
+export { DeploymentReceipt } from './DeploymentReceipt.js';
 export { Notification } from './Notification.js';
 export { PasswordResetToken } from './PasswordResetToken.js';
 export { PendingChange } from './PendingChange.js';
