@@ -5,6 +5,7 @@ import decisionsRouter from '../../../../../packages/backend-host/src/modules/mi
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
+import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
@@ -78,6 +79,7 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/decisi
 describe('mission-control decisions routes', () => {
   let app: express.Application;
   let artifactFind: ReturnType<typeof vi.fn>;
+  let fileFind: ReturnType<typeof vi.fn>;
   let fileVersionFindOne: ReturnType<typeof vi.fn>;
   let fileVersionQbGetRawOne: ReturnType<typeof vi.fn>;
 
@@ -89,6 +91,7 @@ describe('mission-control decisions routes', () => {
     vi.clearAllMocks();
 
     artifactFind = vi.fn().mockResolvedValue([]);
+    fileFind = vi.fn().mockResolvedValue([]);
     fileVersionFindOne = vi.fn().mockResolvedValue(null);
     fileVersionQbGetRawOne = vi.fn().mockResolvedValue(null);
 
@@ -116,6 +119,9 @@ describe('mission-control decisions routes', () => {
         }
         if (entity === EngineDeploymentArtifact) {
           return { find: artifactFind };
+        }
+        if (entity === File) {
+          return { find: fileFind };
         }
         if (entity === FileCommitVersion) {
           return fileVersionRepo;
@@ -171,6 +177,17 @@ describe('mission-control decisions routes', () => {
 
     expect(response.status).toBe(403);
     expect(listDecisionDefinitions).not.toHaveBeenCalled();
+  });
+
+  it('does not infer a Starbase edit target from a matching decision key without deployment lineage', async () => {
+    fileFind.mockResolvedValueOnce([{ id: 'file-key-match', projectId: 'project-1' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/decision-definitions/edit-target')
+      .query({ engineId: 'engine-1', key: 'risk', version: 2 });
+
+    expect(response.status).toBe(404);
+    expect(fileFind).not.toHaveBeenCalled();
   });
 
   it('resolves edit-target through scoped project file permissions without legacy project membership', async () => {

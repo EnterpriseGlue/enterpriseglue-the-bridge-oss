@@ -7,7 +7,6 @@ import { validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js'
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js'
-import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js'
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js'
 import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 import {
@@ -195,52 +194,6 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
       fileVersionNumber,
       mappingSource,
       artifactCreatedAt: Number(row.createdAt),
-    })
-  }
-
-  // Fallback: no artifact mapping found — search File table by bpmnProcessId
-  const fileRepo = dataSource.getRepository(File)
-  const bpmnFiles = await fileRepo.find({
-    where: { type: 'bpmn', bpmnProcessId: processKey },
-    select: ['id', 'projectId', 'name'],
-  })
-
-  for (const f of bpmnFiles) {
-    const projectId = String(f.projectId || '')
-    if (!projectId) continue
-
-    const canRead = await canViewProjectFile(req, projectId)
-    if (!canRead) continue
-
-    const canEdit = await canEditProjectFile(req, projectId)
-
-    let fileVersionNumber: number | null = null
-    let fallbackCommitId: string | null = null
-    const latestVersion = await fileCommitVersionRepo.createQueryBuilder('v')
-      .select(['v.versionNumber AS "versionNumber"', 'v.commitId AS "commitId"'])
-      .where('v.fileId = :fileId', { fileId: f.id })
-      .orderBy('v.createdAt', 'DESC')
-      .limit(1)
-      .getRawOne<{ versionNumber?: number; commitId?: string }>()
-
-    if (latestVersion && Number.isFinite(Number(latestVersion.versionNumber))) {
-      fileVersionNumber = Number(latestVersion.versionNumber)
-      fallbackCommitId = latestVersion.commitId ? String(latestVersion.commitId) : null
-    }
-
-    return res.json({
-      canShowEditButton: true,
-      canEdit,
-      engineId,
-      processKey,
-      processVersion,
-      projectId,
-      fileId: f.id,
-      engineDeploymentId: '',
-      commitId: fallbackCommitId,
-      fileVersionNumber,
-      mappingSource: 'file-key-match' as const,
-      artifactCreatedAt: 0,
     })
   }
 

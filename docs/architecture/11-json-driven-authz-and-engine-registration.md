@@ -2321,7 +2321,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Runtime resource resolver tests for process definition key, decision definition key, process instance inherited scope, deployment lineage, and runtime tenant id.
 - [ ] ⬜ Distributed-engine tests proving `engine_wide` remains the default and does not require runtime-resource materialization.
 - [ ] ⬜ Direct deployment tests proving discovery is idempotent, receipts enrich lineage, nullable project lineage is handled, and bridge links require verified lineage.
-- [ ] ⬜ Bridge tests prove `file-key-match` and inferred/unverified lineage never authorize Mission Control-Starbase navigation.
+- [x] ✅ Bridge lookup and route tests prove `file-key-match` and inferred/unverified lineage never authorize Mission Control-Starbase navigation. The edit-target API now requires a deployment artifact with project/file lineage.
 - [ ] ⬜ Deployment dropdown tests proving project target and engine permission filtering.
 - [ ] ⬜ UI tests for preview, apply, badges, and config-owned read-only fields.
 - [ ] ⬜ Role editor tests for search, category selection, sensitive acknowledgement, unsaved changes, system-role duplication, config ownership, and no horizontal page overflow at supported widths.

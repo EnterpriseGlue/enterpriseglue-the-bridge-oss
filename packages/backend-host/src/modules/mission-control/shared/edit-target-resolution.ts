@@ -1,11 +1,10 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js'
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js'
-import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js'
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js'
 import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 
-export type DeployedEditTargetMappingSource = 'git-commit' | 'db-timestamp' | 'db-latest' | 'deployment-timestamp' | 'file-key-match'
+export type DeployedEditTargetMappingSource = 'git-commit' | 'db-timestamp' | 'db-latest' | 'deployment-timestamp'
 
 export interface DeployedEditTargetResolution {
   canShowEditButton: true
@@ -27,8 +26,6 @@ export interface ResolveDeployedEditTargetParams {
   artifactKey: string
   artifactVersion: number
   artifactId?: string | null
-  fileType: 'bpmn' | 'dmn'
-  fileKeyField: 'bpmnProcessId' | 'dmnDecisionId'
 }
 
 function toStringValue(value: unknown): string {
@@ -125,7 +122,7 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
     const deploymentTimestamp = deployedAt ?? artifactCreatedAt
 
     let fileVersionNumber: number | null = null
-    let mappingSource: Exclude<DeployedEditTargetMappingSource, 'file-key-match'> = 'db-latest'
+    let mappingSource: DeployedEditTargetMappingSource = 'db-latest'
 
     if (commitId) {
       const byCommit = await fileCommitVersionRepo.findOne({
@@ -167,38 +164,6 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
       fileVersionNumber,
       mappingSource,
       artifactCreatedAt,
-    }
-  }
-
-  const fileRepo = dataSource.getRepository(File)
-  const files = await fileRepo.find({
-    where: { type: params.fileType, [params.fileKeyField]: params.artifactKey } as any,
-    select: ['id', 'projectId', 'name'],
-  })
-
-  for (const file of files) {
-    const projectId = toStringValue(file.projectId)
-    if (!projectId) continue
-
-    const canRead = await canViewProjectFile(params.userId, projectId)
-    if (!canRead) continue
-
-    const canEdit = await canEditProjectFile(params.userId, projectId)
-    const latestVersion = await findLatestFileVersion(fileCommitVersionRepo, file.id)
-    const fileVersionNumber = toFiniteNumber(latestVersion?.versionNumber)
-    const commitId = toNullableString(latestVersion?.commitId)
-
-    return {
-      canShowEditButton: true,
-      canEdit,
-      engineId: params.engineId,
-      projectId,
-      fileId: file.id,
-      engineDeploymentId: '',
-      commitId,
-      fileVersionNumber,
-      mappingSource: 'file-key-match',
-      artifactCreatedAt: 0,
     }
   }
 

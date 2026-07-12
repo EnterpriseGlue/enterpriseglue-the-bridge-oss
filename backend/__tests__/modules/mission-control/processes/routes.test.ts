@@ -5,6 +5,7 @@ import processesRouter from '../../../../../packages/backend-host/src/modules/mi
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/db/entities/EngineDeploymentArtifact.js';
+import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
@@ -80,6 +81,7 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/proces
 describe('mission-control processes routes', () => {
   let app: express.Application;
   let artifactFind: ReturnType<typeof vi.fn>;
+  let fileFind: ReturnType<typeof vi.fn>;
   let fileVersionFindOne: ReturnType<typeof vi.fn>;
   let fileVersionQbGetRawOne: ReturnType<typeof vi.fn>;
 
@@ -91,6 +93,7 @@ describe('mission-control processes routes', () => {
     vi.clearAllMocks();
 
     artifactFind = vi.fn().mockResolvedValue([]);
+    fileFind = vi.fn().mockResolvedValue([]);
     fileVersionFindOne = vi.fn().mockResolvedValue(null);
     fileVersionQbGetRawOne = vi.fn().mockResolvedValue(null);
 
@@ -118,6 +121,9 @@ describe('mission-control processes routes', () => {
         }
         if (entity === EngineDeploymentArtifact) {
           return { find: artifactFind };
+        }
+        if (entity === File) {
+          return { find: fileFind };
         }
         if (entity === FileCommitVersion) {
           return fileVersionRepo;
@@ -203,6 +209,17 @@ describe('mission-control processes routes', () => {
 
     expect(response.status).toBe(400);
     expect(response.body?.error).toBe('Invalid query parameters');
+  });
+
+  it('does not infer a Starbase edit target from a matching process key without deployment lineage', async () => {
+    fileFind.mockResolvedValueOnce([{ id: 'file-key-match', projectId: 'project-1' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/edit-target')
+      .query({ engineId: 'engine-1', key: 'invoice', version: 3 });
+
+    expect(response.status).toBe(404);
+    expect(fileFind).not.toHaveBeenCalled();
   });
 
   it('resolves edit-target using processDefinitionId to disambiguate', async () => {
