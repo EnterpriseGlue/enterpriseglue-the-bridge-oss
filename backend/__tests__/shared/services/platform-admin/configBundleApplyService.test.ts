@@ -9,6 +9,8 @@ import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persis
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
+import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 
@@ -46,6 +48,8 @@ function setupDataSource() {
   const assignmentRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn(), delete: vi.fn() };
   const projectRepo = { findOne: vi.fn().mockResolvedValue(null) };
   const targetRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
+  const providerRepo = { find: vi.fn().mockResolvedValue([]) };
+  const identityMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
   const auditRepo = { insert: auditInsert };
   const repositories = (entity: unknown) => {
     if (entity === RbacRole) return roleRepo;
@@ -55,6 +59,8 @@ function setupDataSource() {
     if (entity === RbacRoleAssignment) return assignmentRepo;
     if (entity === Project) return projectRepo;
     if (entity === ProjectEngineTarget) return targetRepo;
+    if (entity === SsoProvider) return providerRepo;
+    if (entity === IdentityEntitlementMapping) return identityMappingRepo;
     if (entity === RbacRolePermission) return permissionRepo;
     if (entity === AuditLog) return auditRepo;
     throw new Error('Unexpected repository');
@@ -64,7 +70,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, engineRepo, projectRepo, targetRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, engineRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {

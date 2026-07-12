@@ -7,6 +7,8 @@ import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/ent
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
+import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { engineSetService } from './EngineSetService.js';
 import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js';
@@ -96,7 +98,7 @@ class ConfigBundleApplyService {
     if (input.expectedPreviewHash !== compilation.preview.canonicalHash) {
       return fail('Preview hash does not match the submitted configuration bundle', 409);
     }
-    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-sets.json', './assignments.json', './project-engine-targets.json'].includes(path));
+    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-sets.json', './assignments.json', './project-engine-targets.json', './identity-mappings.json'].includes(path));
     if (unsupported.length > 0) {
       return fail(`Config apply does not yet support: ${unsupported.join(', ')}`, 422);
     }
@@ -115,6 +117,7 @@ class ConfigBundleApplyService {
     const desiredEngineSets = new Map(entries(compilation.files, './engine-sets.json', 'engineSets').map((set) => [set.key, set]));
     const desiredAssignments = entries(compilation.files, './assignments.json', 'assignments');
     const desiredTargets = entries(compilation.files, './project-engine-targets.json', 'projectEngineTargets');
+    const desiredIdentityMappings = entries(compilation.files, './identity-mappings.json', 'identityMappings');
     const materializeIds: string[] = [];
     const now = Date.now();
     let created = 0;
@@ -130,6 +133,8 @@ class ConfigBundleApplyService {
       const assignmentRepo = manager.getRepository(RbacRoleAssignment);
       const projectRepo = manager.getRepository(Project);
       const targetRepo = manager.getRepository(ProjectEngineTarget);
+      const providerRepo = manager.getRepository(SsoProvider);
+      const identityMappingRepo = manager.getRepository(IdentityEntitlementMapping);
       const rolePermissionRepo = manager.getRepository(RbacRolePermission);
 
       for (const change of diff.changes) {
@@ -353,6 +358,37 @@ class ConfigBundleApplyService {
           if (targetKeys.has(`${target.projectId}:${target.engineId}`)) continue;
           await targetRepo.update({ id: target.id }, { status: 'archived', updatedAt: now });
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.project_engine_target.archive', resourceType: 'project_engine_target', resourceId: target.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash } });
+          archived += 1;
+        }
+      }
+
+      const providers = await providerRepo.find();
+      const providerByKey = new Map(providers.filter((provider) => provider.configKey).map((provider) => [provider.configKey!, provider]));
+      const mappingKeys = new Set<string>();
+      for (const mapping of desiredIdentityMappings) {
+        const provider = providerByKey.get(mapping.providerKey);
+        const group = groupByKey.get(mapping.targetGroupKey);
+        if (!provider || !group) fail(`Identity mapping references an unresolved provider or group: ${mapping.key}`, 422);
+        mappingKeys.add(mapping.key);
+        const existing = await identityMappingRepo.findOne({ where: { tenantId, configKey: mapping.key } as any });
+        const values = { providerId: provider.id, configKey: mapping.key, sourceRef, entitlementType: mapping.source.type, externalId: mapping.source.externalId || null, matchOperator: mapping.source.operator, targetGroupId: group.id, syncMode: mapping.syncMode, isActive: true, updatedAt: now };
+        if (!existing) {
+          const mappingId = generateId();
+          await identityMappingRepo.insert({ id: mappingId, tenantId, ...values, createdAt: now });
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.create', resourceType: 'identity_entitlement_mapping', resourceId: mappingId, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, providerKey: mapping.providerKey, groupKey: mapping.targetGroupKey, canonicalHash: diff.canonicalHash } });
+          created += 1;
+        } else {
+          await identityMappingRepo.update({ id: existing.id }, values);
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.update', resourceType: 'identity_entitlement_mapping', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, canonicalHash: diff.canonicalHash } });
+          updated += 1;
+        }
+      }
+      if (manifest.mode === 'authoritative') {
+        const existing = await identityMappingRepo.find({ where: { tenantId, sourceRef } as any });
+        for (const mapping of existing) {
+          if (mapping.configKey && mappingKeys.has(mapping.configKey)) continue;
+          await identityMappingRepo.update({ id: mapping.id }, { isActive: false, updatedAt: now });
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.disable', resourceType: 'identity_entitlement_mapping', resourceId: mapping.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash } });
           archived += 1;
         }
       }
