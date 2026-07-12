@@ -10,6 +10,8 @@ import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { SavedFilter } from '@enterpriseglue/shared/infrastructure/persistence/entities/SavedFilter.js';
 import { Version } from '@enterpriseglue/shared/infrastructure/persistence/entities/Version.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import { In, IsNull } from 'typeorm';
 import {
   AUTHZ_RESOURCE_RESOLVERS,
@@ -53,6 +55,17 @@ export interface RequireRuntimeCollectionActionOptions {
   resourceKind: 'process_definition' | 'decision_definition';
   engineIdFrom?: ResourceIdLocation;
   engineIdKey?: string;
+}
+
+/**
+ * Resolves a definition from the engine before evaluating a resource-aware
+ * permission. The client-supplied definition id is deliberately not used as
+ * an authorization resource key.
+ */
+export interface RequireRuntimeDefinitionActionOptions extends RequireRuntimeCollectionActionOptions {
+  definitionPath: 'process-definition' | 'decision-definition';
+  definitionIdFrom?: ResourceIdLocation;
+  definitionIdKey?: string;
 }
 
 export type CompositeActionKind = 'deployment';
@@ -903,5 +916,77 @@ export function requireRuntimeCollectionAction(actionId: string, options: Requir
       req.authorizedRuntimeResourceKeys = keys;
       return next();
     } catch (error) { return next(error instanceof Error ? error : Errors.internal('Runtime collection authorization failed')); }
+  };
+}
+
+export function requireRuntimeDefinitionAction(actionId: string, options: RequireRuntimeDefinitionActionOptions) {
+  return async function requireRuntimeDefinition(req: Request, _res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw Errors.unauthorized('Authentication required');
+      const action = assertKnownAuthzAction(actionId);
+      const engineId = readRequestValue(req, options.engineIdKey || 'engineId', options.engineIdFrom || 'query')
+        || (req as Request & { engineId?: string }).engineId;
+      if (!engineId) throw Errors.validation('engineId is required');
+      const definitionId = readRequestValue(req, options.definitionIdKey || 'id', options.definitionIdFrom || 'params');
+      if (!definitionId) throw Errors.validation(`${options.definitionIdKey || 'id'} is required`);
+
+      const tenantId = req.tenant?.tenantId || null;
+      const dataSource = await getDataSource();
+      const engine = await dataSource.getRepository(Engine).findOne({
+        where: { id: engineId },
+        select: ['id', 'tenantId', 'runtimeAccessScope'],
+      });
+      if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+
+      const context: PermissionContext = {
+        userId: req.user.userId,
+        tenantId,
+        platformRole: req.user.platformRole || (req.user as { role?: string }).role,
+        resourceType: 'engine',
+        resourceId: engineId,
+      };
+      const broad = await permissionService.hasPermission(action.permissionId, context);
+      if (!broad && engine.runtimeAccessScope !== 'resource_aware') {
+        throw Errors.forbidden('Engine runtime access is not allowed');
+      }
+
+      let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
+      if (!broad) {
+        const definition = await camundaGet<Record<string, unknown>>(
+          engineId,
+          `/${options.definitionPath}/${encodeURIComponent(definitionId)}`
+        );
+        const resourceKey = typeof definition.key === 'string' ? definition.key.trim() : '';
+        if (!resourceKey) throw Errors.forbidden('Runtime definition cannot be resolved for authorization');
+        const runtimeTenantId = typeof definition.tenantId === 'string' ? definition.tenantId : '';
+        const runtimeResource = await dataSource.getRepository(RuntimeResource).findOne({
+          where: {
+            engineId,
+            resourceKind: options.resourceKind,
+            resourceKey,
+            runtimeTenantId,
+            isActive: true,
+          },
+          select: ['id', 'tenantId'],
+        });
+        if (!runtimeResource || !isTenantVisible(runtimeResource.tenantId, tenantId)) {
+          throw Errors.forbidden('Runtime definition is not present in the authorization inventory');
+        }
+        const resourceAllowed = await permissionService.hasPermission(action.permissionId, {
+          ...context,
+          resourceType: 'engine_runtime_resource',
+          resourceId: runtimeResource.id,
+        });
+        if (!resourceAllowed) throw Errors.forbidden(`Access denied for action ${action.actionId}`);
+        resource = { type: 'engine_runtime_resource', id: runtimeResource.id };
+      }
+
+      (req as Request & { engineId?: string }).engineId = engineId;
+      req.authzAction = action;
+      req.authzResource = resource;
+      return next();
+    } catch (error) {
+      return next(error instanceof Error ? error : Errors.internal('Runtime definition authorization failed'));
+    }
   };
 }

@@ -3,7 +3,7 @@ import express from 'express';
 import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { requireAction, requireCompositeAction, requireInvitationCreateAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
@@ -14,6 +14,7 @@ import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { SavedFilter } from '@enterpriseglue/shared/infrastructure/persistence/entities/SavedFilter.js';
 import { Version } from '@enterpriseglue/shared/infrastructure/persistence/entities/Version.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { engineAccessService } from '@enterpriseglue/shared/services/platform-admin/EngineAccessService.js';
 import { deploymentEligibilityService } from '@enterpriseglue/shared/services/platform-admin/DeploymentEligibilityService.js';
@@ -55,6 +56,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/DeploymentEligibilitySer
   },
 }));
 
+const { camundaGet } = vi.hoisted(() => ({ camundaGet: vi.fn() }));
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({ camundaGet }));
+
 describe('requireAction project resource resolvers', () => {
   const projectId = '11111111-1111-4111-8111-111111111111';
   const fileId = '22222222-2222-4222-8222-222222222222';
@@ -78,6 +82,7 @@ describe('requireAction project resource resolvers', () => {
   let gitLockFindOne: ReturnType<typeof vi.fn>;
   let savedFilterFindOne: ReturnType<typeof vi.fn>;
   let versionFindOne: ReturnType<typeof vi.fn>;
+  let runtimeResourceFindOne: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     app = express();
@@ -151,6 +156,12 @@ describe('requireAction project resource resolvers', () => {
     }), (req: any, res) => {
       res.json({ resource: req.authzResource, projectId: req.projectId });
     });
+    app.get('/runtime-definitions/:id', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', {
+      resourceKind: 'process_definition',
+      definitionPath: 'process-definition',
+    }), (req: any, res) => {
+      res.json({ resource: req.authzResource, engineId: req.engineId });
+    });
     app.post('/deploy', requireCompositeAction('project.deploy.create', {
       kind: 'deployment',
       projectIdFrom: 'body',
@@ -184,6 +195,8 @@ describe('requireAction project resource resolvers', () => {
     gitLockFindOne = vi.fn().mockResolvedValue({ id: gitLockId, fileId });
     savedFilterFindOne = vi.fn().mockResolvedValue({ id: savedFilterId, engineId });
     versionFindOne = vi.fn().mockResolvedValue({ id: versionId, fileId });
+    runtimeResourceFindOne = vi.fn().mockResolvedValue({ id: 'runtime-resource-1', tenantId: null });
+    camundaGet.mockResolvedValue({ id: 'definition-1', key: 'payments', tenantId: null });
 
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
       async (permission: string) =>
@@ -204,9 +217,35 @@ describe('requireAction project resource resolvers', () => {
         if (entity === GitLock) return { findOne: gitLockFindOne };
         if (entity === SavedFilter) return { findOne: savedFilterFindOne };
         if (entity === Version) return { findOne: versionFindOne };
+        if (entity === RuntimeResource) return { findOne: runtimeResourceFindOne };
         return {};
       },
     });
+  });
+
+  it('uses the engine definition key and inventory for resource-aware definition access', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    const response = await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`);
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).toHaveBeenCalledWith(engineId, '/process-definition/definition-1');
+    expect(runtimeResourceFindOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ engineId, resourceKey: 'payments', resourceKind: 'process_definition' }),
+    }));
+    expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
+  });
+
+  it('does not call the engine when a broad engine grant already permits definition access', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+
+    const response = await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`);
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).not.toHaveBeenCalled();
+    expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
   });
 
   it('authorizes deployment composite actions through deployment eligibility', async () => {

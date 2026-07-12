@@ -28,7 +28,7 @@ import {
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireAction, requireRuntimeCollectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { requireAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 
 // Validation schemas
@@ -83,7 +83,7 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
   }
 }))
 
-r.get('/mission-control-api/process-definitions/:id', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/:id', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition', definitionPath: 'process-definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const definitionId = String(req.params.id)
@@ -94,7 +94,7 @@ r.get('/mission-control-api/process-definitions/:id', requireAction('engine.runt
   }
 }))
 
-r.get('/mission-control-api/process-definitions/:id/xml', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/:id/xml', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition', definitionPath: 'process-definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const definitionId = String(req.params.id)
@@ -117,7 +117,7 @@ r.get('/mission-control-api/process-definitions/resolve', requireAction('engine.
 }))
 
 // Active activity counts for a specific process definition (version-specific)
-r.get('/mission-control-api/process-definitions/:id/active-activity-counts', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/:id/active-activity-counts', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition', definitionPath: 'process-definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const definitionId = String(req.params.id)
@@ -130,7 +130,7 @@ r.get('/mission-control-api/process-definitions/:id/active-activity-counts', req
 
 // Activity counts by state for a specific process definition
 // Returns: { active: { actId: count }, incidents: { actId: count }, suspended: { actId: count }, canceled: { actId: count }, completed: { actId: count } }
-r.get('/mission-control-api/process-definitions/:id/activity-counts-by-state', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/:id/activity-counts-by-state', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition', definitionPath: 'process-definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const definitionId = String(req.params.id)

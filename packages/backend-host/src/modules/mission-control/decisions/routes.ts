@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireAction, requireRuntimeCollectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { requireAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
@@ -227,7 +227,7 @@ r.get('/mission-control-api/decision-definitions', requireRuntimeCollectionActio
 }));
 
 // Get decision definition by ID
-r.get('/mission-control-api/decision-definitions/:id', requireAction('engine.runtime.decisions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions/:id', requireRuntimeDefinitionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition', definitionPath: 'decision-definition' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinition(engineId, definitionId);
@@ -235,7 +235,7 @@ r.get('/mission-control-api/decision-definitions/:id', requireAction('engine.run
 }));
 
 // Get decision definition XML
-r.get('/mission-control-api/decision-definitions/:id/xml', requireAction('engine.runtime.decisions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions/:id/xml', requireRuntimeDefinitionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition', definitionPath: 'decision-definition' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinitionXml(engineId, definitionId);
@@ -243,7 +243,7 @@ r.get('/mission-control-api/decision-definitions/:id/xml', requireAction('engine
 }));
 
 // Evaluate decision
-r.post('/mission-control-api/decision-definitions/:id/evaluate', requireAction('engine.runtime.decisions.evaluate', { resourceIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/decision-definitions/:id/evaluate', requireRuntimeDefinitionAction('engine.runtime.decisions.evaluate', { resourceKind: 'decision_definition', definitionPath: 'decision-definition' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await evaluateDecisionById(engineId, definitionId, req.body);
