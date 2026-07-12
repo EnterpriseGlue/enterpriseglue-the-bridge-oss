@@ -2802,6 +2802,7 @@ function RoleAssignmentsPanel({
   groups,
   serviceAccounts,
   externalSystems,
+  runtimeEngines,
   loading,
   onAssign,
   onRemove,
@@ -2815,6 +2816,7 @@ function RoleAssignmentsPanel({
   groups: AuthzGroup[];
   serviceAccounts: ServiceAccount[];
   externalSystems: ExternalEngineSystem[];
+  runtimeEngines: RuntimeResourceEngineOption[];
   loading: boolean;
   onAssign: (form: {
     principalType: AssignmentPrincipalType;
@@ -2833,6 +2835,7 @@ function RoleAssignmentsPanel({
     principalId: '',
     resourceType: 'engine' as CoreAssignmentResourceType,
     resourceId: '',
+    runtimeEngineId: '',
     roleId: '',
   });
   const activeApiClients = apiClients.filter((client) => client.isActive);
@@ -2843,6 +2846,19 @@ function RoleAssignmentsPanel({
   const selectedGroup = activeGroups.find((group) => group.id === form.principalId) || null;
   const selectedServiceAccount = activeServiceAccounts.find((account) => account.id === form.principalId) || null;
   const selectedExternalSystem = activeExternalSystems.find((system) => system.id === form.resourceId) || null;
+  const selectedRuntimeEngine = runtimeEngines.find((engine) => engine.id === form.runtimeEngineId) || null;
+  const runtimeResourcesQ = useQuery({
+    queryKey: ['assignment-runtime-resources', form.runtimeEngineId],
+    enabled: form.resourceType === 'engine_runtime_resource' && Boolean(form.runtimeEngineId),
+    queryFn: () => apiClient.get<RuntimeResourceInventoryRow[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(form.runtimeEngineId)}`),
+  });
+  const runtimeSetsQ = useQuery({
+    queryKey: ['assignment-runtime-resource-sets', form.runtimeEngineId],
+    enabled: form.resourceType === 'engine_runtime_resource_set' && Boolean(form.runtimeEngineId),
+    queryFn: () => apiClient.get<Array<{ id: string; key: string; name: string; resourceKind: string }>>(`/api/authz/runtime-resource-sets?engineId=${encodeURIComponent(form.runtimeEngineId)}`),
+  });
+  const selectedRuntimeResource = (runtimeResourcesQ.data || []).find((resource) => resource.id === form.resourceId) || null;
+  const selectedRuntimeSet = (runtimeSetsQ.data || []).find((set) => set.id === form.resourceId) || null;
   const resourceTypeItems = form.principalType === 'api_client'
     ? [
       { id: 'platform', label: 'Platform' },
@@ -2964,10 +2980,43 @@ function RoleAssignmentsPanel({
           selectedItem={resourceTypeItems.find((item) => item.id === form.resourceType) || { id: form.resourceType, label: form.resourceType }}
           onChange={({ selectedItem }) => {
             const resourceType = (selectedItem?.id || 'engine') as CoreAssignmentResourceType;
-            setForm((current) => ({ ...current, resourceType, resourceId: resourceType === 'platform' ? '' : current.resourceId, roleId: '' }));
+            setForm((current) => ({ ...current, resourceType, resourceId: resourceType === 'platform' ? '' : current.resourceId, runtimeEngineId: resourceType === 'engine_runtime_resource' || resourceType === 'engine_runtime_resource_set' ? current.runtimeEngineId : '', roleId: '' }));
           }}
         />
-        {form.resourceType === 'external_engine_system' ? (
+        {form.resourceType === 'engine_runtime_resource' || form.resourceType === 'engine_runtime_resource_set' ? <>
+          <Dropdown
+            id="assignment-runtime-engine"
+            titleText="Engine"
+            label="Select an engine"
+            items={runtimeEngines}
+            itemToString={(item) => item?.name || ''}
+            selectedItem={selectedRuntimeEngine}
+            onChange={({ selectedItem }) => setForm((current) => ({ ...current, runtimeEngineId: selectedItem?.id || '', resourceId: '' }))}
+          />
+          {form.resourceType === 'engine_runtime_resource' ? (
+            <Dropdown
+              id="assignment-runtime-resource"
+              titleText="Runtime resource"
+              label={runtimeResourcesQ.isLoading ? 'Loading runtime resources' : 'Select a runtime resource'}
+              items={runtimeResourcesQ.data || []}
+              itemToString={(item) => item ? `${item.resourceKey} (${item.resourceKind === 'process_definition' ? 'process' : 'decision'})` : ''}
+              selectedItem={selectedRuntimeResource}
+              disabled={!form.runtimeEngineId || runtimeResourcesQ.isLoading}
+              onChange={({ selectedItem }) => setForm((current) => ({ ...current, resourceId: selectedItem?.id || '' }))}
+            />
+          ) : (
+            <Dropdown
+              id="assignment-runtime-resource-set"
+              titleText="Runtime resource set"
+              label={runtimeSetsQ.isLoading ? 'Loading runtime resource sets' : 'Select a runtime resource set'}
+              items={runtimeSetsQ.data || []}
+              itemToString={(item) => item ? `${item.name || item.key} (${item.resourceKind})` : ''}
+              selectedItem={selectedRuntimeSet}
+              disabled={!form.runtimeEngineId || runtimeSetsQ.isLoading}
+              onChange={({ selectedItem }) => setForm((current) => ({ ...current, resourceId: selectedItem?.id || '' }))}
+            />
+          )}
+        </> : form.resourceType === 'external_engine_system' ? (
           <Dropdown
             id="assignment-external-system"
             titleText="External system"
@@ -2981,7 +3030,6 @@ function RoleAssignmentsPanel({
           <TextInput
             id="assignment-resource-id"
             labelText="Resource ID"
-            helperText={form.resourceType === 'engine_runtime_resource' ? 'Select a Runtime Resources inventory row ID.' : form.resourceType === 'engine_runtime_resource_set' ? 'Enter a Runtime Resource Set ID.' : undefined}
             disabled={form.resourceType === 'platform'}
             value={form.resourceId}
             onChange={(event) => setForm((current) => ({ ...current, resourceId: event.target.value }))}
@@ -7640,6 +7688,7 @@ export default function AccessControl() {
                 groups={groups}
                 serviceAccounts={serviceAccounts}
                 externalSystems={externalSystems}
+                runtimeEngines={runtimeResourceEnginesQ.data || []}
                 loading={assignmentsQ.isLoading || groupsQ.isLoading || serviceAccountsQ.isLoading}
                 onAssign={assignRole}
                 onRemove={removeAssignment}
