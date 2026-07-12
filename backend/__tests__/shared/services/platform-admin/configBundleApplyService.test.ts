@@ -64,7 +64,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, engineRepo, projectRepo, targetRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -129,5 +129,24 @@ describe('configBundleApplyService', () => {
       sourceRef: 'config_bundle:acme.authz', passwordEnc: 'ref:PAYMENTS_ENGINE_PASSWORD', runtimeAccessScope: 'engine_wide',
       deploymentIntegration: 'enterpriseglue_proxy', connectionMode: 'direct',
     }));
+  });
+
+  it('creates a config-owned project-engine target for an existing config engine', async () => {
+    const { engineRepo, projectRepo, targetRepo } = setupDataSource();
+    const engine = {
+      id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.prod-payments', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz',
+      name: 'Payments', baseUrl: 'https://payments.example.com/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}',
+      runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active',
+    };
+    engineRepo.find.mockResolvedValue([engine]);
+    projectRepo.findOne.mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' });
+    const targetBundle = { ...bundle, imports: ['./engines.json', './project-engine-targets.json'] };
+    const targetFiles = {
+      './engines.json': { engines: [{ key: 'engine.prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.com/engine-rest', auth: { type: 'basic', username: 'eg-client', passwordRef: 'PAYMENTS_ENGINE_PASSWORD' } }] },
+      './project-engine-targets.json': { projectEngineTargets: [{ projectRef: { id: '00000000-0000-4000-8000-000000000001' }, engineRef: { engineKey: 'engine.prod-payments' }, allowCiDeploy: true }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
+    await configBundleApplyService.apply({ bundle: targetBundle, files: targetFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+    expect(targetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project-1', engineId: 'engine-1', source: 'config', sourceRef: 'config_bundle:acme.authz', allowCiDeploy: true }));
   });
 });
