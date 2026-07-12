@@ -1803,7 +1803,7 @@ The implementation should extend existing packages rather than introduce an auth
 
 - [ ] ⬜ Extend `packages/frontend-host/src/features/platform-admin/hooks/useAuthzApi.ts` and platform settings/admin API types for identity, runtime resource, config-bundle, receipt, and reconciliation contracts.
 - [ ] ⬜ Refactor `packages/frontend-host/src/features/platform-admin/pages/AccessControl.tsx` into focused tab components as new surfaces are added; the behavior may change without restructuring the overall Carbon admin navigation.
-- [ ] ⬜ Refactor `PlatformSettingsPage.tsx` tab metadata into a central section registry so Identity Providers, Identity Mappings, Access Control, and Configuration do not duplicate navigation/permission logic.
+- [ ] ⬜ Refactor `PlatformSettingsPage.tsx` tab metadata into a central section registry so Identity Providers, Identity Mappings, Access Control, and Configuration do not duplicate navigation/permission logic. A permission-visible Identity Providers tab with compact Carbon lifecycle management is implemented; broader registry consolidation remains pending.
 - [ ] ⬜ Update `EnginesPage.tsx` and `EngineMembersModal.tsx` for runtime access scope, identity source lineage, runtime resource sets, and deployment ingestion status.
 - [ ] ⬜ Update `EngineSelector.tsx`, Dashboard context/UI, engine API types, and shared engine stores to consume permission-derived visibility instead of legacy `myRole` allowlists.
 - [ ] ⬜ Update Mission Control engine selectors, process/decision lists, process details, batches, migrations, and dashboard widgets for authorized subsets.

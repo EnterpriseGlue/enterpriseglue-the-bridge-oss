@@ -22,6 +22,8 @@ export const PlatformPermission = {
   AUTHZ_CHECK: 'platform:authz:check',
   SSO_ASSIGNMENTS_VIEW: 'platform:sso-assignments:view',
   SSO_ASSIGNMENTS_MANAGE: 'platform:sso-assignments:manage',
+  SSO_PROVIDERS_VIEW: 'platform:sso-providers:view',
+  SSO_PROVIDERS_MANAGE: 'platform:sso-providers:manage',
   PROJECT_ENGINE_TARGETS_VIEW: 'platform:project-engine-targets:view',
   PROJECT_ENGINE_TARGETS_MANAGE: 'platform:project-engine-targets:manage',
 } as const;
@@ -102,6 +104,8 @@ export const ADMIN_NAV_PLATFORM_PERMISSIONS = [
   PlatformPermission.AUTHZ_ROLES_MANAGE,
   PlatformPermission.SSO_ASSIGNMENTS_VIEW,
   PlatformPermission.SSO_ASSIGNMENTS_MANAGE,
+  PlatformPermission.SSO_PROVIDERS_VIEW,
+  PlatformPermission.SSO_PROVIDERS_MANAGE,
   PlatformPermission.ENGINE_REGISTRATION_MANAGE,
 ];
 
@@ -110,6 +114,8 @@ export const ACCESS_CONTROL_PLATFORM_PERMISSIONS = [
   PlatformPermission.AUTHZ_ROLES_MANAGE,
   PlatformPermission.SSO_ASSIGNMENTS_VIEW,
   PlatformPermission.SSO_ASSIGNMENTS_MANAGE,
+  PlatformPermission.SSO_PROVIDERS_VIEW,
+  PlatformPermission.SSO_PROVIDERS_MANAGE,
   PlatformPermission.ENGINE_REGISTRATION_MANAGE,
 ];
 

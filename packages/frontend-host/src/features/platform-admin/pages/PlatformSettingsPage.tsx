@@ -42,6 +42,7 @@ import type {
   UserListItem,
 } from '../../../api/platform-admin';
 import SsoSettingsTab from '../components/SsoSettingsTab';
+import IdentityProvidersSettingsTab from '../components/IdentityProvidersSettingsTab';
 import { GitSettingsSection } from '../components/GitSettingsSection';
 import { ProjectsSettingsSection } from '../components/ProjectsSettingsSection';
 import { InviteDomainsSettingsSection } from '../components/InviteDomainsSettingsSection';
@@ -84,6 +85,7 @@ type PlatformSettingsSection =
   | 'pii-redaction'
   | 'engines'
   | 'sso'
+  | 'identity-providers'
   | 'access-control'
   | 'sso-mappings'
   | 'authz-policies'
@@ -100,6 +102,7 @@ const PLATFORM_SETTINGS_SECTION_LABELS: Record<PlatformSettingsSection, string> 
   'pii-redaction': 'PII Redaction',
   engines: 'Engines',
   sso: 'SSO',
+  'identity-providers': 'Identity Providers',
   'access-control': 'Access Control',
   'sso-mappings': 'SSO Role Mappings',
   'authz-policies': 'Authorization Policies',
@@ -134,6 +137,10 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const canViewSsoMappings = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [
     PlatformPermission.SSO_ASSIGNMENTS_VIEW,
     PlatformPermission.SSO_ASSIGNMENTS_MANAGE,
+  ]);
+  const canViewIdentityProviders = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [
+    PlatformPermission.SSO_PROVIDERS_VIEW,
+    PlatformPermission.SSO_PROVIDERS_MANAGE,
   ]);
   const canViewAuthzPolicies = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [PlatformPermission.AUTHZ_ROLES_MANAGE]);
   const canViewAudit = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [PlatformPermission.AUDIT_VIEW]);
@@ -463,6 +470,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   );
 
   const renderSso = () => <SsoSettingsTab />;
+  const renderIdentityProviders = () => <IdentityProvidersSettingsTab />;
 
   const renderAdminSurface = (children: React.ReactNode) => (
     <React.Suspense fallback={<SkeletonText paragraph lineCount={6} />}>
@@ -510,6 +518,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     { id: 'pii-redaction', label: 'PII Redaction', visible: canReadSettings, render: renderPiiRedaction },
     { id: 'engines', label: 'Engines', visible: canReadSettings || canReadGovernance, render: renderEngines },
     { id: 'sso', label: 'SSO', visible: canReadSettings, render: renderSso },
+    { id: 'identity-providers', label: 'Identity Providers', visible: canViewIdentityProviders, render: renderIdentityProviders },
     { id: 'access-control', label: 'Access Control', visible: canViewAccessControl, render: renderAccessControl },
     { id: 'sso-mappings', label: 'SSO Role Mappings', visible: canViewSsoMappings, render: renderSsoMappings },
     { id: 'authz-policies', label: 'Authorization Policies', visible: canViewAuthzPolicies, render: renderAuthzPolicies },
