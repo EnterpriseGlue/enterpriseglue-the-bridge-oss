@@ -1674,7 +1674,7 @@ Required UI changes:
 - [x] ✅ Mission Control engine dropdown/API shows central engines when the user has either broad engine access or at least one allowed runtime resource in the engine. Runtime-resource and Runtime Resource Set assignments contribute their containing engine to evaluator discovery; the engine list no longer starts from legacy membership rows.
 - [ ] ⬜ Replace `EngineSelector.tsx` hard-coded owner/delegate/operator filtering with backend permission-derived engine visibility and runtime capability fields.
 - [ ] ⬜ Process, decision, instance, incident, job, batch, and migration lists show only authorized runtime resources.
-- [ ] ⬜ Dashboard widgets and counts use authorized subsets.
+- [x] ✅ Dashboard engine and process widgets use authorized subsets: runtime-resource-visible engines enable dashboard process/metrics surfaces, engine discovery is evaluator-derived, and process counts come from the runtime-filtered process-instance endpoint. Project/file aggregate cleanup remains separate.
 - [ ] ⬜ Remove Dashboard legacy-role visibility fallbacks and project-member-only counts; use evaluator-visible project/engine collections and filtered runtime aggregations.
 - [ ] ⬜ Bulk actions show partial-denial diagnostics when selected rows span allowed and denied resources.
 - [ ] ⬜ Engine Detail > Access adds a `Runtime Resources` tab or section for process/decision resource sets, exact grants, and source lineage.

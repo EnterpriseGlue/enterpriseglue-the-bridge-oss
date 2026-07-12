@@ -6,6 +6,7 @@ import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMember.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { In } from 'typeorm';
 import {
   EnginePermissions,
@@ -87,7 +88,39 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
   }, new Map<string, string[]>());
   const ownedEngineIds = engineIdsByRole.get('owner') || [];
   const delegatedEngineIds = engineIdsByRole.get('delegate') || [];
-  const accessibleEngineIds = Array.from(new Set(userEngines.map((entry) => entry.engine.id)));
+  const evaluatorEngineIds = permissionSnapshot.engines.map((engine) => engine.resourceId);
+  const resourceAwareEngines = evaluatorEngineIds.length > 0
+    ? await dataSource.getRepository(Engine).find({
+      where: { id: In(evaluatorEngineIds), runtimeAccessScope: 'resource_aware' },
+      select: ['id'],
+    })
+    : [];
+  const runtimeVisibleEngineIds = (await Promise.all(resourceAwareEngines.map(async (engine) => {
+    const [processes, decisions] = await Promise.all([
+      permissionService.getVisibleRuntimeResources({
+        userId,
+        tenantId,
+        engineId: engine.id,
+        resourceKind: 'process_definition',
+        permission: EnginePermissions.INSTANCE_VIEW,
+        limit: 5_000,
+      }),
+      permissionService.getVisibleRuntimeResources({
+        userId,
+        tenantId,
+        engineId: engine.id,
+        resourceKind: 'decision_definition',
+        permission: EnginePermissions.INSTANCE_VIEW,
+        limit: 5_000,
+      }),
+    ]).catch(() => [[], []] as [unknown[], unknown[]]);
+    return processes.length > 0 || decisions.length > 0 ? engine.id : null;
+  }))).filter((id): id is string => Boolean(id));
+  const accessibleEngineIds = Array.from(new Set([
+    ...userEngines.map((entry) => entry.engine.id),
+    ...evaluatorEngineIds,
+    ...runtimeVisibleEngineIds,
+  ]));
 
   // Get project memberships
   const projectMemberRows = await projectMemberRepo.find({
@@ -123,7 +156,7 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
     hasPlatformPermission(permissionSnapshot.platform, PlatformPermissions.USERS_VIEW) ||
     hasPlatformPermission(permissionSnapshot.platform, PlatformPermissions.USER_VIEW) ||
     hasPlatformPermission(permissionSnapshot.platform, PlatformPermissions.USER_MANAGE);
-  const canViewEngineInstances = hasAnyEnginePermission(permissionSnapshot, [EnginePermissions.INSTANCE_VIEW]);
+  const canViewEngineInstances = hasAnyEnginePermission(permissionSnapshot, [EnginePermissions.INSTANCE_VIEW]) || runtimeVisibleEngineIds.length > 0;
   const canViewEngineDeployments = hasAnyEnginePermission(permissionSnapshot, [EnginePermissions.DEPLOY_VIEW]);
   const canViewProjectDeployments = hasAnyProjectPermission(permissionSnapshot, [
     ProjectPermissions.FILES_VIEW,
