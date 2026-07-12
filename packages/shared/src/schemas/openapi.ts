@@ -1725,6 +1725,7 @@ const {
   UpdatePlatformSettingsRequest,
   EngineOnboardingModeSchema,
   EngineRuntimeAuthorizationModeSchema,
+  EnterpriseGlueConfigBundleSchema,
   ProjectEngineTargetPolicyModeSchema,
   ProjectMemberSchema,
   AddProjectMemberRequest,
@@ -3436,6 +3437,55 @@ const SsoSyncDiagnosticsScanResultSchema = z.object({
   cleanup: z.record(z.string(), z.unknown()).optional(),
 });
 
+const ConfigBundleRequestOpenApiSchema = z.object({
+  bundle: EnterpriseGlueConfigBundleSchema,
+  files: z.record(z.string(), z.unknown()),
+});
+
+const ConfigBundlePreviewResponseOpenApiSchema = z.object({
+  valid: z.boolean(),
+  canonicalHash: z.string().optional(),
+  errors: z.array(z.object({ path: z.string(), message: z.string() })),
+  counts: z.record(z.string(), z.number().int().nonnegative()),
+  expandedRolePermissions: z.record(z.string(), z.array(z.string())).optional(),
+});
+
+const ConfigBundleDiffChangeOpenApiSchema = z.object({
+  objectType: z.enum(['role', 'group', 'engine', 'engine_set', 'runtime_resource_set', 'identity_provider']),
+  key: z.string(),
+  operation: z.enum(['create', 'update', 'noop', 'archive', 'conflict']),
+  reason: z.string(),
+  currentId: z.string().optional(),
+});
+
+const ConfigBundleDiffResponseOpenApiSchema = ConfigBundlePreviewResponseOpenApiSchema.extend({
+  changes: z.array(ConfigBundleDiffChangeOpenApiSchema),
+});
+
+const ConfigBundleApplyRequestOpenApiSchema = ConfigBundleRequestOpenApiSchema.extend({
+  expectedPreviewHash: z.string().min(1),
+});
+
+const ConfigBundleApplyResponseOpenApiSchema = z.object({
+  canonicalHash: z.string(),
+  created: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  archived: z.number().int().nonnegative(),
+  changes: z.array(ConfigBundleDiffChangeOpenApiSchema),
+});
+
+const ConfigBundleApplyRunOpenApiSchema = z.object({
+  id: z.string(),
+  bundleKey: z.string(),
+  actorId: z.string().nullable(),
+  createdAt: z.number(),
+  canonicalHash: z.string().optional(),
+  created: z.number().int().nonnegative().optional(),
+  updated: z.number().int().nonnegative().optional(),
+  archived: z.number().int().nonnegative().optional(),
+  mode: z.enum(['additive', 'authoritative', 'preview_only']).nullable().optional(),
+});
+
 // POST /api/authz/check
 registry.registerPath({
   method: 'post',
@@ -3463,10 +3513,10 @@ registry.registerPath({ method: 'get', path: '/api/authz/roles/{id}', ...authzEx
 registry.registerPath({ method: 'post', path: '/api/authz/roles', ...authzExtension('platform.authz.roles.manage', 'POST', '/api/authz/roles'), request: { body: { content: { 'application/json': { schema: CustomRoleCreateSchema } } } }, responses: { 201: { description: 'Custom role created', content: { 'application/json': { schema: z.object({ id: z.string() }) } } } } });
 registry.registerPath({ method: 'put', path: '/api/authz/roles/{id}', ...authzExtension('platform.authz.roles.manage', 'PUT', '/api/authz/roles/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: CustomRoleUpdateSchema } } } }, responses: { 200: { description: 'Custom role updated', content: { 'application/json': { schema: z.object({ success: z.boolean() }) } } } } });
 registry.registerPath({ method: 'delete', path: '/api/authz/roles/{id}', ...authzExtension('platform.authz.roles.manage', 'DELETE', '/api/authz/roles/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Custom role archived' } } });
-registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/preview', ...authzExtension('platform.authz.roles.manage', 'POST', '/api/authz/config-bundles/preview'), request: { body: { content: { 'application/json': { schema: z.object({ bundle: z.unknown(), files: z.record(z.string(), z.unknown()) }) } } } }, responses: { 200: { description: 'Validated config bundle preview' }, 422: { description: 'Invalid config bundle preview' } } });
-registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/diff', ...authzExtension('platform.authz.roles.manage', 'POST', '/api/authz/config-bundles/diff'), request: { body: { content: { 'application/json': { schema: z.object({ bundle: z.unknown(), files: z.record(z.string(), z.unknown()) }) } } } }, responses: { 200: { description: 'Persisted config bundle diff' }, 422: { description: 'Invalid config bundle input' } } });
-registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/apply', ...authzExtension('platform.authz.roles.manage', 'POST', '/api/authz/config-bundles/apply'), request: { body: { content: { 'application/json': { schema: z.object({ bundle: z.unknown(), files: z.record(z.string(), z.unknown()), expectedPreviewHash: z.string() }) } } } }, responses: { 200: { description: 'Applied config bundle' }, 409: { description: 'Preview hash or ownership conflict' }, 422: { description: 'Invalid or unsupported config bundle' } } });
-registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/runs', ...authzExtension('platform.authz.roles.manage', 'GET', '/api/authz/config-bundles/runs'), request: { query: z.object({ limit: z.coerce.number().int().min(1).max(100).optional() }) }, responses: { 200: { description: 'Recent hash-bound configuration bundle applies' } } });
+registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/preview', ...authzExtension('platform.authz.roles.manage', 'POST', '/api/authz/config-bundles/preview'), request: { body: { content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } }, responses: { 200: { description: 'Validated config bundle preview', content: { 'application/json': { schema: ConfigBundlePreviewResponseOpenApiSchema } } }, 422: { description: 'Invalid config bundle preview', content: { 'application/json': { schema: ConfigBundlePreviewResponseOpenApiSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/diff', ...authzExtension('platform.authz.roles.manage', 'POST', '/api/authz/config-bundles/diff'), request: { body: { content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } }, responses: { 200: { description: 'Persisted config bundle diff', content: { 'application/json': { schema: ConfigBundleDiffResponseOpenApiSchema } } }, 422: { description: 'Invalid config bundle input', content: { 'application/json': { schema: ConfigBundleDiffResponseOpenApiSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/apply', ...authzExtension('platform.authz.roles.manage', 'POST', '/api/authz/config-bundles/apply'), request: { body: { content: { 'application/json': { schema: ConfigBundleApplyRequestOpenApiSchema } } } }, responses: { 200: { description: 'Applied config bundle', content: { 'application/json': { schema: ConfigBundleApplyResponseOpenApiSchema } } }, 409: { description: 'Preview hash or ownership conflict' }, 422: { description: 'Invalid or unsupported config bundle' } } });
+registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/runs', ...authzExtension('platform.authz.roles.manage', 'GET', '/api/authz/config-bundles/runs'), request: { query: z.object({ limit: z.coerce.number().int().min(1).max(100).optional() }) }, responses: { 200: { description: 'Recent hash-bound configuration bundle applies', content: { 'application/json': { schema: z.array(ConfigBundleApplyRunOpenApiSchema) } } } } });
 registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/export', ...authzExtension('platform.authz.roles.manage', 'GET', '/api/authz/config-bundles/export'), request: { query: z.object({ bundleKey: z.string(), tenantKey: z.string().optional() }) }, responses: { 200: { description: 'Export config-owned roles, groups, and engines for a bundle key' } } });
 registry.registerPath({
   method: 'get',

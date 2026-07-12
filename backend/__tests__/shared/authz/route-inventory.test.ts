@@ -22,6 +22,26 @@ describe('authorization route inventory validation', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('documents typed configuration bundle lifecycle contracts', () => {
+    const openApi = generateOpenApi();
+    const preview = openApi.paths['/api/authz/config-bundles/preview'].post;
+    const diff = openApi.paths['/api/authz/config-bundles/diff'].post;
+    const apply = openApi.paths['/api/authz/config-bundles/apply'].post;
+    const runs = openApi.paths['/api/authz/config-bundles/runs'].get;
+    const document = JSON.stringify(openApi);
+
+    expect(preview.requestBody).toBeDefined();
+    expect(preview.responses['200'].content['application/json'].schema).toBeDefined();
+    expect(diff.responses['200'].content['application/json'].schema).toBeDefined();
+    expect(apply.requestBody.content['application/json'].schema).toBeDefined();
+    expect(apply.responses['200'].content['application/json'].schema).toBeDefined();
+    expect(runs.responses['200'].content['application/json'].schema).toBeDefined();
+    expect(document).toContain('expectedPreviewHash');
+    expect(document).toContain('expandedRolePermissions');
+    expect(document).toContain('canonicalHash');
+    expect(document).toContain('runtime_resource_set');
+  });
+
   it('detects a missing public action route in strict OpenAPI mode while ignoring scanner-only aliases', () => {
     const openApi = generateOpenApi();
     delete openApi.paths['/api/admin/settings'];
