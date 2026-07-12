@@ -1,5 +1,6 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
@@ -7,7 +8,7 @@ import { configBundlePreviewService, type ConfigBundlePreviewInput } from './Con
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'role' | 'group';
+  objectType: 'role' | 'group' | 'engine';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
@@ -53,9 +54,10 @@ class ConfigBundleDiffService {
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, rolePermissions] = await Promise.all([
+    const [roles, groups, engines, rolePermissions] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
+      dataSource.getRepository(Engine).find(),
       dataSource.getRepository(RbacRolePermission).find(),
     ]);
     const rolePermissionsByRoleId = new Map<string, string[]>();
@@ -66,6 +68,8 @@ class ConfigBundleDiffService {
     const tenantGroups = groups.filter((group) => (group.tenantId || null) === normalizedTenantId);
     const rolesByKey = new Map(tenantRoles.map((role) => [role.key, role]));
     const groupsByKey = new Map(tenantGroups.map((group) => [group.key, group]));
+    const tenantEngines = engines.filter((engine) => (engine.tenantId || null) === normalizedTenantId);
+    const enginesByConfigKey = new Map(tenantEngines.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine]));
     const changes: ConfigBundleDiffChange[] = [];
 
     const desiredRoles = values(compilation.files, './roles.json', 'roles');
@@ -105,6 +109,27 @@ class ConfigBundleDiffService {
       }
     }
 
+    const desiredEngines = values(compilation.files, './engines.json', 'engines');
+    const desiredEngineKeys = new Set(desiredEngines.map((engine) => engine.key));
+    for (const engine of desiredEngines) {
+      const existing = enginesByConfigKey.get(engine.key) || tenantEngines.find((candidate) => candidate.externalId && candidate.externalId === engine.externalId);
+      if (!existing) {
+        changes.push({ objectType: 'engine', key: engine.key, operation: 'create', reason: 'No persisted engine uses this config key or external id' });
+      } else if (existing.registrationSource !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
+        changes.push({ objectType: 'engine', key: engine.key, operation: 'conflict', currentId: existing.id, reason: 'Existing engine is not owned by this configuration bundle' });
+      } else if (
+        existing.name !== engine.name || existing.baseUrl !== engine.baseUrl || existing.type !== engine.type ||
+        existing.externalId !== (engine.externalId || null) || existing.labelsJson !== JSON.stringify(engine.labels || {}) ||
+        existing.runtimeAccessScope !== engine.runtimeAccessScope || existing.deploymentIntegration !== engine.deploymentIntegration ||
+        existing.connectionMode !== engine.connectionMode || existing.ownershipMode !== (engine.ownershipMode || 'config_locked') ||
+        existing.lifecycleStatus === 'decommissioned'
+      ) {
+        changes.push({ objectType: 'engine', key: engine.key, operation: 'update', currentId: existing.id, reason: 'Config-owned engine differs from desired connection, metadata, or authorization settings' });
+      } else {
+        changes.push({ objectType: 'engine', key: engine.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned engine already matches the desired state' });
+      }
+    }
+
     if (manifest.mode === 'authoritative') {
       for (const role of tenantRoles) {
         if (role.source === CONFIG_SOURCE && role.sourceRef === sourceRef && !desiredRoleKeys.has(role.key) && !role.isArchived) {
@@ -114,6 +139,11 @@ class ConfigBundleDiffService {
       for (const group of tenantGroups) {
         if (group.source === CONFIG_SOURCE && group.sourceRef === sourceRef && !desiredGroupKeys.has(group.key) && !group.isArchived) {
           changes.push({ objectType: 'group', key: group.key, operation: 'archive', currentId: group.id, reason: 'Config-owned group is absent from an authoritative bundle' });
+        }
+      }
+      for (const engine of tenantEngines) {
+        if (engine.registrationSource === CONFIG_SOURCE && engine.sourceRef === sourceRef && engine.configKey && !desiredEngineKeys.has(engine.configKey) && engine.lifecycleStatus !== 'decommissioned') {
+          changes.push({ objectType: 'engine', key: engine.configKey, operation: 'archive', currentId: engine.id, reason: 'Config-owned engine is absent from an authoritative bundle' });
         }
       }
     }

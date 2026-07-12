@@ -47,8 +47,8 @@ Current config-as-code status:
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
 - [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply will persist the expanded permission list later.
-- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group create, update, no-op, conflict, and authoritative-archive previews. Other config object families remain pending.
-- [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for the role/group vertical. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, and refuses unsupported object families rather than ignoring them.
+- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine create, update, no-op, conflict, and authoritative-archive previews. Other config object families remain pending.
+- [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for roles, groups, and engines. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, and refuses unsupported object families rather than ignoring them.
 - [x] ✅ Persist engine config provenance (`configKey`, source reference/hash, ownership mode, last applied time) plus `runtimeAccessScope`, `deploymentIntegration`, and `connectionMode` with backward-compatible defaults.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
@@ -2172,14 +2172,14 @@ Phase 0 exit criteria:
 
 ### Phase 3: Apply Service
 
-- [x] ✅ Add `ConfigBundleApplyService` for roles and groups; extend it to all remaining config object families.
+- [x] ✅ Add `ConfigBundleApplyService` for roles, groups, and engines; extend it to all remaining config object families.
 - [x] ✅ Require the exact canonical preview hash on the implemented apply endpoint.
 - [x] ✅ Apply the implemented role/group vertical in one transaction.
 - [x] ✅ Upsert config-managed custom roles and explicit/template-expanded permissions.
 - [x] ✅ Store expanded custom-role permission lists after `copyFromRoleKey` resolution for the implemented role apply path.
 - [x] ✅ Upsert config-managed groups.
 - [ ] ⬜ Upsert provider-neutral identity providers and entitlement mappings with encrypted/secret-ref provider configuration.
-- [ ] ⬜ Upsert config-managed engines using the current engine field shape.
+- [x] ✅ Upsert config-managed engines using the current engine field shape, opaque secret references, provenance, and central/distributed runtime settings.
 - [ ] ⬜ Persist engine runtime access scope and deployment integration settings.
 - [ ] ⬜ Refresh Engine Set materializations and authorization snapshots when config apply changes engine labels.
 - [ ] ⬜ Resolve secret refs and write encrypted engine credential fields.

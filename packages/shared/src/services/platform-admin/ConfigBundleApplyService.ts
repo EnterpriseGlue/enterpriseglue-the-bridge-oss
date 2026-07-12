@@ -2,6 +2,7 @@ import { type EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
@@ -29,6 +30,17 @@ function entries(files: Record<string, unknown>, path: string, property: string)
 
 function canonicalRoleKeyIdentity(tenantId: string | null, key: string): string {
   return `${tenantId || 'platform'}:${key}`;
+}
+
+function canonicalEngineKeyIdentity(tenantId: string | null, key: string): string {
+  return `${tenantId || 'platform'}:${key}`;
+}
+
+function engineCredentialFields(auth: any): Record<string, string | null> {
+  if (auth.type === 'basic') return { authType: 'basic', username: auth.username, passwordEnc: `ref:${auth.passwordRef}`, oauthTokenUrl: null, oauthScopes: null, oauthAudience: null };
+  if (auth.type === 'bearer') return { authType: 'bearer', username: null, passwordEnc: `ref:${auth.tokenRef}`, oauthTokenUrl: null, oauthScopes: null, oauthAudience: null };
+  if (auth.type === 'oauth2-client-credentials') return { authType: 'oauth2-client-credentials', username: auth.username, passwordEnc: `ref:${auth.passwordRef}`, oauthTokenUrl: auth.tokenUrl, oauthScopes: auth.scopes || null, oauthAudience: auth.audience || null };
+  return { authType: 'none', username: null, passwordEnc: null, oauthTokenUrl: null, oauthScopes: null, oauthAudience: null };
 }
 
 function fail(message: string, statusCode: number): never {
@@ -77,7 +89,7 @@ class ConfigBundleApplyService {
     if (input.expectedPreviewHash !== compilation.preview.canonicalHash) {
       return fail('Preview hash does not match the submitted configuration bundle', 409);
     }
-    const unsupported = Object.keys(compilation.files).filter((path) => path !== './roles.json' && path !== './groups.json');
+    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json'].includes(path));
     if (unsupported.length > 0) {
       return fail(`Config apply does not yet support: ${unsupported.join(', ')}`, 422);
     }
@@ -92,6 +104,7 @@ class ConfigBundleApplyService {
 
     const desiredRoles = new Map(entries(compilation.files, './roles.json', 'roles').map((role) => [role.key, role]));
     const desiredGroups = new Map(entries(compilation.files, './groups.json', 'groups').map((group) => [group.key, group]));
+    const desiredEngines = new Map(entries(compilation.files, './engines.json', 'engines').map((engine) => [engine.key, engine]));
     const now = Date.now();
     let created = 0;
     let updated = 0;
@@ -101,6 +114,7 @@ class ConfigBundleApplyService {
     await dataSource.transaction(async (manager) => {
       const roleRepo = manager.getRepository(RbacRole);
       const groupRepo = manager.getRepository(AuthzGroup);
+      const engineRepo = manager.getRepository(Engine);
       const rolePermissionRepo = manager.getRepository(RbacRolePermission);
 
       for (const change of diff.changes) {
@@ -193,6 +207,42 @@ class ConfigBundleApplyService {
           } else if (change.operation === 'archive' && change.currentId) {
             await groupRepo.update({ id: change.currentId }, { isArchived: true, updatedAt: now });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.group.archive', resourceType: 'authz_group', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, groupKey: change.key, canonicalHash: diff.canonicalHash } });
+            archived += 1;
+          }
+        }
+
+        if (change.objectType === 'engine') {
+          const desired = desiredEngines.get(change.key);
+          if (change.operation === 'create' && desired) {
+            const engineId = generateId();
+            await engineRepo.insert({
+              id: engineId, tenantId, name: desired.name, baseUrl: desired.baseUrl, type: desired.type,
+              externalId: desired.externalId || null, labelsJson: JSON.stringify(desired.labels || {}),
+              registrationSource: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`,
+              configKey: desired.key, configKeyIdentity: canonicalEngineKeyIdentity(tenantId, desired.key),
+              sourceHash: diff.canonicalHash, lastAppliedAt: now, ownershipMode: desired.ownershipMode || 'config_locked',
+              managementMode: 'hybrid', fieldOwnershipJson: null, driftStatus: 'in_sync', lifecycleStatus: 'active',
+              lastExternalSyncAt: null, capabilitiesJson: null, capabilityStatus: null, externalUpdatedAt: null,
+              ...engineCredentialFields(desired.auth), version: desired.version || null, ownerId: null, delegateId: null,
+              environmentTagId: desired.environmentTagId || null, environmentLocked: false,
+              runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, connectionMode: desired.connectionMode,
+              createdAt: now, updatedAt: now,
+            });
+            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.create', resourceType: 'engine', resourceId: engineId, details: { bundleKey: manifest.metadata.key, engineKey: desired.key, canonicalHash: diff.canonicalHash } });
+            created += 1;
+          } else if (change.operation === 'update' && desired && change.currentId) {
+            await engineRepo.update({ id: change.currentId }, {
+              name: desired.name, baseUrl: desired.baseUrl, type: desired.type, externalId: desired.externalId || null,
+              labelsJson: JSON.stringify(desired.labels || {}), sourceHash: diff.canonicalHash, lastAppliedAt: now,
+              ownershipMode: desired.ownershipMode || 'config_locked', lifecycleStatus: 'active', driftStatus: 'in_sync',
+              ...engineCredentialFields(desired.auth), version: desired.version || null, environmentTagId: desired.environmentTagId || null,
+              runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, connectionMode: desired.connectionMode, updatedAt: now,
+            });
+            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.update', resourceType: 'engine', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, engineKey: desired.key, canonicalHash: diff.canonicalHash } });
+            updated += 1;
+          } else if (change.operation === 'archive' && change.currentId) {
+            await engineRepo.update({ id: change.currentId }, { lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned', lastAppliedAt: now, updatedAt: now });
+            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.decommission', resourceType: 'engine', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, engineKey: change.key, canonicalHash: diff.canonicalHash } });
             archived += 1;
           }
         }

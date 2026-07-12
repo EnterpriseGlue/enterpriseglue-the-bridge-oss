@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
@@ -35,10 +36,13 @@ function setupDataSource() {
   const roleRepo = { find: vi.fn().mockResolvedValue([]), insert: roleInsert, update: vi.fn() };
   const groupRepo = { find: vi.fn().mockResolvedValue([]), insert: groupInsert, update: vi.fn() };
   const permissionRepo = { find: vi.fn().mockResolvedValue([]), insert: permissionInsert, delete: vi.fn() };
+  const engineInsert = vi.fn().mockResolvedValue(undefined);
+  const engineRepo = { find: vi.fn().mockResolvedValue([]), insert: engineInsert, update: vi.fn() };
   const auditRepo = { insert: auditInsert };
   const repositories = (entity: unknown) => {
     if (entity === RbacRole) return roleRepo;
     if (entity === AuthzGroup) return groupRepo;
+    if (entity === Engine) return engineRepo;
     if (entity === RbacRolePermission) return permissionRepo;
     if (entity === AuditLog) return auditRepo;
     throw new Error('Unexpected repository');
@@ -48,7 +52,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, permissionInsert, auditInsert, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -88,5 +92,30 @@ describe('configBundleApplyService', () => {
       actorId: 'admin-1',
     })).rejects.toMatchObject({ statusCode: 409 });
     expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('applies a config-managed engine with opaque secret references and runtime defaults', async () => {
+    const { engineInsert } = setupDataSource();
+    const engineBundle = { ...bundle, imports: ['./engines.json'] };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.com/engine-rest',
+          labels: { environment: 'prod', country: 'TR' }, auth: { type: 'basic', username: 'eg-client', passwordRef: 'PAYMENTS_ENGINE_PASSWORD' },
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: engineBundle, files: engineFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle: engineBundle, files: engineFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1',
+    });
+
+    expect(result).toMatchObject({ created: 1, updated: 0, archived: 0 });
+    expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
+      configKey: 'engine.prod-payments', configKeyIdentity: 'tenant-a:engine.prod-payments', registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz', passwordEnc: 'ref:PAYMENTS_ENGINE_PASSWORD', runtimeAccessScope: 'engine_wide',
+      deploymentIntegration: 'enterpriseglue_proxy', connectionMode: 'direct',
+    }));
   });
 });
