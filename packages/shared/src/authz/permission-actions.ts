@@ -6,6 +6,8 @@ export const AUTHZ_RESOURCE_TYPES = [
   'project',
   'engine',
   'engine_set',
+  'engine_runtime_resource',
+  'engine_runtime_resource_set',
   'project_engine_target',
   'external_engine_system',
   'api_client',

@@ -2146,7 +2146,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add first-class engine `connectionMode = direct | customer_sidecar` and platform policy for credentialless private-sidecar endpoints; reject `auth.type = "none"` for direct engines.
 - [ ] ⬜ Add deployment receipt, ingestion source, lineage quality, runtime inventory observation, and reconciliation result schemas.
 - [ ] ⬜ Add config schemas for runtime resource sets with exact keys, prefix selectors, labels, project lineage, deployment lineage, and optional runtime tenant id.
-- [ ] ⬜ Add shared resource types for `engine_runtime_resource` and `engine_runtime_resource_set`.
+- [x] ✅ Add shared resource types for `engine_runtime_resource` and `engine_runtime_resource_set`, plus persisted `RuntimeResourceSet` selector/source metadata. Materialization and evaluator resolution remain pending.
 - [ ] ⬜ Add shared resource resolvers for process definition key, decision definition key, deployment id, and instance-inherited runtime resources.
 - [ ] ⬜ Add label validation for engine metadata keys such as `country`, `domain`, `environment`, `region`, `businessUnit`, `criticality`, and customer-defined keys.
 - [ ] ⬜ Document that labels, not display-only metadata, are used for Engine Set selectors and authorization-adjacent filtering.
