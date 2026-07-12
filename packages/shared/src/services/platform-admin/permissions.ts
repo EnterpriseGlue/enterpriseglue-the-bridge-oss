@@ -14,6 +14,9 @@ import { ProjectMemberRole } from '@enterpriseglue/shared/infrastructure/persist
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { EngineMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineMember.js';
 import { SsoAssignmentMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoAssignmentMapping.js';
 import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js';
@@ -2345,7 +2348,8 @@ class PermissionServiceClass {
     requestedResourceId?: string | null
   ): { resourceType: ResourceType; resourceId: string | null; scopeType: ResourceType; scopeId: string | null } {
     const scopeType = requestedResourceType || roleScope;
-    if (scopeType !== roleScope && !(roleScope === 'engine' && scopeType === 'engine_set')) {
+    const engineScopeTarget = scopeType === 'engine_set' || scopeType === 'engine_runtime_resource' || scopeType === 'engine_runtime_resource_set';
+    if (scopeType !== roleScope && !(roleScope === 'engine' && engineScopeTarget)) {
       throw new Error(`Role scope ${roleScope} cannot be assigned to ${scopeType}`);
     }
 
@@ -2357,7 +2361,7 @@ class PermissionServiceClass {
       throw new Error(`${scopeType} role assignments require a resource ID`);
     }
 
-    if (roleScope === 'engine' && scopeType === 'engine_set') {
+    if (roleScope === 'engine' && engineScopeTarget) {
       return { resourceType: 'engine', resourceId: null, scopeType: 'engine_set', scopeId: requestedResourceId };
     }
 
@@ -2397,6 +2401,24 @@ class PermissionServiceClass {
       if (!engineSet) {
         throw new Error('Engine Set not found');
       }
+      return;
+    }
+
+    if (resourceType === 'engine_runtime_resource') {
+      const runtimeResource = await dataSource.getRepository(RuntimeResource).findOne({
+        where: tenantScopedWhere({ id: resourceId || '', isActive: true }, tenantId),
+        select: ['id'],
+      });
+      if (!runtimeResource) throw new Error('Runtime resource not found or inactive');
+      return;
+    }
+
+    if (resourceType === 'engine_runtime_resource_set') {
+      const runtimeResourceSet = await dataSource.getRepository(RuntimeResourceSet).findOne({
+        where: tenantScopedWhere({ id: resourceId || '', isArchived: false }, tenantId),
+        select: ['id'],
+      });
+      if (!runtimeResourceSet) throw new Error('Runtime Resource Set not found or archived');
       return;
     }
 
@@ -3044,6 +3066,12 @@ class PermissionServiceClass {
     const dataSource = await getDataSource();
     const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
     const now = Date.now();
+    const runtimeResource = resourceType === 'engine_runtime_resource' && resourceId
+      ? await dataSource.getRepository(RuntimeResource).findOne({ where: tenantScopedWhere({ id: resourceId, isActive: true }, tenantId) })
+      : null;
+    if (resourceType === 'engine_runtime_resource' && resourceId && !runtimeResource) {
+      return [];
+    }
     const qb = assignmentRepo.createQueryBuilder('assignment')
       .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
       .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
@@ -3056,7 +3084,13 @@ class PermissionServiceClass {
     addTenantScopeFilter(qb, 'assignment', tenantId);
     addTenantScopeFilter(qb, 'role', tenantId);
 
-    if (resourceType && resourceId) {
+    if (resourceType === 'engine_runtime_resource' && resourceId && runtimeResource) {
+      qb.andWhere(
+        '((assignment.scopeType = :resourceType AND assignment.scopeId = :resourceId) OR ' +
+        '(assignment.scopeType = :engineScope AND (assignment.scopeId = :engineId OR assignment.scopeId IS NULL)))',
+        { resourceType, resourceId, engineScope: 'engine', engineId: runtimeResource.engineId }
+      );
+    } else if (resourceType && resourceId) {
       qb.andWhere(
         '((assignment.scopeType = :resourceType AND assignment.scopeId = :resourceId) OR ' +
         '(assignment.scopeType = :resourceType AND assignment.scopeId IS NULL))',
@@ -3084,6 +3118,47 @@ class PermissionServiceClass {
       scopeType: assignment.scopeType as ResourceType | null,
       scopeId: assignment.scopeId,
     }));
+
+    if (resourceType === 'engine_runtime_resource' && resourceId && runtimeResource) {
+      const runtimeSetQb = assignmentRepo.createQueryBuilder('assignment')
+        .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+        .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+        .innerJoin(RuntimeResourceSetMaterialization, 'runtimeMaterialization', 'runtimeMaterialization.runtimeResourceSetId = assignment.scopeId AND runtimeMaterialization.runtimeResourceId = :resourceId', { resourceId })
+        .where('rolePermission.permissionId = :permission', { permission })
+        .andWhere('role.isArchived = :isArchived', { isArchived: false })
+        .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
+        .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
+        .andWhere('assignment.scopeType = :runtimeSetScope', { runtimeSetScope: 'engine_runtime_resource_set' })
+        .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+      await this.addPermissionPrincipalAssignmentFilter(dataSource, runtimeSetQb, 'assignment', principal, tenantId);
+      addTenantScopeFilter(runtimeSetQb, 'assignment', tenantId);
+      addTenantScopeFilter(runtimeSetQb, 'role', tenantId);
+      addTenantScopeFilter(runtimeSetQb, 'runtimeMaterialization', tenantId);
+
+      const engineSetQb = assignmentRepo.createQueryBuilder('assignment')
+        .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+        .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+        .innerJoin(EngineSetMaterialization, 'engineMaterialization', 'engineMaterialization.engineSetId = assignment.scopeId AND engineMaterialization.engineId = :engineId', { engineId: runtimeResource.engineId })
+        .where('rolePermission.permissionId = :permission', { permission })
+        .andWhere('role.isArchived = :isArchived', { isArchived: false })
+        .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
+        .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
+        .andWhere('assignment.scopeType = :engineSetScope', { engineSetScope: 'engine_set' })
+        .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+      await this.addPermissionPrincipalAssignmentFilter(dataSource, engineSetQb, 'assignment', principal, tenantId);
+      addTenantScopeFilter(engineSetQb, 'assignment', tenantId);
+      addTenantScopeFilter(engineSetQb, 'role', tenantId);
+      addTenantScopeFilter(engineSetQb, 'engineMaterialization', tenantId);
+      const [runtimeSetAssignments, engineSetAssignments] = await Promise.all([runtimeSetQb.getMany(), engineSetQb.getMany()]);
+      const inheritedSources: PermissionEvaluationSource[] = [...runtimeSetAssignments, ...engineSetAssignments].map((assignment) => ({
+        type: 'role-assignment' as const, assignmentId: assignment.id, roleId: assignment.roleId,
+        principalType: assignment.principalType as PrincipalType, principalId: assignment.principalId!, source: assignment.source,
+        sourceMappingId: assignment.sourceMappingId, sourceRef: assignment.sourceRef,
+        scopeType: assignment.scopeType as ResourceType | null, scopeId: assignment.scopeId,
+      }));
+      const groupLineageSources = await this.attachGroupLineage(dataSource, [...directSources, ...inheritedSources], principal, tenantId);
+      return this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
+    }
 
     if (resourceType !== 'engine' || !resourceId) {
       const groupLineageSources = await this.attachGroupLineage(dataSource, directSources, principal, tenantId);

@@ -2079,8 +2079,8 @@ This phase is required because the current implementation still carries compatib
 - [x] ✅ Add a collision-safe, non-null canonical assignment identity key and unique database constraint; active assignment writers now populate it. Required principal fields and removal of compatibility aliases remain in progress.
 - [x] ✅ Move role-assignment evaluation, effective-access lineage, and evaluator-backed visible project/engine discovery to canonical principal and scope fields.
 - [x] ✅ Change active manual, SSO, bootstrap, and engine-governance assignment writes to canonical fields; legacy aliases are now nullable and retained only for migration/diagnostic reads.
-- [ ] ⬜ Keep permission scope (`engine`) separate from assignment target type (`engine`, `engine_set`, `engine_runtime_resource`, `engine_runtime_resource_set`).
-- [ ] ⬜ Extend assignment validation and evaluator lookup for exact runtime resource and runtime resource-set materialization.
+- [x] ✅ Keep permission scope (`engine`) separate from assignment target type (`engine`, `engine_set`, `engine_runtime_resource`, `engine_runtime_resource_set`).
+- [x] ✅ Extend assignment validation and evaluator lookup for exact runtime resources and runtime-resource-set materialization. Runtime resource evaluation includes additive direct engine and Engine Set grants, and fails closed for unknown/inactive inventory rows.
 - [ ] ⬜ Stop writing `userId`, `resourceType`, `resourceId`, and `sourceMappingId` aliases in new code, then remove them after local development data migration.
 - [x] ✅ Make tenant-owned custom role keys unique through the canonical `tenantId:key` identity while preserving globally stable system-role keys under the `platform` identity.
 
@@ -2186,7 +2186,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Resolve secret refs and write encrypted engine credential fields.
 - [ ] ⬜ Upsert config-managed Engine Sets and materialize them.
 - [x] ✅ Upsert config-managed runtime resource sets with tenant-scoped keys, config source ownership, engine-key resolution, audit events, authoritative archival, and post-apply materialization against the persisted runtime inventory. Engine discovery/reconciliation remains pending.
-- [x] ✅ Upsert config-managed group role assignments for platform, engine, and Engine Set scopes using canonical assignment keys and source-scoped authoritative cleanup. User/API/service-account, project, and runtime-resource scopes remain pending.
+- [x] ✅ Upsert config-managed group role assignments for platform, engine, Engine Set, exact runtime-resource, and Runtime Resource Set scopes using canonical assignment keys and source-scoped authoritative cleanup. User/API/service-account and project scopes remain pending.
 - [x] ✅ Upsert config-managed provider-neutral identity entitlement mappings by existing provider config key and internal group key, with source-scoped authoritative disablement. Provider creation from bundles remains pending.
 - [x] ✅ Upsert config-managed project-engine targets by explicit `projectRef.id` and config engine key, with source-scoped authoritative archival. Project-key resolution remains pending until projects have deterministic config keys.
 - [ ] ⬜ Refresh authorization version and frontend permission snapshot invalidation.

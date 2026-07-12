@@ -5,6 +5,7 @@ import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
@@ -140,6 +141,7 @@ class ConfigBundleApplyService {
       const engineRepo = manager.getRepository(Engine);
       const engineSetRepo = manager.getRepository(EngineSet);
       const runtimeResourceSetRepo = manager.getRepository(RuntimeResourceSet);
+      const runtimeResourceRepo = manager.getRepository(RuntimeResource);
       const assignmentRepo = manager.getRepository(RbacRoleAssignment);
       const projectRepo = manager.getRepository(Project);
       const targetRepo = manager.getRepository(ProjectEngineTarget);
@@ -328,24 +330,37 @@ class ConfigBundleApplyService {
       }
 
       // Resolve references after staged role/group/engine/Engine Set writes.
-      const [roles, groups, engines, engineSets] = await Promise.all([
-        roleRepo.find(), groupRepo.find(), engineRepo.find(), engineSetRepo.find(),
+      const [roles, groups, engines, engineSets, runtimeResourceSets] = await Promise.all([
+        roleRepo.find(), groupRepo.find(), engineRepo.find(), engineSetRepo.find(), runtimeResourceSetRepo.find(),
       ]);
       const roleByKey = new Map(roles.map((role) => [role.key, role]));
       const groupByKey = new Map(groups.map((group) => [group.key, group]));
       const engineByKey = new Map(engines.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine]));
       const engineSetByKey = new Map(engineSets.map((set) => [set.key, set]));
+      const runtimeResourceSetByKey = new Map(runtimeResourceSets.map((set) => [set.key, set]));
       const sourceRef = `config_bundle:${manifest.metadata.key}`;
       const desiredKeys = new Set<string>();
       for (const assignment of desiredAssignments) {
         if (assignment.principal.type !== 'group') fail('Config apply currently supports group principals only', 422);
-        if (!['platform', 'engine', 'engine_set'].includes(assignment.scope.type)) fail(`Config apply does not yet support ${assignment.scope.type} assignment scopes`, 422);
+        if (!['platform', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(assignment.scope.type)) fail(`Config apply does not yet support ${assignment.scope.type} assignment scopes`, 422);
         const role = roleByKey.get(assignment.roleKey);
         const group = groupByKey.get(assignment.principal.key);
         if (!role || !group) fail(`Config assignment references an unresolved role or group: ${assignment.roleKey}`, 422);
-        const scopeId = assignment.scope.type === 'platform' ? null
-          : assignment.scope.type === 'engine' ? engineByKey.get(assignment.scope.engineKey)?.id
-          : engineSetByKey.get(assignment.scope.engineSetKey)?.id;
+        let scopeId: string | null = assignment.scope.type === 'platform' ? null
+          : assignment.scope.type === 'engine' ? engineByKey.get(assignment.scope.engineKey)?.id || null
+          : assignment.scope.type === 'engine_set' ? engineSetByKey.get(assignment.scope.engineSetKey)?.id || null
+          : assignment.scope.type === 'engine_runtime_resource_set' ? runtimeResourceSetByKey.get(assignment.scope.runtimeResourceSetKey)?.id || null
+          : null;
+        if (assignment.scope.type === 'engine_runtime_resource') {
+          const engine = engineByKey.get(assignment.scope.engineKey);
+          if (engine) {
+            const runtimeResource = await runtimeResourceRepo.findOne({ where: {
+              engineId: engine.id, resourceKind: assignment.scope.resourceKind, resourceKey: assignment.scope.resourceKey,
+              runtimeTenantId: assignment.scope.runtimeTenantId || '', isActive: true,
+            } });
+            scopeId = runtimeResource?.id || null;
+          }
+        }
         if (assignment.scope.type !== 'platform' && !scopeId) fail('Config assignment references an unresolved scope', 422);
         const assignmentKey = canonicalRoleAssignmentKey({ tenantId, principalType: 'group', principalId: group.id, roleId: role.id, scopeType: assignment.scope.type, scopeId, source: 'config', sourceRef });
         desiredKeys.add(assignmentKey);

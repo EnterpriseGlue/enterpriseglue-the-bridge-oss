@@ -5,6 +5,7 @@ import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
@@ -54,6 +55,7 @@ function setupDataSource() {
   const engineRepo = { find: vi.fn().mockResolvedValue([]), insert: engineInsert, update: vi.fn() };
   const engineSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const runtimeResourceSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
+  const runtimeResourceRepo = { findOne: vi.fn().mockResolvedValue(null) };
   const assignmentRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn(), delete: vi.fn() };
   const projectRepo = { findOne: vi.fn().mockResolvedValue(null) };
   const targetRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
@@ -66,6 +68,7 @@ function setupDataSource() {
     if (entity === Engine) return engineRepo;
     if (entity === EngineSet) return engineSetRepo;
     if (entity === RuntimeResourceSet) return runtimeResourceSetRepo;
+    if (entity === RuntimeResource) return runtimeResourceRepo;
     if (entity === RbacRoleAssignment) return assignmentRepo;
     if (entity === Project) return projectRepo;
     if (entity === ProjectEngineTarget) return targetRepo;
