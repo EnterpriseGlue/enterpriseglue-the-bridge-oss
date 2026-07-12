@@ -2,6 +2,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
@@ -9,7 +10,7 @@ import { configBundlePreviewService, type ConfigBundlePreviewInput } from './Con
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'role' | 'group' | 'engine' | 'engine_set';
+  objectType: 'role' | 'group' | 'engine' | 'engine_set' | 'runtime_resource_set';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
@@ -55,11 +56,12 @@ class ConfigBundleDiffService {
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineSets, rolePermissions] = await Promise.all([
+    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
       dataSource.getRepository(EngineSet).find(),
+      dataSource.getRepository(RuntimeResourceSet).find(),
       dataSource.getRepository(RbacRolePermission).find(),
     ]);
     const rolePermissionsByRoleId = new Map<string, string[]>();
@@ -74,6 +76,8 @@ class ConfigBundleDiffService {
     const enginesByConfigKey = new Map(tenantEngines.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine]));
     const tenantEngineSets = engineSets.filter((set) => (set.tenantId || null) === normalizedTenantId);
     const engineSetsByKey = new Map(tenantEngineSets.map((set) => [set.key, set]));
+    const tenantRuntimeResourceSets = runtimeResourceSets.filter((set) => (set.tenantId || null) === normalizedTenantId);
+    const runtimeResourceSetsByKey = new Map(tenantRuntimeResourceSets.map((set) => [set.key, set]));
     const changes: ConfigBundleDiffChange[] = [];
 
     const desiredRoles = values(compilation.files, './roles.json', 'roles');
@@ -144,6 +148,30 @@ class ConfigBundleDiffService {
       else changes.push({ objectType: 'engine_set', key: set.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned Engine Set metadata already matches the desired state' });
     }
 
+    const desiredRuntimeResourceSets = values(compilation.files, './runtime-resource-sets.json', 'runtimeResourceSets');
+    const desiredRuntimeResourceSetKeys = new Set(desiredRuntimeResourceSets.map((set) => set.key));
+    for (const set of desiredRuntimeResourceSets) {
+      const existing = runtimeResourceSetsByKey.get(set.key);
+      const engine = enginesByConfigKey.get(set.engineRef.engineKey);
+      if (!existing) {
+        changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'create', reason: 'No persisted Runtime Resource Set uses this tenant-scoped key' });
+      } else if (existing.source !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
+        changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'conflict', currentId: existing.id, reason: 'Existing Runtime Resource Set is not owned by this configuration bundle' });
+      } else if (
+        existing.name !== set.name ||
+        (existing.description || null) !== (set.description || null) ||
+        existing.engineId !== engine?.id ||
+        existing.resourceKind !== set.resourceKind ||
+        existing.selectorJson !== JSON.stringify(set.selector) ||
+        existing.runtimeTenantId !== (set.runtimeTenantId || null) ||
+        existing.isArchived
+      ) {
+        changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'update', currentId: existing.id, reason: 'Config-owned Runtime Resource Set differs from the desired engine, selector, tenant, metadata, or archive state' });
+      } else {
+        changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned Runtime Resource Set already matches the desired state' });
+      }
+    }
+
     if (manifest.mode === 'authoritative') {
       for (const role of tenantRoles) {
         if (role.source === CONFIG_SOURCE && role.sourceRef === sourceRef && !desiredRoleKeys.has(role.key) && !role.isArchived) {
@@ -162,6 +190,11 @@ class ConfigBundleDiffService {
       }
       for (const set of tenantEngineSets) {
         if (set.source === CONFIG_SOURCE && set.sourceRef === sourceRef && !desiredEngineSetKeys.has(set.key) && !set.isArchived) changes.push({ objectType: 'engine_set', key: set.key, operation: 'archive', currentId: set.id, reason: 'Config-owned Engine Set is absent from an authoritative bundle' });
+      }
+      for (const set of tenantRuntimeResourceSets) {
+        if (set.source === CONFIG_SOURCE && set.sourceRef === sourceRef && !desiredRuntimeResourceSetKeys.has(set.key) && !set.isArchived) {
+          changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'archive', currentId: set.id, reason: 'Config-owned Runtime Resource Set is absent from an authoritative bundle' });
+        }
       }
     }
 

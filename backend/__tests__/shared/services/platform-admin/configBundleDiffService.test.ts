@@ -3,6 +3,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
@@ -26,6 +27,7 @@ function mockDataSource(roles: unknown[] = [], groups: unknown[] = [], permissio
       if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue(groups) };
       if (entity === Engine) return { find: vi.fn().mockResolvedValue(engines) };
       if (entity === EngineSet) return { find: vi.fn().mockResolvedValue([]) };
+      if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue([]) };
       if (entity === RbacRolePermission) return { find: vi.fn().mockResolvedValue(permissions) };
       throw new Error('Unexpected repository');
     },
@@ -83,6 +85,27 @@ describe('configBundleDiffService', () => {
     expect(result.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({ objectType: 'role', key: 'custom.engine.deployer', operation: 'conflict', currentId: 'role-1' }),
       expect.objectContaining({ objectType: 'group', key: 'group.deployers', operation: 'conflict', currentId: 'group-1' }),
+    ]));
+  });
+
+  it('includes config-owned Runtime Resource Sets in the persisted-state diff', async () => {
+    mockDataSource([], [], [], [{ id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central' }]);
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json', './runtime-resource-sets.json'] },
+      files: {
+        './engines.json': {
+          engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' } }],
+        },
+        './runtime-resource-sets.json': {
+          runtimeResourceSets: [{
+            key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.central' },
+            resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' },
+          }],
+        },
+      },
+    }, 'tenant-a');
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'create' }),
     ]));
   });
 });

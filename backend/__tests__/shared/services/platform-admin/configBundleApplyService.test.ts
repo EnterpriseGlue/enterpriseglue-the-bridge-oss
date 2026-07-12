@@ -4,6 +4,7 @@ import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
@@ -45,6 +46,7 @@ function setupDataSource() {
   const engineInsert = vi.fn().mockResolvedValue(undefined);
   const engineRepo = { find: vi.fn().mockResolvedValue([]), insert: engineInsert, update: vi.fn() };
   const engineSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
+  const runtimeResourceSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const assignmentRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn(), delete: vi.fn() };
   const projectRepo = { findOne: vi.fn().mockResolvedValue(null) };
   const targetRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
@@ -56,6 +58,7 @@ function setupDataSource() {
     if (entity === AuthzGroup) return groupRepo;
     if (entity === Engine) return engineRepo;
     if (entity === EngineSet) return engineSetRepo;
+    if (entity === RuntimeResourceSet) return runtimeResourceSetRepo;
     if (entity === RbacRoleAssignment) return assignmentRepo;
     if (entity === Project) return projectRepo;
     if (entity === ProjectEngineTarget) return targetRepo;
@@ -70,7 +73,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, roleRepo, groupRepo, engineRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, roleRepo, groupRepo, engineRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -168,5 +171,18 @@ describe('configBundleApplyService', () => {
     const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
     await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
     expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-1', configKey: 'mapping.operators', targetGroupId: 'group-1', sourceRef: 'config_bundle:acme.authz' }));
+  });
+
+  it('applies a config-owned Runtime Resource Set against a configured engine', async () => {
+    const { engineRepo, runtimeResourceSetRepo } = setupDataSource();
+    engineRepo.find.mockResolvedValue([{ id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz' }]);
+    const runtimeBundle = { ...bundle, imports: ['./engines.json', './runtime-resource-sets.json'] };
+    const runtimeFiles = {
+      './engines.json': { engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' } }] },
+      './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.central' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' } }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: runtimeBundle, files: runtimeFiles });
+    await configBundleApplyService.apply({ bundle: runtimeBundle, files: runtimeFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+    expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ key: 'runtime.payments', engineId: 'engine-1', resourceKind: 'process_definition', source: 'config', sourceRef: 'config_bundle:acme.authz' }));
   });
 });

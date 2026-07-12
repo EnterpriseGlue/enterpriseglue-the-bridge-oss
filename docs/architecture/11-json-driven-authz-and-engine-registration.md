@@ -47,8 +47,8 @@ Current config-as-code status:
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
 - [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply will persist the expanded permission list later.
-- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine create, update, no-op, conflict, and authoritative-archive previews. Other config object families remain pending.
-- [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for roles, groups, and engines. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, and refuses unsupported object families rather than ignoring them.
+- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine/Engine Set/Runtime Resource Set create, update, no-op, conflict, and authoritative-archive previews. Assignments, providers/mappings, and targets remain outside the diff response.
+- [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for roles, groups, engines, Engine Sets, Runtime Resource Sets, scoped group assignments, identity mappings, and project-engine targets. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, and refuses unsupported object families rather than ignoring them.
 - [x] ✅ Persist engine config provenance (`configKey`, source reference/hash, ownership mode, last applied time) plus `runtimeAccessScope`, `deploymentIntegration`, and `connectionMode` with backward-compatible defaults.
 - [x] ✅ Persist SSO provider config key and source reference so provider-neutral identity mappings can resolve configured providers safely. Provider bundle apply remains pending.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
@@ -2145,7 +2145,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add and persist per-engine `runtimeAccessScope` and `deploymentIntegration` schemas with distributed-engine defaults.
 - [ ] ⬜ Add first-class engine `connectionMode = direct | customer_sidecar` and platform policy for credentialless private-sidecar endpoints; reject `auth.type = "none"` for direct engines.
 - [ ] ⬜ Add deployment receipt, ingestion source, lineage quality, runtime inventory observation, and reconciliation result schemas.
-- [ ] ⬜ Add config schemas for runtime resource sets with exact keys, prefix selectors, labels, project lineage, deployment lineage, and optional runtime tenant id.
+- [x] ✅ Add config schemas for runtime resource sets with exact keys, prefix selectors, labels, project lineage, and optional runtime tenant id. Deployment-lineage selectors remain pending with the runtime inventory model.
 - [x] ✅ Add shared resource types for `engine_runtime_resource` and `engine_runtime_resource_set`, plus persisted `RuntimeResourceSet` selector/source metadata. Materialization and evaluator resolution remain pending.
 - [ ] ⬜ Add shared resource resolvers for process definition key, decision definition key, deployment id, and instance-inherited runtime resources.
 - [ ] ⬜ Add label validation for engine metadata keys such as `country`, `domain`, `environment`, `region`, `businessUnit`, `criticality`, and customer-defined keys.
@@ -2160,7 +2160,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Load multi-file folder bundle and single-file bundle.
 - [ ] ⬜ Resolve imports with path traversal protection.
 - [ ] ⬜ Resolve all references against current database state and staged objects in the same bundle.
-- [ ] ⬜ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets, runtime resource sets, assignments, identity providers/mappings, and project-engine targets.
+- [x] ✅ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets and Runtime Resource Sets. Assignment, identity mapping, and project-engine target diff details remain pending.
 - [ ] ⬜ Produce role permission diffs with additions, removals, expanded template permissions, and affected assignments.
 - [ ] ⬜ Produce runtime resource set diffs with matched, unmatched, newly matched, and no-longer-matched process or decision keys.
 - [ ] ⬜ Validate identity provider references and preview normalized entitlement-to-group matches without contacting providers unless an explicit connectivity test is requested.
@@ -2185,7 +2185,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Refresh Engine Set materializations and authorization snapshots when config apply changes engine labels.
 - [ ] ⬜ Resolve secret refs and write encrypted engine credential fields.
 - [ ] ⬜ Upsert config-managed Engine Sets and materialize them.
-- [ ] ⬜ Upsert config-managed runtime resource sets and materialize them against the runtime resource inventory.
+- [x] ✅ Upsert config-managed runtime resource sets with tenant-scoped keys, config source ownership, engine-key resolution, audit events, and authoritative archival. Runtime-inventory materialization remains pending.
 - [x] ✅ Upsert config-managed group role assignments for platform, engine, and Engine Set scopes using canonical assignment keys and source-scoped authoritative cleanup. User/API/service-account, project, and runtime-resource scopes remain pending.
 - [x] ✅ Upsert config-managed provider-neutral identity entitlement mappings by existing provider config key and internal group key, with source-scoped authoritative disablement. Provider creation from bundles remains pending.
 - [x] ✅ Upsert config-managed project-engine targets by explicit `projectRef.id` and config engine key, with source-scoped authoritative archival. Project-key resolution remains pending until projects have deterministic config keys.
