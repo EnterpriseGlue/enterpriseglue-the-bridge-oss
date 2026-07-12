@@ -8,6 +8,7 @@ import { requirePlatformAdmin } from '@enterpriseglue/shared/middleware/platform
 import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { startBatchPollerIfActive } from './poller/batchPoller.js';
 import { startSsoDiagnosticsPollerIfEnabled } from './poller/ssoDiagnosticsPoller.js';
+import { startRuntimeInventoryPollerIfEnabled } from './poller/runtimeInventoryPoller.js';
 import { getConnectionPool, ConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
 import {
   buildEnterpriseBackendRouteOpenApiAuthzMetadata,
@@ -131,6 +132,7 @@ export async function startServer() {
   // Start background pollers
   void startBatchPollerIfActive();
   void startSsoDiagnosticsPollerIfEnabled();
+  void startRuntimeInventoryPollerIfEnabled();
 
   // Graceful shutdown
   process.on('SIGINT', () => process.exit(0));
