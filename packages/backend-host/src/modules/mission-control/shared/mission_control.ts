@@ -165,11 +165,23 @@ r.get('/mission-control-api/process-definitions/:id/activity-counts-by-state', r
 // -----------------------------
 // Process Instances
 // -----------------------------
-r.post('/mission-control-api/process-instances/preview-count', requireAction('engine.runtime.process-instances.read', { resourceIdFrom: 'body' }), validateBody(previewCountSchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/process-instances/preview-count', requireRuntimeCollectionAction('engine.runtime.process-instances.read', {
+  resourceKind: 'process_definition',
+  engineIdFrom: 'body',
+}), validateBody(previewCountSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await previewProcessInstanceCount(engineId, req.body || {})
-    res.json(data)
+    const keys = req.authorizedRuntimeResourceKeys
+    const requestedKey = typeof req.body?.processDefinitionKey === 'string' ? req.body.processDefinitionKey : null
+    const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null
+    if (!visibleKeys) {
+      return res.json(await previewProcessInstanceCount(engineId, req.body || {}))
+    }
+    const counts = await Promise.all(visibleKeys.map((processDefinitionKey) => previewProcessInstanceCount(engineId, {
+      ...(req.body || {}),
+      processDefinitionKey,
+    })));
+    res.json({ count: counts.reduce((total, result) => total + (Number(result?.count) || 0), 0) })
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to preview count')
   }
