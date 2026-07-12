@@ -14,7 +14,7 @@ import {
   RbacPermission, RbacRole, RbacRoleAssignment, RbacRolePermission, SsoAssignmentMapping, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
   GitProvider, SsoProvider, SsoClaimsMapping, IdentityEntitlementMapping, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, EngineSet, EngineSetMaterialization, SavedFilter, EngineHealth,
+  Engine, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 } from '../entities/index.js';
@@ -29,7 +29,7 @@ const entities = [
   RbacPermission, RbacRole, RbacRoleAssignment, RbacRolePermission, SsoAssignmentMapping, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
   GitProvider, SsoProvider, SsoClaimsMapping, IdentityEntitlementMapping, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, EngineSet, EngineSetMaterialization, SavedFilter, EngineHealth,
+  Engine, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 ];

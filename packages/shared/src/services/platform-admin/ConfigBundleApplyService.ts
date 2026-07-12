@@ -12,6 +12,7 @@ import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/e
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { engineSetService } from './EngineSetService.js';
+import { runtimeResourceInventoryService } from './RuntimeResourceInventoryService.js';
 import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
@@ -126,6 +127,7 @@ class ConfigBundleApplyService {
     const desiredTargets = entries(compilation.files, './project-engine-targets.json', 'projectEngineTargets');
     const desiredIdentityMappings = entries(compilation.files, './identity-mappings.json', 'identityMappings');
     const materializeIds: string[] = [];
+    const materializeRuntimeResourceSetIds: string[] = [];
     const now = Date.now();
     let created = 0;
     let updated = 0;
@@ -309,10 +311,12 @@ class ConfigBundleApplyService {
           if (change.operation === 'create' && desired && values) {
             const id = generateId();
             await runtimeResourceSetRepo.insert({ id, tenantId, key: desired.key, ...values, source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, createdById: input.actorId, createdAt: now });
+            materializeRuntimeResourceSetIds.push(id);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.runtime_resource_set.create', resourceType: 'runtime_resource_set', resourceId: id, details: { bundleKey: manifest.metadata.key, runtimeResourceSetKey: desired.key, canonicalHash: diff.canonicalHash } });
             created += 1;
           } else if (change.operation === 'update' && change.currentId && values) {
             await runtimeResourceSetRepo.update({ id: change.currentId }, values);
+            materializeRuntimeResourceSetIds.push(change.currentId);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.runtime_resource_set.update', resourceType: 'runtime_resource_set', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, runtimeResourceSetKey: desired!.key, canonicalHash: diff.canonicalHash } });
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
@@ -434,6 +438,7 @@ class ConfigBundleApplyService {
       }
     });
     for (const id of materializeIds) await engineSetService.materializeEngineSet(id, tenantId);
+    for (const id of materializeRuntimeResourceSetIds) await runtimeResourceInventoryService.materialize(id, tenantId);
 
     return { canonicalHash: diff.canonicalHash, created, updated, archived, changes: diff.changes };
   }

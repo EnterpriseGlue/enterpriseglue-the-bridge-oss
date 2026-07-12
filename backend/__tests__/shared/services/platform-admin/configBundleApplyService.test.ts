@@ -15,6 +15,13 @@ import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructur
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 
+const { materializeRuntimeResourceSet } = vi.hoisted(() => ({
+  materializeRuntimeResourceSet: vi.fn().mockResolvedValue({ matched: 0, created: 0, updated: 0, removed: 0 }),
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
+  runtimeResourceInventoryService: { materialize: materializeRuntimeResourceSet },
+}));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
 const bundle = {
@@ -184,5 +191,6 @@ describe('configBundleApplyService', () => {
     const preview = configBundlePreviewService.preview({ bundle: runtimeBundle, files: runtimeFiles });
     await configBundleApplyService.apply({ bundle: runtimeBundle, files: runtimeFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
     expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ key: 'runtime.payments', engineId: 'engine-1', resourceKind: 'process_definition', source: 'config', sourceRef: 'config_bundle:acme.authz' }));
+    expect(materializeRuntimeResourceSet).toHaveBeenCalledWith(expect.any(String), 'tenant-a');
   });
 });

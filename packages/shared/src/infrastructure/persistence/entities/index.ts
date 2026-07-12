@@ -63,6 +63,8 @@ export { RbacRole } from './RbacRole.js';
 export { RbacRoleAssignment } from './RbacRoleAssignment.js';
 export { RbacRolePermission } from './RbacRolePermission.js';
 export { RuntimeResourceSet } from './RuntimeResourceSet.js';
+export { RuntimeResource } from './RuntimeResource.js';
+export { RuntimeResourceSetMaterialization } from './RuntimeResourceSetMaterialization.js';
 export { RefreshToken } from './RefreshToken.js';
 export { RemoteSyncState } from './RemoteSyncState.js';
 export { SavedFilter } from './SavedFilter.js';
