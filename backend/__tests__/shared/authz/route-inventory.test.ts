@@ -28,6 +28,7 @@ describe('authorization route inventory validation', () => {
     const diff = openApi.paths['/api/authz/config-bundles/diff'].post;
     const apply = openApi.paths['/api/authz/config-bundles/apply'].post;
     const runs = openApi.paths['/api/authz/config-bundles/runs'].get;
+    const exportBundle = openApi.paths['/api/authz/config-bundles/export'].get;
     const document = JSON.stringify(openApi);
 
     expect(preview.requestBody).toBeDefined();
@@ -36,6 +37,7 @@ describe('authorization route inventory validation', () => {
     expect(apply.requestBody.content['application/json'].schema).toBeDefined();
     expect(apply.responses['200'].content['application/json'].schema).toBeDefined();
     expect(runs.responses['200'].content['application/json'].schema).toBeDefined();
+    expect(exportBundle.responses['200'].content['application/json'].schema).toBeDefined();
     expect(document).toContain('expectedPreviewHash');
     expect(document).toContain('expandedRolePermissions');
     expect(document).toContain('canonicalHash');
