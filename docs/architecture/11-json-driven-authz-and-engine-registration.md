@@ -1118,6 +1118,7 @@ LDAP may be used in either of two ways:
 - [ ] ⬜ Match exact immutable external ids by default; display-name and regex matching require preview warnings and explicit platform enablement.
 - [ ] ⬜ Persist external subject, entitlement, provider, mapping, sync-run, and last-seen lineage without exposing raw token or directory payloads to normal users.
 - [ ] ⬜ Create group memberships with provider-managed source lineage and remove only rows owned by the same provider and mapping during authoritative sync.
+- [x] ✅ Add provider-neutral entitlement reconciliation that creates `identity_provider` group memberships with mapping lineage and removes only the exact mapping-owned row in authoritative mode.
 - [ ] ⬜ Preserve manual, API, automation, and other-provider memberships during identity reconciliation.
 - [ ] ⬜ Run OIDC/SAML synchronization at login and optionally through provider APIs; run LDAP synchronization at login plus scheduled reconciliation.
 - [ ] ⬜ Fail login closed when the configured provider requires authoritative entitlement synchronization and normalization or persistence fails.
