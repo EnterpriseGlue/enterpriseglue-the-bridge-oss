@@ -2244,7 +2244,7 @@ Phase 0 exit criteria:
 
 ### Phase 6: UI
 
-- [ ] ⬜ Add Platform Settings Configuration tab.
+- [x] ✅ Add Platform Settings Configuration tab with pasted JSON preview/diff and exact-hash apply. Export, run history, upload/ZIP import, and CI CLI remain pending.
 - [ ] ⬜ Add upload/paste/import source controls using Carbon components.
 - [ ] ⬜ Add diff viewer with filters and risk grouping.
 - [ ] ⬜ Add apply confirmation based on preview hash.
