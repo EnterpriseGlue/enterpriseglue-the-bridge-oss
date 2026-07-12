@@ -16,6 +16,7 @@ import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persis
 import { In, IsNull } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
 import { ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE, EnginePermissions, permissionService, SYSTEM_ROLE_IDS } from './permissions.js';
 
@@ -587,6 +588,16 @@ export class EngineService {
         userId: entry.userId,
         principalType: 'user',
         principalId: entry.userId,
+        assignmentKey: canonicalRoleAssignmentKey({
+          tenantId: engine.tenantId ?? null,
+          principalType: 'user',
+          principalId: entry.userId,
+          roleId: entry.roleId,
+          scopeType: 'engine',
+          scopeId: engine.id,
+          source: ENGINE_GOVERNANCE_SOURCE,
+          sourceRef: entry.sourceRef,
+        }),
         roleId: entry.roleId,
         resourceType: 'engine',
         resourceId: engine.id,

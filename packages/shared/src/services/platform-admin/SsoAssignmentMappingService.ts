@@ -12,6 +12,7 @@ import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persis
 import { SsoAssignmentMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoAssignmentMapping.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import {
   EnginePermissions,
   PlatformPermissions,
@@ -558,6 +559,16 @@ class SsoAssignmentMappingServiceClass {
             await assignmentRepo.update({ id: existing.id }, {
               principalType: 'user',
               principalId: userId,
+              assignmentKey: canonicalRoleAssignmentKey({
+                tenantId: normalizeTenantId(tenantId ?? mapping.tenantId),
+                principalType: 'user',
+                principalId: userId,
+                roleId: mapping.targetRoleId,
+                scopeType: target.scopeType,
+                scopeId: target.scopeId,
+                source: 'sso',
+                sourceRef: mapping.id,
+              }),
               scopeType: target.scopeType,
               scopeId: target.scopeId,
               sourceRef: mapping.id,

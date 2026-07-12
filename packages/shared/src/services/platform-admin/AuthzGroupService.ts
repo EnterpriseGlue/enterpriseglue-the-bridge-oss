@@ -6,6 +6,7 @@ import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persis
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { SYSTEM_ROLE_IDS } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, type DataSource } from 'typeorm';
@@ -234,6 +235,16 @@ export class AuthzGroupService {
         userId: group.id,
         principalType: 'group',
         principalId: group.id,
+        assignmentKey: canonicalRoleAssignmentKey({
+          tenantId: null,
+          principalType: 'group',
+          principalId: group.id,
+          roleId: group.roleId,
+          scopeType: 'platform',
+          scopeId: null,
+          source: 'bootstrap',
+          sourceRef: 'default-platform-groups',
+        }),
         roleId: group.roleId,
         resourceType: 'platform',
         resourceId: null,

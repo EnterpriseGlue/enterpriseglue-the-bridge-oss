@@ -33,6 +33,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, IsNull, Not, type DataSource, type EntityManager } from 'typeorm';
 import { normalizeTenantIdForPersistence, tenantIdsForAuthz } from '../../authz/tenant-scope.js';
+import { canonicalRoleAssignmentKey } from '../../authz/role-assignment-identity.js';
 import type { AuthzPrincipalType, AuthzResourceType } from '../../authz/permission-actions.js';
 
 // ============================================================================
@@ -1481,6 +1482,7 @@ class PermissionServiceClass {
       | 'userId'
       | 'principalType'
       | 'principalId'
+      | 'assignmentKey'
       | 'roleId'
       | 'resourceType'
       | 'resourceId'
@@ -1514,6 +1516,16 @@ class PermissionServiceClass {
         userId: String(input.userId),
         principalType: 'user',
         principalId: String(input.userId),
+        assignmentKey: canonicalRoleAssignmentKey({
+          tenantId: input.tenantId ?? null,
+          principalType: 'user',
+          principalId: String(input.userId),
+          roleId: input.roleId,
+          scopeType: input.resourceType,
+          scopeId: input.resourceId,
+          source: 'legacy',
+          sourceRef: input.sourceKey,
+        }),
         roleId: input.roleId,
         resourceType: input.resourceType,
         resourceId: input.resourceId,
@@ -2024,32 +2036,20 @@ class PermissionServiceClass {
     await this.assertResourceExists(dataSource, scopeType, scopeId, normalizedTenantId);
     const source = input.source ?? 'manual';
     const sourceRef = input.sourceRef ?? input.sourceMappingId ?? null;
+    const assignmentKey = canonicalRoleAssignmentKey({
+      tenantId: normalizedTenantId,
+      principalType: principal.principalType,
+      principalId: principal.principalId,
+      roleId: input.roleId,
+      scopeType,
+      scopeId,
+      source,
+      sourceRef,
+    });
 
     const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
     const duplicateQb = assignmentRepo.createQueryBuilder('assignment')
-      .where('(assignment.principalId = :principalId OR assignment.userId = :principalId)', { principalId: principal.principalId })
-      .andWhere('(assignment.principalType = :principalType OR assignment.principalType IS NULL)', { principalType: principal.principalType })
-      .andWhere('assignment.roleId = :roleId', { roleId: input.roleId })
-      .andWhere('assignment.resourceType = :resourceType', { resourceType })
-      .andWhere('(assignment.scopeType = :scopeType OR (assignment.scopeType IS NULL AND assignment.resourceType = :scopeType))', { scopeType })
-      .andWhere('assignment.source = :source', { source });
-    addTenantScopeFilter(duplicateQb, 'assignment', normalizedTenantId);
-
-    if (resourceId) {
-      duplicateQb.andWhere('assignment.resourceId = :resourceId', { resourceId });
-    } else {
-      duplicateQb.andWhere('assignment.resourceId IS NULL');
-    }
-    if (scopeId) {
-      duplicateQb.andWhere('(assignment.scopeId = :scopeId OR assignment.resourceId = :scopeId)', { scopeId });
-    } else {
-      duplicateQb.andWhere('(assignment.scopeId IS NULL OR assignment.resourceId IS NULL)');
-    }
-    if (sourceRef) {
-      duplicateQb.andWhere('(assignment.sourceRef = :sourceRef OR assignment.sourceMappingId = :sourceRef)', { sourceRef });
-    } else {
-      duplicateQb.andWhere('(assignment.sourceRef IS NULL AND assignment.sourceMappingId IS NULL)');
-    }
+      .where('assignment.assignmentKey = :assignmentKey', { assignmentKey });
 
     const existing = await duplicateQb.getOne();
     if (existing) {
@@ -2064,6 +2064,7 @@ class PermissionServiceClass {
       userId: principal.legacyUserId,
       principalType: principal.principalType,
       principalId: principal.principalId,
+      assignmentKey,
       roleId: input.roleId,
       resourceType,
       resourceId,

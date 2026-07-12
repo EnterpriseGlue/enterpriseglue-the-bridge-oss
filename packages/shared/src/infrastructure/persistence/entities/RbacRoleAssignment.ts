@@ -2,7 +2,7 @@ import { Entity, Column, Index, Unique } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'role_assignments', schema: 'main' })
-@Unique(['userId', 'roleId', 'resourceType', 'resourceId', 'source', 'sourceMappingId'])
+@Unique('uq_role_assignments_canonical_identity', ['assignmentKey'])
 @Index('idx_role_assignments_tenant', ['tenantId'])
 @Index('idx_role_assignments_user', ['userId'])
 @Index('idx_role_assignments_principal', ['principalType', 'principalId'])
@@ -21,6 +21,10 @@ export class RbacRoleAssignment extends AppBaseEntity {
 
   @Column({ name: 'principal_id', type: 'text', nullable: true })
   principalId!: string | null;
+
+  /** Canonical tenant/principal/role/scope/source identity for uniqueness. */
+  @Column({ name: 'assignment_key', type: 'text' })
+  assignmentKey!: string;
 
   @Column({ name: 'role_id', type: 'text' })
   roleId!: string;
