@@ -490,6 +490,16 @@ export default function Decisions() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
+      {defsQ.isSuccess && selectedEngineId && defItems.length === 0 && (
+        <InlineNotification
+          kind="info"
+          lowContrast
+          hideCloseButton
+          title="No visible decision definitions"
+          subtitle="This engine may have no deployed decisions, or your access is limited to a different runtime resource set."
+          style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }}
+        />
+      )}
       {bridgeError && (
         <InlineNotification
           kind="warning"
