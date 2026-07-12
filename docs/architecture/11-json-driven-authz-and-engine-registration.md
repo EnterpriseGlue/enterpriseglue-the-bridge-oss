@@ -2224,6 +2224,7 @@ Phase 0 exit criteria:
 - [x] ✅ Apply process-definition resource guards to the first-mounted process routes, including edit-target resolution, definition details/XML/statistics, and process starts, so they cannot shadow the resource-aware shared routes.
 - [x] ✅ Persist process-definition lineage for newly created local batch records and filter batch reads, details, cancellation, suspension, and record deletion by that lineage on resource-aware engines; legacy unscoped batch records fail closed there.
 - [x] ✅ Apply the decision-definition resource resolver to the first-mounted decision edit-target route and preserve body-supplied engine resolution for decision evaluation mutations.
+- [x] ✅ Filter historic task, variable, decision, and process-scoped user-operation collections by authorized definition keys; historic decision input/output requests resolve their decision-definition lineage before access is evaluated.
 - [ ] ⬜ Keep `engine_wide` distributed-engine behavior on the fast path and invoke resource filtering only for `resource_aware` engines.
 - [ ] ⬜ Ensure process instance, job, incident, batch, and migration mutations resolve inherited process definition or decision scopes before authorization.
 - [ ] ⬜ Ensure EnterpriseGlue denial prevents engine calls even when the engine might allow the request.

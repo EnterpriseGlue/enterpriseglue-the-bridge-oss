@@ -38,6 +38,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(false),
+    getVisibleRuntimeResources: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -98,6 +99,23 @@ describe('mission-control extended history routes', () => {
       resourceId: 'engine-1',
     }));
     expect(listHistoricTasks).toHaveBeenCalledWith('engine-1', {});
+  });
+
+  it('queries historic tasks only for authorized process definition keys on resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/tasks')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(listHistoricTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments' });
   });
 
   it('redacts historic variables after action authorization', async () => {
