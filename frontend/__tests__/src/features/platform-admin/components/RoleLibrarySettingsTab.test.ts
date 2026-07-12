@@ -18,4 +18,13 @@ describe('RoleLibrarySettingsTab permission filters', () => {
     expect(filterRoleLibraryPermissions(permissions, ['engine:deployment:deploy'], '', true)).toEqual([permissions[1]]);
     expect(filterRoleLibraryPermissions(permissions, ['engine:deployment:deploy'], 'runtime', true)).toEqual([]);
   });
+
+  it('limits results to permissions classified as sensitive by the shared risk helper', () => {
+    const withSensitivePermission = [
+      ...permissions,
+      { key: 'engine:members:manage', scope: 'engine' as const, category: 'Access', label: 'Manage members', description: 'Change engine membership' },
+    ];
+
+    expect(filterRoleLibraryPermissions(withSensitivePermission, [], '', false, true)).toEqual([withSensitivePermission[3]]);
+  });
 });

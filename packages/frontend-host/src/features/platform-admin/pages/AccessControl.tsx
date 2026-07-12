@@ -34,6 +34,7 @@ import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/componen
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { apiClient } from '../../../shared/api/client';
 import { UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
+import { getPermissionRiskForKey } from '../../../shared/auth/permissionRisk';
 import { usePlatformSyncSettings } from '../hooks/usePlatformSyncSettings';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import {
@@ -2032,44 +2033,7 @@ export function getAssignableRolesForPrincipal(
 }
 
 export function getPermissionRisk(permission: PermissionCatalogEntry) {
-  const key = permission.key;
-  if (key.includes('permanent-delete')) {
-    return {
-      label: 'Permanent delete',
-      description: 'Can permanently remove records and should be assigned sparingly.',
-    };
-  }
-  if (key.includes(':delete')) {
-    return {
-      label: 'Delete',
-      description: 'Can delete business resources or runtime data.',
-    };
-  }
-  if (
-    (key.includes(':members:') && !key.endsWith(':view')) ||
-    key.includes(':project-access:') ||
-    key.includes(':delegate:') ||
-    key.includes(':ownership:') ||
-    key.includes(':authz:roles:manage') ||
-    key.includes(':sso-assignments:manage')
-  ) {
-    return {
-      label: 'Access control',
-      description: 'Can change who has access to resources.',
-    };
-  }
-  if (
-    key.includes(':settings:manage') ||
-    key.includes(':engine-registration:manage') ||
-    key.includes(':variables:edit') ||
-    key.includes(':environment:')
-  ) {
-    return {
-      label: 'Sensitive operation',
-      description: 'Can change sensitive platform, engine, or runtime settings.',
-    };
-  }
-  return null;
+  return getPermissionRiskForKey(permission.key);
 }
 
 export function getPermissionImplications(permission: PermissionCatalogEntry) {

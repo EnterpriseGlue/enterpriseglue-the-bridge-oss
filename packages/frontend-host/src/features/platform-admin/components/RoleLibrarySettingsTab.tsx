@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
+import { getPermissionRiskForKey } from '../../../shared/auth/permissionRisk';
 
 type Scope = 'platform' | 'project' | 'engine' | 'engine_runtime_resource';
 interface Role { id: string; key: string; name: string; description: string | null; scope: Scope; kind: 'system' | 'custom'; isEditable: boolean; isArchived: boolean; source?: string; sourceRef?: string | null; permissionCount: number; }
@@ -18,13 +19,16 @@ export function filterRoleLibraryPermissions(
   selectedPermissionIds: string[],
   search: string,
   selectedOnly: boolean,
+  sensitiveOnly = false,
 ): RoleLibraryPermission[] {
   const query = search.trim().toLowerCase();
   const selected = new Set(selectedPermissionIds);
   return permissions.filter((permission) => {
     const matchesSearch = !query || [permission.key, permission.label, permission.description, permission.category]
       .some((value) => value.toLowerCase().includes(query));
-    return matchesSearch && (!selectedOnly || selected.has(permission.key));
+    return matchesSearch
+      && (!selectedOnly || selected.has(permission.key))
+      && (!sensitiveOnly || Boolean(getPermissionRiskForKey(permission.key)));
   });
 }
 
@@ -43,7 +47,8 @@ function PermissionPicker({
 }) {
   const [search, setSearch] = useState('');
   const [selectedOnly, setSelectedOnly] = useState(false);
-  const visiblePermissions = filterRoleLibraryPermissions(permissions, draft, search, selectedOnly);
+  const [sensitiveOnly, setSensitiveOnly] = useState(false);
+  const visiblePermissions = filterRoleLibraryPermissions(permissions, draft, search, selectedOnly, sensitiveOnly);
   const categories = visiblePermissions.reduce<Record<string, RoleLibraryPermission[]>>((result, permission) => {
     result[permission.category] = [...(result[permission.category] || []), permission];
     return result;
@@ -56,6 +61,7 @@ function PermissionPicker({
           <Search id={`${idPrefix}-permission-search`} labelText="Search permissions" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
         <Checkbox id={`${idPrefix}-selected-only`} labelText="Selected only" checked={selectedOnly} onChange={(_event, { checked }) => setSelectedOnly(Boolean(checked))} />
+        <Checkbox id={`${idPrefix}-sensitive-only`} labelText="Sensitive only" checked={sensitiveOnly} onChange={(_event, { checked }) => setSensitiveOnly(Boolean(checked))} />
         <Tag type="cool-gray">{draft.length} selected</Tag>
       </div>
       {Object.keys(categories).length === 0 ? (
