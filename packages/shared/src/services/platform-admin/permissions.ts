@@ -318,6 +318,10 @@ function normalizeTenantId(tenantId?: string | null): string | null {
   return normalizeTenantIdForPersistence(tenantId);
 }
 
+function canonicalRoleKeyIdentity(tenantId: string | null | undefined, key: string): string {
+  return `${normalizeTenantId(tenantId) || 'platform'}:${key.trim()}`;
+}
+
 function normalizeRoleSource(source?: Exclude<RoleSource, 'system'>): Exclude<RoleSource, 'system'> {
   const normalized = source || 'manual';
   if (!['manual', 'config', 'api', 'automation'].includes(normalized)) {
@@ -1453,6 +1457,7 @@ class PermissionServiceClass {
         id: role.id,
         tenantId: null,
         key: role.key,
+        roleKeyIdentity: canonicalRoleKeyIdentity(null, role.key),
         name: role.name,
         description: role.description,
         scope: role.scope,
@@ -1807,12 +1812,14 @@ class PermissionServiceClass {
       throw new Error('Config-managed roles require a source reference');
     }
     const key = normalizeCustomRoleKey(input.key, input.scope, name, id);
+    const tenantId = normalizeTenantId(input.tenantId);
 
     await dataSource.transaction(async (manager) => {
       await manager.getRepository(RbacRole).insert({
         id,
-        tenantId: normalizeTenantId(input.tenantId),
+        tenantId,
         key,
+        roleKeyIdentity: canonicalRoleKeyIdentity(tenantId, key),
         name,
         description: input.description?.trim() || null,
         scope: input.scope,

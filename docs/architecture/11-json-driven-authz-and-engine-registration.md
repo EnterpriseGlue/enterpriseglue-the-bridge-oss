@@ -2078,7 +2078,7 @@ This phase is required because the current implementation still carries compatib
 - [ ] ⬜ Keep permission scope (`engine`) separate from assignment target type (`engine`, `engine_set`, `engine_runtime_resource`, `engine_runtime_resource_set`).
 - [ ] ⬜ Extend assignment validation and evaluator lookup for exact runtime resource and runtime resource-set materialization.
 - [ ] ⬜ Stop writing `userId`, `resourceType`, `resourceId`, and `sourceMappingId` aliases in new code, then remove them after local development data migration.
-- [ ] ⬜ Make tenant-owned custom role keys unique per tenant and preserve globally stable system-role keys.
+- [x] ✅ Make tenant-owned custom role keys unique through the canonical `tenantId:key` identity while preserving globally stable system-role keys under the `platform` identity.
 
 #### Legacy Authorization Removal
 

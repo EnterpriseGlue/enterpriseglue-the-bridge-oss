@@ -1170,12 +1170,14 @@ describe('permissionService', () => {
       scope: 'engine',
       permissionIds: [EnginePermissions.DEPLOY],
       createdById: 'config-bot',
+      tenantId: 'tenant-a',
       source: 'config',
       sourceRef: 'bundle:acme.authz',
     });
 
     expect(roleInsert).toHaveBeenCalledWith(expect.objectContaining({
       key: 'custom.engine.deployment-operator',
+      roleKeyIdentity: 'tenant-a:custom.engine.deployment-operator',
       source: 'config',
       sourceRef: 'bundle:acme.authz',
     }));

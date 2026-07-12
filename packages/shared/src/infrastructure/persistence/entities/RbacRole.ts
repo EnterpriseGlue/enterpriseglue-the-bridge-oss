@@ -6,12 +6,17 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_roles_scope', ['scope'])
 @Index('idx_roles_kind', ['kind'])
 @Index('idx_roles_source', ['source', 'sourceRef'])
+@Index('uq_roles_key_identity', ['roleKeyIdentity'], { unique: true })
 export class RbacRole extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true })
   tenantId!: string | null;
 
-  @Column({ type: 'text', unique: true })
+  @Column({ type: 'text' })
   key!: string;
+
+  /** Canonical tenant-plus-key uniqueness used for custom roles. */
+  @Column({ name: 'role_key_identity', type: 'text' })
+  roleKeyIdentity!: string;
 
   @Column({ type: 'text' })
   name!: string;
