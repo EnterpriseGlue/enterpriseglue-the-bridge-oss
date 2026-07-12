@@ -40,7 +40,7 @@ Current config-as-code status:
 - [x] ✅ Provider-neutral identity normalization, distributed-versus-central runtime scoping, dual deployment ingestion, and the focused v1 runtime resource boundary are documented.
 - [x] ✅ Target operator guides now cover platform configuration and deployment/CI-CD operationalization without presenting unimplemented interfaces as currently available.
 - [ ] ⬜ Complete the end-to-end alignment gate: clean principal assignments, external identity links, provider-id-bound login, secure secrets, config ownership fields, project-target ownership, runtime assignment semantics, and legacy authorization removal.
-- [ ] ⬜ Implement shared JSON config bundle schemas, canonical validation, deterministic keys, and bundle hashing.
+- [x] ✅ Implement shared JSON config bundle schemas, strict canonical validation, deterministic config keys, and SHA-256 bundle hashing. Preview/apply persistence remains gated on Phase 0.
 - [ ] ⬜ Implement provider-neutral identity adapters and entitlement mappings for OIDC, SAML, and LDAP.
 - [ ] ⬜ Implement deterministic identity adapter contract tests and protocol-faithful mock OIDC, SAML, and LDAP services for integration and end-to-end testing.
 - [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
@@ -2112,12 +2112,12 @@ Phase 0 exit criteria:
 
 ### Phase 1: Shared Config Contract
 
-- [ ] ⬜ Add shared Zod schemas for `EnterpriseGlueConfigBundle`.
-- [ ] ⬜ Add `identity-providers.json` and `identity-mappings.json` schemas with normalized entitlement types, stable external ids, provider-specific adapter configuration, secret refs, and sync modes.
+- [x] ✅ Add shared Zod schemas for `EnterpriseGlueConfigBundle` and the declared production JSON files.
+- [x] ✅ Add `identity-providers.json` and `identity-mappings.json` schemas with normalized entitlement types, stable external ids, provider-specific adapter configuration, secret refs, and sync modes.
 - [ ] ⬜ Add provider-neutral `NormalizedExternalIdentity`, `ExternalEntitlement`, `IdentityProviderAdapter`, and identity sync diagnostic types.
-- [ ] ⬜ Add test-only identity fixture schemas that reuse production provider/mapping identifiers but are rejected by production config APIs.
-- [ ] ⬜ Add schema versions and forward-compatible unknown-field rejection.
-- [ ] ⬜ Add stable object hashing and canonical JSON normalization.
+- [x] ✅ Add test-only identity fixture schemas that reuse production provider/mapping identifiers but are rejected by production bundle manifests.
+- [x] ✅ Add schema version and strict unknown-field rejection.
+- [x] ✅ Add stable object hashing and canonical JSON normalization.
 - [ ] ⬜ Add reference resolver types for `engineKey`, `engineExternalId`, `engineSetKey`, `groupKey`, `roleKey`, and `projectRef`.
 - [ ] ⬜ Add validation for same-scope role permissions.
 - [ ] ⬜ Add validation that system roles are reference-only and not mutable.
