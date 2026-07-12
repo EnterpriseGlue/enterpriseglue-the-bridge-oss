@@ -2822,6 +2822,53 @@ class PermissionServiceClass {
       materializations.forEach((materialization) => ids.add(materialization.engineId));
     }
 
+    // Runtime-resource assignments are not engine-wide grants, but the user
+    // must still be able to discover the containing central engine before a
+    // later route filters its process/decision resources.
+    const runtimeAssignmentQb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .select(['assignment.scopeType', 'assignment.scopeId'])
+      .where('assignment.scopeType IN (:...scopeTypes)', {
+        scopeTypes: ['engine_runtime_resource', 'engine_runtime_resource_set'],
+      })
+      .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
+    this.addPrincipalAssignmentFilter(runtimeAssignmentQb, 'assignment', userId, groupIds);
+    addTenantScopeFilter(runtimeAssignmentQb, 'assignment', tenantId);
+    const runtimeAssignments = await runtimeAssignmentQb.getMany();
+    const runtimeResourceIds = runtimeAssignments
+      .filter((assignment) => assignment.scopeType === 'engine_runtime_resource')
+      .map((assignment) => assignment.scopeId)
+      .filter((id): id is string => Boolean(id));
+    const runtimeSetIds = runtimeAssignments
+      .filter((assignment) => assignment.scopeType === 'engine_runtime_resource_set')
+      .map((assignment) => assignment.scopeId)
+      .filter((id): id is string => Boolean(id));
+    if (runtimeSetIds.length > 0) {
+      const materializations = await dataSource.getRepository(RuntimeResourceSetMaterialization).find({
+        where: normalizedTenantId
+          ? [
+            { runtimeResourceSetId: In(runtimeSetIds), tenantId: normalizedTenantId },
+            { runtimeResourceSetId: In(runtimeSetIds), tenantId: IsNull() },
+          ]
+          : { runtimeResourceSetId: In(runtimeSetIds) },
+        select: ['runtimeResourceId'],
+      });
+      runtimeResourceIds.push(...materializations.map((materialization) => materialization.runtimeResourceId));
+    }
+    if (runtimeResourceIds.length > 0) {
+      const runtimeResources = await dataSource.getRepository(RuntimeResource).find({
+        where: normalizedTenantId
+          ? [
+            { id: In(Array.from(new Set(runtimeResourceIds))), tenantId: normalizedTenantId, isActive: true },
+            { id: In(Array.from(new Set(runtimeResourceIds))), tenantId: IsNull(), isActive: true },
+          ]
+          : { id: In(Array.from(new Set(runtimeResourceIds))), isActive: true },
+        select: ['engineId'],
+      });
+      runtimeResources.forEach((runtimeResource) => ids.add(runtimeResource.engineId));
+    }
+
     if (hasGlobalEngineAssignment || hasGlobalExplicitGrant) {
       const engines = await dataSource.getRepository(Engine).find({
         where: normalizedTenantId

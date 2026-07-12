@@ -1671,7 +1671,7 @@ selected engine
 
 Required UI changes:
 
-- [ ] ⬜ Mission Control engine dropdown shows central engines when the user has either broad engine access or at least one allowed runtime resource in the engine.
+- [x] ✅ Mission Control engine dropdown/API shows central engines when the user has either broad engine access or at least one allowed runtime resource in the engine. Runtime-resource and Runtime Resource Set assignments contribute their containing engine to evaluator discovery; the engine list no longer starts from legacy membership rows.
 - [ ] ⬜ Replace `EngineSelector.tsx` hard-coded owner/delegate/operator filtering with backend permission-derived engine visibility and runtime capability fields.
 - [ ] ⬜ Process, decision, instance, incident, job, batch, and migration lists show only authorized runtime resources.
 - [ ] ⬜ Dashboard widgets and counts use authorized subsets.

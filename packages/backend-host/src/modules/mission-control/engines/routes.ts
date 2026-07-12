@@ -822,8 +822,14 @@ r.get('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine.
 
   // Filter engines by tenant context (including null tenantId for legacy data)
   const authorizedEngineIds = new Set((req as RequestWithAuthorizedEngineIds).authorizedEngineIds || [])
-  const userEngines = await engineService.getUserEngines(req.user!.userId, tenantId)
-  const rows = await Promise.all(userEngines.filter(({ engine }) => authorizedEngineIds.has(String(engine.id))).map(async ({ engine, role }) => {
+  const dataSource = await getDataSource()
+  const authorizedEngines = authorizedEngineIds.size > 0
+    ? await dataSource.getRepository(Engine).find({ where: { id: In(Array.from(authorizedEngineIds)) } })
+    : []
+  const rows = await Promise.all(authorizedEngines.map(async (engine) => {
+    // Legacy roles remain useful display metadata. Runtime-resource-only users
+    // intentionally have no synthetic engine-wide role.
+    const role = await engineService.getEngineRole(req.user!.userId, String(engine.id), tenantId)
     const out = withEngineCapabilities({ ...serializeEngine(engine), myRole: role })
     if (!(await canViewEngineSecrets(req, String(engine.id)))) {
       return redactEngineSecrets(out)

@@ -508,7 +508,7 @@ async function resolveEngineVisibleCollection(
   const dataSource = await getDataSource();
   const rows = await dataSource.getRepository(Engine).find({
     where: { id: In(requestedIds) },
-    select: ['id', 'tenantId'],
+    select: ['id', 'tenantId', 'runtimeAccessScope'],
   });
   const existingIds = new Set(rows.map((row) => String(row.id)));
   const visibleIds = new Set(rows
@@ -526,6 +526,32 @@ async function resolveEngineVisibleCollection(
       resourceId: engineId,
     });
     if (allowed) {
+      allowedIds.add(engineId);
+      continue;
+    }
+    const engine = rows.find((row) => String(row.id) === engineId);
+    if (engine?.runtimeAccessScope !== 'resource_aware') continue;
+    // A resource-only grant provides Mission Control discovery without
+    // widening the engine's inventory permission.
+    const runtimeVisible = await Promise.all([
+      permissionService.getVisibleRuntimeResources({
+        userId: req.user!.userId,
+        tenantId: req.tenant?.tenantId || null,
+        engineId,
+        resourceKind: 'process_definition',
+        permission: EnginePermissions.INSTANCE_VIEW,
+        limit: 5_000,
+      }),
+      permissionService.getVisibleRuntimeResources({
+        userId: req.user!.userId,
+        tenantId: req.tenant?.tenantId || null,
+        engineId,
+        resourceKind: 'decision_definition',
+        permission: EnginePermissions.INSTANCE_VIEW,
+        limit: 5_000,
+      }),
+    ]).catch(() => [[], []] as [RuntimeResource[], RuntimeResource[]]);
+    if (runtimeVisible.some((resources) => resources.length > 0)) {
       allowedIds.add(engineId);
     }
   }
