@@ -3,7 +3,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { requireAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import {
   processRetries,
   fetchBatchInfo,
@@ -71,7 +71,7 @@ function stripLocalAuditFields<T extends Record<string, any>>(body: T): Omit<T, 
   return engineBody
 }
 
-r.post('/mission-control-api/batches/process-instances/delete', requireAction('engine.runtime.batches.process-instances.delete', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/delete', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   const body = { ...(req.body || {}) }
   if (typeof body.deleteReason !== 'string' || !body.deleteReason.trim()) {
     body.deleteReason = 'Canceled via Mission Control'
@@ -88,7 +88,7 @@ r.post('/mission-control-api/batches/process-instances/delete', requireAction('e
   res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'DELETE_INSTANCES' })
 }))
 
-r.post('/mission-control-api/batches/process-instances/suspend', requireAction('engine.runtime.batches.process-instances.suspend', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/suspend', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.suspend', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   const body = { ...req.body, suspended: true }
   const engineBody = stripLocalAuditFields(body)
   logger.info('[BATCH SUSPEND] Sending to Camunda:', JSON.stringify(engineBody, null, 2))
@@ -99,7 +99,7 @@ r.post('/mission-control-api/batches/process-instances/suspend', requireAction('
   res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'SUSPEND_INSTANCES' })
 }))
 
-r.post('/mission-control-api/batches/process-instances/activate', requireAction('engine.runtime.batches.process-instances.activate', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/activate', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.activate', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   const body = { ...req.body, suspended: false }
   const engineId = (req as any).engineId as string
   const engineDto: any = await suspendProcessInstancesBatch(engineId, stripLocalAuditFields(body))
@@ -107,7 +107,7 @@ r.post('/mission-control-api/batches/process-instances/activate', requireAction(
   res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'ACTIVATE_INSTANCES' })
 }))
 
-r.post('/mission-control-api/batches/jobs/retries', requireAction('engine.runtime.batches.jobs.retry', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/jobs/retries', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.jobs.retry', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   const { processInstanceIds } = req.body
   
   if (!Array.isArray(processInstanceIds) || processInstanceIds.length === 0) {

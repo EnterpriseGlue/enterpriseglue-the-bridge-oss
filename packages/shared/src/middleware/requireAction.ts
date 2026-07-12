@@ -73,6 +73,10 @@ export interface RequireRuntimeDefinitionActionOptions extends RequireRuntimeCol
   resourceKeyFields?: string[];
 }
 
+export interface RequireRuntimeProcessInstanceSelectionActionOptions extends RequireRuntimeCollectionActionOptions {
+  processInstanceIdsKey?: string;
+}
+
 export type CompositeActionKind = 'deployment';
 
 export interface RequireCompositeActionOptions {
@@ -1002,6 +1006,80 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
       return next();
     } catch (error) {
       return next(error instanceof Error ? error : Errors.internal('Runtime definition authorization failed'));
+    }
+  };
+}
+
+/**
+ * Authorizes an explicit multi-instance operation. Resource-aware engines
+ * intentionally reject query-based selections: all selected instances must be
+ * resolved to their inherited process-definition resource before an engine
+ * mutation can be sent.
+ */
+export function requireRuntimeProcessInstanceSelectionAction(
+  actionId: string,
+  options: RequireRuntimeProcessInstanceSelectionActionOptions = { resourceKind: 'process_definition' }
+) {
+  return async function requireRuntimeProcessInstanceSelection(req: Request, _res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw Errors.unauthorized('Authentication required');
+      const action = assertKnownAuthzAction(actionId);
+      const engineId = readRequestValue(req, options.engineIdKey || 'engineId', options.engineIdFrom || 'body')
+        || (req as Request & { engineId?: string }).engineId;
+      if (!engineId) throw Errors.validation('engineId is required');
+      const tenantId = req.tenant?.tenantId || null;
+      const dataSource = await getDataSource();
+      const engine = await dataSource.getRepository(Engine).findOne({
+        where: { id: engineId }, select: ['id', 'tenantId', 'runtimeAccessScope'],
+      });
+      if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+      const context: PermissionContext = {
+        userId: req.user.userId,
+        tenantId,
+        platformRole: req.user.platformRole || (req.user as { role?: string }).role,
+        resourceType: 'engine',
+        resourceId: engineId,
+      };
+      const broad = await permissionService.hasPermission(action.permissionId, context);
+      if (!broad && engine.runtimeAccessScope !== 'resource_aware') {
+        throw Errors.forbidden('Engine runtime access is not allowed');
+      }
+
+      let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
+      if (!broad) {
+        const ids = readRequestValues(req, options.processInstanceIdsKey || 'processInstanceIds', 'body');
+        if (!ids.length) {
+          throw Errors.forbidden('Resource-aware batch operations require explicit processInstanceIds');
+        }
+        const instances = await Promise.all(ids.map((id) => camundaGet<Record<string, unknown>>(
+          engineId, `/process-instance/${encodeURIComponent(id)}`
+        )));
+        const resourceKeys = Array.from(new Set(instances.map((instance) => {
+          const key = instance.definitionKey ?? instance.processDefinitionKey;
+          return typeof key === 'string' ? key.trim() : '';
+        }).filter(Boolean)));
+        if (!resourceKeys.length) throw Errors.forbidden('Selected process instances cannot be resolved for authorization');
+        const resources = await Promise.all(resourceKeys.map((resourceKey) => dataSource.getRepository(RuntimeResource).findOne({
+          where: { engineId, resourceKind: options.resourceKind, resourceKey, isActive: true },
+          select: ['id', 'tenantId'],
+        })));
+        if (resources.some((candidate) => !candidate || !isTenantVisible(candidate.tenantId, tenantId))) {
+          throw Errors.forbidden('A selected process instance is not present in the authorization inventory');
+        }
+        const allowed = await Promise.all(resources.map((candidate) => permissionService.hasPermission(action.permissionId, {
+          ...context,
+          resourceType: 'engine_runtime_resource',
+          resourceId: candidate!.id,
+        })));
+        if (allowed.some((candidate) => !candidate)) throw Errors.forbidden(`Access denied for action ${action.actionId}`);
+        resource = { type: 'engine_runtime_resource', id: resources[0]!.id };
+      }
+      (req as Request & { engineId?: string }).engineId = engineId;
+      req.authzAction = action;
+      req.authzResource = resource;
+      return next();
+    } catch (error) {
+      return next(error instanceof Error ? error : Errors.internal('Runtime batch authorization failed'));
     }
   };
 }

@@ -3,7 +3,7 @@ import express from 'express';
 import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeDefinitionAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
@@ -169,6 +169,11 @@ describe('requireAction project resource resolvers', () => {
     }), (req: any, res) => {
       res.json({ resource: req.authzResource, engineId: req.engineId });
     });
+    app.post('/runtime-instance-selection', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', {
+      resourceKind: 'process_definition',
+    }), (req: any, res) => {
+      res.json({ resource: req.authzResource, engineId: req.engineId });
+    });
     app.post('/deploy', requireCompositeAction('project.deploy.create', {
       kind: 'deployment',
       projectIdFrom: 'body',
@@ -265,6 +270,30 @@ describe('requireAction project resource resolvers', () => {
     expect(response.status).toBe(200);
     expect(camundaGet).toHaveBeenCalledWith(engineId, '/process-definition', { key: 'payments', version: 2 });
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
+  });
+
+  it('requires explicit and fully authorized instances for resource-aware batch actions', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments' });
+
+    const response = await request(app)
+      .post('/runtime-instance-selection')
+      .send({ engineId, processInstanceIds: ['instance-1'] });
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).toHaveBeenCalledWith(engineId, '/process-instance/instance-1');
+    expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
+  });
+
+  it('rejects unbounded batch selections on resource-aware engines', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app).post('/runtime-instance-selection').send({ engineId });
+
+    expect(response.status).toBe(403);
+    expect(camundaGet).not.toHaveBeenCalled();
   });
 
   it('authorizes deployment composite actions through deployment eligibility', async () => {
