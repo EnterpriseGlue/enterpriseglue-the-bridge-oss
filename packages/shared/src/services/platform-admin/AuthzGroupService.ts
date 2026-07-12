@@ -11,7 +11,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, type DataSource } from 'typeorm';
 
-export type AuthzGroupSource = 'manual' | 'sso' | 'api' | 'automation' | 'system';
+export type AuthzGroupSource = 'manual' | 'sso' | 'api' | 'automation' | 'system' | 'config';
 
 export interface AuthzGroupView {
   id: string;
@@ -347,6 +347,9 @@ export class AuthzGroupService {
     if (group.isSystem && input.isArchived) {
       throw Errors.validation('System groups cannot be archived');
     }
+    if (group.source !== 'manual') {
+      throw Errors.forbidden('Source-managed groups must be updated by their source');
+    }
 
     const isArchive = input.isArchived === true && !group.isArchived;
     await repo.update({ id }, {
@@ -419,6 +422,9 @@ export class AuthzGroupService {
     const dataSource = await getDataSource();
     const group = await dataSource.getRepository(AuthzGroup).findOneBy({ id: input.groupId });
     if (!group || group.isArchived) throw Errors.notFound('Group');
+    if (group.source !== 'manual') {
+      throw Errors.forbidden('Source-managed group memberships must be updated by their source');
+    }
     if (tenantId && group.tenantId && group.tenantId !== tenantId) {
       throw Errors.forbidden('Group is not available in this tenant');
     }
@@ -478,6 +484,13 @@ export class AuthzGroupService {
     const repo = dataSource.getRepository(AuthzGroupMembership);
     const membership = await repo.findOneBy({ id });
     if (!membership) throw Errors.notFound('Group membership');
+    if (membership.source !== 'manual') {
+      throw Errors.forbidden('Source-managed group memberships must be updated by their source');
+    }
+    const group = await dataSource.getRepository(AuthzGroup).findOneBy({ id: membership.groupId });
+    if (!group || group.source !== 'manual') {
+      throw Errors.forbidden('Source-managed group memberships must be updated by their source');
+    }
     await repo.delete({ id });
     await recordGroupAudit(dataSource, {
       tenantId: membership.tenantId,

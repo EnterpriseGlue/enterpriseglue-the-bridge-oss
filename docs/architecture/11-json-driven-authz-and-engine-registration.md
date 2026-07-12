@@ -2262,7 +2262,7 @@ Phase 0 exit criteria:
 - [x] ✅ Bind apply to the exact canonical preview hash.
 - [x] ✅ Add recent config apply-run history.
 - [x] ✅ Add JSON export of the current editor payload.
-- [ ] ⬜ Complete managed-by-config badges across Access Control and Engine UI surfaces. Engine inventory and registration detail show configuration ownership/provenance; Access Control roles, identity mappings, groups, memberships, role assignments, and Engine Set assignment usage show `Managed by config`. Engine Set and project-target ownership-specific controls remain pending.
+- [ ] ⬜ Complete managed-by-config badges across Access Control and Engine UI surfaces. Engine inventory and registration detail show configuration ownership/provenance; Access Control roles, identity mappings, groups, memberships, role assignments, and Engine Set assignment usage show `Managed by config`. Config-sourced groups/memberships and custom roles now reject manual mutation at the shared service boundary. Engine Set and project-target ownership-specific controls remain pending.
 - [x] ✅ Add the Role Library and single-role editor; it avoids page-level horizontal scrolling for normal role management. Legacy Access Control matrix removal remains pending.
 - [ ] ⬜ Add role-editor search, grouped permission accordions, selected-only/risk filters, responsive checkboxes, sticky save/cancel, system-role duplication, and config ownership states.
 - [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Direct LDAPS configuration now includes bind identity, secret reference, user/group base DNs, user filter, and membership lookup fields. Mapping connection health and reconciliation history remain pending.
@@ -2276,7 +2276,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add Mission Control filters and empty states that explain when the user can see the engine but has no visible process or decision resources.
 - [ ] ⬜ Ensure dashboard and Mission Control counters are based on authorized runtime subsets.
 - [ ] ⬜ Show `Customer-managed engine authentication` or `No EnterpriseGlue-managed credentials` for sidecar engines instead of implying missing security.
-- [ ] ⬜ Add role-matrix behavior for config-managed custom roles: read-only in `config_locked`, editable with drift warning in `config_warn`.
+- [ ] ⬜ Complete config ownership modes for custom roles: config-sourced roles are currently read-only through the shared service boundary; add persisted `config_warn` ownership and drift-warning behavior after the generic ownership schema is available.
 - [ ] ⬜ Add duplicate-system-role-to-config-role flow in the UI export/import path.
 - [ ] ⬜ Add disabled/editable field behavior for config-owned objects.
 - [ ] ⬜ Add effective-access links from config diff rows.

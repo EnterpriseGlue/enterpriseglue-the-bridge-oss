@@ -2104,6 +2104,28 @@ describe('permissionService', () => {
     })).rejects.toThrow('System roles cannot be edited');
   });
 
+  it('keeps config-managed custom roles read-only outside config apply', async () => {
+    const roleRepo = {
+      findOne: vi.fn().mockResolvedValue({
+        id: 'role-config',
+        kind: 'custom',
+        isEditable: true,
+        source: 'config',
+        sourceRef: 'config_bundle:acme.authz',
+      }),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return roleRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(permissionService.updateCustomRole('role-config', { name: 'Changed' }))
+      .rejects.toThrow('Config-managed roles must be updated through their configuration bundle');
+  });
+
   it('writes audit records for custom role lifecycle changes', async () => {
     const roleInsert = vi.fn().mockResolvedValue(undefined);
     const roleUpdate = vi.fn().mockResolvedValue(undefined);

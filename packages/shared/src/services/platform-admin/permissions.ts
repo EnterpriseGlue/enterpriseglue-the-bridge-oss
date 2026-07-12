@@ -1929,6 +1929,9 @@ class PermissionServiceClass {
     if (role.kind !== 'custom' || !role.isEditable) {
       throw new Error('System roles cannot be edited');
     }
+    if (role.source === 'config') {
+      throw new Error('Config-managed roles must be updated through their configuration bundle');
+    }
     const normalizedTenantId = normalizeTenantId(input.tenantId);
     if (normalizedTenantId && role.tenantId && role.tenantId !== normalizedTenantId) {
       throw new Error('Role not found');

@@ -209,4 +209,50 @@ describe('authzGroupService', () => {
       resourceId: 'membership-1',
     }));
   });
+
+  it('rejects manual mutations for config-managed groups and memberships', async () => {
+    const groupRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'group-config',
+        tenantId: 'tenant-a',
+        key: 'group.config',
+        name: 'Config group',
+        description: null,
+        source: 'config',
+        sourceRef: 'config_bundle:acme.authz',
+        isSystem: false,
+        isArchived: false,
+      }),
+      update: vi.fn(),
+    };
+    const membershipRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'membership-config',
+        tenantId: 'tenant-a',
+        groupId: 'group-config',
+        userId: 'user-1',
+        source: 'config',
+        sourceRef: 'config_bundle:acme.authz',
+      }),
+      delete: vi.fn(),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroup) return groupRepo;
+        if (entity === AuthzGroupMembership) return membershipRepo;
+        if (entity === AuditLog) return { insert: vi.fn() };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(authzGroupService.updateGroup('group-config', { name: 'Changed' }))
+      .rejects.toThrow('Source-managed groups must be updated by their source');
+    await expect(authzGroupService.addMembership({ groupId: 'group-config', userId: 'user-1' }))
+      .rejects.toThrow('Source-managed group memberships must be updated by their source');
+    await expect(authzGroupService.removeMembership('membership-config'))
+      .rejects.toThrow('Source-managed group memberships must be updated by their source');
+    expect(groupRepo.update).not.toHaveBeenCalled();
+    expect(membershipRepo.delete).not.toHaveBeenCalled();
+  });
 });
