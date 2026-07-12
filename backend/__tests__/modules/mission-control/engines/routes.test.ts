@@ -19,6 +19,10 @@ const platformSettingsServiceMock = vi.hoisted(() => ({
   get: vi.fn().mockResolvedValue({ engineOnboardingMode: 'manual_allowed' }),
 }));
 const fetchMock = vi.hoisted(() => vi.fn());
+const secretResolverMock = vi.hoisted(() => ({
+  normalizeForStorage: vi.fn((value: string | null | undefined) => value ? `v2:test:${value}` : null),
+  resolveStored: vi.fn((value: string | null | undefined) => value?.startsWith('v2:test:') ? value.slice('v2:test:'.length) : value || null),
+}));
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
@@ -26,6 +30,10 @@ vi.mock('fs', () => ({
 
 vi.mock('undici', () => ({
   fetch: fetchMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/SecretResolver.js', () => ({
+  secretResolver: secretResolverMock,
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -185,7 +193,7 @@ describe('mission-control engines routes', () => {
     ]);
   });
 
-  it('returns unredacted engine list rows through scoped engine secret view permission without legacy manager role', async () => {
+  it('returns engine credential state but never the stored secret through scoped engine secret view permission', async () => {
     (engineService as any).getUserEngines.mockResolvedValueOnce([
       { engine: { id: 'e1', name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }, role: 'operator' },
     ]);
@@ -200,7 +208,8 @@ describe('mission-control engines routes', () => {
     expect(response.body[0]).toMatchObject({
       id: 'e1',
       username: 'engine-user',
-      passwordEnc: 'secret',
+      passwordEnc: null,
+      hasCredential: true,
     });
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:secrets:view', expect.objectContaining({
       userId: 'user-1',
@@ -240,7 +249,7 @@ describe('mission-control engines routes', () => {
     }));
   });
 
-  it('returns unredacted engine detail through scoped engine secret view permission without legacy manager role', async () => {
+  it('returns engine credential state but never the stored secret in engine detail', async () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     (engineService as any).getEngineRole.mockResolvedValue(null);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
@@ -253,7 +262,8 @@ describe('mission-control engines routes', () => {
     expect(response.body).toMatchObject({
       id: 'e1',
       username: 'engine-user',
-      passwordEnc: 'secret',
+      passwordEnc: null,
+      hasCredential: true,
     });
   });
 
@@ -387,8 +397,9 @@ describe('mission-control engines routes', () => {
 
     expect(response.status).toBe(200);
     expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
-      passwordEnc: 'new-secret',
+      passwordEnc: 'v2:test:new-secret',
     }));
+    expect(secretResolverMock.normalizeForStorage).toHaveBeenCalledWith('new-secret');
   });
 
   it('rejects manual updates to externally managed engine registration fields', async () => {
@@ -892,10 +903,12 @@ describe('mission-control engines routes', () => {
     expect(response.status).toBe(201);
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       authType: 'oauth2-client-credentials',
+      passwordEnc: 'v2:test:client-secret',
       oauthTokenUrl: 'https://keycloak.example.com/realms/acme/protocol/openid-connect/token',
       oauthScopes: 'engine-rest',
       oauthAudience: 'ion-engine',
     }));
+    expect(response.body).toMatchObject({ passwordEnc: null, hasCredential: true });
   });
 
   it('stores external engine metadata on normal registration', async () => {

@@ -15,6 +15,7 @@ describe('SecretResolver', () => {
   it('reads legacy base64 markers without producing them on new writes', () => {
     expect(secretResolver.resolveStored('enc:cHJldmlvdXMtc2VjcmV0')).toBe('previous-secret');
     expect(secretResolver.kindOf('enc:cHJldmlvdXMtc2VjcmV0')).toBe('legacy');
+    expect(secretResolver.normalizeForStorage('enc:cHJldmlvdXMtc2VjcmV0')).toMatch(/^v2:/);
   });
 
   it('resolves opaque external references without exposing the reference value', () => {
@@ -25,5 +26,10 @@ describe('SecretResolver', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('preserves external references while normalizing engine credential writes', () => {
+    expect(secretResolver.normalizeForStorage('ref:EG_ENGINE_PASSWORD')).toBe('ref:EG_ENGINE_PASSWORD');
+    expect(secretResolver.normalizeForStorage(null)).toBeNull();
   });
 });

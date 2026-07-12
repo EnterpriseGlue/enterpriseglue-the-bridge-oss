@@ -5,7 +5,7 @@ import { fetch } from 'undici'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js'
-import { safeDecrypt } from './encryption.js'
+import { secretResolver } from './platform-admin/SecretResolver.js'
 import { getBpmnEngineRequestContext } from './bpmn-engine-request-context.js'
 import type {
   Batch,
@@ -73,6 +73,26 @@ type EngineCfg = {
   oauthAudience?: string | null;
 }
 
+export type EngineCredentialInput = {
+  authType?: string | null;
+  username?: string | null;
+  passwordEnc?: string | null;
+};
+
+/** Shared credential projection for all EnterpriseGlue-to-endpoint calls. */
+export function buildEngineCredentialHeaders(input: EngineCredentialInput): Record<string, string> {
+  const authType = (input.authType || (input.username ? 'basic' : 'none')) as EngineAuthType;
+  const password = secretResolver.resolveStored(input.passwordEnc);
+  if (authType === 'basic' && input.username) {
+    const token = Buffer.from(`${input.username}:${password || ''}`).toString('base64');
+    return { Authorization: `Basic ${token}` };
+  }
+  if (authType === 'bearer' && password) {
+    return { Authorization: `Bearer ${password}` };
+  }
+  return {};
+}
+
 type OAuthTokenCacheEntry = {
   token: string;
   expiresAt: number;
@@ -127,8 +147,7 @@ async function getEngine(engineId: string): Promise<EngineCfg> {
     oauthAudience?: string | null;
   }
   const authType = (engineRow.authType || (engineRow.username ? 'basic' : 'none')) as EngineAuthType
-  const encryptedPassword = engineRow.passwordEnc || null
-  const password = encryptedPassword ? safeDecrypt(encryptedPassword) : null
+  const password = secretResolver.resolveStored(engineRow.passwordEnc)
   return {
     id: engineId,
     baseUrl: String(row.baseUrl),
@@ -195,14 +214,11 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
 }
 
 async function buildHeaders(cfg: EngineCfg, meta: { engineId: string; method: string; path: string }): Promise<Record<string, string>> {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (cfg.authType === 'basic' && cfg.username) {
-    const token = Buffer.from(`${cfg.username}:${cfg.password ?? ''}`).toString('base64')
-    h['Authorization'] = `Basic ${token}`
-  } else if (cfg.authType === 'bearer' && cfg.password) {
-    // Bearer token auth - token stored in password field
-    h['Authorization'] = `Bearer ${cfg.password}`
-  } else if (cfg.authType === 'oauth2-client-credentials') {
+  const h: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...buildEngineCredentialHeaders({ authType: cfg.authType, username: cfg.username, passwordEnc: cfg.password }),
+  }
+  if (cfg.authType === 'oauth2-client-credentials') {
     h['Authorization'] = `Bearer ${await resolveOAuthClientCredentialsToken(cfg)}`
   }
 

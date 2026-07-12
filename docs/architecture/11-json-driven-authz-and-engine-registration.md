@@ -718,7 +718,7 @@ OAuth2 client credentials keep the current public configuration shape, but secre
 - [ ] ⬜ Add one `SecretResolver` contract shared by config preview/apply, identity providers, engine clients, and connection tests.
 - [ ] ⬜ Support `encrypted_local` and `external_ref` storage modes; persist ciphertext or opaque reference metadata, never the resolved plaintext.
 - [x] ✅ Replace current SSO provider base64 writes with authenticated AES-GCM encryption through the shared `SecretResolver`.
-- [ ] ⬜ Replace direct runtime consumption of `Engine.passwordEnc` with secret resolution/decryption at the engine-client boundary.
+- [x] ✅ Replace direct runtime consumption of `Engine.passwordEnc` with secret resolution/decryption at the engine-client boundary for BPMN client, deployment, health, and Mission Control engine calls.
 - [ ] ⬜ Add importer secret-ref validation for environment variables without returning values.
 - [ ] ⬜ Add optional Kubernetes Secret, Docker secret, and Vault adapters later.
 - [ ] ⬜ Reject plaintext secret fields by default.
@@ -1766,7 +1766,7 @@ The implementation should extend existing packages rather than introduce an auth
 ### Shared Services
 
 - [ ] ⬜ Add `IdentityProviderAdapter` plus OIDC, SAML, and LDAP adapter implementations; evolve `SsoNormalizedIdentityService`, `SsoGroupMappingService`, and `SsoSyncDiagnosticsService` into the provider-neutral orchestration path.
-- [x] ✅ Add a shared `SecretResolver` used by identity providers and replace SSO base64 writes. Engine connection credential resolution remains required before config apply is enabled.
+- [x] ✅ Add a shared `SecretResolver` used by identity providers and engine connections; replace SSO base64 writes and direct engine credential consumption. Config preview/apply integration remains required before config apply is enabled.
 - [ ] ⬜ Add a shared engine `ConnectionResolver` used by health, metadata, deployment, Mission Control, and reconciliation calls. It must distinguish direct versus customer-sidecar endpoints without changing authorization semantics.
 - [ ] ⬜ Add provider-id-bound auth start/callback orchestration, generic OIDC login, direct LDAP login when configured, and provider-specific state/nonce/replay validation.
 - [ ] ⬜ Converge platform-role, group, and direct-engine SSO mapping services into group-first identity mappings; UI convenience flows create a managed internal group plus normal scoped assignment.
@@ -2089,7 +2089,7 @@ This phase is required because the current implementation still carries compatib
 #### Secret And Config Ownership Foundation
 
 - [x] ✅ Replace provider base64 secret writes with the shared AES-GCM `SecretResolver`; legacy base64 rows are read-only compatibility input until rotated, and opaque `ref:` resolution is available for later config ownership.
-- [ ] ⬜ Add engine credential resolution so `passwordEnc` is not treated as plaintext at runtime; support encrypted-local and external-ref storage modes.
+- [x] ✅ Add engine credential resolution so `passwordEnc` is not treated as plaintext at runtime; engine create/update stores authenticated ciphertext or an opaque external reference, and runtime calls resolve both modes through `SecretResolver`.
 - [ ] ⬜ Add source, sourceRef, sourceHash, configKey, lastAppliedAt, and ownership mode where required on every config-managed object.
 - [ ] ⬜ Define one-row project-engine-target conflict/ownership-transfer behavior and cover it in preview/apply services.
 

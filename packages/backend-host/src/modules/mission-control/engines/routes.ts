@@ -20,7 +20,8 @@ import { apiLimiter, engineLimiter } from '@enterpriseglue/shared/middleware/rat
 import { engineService, engineSetService, platformSettingsService, projectEngineTargetService, ApiClientScopes } from '@enterpriseglue/shared/services/platform-admin/index.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
-import { resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { buildEngineCredentialHeaders, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js'
 import { config } from '@enterpriseglue/shared/config/index.js'
 import { logAudit } from '@enterpriseglue/shared/services/audit.js'
 import { logger } from '@enterpriseglue/shared/utils/logger.js'
@@ -594,18 +595,24 @@ function applyExternalFieldOwnership(
   }
 }
 
-function serializeEngine<T extends { labelsJson?: string | null; fieldOwnershipJson?: string | null; capabilitiesJson?: string | null; type?: unknown }>(
+function serializeEngine<T extends { labelsJson?: string | null; fieldOwnershipJson?: string | null; capabilitiesJson?: string | null; passwordEnc?: string | null; type?: unknown }>(
   engine: T
-): Omit<T, 'labelsJson' | 'fieldOwnershipJson' | 'capabilitiesJson'> & {
+): Omit<T, 'labelsJson' | 'fieldOwnershipJson' | 'capabilitiesJson' | 'passwordEnc'> & {
+  passwordEnc: null
+  hasCredential: boolean
   labels: Record<string, string>
   fieldOwnership: EngineFieldOwnership
   reportedCapabilities: ExternalEngineCapabilities | null
   capabilityDiagnostics: ReturnType<typeof getCapabilityDiagnostics>
 } {
-  const { labelsJson, fieldOwnershipJson, capabilitiesJson, ...rest } = engine
+  const { labelsJson, fieldOwnershipJson, capabilitiesJson, passwordEnc, ...rest } = engine
   const reportedCapabilities = parseExternalEngineCapabilities(capabilitiesJson)
   return {
     ...rest,
+    // Credentials are write-only. A caller can manage a replacement without
+    // receiving ciphertext, legacy data, or an external secret reference.
+    passwordEnc: null,
+    hasCredential: Boolean(passwordEnc),
     labels: parseEngineLabels(labelsJson),
     fieldOwnership: parseEngineFieldOwnership(fieldOwnershipJson),
     reportedCapabilities,
@@ -767,16 +774,12 @@ async function refreshEngineSetMaterializationsForEngine(engineId: string, tenan
 
 async function testEngineConnectionAndRecord(
   dataSource: Awaited<ReturnType<typeof getDataSource>>,
-  eng: Pick<Engine, 'id' | 'baseUrl' | 'username' | 'passwordEnc'>
+  eng: Pick<Engine, 'id' | 'baseUrl' | 'authType' | 'username' | 'passwordEnc'>
 ) {
   const engineRepo = dataSource.getRepository(Engine)
   const healthRepo = dataSource.getRepository(EngineHealth)
   const url = resolveBpmnEngineRequestUrl(String(eng.baseUrl || ''), '/version')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (eng.username) {
-    const token = Buffer.from(`${eng.username}:${eng.passwordEnc || ''}`).toString('base64')
-    headers['Authorization'] = `Basic ${token}`
-  }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...buildEngineCredentialHeaders(eng) }
   const started = Date.now()
   let status: 'connected'|'disconnected'|'unknown' = 'unknown'
   let version: string | null = null
@@ -870,7 +873,7 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine
     externalUpdatedAt: null,
     authType: req.body.authType || (req.body.username ? 'basic' : 'none'),
     username: req.body.username ?? null,
-    passwordEnc: req.body.passwordEnc ?? null,
+    passwordEnc: secretResolver.normalizeForStorage(req.body.passwordEnc),
     oauthTokenUrl: req.body.oauthTokenUrl ?? null,
     oauthScopes: req.body.oauthScopes ?? null,
     oauthAudience: req.body.oauthAudience ?? null,
@@ -955,7 +958,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     externalUpdatedAt: now,
     authType: req.body.authType || (req.body.username ? 'basic' : 'none'),
     username: req.body.username ?? null,
-    passwordEnc: req.body.passwordEnc ?? null,
+    passwordEnc: secretResolver.normalizeForStorage(req.body.passwordEnc),
     oauthTokenUrl: req.body.oauthTokenUrl ?? null,
     oauthScopes: req.body.oauthScopes ?? null,
     oauthAudience: req.body.oauthAudience ?? null,
@@ -1351,7 +1354,7 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
     labelsJson: req.body.labels === undefined ? undefined : labelsToJson(req.body.labels),
     authType: req.body.authType,
     username: req.body.username,
-    passwordEnc: req.body.passwordEnc,
+    passwordEnc: req.body.passwordEnc === undefined ? undefined : secretResolver.normalizeForStorage(req.body.passwordEnc),
     oauthTokenUrl: req.body.oauthTokenUrl,
     oauthScopes: req.body.oauthScopes,
     oauthAudience: req.body.oauthAudience,
@@ -1428,11 +1431,7 @@ r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, requireActio
   }
 
   const url = resolveBpmnEngineRequestUrl(String(eng.baseUrl || ''), '/version')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (eng.username) {
-    const token = Buffer.from(`${eng.username}:${eng.passwordEnc || ''}`).toString('base64')
-    headers['Authorization'] = `Basic ${token}`
-  }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...buildEngineCredentialHeaders(eng) }
   const started = Date.now()
   let status: 'connected'|'disconnected'|'unknown' = 'unknown'
   let version: string | null = null
@@ -1495,11 +1494,7 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, requireEngi
     // Auto-ping once if no health yet
     const eng = await engineRepo.findOneBy({ id: engineId })
     if (eng) {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (eng.username) {
-        const token = Buffer.from(`${eng.username}:${eng.passwordEnc || ''}`).toString('base64')
-        headers['Authorization'] = `Basic ${token}`
-      }
+      const headers: Record<string, string> = { 'Content-Type': 'application/json', ...buildEngineCredentialHeaders(eng) }
       const started = Date.now()
       try {
         const r = await fetch(resolveBpmnEngineRequestUrl(String(eng.baseUrl || ''), '/version'), { headers })

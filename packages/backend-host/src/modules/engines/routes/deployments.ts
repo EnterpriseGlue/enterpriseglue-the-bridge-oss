@@ -16,8 +16,7 @@ import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js'
 import { In } from 'typeorm'
 import { fetch, FormData } from 'undici'
-import { Buffer } from 'node:buffer'
-import { resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { buildEngineCredentialHeaders, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import {
@@ -80,16 +79,11 @@ async function getEngineById(engineId: string): Promise<EngineConnectionInfo> {
   const engineRepo = dataSource.getRepository(Engine)
   const row = await engineRepo.findOne({ where: { id: engineId } })
   if (!row) throw Object.assign(new Error('Engine not found'), { status: 404 })
-  return { id: row.id, baseUrl: row.baseUrl, username: row.username ?? null, passwordEnc: row.passwordEnc ?? null }
+  return { id: row.id, baseUrl: row.baseUrl, authType: row.authType ?? null, username: row.username ?? null, passwordEnc: row.passwordEnc ?? null }
 }
 
-function authHeaders(e: { username?: string|null; passwordEnc?: string|null }): Record<string,string> {
-  const h: Record<string,string> = {}
-  if (e.username) {
-    const token = Buffer.from(`${e.username}:${e.passwordEnc ?? ''}`).toString('base64')
-    h['Authorization'] = `Basic ${token}`
-  }
-  return h
+function authHeaders(e: { authType?: string | null; username?: string | null; passwordEnc?: string | null }): Record<string, string> {
+  return buildEngineCredentialHeaders(e)
 }
 
 function deploymentActorId(req: Request): string {

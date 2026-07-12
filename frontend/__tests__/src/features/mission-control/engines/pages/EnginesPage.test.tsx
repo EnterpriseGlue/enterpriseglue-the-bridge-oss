@@ -770,10 +770,23 @@ describe('EnginesPage', () => {
       type: 'operaton',
       authType: 'none',
       username: undefined,
-      passwordEnc: undefined,
+      passwordEnc: null,
       oauthTokenUrl: undefined,
       oauthScopes: undefined,
       oauthAudience: undefined,
+    });
+  });
+
+  it('keeps an existing write-only engine credential when an edit omits a replacement', () => {
+    expect(buildEngineMutationPayload({
+      name: 'Manual Engine',
+      baseUrl: 'https://manual.example.com/engine-rest',
+      type: 'operaton',
+      authType: 'basic',
+      username: 'manual-user',
+      passwordEnc: '',
+    }, { registrationSource: 'user', hasCredential: true })).toMatchObject({
+      passwordEnc: undefined,
     });
   });
 

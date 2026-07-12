@@ -965,7 +965,7 @@ export function buildEngineMutationPayload(
   }
   if (payload.authType === 'none') {
     payload.username = undefined
-    payload.passwordEnc = undefined
+    payload.passwordEnc = null
     payload.oauthTokenUrl = undefined
     payload.oauthScopes = undefined
     payload.oauthAudience = undefined
@@ -974,6 +974,11 @@ export function buildEngineMutationPayload(
     payload.oauthTokenUrl = undefined
     payload.oauthScopes = undefined
     payload.oauthAudience = undefined
+  }
+  if (editing && payload.authType !== 'none' && !payload.passwordEnc) {
+    // Engine credentials are write-only. Leaving the replacement field empty
+    // preserves the stored credential instead of clearing it on an unrelated edit.
+    payload.passwordEnc = undefined
   }
   return payload
 }
@@ -1199,7 +1204,7 @@ export default function Engines() {
       type: normalizeEngineType(row.type),
       authType: row.authType || 'basic',
       username: row.username || '',
-      passwordEnc: row.passwordEnc || '',
+      passwordEnc: '',
       oauthTokenUrl: row.oauthTokenUrl || '',
       oauthScopes: row.oauthScopes || '',
       oauthAudience: row.oauthAudience || '',
@@ -1768,6 +1773,7 @@ export default function Engines() {
               id="eng-pass"
               type="password"
               labelText="Password"
+              placeholder={editing?.hasCredential ? 'Enter a replacement password' : undefined}
               value={form.passwordEnc}
               onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
               disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
@@ -1779,7 +1785,7 @@ export default function Engines() {
             id="eng-token"
             type="password"
             labelText="Bearer Token"
-            placeholder="Enter your API token"
+            placeholder={editing?.hasCredential ? 'Enter a replacement API token' : 'Enter your API token'}
             value={form.passwordEnc}
             onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
             disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
@@ -1798,6 +1804,7 @@ export default function Engines() {
               id="eng-oauth-secret"
               type="password"
               labelText="Client Secret"
+              placeholder={editing?.hasCredential ? 'Enter a replacement client secret' : undefined}
               value={form.passwordEnc}
               onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
               disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}

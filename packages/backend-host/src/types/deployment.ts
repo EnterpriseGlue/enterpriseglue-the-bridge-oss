@@ -11,6 +11,7 @@ import type { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastruc
 export interface EngineConnectionInfo {
   id: string;
   baseUrl: string;
+  authType?: string | null;
   username?: string | null;
   passwordEnc?: string | null;
 }

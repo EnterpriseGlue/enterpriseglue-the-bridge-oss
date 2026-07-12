@@ -12,6 +12,13 @@ export class SecretResolver {
     return encrypt(plaintext);
   }
 
+  normalizeForStorage(value: string | null | undefined): string | null {
+    if (!value) return null;
+    if (this.isExternalReference(value) || isEncrypted(value)) return value;
+    // Upgrade the legacy marker on its next write rather than perpetuating it.
+    return this.storeEncryptedLocal(this.resolveStored(value) || value);
+  }
+
   isExternalReference(value: string | null | undefined): boolean {
     return Boolean(value && value.startsWith('ref:'));
   }
