@@ -49,6 +49,12 @@ export interface RequireActionOptions {
   acceptedPermissions?: Permission[];
 }
 
+export interface RequireRuntimeCollectionActionOptions {
+  resourceKind: 'process_definition' | 'decision_definition';
+  engineIdFrom?: ResourceIdLocation;
+  engineIdKey?: string;
+}
+
 export type CompositeActionKind = 'deployment';
 
 export interface RequireCompositeActionOptions {
@@ -110,6 +116,7 @@ declare global {
       deployContext?: DeployActionContext;
       authorizedProjectIds?: string[];
       authorizedEngineIds?: string[];
+      authorizedRuntimeResourceKeys?: string[];
     }
   }
 }
@@ -870,5 +877,31 @@ export function requireInvitationCreateAction(actionId = 'invitations.create') {
       }
       return next(Errors.internal('Invitation authorization check failed'));
     }
+  };
+}
+
+export function requireRuntimeCollectionAction(actionId: string, options: RequireRuntimeCollectionActionOptions) {
+  return async function requireRuntimeCollection(req: Request, _res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw Errors.unauthorized('Authentication required');
+      const action = assertKnownAuthzAction(actionId);
+      const engineId = readRequestValue(req, options.engineIdKey || 'engineId', options.engineIdFrom || 'query') || (req as Request & { engineId?: string }).engineId;
+      if (!engineId) throw Errors.validation('engineId is required');
+      const tenantId = req.tenant?.tenantId || null;
+      const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId }, select: ['id', 'tenantId', 'runtimeAccessScope'] });
+      if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+      const context = { userId: req.user.userId, tenantId, platformRole: req.user.platformRole || (req.user as { role?: string }).role, resourceType: 'engine' as const, resourceId: engineId };
+      const broad = await permissionService.hasPermission(action.permissionId, context);
+      let keys: string[] | undefined;
+      if (!broad && engine.runtimeAccessScope === 'resource_aware') {
+        const visible = await permissionService.getVisibleRuntimeResources({ userId: req.user.userId, tenantId, engineId, resourceKind: options.resourceKind, permission: action.permissionId });
+        keys = visible.map((resource) => resource.resourceKey);
+        if (!keys.length) throw Errors.forbidden('No authorized runtime resources are available for this engine');
+      } else if (!broad) throw Errors.forbidden('Engine runtime access is not allowed');
+      req.authzAction = action;
+      req.authzResource = { type: 'engine', id: engineId };
+      req.authorizedRuntimeResourceKeys = keys;
+      return next();
+    } catch (error) { return next(error instanceof Error ? error : Errors.internal('Runtime collection authorization failed')); }
   };
 }

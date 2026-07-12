@@ -28,7 +28,7 @@ import {
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { requireAction, requireRuntimeCollectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 
 // Validation schemas
@@ -72,11 +72,12 @@ r.use('/mission-control-api', requireAuth)
 // -----------------------------
 // Process Definitions
 // -----------------------------
-r.get('/mission-control-api/process-definitions', requireAction('engine.runtime.process-definitions.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const data = await listProcessDefinitions(engineId, req.query as { key?: string; nameLike?: string; latest?: string })
-    res.json(data)
+    const keys = req.authorizedRuntimeResourceKeys
+    res.json(keys ? data.filter((definition) => keys.includes(String(definition?.key || ''))) : data)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process definitions')
   }
