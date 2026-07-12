@@ -2201,6 +2201,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Ensure config-managed assignments use `source = "config"` and source lineage.
 - [ ] ⬜ Ensure Engine Set materialization refreshes after config-managed engine label changes.
 - [ ] ⬜ Add runtime resource inventory refresh after deployment, import, engine sync, and explicit reconciliation.
+- [x] ✅ Add an explicit admin reconciliation path that discovers process and decision definitions through the configured engine client, upserts sanitized runtime inventory rows, and rematerializes Runtime Resource Sets. Deployment/import/engine-sync triggers remain pending.
 - [ ] ⬜ Reconcile direct engine deployments by `engineId + engineDeploymentId` without duplicating proxied or receipt-backed records.
 - [ ] ⬜ Accept idempotent pipeline receipts and upgrade discovered lineage to reported lineage when references validate.
 - [ ] ⬜ Persist process key, decision key, version, runtime tenant id, deployment id, and source observation for every discovered artifact.
