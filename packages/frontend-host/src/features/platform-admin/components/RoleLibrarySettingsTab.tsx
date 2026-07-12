@@ -115,6 +115,9 @@ export default function RoleLibrarySettingsTab() {
   const selectedRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === selected?.scope);
   const createRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === form.scope);
   const editable = Boolean(selected?.kind === 'custom' && selected.isEditable && !selected.isArchived && selected.source !== 'config');
+  const hasUnsavedRoleChanges = Boolean(detail && (
+    draft.length !== detail.permissions.length || draft.some((permission) => !detail.permissions.includes(permission))
+  ));
   const toggle = (key: string, checked: boolean) => setDraft((current) => checked ? [...new Set([...current, key])] : current.filter((item) => item !== key));
   const save = useMutation({
     mutationFn: () => apiClient.put(`/api/authz/roles/${selected!.id}`, { permissionIds: draft }),
@@ -158,8 +161,9 @@ export default function RoleLibrarySettingsTab() {
         </div>
       </div>
       <div>{selected && detail ? <>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-4)', alignItems: 'start', flexWrap: 'wrap' }}><div><h4 style={{ margin: 0 }}>{selected.name}</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{selected.description || 'No description'} · {selected.permissionCount} permissions</p></div><div style={{ display: 'flex', gap: 'var(--spacing-3)' }}>{selected.kind === 'system' && <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={() => startCreate(true)}>Duplicate</Button></GuardedAction>}{editable && <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={save.isPending} onClick={() => save.mutate()}>Save</Button></GuardedAction>}</div></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-4)', alignItems: 'start', flexWrap: 'wrap' }}><div><h4 style={{ margin: 0 }}>{selected.name}</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{selected.description || 'No description'} · {selected.permissionCount} permissions</p></div><div style={{ display: 'flex', gap: 'var(--spacing-3)' }}>{selected.kind === 'system' && <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={() => startCreate(true)}>Duplicate</Button></GuardedAction>}</div></div>
         {selected.source === 'config' && <InlineNotification kind="info" title="Managed by configuration" subtitle="Update this role in its configuration bundle to avoid drift." hideCloseButton lowContrast style={{ marginTop: 'var(--spacing-4)' }} />}
+        {editable && <div style={{ position: 'sticky', top: 'var(--spacing-3)', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', marginTop: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => setDraft(detail.permissions)}>Reset</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => save.mutate()}>Save</Button></GuardedAction></div>}
         <div style={{ marginTop: 'var(--spacing-5)' }}><PermissionPicker permissions={selectedRolePermissions} draft={draft} editable={editable && manage.allowed} idPrefix="role-library" onToggle={toggle} /></div>
       </> : <InlineNotification kind="info" title="Select a role" subtitle="Choose a role from the library to inspect its permissions." hideCloseButton lowContrast />}</div>
     </div>
