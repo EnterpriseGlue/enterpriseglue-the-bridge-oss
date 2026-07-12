@@ -96,6 +96,9 @@ This matrix lists current executable settings. Planned authorization bundle sett
 | GOOGLE_CLIENT_ID | No | Google OAuth |
 | GOOGLE_CLIENT_SECRET | No | Google OAuth |
 | GOOGLE_REDIRECT_URI | No | Google OAuth |
+| RUNTIME_INVENTORY_RECONCILIATION_INTERVAL_MS | No | disabled | Positive milliseconds for scheduled runtime inventory refresh of active resource-aware engines |
+| RUNTIME_INVENTORY_RECONCILIATION_TENANT_IDS | No | global | Comma-separated tenant ids; use `global`/`null` for the OSS/default tenant |
+| RUNTIME_INVENTORY_RECONCILIATION_RUN_ON_START | No | false | Run a reconciliation pass after backend startup |
 
 SAML 2.0 (including Microsoft Entra as IdP) is configured via **Platform Settings → SSO**
 using provider fields (`entityId`, `ssoUrl`, `certificate`, `signatureAlgorithm`), not

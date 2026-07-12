@@ -66,6 +66,21 @@ Launcher and validation scripts:
 - `GIT_DEFAULT_BRANCH`
 - `ENCRYPTION_KEY`
 
+### Runtime Inventory Reconciliation
+
+These settings are disabled by default. They schedule bounded process/decision
+inventory refreshes for active `resource_aware` engines only; distributed
+engine-wide engines are not polled because they do not use runtime-resource
+authorization.
+
+- `RUNTIME_INVENTORY_RECONCILIATION_INTERVAL_MS`: Positive interval in milliseconds. Unset or `0` disables the scheduler.
+- `RUNTIME_INVENTORY_RECONCILIATION_TENANT_IDS`: Optional comma-separated tenant ids. Use `global` or `null` for the OSS/default tenant. Defaults to `global`.
+- `RUNTIME_INVENTORY_RECONCILIATION_RUN_ON_START`: Set to `true` to run one reconciliation after server startup.
+
+The scheduler isolates individual engine failures and never revokes resources
+when an engine listing fails. Operators can use the Access Control runtime
+resource reconciliation action for immediate, one-engine repair.
+
 ### Database Compatibility (TypeORM Adapters)
 Database support is provided via TypeORM adapters and driver packages:
 - **Postgres**: `pg`
