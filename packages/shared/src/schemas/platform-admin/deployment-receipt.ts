@@ -33,4 +33,17 @@ export const DeploymentReceiptResponseSchema = z.object({
   materializedResourceSets: z.number().int(),
 });
 
+export const DeploymentReceiptViewSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  engineId: z.string(),
+  engineDeploymentId: z.string(),
+  source: z.string(),
+  lineage: DeploymentReceiptLineageSchema.extend({
+    source: z.string().optional(),
+    sourcePrincipalId: z.string().optional(),
+  }),
+  receivedAt: z.number().int(),
+});
+
 export type DeploymentReceiptCreate = z.infer<typeof DeploymentReceiptCreateSchema>;

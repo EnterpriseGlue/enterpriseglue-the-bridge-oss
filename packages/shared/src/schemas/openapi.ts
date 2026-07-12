@@ -1135,6 +1135,7 @@ registry.registerPath({
 const {
   DeploymentReceiptCreateSchema,
   DeploymentReceiptResponseSchema,
+  DeploymentReceiptViewSchema,
 } = await import('./platform-admin/deployment-receipt.js');
 registry.registerPath({
   method: 'post',
@@ -1150,6 +1151,13 @@ registry.registerPath({
     401: { description: 'API client bearer token required' },
     403: { description: 'API deployment is not allowed' },
   },
+})
+registry.registerPath({
+  method: 'get',
+  path: '/engines-api/engines/{engineId}/deployment-receipts',
+  ...authzExtension('engine.deployments.read', 'GET', '/engines-api/engines/{engineId}/deployment-receipts'),
+  request: { params: z.object({ engineId: z.string() }), query: z.object({ limit: z.coerce.number().int().min(1).max(500).optional() }) },
+  responses: { 200: { description: 'Sanitized external deployment receipt lineage', content: { 'application/json': { schema: z.array(DeploymentReceiptViewSchema) } } } },
 })
 
 registry.registerPath({

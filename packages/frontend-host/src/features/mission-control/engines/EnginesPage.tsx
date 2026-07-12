@@ -141,6 +141,7 @@ export function getEngineActionPermissions(engine: any, hasPermission: EnginePer
   const canSetEnvironment = hasPermissionOrActionOrLegacy(EnginePermission.ENVIRONMENT_SET, 'engine.environment.set')
   const canLockEnvironment = hasPermissionOrActionOrLegacy(EnginePermission.ENVIRONMENT_LOCK, 'engine.environment.lock')
   const canTransferOwnership = hasPermissionOrActionOrLegacy(EnginePermission.OWNERSHIP_TRANSFER, 'engine.ownership.transfer')
+  const canViewDeployments = hasPermissionOrActionOrLegacy(EnginePermission.DEPLOY_VIEW, 'engine.deployments.read')
   const canViewMembers = hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_VIEW, 'engine.members.read') || canLookupMembers
   const canManageSecrets = hasPermissionOrActionOrLegacy(EnginePermission.SECRETS_MANAGE, 'engine.secrets.manage')
   const canViewSecrets = hasPermissionOrActionOrLegacy(EnginePermission.SECRETS_VIEW, 'engine.secrets.view') || canManageSecrets
@@ -160,6 +161,7 @@ export function getEngineActionPermissions(engine: any, hasPermission: EnginePer
     canRemoveMembers,
     canManageDelegate,
     canTransferOwnership,
+    canViewDeployments,
     canViewProjectAccess,
     canApproveProjectAccess,
     canDenyProjectAccess,
@@ -190,11 +192,12 @@ export function resolveEngineDetailSections(options: {
   isEditing?: boolean
   canViewMembers?: boolean
   canViewProjectAccess?: boolean
+  canViewDeployments?: boolean
 }): EngineDetailSectionId[] {
   const sections: EngineDetailSectionId[] = []
   if (options.isEditing) sections.push('registration')
   if (options.canViewMembers) sections.push('access')
-  if (options.canViewProjectAccess) sections.push('deployment')
+  if (options.canViewProjectAccess || options.canViewDeployments) sections.push('deployment')
   return sections
 }
 
@@ -379,6 +382,16 @@ type ProjectEngineTargetView = {
   allowImport?: boolean
   lastSeenAt?: number | null
   updatedAt?: number | null
+}
+
+type DeploymentReceiptView = {
+  id: string
+  projectId: string
+  engineId: string
+  engineDeploymentId: string
+  source: string
+  lineage: { source?: string; sourcePrincipalId?: string; pipelineRunId?: string; commitSha?: string; deploymentName?: string }
+  receivedAt: number
 }
 
 type EngineAccessMember = {
@@ -597,11 +610,17 @@ function EngineDeploymentSection({
   canViewProjectAccess,
   error,
   isLoading,
+  receipts,
+  receiptsError,
+  receiptsLoading,
   targets,
 }: {
   canViewProjectAccess: boolean
   error: unknown
   isLoading: boolean
+  receipts: DeploymentReceiptView[]
+  receiptsError: unknown
+  receiptsLoading: boolean
   targets: ProjectEngineTargetView[]
 }) {
   return (
@@ -681,6 +700,32 @@ function EngineDeploymentSection({
           ))}
         </div>
       )}
+      <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-4)', display: 'grid', gap: 'var(--spacing-3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+          <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Pipeline receipts</h4>
+          <Tag type="purple" size="sm">{receipts.length} recorded</Tag>
+        </div>
+        {receiptsLoading ? <InlineLoading description="Loading deployment receipts" /> : receiptsError ? (
+          <InlineNotification lowContrast kind="error" title="Failed to load deployment receipts" subtitle={getUiErrorMessage(receiptsError, 'Failed to load deployment receipts')} hideCloseButton />
+        ) : receipts.length === 0 ? (
+          <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>No direct-pipeline receipts have been recorded for this engine.</div>
+        ) : (
+          <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+            {receipts.map((receipt) => (
+              <div key={receipt.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 'var(--spacing-3)', alignItems: 'start', padding: 'var(--spacing-3)', border: '1px solid var(--color-border-subtle)', borderRadius: 6, background: 'var(--color-bg-primary)' }}>
+                <div style={{ minWidth: 0, display: 'grid', gap: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflowWrap: 'anywhere' }}>{receipt.lineage.deploymentName || receipt.engineDeploymentId}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
+                    Project {receipt.projectId}{receipt.lineage.pipelineRunId ? ` | Run ${receipt.lineage.pipelineRunId}` : ''}{receipt.lineage.commitSha ? ` | ${receipt.lineage.commitSha.slice(0, 12)}` : ''}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Received {formatEngineTimestamp(receipt.receivedAt)}</div>
+                </div>
+                <Tag type="purple" size="sm">{formatEngineRegistrationStatus(receipt.source)}</Tag>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   )
 }
@@ -1144,6 +1189,7 @@ export default function Engines() {
   const isEngineEnvironmentOnlyEditable = Boolean(editing && !editingActions?.canEdit && editingActions?.canSetEnvironment)
   const isEngineFormReadOnly = Boolean(editing && !editingActions?.canEdit && !editingActions?.canSetEnvironment)
   const canViewEditingProjectAccess = editing ? Boolean(editingActions?.canViewProjectAccess) : false
+  const canViewEditingDeployments = editing ? Boolean(editingActions?.canViewDeployments) : false
   const canViewEditingSecrets = editing ? Boolean(editingActions?.canViewSecrets) : true
   const canManageEditingSecrets = editing ? Boolean(editingActions?.canManageSecrets) : true
   const canSetEditingEnvironment = editing ? Boolean(editingActions?.canSetEnvironment || editingActions?.canEdit) : true
@@ -1155,6 +1201,15 @@ export default function Engines() {
     enabled: Boolean(engineModal.isOpen && editing?.id && canViewEditingProjectAccess),
     queryFn: () => apiClient.get<ProjectEngineTargetView[]>(
       `/engines-api/engines/${encodeURIComponent(String(editing?.id))}/project-targets`,
+      undefined,
+      { credentials: 'include' }
+    ),
+  })
+  const deploymentReceiptsQ = useQuery({
+    queryKey: ['engines', editing?.id, 'deployment-receipts'],
+    enabled: Boolean(engineModal.isOpen && editing?.id && canViewEditingDeployments),
+    queryFn: () => apiClient.get<DeploymentReceiptView[]>(
+      `/engines-api/engines/${encodeURIComponent(String(editing?.id))}/deployment-receipts`,
       undefined,
       { credentials: 'include' }
     ),
@@ -1191,7 +1246,8 @@ export default function Engines() {
     isEditing: Boolean(editing),
     canViewMembers: Boolean(editingActions?.canViewMembers),
     canViewProjectAccess: canViewEditingProjectAccess,
-  }), [canViewEditingProjectAccess, editing, editingActions?.canViewMembers])
+    canViewDeployments: canViewEditingDeployments,
+  }), [canViewEditingDeployments, canViewEditingProjectAccess, editing, editingActions?.canViewMembers])
 
   function openEngineDetails(row: any) {
     if (!row?.id) return
@@ -1660,6 +1716,9 @@ export default function Engines() {
             canViewProjectAccess={canViewEditingProjectAccess}
             error={deploymentTargetsQ.error}
             isLoading={deploymentTargetsQ.isLoading}
+            receipts={deploymentReceiptsQ.data || []}
+            receiptsError={deploymentReceiptsQ.error}
+            receiptsLoading={deploymentReceiptsQ.isLoading}
             targets={deploymentTargetsQ.data || []}
           />
         )}

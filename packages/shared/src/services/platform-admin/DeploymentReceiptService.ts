@@ -19,6 +19,16 @@ export interface DeploymentReceiptResult {
   materializedResourceSets: number;
 }
 
+export interface DeploymentReceiptView {
+  id: string;
+  projectId: string;
+  engineId: string;
+  engineDeploymentId: string;
+  source: string;
+  lineage: Record<string, string>;
+  receivedAt: number;
+}
+
 function normalizedTenantWhere(tenantId?: string | null): { tenantId: string } | { tenantId: ReturnType<typeof IsNull> } {
   return tenantId?.trim() ? { tenantId: tenantId.trim() } : { tenantId: IsNull() };
 }
@@ -33,7 +43,38 @@ function receiptLineage(input: RecordDeploymentReceiptInput): Record<string, str
   };
 }
 
+function parseLineage(value: string): Record<string, string> {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed)
+      .filter(([key, item]) => ['source', 'sourcePrincipalId', 'pipelineRunId', 'commitSha', 'deploymentName'].includes(key) && typeof item === 'string')
+      .map(([key, item]) => [key, item as string]));
+  } catch {
+    return {};
+  }
+}
+
 class DeploymentReceiptService {
+  async listForEngine(engineId: string, tenantId?: string | null, limit = 100): Promise<DeploymentReceiptView[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), 500);
+    const repo = (await getDataSource()).getRepository(DeploymentReceipt);
+    const rows = await repo.find({
+      where: { ...normalizedTenantWhere(tenantId), engineId },
+      order: { receivedAt: 'DESC', id: 'DESC' },
+      take: safeLimit,
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      projectId: row.projectId,
+      engineId: row.engineId,
+      engineDeploymentId: row.engineDeploymentId,
+      source: row.source,
+      lineage: parseLineage(row.lineageJson),
+      receivedAt: row.receivedAt,
+    }));
+  }
+
   async record(input: RecordDeploymentReceiptInput): Promise<DeploymentReceiptResult> {
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(DeploymentReceipt);

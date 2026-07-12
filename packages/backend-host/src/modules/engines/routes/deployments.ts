@@ -717,6 +717,12 @@ r.post(
   })
 )
 
+r.get('/engines-api/engines/:engineId/deployment-receipts', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const rawLimit = Number(req.query.limit || 100);
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 500) : 100;
+  res.json(await deploymentReceiptService.listForEngine(String(req.params.engineId), req.tenant?.tenantId || null, limit));
+}))
+
 // Passthroughs to engine for listing/reading/deleting deployments
 r.get('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
 const engineId = String(req.params.engineId)

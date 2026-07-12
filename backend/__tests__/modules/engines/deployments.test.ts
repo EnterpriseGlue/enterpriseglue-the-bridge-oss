@@ -221,6 +221,20 @@ describe('engines deployments routes', () => {
     }));
   });
 
+  it('lists sanitized external deployment receipts through deployment-read permission', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission === 'engine:deploy:view'
+    );
+
+    const response = await request(app).get('/engines-api/engines/e1/deployment-receipts');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:deploy:view', expect.objectContaining({
+      userId: 'user-1', resourceType: 'engine', resourceId: 'e1',
+    }));
+  });
+
   it('gets deployment by id through action metadata permission', async () => {
     // TODO: Convert to E2E test with Prism mock server (see local-docs/ING/api-specs)
     const { fetch } = await import('undici');

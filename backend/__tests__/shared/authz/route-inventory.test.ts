@@ -429,6 +429,7 @@ describe('authorization route inventory validation', () => {
           ['POST', '/api/identity/providers', 'platform.self'],
           ['PUT', '/api/identity/providers/{key}', 'platform.self'],
           ['DELETE', '/api/identity/providers/{key}', 'platform.self'],
+          ['POST', '/api/identity/providers/{key}/reconcile', 'platform.self'],
           ['PUT', '/api/sso/providers/{id}', 'platform.self'],
           ['DELETE', '/api/sso/providers/{id}', 'platform.self'],
           ['POST', '/api/sso/providers/{id}/toggle', 'platform.self'],

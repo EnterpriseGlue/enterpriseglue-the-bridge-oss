@@ -7,7 +7,7 @@ import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
 function setup(existing: Record<string, unknown> | null = null) {
-  const receiptRepo = { findOne: vi.fn().mockResolvedValue(existing), insert: vi.fn().mockResolvedValue(undefined) };
+  const receiptRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(existing), insert: vi.fn().mockResolvedValue(undefined) };
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository(entity: unknown) {
       if (entity === DeploymentReceipt) return receiptRepo;
@@ -53,5 +53,19 @@ describe('deploymentReceiptService', () => {
       artifacts: [{ resourceKind: 'process_definition', resourceKey: 'payments-order' }],
     })).resolves.toEqual({ receiptId: 'receipt-1', idempotent: true, inventory: { created: 0, updated: 0 }, materializedResourceSets: 0 });
     expect(runtimeResourceInventoryService.observe).not.toHaveBeenCalled();
+  });
+
+  it('lists only the sanitized receipt lineage for an engine', async () => {
+    const repo = setup();
+    repo.find.mockResolvedValue([{
+      id: 'receipt-1', projectId: 'project-1', engineId: 'engine-1', engineDeploymentId: 'deployment-1', source: 'api_client', receivedAt: 123,
+      lineageJson: JSON.stringify({ source: 'api_client', sourcePrincipalId: 'client-1', pipelineRunId: 'run-1', ignoredSecret: 'must-not-leak' }),
+    }]);
+
+    await expect(deploymentReceiptService.listForEngine('engine-1', 'tenant-a')).resolves.toEqual([{
+      id: 'receipt-1', projectId: 'project-1', engineId: 'engine-1', engineDeploymentId: 'deployment-1', source: 'api_client', receivedAt: 123,
+      lineage: { source: 'api_client', sourcePrincipalId: 'client-1', pipelineRunId: 'run-1' },
+    }]);
+    expect(repo.find).toHaveBeenCalledWith(expect.objectContaining({ take: 100 }));
   });
 });
