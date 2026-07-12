@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   AccessAuthorityModeSchema,
   EngineOnboardingModeSchema,
+  EngineRuntimeAuthorizationModeSchema,
   ProjectEngineTargetPolicyModeSchema,
 } from './platform-settings.js';
 
@@ -33,7 +34,6 @@ const AllowedImportPaths = [
 ] as const;
 
 export const ConfigBundleModeSchema = z.enum(['additive', 'authoritative', 'preview_only']);
-export const EngineRuntimeAuthorizationModeSchema = z.literal('enterpriseglue_authoritative');
 export const ConfigOwnershipModeSchema = z.enum(['config_locked', 'config_warn', 'manual']);
 
 export const ConfigBundleSettingsSchema = z.object({

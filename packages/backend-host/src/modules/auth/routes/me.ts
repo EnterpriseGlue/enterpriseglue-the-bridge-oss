@@ -12,6 +12,7 @@ import {
   normalizeEngineOnboardingMode,
   normalizeProjectEngineTargetMode,
   normalizeAccessAuthorityMode,
+  normalizeEngineRuntimeAuthorizationMode,
 } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
@@ -191,6 +192,7 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
         projectEngineTargetMode: 'manual_allowed',
         engineAccessAuthority: 'manual',
         projectAccessAuthority: 'manual',
+        engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
         ssoAllEnginesAssignmentMappingsEnabled: true,
         ssoEngineOwnerAssignmentMappingsEnabled: false,
         ssoEngineDelegateAssignmentMappingsEnabled: false,
@@ -219,6 +221,7 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
       projectEngineTargetMode: normalizeProjectEngineTargetMode((settings as any).projectEngineTargetMode),
       engineAccessAuthority: normalizeAccessAuthorityMode((settings as any).engineAccessAuthority),
       projectAccessAuthority: normalizeAccessAuthorityMode((settings as any).projectAccessAuthority),
+      engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode((settings as any).engineRuntimeAuthorizationMode),
       ssoAllEnginesAssignmentMappingsEnabled: (settings as any).ssoAllEnginesAssignmentMappingsEnabled ?? true,
       ssoEngineOwnerAssignmentMappingsEnabled: (settings as any).ssoEngineOwnerAssignmentMappingsEnabled ?? false,
       ssoEngineDelegateAssignmentMappingsEnabled: (settings as any).ssoEngineDelegateAssignmentMappingsEnabled ?? false,

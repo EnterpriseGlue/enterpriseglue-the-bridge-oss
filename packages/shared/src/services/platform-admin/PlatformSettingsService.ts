@@ -8,9 +8,11 @@ import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persiste
 import {
   AccessAuthorityModeSchema,
   EngineOnboardingModeSchema,
+  EngineRuntimeAuthorizationModeSchema,
   ProjectEngineTargetPolicyModeSchema,
   type AccessAuthorityMode,
   type EngineOnboardingMode,
+  type EngineRuntimeAuthorizationMode,
   type ProjectEngineTargetPolicyMode,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import { encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
@@ -19,6 +21,7 @@ const DEFAULT_PII_SCOPES = ['processDetails', 'history', 'logs', 'errors', 'audi
 export const DEFAULT_ENGINE_ONBOARDING_MODE: EngineOnboardingMode = 'manual_allowed';
 export const DEFAULT_PROJECT_ENGINE_TARGET_MODE: ProjectEngineTargetPolicyMode = 'manual_allowed';
 export const DEFAULT_ACCESS_AUTHORITY_MODE: AccessAuthorityMode = 'manual';
+export const DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE: EngineRuntimeAuthorizationMode = 'enterpriseglue_authoritative';
 
 export function normalizeEngineOnboardingMode(value: unknown): EngineOnboardingMode {
   const parsed = EngineOnboardingModeSchema.safeParse(value);
@@ -35,6 +38,11 @@ export function normalizeAccessAuthorityMode(value: unknown): AccessAuthorityMod
   return parsed.success ? parsed.data : DEFAULT_ACCESS_AUTHORITY_MODE;
 }
 
+export function normalizeEngineRuntimeAuthorizationMode(value: unknown): EngineRuntimeAuthorizationMode {
+  const parsed = EngineRuntimeAuthorizationModeSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE;
+}
+
 export interface PlatformSettingsData {
   defaultEnvironmentTagId: string | null;
   syncPushEnabled: boolean;
@@ -45,6 +53,7 @@ export interface PlatformSettingsData {
   projectEngineTargetMode: ProjectEngineTargetPolicyMode;
   engineAccessAuthority: AccessAuthorityMode;
   projectAccessAuthority: AccessAuthorityMode;
+  engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationMode;
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
   ssoAutoRedirectSingleProvider: boolean;
@@ -91,6 +100,7 @@ export class PlatformSettingsService {
         projectEngineTargetMode: DEFAULT_PROJECT_ENGINE_TARGET_MODE,
         engineAccessAuthority: DEFAULT_ACCESS_AUTHORITY_MODE,
         projectAccessAuthority: DEFAULT_ACCESS_AUTHORITY_MODE,
+        engineRuntimeAuthorizationMode: DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE,
         inviteAllowAllDomains: true,
         inviteAllowedDomains: [],
         ssoAutoRedirectSingleProvider: false,
@@ -125,6 +135,7 @@ export class PlatformSettingsService {
       projectEngineTargetMode: normalizeProjectEngineTargetMode((settings as any).projectEngineTargetMode),
       engineAccessAuthority: normalizeAccessAuthorityMode((settings as any).engineAccessAuthority),
       projectAccessAuthority: normalizeAccessAuthorityMode((settings as any).projectAccessAuthority),
+      engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode((settings as any).engineRuntimeAuthorizationMode),
       inviteAllowAllDomains: (settings as any).inviteAllowAllDomains ?? true,
       inviteAllowedDomains: (() => {
         try {
@@ -192,6 +203,7 @@ export class PlatformSettingsService {
       projectEngineTargetMode: ProjectEngineTargetPolicyMode;
       engineAccessAuthority: AccessAuthorityMode;
       projectAccessAuthority: AccessAuthorityMode;
+      engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationMode;
       inviteAllowAllDomains: boolean;
       inviteAllowedDomains: string[];
       ssoAutoRedirectSingleProvider: boolean;
@@ -252,6 +264,9 @@ export class PlatformSettingsService {
     }
     if (data.projectAccessAuthority !== undefined) {
       updateData.projectAccessAuthority = data.projectAccessAuthority;
+    }
+    if (data.engineRuntimeAuthorizationMode !== undefined) {
+      updateData.engineRuntimeAuthorizationMode = data.engineRuntimeAuthorizationMode;
     }
     if (data.inviteAllowAllDomains !== undefined) {
       updateData.inviteAllowAllDomains = data.inviteAllowAllDomains;
@@ -339,6 +354,7 @@ export class PlatformSettingsService {
         projectEngineTargetMode: data.projectEngineTargetMode ?? DEFAULT_PROJECT_ENGINE_TARGET_MODE,
         engineAccessAuthority: data.engineAccessAuthority ?? DEFAULT_ACCESS_AUTHORITY_MODE,
         projectAccessAuthority: data.projectAccessAuthority ?? DEFAULT_ACCESS_AUTHORITY_MODE,
+        engineRuntimeAuthorizationMode: data.engineRuntimeAuthorizationMode ?? DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE,
         inviteAllowAllDomains: data.inviteAllowAllDomains ?? true,
         inviteAllowedDomains: JSON.stringify(data.inviteAllowedDomains ?? []),
         ssoAutoRedirectSingleProvider: data.ssoAutoRedirectSingleProvider ?? false,

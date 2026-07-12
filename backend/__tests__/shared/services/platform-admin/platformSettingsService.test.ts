@@ -42,6 +42,7 @@ describe('PlatformSettingsService', () => {
     expect(settings.defaultDeployRoles).toContain('owner');
     expect(settings.engineOnboardingMode).toBe('manual_allowed');
     expect(settings.projectEngineTargetMode).toBe('manual_allowed');
+    expect(settings.engineRuntimeAuthorizationMode).toBe('enterpriseglue_authoritative');
     expect(settings.ssoAllEnginesAssignmentMappingsEnabled).toBe(true);
     expect(settings.ssoEngineOwnerAssignmentMappingsEnabled).toBe(false);
     expect(settings.ssoEngineDelegateAssignmentMappingsEnabled).toBe(false);
@@ -70,6 +71,7 @@ describe('PlatformSettingsService', () => {
     expect(repo.insert).toHaveBeenCalledWith(expect.objectContaining({
       engineOnboardingMode: 'manual_allowed',
       projectEngineTargetMode: 'manual_allowed',
+      engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
       ssoAllEnginesAssignmentMappingsEnabled: true,
       ssoEngineOwnerAssignmentMappingsEnabled: false,
       ssoEngineDelegateAssignmentMappingsEnabled: false,
@@ -143,6 +145,28 @@ describe('PlatformSettingsService', () => {
 
     expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
       projectEngineTargetMode: 'external_only',
+      updatedById: 'admin-1',
+    }));
+  });
+
+  it('persists only the supported runtime authorization mode', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({ engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative' }, 'admin-1');
+
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
       updatedById: 'admin-1',
     }));
   });

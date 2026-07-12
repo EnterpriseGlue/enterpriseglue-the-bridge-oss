@@ -9,6 +9,7 @@ import { apiClient } from '../../shared/api/client';
 export type EngineOnboardingMode = 'manual_allowed' | 'external_only' | 'hybrid';
 export type ProjectEngineTargetPolicyMode = 'manual_allowed' | 'external_only' | 'hybrid';
 export type AccessAuthorityMode = 'manual' | 'transition_to_sso' | 'sso_managed';
+export type EngineRuntimeAuthorizationMode = 'enterpriseglue_authoritative';
 
 export interface EnvironmentTag {
   id: string;
@@ -31,6 +32,7 @@ export interface PlatformSettings {
   projectEngineTargetMode: ProjectEngineTargetPolicyMode;
   engineAccessAuthority: AccessAuthorityMode;
   projectAccessAuthority: AccessAuthorityMode;
+  engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationMode;
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
   ssoAutoRedirectSingleProvider: boolean;

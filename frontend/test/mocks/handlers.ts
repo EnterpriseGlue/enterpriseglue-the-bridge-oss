@@ -17,6 +17,7 @@ export const handlers = [
       defaultDeployRoles: ['owner', 'delegate', 'operator', 'deployer'],
       engineOnboardingMode: 'manual_allowed',
       projectEngineTargetMode: 'manual_allowed',
+      engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
     });
   }),
   http.get('/starbase-api/projects', () => {

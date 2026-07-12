@@ -47,7 +47,7 @@ Current config-as-code status:
 - [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
 - [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.
 - [ ] ⬜ Implement central-engine runtime resource inventory, runtime resource sets, materialization, and authorization filtering for Mission Control/dashboard reads.
-- [ ] ⬜ Implement `engineRuntimeAuthorizationMode` enforcement with unsupported-mode validation.
+- [x] ✅ Persist and expose the v1 `engineRuntimeAuthorizationMode`; all settings and bundle schemas reject unsupported modes and normalize missing legacy values to `enterpriseglue_authoritative`. Runtime-resource route filtering remains a later phase.
 - [ ] ⬜ Implement first-class `customer_sidecar` engine connection mode, endpoint-auth policy, shared connection resolution, UI/config/OpenAPI fields, and mock-sidecar transport tests. Keep the downstream peer token outside EnterpriseGlue.
 - [ ] ⏸ Defer EnterpriseGlue-issued sidecar action-token integration, sidecar principals/heartbeats/inventory, mirrored engine backstop, and engine-native authority/import modes.
 
@@ -2124,7 +2124,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add custom-role config validation for explicit `permissions`.
 - [ ] ⬜ Add custom-role `copyFromRoleKey` expansion with same-scope `addPermissions` and `removePermissions`.
 - [ ] ⬜ Add role baseline fingerprinting so previews show when a system-role template changed.
-- [ ] ⬜ Add settings schema for `engineRuntimeAuthorizationMode` with `enterpriseglue_authoritative` enabled in v1 and the other modes rejected or marked unsupported.
+- [x] ✅ Add settings schema for `engineRuntimeAuthorizationMode` with `enterpriseglue_authoritative` enabled in v1 and the other modes rejected as unsupported.
 - [ ] ⬜ Add per-engine `runtimeAccessScope` and `deploymentIntegration` schemas with distributed-engine defaults.
 - [ ] ⬜ Add first-class engine `connectionMode = direct | customer_sidecar` and platform policy for credentialless private-sidecar endpoints; reject `auth.type = "none"` for direct engines.
 - [ ] ⬜ Add deployment receipt, ingestion source, lineage quality, runtime inventory observation, and reconciliation result schemas.

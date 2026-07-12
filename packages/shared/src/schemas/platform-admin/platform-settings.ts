@@ -5,6 +5,7 @@ const PiiScopeSchema = z.enum(['processDetails', 'history', 'logs', 'errors', 'a
 export const EngineOnboardingModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
 export const ProjectEngineTargetPolicyModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
 export const AccessAuthorityModeSchema = z.enum(['manual', 'transition_to_sso', 'sso_managed']);
+export const EngineRuntimeAuthorizationModeSchema = z.literal('enterpriseglue_authoritative');
 
 // Select schema (read responses)
 export const PlatformSettingsSchema = z.object({
@@ -17,6 +18,7 @@ export const PlatformSettingsSchema = z.object({
   projectEngineTargetMode: ProjectEngineTargetPolicyModeSchema,
   engineAccessAuthority: AccessAuthorityModeSchema,
   projectAccessAuthority: AccessAuthorityModeSchema,
+  engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationModeSchema,
   inviteAllowAllDomains: z.boolean(),
   inviteAllowedDomains: z.array(z.string()),
   ssoAutoRedirectSingleProvider: z.boolean(),
@@ -51,6 +53,7 @@ export const UpdatePlatformSettingsRequest = z.object({
   projectEngineTargetMode: ProjectEngineTargetPolicyModeSchema.optional(),
   engineAccessAuthority: AccessAuthorityModeSchema.optional(),
   projectAccessAuthority: AccessAuthorityModeSchema.optional(),
+  engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationModeSchema.optional(),
   inviteAllowAllDomains: z.boolean().optional(),
   inviteAllowedDomains: z.array(z.string()).optional(),
   ssoAutoRedirectSingleProvider: z.boolean().optional(),
@@ -80,3 +83,4 @@ export type UpdatePlatformSettings = z.infer<typeof UpdatePlatformSettingsReques
 export type EngineOnboardingMode = z.infer<typeof EngineOnboardingModeSchema>;
 export type ProjectEngineTargetPolicyMode = z.infer<typeof ProjectEngineTargetPolicyModeSchema>;
 export type AccessAuthorityMode = z.infer<typeof AccessAuthorityModeSchema>;
+export type EngineRuntimeAuthorizationMode = z.infer<typeof EngineRuntimeAuthorizationModeSchema>;

@@ -141,6 +141,7 @@ export function EnginesSettingsSection({
   const selectedProjectEngineTargetMode = settings?.projectEngineTargetMode || 'manual_allowed'
   const selectedEngineAccessAuthority = settings?.engineAccessAuthority || 'manual'
   const selectedProjectAccessAuthority = settings?.projectAccessAuthority || 'manual'
+  const engineRuntimeAuthorizationMode = settings?.engineRuntimeAuthorizationMode || 'enterpriseglue_authoritative'
   const settingsDisabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage'
   const governanceAssignDisabledReason = governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
   const canAssignGovernance = canReadGovernance && canManageGovernance
@@ -226,6 +227,17 @@ export function EnginesSettingsSection({
                 size="md"
                 disabled={!canManageSettings}
               />
+              <div aria-label="Runtime authorization mode" style={{ display: 'grid', gap: 'var(--spacing-2)', paddingTop: 'var(--spacing-2)' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Runtime authorization</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
+                  <Tag type="blue">EnterpriseGlue authoritative</Tag>
+                  <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
+                    {engineRuntimeAuthorizationMode === 'enterpriseglue_authoritative'
+                      ? 'EnterpriseGlue is the v1 authorization source for runtime resources.'
+                      : 'Unsupported runtime authorization mode.'}
+                  </span>
+                </div>
+              </div>
             </div>
           </Tile>
         </PlatformCol>

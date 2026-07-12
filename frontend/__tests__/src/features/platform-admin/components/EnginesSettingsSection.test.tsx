@@ -13,6 +13,7 @@ const baseSettings: PlatformSettings = {
   projectEngineTargetMode: 'hybrid',
   engineAccessAuthority: 'manual',
   projectAccessAuthority: 'manual',
+  engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
   inviteAllowAllDomains: true,
   inviteAllowedDomains: [],
   ssoAutoRedirectSingleProvider: false,

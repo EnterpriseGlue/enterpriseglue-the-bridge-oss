@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
-import type { AccessAuthorityMode, EngineOnboardingMode, ProjectEngineTargetPolicyMode } from '../../../api/platform-admin';
+import type { AccessAuthorityMode, EngineOnboardingMode, EngineRuntimeAuthorizationMode, ProjectEngineTargetPolicyMode } from '../../../api/platform-admin';
 
 export interface PlatformSyncSettings {
   syncPushEnabled: boolean;
@@ -11,6 +11,7 @@ export interface PlatformSyncSettings {
   projectEngineTargetMode: ProjectEngineTargetPolicyMode;
   engineAccessAuthority: AccessAuthorityMode;
   projectAccessAuthority: AccessAuthorityMode;
+  engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationMode;
   ssoAllEnginesAssignmentMappingsEnabled: boolean;
   ssoEngineOwnerAssignmentMappingsEnabled: boolean;
   ssoEngineDelegateAssignmentMappingsEnabled: boolean;
