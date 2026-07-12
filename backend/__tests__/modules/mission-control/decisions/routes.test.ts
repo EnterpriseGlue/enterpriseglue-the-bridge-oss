@@ -5,6 +5,7 @@ import decisionsRouter from '../../../../../packages/backend-host/src/modules/mi
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
+import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
@@ -119,6 +120,9 @@ describe('mission-control decisions routes', () => {
         }
         if (entity === EngineDeploymentArtifact) {
           return { find: artifactFind };
+        }
+        if (entity === EngineDeployment) {
+          return { findOne: vi.fn().mockResolvedValue({ deployedAt: null, lineageQuality: 'complete' }) };
         }
         if (entity === File) {
           return { find: fileFind };

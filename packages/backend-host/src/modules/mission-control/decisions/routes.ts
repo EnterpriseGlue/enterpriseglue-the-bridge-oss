@@ -114,8 +114,10 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
 
     const engineDeploymentId = String(row.engineDeploymentId || '');
     const deploymentRow = engineDeploymentId
-      ? await deploymentRepo.findOne({ where: { id: engineDeploymentId }, select: ['deployedAt'] })
+      ? await deploymentRepo.findOne({ where: { id: engineDeploymentId }, select: ['deployedAt', 'lineageQuality'] })
       : null;
+    const lineageQuality = deploymentRow?.lineageQuality || 'complete';
+    if (!deploymentRow || !['complete', 'reported'].includes(lineageQuality)) continue;
     const deployedAt = deploymentRow?.deployedAt ? Number(deploymentRow.deployedAt) : null;
     const deploymentTimestamp = deployedAt ?? Number(row.createdAt);
 
@@ -145,6 +147,8 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
       }
     }
 
+    if (lineageQuality === 'reported' && fileVersionNumber === null) continue;
+
     if (fileVersionNumber === null) {
       const byLatest = await fileCommitVersionRepo.createQueryBuilder('v')
         .select(['v.versionNumber AS "versionNumber"'])
@@ -170,6 +174,7 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
       commitId,
       fileVersionNumber,
       mappingSource,
+      lineageQuality,
       artifactCreatedAt: Number(row.createdAt),
     });
   }

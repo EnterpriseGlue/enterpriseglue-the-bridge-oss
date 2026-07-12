@@ -5,6 +5,7 @@ import processesRouter from '../../../../../packages/backend-host/src/modules/mi
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/db/entities/EngineDeploymentArtifact.js';
+import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
@@ -84,6 +85,7 @@ describe('mission-control processes routes', () => {
   let fileFind: ReturnType<typeof vi.fn>;
   let fileVersionFindOne: ReturnType<typeof vi.fn>;
   let fileVersionQbGetRawOne: ReturnType<typeof vi.fn>;
+  let deploymentFindOne: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     app = express();
@@ -96,6 +98,7 @@ describe('mission-control processes routes', () => {
     fileFind = vi.fn().mockResolvedValue([]);
     fileVersionFindOne = vi.fn().mockResolvedValue(null);
     fileVersionQbGetRawOne = vi.fn().mockResolvedValue(null);
+    deploymentFindOne = vi.fn().mockResolvedValue({ deployedAt: null, lineageQuality: 'complete' });
 
     const fileVersionRepo = {
       findOne: fileVersionFindOne,
@@ -121,6 +124,9 @@ describe('mission-control processes routes', () => {
         }
         if (entity === EngineDeploymentArtifact) {
           return { find: artifactFind };
+        }
+        if (entity === EngineDeployment) {
+          return { findOne: deploymentFindOne };
         }
         if (entity === File) {
           return { find: fileFind };
@@ -448,6 +454,17 @@ describe('mission-control processes routes', () => {
 	    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
 	      permission.startsWith('engine:')
 	    );
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/edit-target')
+      .query({ engineId: 'engine-1', key: 'invoice', version: 3 });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('does not expose an edit target backed only by discovered engine lineage', async () => {
+    artifactFind.mockResolvedValueOnce([{ projectId: 'project-1', fileId: 'file-1', engineDeploymentId: 'dep-1', createdAt: 1700000000000 }]);
+    deploymentFindOne.mockResolvedValueOnce({ deployedAt: 1700000000000, lineageQuality: 'discovered' });
 
     const response = await request(app)
       .get('/mission-control-api/process-definitions/edit-target')

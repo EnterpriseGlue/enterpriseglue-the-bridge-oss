@@ -137,8 +137,10 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
 
     const engineDeploymentId = String(row.engineDeploymentId || '')
     const deploymentRow = engineDeploymentId
-      ? await deploymentRepo.findOne({ where: { id: engineDeploymentId }, select: ['deployedAt'] })
+      ? await deploymentRepo.findOne({ where: { id: engineDeploymentId }, select: ['deployedAt', 'lineageQuality'] })
       : null
+    const lineageQuality = deploymentRow?.lineageQuality || 'complete'
+    if (!deploymentRow || !['complete', 'reported'].includes(lineageQuality)) continue
     const deployedAt = deploymentRow?.deployedAt ? Number(deploymentRow.deployedAt) : null
     const deploymentTimestamp = deployedAt ?? Number(row.createdAt)
 
@@ -181,6 +183,9 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
       }
     }
 
+    // Reported pipeline lineage must still resolve to a versioned project file.
+    if (lineageQuality === 'reported' && fileVersionNumber === null) continue
+
     return res.json({
       canShowEditButton: true,
       canEdit,
@@ -193,6 +198,7 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
       commitId,
       fileVersionNumber,
       mappingSource,
+      lineageQuality,
       artifactCreatedAt: Number(row.createdAt),
     })
   }

@@ -17,6 +17,7 @@ export interface DeployedEditTargetResolution {
   fileVersionNumber: number | null
   mappingSource: DeployedEditTargetMappingSource
   artifactCreatedAt: number
+  lineageQuality: 'complete' | 'reported'
 }
 
 export interface ResolveDeployedEditTargetParams {
@@ -115,8 +116,10 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
     const commitId = toNullableString(row.fileGitCommitId)
     const engineDeploymentId = toStringValue(row.engineDeploymentId)
     const deploymentRow = engineDeploymentId
-      ? await deploymentRepo.findOne({ where: { id: engineDeploymentId }, select: ['deployedAt'] })
+      ? await deploymentRepo.findOne({ where: { id: engineDeploymentId }, select: ['deployedAt', 'lineageQuality'] })
       : null
+    const lineageQuality = deploymentRow?.lineageQuality || 'complete'
+    if (!deploymentRow || !['complete', 'reported'].includes(lineageQuality)) continue
     const deployedAt = toFiniteNumber(deploymentRow?.deployedAt)
     const artifactCreatedAt = toFiniteNumber(row.createdAt) ?? 0
     const deploymentTimestamp = deployedAt ?? artifactCreatedAt
@@ -145,6 +148,8 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
       }
     }
 
+    if (lineageQuality === 'reported' && fileVersionNumber === null) continue
+
     if (fileVersionNumber === null) {
       const byLatest = await findLatestFileVersion(fileCommitVersionRepo, fileId)
       const latestVersion = toFiniteNumber(byLatest?.versionNumber)
@@ -164,6 +169,7 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
       fileVersionNumber,
       mappingSource,
       artifactCreatedAt,
+      lineageQuality: lineageQuality as 'complete' | 'reported',
     }
   }
 

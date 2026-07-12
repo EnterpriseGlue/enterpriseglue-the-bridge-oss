@@ -509,7 +509,7 @@ Persist one deployment record per `engineId + engineDeploymentId` and merge rich
 - [x] ✅ Add `POST /engines-api/external/engines/:engineId/deployment-receipts`: machine-authenticated, API-target-eligible, idempotent receipt ingestion that persists sanitized pipeline lineage, reports process/decision metadata into the runtime inventory, and creates or enriches the canonical `EngineDeployment` history with `reported` lineage.
 - [x] ✅ Add scheduled and on-demand deployment/runtime inventory reconciliation. The permission-gated on-demand endpoint and disabled-by-default `RUNTIME_INVENTORY_RECONCILIATION_INTERVAL_MS` poller refresh active resource-aware runtime inventory, deactivate only definitions absent from successful engine listings, and ingest engine-observed deployment records/artifacts as `discovered` lineage without guessing project or file ownership.
 - [ ] ⬜ Never infer project/file lineage solely from a process key unless a configured convention resolves uniquely.
-- [ ] ⬜ Require `complete` or validated `reported` lineage for Mission Control-Starbase edit navigation.
+- [x] ✅ Require `complete` or validated `reported` lineage for Mission Control-Starbase edit navigation. Server-side process, decision, and shared edit-target resolution reject `discovered`/`inferred` history; `reported` mappings also require a resolved versioned project file.
 
 ### Engine Labels As Metadata
 
