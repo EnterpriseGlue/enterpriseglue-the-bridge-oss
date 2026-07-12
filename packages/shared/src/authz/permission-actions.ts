@@ -485,7 +485,10 @@ export const AUTHZ_ACTIONS = [
     category: 'SSO',
     description: 'Read SSO claim-to-group mappings.',
     ui: [{ surfaceId: 'admin.access-control.sso-group-mappings', behavior: 'hide' }],
-    routes: [{ method: 'GET', route: '/api/authz/sso-group-mappings', resourceResolver: 'platform.self' }],
+    routes: [
+      { method: 'GET', route: '/api/authz/sso-group-mappings', resourceResolver: 'platform.self' },
+      { method: 'GET', route: '/api/identity/mappings', resourceResolver: 'platform.self' },
+    ],
   },
   {
     actionId: 'platform.sso.group-mappings.manage',
@@ -502,6 +505,10 @@ export const AUTHZ_ACTIONS = [
       { method: 'PUT', route: '/api/authz/sso-group-mappings/:id', resourceResolver: 'ssoMapping.byId' },
       { method: 'DELETE', route: '/api/authz/sso-group-mappings/:id', resourceResolver: 'ssoMapping.byId' },
       { method: 'POST', route: '/api/authz/sso-group-mappings/test', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/identity/mappings', resourceResolver: 'platform.self' },
+      { method: 'PUT', route: '/api/identity/mappings/{id}', resourceResolver: 'platform.self' },
+      { method: 'DELETE', route: '/api/identity/mappings/{id}', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/identity/mappings/test', resourceResolver: 'platform.self' },
     ],
   },
   {

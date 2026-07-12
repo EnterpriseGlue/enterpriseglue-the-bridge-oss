@@ -50,6 +50,7 @@ import {
   authzRoute,
   ssoProvidersRoute,
   identityProvidersRoute,
+  identityMappingsRoute,
 } from '@modules/platform-admin/index.js';
 
 import {
@@ -214,6 +215,7 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   // SSO Provider Management API (platform-level)
   app.use(ssoProvidersRoute);
   app.use(identityProvidersRoute);
+  app.use(identityMappingsRoute);
 
   // Authorization API (platform-level)
   app.use(authzRoute);

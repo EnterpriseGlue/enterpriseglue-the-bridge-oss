@@ -43,6 +43,7 @@ import type {
 } from '../../../api/platform-admin';
 import SsoSettingsTab from '../components/SsoSettingsTab';
 import IdentityProvidersSettingsTab from '../components/IdentityProvidersSettingsTab';
+import IdentityMappingsSettingsTab from '../components/IdentityMappingsSettingsTab';
 import { GitSettingsSection } from '../components/GitSettingsSection';
 import { ProjectsSettingsSection } from '../components/ProjectsSettingsSection';
 import { InviteDomainsSettingsSection } from '../components/InviteDomainsSettingsSection';
@@ -86,6 +87,7 @@ type PlatformSettingsSection =
   | 'engines'
   | 'sso'
   | 'identity-providers'
+  | 'identity-mappings'
   | 'access-control'
   | 'sso-mappings'
   | 'authz-policies'
@@ -103,6 +105,7 @@ const PLATFORM_SETTINGS_SECTION_LABELS: Record<PlatformSettingsSection, string> 
   engines: 'Engines',
   sso: 'SSO',
   'identity-providers': 'Identity Providers',
+  'identity-mappings': 'Identity Mappings',
   'access-control': 'Access Control',
   'sso-mappings': 'SSO Role Mappings',
   'authz-policies': 'Authorization Policies',
@@ -471,6 +474,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
 
   const renderSso = () => <SsoSettingsTab />;
   const renderIdentityProviders = () => <IdentityProvidersSettingsTab />;
+  const renderIdentityMappings = () => <IdentityMappingsSettingsTab />;
 
   const renderAdminSurface = (children: React.ReactNode) => (
     <React.Suspense fallback={<SkeletonText paragraph lineCount={6} />}>
@@ -519,6 +523,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     { id: 'engines', label: 'Engines', visible: canReadSettings || canReadGovernance, render: renderEngines },
     { id: 'sso', label: 'SSO', visible: canReadSettings, render: renderSso },
     { id: 'identity-providers', label: 'Identity Providers', visible: canViewIdentityProviders, render: renderIdentityProviders },
+    { id: 'identity-mappings', label: 'Identity Mappings', visible: canViewSsoMappings, render: renderIdentityMappings },
     { id: 'access-control', label: 'Access Control', visible: canViewAccessControl, render: renderAccessControl },
     { id: 'sso-mappings', label: 'SSO Role Mappings', visible: canViewSsoMappings, render: renderSsoMappings },
     { id: 'authz-policies', label: 'Authorization Policies', visible: canViewAuthzPolicies, render: renderAuthzPolicies },

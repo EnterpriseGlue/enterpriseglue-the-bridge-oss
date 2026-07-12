@@ -21,4 +21,14 @@ describe('identity entitlement mapping', () => {
     await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', identity)).resolves.toEqual({ created: 1, removed: 0 });
     expect(membershipRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', groupId: 'group-1', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' }));
   });
+
+  it('removes only memberships created by a manually managed mapping', async () => {
+    const mappingRepo = { findOne: vi.fn().mockResolvedValue({ id: 'mapping-1', sourceRef: null }), delete: vi.fn().mockResolvedValue(undefined) };
+    const membershipRepo = { delete: vi.fn().mockResolvedValue(undefined) };
+    const repositories = (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo : entity === AuthzGroupMembership ? membershipRepo : {};
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })) });
+    await identityEntitlementMappingService.remove('mapping-1', 'tenant-a');
+    expect(membershipRepo.delete).toHaveBeenCalledWith({ source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
+    expect(mappingRepo.delete).toHaveBeenCalledWith({ id: 'mapping-1' });
+  });
 });

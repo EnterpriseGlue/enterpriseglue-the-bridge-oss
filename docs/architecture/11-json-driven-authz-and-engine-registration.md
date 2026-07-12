@@ -1827,10 +1827,10 @@ The implementation should extend existing packages rather than introduce an auth
   - Manages provider-neutral OIDC, SAML, and LDAP provider definitions with secret references, archival delete semantics, audit entries, and exact action/OpenAPI metadata.
 - [ ] ⬜ `POST /api/identity/providers/:id/test-connection`
   - Performs an explicit protocol-specific connectivity/configuration test and returns sanitized capability diagnostics without creating a session or membership.
-- [ ] ⬜ `GET|POST|PUT|DELETE /api/identity/mappings`
-  - Manages normalized entitlement-to-group mappings, preview, test, source lineage, and sync mode.
-- [ ] ⬜ `POST /api/identity/mappings/test`
-  - Normalizes a sanitized provider sample and returns matched internal groups without persisting membership.
+- [x] ✅ `GET|POST|PUT|DELETE /api/identity/mappings`
+  - Manages normalized entitlement-to-group mappings, sync mode, source lineage, and configuration-owned edit protection.
+- [x] ✅ `POST /api/identity/mappings/test`
+  - Normalizes a sanitized provider sample and returns match results and normalized entitlements without persisting membership.
 - [ ] ⬜ `POST /api/identity/providers/:id/reconciliation-preview`
   - Computes membership additions/removals and incomplete-provider warnings without persistence.
 - [ ] ⬜ `POST /api/identity/providers/:id/reconcile`
@@ -2253,7 +2253,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add managed-by-config badges to existing Access Control and Engine UI surfaces.
 - [ ] ⬜ Replace the role-permission matrix with the Role Library and single-role editor; remove page-level horizontal scrolling from role management.
 - [ ] ⬜ Add role-editor search, grouped permission accordions, selected-only/risk filters, responsive checkboxes, sticky save/cancel, system-role duplication, and config ownership states.
-- [ ] ⬜ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup.
+- [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Mapping connection health and reconciliation history remain pending.
 - [ ] ⬜ Show engine labels such as country, domain, environment, and region in engine detail and engine inventory filters.
 - [ ] ⬜ Show runtime authorization mode in Platform Settings with `enterpriseglue_authoritative` as active and later modes disabled with explanatory copy.
 - [ ] ⬜ Add runtime resource access section in Engine Detail and Access Control for central engines.

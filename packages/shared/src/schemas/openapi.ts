@@ -2084,6 +2084,25 @@ registry.registerPath({
   responses: { 204: { description: 'Identity provider archived' }, 404: { description: 'Identity provider not found' } },
 });
 
+const IdentityMappingRequestSchema = z.object({
+  providerKey: z.string().min(1).max(160),
+  targetGroupKey: z.string().min(1).max(160),
+  entitlementType: z.enum(['group', 'role', 'scope', 'attribute']),
+  externalId: z.string().min(1).max(2000).nullable().optional(),
+  matchOperator: z.enum(['exact', 'contains', 'exists']),
+  syncMode: z.enum(['additive', 'authoritative']).optional(),
+});
+const IdentityMappingResponseSchema = IdentityMappingRequestSchema.extend({
+  id: z.string(), providerId: z.string(), targetGroupId: z.string(), isActive: z.boolean(), configKey: z.string().nullable(), sourceRef: z.string().nullable(),
+});
+const IdentityMappingTestRequestSchema = IdentityMappingRequestSchema.omit({ targetGroupKey: true }).extend({ claims: z.record(z.string(), z.unknown()) });
+registry.register('IdentityMapping', IdentityMappingResponseSchema);
+registry.registerPath({ method: 'get', path: '/api/identity/mappings', ...authzExtension('platform.sso.group-mappings.read', 'GET', '/api/identity/mappings'), responses: { 200: { description: 'List provider-neutral identity mappings', content: { 'application/json': { schema: z.array(IdentityMappingResponseSchema) } } } } });
+registry.registerPath({ method: 'post', path: '/api/identity/mappings', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings'), request: { body: { content: { 'application/json': { schema: IdentityMappingRequestSchema } } } }, responses: { 201: { description: 'Identity mapping created', content: { 'application/json': { schema: IdentityMappingResponseSchema } } } } });
+registry.registerPath({ method: 'put', path: '/api/identity/mappings/{id}', ...authzExtension('platform.sso.group-mappings.manage', 'PUT', '/api/identity/mappings/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: IdentityMappingRequestSchema.partial().extend({ isActive: z.boolean().optional() }) } } } }, responses: { 200: { description: 'Identity mapping updated', content: { 'application/json': { schema: IdentityMappingResponseSchema } } } } });
+registry.registerPath({ method: 'delete', path: '/api/identity/mappings/{id}', ...authzExtension('platform.sso.group-mappings.manage', 'DELETE', '/api/identity/mappings/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Identity mapping removed' } } });
+registry.registerPath({ method: 'post', path: '/api/identity/mappings/test', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings/test'), request: { body: { content: { 'application/json': { schema: IdentityMappingTestRequestSchema } } } }, responses: { 200: { description: 'Identity mapping test result', content: { 'application/json': { schema: z.object({ matches: z.boolean(), entitlements: z.array(z.object({ type: z.string(), externalId: z.string() })) }) } } } } });
+
 // -----------------------------
 // Project Members API
 // -----------------------------

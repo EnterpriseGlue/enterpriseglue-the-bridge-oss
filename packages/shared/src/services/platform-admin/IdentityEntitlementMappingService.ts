@@ -1,7 +1,10 @@
-import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
+import { IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ExternalEntitlement, NormalizedExternalIdentity } from './IdentityProviderAdapter.js';
 
@@ -11,6 +14,27 @@ export interface IdentityEntitlementMappingMatch {
   entitlementType: ExternalEntitlement['type'];
   externalId?: string | null;
   matchOperator: IdentityEntitlementMatchOperator;
+}
+
+export interface IdentityEntitlementMappingInput extends IdentityEntitlementMappingMatch {
+  providerKey: string;
+  targetGroupKey: string;
+  syncMode?: 'additive' | 'authoritative';
+}
+
+export interface ManagedIdentityEntitlementMapping {
+  id: string;
+  providerId: string;
+  providerKey: string;
+  targetGroupId: string;
+  targetGroupKey: string;
+  entitlementType: ExternalEntitlement['type'];
+  externalId: string | null;
+  matchOperator: IdentityEntitlementMatchOperator;
+  syncMode: 'additive' | 'authoritative';
+  isActive: boolean;
+  configKey: string | null;
+  sourceRef: string | null;
 }
 
 export function matchesIdentityEntitlement(mapping: IdentityEntitlementMappingMatch, identity: NormalizedExternalIdentity): boolean {
@@ -26,10 +50,110 @@ export function matchesIdentityEntitlement(mapping: IdentityEntitlementMappingMa
 type MappingStore = DataSource | EntityManager;
 
 function tenantWhere(tenantId?: string | null): object | object[] {
-  return tenantId ? [{ tenantId }, { tenantId: IsNull() }] : {};
+  return tenantId ? { tenantId } : { tenantId: IsNull() };
+}
+
+function normalized(value: string, field: string): string {
+  const result = value.trim();
+  if (!result) throw Errors.validation(`${field} is required`);
+  return result;
+}
+
+function validateInput(input: IdentityEntitlementMappingInput): void {
+  normalized(input.providerKey, 'providerKey');
+  normalized(input.targetGroupKey, 'targetGroupKey');
+  if (!['group', 'role', 'scope', 'attribute'].includes(input.entitlementType)) throw Errors.validation('Unsupported entitlement type');
+  if (!['exact', 'contains', 'exists'].includes(input.matchOperator)) throw Errors.validation('Unsupported entitlement match operator');
+  if (input.matchOperator === 'exists' && input.externalId) throw Errors.validation('externalId is not allowed for exists mappings');
+  if (input.matchOperator !== 'exists' && !input.externalId?.trim()) throw Errors.validation('externalId is required for exact and contains mappings');
+  if (input.syncMode && !['additive', 'authoritative'].includes(input.syncMode)) throw Errors.validation('Unsupported identity mapping sync mode');
 }
 
 class IdentityEntitlementMappingService {
+  async list(tenantId?: string | null): Promise<ManagedIdentityEntitlementMapping[]> {
+    const dataSource = await getDataSource();
+    const [mappings, providers, groups] = await Promise.all([
+      dataSource.getRepository(IdentityEntitlementMapping).find({ where: tenantWhere(tenantId) as any, order: { createdAt: 'ASC' } }),
+      dataSource.getRepository(IdentityProvider).find({ where: tenantWhere(tenantId) as any }),
+      dataSource.getRepository(AuthzGroup).find({ where: tenantWhere(tenantId) as any }),
+    ]);
+    const providerById = new Map(providers.map((provider) => [provider.id, provider]));
+    const groupById = new Map(groups.map((group) => [group.id, group]));
+    return mappings.flatMap((mapping) => {
+      const provider = providerById.get(mapping.providerId);
+      const group = groupById.get(mapping.targetGroupId);
+      if (!provider || !group) return [];
+      return [{
+        id: mapping.id, providerId: mapping.providerId, providerKey: provider.key, targetGroupId: mapping.targetGroupId,
+        targetGroupKey: group.key, entitlementType: mapping.entitlementType as ExternalEntitlement['type'], externalId: mapping.externalId,
+        matchOperator: mapping.matchOperator as IdentityEntitlementMatchOperator, syncMode: mapping.syncMode as 'additive' | 'authoritative',
+        isActive: mapping.isActive, configKey: mapping.configKey, sourceRef: mapping.sourceRef,
+      }];
+    });
+  }
+
+  async create(input: IdentityEntitlementMappingInput, tenantId?: string | null): Promise<ManagedIdentityEntitlementMapping> {
+    validateInput(input);
+    const dataSource = await getDataSource();
+    const [provider, group] = await Promise.all([
+      dataSource.getRepository(IdentityProvider).findOne({ where: { ...tenantWhere(tenantId), key: normalized(input.providerKey, 'providerKey') } as any }),
+      dataSource.getRepository(AuthzGroup).findOne({ where: { ...tenantWhere(tenantId), key: normalized(input.targetGroupKey, 'targetGroupKey'), isArchived: false } as any }),
+    ]);
+    if (!provider) throw Errors.notFound('Identity provider not found');
+    if (!group) throw Errors.notFound('Authorization group not found');
+    const repo = dataSource.getRepository(IdentityEntitlementMapping);
+    const now = Date.now();
+    const id = generateId();
+    await repo.insert({ id, tenantId: tenantId || null, providerId: provider.id, configKey: null, sourceRef: null, entitlementType: input.entitlementType, externalId: input.externalId?.trim() || null, matchOperator: input.matchOperator, targetGroupId: group.id, syncMode: input.syncMode || 'authoritative', isActive: true, createdAt: now, updatedAt: now });
+    return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: input.entitlementType, externalId: input.externalId?.trim() || null, matchOperator: input.matchOperator, syncMode: input.syncMode || 'authoritative', isActive: true, configKey: null, sourceRef: null };
+  }
+
+  async update(id: string, input: Partial<IdentityEntitlementMappingInput> & { isActive?: boolean }, tenantId?: string | null): Promise<ManagedIdentityEntitlementMapping> {
+    const dataSource = await getDataSource();
+    const repo = dataSource.getRepository(IdentityEntitlementMapping);
+    const existing = await repo.findOne({ where: { ...tenantWhere(tenantId), id } as any });
+    if (!existing) throw Errors.notFound('Identity mapping not found');
+    if (existing.sourceRef) throw Errors.forbidden('This identity mapping is managed by configuration');
+    const current = (await this.list(tenantId)).find((mapping) => mapping.id === id);
+    if (!current) throw Errors.notFound('Identity mapping references a missing provider or group');
+    const merged: IdentityEntitlementMappingInput = {
+      providerKey: input.providerKey ?? current.providerKey, targetGroupKey: input.targetGroupKey ?? current.targetGroupKey,
+      entitlementType: input.entitlementType ?? current.entitlementType, externalId: input.externalId === undefined ? current.externalId : input.externalId,
+      matchOperator: input.matchOperator ?? current.matchOperator, syncMode: input.syncMode ?? current.syncMode,
+    };
+    validateInput(merged);
+    const [provider, group] = await Promise.all([
+      dataSource.getRepository(IdentityProvider).findOne({ where: { ...tenantWhere(tenantId), key: merged.providerKey } as any }),
+      dataSource.getRepository(AuthzGroup).findOne({ where: { ...tenantWhere(tenantId), key: merged.targetGroupKey, isArchived: false } as any }),
+    ]);
+    if (!provider) throw Errors.notFound('Identity provider not found');
+    if (!group) throw Errors.notFound('Authorization group not found');
+    const isActive = input.isActive ?? existing.isActive;
+    await repo.update({ id }, { providerId: provider.id, targetGroupId: group.id, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, updatedAt: Date.now() });
+    return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, configKey: null, sourceRef: null };
+  }
+
+  async remove(id: string, tenantId?: string | null): Promise<void> {
+    const dataSource = await getDataSource();
+    await dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(IdentityEntitlementMapping);
+      const mapping = await repo.findOne({ where: { ...tenantWhere(tenantId), id } as any });
+      if (!mapping) throw Errors.notFound('Identity mapping not found');
+      if (mapping.sourceRef) throw Errors.forbidden('This identity mapping is managed by configuration');
+      await manager.getRepository(AuthzGroupMembership).delete({ source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` });
+      await repo.delete({ id: mapping.id });
+    });
+  }
+
+  async test(input: Omit<IdentityEntitlementMappingInput, 'targetGroupKey'> & { claims: Record<string, unknown> }, tenantId?: string | null): Promise<{ matches: boolean; entitlements: ExternalEntitlement[] }> {
+    const dataSource = await getDataSource();
+    const provider = await dataSource.getRepository(IdentityProvider).findOne({ where: { ...tenantWhere(tenantId), key: normalized(input.providerKey, 'providerKey') } as any });
+    if (!provider) throw Errors.notFound('Identity provider not found');
+    const subjectId = typeof input.claims.sub === 'string' ? input.claims.sub : 'mapping-preview';
+    const identity = (await import('./IdentityProviderAdapter.js')).getIdentityProviderAdapter(provider.protocol as 'oidc' | 'saml' | 'ldap').normalizeIdentity({ providerKey: provider.id, subjectId, claims: input.claims });
+    return { matches: matchesIdentityEntitlement(input, identity), entitlements: identity.entitlements };
+  }
+
   async syncMemberships(userId: string, tenantId: string | null | undefined, identity: NormalizedExternalIdentity): Promise<{ created: number; removed: number }> {
     return this.syncMembershipsInStore(await getDataSource(), userId, tenantId, identity);
   }
