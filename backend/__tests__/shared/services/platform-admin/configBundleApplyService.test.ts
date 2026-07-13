@@ -23,11 +23,15 @@ const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSe
   materializeForEngine: vi.fn().mockResolvedValue([]),
   materializeEngineSetsForEngine: vi.fn().mockResolvedValue([]),
 }));
+const replayMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, created: 0, removed: 0, failed: 0, truncated: false }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
   runtimeResourceInventoryService: { materialize: materializeRuntimeResourceSet, materializeForEngine },
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/EngineSetService.js', () => ({
   engineSetService: { materializeEngineSet: vi.fn().mockResolvedValue({}), materializeEngineSetsForEngine },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({
+  ssoNormalizedIdentityService: { replayMemberships },
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -260,8 +264,10 @@ describe('configBundleApplyService', () => {
       './identity-mappings.json': { identityMappings: [{ key: 'mapping.operators', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'ops' }, targetGroupKey: 'group.operators' }] },
     };
     const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
-    await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+    const result = await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
     expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-1', configKey: 'mapping.operators', targetGroupId: 'group-1', sourceRef: 'config_bundle:acme.authz' }));
+    expect(replayMemberships).toHaveBeenCalledWith({ tenantId: 'tenant-a', providerIds: ['provider-1'] });
+    expect(result.reconciliation.identitySnapshot).toEqual({ status: 'completed', providerCount: 1, scanned: 0, created: 0, removed: 0, failed: 0 });
   });
 
   it('cleans only the source-owned memberships when an authoritative bundle disables an identity mapping', async () => {

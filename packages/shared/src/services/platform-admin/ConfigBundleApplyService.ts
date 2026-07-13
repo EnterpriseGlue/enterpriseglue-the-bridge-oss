@@ -16,6 +16,7 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { engineSetService } from './EngineSetService.js';
 import { runtimeResourceInventoryService } from './RuntimeResourceInventoryService.js';
+import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
 import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
@@ -43,6 +44,14 @@ export interface ConfigBundleApplyResult {
     engineSetCount: number;
     runtimeResourceSetCount: number;
     engineCount: number;
+    identitySnapshot: {
+      status: 'not_needed' | 'completed' | 'truncated' | 'failed';
+      providerCount: number;
+      scanned: number;
+      created: number;
+      removed: number;
+      failed: number;
+    };
   };
   idempotent?: boolean;
   applyRunId?: string;
@@ -87,8 +96,9 @@ function tenantScopeKey(tenantId?: string | null): string {
 }
 
 function parseStoredReconciliation(value: unknown): ConfigBundleApplyResult['reconciliation'] {
+  const emptyIdentitySnapshot = { status: 'not_needed' as const, providerCount: 0, scanned: 0, created: 0, removed: 0, failed: 0 };
   if (!value || typeof value !== 'object') {
-    return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 };
+    return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: emptyIdentitySnapshot };
   }
 
   const reconciliation = value as Record<string, unknown>;
@@ -101,14 +111,22 @@ function parseStoredReconciliation(value: unknown): ConfigBundleApplyResult['rec
     || (reconciliation.runtimeResourceSetCount as number) < 0
     || (reconciliation.engineCount as number) < 0
   ) {
-    return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 };
+    return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: emptyIdentitySnapshot };
   }
+
+  const snapshot = reconciliation.identitySnapshot as Record<string, unknown> | undefined;
+  const identitySnapshot = snapshot
+    && ['not_needed', 'completed', 'truncated', 'failed'].includes(String(snapshot.status))
+    && ['providerCount', 'scanned', 'created', 'removed', 'failed'].every((key) => Number.isInteger(snapshot[key]) && (snapshot[key] as number) >= 0)
+    ? { status: snapshot.status as ConfigBundleApplyResult['reconciliation']['identitySnapshot']['status'], providerCount: snapshot.providerCount as number, scanned: snapshot.scanned as number, created: snapshot.created as number, removed: snapshot.removed as number, failed: snapshot.failed as number }
+    : emptyIdentitySnapshot;
 
   return {
     status: 'completed',
     engineSetCount: reconciliation.engineSetCount as number,
     runtimeResourceSetCount: reconciliation.runtimeResourceSetCount as number,
     engineCount: reconciliation.engineCount as number,
+    identitySnapshot,
   };
 }
 
@@ -252,6 +270,7 @@ class ConfigBundleApplyService {
     const materializeIds: string[] = [];
     const materializeRuntimeResourceSetIds: string[] = [];
     const changedEngineIds: string[] = [];
+    const replayProviderIds: string[] = [];
     const now = Date.now();
     let created = 0;
     let updated = 0;
@@ -590,6 +609,7 @@ class ConfigBundleApplyService {
           await identityMappingRepo.insert({ id: mappingId, tenantId, ...values, createdAt: now });
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.create', resourceType: 'identity_entitlement_mapping', resourceId: mappingId, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, providerKey: mapping.providerKey, groupKey: mapping.targetGroupKey, canonicalHash: diff.canonicalHash } });
           created += 1;
+          replayProviderIds.push(provider.id);
         } else {
           const mappingChanged = existing.providerId !== values.providerId
             || existing.targetGroupId !== values.targetGroupId
@@ -603,6 +623,7 @@ class ConfigBundleApplyService {
             await identityMappingRepo.update({ id: existing.id }, values);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.update', resourceType: 'identity_entitlement_mapping', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, canonicalHash: diff.canonicalHash, membershipCleanup: 'source_scoped' } });
             updated += 1;
+            replayProviderIds.push(provider.id);
           }
         }
       }
@@ -614,6 +635,7 @@ class ConfigBundleApplyService {
           await identityMappingRepo.update({ id: mapping.id }, { isActive: false, updatedAt: now });
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.disable', resourceType: 'identity_entitlement_mapping', resourceId: mapping.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash, membershipCleanup: 'source_scoped' } });
           archived += 1;
+          replayProviderIds.push(mapping.providerId);
         }
       }
     });
@@ -622,6 +644,23 @@ class ConfigBundleApplyService {
       for (const id of [...new Set(changedEngineIds)]) {
         await engineSetService.materializeEngineSetsForEngine(id, tenantId);
         await runtimeResourceInventoryService.materializeForEngine(id, tenantId);
+      }
+      const providerIds = Array.from(new Set(replayProviderIds.filter(Boolean)));
+      let identitySnapshot: ConfigBundleApplyResult['reconciliation']['identitySnapshot'] = { status: 'not_needed', providerCount: 0, scanned: 0, created: 0, removed: 0, failed: 0 };
+      if (providerIds.length > 0) {
+        try {
+          const replay = await ssoNormalizedIdentityService.replayMemberships({ tenantId, providerIds });
+          identitySnapshot = {
+            status: replay.truncated ? 'truncated' : replay.failed > 0 ? 'failed' : 'completed',
+            providerCount: providerIds.length,
+            scanned: replay.scanned,
+            created: replay.created,
+            removed: replay.removed,
+            failed: replay.failed,
+          };
+        } catch {
+          identitySnapshot = { status: 'failed', providerCount: providerIds.length, scanned: 0, created: 0, removed: 0, failed: 1 };
+        }
       }
 
       const result = {
@@ -635,6 +674,7 @@ class ConfigBundleApplyService {
           engineSetCount: materializeIds.length,
           runtimeResourceSetCount: materializeRuntimeResourceSetIds.length,
           engineCount: new Set(changedEngineIds).size,
+          identitySnapshot,
         },
         ...(applyRunId ? { applyRunId } : {}),
       };
