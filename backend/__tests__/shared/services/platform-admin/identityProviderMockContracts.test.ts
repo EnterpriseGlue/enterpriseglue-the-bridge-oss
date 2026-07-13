@@ -71,4 +71,26 @@ describe('identity mock provider contracts', () => {
       providerKey: 'entra-mock', subjectId: claims.sub, claims,
     })).toThrow('OIDC group claims are incomplete');
   });
+
+  it.each([
+    ['expired_token', 'jwt expired'],
+    ['missing_subject', 'OIDC ID token subject or nonce is invalid'],
+  ] as const)('fails closed when the OIDC fixture returns %s', async (failureMode, message) => {
+    const provider = new MockOidcProvider();
+    provider.setFailureMode(failureMode);
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+
+    await expect(genericOidcService.exchangeCode(provider.configuration(), {
+      code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
+    })).rejects.toThrow(message);
+  });
+
+  it('surfaces an OIDC provider timeout without continuing authorization', async () => {
+    const provider = new MockOidcProvider();
+    provider.setFailureMode('timeout');
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+
+    await expect(genericOidcService.createAuthorizationRequest(provider.configuration(), 'state-1', 'nonce-1'))
+      .rejects.toThrow('OIDC provider request timed out');
+  });
 });

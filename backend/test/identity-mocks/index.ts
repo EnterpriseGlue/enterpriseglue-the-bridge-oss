@@ -2,7 +2,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { IdentityProviderAdapter, NormalizedExternalIdentity, ProviderIdentityInput } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
 
-export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'group_overage';
+export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'group_overage' | 'expired_token' | 'missing_subject' | 'timeout';
 
 interface SigningMaterial {
   privateKey: string;
@@ -61,6 +61,7 @@ export class MockOidcProvider {
 
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     const url = String(input);
+    if (this.failureMode === 'timeout') throw new Error('OIDC provider request timed out');
     if (this.failureMode === 'unavailable') return new Response('unavailable', { status: 503 });
     if (url === `${this.issuer}/.well-known/openid-configuration`) {
       if (this.failureMode === 'malformed') return Response.json({ issuer: this.issuer });
@@ -72,6 +73,8 @@ export class MockOidcProvider {
     if (url === `${this.issuer}/jwks`) return Response.json({ keys: [this.signingMaterial.publicJwk] });
     if (url === `${this.issuer}/token` && init?.method === 'POST') {
       if (this.failureMode === 'invalid_token') return Response.json({ id_token: 'invalid.token.value' });
+      if (this.failureMode === 'expired_token') return Response.json({ id_token: this.issueIdToken(undefined, -1) });
+      if (this.failureMode === 'missing_subject') return Response.json({ id_token: this.issueIdToken({ email: 'person@example.test', email_verified: true, nonce: 'nonce-1', groups: ['ops'] }) });
       if (this.failureMode === 'group_overage') {
         return Response.json({ id_token: this.issueIdToken({
           sub: 'user-1', email: 'person@example.test', email_verified: true, nonce: 'nonce-1', hasgroups: true,
