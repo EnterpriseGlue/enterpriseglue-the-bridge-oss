@@ -97,10 +97,10 @@ docker compose --project-directory . \
 
 Required changes:
 
-- [ ] ⬜ Update `dev.sh`, production/image startup scripts to include the override only when a host bundle path is configured. The opt-in Compose overlay and documentation are complete.
+- [x] ✅ Update `dev.sh`, production/image startup scripts to include the override only when a host bundle path is configured. `EG_CONFIG_BUNDLE_HOST_PATH` selects the Compose overlay; the default local start remains unchanged.
 - [x] ✅ Add disabled-by-default bootstrap variables to every Docker/OpenShift environment example and the configuration reference/matrix.
-- [ ] ⬜ Ensure backend production images can read `/etc/enterpriseglue/config` as a non-root user.
-- [ ] ⬜ Keep secret files in a separate read-only mount with stricter permissions; never put them in the config bundle volume.
+- [x] ✅ Ensure backend production images can read `/etc/enterpriseglue/config` as a non-root user. The production image creates and grants the projection directory to the Chainguard runtime user.
+- [x] ✅ Keep secret files in a separate read-only mount with stricter permissions; never put them in the config bundle volume. The optional Compose overlay mounts the bundle file and secret directory independently as read-only paths.
 - [x] ✅ Add health/readiness output for bundle status, hash, and local materialization state without exposing configuration contents. Historical last-run details and provider identity reconciliation state remain pending.
 - [ ] ⬜ Test paths containing spaces, missing mounts, read-only mounts, invalid JSON, wrong hash, unresolved secret refs, and restart idempotency.
 

@@ -57,8 +57,14 @@ USER 65532
 
 FROM runtime-base
 
+USER root
 WORKDIR /app
 ENV NODE_ENV=production
+
+# The optional Compose/OpenShift config projection targets this directory. It
+# must exist and be readable by the non-root Chainguard runtime user.
+RUN mkdir -p /etc/enterpriseglue/config /var/run/secrets/enterpriseglue \
+    && chown -R 65532:65532 /etc/enterpriseglue /var/run/secrets/enterpriseglue
 
 COPY backend/package.json ./package.json
 
