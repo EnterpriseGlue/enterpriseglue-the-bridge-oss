@@ -2045,6 +2045,7 @@ describe('platform-admin authz routes', () => {
         acknowledgements: ['config.engine_set_broad:engines.all'],
         idempotencyKey: 'config-apply-2026-07-13',
         expectedTenantScope: 'platform',
+        identityReconciliationMode: 'preview',
       });
 
     expect(response.status).toBe(200);
@@ -2058,6 +2059,7 @@ describe('platform-admin authz routes', () => {
       acknowledgements: ['config.engine_set_broad:engines.all'],
       idempotencyKey: 'config-apply-2026-07-13',
       expectedTenantScope: 'platform',
+      identityReconciliationMode: 'preview',
       actorId: 'user-1',
     }));
   });

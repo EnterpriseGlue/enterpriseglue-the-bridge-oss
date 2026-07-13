@@ -26,12 +26,15 @@ import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBu
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
 
+export type ConfigBundleIdentityReconciliationMode = 'none' | 'preview' | 'apply';
+
 export interface ConfigBundleApplyInput extends ConfigBundlePreviewInput {
   expectedPreviewHash: string;
   expectedSecretPreflightHash?: string | null;
   acknowledgements?: string[];
   idempotencyKey?: string | null;
   expectedTenantScope?: string | null;
+  identityReconciliationMode?: ConfigBundleIdentityReconciliationMode;
   tenantId?: string | null;
   actorId: string;
 }
@@ -48,7 +51,8 @@ export interface ConfigBundleApplyResult {
     runtimeResourceSetCount: number;
     engineCount: number;
     identitySnapshot: {
-      status: 'not_needed' | 'completed' | 'truncated' | 'failed';
+      mode: ConfigBundleIdentityReconciliationMode;
+      status: 'not_needed' | 'skipped' | 'previewed' | 'completed' | 'truncated' | 'failed';
       providerCount: number;
       scanned: number;
       created: number;
@@ -99,7 +103,7 @@ function tenantScopeKey(tenantId?: string | null): string {
 }
 
 function parseStoredReconciliation(value: unknown): ConfigBundleApplyResult['reconciliation'] {
-  const emptyIdentitySnapshot = { status: 'not_needed' as const, providerCount: 0, scanned: 0, created: 0, removed: 0, failed: 0 };
+  const emptyIdentitySnapshot = { mode: 'apply' as const, status: 'not_needed' as const, providerCount: 0, scanned: 0, created: 0, removed: 0, failed: 0 };
   if (!value || typeof value !== 'object') {
     return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: emptyIdentitySnapshot };
   }
@@ -119,9 +123,10 @@ function parseStoredReconciliation(value: unknown): ConfigBundleApplyResult['rec
 
   const snapshot = reconciliation.identitySnapshot as Record<string, unknown> | undefined;
   const identitySnapshot = snapshot
-    && ['not_needed', 'completed', 'truncated', 'failed'].includes(String(snapshot.status))
+    && ['none', 'preview', 'apply'].includes(String(snapshot.mode || 'apply'))
+    && ['not_needed', 'skipped', 'previewed', 'completed', 'truncated', 'failed'].includes(String(snapshot.status))
     && ['providerCount', 'scanned', 'created', 'removed', 'failed'].every((key) => Number.isInteger(snapshot[key]) && (snapshot[key] as number) >= 0)
-    ? { status: snapshot.status as ConfigBundleApplyResult['reconciliation']['identitySnapshot']['status'], providerCount: snapshot.providerCount as number, scanned: snapshot.scanned as number, created: snapshot.created as number, removed: snapshot.removed as number, failed: snapshot.failed as number }
+    ? { mode: (snapshot.mode || 'apply') as ConfigBundleIdentityReconciliationMode, status: snapshot.status as ConfigBundleApplyResult['reconciliation']['identitySnapshot']['status'], providerCount: snapshot.providerCount as number, scanned: snapshot.scanned as number, created: snapshot.created as number, removed: snapshot.removed as number, failed: snapshot.failed as number }
     : emptyIdentitySnapshot;
 
   return {
@@ -196,6 +201,10 @@ async function writeAudit(manager: EntityManager, input: {
  */
 class ConfigBundleApplyService {
   async apply(input: ConfigBundleApplyInput): Promise<ConfigBundleApplyResult> {
+    const identityReconciliationMode = input.identityReconciliationMode || 'apply';
+    if (!['none', 'preview', 'apply'].includes(identityReconciliationMode)) {
+      return fail('Identity reconciliation mode must be none, preview, or apply', 422);
+    }
     const compilation = configBundlePreviewService.compile(input);
     if (!compilation.preview.valid || !compilation.manifest || !compilation.files || !compilation.preview.canonicalHash) {
       return fail('Configuration bundle is invalid', 422);
@@ -660,20 +669,40 @@ class ConfigBundleApplyService {
         await runtimeResourceInventoryService.materializeForEngine(id, tenantId);
       }
       const providerIds = Array.from(new Set(replayProviderIds.filter(Boolean)));
-      let identitySnapshot: ConfigBundleApplyResult['reconciliation']['identitySnapshot'] = { status: 'not_needed', providerCount: 0, scanned: 0, created: 0, removed: 0, failed: 0 };
+      let identitySnapshot: ConfigBundleApplyResult['reconciliation']['identitySnapshot'] = { mode: identityReconciliationMode, status: 'not_needed', providerCount: 0, scanned: 0, created: 0, removed: 0, failed: 0 };
       if (providerIds.length > 0) {
-        try {
-          const replay = await ssoNormalizedIdentityService.replayMemberships({ tenantId, providerIds });
-          identitySnapshot = {
-            status: replay.truncated ? 'truncated' : replay.failed > 0 ? 'failed' : 'completed',
-            providerCount: providerIds.length,
-            scanned: replay.scanned,
-            created: replay.created,
-            removed: replay.removed,
-            failed: replay.failed,
-          };
-        } catch {
-          identitySnapshot = { status: 'failed', providerCount: providerIds.length, scanned: 0, created: 0, removed: 0, failed: 1 };
+        if (identityReconciliationMode === 'none') {
+          identitySnapshot = { mode: 'none', status: 'skipped', providerCount: providerIds.length, scanned: 0, created: 0, removed: 0, failed: 0 };
+        } else if (identityReconciliationMode === 'preview') {
+          try {
+            const previews = await Promise.all(providerIds.map((providerId) => ssoNormalizedIdentityService.previewMemberships({ tenantId, providerId })));
+            identitySnapshot = {
+              mode: 'preview',
+              status: previews.some((preview) => preview.truncated) ? 'truncated' : previews.some((preview) => preview.failed > 0) ? 'failed' : 'previewed',
+              providerCount: providerIds.length,
+              scanned: previews.reduce((total, preview) => total + preview.scanned, 0),
+              created: previews.reduce((total, preview) => total + preview.additions, 0),
+              removed: previews.reduce((total, preview) => total + preview.removals, 0),
+              failed: previews.reduce((total, preview) => total + preview.failed, 0),
+            };
+          } catch {
+            identitySnapshot = { mode: 'preview', status: 'failed', providerCount: providerIds.length, scanned: 0, created: 0, removed: 0, failed: 1 };
+          }
+        } else {
+          try {
+            const replay = await ssoNormalizedIdentityService.replayMemberships({ tenantId, providerIds });
+            identitySnapshot = {
+              mode: 'apply',
+              status: replay.truncated ? 'truncated' : replay.failed > 0 ? 'failed' : 'completed',
+              providerCount: providerIds.length,
+              scanned: replay.scanned,
+              created: replay.created,
+              removed: replay.removed,
+              failed: replay.failed,
+            };
+          } catch {
+            identitySnapshot = { mode: 'apply', status: 'failed', providerCount: providerIds.length, scanned: 0, created: 0, removed: 0, failed: 1 };
+          }
         }
       }
 

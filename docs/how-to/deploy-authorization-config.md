@@ -159,6 +159,9 @@ export ENTERPRISEGLUE_API_TOKEN="$EG_CONFIG_TOKEN"
 export ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY="release-2026-07-13-001"
 # Use `platform` for the OSS default tenant; use the authenticated tenant ID in multi-tenant deployments.
 export ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE="platform"
+# Optional: none skips stored snapshots, preview reports bounded membership
+# changes without replaying snapshots, and apply performs the bounded replay.
+export ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE="apply"
 
 # Validates the local JSON and performs the server-side preview. Exit code 2
 # means the bundle was rejected by preview validation.
@@ -193,6 +196,7 @@ The repository also includes a manually dispatched GitHub Actions workflow at `.
 - `ENTERPRISEGLUE_API_URL` as an Environment variable;
 - `ENTERPRISEGLUE_CONFIG_TOKEN` as an Environment secret for an API client with `config:bundle:manage` and an RBAC assignment granting `platform:authz:roles:manage`;
 - `ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE` as an Environment variable (`platform` for OSS default tenant, otherwise the target tenant ID);
+- `identity_reconciliation_mode` is selected on workflow dispatch: `apply` is backward-compatible default behavior, `preview` records bounded stored-snapshot impact without replaying snapshots, and `none` skips that replay;
 - required reviewers for environments that permit `apply`.
 
 Dispatch `preview` first against an immutable reviewed commit SHA, inspect the uploaded JSON receipt, then dispatch `apply` for that same SHA. The workflow requires the literal `APPLY` confirmation and serializes runs per environment. It is intentionally not triggered by pull requests and never uses a repository-wide human credential.
@@ -212,6 +216,7 @@ Required behavior:
 - [x] ✅ Require an explicit expected tenant scope for CLI applies and protected CI runs; the API rejects a mismatch with the authenticated tenant. GitHub Environment protection binds the target environment and its credentials.
 - [x] ✅ Add persisted tenant-scoped idempotency keys. A matching completed apply replays its receipt; a key reused for other bundle input or an unfinished/failed run is rejected.
 - [x] ✅ Require the server-generated canonical preview hash on apply; the apply service rejects an altered or stale bundle.
+- [x] ✅ Allow apply callers to select `none`, `preview`, or bounded `apply` replay for affected stored identity snapshots. Replay starts after the config database transaction commits; normal source-scoped cleanup for changed or disabled config mappings remains part of that transaction.
 - [x] ✅ Print sanitized machine-readable preview, apply, and export responses suitable for CI artifacts.
 - [ ] ⬜ Return distinct exit codes for validation, authorization, conflict, reconciliation, and transport failures.
 - [x] ✅ Sanitize all configuration CLI stdout/stderr before GitHub Actions or other CI systems can archive it. Access tokens, provider secrets and references, engine credentials, certificates, LDAP bind values, and customer peer tokens are redacted defensively even if an upstream response is malformed.

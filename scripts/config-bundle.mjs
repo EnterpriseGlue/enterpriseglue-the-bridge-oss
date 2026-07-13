@@ -7,14 +7,16 @@ const apiUrl = (process.env.ENTERPRISEGLUE_API_URL || '').replace(/\/$/, '');
 const token = process.env.ENTERPRISEGLUE_API_TOKEN;
 const idempotencyKey = process.env.ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY;
 const expectedTenantScope = process.env.ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE;
+const identityReconciliationMode = process.env.ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE;
 const knownSecrets = [token];
 const needsFile = command === 'validate' || command === 'preview' || command === 'apply';
 const needsBundleKey = command === 'export';
 
-if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument || !apiUrl || !token || (command === 'apply' && !expectedTenantScope)) {
+if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument || !apiUrl || !token || (command === 'apply' && !expectedTenantScope) || (identityReconciliationMode && !['none', 'preview', 'apply'].includes(identityReconciliationMode))) {
   console.error('Usage: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs <validate|preview|apply> <bundle.json>');
   console.error('   or: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs export <bundle-key>');
   console.error('   apply also requires ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE.');
+  console.error('   ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE may be none, preview, or apply.');
   process.exitCode = 64;
 } else {
   const request = async (path, options = {}) => {
@@ -55,6 +57,7 @@ if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument |
           expectedPreviewHash: previewRequest.result.canonicalHash,
           ...(idempotencyKey ? { idempotencyKey } : {}),
           expectedTenantScope,
+          ...(identityReconciliationMode ? { identityReconciliationMode } : {}),
         }) });
         if (!applyRequest.response.ok) throw new Error(applyRequest.result.message || applyRequest.result.error || `Apply failed: ${applyRequest.response.status}`);
         console.log(toSanitizedJson(applyRequest.result, knownSecrets));

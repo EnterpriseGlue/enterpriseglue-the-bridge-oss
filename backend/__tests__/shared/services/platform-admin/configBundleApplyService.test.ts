@@ -26,6 +26,7 @@ const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSe
   materializeEngineSetsForEngine: vi.fn().mockResolvedValue([]),
 }));
 const replayMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, created: 0, removed: 0, failed: 0, truncated: false }));
+const previewMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, additions: 0, removals: 0, unchanged: 0, failed: 0, truncated: false }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
   runtimeResourceInventoryService: { materialize: materializeRuntimeResourceSet, materializeForEngine },
 }));
@@ -33,7 +34,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/EngineSetService.js', ()
   engineSetService: { materializeEngineSet: vi.fn().mockResolvedValue({}), materializeEngineSetsForEngine },
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({
-  ssoNormalizedIdentityService: { replayMemberships },
+  ssoNormalizedIdentityService: { replayMemberships, previewMemberships },
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -313,7 +314,44 @@ describe('configBundleApplyService', () => {
     const result = await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
     expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-1', configKey: 'mapping.operators', targetGroupId: 'group-1', sourceRef: 'config_bundle:acme.authz' }));
     expect(replayMemberships).toHaveBeenCalledWith({ tenantId: 'tenant-a', providerIds: ['provider-1'] });
-    expect(result.reconciliation.identitySnapshot).toEqual({ status: 'completed', providerCount: 1, scanned: 0, created: 0, removed: 0, failed: 0 });
+    expect(result.reconciliation.identitySnapshot).toEqual({ mode: 'apply', status: 'completed', providerCount: 1, scanned: 0, created: 0, removed: 0, failed: 0 });
+  });
+
+  it('previews stored identity snapshot replay without running it', async () => {
+    const { groupRepo, providerRepo } = setupDataSource();
+    groupRepo.find.mockResolvedValue([{ id: 'group-1', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false }]);
+    providerRepo.find.mockResolvedValue([{ id: 'provider-1', tenantId: 'tenant-a', key: 'identity.oidc.main' }]);
+    previewMemberships.mockResolvedValueOnce({ scanned: 3, additions: 2, removals: 1, unchanged: 0, failed: 0, truncated: false });
+    const mappingBundle = { ...bundle, imports: ['./groups.json', './identity-mappings.json'] };
+    const mappingFiles = {
+      './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+      './identity-mappings.json': { identityMappings: [{ key: 'mapping.operators', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'ops' }, targetGroupKey: 'group.operators' }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+
+    const result = await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1', identityReconciliationMode: 'preview' });
+
+    expect(previewMemberships).toHaveBeenCalledWith({ tenantId: 'tenant-a', providerId: 'provider-1' });
+    expect(replayMemberships).not.toHaveBeenCalled();
+    expect(result.reconciliation.identitySnapshot).toEqual({ mode: 'preview', status: 'previewed', providerCount: 1, scanned: 3, created: 2, removed: 1, failed: 0 });
+  });
+
+  it('can skip stored identity reconciliation after applying mapping changes', async () => {
+    const { groupRepo, providerRepo } = setupDataSource();
+    groupRepo.find.mockResolvedValue([{ id: 'group-1', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false }]);
+    providerRepo.find.mockResolvedValue([{ id: 'provider-1', tenantId: 'tenant-a', key: 'identity.oidc.main' }]);
+    const mappingBundle = { ...bundle, imports: ['./groups.json', './identity-mappings.json'] };
+    const mappingFiles = {
+      './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+      './identity-mappings.json': { identityMappings: [{ key: 'mapping.operators', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'ops' }, targetGroupKey: 'group.operators' }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+
+    const result = await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1', identityReconciliationMode: 'none' });
+
+    expect(previewMemberships).not.toHaveBeenCalled();
+    expect(replayMemberships).not.toHaveBeenCalled();
+    expect(result.reconciliation.identitySnapshot).toEqual({ mode: 'none', status: 'skipped', providerCount: 1, scanned: 0, created: 0, removed: 0, failed: 0 });
   });
 
   it('cleans only the source-owned memberships when an authoritative bundle disables an identity mapping', async () => {

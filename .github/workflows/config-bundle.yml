@@ -24,6 +24,15 @@ on:
         options:
           - preview
           - apply
+      identity_reconciliation_mode:
+        description: Applied bundles can skip stored identity replay, preview it, or run a bounded replay after commit.
+        required: false
+        default: apply
+        type: choice
+        options:
+          - apply
+          - preview
+          - none
       confirm_apply:
         description: Type APPLY only after reviewing the preview for this exact commit
         required: false
@@ -47,6 +56,7 @@ jobs:
       ENTERPRISEGLUE_API_TOKEN: ${{ secrets.ENTERPRISEGLUE_CONFIG_TOKEN }}
       ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY: config-bundle-${{ github.run_id }}
       ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE: ${{ vars.ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE }}
+      ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE: ${{ inputs.identity_reconciliation_mode }}
       BUNDLE_PATH: ${{ inputs.bundle_path }}
       GIT_REF: ${{ inputs.git_ref }}
       OPERATION: ${{ inputs.operation }}

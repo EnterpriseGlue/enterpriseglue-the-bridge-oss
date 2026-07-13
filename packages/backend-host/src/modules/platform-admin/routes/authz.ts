@@ -92,6 +92,7 @@ const configBundleApplySchema = configBundlePreviewSchema.extend({
   acknowledgements: z.array(z.string().min(1).max(500)).max(100).optional(),
   idempotencyKey: z.string().min(8).max(160).optional(),
   expectedTenantScope: z.string().min(1).max(255).optional(),
+  identityReconciliationMode: z.enum(['none', 'preview', 'apply']).optional(),
 });
 
 function configBundleRunResponse(row: ConfigBundleApplyRun): Record<string, unknown> {

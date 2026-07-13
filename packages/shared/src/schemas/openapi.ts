@@ -3560,6 +3560,7 @@ const ConfigBundleApplyRequestOpenApiSchema = ConfigBundleRequestOpenApiSchema.e
   acknowledgements: z.array(z.string()).max(100).optional(),
   idempotencyKey: z.string().min(8).max(160).optional(),
   expectedTenantScope: z.string().min(1).max(255).optional(),
+  identityReconciliationMode: z.enum(['none', 'preview', 'apply']).optional(),
 });
 
 const ConfigBundleApplyResponseOpenApiSchema = z.object({
@@ -3574,7 +3575,8 @@ const ConfigBundleApplyResponseOpenApiSchema = z.object({
     runtimeResourceSetCount: z.number().int().nonnegative(),
     engineCount: z.number().int().nonnegative(),
     identitySnapshot: z.object({
-      status: z.enum(['not_needed', 'completed', 'truncated', 'failed']),
+      mode: z.enum(['none', 'preview', 'apply']),
+      status: z.enum(['not_needed', 'skipped', 'previewed', 'completed', 'truncated', 'failed']),
       providerCount: z.number().int().nonnegative(),
       scanned: z.number().int().nonnegative(),
       created: z.number().int().nonnegative(),
@@ -3605,7 +3607,8 @@ const ConfigBundleApplyRunOpenApiSchema = z.object({
     runtimeResourceSetCount: z.number().int().nonnegative(),
     engineCount: z.number().int().nonnegative(),
     identitySnapshot: z.object({
-      status: z.enum(['not_needed', 'completed', 'truncated', 'failed']),
+      mode: z.enum(['none', 'preview', 'apply']),
+      status: z.enum(['not_needed', 'skipped', 'previewed', 'completed', 'truncated', 'failed']),
       providerCount: z.number().int().nonnegative(),
       scanned: z.number().int().nonnegative(),
       created: z.number().int().nonnegative(),
