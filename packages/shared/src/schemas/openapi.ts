@@ -3519,6 +3519,20 @@ const ConfigBundleApplyRunOpenApiSchema = z.object({
   created: z.number().int().nonnegative().optional(),
   updated: z.number().int().nonnegative().optional(),
   archived: z.number().int().nonnegative().optional(),
+  reconciliation: z.object({
+    status: z.literal('completed'),
+    engineSetCount: z.number().int().nonnegative(),
+    runtimeResourceSetCount: z.number().int().nonnegative(),
+    engineCount: z.number().int().nonnegative(),
+    identitySnapshot: z.object({
+      status: z.enum(['not_needed', 'completed', 'truncated', 'failed']),
+      providerCount: z.number().int().nonnegative(),
+      scanned: z.number().int().nonnegative(),
+      created: z.number().int().nonnegative(),
+      removed: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+    }),
+  }).optional(),
   mode: z.enum(['additive', 'authoritative', 'preview_only']).nullable().optional(),
 });
 

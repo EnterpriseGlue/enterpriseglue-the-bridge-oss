@@ -554,7 +554,7 @@ describe('platform-admin authz routes', () => {
                 idempotencyKey: 'config-apply-2026-07-13',
                 actorId: 'user-1',
                 status: 'succeeded',
-                resultJson: JSON.stringify({ created: 2, updated: 1, archived: 0 }),
+                resultJson: JSON.stringify({ created: 2, updated: 1, archived: 0, reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: { status: 'completed', providerCount: 1, scanned: 2, created: 1, removed: 0, failed: 0 } } }),
                 errorMessage: null,
                 completedAt: 1100,
                 createdAt: 1000,
@@ -2030,6 +2030,7 @@ describe('platform-admin authz routes', () => {
         status: 'succeeded',
         created: 2,
         updated: 1,
+        reconciliation: expect.objectContaining({ identitySnapshot: expect.objectContaining({ status: 'completed', scanned: 2 }) }),
       }),
     ]);
   });
