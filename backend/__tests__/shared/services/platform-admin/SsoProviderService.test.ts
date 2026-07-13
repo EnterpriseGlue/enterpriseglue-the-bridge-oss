@@ -95,4 +95,20 @@ describe('SsoProviderService', () => {
       clientSecretEnc: expect.stringMatching(/^v2:/),
     }));
   });
+
+  it('rejects SHA-1 for legacy SAML provider create and update paths', async () => {
+    const insert = vi.fn();
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'provider-1', type: 'saml', enabled: false, signatureAlgorithm: 'sha256',
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({ insert, findOneBy, update: vi.fn() }),
+    });
+
+    await expect(ssoProviderService.createProvider({ name: 'Legacy SAML', type: 'saml', signatureAlgorithm: 'sha1' as never }))
+      .rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('sha256 or sha512') });
+    await expect(ssoProviderService.updateProvider('provider-1', { signatureAlgorithm: 'sha1' as never }))
+      .rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('sha256 or sha512') });
+    expect(insert).not.toHaveBeenCalled();
+  });
 });

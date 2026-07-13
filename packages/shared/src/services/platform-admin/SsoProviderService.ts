@@ -40,7 +40,7 @@ export interface CreateSsoProviderInput {
   ssoUrl?: string;
   sloUrl?: string;
   certificate?: string; // Will be encrypted before storage
-  signatureAlgorithm?: 'sha1' | 'sha256' | 'sha512';
+  signatureAlgorithm?: 'sha256' | 'sha512';
   
   // Display
   iconUrl?: string;
@@ -112,6 +112,13 @@ class SsoProviderServiceClass {
         `Cannot enable SAML provider. Missing required fields: ${missingFields.join(', ')}`,
         { missingFields }
       );
+    }
+  }
+
+  private ensureSamlSignatureAlgorithm(type: SsoProviderType, signatureAlgorithm?: string | null): void {
+    if (type !== 'saml' || signatureAlgorithm === undefined || signatureAlgorithm === null) return;
+    if (signatureAlgorithm !== 'sha256' && signatureAlgorithm !== 'sha512') {
+      throw Errors.validation('SAML signatureAlgorithm must be sha256 or sha512');
     }
   }
 
@@ -193,6 +200,7 @@ class SsoProviderServiceClass {
     const id = generateId();
     const now = Date.now();
     const enabled = input.enabled ?? false;
+    this.ensureSamlSignatureAlgorithm(input.type, input.signatureAlgorithm);
 
     if (enabled) {
       this.ensureProviderCanBeEnabled(input.type, {
@@ -263,6 +271,8 @@ class SsoProviderServiceClass {
 
     const type = (input.type ?? existing.type) as SsoProviderType;
     const enabled = input.enabled ?? existing.enabled;
+    const signatureAlgorithm = input.signatureAlgorithm !== undefined ? input.signatureAlgorithm : existing.signatureAlgorithm;
+    this.ensureSamlSignatureAlgorithm(type, signatureAlgorithm);
     const entityId = input.entityId !== undefined ? input.entityId || null : existing.entityId;
     const ssoUrl = input.ssoUrl !== undefined ? input.ssoUrl || null : existing.ssoUrl;
     const hasCertificate =
@@ -344,6 +354,7 @@ class SsoProviderServiceClass {
         ssoUrl: existing.ssoUrl,
         hasCertificate: !!existing.certificateEnc,
       });
+      this.ensureSamlSignatureAlgorithm(existing.type as SsoProviderType, existing.signatureAlgorithm);
     }
 
     await providerRepo.update({ id }, { enabled, updatedAt: Date.now() });

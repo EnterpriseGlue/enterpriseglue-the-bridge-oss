@@ -1117,7 +1117,7 @@ Protocol-specific fields remain inside their adapter block:
 | OIDC | `issuerUrl`, `clientId`, `clientSecretRef`, callback, scopes, claim/userinfo/group-fetch settings, expected issuer/audience. |
 | SAML | Entity ID, callback/ACS, IdP SSO URL, signing-certificate reference, optional metadata URL/XML reference, signature algorithm, and NameID/email/group attribute names. |
 
-SAML signatures are restricted to SHA-256 or SHA-512. SHA-1 is rejected by the JSON schema, provider API, runtime client, and administration form.
+SAML signatures are restricted to SHA-256 or SHA-512. SHA-1 is rejected by the JSON schema, provider-neutral and legacy provider APIs, both runtime clients, and the administration forms. A migration upgrades legacy persisted SAML provider request-signing configuration to SHA-256 rather than preserving a weak algorithm.
 | LDAP | LDAPS URL, bind DN/password ref, user/group bases and filters, immutable id attributes, membership mode, paging, nested-group policy, TLS trust ref. |
 
 The bundle schema must reject protocol fields outside the selected adapter block and must never return resolved secret values during preview, export, diagnostics, or test-connection responses.

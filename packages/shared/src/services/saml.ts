@@ -17,7 +17,7 @@ const nodeSaml = require('@node-saml/node-saml');
 type SamlClient = any;
 type SamlProfile = Record<string, unknown>;
 
-type SignatureAlgorithm = 'sha1' | 'sha256' | 'sha512';
+type SignatureAlgorithm = 'sha256' | 'sha512';
 
 const EMAIL_CLAIM_KEYS = [
   'email',
@@ -255,13 +255,17 @@ function getSamlClient(provider: Awaited<ReturnType<typeof getEnabledSamlProvide
 
   const callbackUrl =
     provider.callbackUrl || `${config.frontendUrl.replace(/\/$/, '')}/api/auth/saml/callback`;
+  const signatureAlgorithm = provider.signatureAlgorithm || 'sha256';
+  if (signatureAlgorithm !== 'sha256' && signatureAlgorithm !== 'sha512') {
+    throw new Error('SAML signatureAlgorithm must be sha256 or sha512');
+  }
 
   return new nodeSaml.SAML({
     issuer: provider.entityId,
     callbackUrl,
     entryPoint: provider.ssoUrl,
     idpCert: normalizePemCertificate(provider.certificateEnc),
-    signatureAlgorithm: (provider.signatureAlgorithm || 'sha256') as SignatureAlgorithm,
+    signatureAlgorithm: signatureAlgorithm as SignatureAlgorithm,
     validateInResponseTo: 'never',
     acceptedClockSkewMs: 300000,
     wantAssertionsSigned: true,

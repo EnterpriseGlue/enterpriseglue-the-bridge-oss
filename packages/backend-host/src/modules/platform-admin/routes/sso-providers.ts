@@ -43,7 +43,7 @@ const createProviderSchema = z.object({
   ssoUrl: z.string().url().optional().or(z.literal('')),
   sloUrl: z.string().url().optional().or(z.literal('')),
   certificate: z.string().optional(),
-  signatureAlgorithm: z.enum(['sha1', 'sha256', 'sha512']).optional(),
+  signatureAlgorithm: z.enum(['sha256', 'sha512']).optional(),
 
   // Display
   iconUrl: z.string().url().optional().or(z.literal('')),

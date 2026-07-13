@@ -75,6 +75,15 @@ describe('platform-admin sso-providers routes', () => {
     expect(ssoProviderServiceMock.createProvider).not.toHaveBeenCalled();
   });
 
+  it('rejects SHA-1 legacy SAML provider configuration at the API boundary', async () => {
+    const response = await request(app)
+      .post('/api/sso/providers')
+      .send({ name: 'Legacy SAML', type: 'saml', signatureAlgorithm: 'sha1' });
+
+    expect(response.status).toBe(400);
+    expect(ssoProviderServiceMock.createProvider).not.toHaveBeenCalled();
+  });
+
   it('audits risk acknowledgement when creating a provider with admin default role', async () => {
     const response = await request(app)
       .post('/api/sso/providers')
