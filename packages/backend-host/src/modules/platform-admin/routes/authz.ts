@@ -1372,6 +1372,7 @@ router.post('/api/authz/config-bundles/apply', apiLimiter, requireConfigBundleAc
       idempotencyKey: req.body.idempotencyKey || null,
       applyRunId: result.applyRunId || null,
       idempotent: result.idempotent === true,
+      reconciliation: result.reconciliation,
       actorType: req.apiClient ? 'api_client' : 'user',
       apiClientId: req.apiClient?.id || null,
     },
