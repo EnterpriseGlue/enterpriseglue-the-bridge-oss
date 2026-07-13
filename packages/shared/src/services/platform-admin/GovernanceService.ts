@@ -13,7 +13,7 @@ class GovernanceServiceImpl {
     const dataSource = await getDataSource();
     const userRepo = dataSource.getRepository(User);
     let qb = userRepo.createQueryBuilder('u')
-      .select(['u.id', 'u.email', 'u.firstName', 'u.lastName', 'u.platformRole'])
+      .select(['u.id', 'u.email', 'u.firstName', 'u.lastName'])
       .take(limit)
       .orderBy('u.email', 'ASC');
     qb = addCaseInsensitiveLike(qb, 'u', 'email', 'query', `%${query}%`);
