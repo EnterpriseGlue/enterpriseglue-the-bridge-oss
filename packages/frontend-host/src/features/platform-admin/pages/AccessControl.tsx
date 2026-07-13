@@ -50,6 +50,7 @@ import {
   formatReconcileSummary,
   formatStatusLabel,
 } from './accessControlPresentation';
+import { AuthzAuditPanel, DEFAULT_AUTHZ_AUDIT_FILTER, type AuthzAuditFilterState } from './access-control/AuthzAuditPanel';
 import {
   useArchiveCustomRole,
   useArchiveExternalEngineSystem,
@@ -609,19 +610,6 @@ const policyInspectionHeaders = [
   { key: 'reason', header: 'Why shown' },
 ];
 
-const authzAuditHeaders = [
-  { key: 'timestamp', header: 'Timestamp' },
-  { key: 'decision', header: 'Decision' },
-  { key: 'action', header: 'Action' },
-  { key: 'user', header: 'User' },
-  { key: 'resource', header: 'Resource' },
-  { key: 'reason', header: 'Reason' },
-  { key: 'policy', header: 'Policy' },
-  { key: 'context', header: 'Context' },
-  { key: 'network', header: 'Network' },
-];
-
-type AuthzAuditDecisionFilter = 'all' | 'allow' | 'deny';
 type AccessControlTabId =
   | 'roles'
   | 'permissions'
@@ -639,12 +627,6 @@ type AccessControlTabId =
   | 'audit'
   | 'external_registration';
 
-const AUTHZ_AUDIT_DECISION_FILTERS: Array<{ id: AuthzAuditDecisionFilter; label: string }> = [
-  { id: 'all', label: 'All decisions' },
-  { id: 'allow', label: 'Allowed only' },
-  { id: 'deny', label: 'Denied only' },
-];
-
 const ACCESS_CONTROL_TAB_LABELS: Record<AccessControlTabId, string> = {
   roles: 'Roles',
   permissions: 'Permissions',
@@ -661,29 +643,6 @@ const ACCESS_CONTROL_TAB_LABELS: Record<AccessControlTabId, string> = {
   policies: 'Policies',
   audit: 'Audit',
   external_registration: 'External Registration',
-};
-
-const AUTHZ_AUDIT_LIMITS = [
-  { id: 25, label: '25 events' },
-  { id: 50, label: '50 events' },
-  { id: 100, label: '100 events' },
-  { id: 250, label: '250 events' },
-];
-
-interface AuthzAuditFilterState {
-  userId: string;
-  resourceType: string;
-  resourceId: string;
-  decision: AuthzAuditDecisionFilter;
-  limit: number;
-}
-
-const DEFAULT_AUTHZ_AUDIT_FILTER: AuthzAuditFilterState = {
-  userId: '',
-  resourceType: '',
-  resourceId: '',
-  decision: 'all',
-  limit: 50,
 };
 
 const EXTERNAL_ENGINE_AUDIT_FILTERS: Array<{ id: ExternalEngineAuditAction; label: string }> = [
@@ -1287,28 +1246,6 @@ function formatSsoSyncMapping(event: SsoSyncEvent) {
   return parts.length ? parts.join(':') : '-';
 }
 
-function formatAuditResource(entry: AuthzAuditEntry) {
-  if (!entry.resourceType) return 'Platform';
-  return `${entry.resourceType}:${entry.resourceId || '*'}`;
-}
-
-function formatAuditNetwork(entry: AuthzAuditEntry) {
-  const parts = [entry.ipAddress || '', entry.userAgent || ''].filter(Boolean);
-  return parts.length ? parts.join(' | ') : '-';
-}
-
-function formatAuditContext(context: string | null | undefined) {
-  if (!context) return '-';
-  try {
-    const parsed = JSON.parse(context);
-    if (!parsed || typeof parsed !== 'object') return String(parsed);
-    const keys = Object.keys(parsed);
-    if (keys.length === 0) return '{}';
-    return keys.slice(0, 5).join(', ') + (keys.length > 5 ? ` +${keys.length - 5} more` : '');
-  } catch {
-    return context.length > 120 ? `${context.slice(0, 117)}...` : context;
-  }
-}
 
 function formatAssignmentPrincipal(
   assignment: RoleAssignment,
@@ -5453,124 +5390,6 @@ function PoliciesPanel({
   );
 }
 
-function AuthzAuditPanel({
-  entries,
-  loading,
-  filters,
-  onFiltersChange,
-  onClearFilters,
-}: {
-  entries: AuthzAuditEntry[];
-  loading: boolean;
-  filters: AuthzAuditFilterState;
-  onFiltersChange: (patch: Partial<AuthzAuditFilterState>) => void;
-  onClearFilters: () => void;
-}) {
-  const selectedDecision = AUTHZ_AUDIT_DECISION_FILTERS.find((item) => item.id === filters.decision) || AUTHZ_AUDIT_DECISION_FILTERS[0];
-  const selectedLimit = AUTHZ_AUDIT_LIMITS.find((item) => item.id === filters.limit) || AUTHZ_AUDIT_LIMITS[1];
-
-  if (loading) return <DataTableSkeleton headers={authzAuditHeaders} rowCount={6} />;
-
-  return (
-    <TableContainer>
-      <DataTable
-        rows={entries.map((entry) => ({
-          id: entry.id,
-          timestamp: formatTimestamp(entry.timestamp),
-          decision: entry.decision,
-          action: entry.action,
-          user: entry.userId,
-          resource: formatAuditResource(entry),
-          reason: entry.reason || '-',
-          policy: entry.policyId || '-',
-          context: formatAuditContext(entry.context),
-          network: formatAuditNetwork(entry),
-        }))}
-        headers={authzAuditHeaders}
-      >
-        {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
-          <>
-            <TableToolbar>
-              <TableToolbarContent>
-                <TextInput
-                  id="authz-audit-user-filter"
-                  labelText="User ID"
-                  value={filters.userId}
-                  onChange={(event) => onFiltersChange({ userId: event.target.value })}
-                />
-                <TextInput
-                  id="authz-audit-resource-type-filter"
-                  labelText="Resource type"
-                  value={filters.resourceType}
-                  onChange={(event) => onFiltersChange({ resourceType: event.target.value })}
-                />
-                <TextInput
-                  id="authz-audit-resource-id-filter"
-                  labelText="Resource ID"
-                  value={filters.resourceId}
-                  onChange={(event) => onFiltersChange({ resourceId: event.target.value })}
-                />
-                <Dropdown
-                  id="authz-audit-decision-filter"
-                  titleText="Decision"
-                  label="Decision"
-                  items={AUTHZ_AUDIT_DECISION_FILTERS}
-                  itemToString={(item) => item?.label || ''}
-                  selectedItem={selectedDecision}
-                  onChange={({ selectedItem }) => onFiltersChange({ decision: selectedItem?.id || 'all' })}
-                />
-                <Dropdown
-                  id="authz-audit-limit"
-                  titleText="Limit"
-                  label="Limit"
-                  items={AUTHZ_AUDIT_LIMITS}
-                  itemToString={(item) => item?.label || ''}
-                  selectedItem={selectedLimit}
-                  onChange={({ selectedItem }) => onFiltersChange({ limit: selectedItem?.id || 50 })}
-                />
-                <Button kind="ghost" size="sm" onClick={onClearFilters}>
-                  Clear
-                </Button>
-              </TableToolbarContent>
-            </TableToolbar>
-            <Table {...getTableProps()} size="md">
-              <TableHead>
-                <TableRow>
-                  {headers.map((header) => (
-                    <DataTableHeaderCell key={dataTableHeaderKey(header)} header={header} getHeaderProps={getHeaderProps} />
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={headers.length}>No authorization audit events match the current filters.</TableCell>
-                  </TableRow>
-                ) : rows.map((row) => (
-                  <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
-                    {row.cells.map((cell) => {
-                      if (cell.info.header === 'decision') {
-                        return (
-                          <TableCell key={cell.id}>
-                            <Tag type={cell.value === 'allow' ? 'green' : 'red'}>{cell.value === 'allow' ? 'Allow' : 'Deny'}</Tag>
-                          </TableCell>
-                        );
-                      }
-                      if (cell.info.header === 'action') {
-                        return <TableCell key={cell.id}><code>{cell.value}</code></TableCell>;
-                      }
-                      return <TableCell key={cell.id}>{cell.value}</TableCell>;
-                    })}
-                  </DataTableDataRow>
-                ))}
-              </TableBody>
-            </Table>
-          </>
-        )}
-      </DataTable>
-    </TableContainer>
-  );
-}
 
 function ApiClientsPanel({
   clients,

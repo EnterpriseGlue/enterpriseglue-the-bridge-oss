@@ -2191,6 +2191,7 @@ This phase is required because the current implementation still carries compatib
 #### Module Boundaries
 
 - [ ] ⬜ Split the 8k+ line Access Control page into tab/domain components before adding Identity, Config Imports, and Runtime Resources.
+- [x] ✅ Extract the read-only authorization audit tab, filter state, and presentation helpers into `pages/access-control/AuthzAuditPanel.tsx` without altering the Carbon tab layout.
 - [x] ✅ Split external registration and all SSO mapping/diagnostic families into focused routers. Roles/permissions, assignments/groups, project-engine targets/bridges, engine sets/runtime resources, policies, machines, configuration bundles, audit, external registration, and SSO mappings are now isolated; the parent router retains only shared evaluation and module mounting.
 - [ ] ⬜ Split action and OpenAPI registrations into domain modules with aggregate validation exports so strict inventory guards remain authoritative.
 - [ ] ⬜ Keep shared types generated/imported from shared schemas instead of duplicating hand-maintained frontend interfaces.
