@@ -528,6 +528,67 @@ export class AuthzGroupService {
     );
   }
 
+  async backfillAuthenticatedUserMemberships(
+    providedDataSource?: DataSource,
+    now: number = Date.now()
+  ): Promise<{ scanned: number; created: number }> {
+    const dataSource = providedDataSource || await getDataSource();
+    return dataSource.transaction(async (manager) => {
+      const group = await manager.getRepository(AuthzGroup).findOneBy({ id: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS });
+      if (!group || group.isArchived || group.source !== 'system' || group.tenantId !== null) {
+        throw new Error('Authenticated users system group is unavailable');
+      }
+
+      const users = await manager.getRepository(User).find({
+        where: { isActive: true },
+        select: ['id'],
+      });
+      const userIds = users.map((user) => user.id);
+      if (userIds.length === 0) return { scanned: 0, created: 0 };
+
+      const membershipRepo = manager.getRepository(AuthzGroupMembership);
+      const existing = await membershipRepo.find({
+        where: {
+          groupId: group.id,
+          source: 'system',
+          sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+        },
+        select: ['userId'],
+      });
+      const existingUserIds = new Set(existing.map((membership) => membership.userId));
+      const missingUserIds = userIds.filter((userId) => !existingUserIds.has(userId));
+      if (missingUserIds.length === 0) return { scanned: userIds.length, created: 0 };
+
+      await membershipRepo.insert(missingUserIds.map((userId) => ({
+        id: generateId(),
+        tenantId: null,
+        groupId: group.id,
+        userId,
+        source: 'system',
+        sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+        expiresAt: null,
+        createdById: null,
+        createdAt: now,
+        updatedAt: now,
+      })));
+      await recordGroupAudit(manager, {
+        tenantId: null,
+        userId: null,
+        action: 'authz.group_membership.backfill',
+        resourceType: 'authz_group',
+        resourceId: group.id,
+        details: {
+          groupId: group.id,
+          source: 'system',
+          sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+          scanned: userIds.length,
+          created: missingUserIds.length,
+        },
+      });
+      return { scanned: userIds.length, created: missingUserIds.length };
+    });
+  }
+
   private async ensureSystemGroupMembershipWithManager(
     manager: EntityManager,
     groupId: string,

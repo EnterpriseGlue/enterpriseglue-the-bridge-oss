@@ -253,6 +253,53 @@ describe('authzGroupService', () => {
     expect(membershipRepo.insert).toHaveBeenCalledTimes(1);
   });
 
+  it('backfills only active users missing the authenticated-user baseline', async () => {
+    const groupRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS,
+        tenantId: null,
+        source: 'system',
+        isArchived: false,
+      }),
+    };
+    const userRepo = {
+      find: vi.fn().mockResolvedValue([{ id: 'user-1' }, { id: 'user-2' }]),
+    };
+    const membershipRepo = {
+      find: vi.fn().mockResolvedValue([{ userId: 'user-1' }]),
+      insert: vi.fn(),
+    };
+    const auditRepo = { insert: vi.fn() };
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroup) return groupRepo;
+        if (entity === User) return userRepo;
+        if (entity === AuthzGroupMembership) return membershipRepo;
+        if (entity === AuditLog) return auditRepo;
+        throw new Error('Unexpected repository');
+      },
+    };
+    const dataSource = {
+      transaction: vi.fn(async (callback: (transactionManager: typeof manager) => unknown) => callback(manager)),
+    };
+
+    await expect(authzGroupService.backfillAuthenticatedUserMemberships(dataSource as any, 12345))
+      .resolves.toEqual({ scanned: 2, created: 1 });
+    expect(membershipRepo.insert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        groupId: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS,
+        userId: 'user-2',
+        source: 'system',
+        sourceRef: 'authenticated-user-baseline',
+        createdAt: 12345,
+      }),
+    ]);
+    expect(auditRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.group_membership.backfill',
+      details: expect.stringContaining('"created":1'),
+    }));
+  });
+
   it('rejects manual mutations for config-managed groups and memberships', async () => {
     const groupRepo = {
       findOneBy: vi.fn().mockResolvedValue({

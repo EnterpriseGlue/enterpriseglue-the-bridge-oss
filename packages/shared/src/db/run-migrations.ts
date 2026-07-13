@@ -567,6 +567,13 @@ export async function seedInitialData() {
   }
 
   try {
+    const result = await authzGroupService.backfillAuthenticatedUserMemberships(dataSource, now);
+    console.log(`  ✅ authenticated-user memberships reconciled (${result.created} created across ${result.scanned} active users)`);
+  } catch (error: any) {
+    console.log('  Note: authenticated-user membership backfill:', error.message);
+  }
+
+  try {
     const result = await permissionService.syncLegacyRoleAssignments({ now }, dataSource);
     console.log(`  ✅ legacy role assignments synced (${result.upserted} upserted, ${result.removed} removed)`);
   } catch (error: any) {
