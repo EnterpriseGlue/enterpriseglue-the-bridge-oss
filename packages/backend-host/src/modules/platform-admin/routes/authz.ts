@@ -49,6 +49,7 @@ import { registerPolicyRoutes } from './authz/policies.js';
 import { registerRoleRoutes } from './authz/roles.js';
 import { registerAssignmentRoutes } from './authz/assignments.js';
 import { registerProjectEngineTargetRoutes } from './authz/project-engine-targets.js';
+import { registerAuditRoutes } from './authz/audit.js';
 
 // Validation schemas
 const authzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
@@ -293,15 +294,6 @@ const engineIdParamSchema = z.object({ engineId: z.string().min(1) });
 const transitionCleanupApplySchema = z.object({
   previewCorrelationId: z.string().min(1).optional(),
   assignmentIds: z.array(z.string().min(1)).min(1),
-});
-
-const authzAuditQuerySchema = z.object({
-  userId: z.string().optional(),
-  resourceType: z.string().optional(),
-  resourceId: z.string().optional(),
-  decision: z.enum(['allow', 'deny']).optional(),
-  limit: z.coerce.number().int().min(1).max(500).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
 });
 
 const router = Router();
@@ -1527,40 +1519,6 @@ router.get('/api/authz/sso-sync-runs/:id/events', apiLimiter, requireAuth, requi
   }
 }));
 
-// ============================================================================
-// Audit Log (Admin Only)
-// ============================================================================
-
-/**
- * GET /api/platform-admin/authz/audit
- * Query authorization audit log.
- */
-router.get('/api/authz/audit', apiLimiter, requireAuth, requirePlatformAction('platform.audit.read'), validateQuery(authzAuditQuerySchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
-    const resourceType = typeof req.query.resourceType === 'string' ? req.query.resourceType : undefined;
-    const resourceId = typeof req.query.resourceId === 'string' ? req.query.resourceId : undefined;
-    const decision = req.query.decision === 'allow' || req.query.decision === 'deny'
-      ? req.query.decision
-      : undefined;
-    const limit = typeof req.query.limit === 'number' ? req.query.limit : undefined;
-    const offset = typeof req.query.offset === 'number' ? req.query.offset : undefined;
-
-    const entries = await policyService.getAuditLog({
-      tenantId: req.tenant?.tenantId || null,
-      userId,
-      resourceType,
-      resourceId,
-      decision,
-      limit,
-      offset,
-    });
-
-    res.json(entries);
-  } catch (error: any) {
-    logger.error('Get audit log error:', error);
-    throw Errors.internal('Failed to get audit log');
-  }
-}));
+registerAuditRoutes(router, { requirePlatformAction });
 
 export default router;

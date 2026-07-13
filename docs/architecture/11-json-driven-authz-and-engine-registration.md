@@ -1854,7 +1854,8 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Extract the roles/permissions catalog routes into `routes/authz/roles.ts`, retaining scoped-manager filtering and custom-role allow-only validation.
 - [x] ✅ Extract role-assignment and group routes into `routes/authz/assignments.ts`, retaining scoped-manager assignment/removal boundaries and manual group membership behavior.
 - [x] ✅ Extract project-engine target CRUD, deployment eligibility, and Mission Control/Starbase bridge evaluations into `routes/authz/project-engine-targets.ts` with their existing action resolvers.
-- [ ] ⬜ Split the remaining `packages/backend-host/src/modules/platform-admin/routes/authz.ts` families into focused identity, external registration, and audit routers.
+- [x] ✅ Extract authorization-audit reads into `routes/authz/audit.ts`, retaining the existing platform audit action and query bounds.
+- [ ] ⬜ Split the remaining `packages/backend-host/src/modules/platform-admin/routes/authz.ts` families into focused identity and external registration routers.
 - [x] ✅ Add the external machine-authenticated deployment receipt route with API deployment eligibility, action/OpenAPI metadata, audit logging, and inventory materialization. Runtime scope settings, inventory reads, and reconciliation routes remain pending.
 - [x] ✅ Update `packages/backend-host/src/modules/mission-control/engines/routes.ts` manual engine create/update/list/detail schemas and serializers, including runtime scope, deployment integration, metadata discovery, pipeline receipt ingestion, managed-field protection, and canonical deployment-history reads.
 - [ ] ⬜ Update auth start/callback routes and provider services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit.
@@ -2183,7 +2184,7 @@ This phase is required because the current implementation still carries compatib
 #### Module Boundaries
 
 - [ ] ⬜ Split the 8k+ line Access Control page into tab/domain components before adding Identity, Config Imports, and Runtime Resources.
-- [ ] ⬜ Split the platform authz router into identity, external registration, and audit routers. Roles/permissions, assignments/groups, project-engine targets/bridges, engine sets/runtime resources, policies, machines, and configuration bundles are already isolated.
+- [ ] ⬜ Split the platform authz router into identity and external registration routers. Roles/permissions, assignments/groups, project-engine targets/bridges, engine sets/runtime resources, policies, machines, configuration bundles, and audit are already isolated.
 - [ ] ⬜ Split action and OpenAPI registrations into domain modules with aggregate validation exports so strict inventory guards remain authoritative.
 - [ ] ⬜ Keep shared types generated/imported from shared schemas instead of duplicating hand-maintained frontend interfaces.
 
