@@ -2168,7 +2168,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add `ConfigBundlePreviewService` for strict, side-effect-free schema and staged-object reference validation.
 - [ ] ⬜ Load multi-file folder bundle and single-file bundle.
 - [ ] ⬜ Resolve imports with path traversal protection.
-- [ ] ⬜ Resolve all references against current database state and staged objects in the same bundle.
+- [x] ✅ Resolve all apply-supported references against current database state and staged objects in the same bundle; unresolved external providers, groups, roles, engines, and runtime resources fail closed during preview.
 - [x] ✅ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets, Runtime Resource Sets, config-owned identity mappings, config-owned project-engine targets, and supported config-owned group assignments.
 - [x] ✅ Produce role permission diffs with additions, removals, expanded template permissions, and affected-assignment counts. The details are returned on the same object-level diff records and retained in apply receipts.
 - [x] ✅ Produce bounded runtime resource set diffs with matched/unmatched counts plus newly matched and no-longer-matched process or decision keys. The preview uses current runtime inventory and persisted materializations only; it does not contact engines or reconcile state.

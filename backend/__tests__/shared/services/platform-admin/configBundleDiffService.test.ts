@@ -478,4 +478,64 @@ describe('configBundleDiffService', () => {
       expect.objectContaining({ objectType: 'assignment', key: assignmentKey, operation: 'archive', currentId: 'assignment-1' }),
     ]));
   });
+
+  it('resolves dependent references declared in the same bundle as staged creates', async () => {
+    const projectId = '00000000-0000-4000-8000-000000000001';
+    mockDataSource([], [], [], [], [], [], [], [], [], [{ id: projectId, tenantId: 'tenant-a' }]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: {
+        ...bundle,
+        imports: [
+          './roles.json', './groups.json', './engines.json', './engine-sets.json', './runtime-resource-sets.json',
+          './assignments.json', './identity-providers.json', './identity-mappings.json', './project-engine-targets.json',
+        ],
+      },
+      files: {
+        './roles.json': { roles: [{ key: 'custom.engine.viewer', name: 'Engine viewer', scope: 'engine', permissions: ['engine:instance:view'] }] },
+        './groups.json': { groups: [{ key: 'group.operations', name: 'Operations' }] },
+        './engines.json': { engines: [{ key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'PAYMENTS_PASSWORD' } }] },
+        './engine-sets.json': { engineSets: [{ key: 'engines.payments', name: 'Payments engines', selector: { mode: 'engine_ids', engineKeys: ['engine.payments'] } }] },
+        './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.payments' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' } }] },
+        './assignments.json': { assignments: [
+          { key: 'assignment.engine', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine', engineKey: 'engine.payments' } },
+          { key: 'assignment.engine-set', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine_set', engineSetKey: 'engines.payments' } },
+          { key: 'assignment.runtime-set', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine_runtime_resource_set', runtimeResourceSetKey: 'runtime.payments' } },
+        ] },
+        './identity-providers.json': { identityProviders: [{
+          key: 'identity.oidc.main', type: 'oidc', enabled: true, authenticationMode: 'claims_only',
+          sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
+          oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', callbackUrl: 'https://app.example.test/callback', scopes: ['openid'] },
+        }] },
+        './identity-mappings.json': { identityMappings: [{ key: 'mapping.operations', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'operations' }, targetGroupKey: 'group.operations' }] },
+        './project-engine-targets.json': { projectEngineTargets: [{ key: 'target.payments', projectRef: { id: projectId }, engineRef: { engineKey: 'engine.payments' }, allowManualDeploy: true }] },
+      },
+    }, 'tenant-a');
+
+    expect(result).toMatchObject({ valid: true, errors: [] });
+    expect(result.changes.filter((change) => change.operation === 'conflict')).toEqual([]);
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'create' }),
+      expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.operations', operation: 'create', reason: expect.stringContaining('will be created') }),
+      expect.objectContaining({ objectType: 'project_engine_target', key: 'target.payments', operation: 'create', reason: expect.stringContaining('will be created') }),
+      expect.objectContaining({ objectType: 'assignment', key: 'assignment.engine', operation: 'create', reason: expect.stringContaining('will be created') }),
+      expect.objectContaining({ objectType: 'assignment', key: 'assignment.engine-set', operation: 'create', reason: expect.stringContaining('will be created') }),
+      expect.objectContaining({ objectType: 'assignment', key: 'assignment.runtime-set', operation: 'create', reason: expect.stringContaining('will be created') }),
+    ]));
+  });
+
+  it('fails closed when an identity mapping references no persisted or staged provider', async () => {
+    mockDataSource();
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./groups.json', './identity-mappings.json'] },
+      files: {
+        './groups.json': { groups: [{ key: 'group.operations', name: 'Operations' }] },
+        './identity-mappings.json': { identityMappings: [{ key: 'mapping.operations', providerKey: 'identity.oidc.missing', source: { type: 'group', externalId: 'operations' }, targetGroupKey: 'group.operations' }] },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'identity_mapping', key: 'mapping.operations', operation: 'conflict', reason: expect.stringContaining('unresolved identity provider'),
+    }));
+  });
 });

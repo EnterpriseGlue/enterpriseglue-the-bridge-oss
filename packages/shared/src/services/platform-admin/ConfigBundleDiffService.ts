@@ -239,6 +239,16 @@ class ConfigBundleDiffService {
 
     const desiredRoles = values(compilation.files, './roles.json', 'roles');
     const desiredRoleKeys = new Set(desiredRoles.map((role) => role.key));
+    const desiredGroups = values(compilation.files, './groups.json', 'groups');
+    const desiredGroupKeys = new Set(desiredGroups.map((group) => group.key));
+    const desiredEngines = values(compilation.files, './engines.json', 'engines');
+    const desiredEngineKeys = new Set(desiredEngines.map((engine) => engine.key));
+    const desiredEngineSets = values(compilation.files, './engine-sets.json', 'engineSets');
+    const desiredEngineSetKeys = new Set(desiredEngineSets.map((set) => set.key));
+    const desiredRuntimeResourceSets = values(compilation.files, './runtime-resource-sets.json', 'runtimeResourceSets');
+    const desiredRuntimeResourceSetKeys = new Set(desiredRuntimeResourceSets.map((set) => set.key));
+    const desiredIdentityProviders = values(compilation.files, './identity-providers.json', 'identityProviders');
+    const desiredIdentityProviderKeys = new Set(desiredIdentityProviders.map((provider) => provider.key));
     for (const role of desiredRoles) {
       const existing = rolesByKey.get(role.key);
       const permissions = compilation.preview.expandedRolePermissions?.[role.key] || role.permissions || [];
@@ -261,8 +271,6 @@ class ConfigBundleDiffService {
       }
     }
 
-    const desiredGroups = values(compilation.files, './groups.json', 'groups');
-    const desiredGroupKeys = new Set(desiredGroups.map((group) => group.key));
     for (const group of desiredGroups) {
       const existing = groupsByKey.get(group.key);
       if (!existing) {
@@ -276,8 +284,6 @@ class ConfigBundleDiffService {
       }
     }
 
-    const desiredEngines = values(compilation.files, './engines.json', 'engines');
-    const desiredEngineKeys = new Set(desiredEngines.map((engine) => engine.key));
     for (const engine of desiredEngines) {
       const existing = enginesByConfigKey.get(engine.key) || tenantEngines.find((candidate) => candidate.externalId && candidate.externalId === engine.externalId);
       if (!existing) {
@@ -299,8 +305,6 @@ class ConfigBundleDiffService {
       }
     }
 
-    const desiredEngineSets = values(compilation.files, './engine-sets.json', 'engineSets');
-    const desiredEngineSetKeys = new Set(desiredEngineSets.map((set) => set.key));
     for (const set of desiredEngineSets) {
       const existing = engineSetsByKey.get(set.key);
       if (!existing) changes.push({ objectType: 'engine_set', key: set.key, operation: 'create', reason: 'No persisted Engine Set uses this tenant-scoped key' });
@@ -309,8 +313,6 @@ class ConfigBundleDiffService {
       else changes.push({ objectType: 'engine_set', key: set.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned Engine Set metadata already matches the desired state' });
     }
 
-    const desiredRuntimeResourceSets = values(compilation.files, './runtime-resource-sets.json', 'runtimeResourceSets');
-    const desiredRuntimeResourceSetKeys = new Set(desiredRuntimeResourceSets.map((set) => set.key));
     for (const set of desiredRuntimeResourceSets) {
       const existing = runtimeResourceSetsByKey.get(set.key);
       const engine = enginesByConfigKey.get(set.engineRef.engineKey);
@@ -341,8 +343,6 @@ class ConfigBundleDiffService {
       }
     }
 
-    const desiredIdentityProviders = values(compilation.files, './identity-providers.json', 'identityProviders');
-    const desiredIdentityProviderKeys = new Set(desiredIdentityProviders.map((provider) => provider.key));
     for (const provider of desiredIdentityProviders) {
       const existing = identityProvidersByKey.get(provider.key);
       const configurationJson = JSON.stringify(providerConfiguration(provider));
@@ -370,11 +370,27 @@ class ConfigBundleDiffService {
       const existing = identityMappingsByKey.get(mapping.key);
       const provider = identityProvidersByKey.get(mapping.providerKey);
       const group = groupsByKey.get(mapping.targetGroupKey);
+      const stagedProvider = !provider && desiredIdentityProviderKeys.has(mapping.providerKey);
+      const stagedGroup = !group && desiredGroupKeys.has(mapping.targetGroupKey);
       if (group) desiredIdentityMappingGroupIds.set(mapping.key, group.id);
-      if (!existing) changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'create', reason: 'No persisted identity mapping uses this config key' });
+      if (!provider && !stagedProvider) {
+        changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'conflict', reason: 'Identity mapping references an unresolved identity provider' });
+      } else if (!group && !stagedGroup) {
+        changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'conflict', reason: 'Identity mapping references an unresolved group' });
+      } else if (!existing) {
+        changes.push({
+          objectType: 'identity_mapping',
+          key: mapping.key,
+          operation: 'create',
+          reason: stagedProvider || stagedGroup
+            ? 'Identity mapping references a provider or group that will be created by this configuration bundle'
+            : 'No persisted identity mapping uses this config key',
+        });
+      }
       else if (existing.sourceRef !== sourceRef) changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'conflict', currentId: existing.id, reason: 'Existing identity mapping is not owned by this configuration bundle' });
       else if (
-        existing.providerId !== provider?.id || existing.targetGroupId !== group?.id ||
+        (provider ? existing.providerId !== provider.id : stagedProvider) ||
+        (group ? existing.targetGroupId !== group.id : stagedGroup) ||
         existing.entitlementType !== mapping.source.type || existing.externalId !== (mapping.source.externalId || null) ||
         existing.matchOperator !== mapping.source.operator || existing.syncMode !== mapping.syncMode || !existing.isActive
       ) changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'update', currentId: existing.id, reason: 'Config-owned identity mapping differs from desired provider, entitlement, target group, sync mode, or active state' });
@@ -386,9 +402,22 @@ class ConfigBundleDiffService {
     for (const target of desiredProjectEngineTargets) {
       const projectId = target.projectRef.id;
       const engine = enginesByConfigKey.get(target.engineRef.engineKey);
+      const stagedEngine = !engine && desiredEngineKeys.has(target.engineRef.engineKey);
       const key = target.key || `${projectId || 'unresolved-project'}:${target.engineRef.engineKey}`;
-      if (!projectId || !tenantProjectIds.has(projectId) || !engine) {
-        changes.push({ objectType: 'project_engine_target', key, operation: 'conflict', reason: 'Project-engine target references an unresolved project id or configured engine' });
+      if (!projectId || !tenantProjectIds.has(projectId)) {
+        changes.push({ objectType: 'project_engine_target', key, operation: 'conflict', reason: 'Project-engine target references an unresolved project id' });
+        continue;
+      }
+      if (!engine && !stagedEngine) {
+        changes.push({ objectType: 'project_engine_target', key, operation: 'conflict', reason: 'Project-engine target references an unresolved configured engine' });
+        continue;
+      }
+      if (stagedEngine) {
+        changes.push({ objectType: 'project_engine_target', key, operation: 'create', reason: 'Project-engine target references an engine that will be created by this configuration bundle' });
+        continue;
+      }
+      if (!engine) {
+        changes.push({ objectType: 'project_engine_target', key, operation: 'conflict', reason: 'Project-engine target references an unresolved configured engine' });
         continue;
       }
       const pair = `${projectId}:${engine.id}`;
@@ -425,19 +454,32 @@ class ConfigBundleDiffService {
       }
       const role = rolesByKey.get(assignment.roleKey);
       const group = groupsByKey.get(assignment.principal.key);
+      const stagedRole = !role && desiredRoleKeys.has(assignment.roleKey);
+      const stagedGroup = !group && desiredGroupKeys.has(assignment.principal.key);
       let scopeId: string | null = assignment.scope.type === 'platform' ? null
         : assignment.scope.type === 'engine' ? enginesByConfigKey.get(assignment.scope.engineKey)?.id || null
         : assignment.scope.type === 'engine_set' ? engineSetsByKey.get(assignment.scope.engineSetKey)?.id || null
         : assignment.scope.type === 'engine_runtime_resource_set' ? runtimeResourceSetsByKey.get(assignment.scope.runtimeResourceSetKey)?.id || null
         : null;
+      const stagedScope = (assignment.scope.type === 'engine' && !scopeId && desiredEngineKeys.has(assignment.scope.engineKey))
+        || (assignment.scope.type === 'engine_set' && !scopeId && desiredEngineSetKeys.has(assignment.scope.engineSetKey))
+        || (assignment.scope.type === 'engine_runtime_resource_set' && !scopeId && desiredRuntimeResourceSetKeys.has(assignment.scope.runtimeResourceSetKey));
       if (assignment.scope.type === 'engine_runtime_resource') {
         const engine = enginesByConfigKey.get(assignment.scope.engineKey);
         scopeId = engine
           ? runtimeResourcesByIdentity.get(`${engine.id}:${assignment.scope.resourceKind}:${assignment.scope.resourceKey}:${assignment.scope.runtimeTenantId || ''}`)?.id || null
           : null;
       }
-      if (!role || !group || (assignment.scope.type !== 'platform' && !scopeId)) {
+      if ((!role && !stagedRole) || (!group && !stagedGroup) || (assignment.scope.type !== 'platform' && !scopeId && !stagedScope)) {
         changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: 'Assignment references an unresolved role, group, or scope' });
+        continue;
+      }
+      if (stagedRole || stagedGroup || stagedScope) {
+        changes.push({ objectType: 'assignment', key, operation: 'create', reason: 'Scoped role assignment references an object that will be created by this configuration bundle' });
+        continue;
+      }
+      if (!role || !group) {
+        changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: 'Assignment references an unresolved role or group' });
         continue;
       }
       const assignmentKey = canonicalRoleAssignmentKey({
