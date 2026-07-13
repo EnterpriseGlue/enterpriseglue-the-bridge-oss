@@ -5,9 +5,15 @@ import identityMappingsRouter from '../../../../../packages/backend-host/src/mod
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
 const service = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), test: vi.fn(), previewStoredSnapshots: vi.fn() }));
+const groups = vi.hoisted(() => ({ createGroup: vi.fn() }));
+const permissions = vi.hoisted(() => ({ assignRole: vi.fn() }));
+const dataSource = vi.hoisted(() => ({ transaction: vi.fn() }));
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({ requireAuth: (req: any, _res: any, next: any) => { req.user = { userId: 'admin-1' }; req.tenant = { tenantId: 'tenant-1' }; next(); } }));
 vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({ requireAction: () => (_req: any, _res: any, next: any) => next() }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js', () => ({ identityEntitlementMappingService: service }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({ authzGroupService: groups }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({ permissionService: permissions }));
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn(async () => dataSource) }));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }));
 
 const mapping = { id: 'mapping-1', providerId: 'provider-1', providerKey: 'identity.oidc.main', targetGroupId: 'group-1', targetGroupKey: 'group.operators', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, configKey: null, sourceRef: null };
@@ -17,6 +23,7 @@ describe('identity mapping routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     service.list.mockResolvedValue([mapping]); service.create.mockResolvedValue(mapping); service.update.mockResolvedValue(mapping); service.remove.mockResolvedValue(undefined); service.test.mockResolvedValue({ matches: true, entitlements: [{ type: 'group', externalId: 'ops' }] }); service.previewStoredSnapshots.mockResolvedValue({ scanned: 3, matches: 2, nonMatches: 1, failed: 0, truncated: false, latestSnapshotAt: 123, warnings: ['stored_snapshots_only'] });
+    groups.createGroup.mockResolvedValue({ id: 'group-1' }); permissions.assignRole.mockResolvedValue({ id: 'assignment-1', warnings: [] }); dataSource.transaction.mockImplementation(async (callback: (manager: object) => Promise<unknown>) => callback({ transaction: true }));
     app = express(); app.use(express.json()); app.use(identityMappingsRouter); app.use((error: any, _req: any, res: any, _next: any) => res.status(error.statusCode || 500).json({ error: error.message }));
   });
   it('lists tenant-scoped provider-neutral mappings', async () => {
@@ -26,6 +33,19 @@ describe('identity mapping routes', () => {
   it('creates and audits an entitlement-to-group mapping', async () => {
     const response = await request(app).post('/api/identity/mappings').send({ providerKey: 'identity.oidc.main', targetGroupKey: 'group.operators', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact' });
     expect(response.status).toBe(201); expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ providerKey: 'identity.oidc.main' }), 'tenant-1'); expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.mapping.create' }));
+  });
+  it('atomically provisions a new group, mapping, and scoped assignment', async () => {
+    const response = await request(app).post('/api/identity/mappings/provision-access').send({ providerKey: 'identity.oidc.main', newGroup: { key: 'group.operators', name: 'Operators' }, entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1' });
+    expect(response.status).toBe(201);
+    expect(groups.createGroup).toHaveBeenCalledWith(expect.objectContaining({ key: 'group.operators', name: 'Operators', tenantId: 'tenant-1' }), { transaction: true });
+    expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ targetGroupKey: 'group.operators' }), 'tenant-1', { transaction: true });
+    expect(permissions.assignRole).toHaveBeenCalledWith(expect.objectContaining({ principalType: 'group', principalId: 'group-1', resourceType: 'engine', resourceId: 'engine-1' }), { transaction: true });
+    expect(response.body).toEqual(expect.objectContaining({ mapping, assignment: { id: 'assignment-1', warnings: [] }, createdGroup: { id: 'group-1' } }));
+  });
+  it('requires exactly one existing or new target group for transactional provisioning', async () => {
+    const response = await request(app).post('/api/identity/mappings/provision-access').send({ providerKey: 'identity.oidc.main', targetGroupKey: 'group.operators', newGroup: { key: 'group.other', name: 'Other' }, entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1' });
+    expect(response.status).toBe(400);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
   it('tests claims without persisting memberships', async () => {
     const response = await request(app).post('/api/identity/mappings/test').send({ providerKey: 'identity.oidc.main', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', claims: { sub: 'user-1', groups: ['ops'] } });
