@@ -36,11 +36,8 @@ import {
   engineSetService,
   projectEngineTargetService,
   deploymentEligibilityService,
-  apiClientService,
-  serviceAccountService,
   API_CLIENT_TOKEN_PREFIX,
   ApiClientScopes,
-  ServiceAccountScopes,
   AllPermissions,
   EnginePermissions,
   Permission,
@@ -57,6 +54,7 @@ import { getEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engi
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
 import { registerConfigBundleRoutes } from './authz/config-bundles.js';
+import { registerMachineRoutes } from './authz/machines.js';
 import { registerPolicyRoutes } from './authz/policies.js';
 import {
   evaluateMissionControlStarbaseBridge,
@@ -390,21 +388,6 @@ async function assertCanRemoveScopedAssignment(req: Request, id: string): Promis
     throw Errors.forbidden('Resource managers can remove only manual delegated system or custom role assignments for the same resource scope');
   }
 }
-
-const apiClientCreateSchema = z.object({
-  name: z.string().min(1).max(255),
-  scopes: z.array(z.enum([
-    ApiClientScopes.CONFIG_BUNDLE_MANAGE,
-    ApiClientScopes.ENGINE_REGISTER,
-    ApiClientScopes.DEPLOYMENT_EXECUTE,
-  ])).min(1).optional(),
-});
-
-const serviceAccountCreateSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().max(2000).nullable().optional(),
-  scopes: z.array(z.enum([ServiceAccountScopes.DEPLOYMENT_EXECUTE])).min(1).optional(),
-});
 
 const engineManagementModeSchema = z.enum(['external_managed', 'hybrid']);
 const engineFieldOwnerSchema = z.enum(['manual', 'external']);
@@ -1342,112 +1325,7 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
 
 registerConfigBundleRoutes(router, { requireConfigBundleAccess, requireTargetTransferAccess });
 
-// ============================================================================
-// API Client Management (Admin Only)
-// ============================================================================
-
-router.get('/api/authz/api-clients', apiLimiter, requireAuth, requirePlatformAction('platform.api-clients.read'), asyncHandler(async (_req: Request, res: Response) => {
-  try {
-    const clients = await apiClientService.listClients();
-    res.json(clients);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('List API clients error:', error);
-    throw Errors.internal('Failed to list API clients');
-  }
-}));
-
-router.post('/api/authz/api-clients', apiLimiter, requireAuth, requirePlatformAction('platform.api-clients.manage'), validateBody(apiClientCreateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const result = await apiClientService.createClient({
-      name: req.body.name,
-      scopes: req.body.scopes,
-      createdById: req.user!.userId,
-    });
-    res.status(201).json(result);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Create API client error:', error);
-    throw Errors.badRequest(error.message || 'Failed to create API client');
-  }
-}));
-
-router.post('/api/authz/api-clients/:id/rotate', apiLimiter, requireAuth, requirePlatformAction('platform.api-clients.manage'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const result = await apiClientService.rotateClient(String(req.params.id));
-    res.json(result);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Rotate API client error:', error);
-    throw Errors.badRequest(error.message || 'Failed to rotate API client');
-  }
-}));
-
-router.delete('/api/authz/api-clients/:id', apiLimiter, requireAuth, requirePlatformAction('platform.api-clients.manage'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    await apiClientService.revokeClient(String(req.params.id));
-    res.status(204).send();
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Revoke API client error:', error);
-    throw Errors.badRequest(error.message || 'Failed to revoke API client');
-  }
-}));
-
-// ============================================================================
-// Service Account Management (Admin Only)
-// ============================================================================
-
-router.get('/api/authz/service-accounts', apiLimiter, requireAuth, requirePlatformAction('platform.service-accounts.read'), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const accounts = await serviceAccountService.listServiceAccounts({
-      includeInactive: req.query.includeInactive === 'true',
-    });
-    res.json(accounts);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('List service accounts error:', error);
-    throw Errors.internal('Failed to list service accounts');
-  }
-}));
-
-router.post('/api/authz/service-accounts', apiLimiter, requireAuth, requirePlatformAction('platform.service-accounts.manage'), validateBody(serviceAccountCreateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const result = await serviceAccountService.createServiceAccount({
-      name: req.body.name,
-      description: req.body.description,
-      scopes: req.body.scopes,
-      createdById: req.user!.userId,
-    });
-    res.status(201).json(result);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Create service account error:', error);
-    throw Errors.badRequest(error.message || 'Failed to create service account');
-  }
-}));
-
-router.post('/api/authz/service-accounts/:id/rotate', apiLimiter, requireAuth, requirePlatformAction('platform.service-accounts.manage'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const result = await serviceAccountService.rotateServiceAccountToken(String(req.params.id));
-    res.json(result);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Rotate service account token error:', error);
-    throw Errors.badRequest(error.message || 'Failed to rotate service account token');
-  }
-}));
-
-router.delete('/api/authz/service-accounts/:id', apiLimiter, requireAuth, requirePlatformAction('platform.service-accounts.manage'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    await serviceAccountService.revokeServiceAccount(String(req.params.id));
-    res.status(204).send();
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Revoke service account error:', error);
-    throw Errors.badRequest(error.message || 'Failed to revoke service account');
-  }
-}));
+registerMachineRoutes(router, { requirePlatformAction });
 
 // ============================================================================
 // External Engine Registration Inventory (Admin Only)
