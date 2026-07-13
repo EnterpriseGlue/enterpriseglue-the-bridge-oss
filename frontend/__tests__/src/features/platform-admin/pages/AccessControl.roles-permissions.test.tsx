@@ -266,13 +266,27 @@ describe('AccessControl roles and permissions', () => {
     expect(within(assignmentRow!).getByLabelText('Remove assignment')).toBeInTheDocument();
   });
 
+  it('shows SSO-managed assignments without a manual removal affordance', () => {
+    render(<AccessControl />);
+
+    fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
+
+    const assignmentRow = screen.getAllByText('00000000-0000-4000-8000-000000000012')
+      .map((principal) => principal.closest('tr'))
+      .find((row) => row && within(row).queryByText('sso'));
+    expect(assignmentRow).toBeTruthy();
+    expect(within(assignmentRow!).getByText('sso')).toBeInTheDocument();
+    expect(within(assignmentRow!).queryByLabelText('Remove assignment')).not.toBeInTheDocument();
+  });
+
   it('identifies locally overridable config assignments without hiding their removal affordance', () => {
     render(<AccessControl />);
 
     fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
 
-    const principal = screen.getByText('00000000-0000-4000-8000-000000000099');
-    const assignmentRow = principal.closest('tr');
+    const assignmentRow = screen.getAllByText('00000000-0000-4000-8000-000000000099')
+      .map((principal) => principal.closest('tr'))
+      .find((row) => row && within(row).queryByText('Config warning'));
     expect(assignmentRow).toBeTruthy();
     expect(within(assignmentRow!).getByText('Config warning')).toBeInTheDocument();
     expect(within(assignmentRow!).getByLabelText('Remove assignment')).toBeInTheDocument();
