@@ -73,7 +73,12 @@ export class SecretResolver {
       }
     }
 
-    return process.env[reference]
+    // Bare identifiers remain supported for existing UI-managed providers.
+    // Config bundles may use the explicit env:// form documented for CI/CD.
+    const environmentVariable = reference.startsWith('env://')
+      ? reference.slice('env://'.length)
+      : reference;
+    return environmentVariable && process.env[environmentVariable]
       ? { available: true }
       : { available: false, reason: 'environment_variable_missing' };
   }
@@ -95,7 +100,10 @@ export class SecretResolver {
         }
         return readFileSync(filePath, 'utf8');
       }
-      const resolved = process.env[reference];
+      const environmentVariable = reference.startsWith('env://')
+        ? reference.slice('env://'.length)
+        : reference;
+      const resolved = environmentVariable ? process.env[environmentVariable] : undefined;
       if (!resolved) throw new Error(`External secret reference is unavailable: ${reference}`);
       return resolved;
     }

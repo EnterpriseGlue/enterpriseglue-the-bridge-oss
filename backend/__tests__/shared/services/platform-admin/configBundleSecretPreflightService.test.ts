@@ -25,14 +25,14 @@ describe('configBundleSecretPreflightService', () => {
         './identity-providers.json': { identityProviders: [{
           key: 'identity.oidc.main', type: 'oidc', enabled: true, authenticationMode: 'claims_only',
           sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
-          oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', clientSecretRef: 'OIDC_CLIENT_SECRET', callbackUrl: 'https://app.example.test/callback', scopes: ['openid'] },
+          oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', clientSecretRef: 'env://OIDC_CLIENT_SECRET', callbackUrl: 'https://app.example.test/callback', scopes: ['openid'] },
         }] },
       },
     });
 
     expect(result).toMatchObject({ valid: true, availabilityHash: expect.any(String), available: true, errors: [] });
     expect(result.references).toEqual([
-      { reference: 'OIDC_CLIENT_SECRET', locations: ['./identity-providers.json.identityProviders.0.oidc.clientSecretRef'], available: true },
+      { reference: 'env://OIDC_CLIENT_SECRET', locations: ['./identity-providers.json.identityProviders.0.oidc.clientSecretRef'], available: true },
       { reference: 'PAYMENTS_ENGINE_PASSWORD', locations: ['./engines.json.engines.0.auth.passwordRef'], available: true },
     ]);
     expect(JSON.stringify(result)).not.toContain('not-returned');

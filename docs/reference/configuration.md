@@ -93,6 +93,7 @@ OpenShift ConfigMap projection to mount the non-secret JSON payload.
 - `EG_CONFIG_EXPECTED_SHA256`: Optional SHA-256 of the mounted payload; rejects unexpected content.
 - `EG_CONFIG_EXPECTED_TENANT_SCOPE`: Required expected target scope for an `apply` bootstrap, such as `platform` or a tenant id.
 - `EG_CONFIG_FAIL_CLOSED`: `true` or `false`; defaults to `true` in production and controls whether a configured bootstrap failure stops startup.
+- `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT`: `true` or `false`; default `false`. When enabled, validation and apply bootstrap modes require every referenced `env://` or `file://` secret to be available, and apply is bound to that availability check.
 - `EG_CONFIG_MAX_BYTES`: Maximum payload size; defaults to `1048576`.
 - `EG_CONFIG_SECRET_PROVIDER`: `env` or `file`; defaults to `env`.
 - `EG_CONFIG_SECRET_FILE_ROOT`: Required root directory for `file://` secret references when the provider is `file`.

@@ -30,7 +30,9 @@ Do not make automatic startup apply the default. Existing standalone installatio
 | `EG_CONFIG_BUNDLE_PATH` | Absolute JSON or ZIP file path | Read-only bootstrap bundle location; ZIP archives contain `bundle.json` and declared imported JSON files |
 | `EG_CONFIG_BOOTSTRAP_MODE` | `disabled`, `validate`, `apply` | Startup behavior; default `disabled` |
 | `EG_CONFIG_EXPECTED_SHA256` | SHA-256 or empty | Reject an unexpected mounted bundle |
+| `EG_CONFIG_EXPECTED_TENANT_SCOPE` | `platform` or tenant id | Required target scope for bootstrap apply |
 | `EG_CONFIG_FAIL_CLOSED` | `true`, `false` | Keep readiness false when configured bootstrap validation/apply fails; production default `true` |
+| `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT` | `true`, `false` | Require all bundle secret references to be available before configured startup validation or apply; default `false` |
 | `EG_CONFIG_SECRET_PROVIDER` | `env`, `file`, provider extension id | Resolve secret references without placing secret values in bundles |
 | `EG_CONFIG_SECRET_FILE_ROOT` | Absolute directory | Allowed root for file-based secret references |
 | `EG_CONFIG_MAX_BYTES` | Positive integer | Bundle upload/read size limit |
@@ -49,6 +51,7 @@ load process environment
 -> run schema migrations
 -> seed immutable permission/action/system-role catalog
 -> validate optional mounted bundle
+-> optionally preflight opaque secret-reference availability
 -> preview and apply only when bootstrap mode is apply
 -> materialize affected Engine Sets and runtime resources
 -> record reconciliation counts in the apply receipt
@@ -218,6 +221,14 @@ file:///var/run/secrets/enterpriseglue/oidc-client-secret
 ```
 
 `env://NAME` references remain environment-backed. File-backed references use `file://` only when `EG_CONFIG_SECRET_PROVIDER=file` and `EG_CONFIG_SECRET_FILE_ROOT` are configured; paths outside that root are rejected. External secret-manager adapters can be extensions. All resolution goes through the shared `SecretResolver` and returns redacted diagnostics.
+
+Set `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT=true` when a configured bootstrap must
+prove that every referenced `env://` or `file://` secret is available before it
+is considered valid. This is opt-in so existing standalone deployments and
+validation-only bundle workflows keep their current behavior. For `apply`, the
+service binds the write to the same status-only availability hash so a secret
+that disappears after preflight fails the apply rather than creating a partial
+authorization configuration.
 
 Customer-sidecar downstream peer tokens are never EnterpriseGlue secret references because EnterpriseGlue must not receive them.
 

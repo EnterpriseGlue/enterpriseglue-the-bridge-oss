@@ -5,6 +5,7 @@ services:
   backend:
     environment:
       EG_CONFIG_BUNDLE_PATH: /etc/enterpriseglue/config/bundle.json
+      EG_CONFIG_REQUIRE_SECRET_PREFLIGHT: ${EG_CONFIG_REQUIRE_SECRET_PREFLIGHT:-false}
       EG_CONFIG_SECRET_PROVIDER: ${EG_CONFIG_SECRET_PROVIDER:-env}
       EG_CONFIG_SECRET_FILE_ROOT: /var/run/secrets/enterpriseglue
     volumes:

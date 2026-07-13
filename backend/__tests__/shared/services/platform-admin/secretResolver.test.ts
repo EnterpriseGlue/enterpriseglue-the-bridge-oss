@@ -42,6 +42,16 @@ describe('SecretResolver', () => {
     }
   });
 
+  it('supports documented env:// references while retaining bare environment names', () => {
+    vi.stubEnv('EG_TEST_PROVIDER_SECRET', 'external-secret');
+    try {
+      expect(secretResolver.checkExternalReference('env://EG_TEST_PROVIDER_SECRET')).toEqual({ available: true });
+      expect(secretResolver.resolveStored('ref:env://EG_TEST_PROVIDER_SECRET')).toBe('external-secret');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('preserves external references while normalizing engine credential writes', () => {
     expect(secretResolver.normalizeForStorage('ref:EG_ENGINE_PASSWORD')).toBe('ref:EG_ENGINE_PASSWORD');
     expect(secretResolver.normalizeForStorage(null)).toBeNull();
