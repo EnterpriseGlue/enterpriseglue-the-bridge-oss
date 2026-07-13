@@ -53,4 +53,24 @@ describe('LegacyMappingCoverageService', () => {
 
     await expect(legacyMappingCoverageService.retireLegacyMappings('tenant-a', 'admin-1')).rejects.toThrow('Globally scoped platform-role mappings must be retired from global platform scope');
   });
+
+  it('disables global platform mappings only from global retirement scope', async () => {
+    vi.spyOn(legacyMappingCoverageService, 'getRetirementReadiness').mockResolvedValue({ ready: true, activeLegacyMappingCount: 1, verifiedReplacementCount: 1, blockers: [] });
+    const platformUpdate = vi.fn().mockResolvedValue({ affected: 1 });
+    const groupUpdate = vi.fn().mockResolvedValue({ affected: 0 });
+    const engineUpdate = vi.fn().mockResolvedValue({ affected: 0 });
+    const auditInsert = vi.fn().mockResolvedValue(undefined);
+    const getRepository = vi.fn((entity) => {
+      if (entity === SsoClaimsMapping) return { update: platformUpdate };
+      if (entity === SsoGroupMapping) return { update: groupUpdate };
+      if (entity === SsoAssignmentMapping) return { update: engineUpdate };
+      if (entity === AuditLog) return { insert: auditInsert };
+      throw new Error(`Unexpected repository: ${(entity as any).name}`);
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: async (callback: any) => callback({ getRepository }) });
+
+    await expect(legacyMappingCoverageService.retireLegacyMappings(null, 'global-admin')).resolves.toEqual({ platformRoleMappingsDisabled: 1, groupMappingsDisabled: 0, engineAssignmentMappingsDisabled: 0 });
+    expect(platformUpdate).toHaveBeenCalledOnce();
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ tenantId: null, userId: 'global-admin' }));
+  });
 });
