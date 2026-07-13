@@ -291,7 +291,7 @@ describe('AccessControl roles and permissions', () => {
 
     const row = screen.getByText('provider-user').closest('tr');
     expect(row).toBeTruthy();
-    expect(within(row!).getByText('Managed by identity provider')).toBeInTheDocument();
+    expect(within(row!).getByTitle(/identity-provider mapping/)).toBeInTheDocument();
     expect(within(row!).queryByLabelText('Remove assignment')).not.toBeInTheDocument();
   });
 

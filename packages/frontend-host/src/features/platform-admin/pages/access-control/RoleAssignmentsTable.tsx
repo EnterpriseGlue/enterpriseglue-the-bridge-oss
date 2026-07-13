@@ -51,6 +51,15 @@ function sourceLabel(source: unknown) {
   return String(source || '-');
 }
 
+function sourceDescription(source: unknown) {
+  if (source === 'sso') return 'Managed by an SSO assignment mapping. Change the mapping or the upstream entitlement.';
+  if (source === 'identity_provider') return 'Managed by an identity-provider mapping. Change the mapping or the upstream entitlement.';
+  if (source === 'config') return 'Managed by an authorization configuration bundle.';
+  if (source === 'api') return 'Created through the EnterpriseGlue API.';
+  if (source === 'system') return 'Created by an EnterpriseGlue system workflow.';
+  return undefined;
+}
+
 export function RoleAssignmentsTable({ assignments, apiClients, groups, serviceAccounts, externalSystems, loading, canDelete, onRemove }: {
   assignments: RoleAssignment[]; apiClients: ApiClient[]; groups: AuthzGroup[]; serviceAccounts: ServiceAccount[]; externalSystems: ExternalEngineSystem[];
   loading: boolean; canDelete: boolean; onRemove: (assignmentId: string) => void;
@@ -71,7 +80,8 @@ export function RoleAssignmentsTable({ assignments, apiClients, groups, serviceA
         return <TableRow {...getRowProps({ row })} key={row.id}>{row.cells.map((cell) => {
           if (cell.info.header === 'source') {
             const configWarning = assignment?.source === 'config' && assignment.ownershipMode === 'config_warn';
-            return <TableCell key={cell.id}><Tag type={configWarning ? 'warm-gray' : sourceTagType(cell.value)}>{configWarning ? 'Config warning' : sourceLabel(cell.value)}</Tag></TableCell>;
+            const description = configWarning ? 'A local configuration override permits removal until the next authoritative apply.' : sourceDescription(cell.value);
+            return <TableCell key={cell.id}><span title={description}><Tag type={configWarning ? 'warm-gray' : sourceTagType(cell.value)}>{configWarning ? 'Config warning' : sourceLabel(cell.value)}</Tag></span></TableCell>;
           }
           if (cell.info.header === 'actions') return <TableCell key={cell.id}>{(assignment?.source === 'manual' || (assignment?.source === 'config' && assignment.ownershipMode === 'config_warn')) && <Button kind="ghost" size="sm" renderIcon={TrashCan} hasIconOnly iconDescription="Remove assignment" disabled={!canDelete} title={canDelete ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onRemove(assignment.id)} />}</TableCell>;
           return <TableCell key={cell.id}>{cell.value}</TableCell>;
