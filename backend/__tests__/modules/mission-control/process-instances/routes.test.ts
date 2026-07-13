@@ -39,6 +39,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(false),
+    getVisibleRuntimeResources: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -143,6 +144,80 @@ describe('mission-control process-instances routes', () => {
 
   it('denies process instance reads when instance view permission is missing', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(403);
+    expect(listProcessInstances).not.toHaveBeenCalled();
+  });
+
+  it('queries only authorized process definition keys for a resource-aware engine', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'engine-1',
+              tenantId: null,
+              runtimeAccessScope: 'resource_aware',
+            }),
+          };
+        }
+        return { findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
+      { resourceKey: 'invoice-process' },
+      { resourceKey: 'payment-process' },
+    ]);
+    (listProcessInstances as unknown as Mock).mockImplementation(async (_engineId, query) => [{
+      id: `${query.processDefinitionKey}-instance`,
+      processDefinitionKey: query.processDefinitionKey,
+    }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      { id: 'invoice-process-instance', processDefinitionKey: 'invoice-process' },
+      { id: 'payment-process-instance', processDefinitionKey: 'payment-process' },
+    ]);
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'engine-1',
+      resourceKind: 'process_definition',
+      permission: 'engine:instance:view',
+    }));
+    expect(listProcessInstances).toHaveBeenCalledTimes(2);
+    expect(listProcessInstances).toHaveBeenCalledWith('engine-1', expect.objectContaining({
+      processDefinitionKey: 'invoice-process',
+    }));
+    expect(listProcessInstances).toHaveBeenCalledWith('engine-1', expect.objectContaining({
+      processDefinitionKey: 'payment-process',
+    }));
+  });
+
+  it('denies resource-aware collections with no visible process definitions', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'engine-1',
+              tenantId: null,
+              runtimeAccessScope: 'resource_aware',
+            }),
+          };
+        }
+        return { findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
 
     const response = await request(app)
       .get('/mission-control-api/process-instances')
