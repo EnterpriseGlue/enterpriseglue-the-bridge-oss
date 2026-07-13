@@ -1,6 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import IdentityProvidersSettingsTab from '@src/features/platform-admin/components/IdentityProvidersSettingsTab';
@@ -56,5 +56,18 @@ describe('IdentityProvidersSettingsTab', () => {
     server.use(http.get('/api/identity/providers', () => HttpResponse.json([])));
     renderTab();
     await waitFor(() => expect(screen.queryByText('demo-oidc')).not.toBeInTheDocument());
+  });
+
+  it('collects the complete provider-neutral SAML runtime configuration', async () => {
+    renderTab();
+    await waitFor(() => expect(screen.getByText('demo-oidc')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Add provider/i }));
+    fireEvent.change(screen.getByLabelText('Protocol'), { target: { value: 'saml' } });
+
+    expect(screen.getByLabelText('Identity provider SSO URL')).toBeInTheDocument();
+    expect(screen.getByLabelText('Identity provider signing certificate reference')).toBeInTheDocument();
+    expect(screen.getByLabelText('Subject attribute')).toHaveValue('nameID');
+    expect(screen.getByLabelText('Email attribute')).toHaveValue('email');
+    expect(screen.getByLabelText('Group attribute')).toHaveValue('groups');
   });
 });

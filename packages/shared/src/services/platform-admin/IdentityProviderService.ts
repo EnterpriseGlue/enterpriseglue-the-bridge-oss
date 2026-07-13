@@ -29,7 +29,11 @@ function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<
   const rawSecrets = Object.keys(configuration).filter((key) => /(?:secret|password|private.?key)$/i.test(key) && !/ref$/i.test(key));
   if (rawSecrets.length) throw Errors.validation(`Provider configuration must use secret references: ${rawSecrets.join(', ')}`);
   if (protocol === 'oidc' && (typeof configuration.issuerUrl !== 'string' || typeof configuration.clientId !== 'string')) throw Errors.validation('OIDC providers require issuerUrl and clientId');
-  if (protocol === 'saml' && (typeof configuration.entityId !== 'string' || typeof configuration.callbackUrl !== 'string')) throw Errors.validation('SAML providers require entityId and callbackUrl');
+  if (protocol === 'saml') {
+    for (const field of ['entityId', 'callbackUrl', 'ssoUrl', 'signingCertificateRef']) {
+      if (typeof configuration[field] !== 'string' || !String(configuration[field]).trim()) throw Errors.validation(`SAML providers require ${field}`);
+    }
+  }
   if (protocol === 'ldap') {
     if (typeof configuration.url !== 'string' || !String(configuration.url).startsWith('ldaps://')) throw Errors.validation('LDAP providers require an ldaps:// URL');
     for (const field of ['bindDn', 'bindPasswordRef', 'userBaseDn', 'userSearchFilter', 'groupBaseDn', 'groupIdAttribute']) {
@@ -65,7 +69,7 @@ class IdentityProviderServiceClass {
     return (await getDataSource()).getRepository(IdentityProvider).findOne({ where: normalized(tenantId) ? { id: id.trim(), tenantId: normalized(tenantId)! } : { id: id.trim(), tenantId: IsNull() } });
   }
   async listEnabledDirectLoginProviders(tenantId?: string | null): Promise<IdentityProvider[]> {
-    return (await this.list(tenantId)).filter((provider) => provider.isEnabled && provider.authenticationMode === 'direct' && (provider.protocol === 'oidc' || provider.protocol === 'ldap'));
+    return (await this.list(tenantId)).filter((provider) => provider.isEnabled && provider.authenticationMode === 'direct' && (provider.protocol === 'oidc' || provider.protocol === 'saml' || provider.protocol === 'ldap'));
   }
   async upsert(input: IdentityProviderInput): Promise<IdentityProvider> {
     const tenantId = normalized(input.tenantId); const key = input.key.trim();

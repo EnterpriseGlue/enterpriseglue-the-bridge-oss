@@ -6,13 +6,14 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
+import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
 import { identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
 import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
 import type { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { auditFromRequest, logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
-import { buildSsoState, getSsoRedirectUrl, parseSsoState } from './sso-state.js';
+import { buildSignedSamlState, buildSsoState, getSsoRedirectUrl, parseSignedSamlState, parseSsoState } from './sso-state.js';
 
 const router = Router();
 const stateCookie = 'identity_oidc_state';
@@ -35,6 +36,12 @@ function requireDirectOidc(provider: { protocol: string; isEnabled: boolean; aut
   if (provider.authenticationMode !== 'direct') throw Errors.forbidden('This identity provider accepts upstream claims and cannot initiate login');
 }
 
+function requireDirectSaml(provider: { protocol: string; isEnabled: boolean; authenticationMode: string }) {
+  if (!provider.isEnabled) throw Errors.notFound('Identity provider not found');
+  if (provider.protocol !== 'saml') throw Errors.validation('This identity provider does not use SAML');
+  if (provider.authenticationMode !== 'direct') throw Errors.forbidden('This identity provider accepts upstream claims and cannot initiate login');
+}
+
 async function startOidcLogin(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
   requireDirectOidc(provider);
   const state = buildSsoState(req, provider.id, { key: provider.key, tenantId: provider.tenantId });
@@ -45,6 +52,18 @@ async function startOidcLogin(req: Request, res: Response, provider: IdentityPro
   res.cookie(stateCookie, state, cookieOptions);
   res.cookie(verifierCookie, request.codeVerifier, cookieOptions);
   res.redirect(request.url);
+}
+
+async function startSamlLogin(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
+  requireDirectSaml(provider);
+  const relayState = buildSignedSamlState(req, provider.id, { key: provider.key, tenantId: provider.tenantId });
+  const request = await genericSamlService.createAuthorizationRequest(configuration(provider), relayState);
+  const authorizationUrl = new URL(request.url);
+  const entryPoint = new URL(request.entryPoint);
+  if (authorizationUrl.protocol !== 'https:' || entryPoint.protocol !== 'https:' || authorizationUrl.hostname !== entryPoint.hostname) {
+    throw Errors.internal('Invalid SAML authorization URL');
+  }
+  res.redirect(authorizationUrl.toString());
 }
 
 async function authenticateDirectLdap(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
@@ -67,13 +86,14 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
 
 router.get('/api/auth/providers/enabled', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
   const providers = await identityProviderService.listEnabledDirectLoginProviders(req.tenant?.tenantId || null);
-  res.json(providers.map((provider) => ({ id: provider.id, key: provider.key, protocol: provider.protocol, loginMethod: provider.protocol === 'oidc' ? 'redirect' : 'password' })));
+  res.json(providers.map((provider) => ({ id: provider.id, key: provider.key, protocol: provider.protocol, loginMethod: provider.protocol === 'ldap' ? 'password' : 'redirect' })));
 }));
 
 router.get('/api/auth/providers/:providerId/start', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
   const provider = await identityProviderService.getById(String(req.params.providerId || ''), req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
-  await startOidcLogin(req, res, provider);
+  if (provider.protocol === 'saml') await startSamlLogin(req, res, provider);
+  else await startOidcLogin(req, res, provider);
 }));
 
 router.get('/api/auth/identity/:key/start', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
@@ -81,7 +101,8 @@ router.get('/api/auth/identity/:key/start', apiLimiter, asyncHandler(async (req:
   if (!providerKey) throw Errors.validation('Identity provider key is required');
   const provider = await identityProviderService.getByKey(providerKey, req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
-  await startOidcLogin(req, res, provider);
+  if (provider.protocol === 'saml') await startSamlLogin(req, res, provider);
+  else await startOidcLogin(req, res, provider);
 }));
 
 router.get('/api/auth/identity/callback', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
@@ -102,6 +123,36 @@ router.get('/api/auth/identity/callback', apiLimiter, asyncHandler(async (req: R
   const user = await identityProviderProvisioningService.provisionOidcUser(provider, claims);
   if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
   await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'oidc' } }));
+  const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: config.jwtAccessTokenExpires * 1000, path: '/' };
+  res.cookie('accessToken', generateAccessToken(user as any), cookieOptions);
+  res.cookie('refreshToken', generateRefreshToken(user as any), { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.redirect(getSsoRedirectUrl(parsed));
+}));
+
+router.post('/api/auth/providers/saml/callback', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const samlResponse = typeof req.body?.SAMLResponse === 'string' ? req.body.SAMLResponse : '';
+  const relayState = typeof req.body?.RelayState === 'string' ? req.body.RelayState : '';
+  if (!samlResponse) throw Errors.validation('Missing SAMLResponse');
+  const parsed = parseSignedSamlState(relayState);
+  if (!parsed?.identityProviderKey) throw Errors.unauthorized('Identity provider login has expired');
+  const provider = await identityProviderService.getByKey(parsed.identityProviderKey, parsed.identityProviderTenantId || null);
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  requireDirectSaml(provider);
+  if (parsed.providerId && parsed.providerId !== provider.id) throw Errors.unauthorized('Identity provider state does not match the selected provider');
+  const rawConfiguration = configuration(provider);
+  const profile = await genericSamlService.validatePostResponse(rawConfiguration, samlResponse);
+  const identity = genericSamlService.extractUserClaims(rawConfiguration, profile);
+  const user = await identityProviderProvisioningService.provisionSamlUser(provider, {
+    subjectId: identity.subjectId,
+    email: identity.email,
+    displayName: identity.displayName,
+    firstName: identity.firstName,
+    lastName: identity.lastName,
+    directoryTenantId: identity.directoryTenantId || provider.directoryTenantId,
+    claims: identity.claims,
+  });
+  if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
+  await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'saml' } }));
   const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: config.jwtAccessTokenExpires * 1000, path: '/' };
   res.cookie('accessToken', generateAccessToken(user as any), cookieOptions);
   res.cookie('refreshToken', generateRefreshToken(user as any), { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });

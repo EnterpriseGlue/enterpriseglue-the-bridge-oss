@@ -6,10 +6,12 @@ import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import type { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import type { OidcIdentityClaims } from './GenericOidcService.js';
+import { getIdentityProviderAdapter, type IdentityProviderType } from './IdentityProviderAdapter.js';
+import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
 
 export interface ProvisionedIdentityUser { id: string; email: string; firstName: string | null; lastName: string | null; platformRole: string; isActive: boolean; }
 export interface ProvisionIdentityInput {
-  providerType: 'oidc' | 'ldap'; subjectId: string; email: string; emailVerified: boolean; displayName?: string | null;
+  providerType: IdentityProviderType; subjectId: string; email: string; emailVerified: boolean; displayName?: string | null;
   firstName?: string | null; lastName?: string | null; directoryTenantId?: string | null; claims: Record<string, unknown>;
 }
 
@@ -27,6 +29,10 @@ class IdentityProviderProvisioningService {
 
   async provisionLdapUser(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>): Promise<ProvisionedIdentityUser> {
     return this.provision(provider, { ...input, providerType: 'ldap', emailVerified: true });
+  }
+
+  async provisionSamlUser(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>): Promise<ProvisionedIdentityUser> {
+    return this.provision(provider, { ...input, providerType: 'saml', emailVerified: true });
   }
 
   private async provision(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisionedIdentityUser> {
@@ -53,6 +59,15 @@ class IdentityProviderProvisioningService {
       await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
         tenantId: provider.tenantId, providerId: provider.id, providerType: input.providerType, providerSubject: input.subjectId, subjectClaim: input.providerType === 'ldap' ? 'directory_id' : 'sub', providerTenantId: input.directoryTenantId || provider.directoryTenantId, userId: user.id, email, displayName: input.displayName || null, firstName: input.firstName || null, lastName: input.lastName || null, claims: input.claims, now,
       });
+      const normalizedIdentity = getIdentityProviderAdapter(input.providerType).normalizeIdentity({
+        providerKey: provider.id,
+        subjectId: input.subjectId,
+        claims: input.claims,
+        email,
+        directoryTenantId: input.directoryTenantId || provider.directoryTenantId,
+        observedAt: now,
+      });
+      await identityEntitlementMappingService.syncMembershipsInStore(manager, user.id, provider.tenantId, normalizedIdentity);
       return { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, platformRole: user.platformRole, isActive: user.isActive };
     });
   }

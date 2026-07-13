@@ -147,6 +147,21 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     }).success).toBe(false);
   });
 
+  it('requires complete direct SAML runtime configuration with a secret reference', () => {
+    const provider = {
+      key: 'customer-saml', type: 'saml', authenticationMode: 'direct', sync: { triggers: ['login'] },
+      saml: {
+        entityId: 'enterpriseglue-ai',
+        callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback',
+        ssoUrl: 'https://idp.example.test/sso',
+        signingCertificateRef: 'EG_SAML_SIGNING_CERT',
+        nameIdAttribute: 'nameID',
+      },
+    };
+    expect(ConfigIdentityProvidersFileSchema.safeParse({ identityProviders: [provider] }).success).toBe(true);
+    expect(ConfigIdentityProvidersFileSchema.safeParse({ identityProviders: [{ ...provider, saml: { ...provider.saml, signingCertificateRef: undefined } }] }).success).toBe(false);
+  });
+
   it('canonicalizes object key order but preserves array order for exact preview hashes', () => {
     const left = { metadata: { owner: 'iam', key: 'acme' }, imports: ['./roles.json', './groups.json'] };
     const right = { imports: ['./roles.json', './groups.json'], metadata: { key: 'acme', owner: 'iam' } };

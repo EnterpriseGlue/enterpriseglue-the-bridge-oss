@@ -30,7 +30,7 @@ interface SsoProviderButton {
 interface IdentityProviderLoginOption {
   id: string;
   key: string;
-  protocol: 'oidc' | 'ldap';
+  protocol: 'oidc' | 'saml' | 'ldap';
   loginMethod: 'redirect' | 'password';
 }
 

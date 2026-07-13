@@ -1,5 +1,6 @@
 import type { Request } from 'express';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { signSamlRelayState, verifySamlRelayState } from '@enterpriseglue/shared/utils/samlRelayState.js';
 
 export type SsoProviderType = 'microsoft' | 'saml' | 'oidc' | 'ldap';
 
@@ -73,6 +74,16 @@ export function buildSsoState(req: Request, providerId?: string, identityProvide
   return Buffer.from(JSON.stringify(payload)).toString('base64');
 }
 
+/**
+ * SAML POST callbacks are cross-site and therefore cannot rely on a Lax
+ * cookie. The signed RelayState keeps provider/tenant/return-path binding
+ * intact without relaxing the session cookie policy.
+ */
+export function buildSignedSamlState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null }): string {
+  const state = buildSsoState(req, providerId, identityProvider);
+  return signSamlRelayState(state);
+}
+
 export function appendSsoStartQuery(req: Request, startPath: string): string {
   const params = new URLSearchParams();
   const tenantSlug = sanitizeTenantSlug(req.query.tenantSlug);
@@ -113,6 +124,10 @@ export function parseSsoState(rawState: unknown): SsoState | null {
   } catch {
     return null;
   }
+}
+
+export function parseSignedSamlState(rawState: unknown): SsoState | null {
+  return parseSsoState(verifySamlRelayState(rawState));
 }
 
 export function getSsoReturnPath(state: SsoState | null): string {

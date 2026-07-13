@@ -121,7 +121,7 @@ The 2026-07-12 codebase review found that the implemented RBAC foundation is a u
 | --- | --- | --- |
 | P0 | `role_assignments` still requires legacy `user_id`; its uniqueness constraint uses user/resource/source-mapping compatibility fields rather than principal/scope/source lineage. | Make `principal_type`, `principal_id`, `role_id`, `scope_type`, `scope_id`, `source`, and `source_ref` the canonical non-null uniqueness contract. Remove user/resource aliases from new writes and evaluation. |
 | P0 | Legacy platform admin, project/member, engine/member, owner/delegate fallbacks still grant permissions and sync into RBAC. | Keep accountable owner metadata, but remove legacy authorization grants and `syncLegacyRoleAssignments` after greenfield seeding and UI/API migration. All authorization must come from scoped assignments and policies. |
-| P0 | Provider-neutral direct OIDC now has a provider-key-bound start/callback flow with PKCE, nonce, discovery/JWKS validation, and normalized identity provisioning. Microsoft/Google legacy flows and direct LDAP still need migration to the same provider lifecycle. | Complete direct LDAP and migrate remaining protocol starts/callbacks while retaining the current compatibility routes until their replacements pass parity. |
+| P0 | Provider-neutral OIDC, SAML, and direct LDAP now have exact-provider-bound login flows and normalized identity provisioning. Microsoft/Google remain legacy-only compatibility flows. | Migrate Microsoft/Google while retaining their compatibility routes until provider-neutral replacements pass parity. |
 | P0 | `User` has provider-specific Entra/Google columns but no general external identity link. Normalized identity snapshots are diagnostics, not a safe account-link model. | Add `external_identities` with unique tenant/provider/subject -> user linkage. Keep entitlement snapshots separate. Remove provider-specific user identity columns from the target model. |
 | P0 | Provider `tenant_id` represents an external directory tenant while authorization entities use `tenant_id` as the EnterpriseGlue tenant boundary. | Split `tenantId` for EnterpriseGlue scope from `directoryTenantId`/issuer-specific configuration. Never overload the same field. |
 | P0 | SSO provider secrets use reversible base64 marking and engine `password_enc` is consumed as plaintext by runtime clients. | Add one secret resolver/encryption boundary for UI, JSON config, and runtime. Production APIs store encrypted local values or opaque external refs; they never persist resolved plaintext. |
@@ -141,7 +141,7 @@ The 2026-07-12 codebase review found that the implemented RBAC foundation is a u
 - [x] ✅ Keep navigation permission snapshots coarse; runtime-resource visibility is server-filtered.
 - [x] ✅ Make identity mappings group-first. Provider default access is represented as an `exists` mapping to an internal group, not a provider `defaultRole` mutation.
 - [x] ✅ Treat the current SSO platform-role and direct-engine mapping models as migration inputs, not parallel target models. Product wizards may create a managed internal group plus scoped assignment, but runtime lineage stays entitlement -> group -> assignment.
-- [ ] ⬜ Require exact provider-id-bound login and reconciliation for every protocol. Generic OIDC is exact-provider bound; legacy Microsoft/Google and direct LDAP remain pending.
+- [ ] ⬜ Require exact provider-id-bound login and reconciliation for every protocol. Provider-neutral OIDC, SAML, and direct LDAP are exact-provider bound; legacy Microsoft/Google reconciliation remains pending.
 - [x] ✅ Require a real secret resolver/encryption service before config bundle apply can handle provider or engine credentials.
 - [x] ✅ Make the Phase 0 alignment gate a prerequisite for Phase 1 config schemas and runtime-resource persistence.
 
@@ -364,7 +364,7 @@ The production bundle now needs these object families:
 | --- | --- | --- |
 | `roles.json` and permissions | Custom role/permission CRUD and role source lineage exist | Add template expansion, source-ownership enforcement, permission diff, and sensitive-risk validation. |
 | `groups.json` | Internal group CRUD exists | Add config ownership and stable references from identity mappings and assignments. |
-| `identity-providers.json` | Provider-neutral OIDC/SAML/LDAP persistence and config apply exist | Add protocol adapters, secret resolution, sync policy execution, and connectivity-test metadata. |
+| `identity-providers.json` | Provider-neutral OIDC/SAML/LDAP persistence, config apply, direct-login adapters, secret resolution, and connection testing exist | Add provider-API reconciliation beyond LDAP and migrate legacy Microsoft/Google login. |
 | `identity-mappings.json` | SSO group mappings exist | Compile normalized external entitlements to internal groups independent of protocol. |
 | `engines.json` | Manual/external engine APIs exist | Add `runtimeAccessScope`, deployment integration, first-class `connectionMode`, endpoint-auth policy validation, source ownership, and config-safe secret refs. |
 | `engine-sets.json` | Engine Set CRUD/materialization exists | Add deterministic config keys and previewed selector materialization. |
@@ -1114,7 +1114,7 @@ Protocol-specific fields remain inside their adapter block:
 | Provider type | Required configuration examples |
 | --- | --- |
 | OIDC | `issuerUrl`, `clientId`, `clientSecretRef`, callback, scopes, claim/userinfo/group-fetch settings, expected issuer/audience. |
-| SAML | Metadata URL/XML reference, entity id, callback/ACS, signing/encryption certificate refs, NameID and group attribute names. |
+| SAML | Entity ID, callback/ACS, IdP SSO URL, signing-certificate reference, optional metadata URL/XML reference, signature algorithm, and NameID/email/group attribute names. |
 | LDAP | LDAPS URL, bind DN/password ref, user/group bases and filters, immutable id attributes, membership mode, paging, nested-group policy, TLS trust ref. |
 
 The bundle schema must reject protocol fields outside the selected adapter block and must never return resolved secret values during preview, export, diagnostics, or test-connection responses.
@@ -1134,7 +1134,7 @@ LDAP may be used in either of two ways:
 - [x] ✅ Add provider-neutral entitlement reconciliation that creates `identity_provider` group memberships with mapping lineage and removes only the exact mapping-owned row in authoritative mode.
 - [ ] ⬜ Preserve manual, API, automation, and other-provider memberships during identity reconciliation.
 - [x] ✅ Run direct LDAP synchronization at login, through an audited manual provider action, and through the bounded scheduled reconciliation poller. The provider interval is enforced by checkpoint leases; OIDC/SAML provider-API synchronization remains pending.
-- [x] ✅ Invoke provider-neutral entitlement-to-group reconciliation from the existing normalized identity provisioning path, so current OIDC-family and SAML login flows synchronize mapped memberships at login. LDAP transport and scheduled reconciliation remain in progress.
+- [x] ✅ Invoke provider-neutral entitlement-to-group reconciliation from the normalized identity provisioning path, so direct OIDC, SAML, and LDAP logins synchronize mapped memberships immediately. LDAP transport and scheduled reconciliation remain in progress.
 - [x] ✅ Add a bounded replay of sanitized normalized identity snapshots for selected providers, exposed as audited `POST /api/identity/providers/:key/replay-memberships` and invoked after config-managed mapping changes. It never contacts the provider, reports truncation/failures in the config-apply receipt, and lets mapping changes repair known provider-managed memberships without waiting for another login.
 - [ ] ⬜ Fail login closed when the configured provider requires authoritative entitlement synchronization and normalization or persistence fails.
 - [ ] ⬜ Keep additive and authoritative modes per mapping.
@@ -1788,7 +1788,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Add `IdentityProviderAdapter` plus OIDC, SAML, and LDAP adapter implementations; evolve `SsoNormalizedIdentityService`, `SsoGroupMappingService`, and `SsoSyncDiagnosticsService` into the provider-neutral orchestration path.
 - [x] ✅ Add a shared `SecretResolver` used by identity providers and engine connections; replace SSO base64 writes and direct engine credential consumption. Config preview/apply integration remains required before config apply is enabled.
 - [ ] ⬜ Add a shared engine `ConnectionResolver` used by health, metadata, deployment, Mission Control, and reconciliation calls. It must distinguish direct versus customer-sidecar endpoints without changing authorization semantics.
-- [ ] ⬜ Complete provider-id-bound auth start/callback orchestration for every protocol. Generic OIDC is implemented with provider-bound state, PKCE, nonce, discovery, JWKS verification, and normalized provisioning; direct LDAP supports LDAPS service lookup, user bind verification, and normalized group output. Legacy Microsoft/Google migration remains pending.
+- [ ] ⬜ Complete provider-id-bound auth start/callback orchestration for every protocol. Generic OIDC uses provider-bound state, PKCE, nonce, discovery, JWKS verification, and normalized provisioning; generic SAML uses signed RelayState and assertion verification; direct LDAP supports LDAPS service lookup, user bind verification, and normalized group output. Legacy Microsoft/Google migration remains pending.
 - [ ] ⬜ Converge platform-role, group, and direct-engine SSO mapping services into group-first identity mappings; UI convenience flows create a managed internal group plus normal scoped assignment.
 - [x] ✅ Add shared runtime inventory, runtime-resource-set materialization, and deployment-receipt services. Runtime authorization filtering and scheduled deployment reconciliation remain pending.
 - [ ] ⬜ Extend `DeploymentEligibilityService` only for deployment eligibility; do not mix deployment metadata discovery into the eligibility evaluator.
@@ -1843,9 +1843,11 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ `GET /api/identity/sync-runs` and `GET /api/identity/sync-runs/:id/events`
   - Exposes provider-neutral login/scheduled reconciliation diagnostics.
 - [x] ✅ `GET /api/auth/providers/enabled`
-  - Returns minimal provider-id-bound OIDC/LDAP direct-login options without secrets or mapping details. The login UI merges these options with legacy providers, redirects OIDC by provider id, and presents a dedicated direct-LDAP credential form.
-- [x] ✅ `GET /api/auth/providers/:providerId/start` for direct OIDC providers
-  - Starts OIDC login for the exact provider id and binds provider, tenant, redirect, nonce, and anti-replay state. Provider-neutral SAML start/callback remains pending.
+  - Returns minimal provider-id-bound OIDC/SAML/LDAP direct-login options without secrets or mapping details. The login UI merges these options with legacy providers, redirects OIDC/SAML by provider id, and presents a dedicated direct-LDAP credential form.
+- [x] ✅ `GET /api/auth/providers/:providerId/start` for direct OIDC and SAML providers
+  - Starts OIDC login for the exact provider id with PKCE and nonce. Starts SAML login with signed, expiring RelayState because cross-site SAML POST callbacks cannot safely depend on a Lax cookie. Both bind provider, tenant, and return path.
+- [x] ✅ `POST /api/auth/providers/saml/callback`
+  - Validates signed RelayState, validates the selected provider's signed SAML assertion, provisions the normalized identity, synchronizes internal-group mappings, and creates only the normal authenticated session cookies.
 - [x] ✅ `POST /api/auth/providers/:providerId/login`
   - Performs direct LDAP authentication only for providers configured with `authenticationMode = direct`; rate limits and generic credential errors are mandatory.
 - [ ] ⬜ `GET /engines-api/engines/:engineId/runtime-resources`
@@ -2106,7 +2108,7 @@ This phase is required because the current implementation still carries compatib
 
 - [ ] ⬜ Add `IdentityProvider`, `ExternalIdentity`, `ExternalIdentitySnapshot`, `IdentityEntitlementMapping`, `IdentitySyncRun`, and `IdentitySyncEvent` contracts with unambiguous EnterpriseGlue tenant and external directory fields.
 - [x] ✅ Add the provider-neutral `ExternalIdentity` account-link entity and service with unique tenant/provider/subject identity, user linkage, directory-tenant metadata, and active/last-seen lifecycle fields. Existing normalized SSO snapshots now maintain the link; provider and entitlement contract replacement remains in progress.
-- [ ] ⬜ Complete provider-id-bound OIDC/SAML start/callback flows and LDAP direct/claims-only modes. Generic OIDC and direct LDAP now support exact provider-id discovery/login; SAML compatibility remains and LDAP claims-only reconciliation remains pending.
+- [ ] ⬜ Complete provider-id-bound OIDC/SAML start/callback flows and LDAP direct/claims-only modes. Generic OIDC, generic SAML, and direct LDAP support exact-provider-id login; LDAP claims-only reconciliation and legacy Microsoft/Google migration remain pending.
 - [x] ✅ Bind SAML start/callback state and metadata generation to an optional exact provider id. Explicit-provider login resolves the same configured SAML provider for authorization redirect, assertion validation, and metadata; legacy no-provider SAML login remains compatible. Generic OIDC, Microsoft configuration migration, and LDAP modes remain pending.
 - [ ] ⬜ Replace provider `defaultRole` with an explicit default/internal-group mapping and converge all external access through groups plus scoped assignments.
 - [ ] ⬜ Define verified-email account-linking policy, collision handling, unlink/deactivate behavior, and break-glass local account behavior.
@@ -2129,7 +2131,7 @@ This phase is required because the current implementation still carries compatib
 Phase 0 exit criteria:
 
 - [ ] ⬜ No new authorization write uses a legacy user/role/member field.
-- [ ] ⬜ Provider login and reconciliation are exact-provider-id based for every protocol. Generic OIDC is executable; legacy Microsoft/Google and direct LDAP remain pending.
+- [ ] ⬜ Provider login and reconciliation are exact-provider-id based for every protocol. Provider-neutral OIDC, SAML, and direct LDAP are executable; legacy Microsoft/Google and provider-API reconciliation remain pending.
 - [ ] ⬜ Secrets are encrypted or externally referenced end to end.
 - [ ] ⬜ Config-manageable entities have deterministic keys and ownership metadata.
 - [ ] ⬜ Project-engine target ownership has one unambiguous effective row per pair.
@@ -2203,10 +2205,10 @@ Phase 0 exit criteria:
 
 ### Phase 4: Runtime Integration
 
-- [ ] ⬜ Ensure OIDC, SAML, and LDAP adapters normalize identities before mappings create provider-managed group memberships.
+- [x] ✅ Ensure direct OIDC, SAML, and LDAP adapters normalize identities before mappings create provider-managed group memberships at provisioning time.
 - [ ] ⬜ Ensure login and scheduled synchronization share one identity reconciliation service and diagnostics model.
 - [ ] ⬜ Enforce `enterpriseglue_authoritative` as the only active runtime authorization mode in v1.
-- [ ] ⬜ Ensure provider-created group memberships use `source = "identity_provider"` plus provider/mapping lineage for OIDC, SAML, and LDAP.
+- [x] ✅ Ensure provider-created group memberships use `source = "identity_provider"` plus provider/mapping lineage for direct OIDC, SAML, and LDAP provisioning.
 - [ ] ⬜ Ensure config-managed assignments use `source = "config"` and source lineage.
 - [x] ✅ Ensure Engine Set and Runtime Resource Set materialization refresh after config-managed engine creation or label changes.
 - [x] ✅ Add runtime resource inventory reconciliation after EnterpriseGlue deployments, engine registration/update synchronization, config-managed engine changes, and explicit admin reconciliation. Import/pipeline receipt ingestion remains pending.
@@ -2266,7 +2268,7 @@ Phase 0 exit criteria:
 - [x] ✅ Complete managed-by-config badges across Access Control and Engine UI surfaces. Engine inventory and registration detail show configuration ownership/provenance; config-locked engines are read-only and config-warn edits are marked as drift. Access Control roles, identity mappings, groups, memberships, role assignments, Engine Sets, and Engine Set assignment usage show `Managed by config`. Config-sourced groups/memberships, custom roles, project targets, and all non-manual Engine Sets reject manual mutation at the shared service boundary.
 - [x] ✅ Add the Role Library and single-role editor; it avoids page-level horizontal scrolling for normal role management. Legacy Access Control matrix removal remains pending.
 - [x] ✅ Complete role-editor sticky save/reset controls. Grouped permission accordions, shared sensitive-permission filtering, permission search, selected-only filtering, responsive checkboxes, system-role duplication, config ownership states, and permission selection during new-role creation are complete.
-- [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Direct LDAPS configuration now includes bind identity, secret reference, user/group base DNs, user filter, and membership lookup fields. The provider overflow menu exposes bounded stored-membership replay separately from LDAP directory reconciliation; replay persists an SSO synchronization run for diagnostics and the on-demand provider history panel reads `GET /api/identity/providers/:key/sync-runs`. The connection-test action performs LDAP bind/search, OIDC discovery, and bounded HTTPS SAML metadata entity-descriptor validation.
+- [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Direct SAML setup now requires its ACS URL, IdP SSO URL, signing-certificate reference, signature algorithm, and configurable subject/email/group attributes. Direct LDAPS configuration includes bind identity, secret reference, user/group base DNs, user filter, and membership lookup fields. The provider overflow menu exposes bounded stored-membership replay separately from LDAP directory reconciliation; replay persists an SSO synchronization run for diagnostics and the on-demand provider history panel reads `GET /api/identity/providers/:key/sync-runs`. The connection-test action performs LDAP bind/search, OIDC discovery, and bounded HTTPS SAML metadata entity-descriptor validation.
 - [x] ✅ Show engine labels such as country, domain, environment, and region in engine detail and expose the inventory's discovered `key=value` metadata labels as exact filters.
 - [x] ✅ Show the active `enterpriseglue_authoritative` runtime authorization mode in Platform Settings with explanatory copy. Unsupported later modes remain rejected by settings validation.
 - [x] ✅ Add a permission-gated Access Control > Runtime Resources tab for bounded, sanitized process/decision inventory inspection and manual reconciliation.
