@@ -51,6 +51,7 @@ import { registerAssignmentRoutes } from './authz/assignments.js';
 import { registerProjectEngineTargetRoutes } from './authz/project-engine-targets.js';
 import { registerAuditRoutes } from './authz/audit.js';
 import { isExternalEngineTenantVisible } from './authz/external-engine-tenant.js';
+import { parseExternalEngineJson, parseExternalEngineLabels } from './authz/external-engine-serialization.js';
 
 // Validation schemas
 const authzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
@@ -347,25 +348,6 @@ function requireTargetTransferAccess(req: Request, res: Response, next: NextFunc
   return requirePlatformAction('platform.project-engine-targets.manage')(req, res, next);
 }
 
-function parseJsonObject(value: string | null | undefined): Record<string, unknown> | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-function parseEngineLabels(labelsJson: string | null | undefined): Record<string, string> {
-  const parsed = parseJsonObject(labelsJson);
-  if (!parsed) return {};
-  return Object.fromEntries(
-    Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
-  );
-}
-
 function normalizeExternalSystemKey(name: string): string {
   return name.trim().toLowerCase()
     .replace(/[^a-z0-9._-]+/g, '-')
@@ -387,7 +369,7 @@ function fieldOwnershipToJson(ownership?: EngineFieldOwnership | null): string {
 }
 
 function parseFieldOwnership(value: string | null | undefined): EngineFieldOwnership {
-  const parsed = parseJsonObject(value);
+  const parsed = parseExternalEngineJson(value);
   if (!parsed) return { ...DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP };
   return normalizeFieldOwnership(Object.fromEntries(
     Object.entries(parsed).filter((entry): entry is [string, 'manual' | 'external'] => entry[1] === 'manual' || entry[1] === 'external')
@@ -395,7 +377,7 @@ function parseFieldOwnership(value: string | null | undefined): EngineFieldOwner
 }
 
 function parseExternalEngineCapabilities(value: string | null | undefined): Record<string, unknown> | null {
-  const parsed = parseJsonObject(value);
+  const parsed = parseExternalEngineJson(value);
   if (!parsed) return null;
   const operations = Array.isArray(parsed.operations)
     ? Array.from(new Set(parsed.operations.filter((operation): operation is string => typeof operation === 'string'))).sort()
@@ -832,7 +814,7 @@ router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatfo
             baseUrl: engine.baseUrl,
             type: engine.type,
             externalId: registration.externalId,
-            labels: parseEngineLabels(registration.labelsJson),
+            labels: parseExternalEngineLabels(registration.labelsJson),
             registrationSource: registration.registrationSource,
             apiClientId: registration.apiClientId,
             externalSystemId: registration.externalSystemId,
@@ -874,7 +856,7 @@ router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatfo
         baseUrl: engine.baseUrl,
         type: engine.type,
         externalId: engine.externalId,
-        labels: parseEngineLabels(engine.labelsJson),
+        labels: parseExternalEngineLabels(engine.labelsJson),
         registrationSource: engine.registrationSource,
         apiClientId: null,
         externalSystemId: engine.externalSystemId,
@@ -923,7 +905,7 @@ router.get('/api/authz/external-engines/:id/audit', apiLimiter, requireAuth, req
       resourceId: entry.resourceId,
       ipAddress: entry.ipAddress,
       userAgent: entry.userAgent,
-      details: parseJsonObject(entry.details),
+      details: parseExternalEngineJson(entry.details),
       createdAt: entry.createdAt,
     })));
   } catch (error: any) {
