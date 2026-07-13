@@ -60,7 +60,7 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
-import { assignmentResourceTypeOptions, DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
+import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -2488,23 +2488,9 @@ function RoleAssignmentsPanel({
           id="assignment-principal-type"
           titleText="Principal"
           label="Select principal"
-          items={[
-            { id: 'user', label: 'User' },
-            { id: 'group', label: 'Group' },
-            { id: 'api_client', label: 'API client' },
-            { id: 'service_account', label: 'Service account' },
-          ]}
+          items={ASSIGNMENT_PRINCIPAL_OPTIONS}
           itemToString={(item) => item?.label || ''}
-          selectedItem={{
-            id: form.principalType,
-            label: form.principalType === 'api_client'
-              ? 'API client'
-              : form.principalType === 'service_account'
-                ? 'Service account'
-                : form.principalType === 'group'
-                  ? 'Group'
-                  : 'User',
-          }}
+          selectedItem={ASSIGNMENT_PRINCIPAL_OPTIONS.find((item) => item.id === form.principalType) || ASSIGNMENT_PRINCIPAL_OPTIONS[0]}
           onChange={({ selectedItem }) => {
             const principalType = (selectedItem?.id || 'user') as AssignmentPrincipalType;
             setForm((current) => ({
