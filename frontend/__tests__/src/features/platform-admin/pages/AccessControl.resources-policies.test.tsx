@@ -359,6 +359,21 @@ describe('AccessControl resources and policies', () => {
     expect(screen.getByRole('button', { name: /Evaluate/i })).toBeDisabled();
   });
 
+  it('shows runtime resource selector fields for effective access', () => {
+    render(<AccessControl />);
+
+    fireEvent.click(screen.getByRole('tab', { name: /Effective Access/i }));
+    const resourceTypeDropdown = document.querySelector('#effective-resource-type button');
+    expect(resourceTypeDropdown).not.toBeNull();
+    fireEvent.click(resourceTypeDropdown as HTMLButtonElement);
+    fireEvent.click(screen.getByText('Runtime resource'));
+
+    expect(document.querySelector('#effective-runtime-engine-id')).toBeInTheDocument();
+    expect(document.querySelector('#effective-runtime-resource-kind')).toBeInTheDocument();
+    expect(document.querySelector('#effective-runtime-resource-key')).toBeInTheDocument();
+    expect(document.querySelector('#effective-runtime-tenant-id')).toBeInTheDocument();
+  });
+
   it('renders effective access SSO Engine Set lineage', () => {
     evaluateAccessState.data = {
       allowed: true,
