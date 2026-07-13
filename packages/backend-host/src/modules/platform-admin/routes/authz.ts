@@ -943,7 +943,7 @@ router.post('/api/authz/external-engines/:id/decommission', apiLimiter, requireA
     const registrationRepo = dataSource.getRepository(ExternalEngineRegistration);
     const materializationRepo = dataSource.getRepository(EngineSetMaterialization);
     const engine = await engineRepo.findOneBy({ id: String(req.params.id) });
-    if (!engine) throw Errors.notFound('Engine');
+    if (!engine || !tenantVisible(engine.tenantId, req.tenant?.tenantId || null)) throw Errors.notFound('Engine');
     if (engine.registrationSource !== 'external_api' && !engine.externalId) {
       throw Errors.validation('Only externally registered engines can be decommissioned');
     }
@@ -999,7 +999,7 @@ router.post('/api/authz/external-engines/:id/reactivate', apiLimiter, requireAut
     const engineRepo = dataSource.getRepository(Engine);
     const registrationRepo = dataSource.getRepository(ExternalEngineRegistration);
     const engine = await engineRepo.findOneBy({ id: String(req.params.id) });
-    if (!engine) throw Errors.notFound('Engine');
+    if (!engine || !tenantVisible(engine.tenantId, req.tenant?.tenantId || null)) throw Errors.notFound('Engine');
     if (engine.registrationSource !== 'external_api' && !engine.externalId) {
       throw Errors.validation('Only externally registered engines can be reactivated');
     }
@@ -1065,7 +1065,7 @@ router.post('/api/authz/external-engines/:id/reconcile', apiLimiter, requireAuth
     const engineRepo = dataSource.getRepository(Engine);
     const registrationRepo = dataSource.getRepository(ExternalEngineRegistration);
     const engine = await engineRepo.findOneBy({ id: String(req.params.id) });
-    if (!engine) throw Errors.notFound('Engine');
+    if (!engine || !tenantVisible(engine.tenantId, req.tenant?.tenantId || null)) throw Errors.notFound('Engine');
     if (engine.registrationSource !== 'external_api' && !engine.externalId) {
       throw Errors.validation('Only externally registered engines can be reconciled');
     }
