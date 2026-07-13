@@ -247,6 +247,8 @@ const ENGINE_UPDATE_FIELD_GROUPS: Record<string, string> = {
   environmentTagId: 'environment',
   runtimeAccessScope: 'metadata',
   deploymentIntegration: 'metadata',
+  metadataDiscoveryEnabled: 'metadata',
+  pipelineReceiptEnabled: 'metadata',
 }
 
 const EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD: Record<string, string> = {
@@ -265,6 +267,8 @@ const EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD: Record<string, string> = {
   environmentTagId: 'environmentTagId',
   runtimeAccessScope: 'runtimeAccessScope',
   deploymentIntegration: 'deploymentIntegration',
+  metadataDiscoveryEnabled: 'metadataDiscoveryEnabled',
+  pipelineReceiptEnabled: 'pipelineReceiptEnabled',
 }
 
 const ENGINE_SECRET_UPDATE_FIELDS = [
