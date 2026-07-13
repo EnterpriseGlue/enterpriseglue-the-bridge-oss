@@ -194,7 +194,7 @@ export class DeploymentEligibilityService {
 
       const engine = await dataSource.getRepository(Engine).findOne({
         where: { id: input.engineId },
-        select: ['id', 'tenantId', 'type', 'baseUrl', 'environmentTagId', 'environmentLocked'],
+        select: ['id', 'tenantId', 'type', 'baseUrl', 'environmentTagId', 'environmentLocked', 'deploymentIntegration'],
       });
       if (!engine || !this.isTenantVisible(engine.tenantId, input.tenantId)) {
         checks.push({
@@ -205,6 +205,19 @@ export class DeploymentEligibilityService {
         return deny(input, mode, checks);
       }
       checks.push({ id: 'engine.exists', allowed: true, reason: 'Engine exists' });
+
+      const usesEnterpriseGlueDeployment = mode === 'manual' || mode === 'ci';
+      const isDirectEngine = engine.deploymentIntegration === 'direct_engine';
+      checks.push({
+        id: 'engine.integration.proxy',
+        allowed: !usesEnterpriseGlueDeployment || !isDirectEngine,
+        reason: !usesEnterpriseGlueDeployment || !isDirectEngine
+          ? 'Engine accepts EnterpriseGlue-managed deployment for this mode'
+          : 'Engine is configured for direct deployment through a customer pipeline',
+        remediation: !usesEnterpriseGlueDeployment || !isDirectEngine
+          ? undefined
+          : 'Deploy through the customer pipeline and submit a pipeline receipt for lineage.',
+      });
 
       const engineConfigured = typeof engine.baseUrl === 'string' && engine.baseUrl.trim().length > 0;
       checks.push({

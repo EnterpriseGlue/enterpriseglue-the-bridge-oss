@@ -24,6 +24,7 @@ describe('deploymentEligibilityService', () => {
     engineType?: string | null;
     environmentLocked?: boolean;
     manualDeployAllowed?: boolean;
+    deploymentIntegration?: string;
   } = {}) {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
@@ -36,6 +37,7 @@ describe('deploymentEligibilityService', () => {
             type: options.engineType ?? 'camunda7',
             environmentTagId: 'env-prod',
             environmentLocked: Boolean(options.environmentLocked),
+            deploymentIntegration: options.deploymentIntegration ?? 'enterpriseglue_proxy',
           }),
         };
         if (entity === EnvironmentTag) return {
@@ -133,6 +135,20 @@ describe('deploymentEligibilityService', () => {
 
     expect(result.allowed).toBe(false);
     expect(result.reasons).toContain('Manual deployment is disabled for Production');
+  });
+
+  it('denies EnterpriseGlue manual deployment for direct-engine targets but keeps API eligibility for receipts', async () => {
+    mockDataSource({ deploymentIntegration: 'direct_engine' });
+    vi.spyOn(permissionService, 'hasPermission').mockResolvedValue(true);
+    vi.spyOn(projectEngineTargetService, 'hasActiveTarget').mockResolvedValue(true);
+
+    const manual = await deploymentEligibilityService.evaluate({ userId: 'user-1', projectId: 'project-1', engineId: 'engine-1', mode: 'manual' });
+    const api = await deploymentEligibilityService.evaluate({ userId: 'user-1', projectId: 'project-1', engineId: 'engine-1', mode: 'api' });
+
+    expect(manual.allowed).toBe(false);
+    expect(manual.checks).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'engine.integration.proxy', allowed: false })]));
+    expect(manual.reasons).toContain('Engine is configured for direct deployment through a customer pipeline');
+    expect(api.checks).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'engine.integration.proxy', allowed: true })]));
   });
 
   it('denies deployment when the engine has no active connection endpoint', async () => {
