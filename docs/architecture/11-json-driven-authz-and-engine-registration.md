@@ -2283,7 +2283,7 @@ Phase 0 exit criteria:
 
 ### Phase 7: CI/CD Tooling
 
-- [ ] ⬜ Add CLI package or script for validate, preview, apply, and export.
+- [x] ✅ Add `pnpm authz:config` CLI commands for validate, preview, hash-bound apply, and export. It uses machine credentials, prints JSON for CI, and returns distinct nonzero usage/validation/request exit codes.
 - [ ] ⬜ Add GitHub Actions example.
 - [ ] ⬜ Add Docker/Kubernetes secret reference examples.
 - [ ] ⬜ Add documentation for least-privilege API client creation.
