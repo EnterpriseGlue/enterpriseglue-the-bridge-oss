@@ -2130,8 +2130,8 @@ registry.registerPath({
   method: 'post',
   path: '/api/identity/providers/{key}/replay-memberships',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/replay-memberships'),
-  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ limit: z.number().int().min(1).max(5000).optional() }) } } } },
-  responses: { 200: { description: 'Replay stored provider identity memberships', content: { 'application/json': { schema: z.object({ runId: z.string().nullable(), scanned: z.number().int().nonnegative(), created: z.number().int().nonnegative(), removed: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), truncated: z.boolean() }) } } }, 404: { description: 'Identity provider not found' } },
+  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ limit: z.number().int().min(1).max(5000).optional(), cursor: z.string().min(1).max(512).optional() }) } } } },
+  responses: { 200: { description: 'Replay stored provider identity memberships', content: { 'application/json': { schema: z.object({ runId: z.string().nullable(), scanned: z.number().int().nonnegative(), created: z.number().int().nonnegative(), removed: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), truncated: z.boolean(), nextCursor: z.string().nullable() }) } } }, 404: { description: 'Identity provider not found' } },
 });
 registry.registerPath({
   method: 'delete',

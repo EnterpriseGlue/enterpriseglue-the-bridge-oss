@@ -15,7 +15,7 @@ const router = Router();
 const schema = z.object({ key: z.string().min(1).max(128), protocol: z.enum(['oidc', 'saml', 'ldap']), isEnabled: z.boolean().optional(), authenticationMode: z.enum(['direct', 'claims_only']).optional(), directoryTenantId: z.string().optional().nullable(), configuration: z.record(z.string(), z.unknown()), sync: z.record(z.string(), z.unknown()).optional(), ownershipMode: z.string().max(64).optional(), sourceRef: z.string().optional().nullable() });
 
 const providerKeySchema = z.string().min(1).max(128);
-const replayMembershipsSchema = z.object({ limit: z.number().int().min(1).max(5000).optional() });
+const replayMembershipsSchema = z.object({ limit: z.number().int().min(1).max(5000).optional(), cursor: z.string().min(1).max(512).optional() });
 const syncRunsQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(10) });
 
 router.get('/api/identity/providers', requireAuth, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
@@ -70,7 +70,7 @@ router.post('/api/identity/providers/:key/replay-memberships', requireAuth, requ
   const tenantId = req.tenant?.tenantId || null;
   const runId = await ssoSyncDiagnosticsService.startRun({ tenantId, providerId: provider.id, trigger: 'manual', details: { source: 'identity_provider_membership_replay' } });
   try {
-    const result = await ssoNormalizedIdentityService.replayMemberships({ tenantId, providerIds: [provider.id], limit: input.limit });
+    const result = await ssoNormalizedIdentityService.replayMemberships({ tenantId, providerIds: [provider.id], limit: input.limit, cursor: input.cursor });
     await ssoSyncDiagnosticsService.completeRun(runId, { tenantId, providerId: provider.id, groupMembershipsCreated: result.created, groupMembershipsRemoved: result.removed, details: { source: 'identity_provider_membership_replay', ...result } });
     await logAudit({ action: 'identity.provider.memberships.replay', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, protocol: provider.protocol, runId, ...result } });
     res.json({ ...result, runId });

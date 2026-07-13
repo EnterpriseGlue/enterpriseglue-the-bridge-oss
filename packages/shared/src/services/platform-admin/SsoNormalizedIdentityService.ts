@@ -1,4 +1,4 @@
-import { DataSource, EntityManager, In, IsNull } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
@@ -29,6 +29,7 @@ export interface ReplayNormalizedIdentityMembershipsInput {
   tenantId?: string | null;
   providerIds: string[];
   limit?: number;
+  cursor?: string | null;
 }
 
 export interface ReplayNormalizedIdentityMembershipsResult {
@@ -37,6 +38,7 @@ export interface ReplayNormalizedIdentityMembershipsResult {
   removed: number;
   failed: number;
   truncated: boolean;
+  nextCursor: string | null;
 }
 
 function normalizeNullableText(value?: string | null): string | null {
@@ -76,6 +78,19 @@ function parseStoredClaims(value: string): SsoClaims {
   } catch {
     return {};
   }
+}
+
+function decodeReplayCursor(value?: string | null): { lastSeenAt: number; id: string } | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    if (!Number.isInteger(parsed?.lastSeenAt) || typeof parsed?.id !== 'string' || !parsed.id) throw new Error('Invalid cursor');
+    return { lastSeenAt: parsed.lastSeenAt, id: parsed.id };
+  } catch { throw new Error('Invalid replay cursor'); }
+}
+
+function encodeReplayCursor(identity: SsoNormalizedIdentity): string {
+  return Buffer.from(JSON.stringify({ lastSeenAt: identity.lastSeenAt, id: identity.id })).toString('base64url');
 }
 
 /**
@@ -124,19 +139,18 @@ class SsoNormalizedIdentityServiceClass {
    */
   async replayMemberships(input: ReplayNormalizedIdentityMembershipsInput): Promise<ReplayNormalizedIdentityMembershipsResult> {
     const providerIds = Array.from(new Set(input.providerIds.map((id) => id.trim()).filter(Boolean)));
-    if (providerIds.length === 0) return { scanned: 0, created: 0, removed: 0, failed: 0, truncated: false };
+    if (providerIds.length === 0) return { scanned: 0, created: 0, removed: 0, failed: 0, truncated: false, nextCursor: null };
 
     const limit = Math.min(Math.max(input.limit ?? 500, 1), 5000);
     const dataSource = await getDataSource();
-    const identities = await dataSource.getRepository(SsoNormalizedIdentity).find({
-      where: {
-        tenantId: input.tenantId ? input.tenantId : IsNull(),
-        providerId: In(providerIds),
-        providerStatus: 'active',
-      } as any,
-      order: { lastSeenAt: 'ASC' },
-      take: limit + 1,
-    });
+    const cursor = decodeReplayCursor(input.cursor);
+    const qb = dataSource.getRepository(SsoNormalizedIdentity).createQueryBuilder('identity')
+      .where('identity.providerStatus = :providerStatus', { providerStatus: 'active' })
+      .andWhere('identity.providerId IN (:...providerIds)', { providerIds });
+    if (input.tenantId) qb.andWhere('identity.tenantId = :tenantId', { tenantId: input.tenantId });
+    else qb.andWhere('identity.tenantId IS NULL');
+    if (cursor) qb.andWhere('(identity.lastSeenAt > :cursorSeen OR (identity.lastSeenAt = :cursorSeen AND identity.id > :cursorId))', { cursorSeen: cursor.lastSeenAt, cursorId: cursor.id });
+    const identities = await qb.orderBy('identity.lastSeenAt', 'ASC').addOrderBy('identity.id', 'ASC').take(limit + 1).getMany();
     const selected = identities.slice(0, limit);
     const result: ReplayNormalizedIdentityMembershipsResult = {
       scanned: selected.length,
@@ -144,6 +158,7 @@ class SsoNormalizedIdentityServiceClass {
       removed: 0,
       failed: 0,
       truncated: identities.length > limit,
+      nextCursor: identities.length > limit && selected.length > 0 ? encodeReplayCursor(selected[selected.length - 1]) : null,
     };
 
     for (const identity of selected) {

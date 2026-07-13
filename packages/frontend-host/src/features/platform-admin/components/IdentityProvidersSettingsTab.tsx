@@ -23,7 +23,7 @@ interface IdentityProvider {
   ownershipMode: string;
   sourceRef: string | null;
 }
-type MembershipReplayResult = { runId: string | null; scanned: number; created: number; removed: number; failed: number; truncated: boolean };
+type MembershipReplayResult = { runId: string | null; scanned: number; created: number; removed: number; failed: number; truncated: boolean; nextCursor: string | null };
 type SyncRun = { id: string; status: 'running' | 'success' | 'failed'; trigger: string; startedAt: number; completedAt: number | null; groupMembershipsCreated: number; groupMembershipsRemoved: number; errorMessage: string | null };
 
 type FormState = {
@@ -71,6 +71,7 @@ export default function IdentityProvidersSettingsTab() {
   const [error, setError] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<IdentityProvider | null>(null);
   const [replayResult, setReplayResult] = useState<{ providerKey: string; result: MembershipReplayResult } | null>(null);
+  const [replayCursors, setReplayCursors] = useState<Record<string, string | undefined>>({});
   const [historyProvider, setHistoryProvider] = useState<IdentityProvider | null>(null);
   const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', historyProvider?.key], queryFn: () => apiClient.get<SyncRun[]>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
 
@@ -87,7 +88,7 @@ export default function IdentityProvidersSettingsTab() {
   });
   const archive = useMutation({ mutationFn: (key: string) => apiClient.delete(`/api/identity/providers/${encodeURIComponent(key)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-providers'] }); setArchiveTarget(null); } });
   const reconcile = useMutation({ mutationFn: (key: string) => apiClient.post(`/api/identity/providers/${encodeURIComponent(key)}/reconcile`, {}), onError: (value: unknown) => setError(parseApiError(value, 'Unable to reconcile LDAP directory').message) });
-  const replayMemberships = useMutation({ mutationFn: (key: string) => apiClient.post<MembershipReplayResult>(`/api/identity/providers/${encodeURIComponent(key)}/replay-memberships`, {}), onSuccess: (result, key) => { setReplayResult({ providerKey: key, result }); setError(null); }, onError: (value: unknown) => setError(parseApiError(value, 'Unable to replay stored memberships').message) });
+  const replayMemberships = useMutation({ mutationFn: ({ key, cursor }: { key: string; cursor?: string }) => apiClient.post<MembershipReplayResult>(`/api/identity/providers/${encodeURIComponent(key)}/replay-memberships`, cursor ? { cursor } : {}), onSuccess: (result, input) => { setReplayResult({ providerKey: input.key, result }); setReplayCursors((current) => ({ ...current, [input.key]: result.nextCursor || undefined })); setError(null); }, onError: (value: unknown) => setError(parseApiError(value, 'Unable to replay stored memberships').message) });
 
   const startCreate = () => { setEditing(null); setForm(emptyForm()); setError(null); setOpen(true); };
   const startEdit = (provider: IdentityProvider) => { setEditing(provider); setForm(formForProvider(provider)); setError(null); setOpen(true); };
@@ -128,7 +129,7 @@ export default function IdentityProvidersSettingsTab() {
                     <GuardedOverflowMenuItem decision={manage} itemText="Edit" onClick={() => startEdit(provider)} />
                     <GuardedOverflowMenuItem decision={read} itemText="View sync history" onClick={() => setHistoryProvider(provider)} />
                     {provider.protocol === 'ldap' && <GuardedOverflowMenuItem decision={manage} itemText="Reconcile directory" disabled={!provider.isEnabled || reconcile.isPending} onClick={() => reconcile.mutate(provider.key)} />}
-                    <GuardedOverflowMenuItem decision={manage} itemText="Replay stored memberships" disabled={!provider.isEnabled || replayMemberships.isPending} onClick={() => replayMemberships.mutate(provider.key)} />
+                    <GuardedOverflowMenuItem decision={manage} itemText={replayCursors[provider.key] ? 'Continue membership replay' : 'Replay stored memberships'} disabled={!provider.isEnabled || replayMemberships.isPending} onClick={() => replayMemberships.mutate({ key: provider.key, cursor: replayCursors[provider.key] })} />
                     <GuardedOverflowMenuItem decision={manage} itemText="Archive" isDelete onClick={() => setArchiveTarget(provider)} />
                   </GuardedOverflowMenu></TableCell>
                 </TableRow>;
