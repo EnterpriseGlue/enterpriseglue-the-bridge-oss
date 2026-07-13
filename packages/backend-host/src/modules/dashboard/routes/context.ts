@@ -12,7 +12,6 @@ import {
   EnginePermissions,
   PlatformPermissions,
   ProjectPermissions,
-  engineService,
   permissionService,
   type CurrentUserPermissionsSnapshot,
   type Permission,
@@ -23,9 +22,9 @@ const r = Router();
 export type DashboardContext = {
   isPlatformAdmin: boolean;
   // Engine access
-  ownedEngineIds: string[];
-  delegatedEngineIds: string[];
-  accessibleEngineIds: string[]; // All engines user can see (owned + delegated + member)
+  ownedEngineIds: string[]; // Deprecated display metadata; authorization never reads it.
+  delegatedEngineIds: string[]; // Deprecated display metadata; authorization never reads it.
+  accessibleEngineIds: string[]; // Engines visible through the evaluator.
   runtimeScopedEngineIds: string[]; // Resource-aware engines visible through process or decision scope
   // Project access
   projectMemberships: Array<{
@@ -75,20 +74,8 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
   const projectRepo = dataSource.getRepository(Project);
   const tenantId = req.tenant?.tenantId;
 
-  const [userEngines, permissionSnapshot] = await Promise.all([
-    engineService.getUserEngines(userId, tenantId),
-    permissionService.getCurrentUserPermissions(userId, tenantId),
-  ]);
+  const permissionSnapshot = await permissionService.getCurrentUserPermissions(userId, tenantId);
   const isAdmin = hasPlatformPermission(permissionSnapshot.platform, PlatformPermissions.SETTINGS_MANAGE);
-  const engineIdsByRole = userEngines.reduce((acc, entry) => {
-    const role = String(entry.role);
-    const engineIds = acc.get(role) || [];
-    engineIds.push(entry.engine.id);
-    acc.set(role, engineIds);
-    return acc;
-  }, new Map<string, string[]>());
-  const ownedEngineIds = engineIdsByRole.get('owner') || [];
-  const delegatedEngineIds = engineIdsByRole.get('delegate') || [];
   const evaluatorEngineIds = permissionSnapshot.engines.map((engine) => engine.resourceId);
   const resourceAwareEngines = evaluatorEngineIds.length > 0
     ? await dataSource.getRepository(Engine).find({
@@ -118,7 +105,6 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
     return processes.length > 0 || decisions.length > 0 ? engine.id : null;
   }))).filter((id): id is string => Boolean(id));
   const accessibleEngineIds = Array.from(new Set([
-    ...userEngines.map((entry) => entry.engine.id),
     ...evaluatorEngineIds,
     ...runtimeVisibleEngineIds,
   ]));
@@ -152,7 +138,7 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
     role: legacyRoleByProjectId.get(projectId) || 'permission',
   }));
 
-  // Compute visibility flags from effective permissions, with legacy role output preserved above.
+  // Compute visibility only from evaluator-backed permission snapshots.
   const canViewActiveUsers =
     hasPlatformPermission(permissionSnapshot.platform, PlatformPermissions.USERS_VIEW) ||
     hasPlatformPermission(permissionSnapshot.platform, PlatformPermissions.USER_VIEW) ||
@@ -163,15 +149,10 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
     ProjectPermissions.FILES_VIEW,
     ProjectPermissions.DEPLOY,
   ]);
-  const hasLegacyProcessEngine = userEngines.some((entry) =>
-    ['owner', 'delegate', 'operator'].includes(String(entry.role))
-  );
-  const hasProjectMemberships = projectMemberships.length > 0;
-
   const context: DashboardContext = {
     isPlatformAdmin: isAdmin,
-    ownedEngineIds,
-    delegatedEngineIds,
+    ownedEngineIds: [],
+    delegatedEngineIds: [],
     accessibleEngineIds,
     runtimeScopedEngineIds: runtimeVisibleEngineIds,
     projectMemberships,
@@ -179,9 +160,9 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
     canViewActiveUsers: isAdmin || canViewActiveUsers,
     canViewAllProjects: isAdmin,
     canViewEngines: accessibleEngineIds.length > 0 || permissionSnapshot.engines.length > 0,
-    canViewProcessData: canViewEngineInstances || hasLegacyProcessEngine,
-    canViewDeployments: canViewEngineDeployments || canViewProjectDeployments || hasLegacyProcessEngine || hasProjectMemberships,
-    canViewMetrics: canViewEngineInstances || hasLegacyProcessEngine,
+    canViewProcessData: canViewEngineInstances,
+    canViewDeployments: canViewEngineDeployments || canViewProjectDeployments,
+    canViewMetrics: canViewEngineInstances,
   };
 
   res.json(context);

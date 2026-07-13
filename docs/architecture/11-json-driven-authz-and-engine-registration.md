@@ -1695,7 +1695,7 @@ Required UI changes:
 - [x] ✅ Replace `EngineSelector.tsx` hard-coded owner/delegate/operator filtering with the backend `engine.visibleCollection` result. The selector also resets a stale selected engine when backend visibility changes; runtime capability fields remain an incremental enhancement.
 - [ ] ⬜ Process, decision, instance, incident, job, batch, and migration lists show only authorized runtime resources.
 - [x] ✅ Dashboard engine and process widgets use authorized subsets: runtime-resource-visible engines enable dashboard process/metrics surfaces, engine discovery is evaluator-derived, and process counts come from the runtime-filtered process-instance endpoint. Project/file aggregate cleanup remains separate.
-- [ ] ⬜ Remove Dashboard legacy-role visibility fallbacks and project-member-only counts; use evaluator-visible project/engine collections and filtered runtime aggregations.
+- [x] ✅ Remove Dashboard legacy-role visibility fallbacks and project-member-only counts. Dashboard context now derives engine/process/deployment/metric visibility from evaluator snapshots and runtime-resource filtering; the deprecated owner/delegate response arrays remain empty for compatibility.
 - [ ] ⬜ Bulk actions show partial-denial diagnostics when selected rows span allowed and denied resources.
 - [ ] ⬜ Engine Detail > Access adds a `Runtime Resources` tab or section for process/decision resource sets, exact grants, and source lineage.
 - [ ] ⬜ Access Control Effective Access supports resource type `engine_runtime_resource` and input fields for engine, resource kind, resource key, and optional runtime tenant id.

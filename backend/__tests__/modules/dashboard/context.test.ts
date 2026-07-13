@@ -6,7 +6,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
 import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
-import { engineService, permissionService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { permissionService as actionPermissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
@@ -22,9 +22,6 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
-  engineService: {
-    getUserEngines: vi.fn(),
-  },
   permissionService: {
     getCurrentUserPermissions: vi.fn(),
     getVisibleRuntimeResources: vi.fn(),
@@ -101,7 +98,6 @@ describe('GET /api/dashboard/context', () => {
     vi.mocked(actionPermissionService.hasPermission).mockImplementation(async (permission: string) =>
       permission === 'platform:dashboard:view'
     );
-    vi.mocked(engineService.getUserEngines).mockResolvedValue([]);
     vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue(emptyPermissions());
     vi.mocked(permissionService.getVisibleRuntimeResources).mockResolvedValue([]);
   });
@@ -139,14 +135,10 @@ describe('GET /api/dashboard/context', () => {
 
     expect(response.status).toBe(403);
     expect(response.body.error).toContain('platform.dashboard.read');
-    expect(engineService.getUserEngines).not.toHaveBeenCalled();
     expect(permissionService.getCurrentUserPermissions).not.toHaveBeenCalled();
   });
 
-  it('returns context with engine ownership', async () => {
-    vi.mocked(engineService.getUserEngines).mockResolvedValue([
-      { engine: { id: 'engine-1' } as any, role: 'owner', environmentTag: null },
-    ]);
+  it('returns context with scoped engine permissions', async () => {
     vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
       ...emptyPermissions(),
       engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
@@ -166,12 +158,12 @@ describe('GET /api/dashboard/context', () => {
     const response = await request(app).get('/api/dashboard/context');
 
     expect(response.status).toBe(200);
-    expect(response.body.ownedEngineIds).toEqual(['engine-1']);
+    expect(response.body.ownedEngineIds).toEqual([]);
     expect(response.body.canViewEngines).toBe(true);
     expect(response.body.canViewProcessData).toBe(true);
   });
 
-  it('returns context with project memberships', async () => {
+  it('returns project membership metadata without treating it as deployment permission', async () => {
     const projectMemberRepo = { find: vi.fn().mockResolvedValue([
       { projectId: 'project-1', role: 'owner' }
     ]) };
@@ -193,7 +185,7 @@ describe('GET /api/dashboard/context', () => {
     expect(response.status).toBe(200);
     expect(response.body.projectMemberships).toHaveLength(1);
     expect(response.body.projectMemberships[0].projectName).toBe('Test Project');
-    expect(response.body.canViewDeployments).toBe(true);
+    expect(response.body.canViewDeployments).toBe(false);
   });
 
   it('derives dashboard visibility from scoped permission snapshots', async () => {
@@ -203,9 +195,6 @@ describe('GET /api/dashboard/context', () => {
       projects: [{ resourceId: 'project-2', permissions: ['project:deploy'] }],
       engines: [{ resourceId: 'engine-2', permissions: ['engine:deploy:view'] }],
     });
-    vi.mocked(engineService.getUserEngines).mockResolvedValue([
-      { engine: { id: 'engine-2' } as any, role: 'custom', environmentTag: null },
-    ]);
     const projectMemberRepo = { find: vi.fn().mockResolvedValue([]) };
     const projectRepo = { find: vi.fn().mockResolvedValue([
       { id: 'project-2', name: 'Scoped Project' },
