@@ -38,6 +38,19 @@ import { getPermissionRiskForKey } from '../../../shared/auth/permissionRisk';
 import { usePlatformSyncSettings } from '../hooks/usePlatformSyncSettings';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import {
+  formatCapabilityDiagnostics,
+  formatEffectiveAccessGrant,
+  formatEffectiveAccessLineage,
+  formatEffectiveAccessPrincipal,
+  formatEffectiveAccessScope,
+  formatEngineSetMatchedBy,
+  formatEngineSetSelector,
+  formatFieldOwnership,
+  formatLabels,
+  formatReconcileSummary,
+  formatStatusLabel,
+} from './accessControlPresentation';
+import {
   useArchiveCustomRole,
   useArchiveExternalEngineSystem,
   useArchiveProjectEngineTarget,
@@ -123,9 +136,7 @@ import {
   type AuthzAuditEntry,
   type ExternalEngineRegistration,
   type ExternalEngineAuditAction,
-  type ExternalEngineCapabilityDiagnostics,
   type ExternalEngineRegistrationAuditEntry,
-  type ExternalEngineReconcileResponse,
   type ExternalEngineSystem,
   type ExternalEngineSystemPayload,
   type EffectiveAccessResult,
@@ -971,30 +982,6 @@ function platformRoleLabel(role: SsoClaimsMapping['targetRole'] | string) {
   return SSO_PLATFORM_TARGET_ROLES.find((item) => item.id === role)?.label || role;
 }
 
-function formatLabels(labels: Record<string, string>) {
-  const entries = Object.entries(labels);
-  return entries.length ? entries.map(([key, value]) => `${key}=${value}`).join(', ') : '-';
-}
-
-function formatFieldOwnership(ownership?: Record<string, 'manual' | 'external'>) {
-  const entries = Object.entries(ownership || {});
-  if (!entries.length) return '-';
-  const external = entries.filter(([, owner]) => owner === 'external').map(([key]) => key).join(', ');
-  const manual = entries.filter(([, owner]) => owner === 'manual').map(([key]) => key).join(', ');
-  return [
-    external ? `External: ${external}` : '',
-    manual ? `Manual: ${manual}` : '',
-  ].filter(Boolean).join(' | ') || '-';
-}
-
-function formatStatusLabel(value: string | null | undefined) {
-  if (!value) return '-';
-  return value
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
 function getLifecycleTagType(value: string | null | undefined) {
   if (value === 'active') return 'green';
   if (value === 'disabled') return 'gray';
@@ -1014,109 +1001,6 @@ function getCapabilityTagType(value: string | null | undefined) {
   if (value === 'in_sync') return 'green';
   if (value === 'mismatch') return 'red';
   return 'gray';
-}
-
-function formatCapabilityDiagnostics(diagnostics?: ExternalEngineCapabilityDiagnostics | null) {
-  if (!diagnostics) return '-';
-  if (diagnostics.status === 'in_sync') return 'All expected operations reported';
-  if (diagnostics.reportedOperations.length === 0) return 'No operation capabilities reported';
-  if (diagnostics.missingOperations.length > 0) return `Missing: ${diagnostics.missingOperations.join(', ')}`;
-  if (diagnostics.extraOperations.length > 0) return `Extra: ${diagnostics.extraOperations.join(', ')}`;
-  return diagnostics.issues[0] || diagnostics.recommendation || '-';
-}
-
-function formatReconcileSummary(result: ExternalEngineReconcileResponse) {
-  const capability = formatCapabilityDiagnostics(result.capabilityDiagnostics);
-  const materialization = result.materializationDiagnostics?.summary || 'Engine Sets checked';
-  return `${capability}. ${materialization}.`;
-}
-
-function formatEngineSetSelector(selector: EngineSetSelector) {
-  if (selector.mode === 'all') return 'All active engines';
-  if (selector.mode === 'engine_ids') return `Engine IDs: ${selector.engineIds.join(', ') || '-'}`;
-  const labels = Object.entries(selector.labels || {})
-    .map(([key, value]) => `${key}=${value}`)
-    .join(', ');
-  return `Labels (${selector.labelMatch || 'all'}): ${labels || '-'}`;
-}
-
-function formatEngineSetMatchedBy(matchedBy: Record<string, unknown>) {
-  const entries = Object.entries(matchedBy || {});
-  return entries.length ? entries.map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`).join(', ') : '-';
-}
-
-function formatEffectiveAccessGrant(source: EffectiveAccessSource) {
-  if (source.roleId) return source.roleId;
-  if (source.role) return source.role;
-  if (source.permission) return source.permission;
-  return '-';
-}
-
-function formatEffectiveAccessPrincipal(source: EffectiveAccessSource) {
-  if (source.principalType === 'group' && (source.groupName || source.groupKey || source.groupId)) {
-    return `group:${source.groupName || source.groupKey || source.groupId}`;
-  }
-  if (!source.principalType && !source.principalId) return '-';
-  return `${source.principalType || 'principal'}:${source.principalId || '-'}`;
-}
-
-function formatEffectiveAccessScope(source: EffectiveAccessSource) {
-  if (source.engineSetId) {
-    const engineSetLabel = source.engineSetName || source.engineSetKey || source.engineSetId;
-    return `Engine Set: ${engineSetLabel}`;
-  }
-  if (source.scopeType || source.scopeId) {
-    return `${source.scopeType || 'scope'}:${source.scopeId || 'all'}`;
-  }
-  return '-';
-}
-
-function formatSsoMappingLineage(source: EffectiveAccessSource) {
-  const mapping = source.ssoMapping;
-  if (!mapping) return null;
-  const operator = mapping.claimOperator || 'matches';
-  return `SSO mapping: ${mapping.claimType} ${mapping.claimKey} ${operator} ${mapping.claimValue}`;
-}
-
-function formatSsoGroupMappingLineage(source: EffectiveAccessSource) {
-  const mapping = source.ssoGroupMapping;
-  if (!mapping) return null;
-  const operator = mapping.claimOperator || 'matches';
-  return `SSO group: ${mapping.claimType} ${mapping.claimKey} ${operator} ${mapping.claimValue}`;
-}
-
-function formatIdentityEntitlementMappingLineage(source: EffectiveAccessSource) {
-  const mapping = source.identityEntitlementMapping;
-  if (!mapping) return null;
-  const value = mapping.matchOperator === 'exists' ? 'any value' : mapping.externalId || '-';
-  return `Identity mapping: ${mapping.entitlementType} ${mapping.matchOperator} ${value}`;
-}
-
-function formatEngineRegistrationLineage(source: EffectiveAccessSource) {
-  const registration = source.engineRegistration;
-  if (!registration) return null;
-  const parts = [
-    registration.registrationSource || 'manual',
-    registration.externalId ? `externalId=${registration.externalId}` : null,
-    registration.externalSystemId ? `system=${registration.externalSystemId}` : null,
-    registration.lifecycleStatus ? `lifecycle=${registration.lifecycleStatus}` : null,
-  ].filter((part): part is string => Boolean(part));
-  return `Engine registration: ${parts.join(' ') || registration.engineId}`;
-}
-
-function formatEffectiveAccessLineage(source: EffectiveAccessSource) {
-  const parts = [
-    source.source ? `Assignment source: ${source.source}` : null,
-    source.groupMembership ? `Group membership: ${source.groupMembership.source}` : null,
-    formatIdentityEntitlementMappingLineage(source),
-    formatSsoGroupMappingLineage(source),
-    formatSsoMappingLineage(source),
-    source.selectorFingerprint ? `Selector: ${source.selectorFingerprint}` : null,
-    formatEngineRegistrationLineage(source),
-    source.matchedBy ? `Matched by: ${formatEngineSetMatchedBy(source.matchedBy)}` : null,
-    source.lineage ? `Lineage: ${formatEngineSetMatchedBy(source.lineage)}` : null,
-  ].filter((part): part is string => Boolean(part));
-  return parts.length > 0 ? parts.join(' | ') : '-';
 }
 
 function engineSetFormFromSummary(engineSet: EngineSetSummary): EngineSetFormState {
