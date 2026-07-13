@@ -5,3 +5,4 @@ export type { SsoAssignmentDiagnostics, SsoAssignmentTestResult } from './SsoAss
 export { SsoEngineAccessSnapshotsPanel } from './SsoEngineAccessSnapshotsPanel';
 export { SsoSyncDiagnosticsPanel } from './SsoSyncDiagnosticsPanel';
 export { EffectiveAccessPanel } from './EffectiveAccessPanel';
+export { PolicyInspectionTable } from './PolicyInspectionTable';

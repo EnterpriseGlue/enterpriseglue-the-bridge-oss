@@ -50,6 +50,7 @@ import {
   AuthzAuditPanel,
   DEFAULT_AUTHZ_AUDIT_FILTER,
   EffectiveAccessPanel,
+  PolicyInspectionTable,
   SsoAssignmentDiagnosticsPanel,
   SsoEngineAccessSnapshotsPanel,
   SsoSyncDiagnosticsPanel,
@@ -2733,49 +2734,6 @@ function RoleAssignmentsPanel({
         </TableContainer>
       )}
     </div>
-  );
-}
-
-function PolicyInspectionTable({ rows }: { rows: ReturnType<typeof buildPolicyInspectionRows> }) {
-  if (rows.length === 0) {
-    return (
-      <InlineNotification
-        kind="info"
-        title="No active policy candidates"
-        subtitle="No active global or matching resource-type policies were found for this selection."
-        lowContrast
-      />
-    );
-  }
-
-  return (
-    <TableContainer title="Applicable policies">
-      <DataTable rows={rows} headers={policyInspectionHeaders}>
-        {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
-          <Table {...getTableProps()} size="sm">
-            <TableHead>
-              <TableRow>
-                {headers.map((header) => (
-                  <DataTableHeaderCell key={dataTableHeaderKey(header)} header={header} getHeaderProps={getHeaderProps} />
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => (
-                <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
-                  {row.cells.map((cell) => {
-                    if (cell.info.header === 'effect') {
-                      return <TableCell key={cell.id}><Tag type={cell.value === 'deny' ? 'red' : 'green'}>{cell.value}</Tag></TableCell>;
-                    }
-                    return <TableCell key={cell.id}>{cell.value}</TableCell>;
-                  })}
-                </DataTableDataRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </DataTable>
-    </TableContainer>
   );
 }
 
