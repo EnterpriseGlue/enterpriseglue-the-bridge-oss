@@ -21,3 +21,9 @@ export function reconciliationExitCode(result) {
     ? ConfigBundleExitCode.RECONCILIATION
     : null;
 }
+
+export function reconciliationWaitState(tasks) {
+  if (!Array.isArray(tasks) || tasks.length === 0) return 'completed';
+  if (tasks.some((task) => task?.status === 'cancelled')) return 'failed';
+  return tasks.every((task) => task?.status === 'completed') ? 'completed' : 'pending';
+}

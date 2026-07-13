@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 import { sanitizeConfigBundleError, toSanitizedJson } from './lib/config-bundle-output.mjs';
-import { ConfigBundleExitCode, classifyConfigBundleHttpFailure, reconciliationExitCode } from './lib/config-bundle-exit.mjs';
+import { ConfigBundleExitCode, classifyConfigBundleHttpFailure, reconciliationExitCode, reconciliationWaitState } from './lib/config-bundle-exit.mjs';
 
 const [command, argument] = process.argv.slice(2);
 const apiUrl = (process.env.ENTERPRISEGLUE_API_URL || '').replace(/\/$/, '');
@@ -9,13 +9,16 @@ const token = process.env.ENTERPRISEGLUE_API_TOKEN;
 const idempotencyKey = process.env.ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY;
 const expectedTenantScope = process.env.ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE;
 const identityReconciliationMode = process.env.ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE;
+const reconciliationTimeoutMs = Number(process.env.ENTERPRISEGLUE_CONFIG_RECONCILIATION_TIMEOUT_MS || 300_000);
+const reconciliationPollMs = Number(process.env.ENTERPRISEGLUE_CONFIG_RECONCILIATION_POLL_MS || 1_000);
 const knownSecrets = [token];
 const needsFile = command === 'validate' || command === 'preview' || command === 'apply';
 const needsBundleKey = command === 'export';
 
-if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument || !apiUrl || !token || (command === 'apply' && !expectedTenantScope) || (identityReconciliationMode && !['none', 'preview', 'apply'].includes(identityReconciliationMode))) {
+if (!['validate', 'preview', 'apply', 'export', 'wait'].includes(command) || !argument || !apiUrl || !token || (command === 'apply' && !expectedTenantScope) || (identityReconciliationMode && !['none', 'preview', 'apply'].includes(identityReconciliationMode)) || !Number.isFinite(reconciliationTimeoutMs) || reconciliationTimeoutMs < 1 || !Number.isFinite(reconciliationPollMs) || reconciliationPollMs < 1) {
   console.error('Usage: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs <validate|preview|apply> <bundle.json>');
   console.error('   or: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs export <bundle-key>');
+  console.error('   or: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs wait <apply-run-id>');
   console.error('   apply also requires ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE.');
   console.error('   ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE may be none, preview, or apply.');
   process.exitCode = ConfigBundleExitCode.USAGE;
@@ -30,7 +33,17 @@ if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument |
   };
 
   try {
-    if (needsBundleKey) {
+    if (command === 'wait') {
+      const deadline = Date.now() + reconciliationTimeoutMs;
+      while (true) {
+        const { response, result } = await request(`/api/authz/config-bundles/runs/${encodeURIComponent(argument)}/identity-replay-tasks`);
+        if (!response.ok) { const error = new Error(result.message || result.error || `Reconciliation status failed: ${response.status}`); error.exitCode = classifyConfigBundleHttpFailure(response.status, 'reconciliation'); throw error; }
+        const state = reconciliationWaitState(result);
+        if (state === 'completed') { console.log(toSanitizedJson({ runId: argument, status: 'completed', tasks: result }, knownSecrets)); break; }
+        if (state === 'failed' || Date.now() >= deadline) { const error = new Error(state === 'failed' ? 'Reconciliation continuation was cancelled' : 'Timed out waiting for reconciliation continuation'); error.exitCode = ConfigBundleExitCode.RECONCILIATION; throw error; }
+        await new Promise((resolve) => setTimeout(resolve, reconciliationPollMs));
+      }
+    } else if (needsBundleKey) {
       const { response, result } = await request(`/api/authz/config-bundles/export?bundleKey=${encodeURIComponent(argument)}`);
       if (!response.ok) { const error = new Error(result.message || result.error || `Export failed: ${response.status}`); error.exitCode = classifyConfigBundleHttpFailure(response.status); throw error; }
       console.log(toSanitizedJson(result, knownSecrets));

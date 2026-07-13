@@ -181,6 +181,12 @@ pnpm authz:config preview ./enterpriseglue-config.json
 # preview. Do not modify the file between preview approval and this command.
 pnpm authz:config apply ./enterpriseglue-config.json
 
+# Wait for any durable stored-identity replay continuation created by an apply.
+# Default timeout is five minutes; both values are milliseconds.
+ENTERPRISEGLUE_CONFIG_RECONCILIATION_TIMEOUT_MS=300000 \
+ENTERPRISEGLUE_CONFIG_RECONCILIATION_POLL_MS=1000 \
+pnpm authz:config wait <apply-run-id>
+
 # Exports the server-side state owned by a previously applied bundle.
 pnpm authz:config export acme-platform-authz
 ```
