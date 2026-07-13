@@ -3,6 +3,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { DEFAULT_PLATFORM_GROUP_IDS } from './AuthzGroupService.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { secretResolver } from './SecretResolver.js';
 import { IsNull } from 'typeorm';
@@ -250,6 +251,16 @@ class LegacyIdentityProviderMigrationServiceClass {
       const readiness = await this.getReadinessInStore(manager, { targetProviderKey, tenantId: input.tenantId });
       if (!readiness.ready) {
         throw Errors.validation(`The provider-neutral replacement is not ready for cutover: ${readiness.blockers.join(', ')}`);
+      }
+      const targetProvider = await manager.getRepository(IdentityProvider).findOne({ where: input.tenantId ? { key: targetProviderKey, tenantId: input.tenantId } : { key: targetProviderKey, tenantId: IsNull() } });
+      const defaultGroupId = legacyProvider.defaultRole === 'admin'
+        ? DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS
+        : DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS;
+      const defaultMappingCount = targetProvider ? await manager.getRepository(IdentityEntitlementMapping).count({
+        where: { tenantId: input.tenantId ? input.tenantId : IsNull(), providerId: targetProvider.id, targetGroupId: defaultGroupId, entitlementType: 'authenticated', externalId: 'authenticated', matchOperator: 'exact', syncMode: 'authoritative', isActive: true } as any,
+      }) : 0;
+      if (!defaultMappingCount) {
+        throw Errors.validation('The provider-neutral replacement is missing the explicit authenticated identity default-role mapping');
       }
 
       const alreadyDisabled = !legacyProvider.enabled;
