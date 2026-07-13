@@ -36,6 +36,7 @@ export default function ConfigurationBundleSettingsTab() {
   const [changeObjectType, setChangeObjectType] = useState('all');
   const [changeRisk, setChangeRisk] = useState<ConfigBundleChangeRisk | 'all'>('all');
   const [acknowledgements, setAcknowledgements] = useState<string[]>([]);
+  const [applyIdempotencyKey, setApplyIdempotencyKey] = useState<string | null>(null);
   const parse = (): { bundle: unknown; files: Record<string, unknown> } => {
     const value = JSON.parse(source) as { bundle: unknown; files: Record<string, unknown> };
     if (!value || !value.bundle || !value.files || typeof value.files !== 'object') throw new Error('Configuration must contain bundle and files objects.');
@@ -43,14 +44,14 @@ export default function ConfigurationBundleSettingsTab() {
   };
   const previewBundle = async () => {
     setBusy('preview'); setError(null);
-    try { const input = parse(); const [nextPreview, nextDiff] = await Promise.all([apiClient.post<Preview>('/api/authz/config-bundles/preview', input), apiClient.post<Diff>('/api/authz/config-bundles/diff', input)]); setPreview(nextPreview); setDiff(nextDiff); setAcknowledgements([]); }
+    try { const input = parse(); const [nextPreview, nextDiff] = await Promise.all([apiClient.post<Preview>('/api/authz/config-bundles/preview', input), apiClient.post<Diff>('/api/authz/config-bundles/diff', input)]); setPreview(nextPreview); setDiff(nextDiff); setAcknowledgements([]); setApplyIdempotencyKey(nextPreview.valid ? crypto.randomUUID() : null); }
     catch (value) { setError(parseApiError(value, 'Configuration preview failed').message); setPreview(null); setDiff(null); }
     finally { setBusy(null); }
   };
   const applyBundle = async () => {
     if (!preview?.valid || !preview.canonicalHash) return;
     setBusy('apply'); setError(null);
-    try { const input = parse(); setApplyResult(await apiClient.post<ApplyResult>('/api/authz/config-bundles/apply', { ...input, expectedPreviewHash: preview.canonicalHash, acknowledgements })); await loadRuns(); await previewBundle(); }
+    try { const input = parse(); setApplyResult(await apiClient.post<ApplyResult>('/api/authz/config-bundles/apply', { ...input, expectedPreviewHash: preview.canonicalHash, acknowledgements, idempotencyKey: applyIdempotencyKey || crypto.randomUUID() })); await loadRuns(); await previewBundle(); }
     catch (value) { setError(parseApiError(value, 'Configuration apply failed').message); }
     finally { setBusy(null); }
   };
@@ -61,7 +62,7 @@ export default function ConfigurationBundleSettingsTab() {
   const importJson = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    try { setSource(await file.text()); setPreview(null); setDiff(null); setApplyResult(null); setAcknowledgements([]); setError(null); }
+    try { setSource(await file.text()); setPreview(null); setDiff(null); setApplyResult(null); setAcknowledgements([]); setApplyIdempotencyKey(null); setError(null); }
     catch { setError('The selected configuration file could not be read.'); }
     finally { event.target.value = ''; }
   };

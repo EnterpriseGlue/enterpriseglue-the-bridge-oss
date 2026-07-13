@@ -1871,7 +1871,7 @@ Config transport and response rules:
 - [ ] ⬜ Accept `application/json` for a single-file bundle and `application/zip` or multipart upload for a folder bundle.
 - [x] ✅ Return a canonical bundle hash, source key, object-level diff, warnings, and required acknowledgement ids. Acknowledgements are enforced by hash-bound apply; schema-version metadata and affected-object reconciliation preview remain pending.
 - [x] ✅ Add deterministic config-bundle preview validation for declared JSON imports with strict schema validation, object counts, undeclared/missing file rejection, and canonical SHA-256 hash. The current diff covers every object family that apply mutates; acknowledgement and affected-principal previews remain pending.
-- [ ] ⬜ Require idempotency keys for every apply caller. The API/CLI now supports persisted tenant-scoped idempotency keys and replays completed matching receipts; interactive UI callers still need generated keys.
+- [x] ✅ Require idempotency keys for every apply caller. The API/CLI supports persisted tenant-scoped idempotency keys and replays completed matching receipts; the Platform Settings UI generates one per successful preview and reuses it for the corresponding apply attempt.
 - [ ] ⬜ Return `202 Accepted` plus a run id for asynchronous identity/runtime reconciliation triggered after apply.
 - [ ] ⬜ Keep config run and identity sync run ids cross-linked for diagnostics and audit.
 
