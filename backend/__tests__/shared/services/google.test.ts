@@ -1,6 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { isGoogleAuthEnabled, provisionGoogleUser } from '@enterpriseglue/shared/services/google.js';
+import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
 const normalizedIdentityService = vi.hoisted(() => ({ upsertIdentityWithManager: vi.fn() }));
 const syncDiagnosticsService = vi.hoisted(() => ({ startRun: vi.fn(), completeRun: vi.fn(), failRun: vi.fn() }));
@@ -16,6 +17,11 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoProviderService.js', 
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: normalizedIdentityService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: syncDiagnosticsService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.js', () => ({ ssoClaimsMappingService: claimsMappingService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({
+  authzGroupService: {
+    ensureAuthenticatedUserMembershipWithManager: vi.fn().mockResolvedValue({ id: 'baseline-1', created: true }),
+  },
+}));
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   shouldUseSecureCookies: () => false,
@@ -54,6 +60,7 @@ describe('google service', () => {
 
     expect(result).toEqual(expect.objectContaining({ id: 'user-1', email: 'google-user@example.com' }));
     expect(normalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({ providerId: 'google', providerSubject: 'google-subject-1', providerTenantId: 'example.com', userId: 'user-1' }));
-    expect(syncDiagnosticsService.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({ groupMembershipsCreated: 2, groupMembershipsRemoved: 1 }));
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
+    expect(syncDiagnosticsService.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({ groupMembershipsCreated: 3, groupMembershipsRemoved: 1 }));
   });
 });

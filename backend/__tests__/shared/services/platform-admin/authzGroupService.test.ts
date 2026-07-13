@@ -210,6 +210,49 @@ describe('authzGroupService', () => {
     }));
   });
 
+  it('creates the authenticated-user baseline once through the provisioning transaction manager', async () => {
+    const groupRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS,
+        tenantId: null,
+        source: 'system',
+        isArchived: false,
+      }),
+    };
+    const membershipRepo = {
+      findOneBy: vi.fn().mockResolvedValue(null),
+      insert: vi.fn(),
+    };
+    const auditRepo = { insert: vi.fn() };
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroup) return groupRepo;
+        if (entity === AuthzGroupMembership) return membershipRepo;
+        if (entity === AuditLog) return auditRepo;
+        throw new Error('Unexpected repository');
+      },
+    };
+
+    const result = await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager as any, 'user-1');
+
+    expect(result).toEqual({ id: expect.any(String), created: true });
+    expect(membershipRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: null,
+      groupId: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS,
+      userId: 'user-1',
+      source: 'system',
+      sourceRef: 'authenticated-user-baseline',
+    }));
+    expect(auditRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.group_membership.authenticate',
+    }));
+
+    membershipRepo.findOneBy.mockResolvedValueOnce({ id: 'baseline-membership-1' });
+    await expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager as any, 'user-1'))
+      .resolves.toEqual({ id: 'baseline-membership-1', created: false });
+    expect(membershipRepo.insert).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects manual mutations for config-managed groups and memberships', async () => {
     const groupRepo = {
       findOneBy: vi.fn().mockResolvedValue({

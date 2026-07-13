@@ -6,6 +6,7 @@ import { ssoAssignmentMappingService } from '@enterpriseglue/shared/services/pla
 import { ssoGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.js';
 import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
+import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   shouldUseSecureCookies: () => false,
@@ -24,6 +25,12 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.js', () => ({
   ssoClaimsMappingService: {
     resolveRoleFromClaims: vi.fn(),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({
+  authzGroupService: {
+    ensureAuthenticatedUserMembershipWithManager: vi.fn().mockResolvedValue({ id: 'baseline-1', created: true }),
   },
 }));
 
@@ -138,6 +145,7 @@ describe('microsoft service', () => {
       }),
       'microsoft',
     );
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
     const snapshotOrder = (ssoNormalizedIdentityService.upsertIdentityWithManager as unknown as Mock).mock.invocationCallOrder[0];
     const groupSyncOrder = (ssoGroupMappingService.syncMembershipsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];
     const engineSyncOrder = (ssoAssignmentMappingService.syncAssignmentsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];
@@ -145,7 +153,7 @@ describe('microsoft service', () => {
     expect(groupSyncOrder).toBeLessThan(engineSyncOrder);
     expect(ssoSyncDiagnosticsService.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({
       providerId: 'microsoft',
-      groupMembershipsCreated: 3,
+      groupMembershipsCreated: 4,
       groupMembershipsRemoved: 1,
       assignmentsCreated: 1,
       details: expect.objectContaining({ email: 'sso-user@example.com' }),

@@ -7,6 +7,7 @@ import { ssoAssignmentMappingService } from '@enterpriseglue/shared/services/pla
 import { ssoGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.js';
 import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
+import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -21,6 +22,12 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoProviderService.js', 
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.js', () => ({
   ssoClaimsMappingService: {
     resolveRoleFromClaims: vi.fn(),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({
+  authzGroupService: {
+    ensureAuthenticatedUserMembershipWithManager: vi.fn().mockResolvedValue({ id: 'baseline-1', created: true }),
   },
 }));
 
@@ -155,6 +162,7 @@ describe('saml service - provisionSamlUser', () => {
       'provider-saml-1',
       'tenant-a',
     );
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
     const snapshotOrder = (ssoNormalizedIdentityService.upsertIdentityWithManager as unknown as Mock).mock.invocationCallOrder[0];
     const groupSyncOrder = (ssoGroupMappingService.syncMembershipsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];
     const engineSyncOrder = (ssoAssignmentMappingService.syncAssignmentsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];
@@ -165,7 +173,7 @@ describe('saml service - provisionSamlUser', () => {
       tenantId: 'tenant-a',
       providerId: 'provider-saml-1',
       userId: 'user-1',
-      groupMembershipsCreated: 3,
+      groupMembershipsCreated: 4,
       groupMembershipsRemoved: 1,
       assignmentsCreated: 1,
       details: expect.objectContaining({ email: 'saml-user@example.com' }),

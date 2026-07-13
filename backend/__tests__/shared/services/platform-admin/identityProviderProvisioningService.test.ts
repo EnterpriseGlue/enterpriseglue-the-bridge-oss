@@ -8,11 +8,13 @@ const manager = vi.hoisted(() => ({
   getRepository: vi.fn(),
 }));
 const ssoNormalizedIdentityService = vi.hoisted(() => ({ upsertIdentityWithManager: vi.fn() }));
+const authzGroupService = vi.hoisted(() => ({ ensureAuthenticatedUserMembershipWithManager: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(async () => ({ transaction: async (callback: (transactionManager: typeof manager) => unknown) => callback(manager) })),
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({ authzGroupService }));
 
 import { identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
 
@@ -24,6 +26,7 @@ describe('IdentityProviderProvisioningService', () => {
     stores.user.findOneBy.mockResolvedValue(null);
     stores.user.insert.mockResolvedValue(undefined);
     ssoNormalizedIdentityService.upsertIdentityWithManager.mockResolvedValue({ id: 'snapshot-1', created: true });
+    authzGroupService.ensureAuthenticatedUserMembershipWithManager.mockResolvedValue({ id: 'baseline-1', created: true });
   });
 
   it('writes the normalized identity in the provisioning transaction, where membership reconciliation is orchestrated', async () => {
@@ -43,6 +46,7 @@ describe('IdentityProviderProvisioningService', () => {
         claims: expect.objectContaining({ groups: ['team-a'] }),
       }),
     );
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
   });
 
   it('rejects a new provider subject that tries to link an existing local account without explicit provider approval', async () => {

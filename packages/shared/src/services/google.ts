@@ -10,6 +10,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ssoClaimsMappingService, type SsoClaims } from './platform-admin/SsoClaimsMappingService.js';
+import { authzGroupService } from './platform-admin/AuthzGroupService.js';
 import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIdentityService.js';
 import { ssoProviderService } from './platform-admin/SsoProviderService.js';
 import { ssoSyncDiagnosticsService, type SsoSyncCounts } from './platform-admin/SsoSyncDiagnosticsService.js';
@@ -170,6 +171,7 @@ async function syncGoogleAuthorizationForUser(
   userInfo: GoogleUserInfo,
   ssoClaims: SsoClaims
 ): Promise<SsoSyncCounts> {
+  const baselineMembership = await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
   const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
     providerId: 'google',
     providerType: 'google',
@@ -184,7 +186,7 @@ async function syncGoogleAuthorizationForUser(
     claims: ssoClaims,
   });
   return {
-    groupMembershipsCreated: normalizedIdentitySync.groupMembershipsCreated || 0,
+    groupMembershipsCreated: (normalizedIdentitySync.groupMembershipsCreated || 0) + (baselineMembership.created ? 1 : 0),
     groupMembershipsRemoved: normalizedIdentitySync.groupMembershipsRemoved || 0,
   };
 }

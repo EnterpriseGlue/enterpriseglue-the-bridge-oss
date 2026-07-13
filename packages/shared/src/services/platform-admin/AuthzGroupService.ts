@@ -88,6 +88,8 @@ export const DEFAULT_PLATFORM_GROUP_IDS = {
   API_CLIENT_ADMINISTRATORS: 'system.group.api_client_administrators',
 } as const;
 
+const AUTHENTICATED_USER_BASELINE_SOURCE_REF = 'authenticated-user-baseline';
+
 export const DEFAULT_PLATFORM_GROUPS = [
   {
     id: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
@@ -494,6 +496,61 @@ export class AuthzGroupService {
       },
     });
     return { id };
+  }
+
+  /**
+   * Adds the non-privileged platform baseline for an authenticated identity.
+   * This is intentionally source-managed and transaction-bound so provisioning
+   * cannot leave a user account without the group-backed platform-user grant.
+   */
+  async ensureAuthenticatedUserMembershipWithManager(
+    manager: EntityManager,
+    userId: string
+  ): Promise<{ id: string; created: boolean }> {
+    const groupRepo = manager.getRepository(AuthzGroup);
+    const group = await groupRepo.findOneBy({ id: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS });
+    if (!group || group.isArchived || group.source !== 'system' || group.tenantId !== null) {
+      throw new Error('Authenticated users system group is unavailable');
+    }
+
+    const membershipRepo = manager.getRepository(AuthzGroupMembership);
+    const existing = await membershipRepo.findOneBy({
+      groupId: group.id,
+      userId,
+      source: 'system',
+      sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+    });
+    if (existing) return { id: existing.id, created: false };
+
+    const id = generateId();
+    const now = Date.now();
+    await membershipRepo.insert({
+      id,
+      tenantId: null,
+      groupId: group.id,
+      userId,
+      source: 'system',
+      sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+      expiresAt: null,
+      createdById: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await recordGroupAudit(manager, {
+      tenantId: null,
+      userId: null,
+      action: 'authz.group_membership.authenticate',
+      resourceType: 'authz_group_membership',
+      resourceId: id,
+      details: {
+        membershipId: id,
+        groupId: group.id,
+        userId,
+        source: 'system',
+        sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+      },
+    });
+    return { id, created: true };
   }
 
   async removeMembership(id: string, removedById?: string | null): Promise<void> {

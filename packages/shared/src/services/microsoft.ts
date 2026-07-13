@@ -10,6 +10,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ssoClaimsMappingService, type SsoClaims } from './platform-admin/SsoClaimsMappingService.js';
+import { authzGroupService } from './platform-admin/AuthzGroupService.js';
 import { ssoAssignmentMappingService } from './platform-admin/SsoAssignmentMappingService.js';
 import { ssoGroupMappingService } from './platform-admin/SsoGroupMappingService.js';
 import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIdentityService.js';
@@ -148,6 +149,7 @@ async function syncMicrosoftAuthorizationForUser(
   userInfo: MicrosoftUserInfo,
   ssoClaims: SsoClaims
 ): Promise<SsoSyncCounts> {
+  const baselineMembership = await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
   const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
     providerId: 'microsoft',
     providerType: 'microsoft',
@@ -164,7 +166,7 @@ async function syncMicrosoftAuthorizationForUser(
   const groupSync = await ssoGroupMappingService.syncMembershipsForUserWithManager(manager, userId, ssoClaims, 'microsoft');
   const assignmentSync = await ssoAssignmentMappingService.syncAssignmentsForUserWithManager(manager, userId, ssoClaims, 'microsoft');
   return {
-    groupMembershipsCreated: groupSync.created + (normalizedIdentitySync.groupMembershipsCreated || 0),
+    groupMembershipsCreated: groupSync.created + (normalizedIdentitySync.groupMembershipsCreated || 0) + (baselineMembership.created ? 1 : 0),
     groupMembershipsUpdated: groupSync.updated,
     groupMembershipsRemoved: groupSync.removed + (normalizedIdentitySync.groupMembershipsRemoved || 0),
     assignmentsCreated: assignmentSync.created,
