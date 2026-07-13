@@ -51,6 +51,7 @@ import {
   DEFAULT_AUTHZ_AUDIT_FILTER,
   EffectiveAccessPanel,
   PolicyInspectionTable,
+  RoleAssignmentsTable,
   SsoAssignmentDiagnosticsPanel,
   SsoEngineAccessSnapshotsPanel,
   SsoSyncDiagnosticsPanel,
@@ -2679,60 +2680,16 @@ function RoleAssignmentsPanel({
           Assign Role
         </Button>
       </div>
-      {loading ? (
-        <DataTableSkeleton headers={roleAssignmentHeaders} rowCount={5} />
-      ) : (
-        <TableContainer>
-          <DataTable
-            rows={assignments.map((assignment) => ({
-              id: assignment.id,
-              principal: formatAssignmentPrincipal(assignment, apiClients, groups, serviceAccounts),
-              role: assignment.roleName || assignment.roleId,
-              resource: formatAssignmentResource(assignment, externalSystems),
-              source: assignment.source,
-              actions: '',
-            }))}
-            headers={roleAssignmentHeaders}
-          >
-            {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
-              <Table {...getTableProps()} size="md">
-                <TableHead>
-                  <TableRow>
-                    {headers.map((header) => (
-                      <DataTableHeaderCell key={dataTableHeaderKey(header)} header={header} getHeaderProps={getHeaderProps} />
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rows.map((row) => {
-                    const assignment = assignments.find((item) => item.id === row.id);
-                    return (
-                      <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
-                        {row.cells.map((cell) => {
-                          if (cell.info.header === 'source') {
-                            const configWarning = assignment?.source === 'config' && assignment.ownershipMode === 'config_warn';
-                            return <TableCell key={cell.id}><Tag type={configWarning ? 'warm-gray' : authzSourceTagType(cell.value)}>{configWarning ? 'Config warning' : formatAuthzSource(cell.value)}</Tag></TableCell>;
-                          }
-                          if (cell.info.header === 'actions') {
-                            return (
-                              <TableCell key={cell.id}>
-                                {(assignment?.source === 'manual' || (assignment?.source === 'config' && assignment.ownershipMode === 'config_warn')) && (
-                                  <Button kind="ghost" size="sm" renderIcon={TrashCan} hasIconOnly iconDescription="Remove assignment" disabled={!canDelete} title={canDelete ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onRemove(assignment.id)} />
-                                )}
-                              </TableCell>
-                            );
-                          }
-                          return <TableCell key={cell.id}>{cell.value}</TableCell>;
-                        })}
-                      </DataTableDataRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </DataTable>
-        </TableContainer>
-      )}
+      <RoleAssignmentsTable
+        assignments={assignments}
+        apiClients={apiClients}
+        groups={groups}
+        serviceAccounts={serviceAccounts}
+        externalSystems={externalSystems}
+        loading={loading}
+        canDelete={canDelete}
+        onRemove={onRemove}
+      />
     </div>
   );
 }
