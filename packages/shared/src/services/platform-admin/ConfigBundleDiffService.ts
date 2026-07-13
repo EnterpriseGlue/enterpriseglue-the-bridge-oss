@@ -24,11 +24,19 @@ export interface ConfigBundleDiffChange {
   currentId?: string;
 }
 
+export interface ConfigBundleDiffWarning {
+  id: string;
+  message: string;
+  acknowledgementId?: string;
+}
+
 export interface ConfigBundleDiff {
   valid: boolean;
   canonicalHash?: string;
   errors: Array<{ path: string; message: string }>;
   changes: ConfigBundleDiffChange[];
+  warnings: ConfigBundleDiffWarning[];
+  requiredAcknowledgements: string[];
 }
 
 const CONFIG_SOURCE = 'config';
@@ -60,6 +68,31 @@ function assignmentDisplayKey(assignment: any): string {
   return `${assignment.principal.type}:${principal}:${assignment.roleKey}:${scope.type}:${scopeReference}`;
 }
 
+function broadConfigurationWarnings(files: Record<string, unknown>): ConfigBundleDiffWarning[] {
+  const warnings: ConfigBundleDiffWarning[] = [];
+  for (const engineSet of values(files, './engine-sets.json', 'engineSets')) {
+    if (engineSet.selector.mode === 'all' || (engineSet.selector.mode === 'labels' && engineSet.selector.labelMatch === 'any')) {
+      const acknowledgementId = `config.engine_set_broad:${engineSet.key}`;
+      warnings.push({
+        id: acknowledgementId,
+        acknowledgementId,
+        message: `Engine Set ${engineSet.key} uses a broad ${engineSet.selector.mode === 'all' ? 'all-engines' : 'any-label'} selector.`,
+      });
+    }
+  }
+  for (const mapping of values(files, './identity-mappings.json', 'identityMappings')) {
+    if (mapping.source.operator === 'contains' || mapping.source.operator === 'exists') {
+      const acknowledgementId = `config.identity_mapping_broad:${mapping.key}`;
+      warnings.push({
+        id: acknowledgementId,
+        acknowledgementId,
+        message: `Identity mapping ${mapping.key} uses the broad ${mapping.source.operator} entitlement operator.`,
+      });
+    }
+  }
+  return warnings;
+}
+
 /**
  * Produces a persisted-state diff for the currently supported config-owned
  * objects. It is intentionally read-only and must be used before apply.
@@ -68,7 +101,7 @@ class ConfigBundleDiffService {
   async diff(input: ConfigBundlePreviewInput, tenantId?: string | null): Promise<ConfigBundleDiff> {
     const compilation = configBundlePreviewService.compile(input);
     if (!compilation.preview.valid || !compilation.manifest || !compilation.files || !compilation.preview.canonicalHash) {
-      return { valid: false, errors: compilation.preview.errors, changes: [] };
+      return { valid: false, errors: compilation.preview.errors, changes: [], warnings: [], requiredAcknowledgements: [] };
     }
 
     const manifest = compilation.manifest as { metadata: { key: string }; mode: string };
@@ -115,6 +148,7 @@ class ConfigBundleDiffService {
     const tenantRuntimeResources = runtimeResources.filter((resource) => (resource.tenantId || null) === normalizedTenantId);
     const runtimeResourcesByIdentity = new Map(tenantRuntimeResources.map((resource) => [`${resource.engineId}:${resource.resourceKind}:${resource.resourceKey}:${resource.runtimeTenantId || ''}`, resource]));
     const changes: ConfigBundleDiffChange[] = [];
+    const warnings = broadConfigurationWarnings(compilation.files);
 
     const desiredRoles = values(compilation.files, './roles.json', 'roles');
     const desiredRoleKeys = new Set(desiredRoles.map((role) => role.key));
@@ -377,7 +411,23 @@ class ConfigBundleDiffService {
       }
     }
 
-    return { valid: true, canonicalHash: compilation.preview.canonicalHash, errors: [], changes };
+    for (const change of changes) {
+      if (change.operation !== 'archive') continue;
+      const acknowledgementId = `config.authoritative_archive:${change.objectType}:${change.key}`;
+      warnings.push({
+        id: acknowledgementId,
+        acknowledgementId,
+        message: `Authoritative configuration will remove or disable ${change.objectType.replace(/_/g, ' ')} ${change.key}.`,
+      });
+    }
+    return {
+      valid: true,
+      canonicalHash: compilation.preview.canonicalHash,
+      errors: [],
+      changes,
+      warnings,
+      requiredAcknowledgements: warnings.flatMap((warning) => warning.acknowledgementId ? [warning.acknowledgementId] : []),
+    };
   }
 }
 

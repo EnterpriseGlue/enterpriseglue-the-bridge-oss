@@ -86,6 +86,7 @@ const configBundlePreviewSchema = z.object({
 });
 const configBundleApplySchema = configBundlePreviewSchema.extend({
   expectedPreviewHash: z.string().min(1),
+  acknowledgements: z.array(z.string().min(1).max(500)).max(100).optional(),
   idempotencyKey: z.string().min(8).max(160).optional(),
   expectedTenantScope: z.string().min(1).max(255).optional(),
 });
@@ -1372,6 +1373,7 @@ router.post('/api/authz/config-bundles/apply', apiLimiter, requireConfigBundleAc
       idempotencyKey: req.body.idempotencyKey || null,
       applyRunId: result.applyRunId || null,
       idempotent: result.idempotent === true,
+      acknowledgements: req.body.acknowledgements || [],
       reconciliation: result.reconciliation,
       actorType: req.apiClient ? 'api_client' : 'user',
       apiClientId: req.apiClient?.id || null,

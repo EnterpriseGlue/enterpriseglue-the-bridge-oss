@@ -81,9 +81,9 @@ function setupDataSource() {
   const engineRepo = { find: vi.fn().mockResolvedValue([]), insert: engineInsert, update: vi.fn() };
   const engineSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const runtimeResourceSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
-  const runtimeResourceRepo = { findOne: vi.fn().mockResolvedValue(null) };
+  const runtimeResourceRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
   const assignmentRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn(), delete: vi.fn() };
-  const projectRepo = { findOne: vi.fn().mockResolvedValue(null) };
+  const projectRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
   const targetRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
   const providerRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const identityMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
@@ -146,6 +146,23 @@ describe('configBundleApplyService', () => {
     expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ key: 'group.deployers', source: 'config', sourceRef: 'config_bundle:acme.authz' }));
     expect(permissionInsert).toHaveBeenCalledWith([expect.objectContaining({ permissionId: 'engine:deploy' })]);
     expect(auditInsert).toHaveBeenCalledTimes(2);
+  });
+
+  it('requires acknowledgement before an authoritative apply archives a config-owned object', async () => {
+    const { groupRepo } = setupDataSource();
+    groupRepo.find.mockResolvedValue([{
+      id: 'group-stale', tenantId: 'tenant-a', key: 'group.stale', name: 'Stale', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,
+    }]);
+    const preview = configBundlePreviewService.preview({ bundle, files });
+
+    await expect(configBundleApplyService.apply({
+      bundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 422, message: expect.stringContaining('config.authoritative_archive:group:group.stale') });
   });
 
   it('rejects stale or arbitrary preview hashes before opening a transaction', async () => {
@@ -243,6 +260,7 @@ describe('configBundleApplyService', () => {
       runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active',
     };
     engineRepo.find.mockResolvedValue([engine]);
+    projectRepo.find.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000001', tenantId: 'tenant-a' }]);
     projectRepo.findOne.mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' });
     const targetBundle = { ...bundle, imports: ['./engines.json', './project-engine-targets.json'] };
     const targetFiles = {
@@ -279,7 +297,14 @@ describe('configBundleApplyService', () => {
     const mappingFiles = { './identity-mappings.json': { identityMappings: [] } };
     const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
 
-    await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+    await configBundleApplyService.apply({
+      bundle: mappingBundle,
+      files: mappingFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      acknowledgements: ['config.authoritative_archive:identity_mapping:mapping.removed'],
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
 
     expect(groupMembershipRepo.delete).toHaveBeenCalledWith({ source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
     expect(identityMappingRepo.update).toHaveBeenCalledWith({ id: 'mapping-1' }, expect.objectContaining({ isActive: false }));

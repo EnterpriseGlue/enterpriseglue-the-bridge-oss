@@ -509,6 +509,7 @@ describe('platform-admin authz routes', () => {
         }
         if (entity.name === 'Project') {
           return {
+            find: vi.fn().mockResolvedValue([]),
             findOne: vi.fn().mockResolvedValue({
               id: 'project-1',
               tenantId: null,
@@ -518,6 +519,7 @@ describe('platform-admin authz routes', () => {
         }
         if (entity.name === 'ProjectEngineTarget') {
           return {
+            find: vi.fn().mockResolvedValue([]),
             findOne: vi.fn().mockResolvedValue({
               id: 'target-1',
               tenantId: null,
@@ -564,6 +566,7 @@ describe('platform-admin authz routes', () => {
         }
         if (entity.name === 'RbacRoleAssignment') {
           return {
+            find: vi.fn().mockResolvedValue([]),
             findOne: vi.fn().mockResolvedValue({
               id: '00000000-0000-4000-8000-000000000020',
               userId: '00000000-0000-4000-8000-000000000001',
@@ -1990,6 +1993,8 @@ describe('platform-admin authz routes', () => {
       valid: true,
       canonicalHash: expect.any(String),
       changes: [expect.objectContaining({ objectType: 'group', key: 'group.ops', operation: 'create' })],
+      warnings: [],
+      requiredAcknowledgements: [],
     });
   });
 
@@ -2000,6 +2005,7 @@ describe('platform-admin authz routes', () => {
         bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle' },
         files: {},
         expectedPreviewHash: 'preview-hash',
+        acknowledgements: ['config.engine_set_broad:engines.all'],
         idempotencyKey: 'config-apply-2026-07-13',
         expectedTenantScope: 'platform',
       });
@@ -2012,6 +2018,7 @@ describe('platform-admin authz routes', () => {
     });
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       expectedPreviewHash: 'preview-hash',
+      acknowledgements: ['config.engine_set_broad:engines.all'],
       idempotencyKey: 'config-apply-2026-07-13',
       expectedTenantScope: 'platform',
       actorId: 'user-1',

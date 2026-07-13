@@ -3479,7 +3479,7 @@ const ConfigBundlePreviewResponseOpenApiSchema = z.object({
 });
 
 const ConfigBundleDiffChangeOpenApiSchema = z.object({
-  objectType: z.enum(['role', 'group', 'engine', 'engine_set', 'runtime_resource_set', 'identity_provider']),
+  objectType: z.enum(['role', 'group', 'engine', 'engine_set', 'runtime_resource_set', 'identity_provider', 'identity_mapping', 'project_engine_target', 'assignment']),
   key: z.string(),
   operation: z.enum(['create', 'update', 'noop', 'archive', 'conflict']),
   reason: z.string(),
@@ -3488,10 +3488,13 @@ const ConfigBundleDiffChangeOpenApiSchema = z.object({
 
 const ConfigBundleDiffResponseOpenApiSchema = ConfigBundlePreviewResponseOpenApiSchema.extend({
   changes: z.array(ConfigBundleDiffChangeOpenApiSchema),
+  warnings: z.array(z.object({ id: z.string(), message: z.string(), acknowledgementId: z.string().optional() })),
+  requiredAcknowledgements: z.array(z.string()),
 });
 
 const ConfigBundleApplyRequestOpenApiSchema = ConfigBundleRequestOpenApiSchema.extend({
   expectedPreviewHash: z.string().min(1),
+  acknowledgements: z.array(z.string()).max(100).optional(),
   idempotencyKey: z.string().min(8).max(160).optional(),
   expectedTenantScope: z.string().min(1).max(255).optional(),
 });

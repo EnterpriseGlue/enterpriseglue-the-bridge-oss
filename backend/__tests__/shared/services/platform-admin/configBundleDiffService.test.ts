@@ -237,6 +237,26 @@ describe('configBundleDiffService', () => {
     expect(result.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.removed', operation: 'archive', currentId: 'mapping-removed' }),
     ]));
+    expect(result.requiredAcknowledgements).toContain('config.authoritative_archive:identity_mapping:mapping.removed');
+  });
+
+  it('requires acknowledgement for broad Engine Set selectors and identity mappings', async () => {
+    mockDataSource();
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engine-sets.json', './groups.json', './identity-mappings.json'] },
+      files: {
+        './engine-sets.json': { engineSets: [{ key: 'engines.all', name: 'All engines', selector: { mode: 'all' } }] },
+        './groups.json': { groups: [{ key: 'group.everyone', name: 'Everyone' }] },
+        './identity-mappings.json': { identityMappings: [{ key: 'mapping.default-access', providerKey: 'identity.external', source: { type: 'attribute', operator: 'exists' }, targetGroupKey: 'group.everyone' }] },
+      },
+    }, 'tenant-a');
+
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ acknowledgementId: 'config.engine_set_broad:engines.all' }),
+      expect.objectContaining({ acknowledgementId: 'config.identity_mapping_broad:mapping.default-access' }),
+    ]));
+    expect(result.requiredAcknowledgements).toContain('config.engine_set_broad:engines.all');
+    expect(result.requiredAcknowledgements).toContain('config.identity_mapping_broad:mapping.default-access');
   });
 
   it('diffs config-owned project-engine targets by deployment eligibility and authoritative ownership', async () => {

@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Button, InlineNotification, Select, SelectItem, Tag, TextArea, TextInput, Tile } from '@carbon/react';
+import { Button, Checkbox, InlineNotification, Select, SelectItem, Tag, TextArea, TextInput, Tile } from '@carbon/react';
 import { Download, Play, Time, Upload, View } from '@carbon/icons-react';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
@@ -14,7 +14,8 @@ import {
 } from './configBundleDiff';
 
 type Preview = { valid: boolean; canonicalHash?: string; errors: Array<{ path: string; message: string }>; counts: Record<string, number> };
-type Diff = Preview & { changes: ConfigBundleDiffChange[] };
+type DiffWarning = { id: string; message: string; acknowledgementId?: string };
+type Diff = Preview & { changes: ConfigBundleDiffChange[]; warnings: DiffWarning[]; requiredAcknowledgements: string[] };
 type ApplyRun = { id: string; bundleKey: string; actorId: string | null; createdAt: number; canonicalHash?: string; created?: number; updated?: number; archived?: number; mode?: string | null; reconciliation?: ApplyResult['reconciliation'] };
 type ApplyResult = { reconciliation: { engineSetCount: number; runtimeResourceSetCount: number; engineCount: number; identitySnapshot: { status: 'not_needed' | 'completed' | 'truncated' | 'failed'; providerCount: number; scanned: number; created: number; removed: number; failed: number } } };
 const placeholder = '{\n  "bundle": {\n    "apiVersion": "enterpriseglue.ai/v1alpha1",\n    "kind": "EnterpriseGlueConfigBundle",\n    "metadata": { "key": "example.authz", "owner": "platform" },\n    "tenantKey": "default",\n    "mode": "preview_only",\n    "settings": {},\n    "imports": ["./groups.json"]\n  },\n  "files": { "./groups.json": { "groups": [] } }\n}';
@@ -34,6 +35,7 @@ export default function ConfigurationBundleSettingsTab() {
   const [changeOperation, setChangeOperation] = useState('all');
   const [changeObjectType, setChangeObjectType] = useState('all');
   const [changeRisk, setChangeRisk] = useState<ConfigBundleChangeRisk | 'all'>('all');
+  const [acknowledgements, setAcknowledgements] = useState<string[]>([]);
   const parse = (): { bundle: unknown; files: Record<string, unknown> } => {
     const value = JSON.parse(source) as { bundle: unknown; files: Record<string, unknown> };
     if (!value || !value.bundle || !value.files || typeof value.files !== 'object') throw new Error('Configuration must contain bundle and files objects.');
@@ -41,14 +43,14 @@ export default function ConfigurationBundleSettingsTab() {
   };
   const previewBundle = async () => {
     setBusy('preview'); setError(null);
-    try { const input = parse(); const [nextPreview, nextDiff] = await Promise.all([apiClient.post<Preview>('/api/authz/config-bundles/preview', input), apiClient.post<Diff>('/api/authz/config-bundles/diff', input)]); setPreview(nextPreview); setDiff(nextDiff); }
+    try { const input = parse(); const [nextPreview, nextDiff] = await Promise.all([apiClient.post<Preview>('/api/authz/config-bundles/preview', input), apiClient.post<Diff>('/api/authz/config-bundles/diff', input)]); setPreview(nextPreview); setDiff(nextDiff); setAcknowledgements([]); }
     catch (value) { setError(parseApiError(value, 'Configuration preview failed').message); setPreview(null); setDiff(null); }
     finally { setBusy(null); }
   };
   const applyBundle = async () => {
     if (!preview?.valid || !preview.canonicalHash) return;
     setBusy('apply'); setError(null);
-    try { const input = parse(); setApplyResult(await apiClient.post<ApplyResult>('/api/authz/config-bundles/apply', { ...input, expectedPreviewHash: preview.canonicalHash })); await loadRuns(); await previewBundle(); }
+    try { const input = parse(); setApplyResult(await apiClient.post<ApplyResult>('/api/authz/config-bundles/apply', { ...input, expectedPreviewHash: preview.canonicalHash, acknowledgements })); await loadRuns(); await previewBundle(); }
     catch (value) { setError(parseApiError(value, 'Configuration apply failed').message); }
     finally { setBusy(null); }
   };
@@ -59,7 +61,7 @@ export default function ConfigurationBundleSettingsTab() {
   const importJson = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    try { setSource(await file.text()); setPreview(null); setDiff(null); setApplyResult(null); setError(null); }
+    try { setSource(await file.text()); setPreview(null); setDiff(null); setApplyResult(null); setAcknowledgements([]); setError(null); }
     catch { setError('The selected configuration file could not be read.'); }
     finally { event.target.value = ''; }
   };
@@ -83,6 +85,10 @@ export default function ConfigurationBundleSettingsTab() {
     risk: changeRisk,
   });
   const groupedChanges = groupConfigBundleChanges(filteredChanges);
+  const missingAcknowledgements = diff?.requiredAcknowledgements.filter((acknowledgement) => !acknowledgements.includes(acknowledgement)) || [];
+  const toggleAcknowledgement = (acknowledgement: string, checked: boolean) => {
+    setAcknowledgements((current) => checked ? [...new Set([...current, acknowledgement])] : current.filter((value) => value !== acknowledgement));
+  };
   const riskLabel: Record<ConfigBundleChangeRisk, string> = {
     requires_attention: 'Requires attention',
     review: 'Review changes',
@@ -99,9 +105,10 @@ export default function ConfigurationBundleSettingsTab() {
     {error && <InlineNotification kind="error" title="Configuration bundle" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
     <TextArea id="configuration-bundle-json" labelText="Configuration bundle JSON" value={source} onChange={(event) => setSource(event.target.value)} rows={22} helperText="Use the same bundle and files shape as CI/CD. Secret references only; plaintext secrets are rejected." />
     <input ref={uploadRef} type="file" accept="application/json,.json" onChange={importJson} style={{ display: 'none' }} />
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}><Button kind="tertiary" renderIcon={Upload} disabled={busy !== null} onClick={() => uploadRef.current?.click()}>Import JSON</Button><Button kind="tertiary" renderIcon={Download} disabled={busy !== null} onClick={exportJson}>Export JSON</Button><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="secondary" renderIcon={View} disabled={busy !== null} onClick={previewBundle}>Preview changes</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="primary" renderIcon={Play} disabled={!preview?.valid || !preview.canonicalHash || busy !== null} onClick={applyBundle}>Apply exact preview</Button></GuardedAction><Button kind="ghost" renderIcon={Time} disabled={busy !== null} onClick={loadRuns}>Refresh history</Button></div>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}><Button kind="tertiary" renderIcon={Upload} disabled={busy !== null} onClick={() => uploadRef.current?.click()}>Import JSON</Button><Button kind="tertiary" renderIcon={Download} disabled={busy !== null} onClick={exportJson}>Export JSON</Button><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="secondary" renderIcon={View} disabled={busy !== null} onClick={previewBundle}>Preview changes</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="primary" renderIcon={Play} disabled={!preview?.valid || !preview.canonicalHash || busy !== null || missingAcknowledgements.length > 0} onClick={applyBundle}>Apply exact preview</Button></GuardedAction><Button kind="ghost" renderIcon={Time} disabled={busy !== null} onClick={loadRuns}>Refresh history</Button></div>
     {applyResult && <InlineNotification kind={applyResult.reconciliation.identitySnapshot.status === 'failed' ? 'error' : applyResult.reconciliation.identitySnapshot.status === 'truncated' ? 'warning' : 'success'} title="Configuration applied" subtitle={`Materialized ${applyResult.reconciliation.engineSetCount} Engine Sets, ${applyResult.reconciliation.runtimeResourceSetCount} runtime resource sets, and refreshed ${applyResult.reconciliation.engineCount} engines.${applyResult.reconciliation.identitySnapshot.status === 'not_needed' ? '' : ` Identity replay ${applyResult.reconciliation.identitySnapshot.status}: ${applyResult.reconciliation.identitySnapshot.scanned} snapshots, ${applyResult.reconciliation.identitySnapshot.created} added, ${applyResult.reconciliation.identitySnapshot.removed} removed.`}`} hideCloseButton style={{ marginTop: 'var(--spacing-5)' }} />}
     {preview && <div style={{ marginTop: 'var(--spacing-6)' }}><h4 style={{ margin: 0 }}>Preview</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{preview.valid ? `Hash ${preview.canonicalHash}` : 'Validation failed'}</p>{preview.errors.map((issue) => <InlineNotification key={`${issue.path}:${issue.message}`} kind="error" title={issue.path} subtitle={issue.message} hideCloseButton style={{ marginBottom: 'var(--spacing-3)' }} />)}{Object.entries(preview.counts).map(([path, count]) => <Tag key={path} type="cool-gray" style={{ marginRight: 'var(--spacing-2)' }}>{path}: {count}</Tag>)}</div>}
+    {diff?.warnings?.length ? <div style={{ marginTop: 'var(--spacing-5)' }}>{diff.warnings.map((warning) => <div key={warning.id} style={{ marginBottom: 'var(--spacing-3)' }}><InlineNotification kind="warning" title="Configuration review required" subtitle={warning.message} hideCloseButton lowContrast />{warning.acknowledgementId ? <Checkbox id={`configuration-acknowledgement-${warning.id}`} labelText="I have reviewed and accept this configuration change." checked={acknowledgements.includes(warning.acknowledgementId)} onChange={(_, data) => toggleAcknowledgement(warning.acknowledgementId!, data.checked)} style={{ marginTop: 'var(--spacing-3)' }} /> : null}</div>)}</div> : null}
     {diff?.changes?.length ? <div style={{ marginTop: 'var(--spacing-6)', display: 'grid', gap: 'var(--spacing-4)' }}>
       <div><h4 style={{ margin: 0 }}>Planned changes</h4><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Review attention-required changes before applying this exact preview.</p></div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))', gap: 'var(--spacing-3)', alignItems: 'end' }}>

@@ -27,6 +27,7 @@ import { configBundlePreviewService, type ConfigBundlePreviewInput } from './Con
 
 export interface ConfigBundleApplyInput extends ConfigBundlePreviewInput {
   expectedPreviewHash: string;
+  acknowledgements?: string[];
   idempotencyKey?: string | null;
   expectedTenantScope?: string | null;
   tenantId?: string | null;
@@ -229,6 +230,11 @@ class ConfigBundleApplyService {
     const conflicts = diff.changes.filter((change) => change.operation === 'conflict');
     if (conflicts.length > 0) {
       return fail(`Config apply conflicts with manually owned objects: ${conflicts.map((change) => `${change.objectType}:${change.key}`).join(', ')}`, 409);
+    }
+    const acknowledgements = new Set(input.acknowledgements || []);
+    const missingAcknowledgements = diff.requiredAcknowledgements.filter((acknowledgement) => !acknowledgements.has(acknowledgement));
+    if (missingAcknowledgements.length > 0) {
+      return fail(`Configuration apply requires acknowledgement: ${missingAcknowledgements.join(', ')}`, 422);
     }
 
     if (idempotencyKey) {

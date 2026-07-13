@@ -49,7 +49,7 @@ Current config-as-code status:
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
 - [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply persists the expanded permission list.
-- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine/Engine Set/Runtime Resource Set/identity-provider/identity-mapping/project-engine-target/scoped-assignment create, update, no-op, conflict, and authoritative-archive previews. Focused tests cover identity-mapping, project-engine-target, and supported group-assignment lifecycle states.
+- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine/Engine Set/Runtime Resource Set/identity-provider/identity-mapping/project-engine-target/scoped-assignment create, update, no-op, conflict, and authoritative-archive previews. It returns deterministic warnings and acknowledgement ids for destructive authoritative removals, broad Engine Sets, and broad identity mappings; apply recomputes and enforces those acknowledgements.
 - [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for roles, groups, engines, Engine Sets, Runtime Resource Sets, scoped group assignments, provider-neutral identity providers/mappings, and project-engine targets. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, refuses unsupported object families rather than ignoring them, and source-cleans derived memberships when an authoritative config mapping is changed or disabled.
 - [x] ✅ Persist engine config provenance (`configKey`, source reference/hash, ownership mode, last applied time) plus `runtimeAccessScope`, `deploymentIntegration`, and `connectionMode` with backward-compatible defaults.
 - [x] ✅ Persist provider-neutral identity-provider keys and source references so entitlement mappings resolve configured providers safely; config-bundle creation/update/archive is supported.
@@ -1869,7 +1869,7 @@ Authorization:
 Config transport and response rules:
 
 - [ ] ⬜ Accept `application/json` for a single-file bundle and `application/zip` or multipart upload for a folder bundle.
-- [ ] ⬜ Return a canonical bundle hash, schema version, source key, object-level diff, warnings, required acknowledgements, and optional reconciliation preview.
+- [x] ✅ Return a canonical bundle hash, source key, object-level diff, warnings, and required acknowledgement ids. Acknowledgements are enforced by hash-bound apply; schema-version metadata and affected-object reconciliation preview remain pending.
 - [x] ✅ Add deterministic config-bundle preview validation for declared JSON imports with strict schema validation, object counts, undeclared/missing file rejection, and canonical SHA-256 hash. The current diff covers every object family that apply mutates; acknowledgement and affected-principal previews remain pending.
 - [ ] ⬜ Require idempotency keys for every apply caller. The API/CLI now supports persisted tenant-scoped idempotency keys and replays completed matching receipts; interactive UI callers still need generated keys.
 - [ ] ⬜ Return `202 Accepted` plus a run id for asynchronous identity/runtime reconciliation triggered after apply.
@@ -1889,7 +1889,7 @@ UI capabilities:
 - [ ] ⬜ Upload folder zip, single JSON file, or paste Git URL.
 - [x] ✅ Show schema validation results before diff in Platform Settings > Configuration Bundles.
 - [ ] ⬜ Show object diff grouped by Engines, Engine Sets, Runtime Resource Sets, Roles, Groups, Identity Providers, Identity Mappings, Assignments, and Project-engine targets.
-- [ ] ⬜ Show warnings for all-engine selectors, regex mappings, external-only modes, secret ref failures, and destructive authoritative removals.
+- [x] ✅ Show and require acknowledgement for all-engine/any-label selectors, broad identity-mapping operators, and destructive authoritative removals. Regex mappings are not part of the current config schema; external-only mode and secret-reference diagnostics remain pending.
 - [x] ✅ Require an exact preview hash to prevent time-of-check/time-of-use drift, and require an expected tenant scope for CLI/CI applies so target credentials cannot apply to a different tenant.
 - [ ] ⬜ Show config-managed badges in Engine Detail, Access Control roles/groups/mappings, Engine Sets, and project deployment target views.
 - [ ] ⬜ Provide export current config button for backup and GitOps bootstrap.
@@ -2173,7 +2173,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Produce role permission diffs with additions, removals, expanded template permissions, and affected assignments.
 - [ ] ⬜ Produce runtime resource set diffs with matched, unmatched, newly matched, and no-longer-matched process or decision keys.
 - [ ] ⬜ Validate identity provider references and preview normalized entitlement-to-group matches without contacting providers unless an explicit connectivity test is requested.
-- [ ] ⬜ Warn about display-name/regex identity matching, broad runtime grants shadowing narrow resource sets, resource sets on `engine_wide` engines, and human deployment roles on pipeline-only targets.
+- [ ] ⬜ Warn about broad runtime grants shadowing narrow resource sets, resource sets on `engine_wide` engines, and human deployment roles on pipeline-only targets. Display-name and regex identity matching are not accepted by the current config schema.
 - [ ] ⬜ Preview deployment integration and lineage schema changes, including direct-engine deployments that cannot resolve project/file origin.
 - [ ] ⬜ Detect destructive authoritative removals.
 - [ ] ⬜ Detect drift between config-owned object hash and live object state.
