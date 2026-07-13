@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: enterpriseglue-backend
+spec:
+  template:
+    spec:
+      containers:
+        - name: backend
+          volumeMounts:
+            - name: config-bundle
+              mountPath: /etc/enterpriseglue/config
+              readOnly: true
+            - name: config-secrets
+              mountPath: /var/run/secrets/enterpriseglue
+              readOnly: true
+      volumes:
+        - name: config-bundle
+          configMap:
+            name: enterpriseglue-config-bundle
+            optional: true
+        - name: config-secrets
+          secret:
+            secretName: enterpriseglue-config-secrets
+            optional: true
+            defaultMode: 0400

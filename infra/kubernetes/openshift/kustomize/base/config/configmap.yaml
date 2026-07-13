@@ -30,3 +30,13 @@ data:
   GIT_REPOS_PATH: "/app/data/repos"
   GIT_DEFAULT_BRANCH: "main"
   EXPOSE_BACKEND: "false"
+
+  # Bootstrap stays disabled unless an environment explicitly supplies a
+  # mounted bundle plus validate/apply mode through its deployment process.
+  EG_CONFIG_BOOTSTRAP_MODE: "disabled"
+  EG_CONFIG_EXPECTED_TENANT_SCOPE: "platform"
+  EG_CONFIG_FAIL_CLOSED: "true"
+  EG_CONFIG_REQUIRE_SECRET_PREFLIGHT: "false"
+  EG_CONFIG_MAX_BYTES: "1048576"
+  EG_CONFIG_SECRET_PROVIDER: "env"
+  EG_CONFIG_SECRET_FILE_ROOT: "/var/run/secrets/enterpriseglue"

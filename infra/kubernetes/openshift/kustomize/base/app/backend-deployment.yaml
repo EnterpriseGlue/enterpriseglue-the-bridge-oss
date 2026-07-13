@@ -43,12 +43,6 @@ spec:
           volumeMounts:
             - name: git-repos
               mountPath: /app/data/repos
-            - name: config-bundle
-              mountPath: /etc/enterpriseglue/config
-              readOnly: true
-            - name: config-secrets
-              mountPath: /var/run/secrets/enterpriseglue
-              readOnly: true
           readinessProbe:
             httpGet:
               path: /ready
@@ -69,11 +63,3 @@ spec:
         - name: git-repos
           persistentVolumeClaim:
             claimName: backend-git-repos
-        - name: config-bundle
-          configMap:
-            name: enterpriseglue-config-bundle
-            optional: true
-        - name: config-secrets
-          secret:
-            secretName: enterpriseglue-config-secrets
-            optional: true

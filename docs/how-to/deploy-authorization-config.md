@@ -115,9 +115,9 @@ Use separate resources:
 Required changes:
 
 - [x] ✅ Add an optional config-bundle ConfigMap/projected-volume component to the Kustomize base.
-- [ ] ⬜ Add dev/staging/prod patches that can enable or omit the bundle mount independently.
-- [ ] ⬜ Extend `runtime-secret.example.yaml` only with secret values and secret-provider configuration, never bundle JSON containing secrets.
-- [ ] ⬜ Extend `configmap.yaml` with non-secret bootstrap settings.
+- [x] ✅ Add dev/staging/prod patches that can enable or omit the bundle mount independently. The reusable `config-bundle` component is omitted by development and included by staging/production overlays.
+- [x] ✅ Extend `runtime-secret.example.yaml` only with secret values and secret-provider configuration, never bundle JSON containing secrets.
+- [x] ✅ Extend `configmap.yaml` with non-secret bootstrap settings.
 - [x] ✅ Update the OpenShift deployment script to create/apply the bundle ConfigMap before backend rollout when enabled.
 - [x] ✅ Include bundle hash annotations in the backend pod template so an intended bundle change triggers rollout.
 - [ ] ⬜ Complete readiness gating for migrations, catalog seed, config apply, and all required reconciliation. `/ready` fails after bootstrap configuration failure and successful apply receipts report Engine Set/runtime-resource materialization; provider identity reconciliation remains pending.
