@@ -1995,6 +1995,7 @@ describe('platform-admin authz routes', () => {
       changes: [expect.objectContaining({ objectType: 'group', key: 'group.ops', operation: 'create' })],
       warnings: [],
       requiredAcknowledgements: [],
+      affectedPrincipals: { affectedGroupCount: 0, affectedUserCount: 0, externalIdentityMappingChangeCount: 0 },
     });
   });
 

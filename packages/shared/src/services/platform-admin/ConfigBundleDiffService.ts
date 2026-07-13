@@ -11,6 +11,7 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persi
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 
@@ -30,6 +31,12 @@ export interface ConfigBundleDiffWarning {
   acknowledgementId?: string;
 }
 
+export interface ConfigBundleAffectedPrincipalSummary {
+  affectedGroupCount: number;
+  affectedUserCount: number;
+  externalIdentityMappingChangeCount: number;
+}
+
 export interface ConfigBundleDiff {
   valid: boolean;
   canonicalHash?: string;
@@ -37,6 +44,7 @@ export interface ConfigBundleDiff {
   changes: ConfigBundleDiffChange[];
   warnings: ConfigBundleDiffWarning[];
   requiredAcknowledgements: string[];
+  affectedPrincipals: ConfigBundleAffectedPrincipalSummary;
 }
 
 const CONFIG_SOURCE = 'config';
@@ -101,14 +109,14 @@ class ConfigBundleDiffService {
   async diff(input: ConfigBundlePreviewInput, tenantId?: string | null): Promise<ConfigBundleDiff> {
     const compilation = configBundlePreviewService.compile(input);
     if (!compilation.preview.valid || !compilation.manifest || !compilation.files || !compilation.preview.canonicalHash) {
-      return { valid: false, errors: compilation.preview.errors, changes: [], warnings: [], requiredAcknowledgements: [] };
+      return { valid: false, errors: compilation.preview.errors, changes: [], warnings: [], requiredAcknowledgements: [], affectedPrincipals: { affectedGroupCount: 0, affectedUserCount: 0, externalIdentityMappingChangeCount: 0 } };
     }
 
     const manifest = compilation.manifest as { metadata: { key: string }; mode: string };
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects] = await Promise.all([
+    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
@@ -121,6 +129,7 @@ class ConfigBundleDiffService {
       dataSource.getRepository(RbacRoleAssignment).find(),
       dataSource.getRepository(RuntimeResource).find(),
       dataSource.getRepository(Project).find(),
+      dataSource.getRepository(AuthzGroupMembership).find(),
     ]);
     const rolePermissionsByRoleId = new Map<string, string[]>();
     for (const permission of rolePermissions) {
@@ -145,10 +154,14 @@ class ConfigBundleDiffService {
     const tenantProjectIds = new Set(projects.filter((project) => (project.tenantId || null) === normalizedTenantId).map((project) => project.id));
     const tenantAssignments = assignments.filter((assignment) => (assignment.tenantId || null) === normalizedTenantId);
     const assignmentsByKey = new Map(tenantAssignments.map((assignment) => [assignment.assignmentKey, assignment]));
+    const assignmentsById = new Map(tenantAssignments.map((assignment) => [assignment.id, assignment]));
     const tenantRuntimeResources = runtimeResources.filter((resource) => (resource.tenantId || null) === normalizedTenantId);
     const runtimeResourcesByIdentity = new Map(tenantRuntimeResources.map((resource) => [`${resource.engineId}:${resource.resourceKind}:${resource.resourceKey}:${resource.runtimeTenantId || ''}`, resource]));
+    const tenantGroupMemberships = groupMemberships.filter((membership) => (membership.tenantId || null) === normalizedTenantId);
     const changes: ConfigBundleDiffChange[] = [];
     const warnings = broadConfigurationWarnings(compilation.files);
+    const desiredAssignmentGroupIds = new Map<string, string>();
+    const desiredIdentityMappingGroupIds = new Map<string, string>();
 
     const desiredRoles = values(compilation.files, './roles.json', 'roles');
     const desiredRoleKeys = new Set(desiredRoles.map((role) => role.key));
@@ -273,6 +286,7 @@ class ConfigBundleDiffService {
       const existing = identityMappingsByKey.get(mapping.key);
       const provider = identityProvidersByKey.get(mapping.providerKey);
       const group = groupsByKey.get(mapping.targetGroupKey);
+      if (group) desiredIdentityMappingGroupIds.set(mapping.key, group.id);
       if (!existing) changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'create', reason: 'No persisted identity mapping uses this config key' });
       else if (existing.sourceRef !== sourceRef) changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'conflict', currentId: existing.id, reason: 'Existing identity mapping is not owned by this configuration bundle' });
       else if (
@@ -352,6 +366,7 @@ class ConfigBundleDiffService {
         source: CONFIG_SOURCE,
         sourceRef,
       });
+      desiredAssignmentGroupIds.set(key, group.id);
       desiredAssignmentKeys.add(assignmentKey);
       const existing = assignmentsByKey.get(assignmentKey);
       if (!existing) {
@@ -420,6 +435,34 @@ class ConfigBundleDiffService {
         message: `Authoritative configuration will remove or disable ${change.objectType.replace(/_/g, ' ')} ${change.key}.`,
       });
     }
+    const affectedGroupIds = new Set<string>();
+    for (const change of changes) {
+      if (change.operation === 'noop' || change.operation === 'conflict') continue;
+      if (change.objectType === 'group' && change.currentId) affectedGroupIds.add(change.currentId);
+      if (change.objectType === 'assignment') {
+        const existing = change.currentId ? assignmentsById.get(change.currentId) : undefined;
+        if (existing?.principalType === 'group' && existing.principalId) affectedGroupIds.add(existing.principalId);
+        const desiredGroupId = desiredAssignmentGroupIds.get(change.key);
+        if (desiredGroupId) affectedGroupIds.add(desiredGroupId);
+      }
+      if (change.objectType === 'identity_mapping') {
+        const existing = change.currentId ? tenantIdentityMappings.find((mapping) => mapping.id === change.currentId) : undefined;
+        if (existing) affectedGroupIds.add(existing.targetGroupId);
+        const desiredGroupId = desiredIdentityMappingGroupIds.get(change.key);
+        if (desiredGroupId) affectedGroupIds.add(desiredGroupId);
+      }
+      if (change.objectType === 'role' && change.currentId) {
+        for (const assignment of tenantAssignments) {
+          if (assignment.roleId === change.currentId && assignment.principalType === 'group' && assignment.principalId) affectedGroupIds.add(assignment.principalId);
+        }
+      }
+    }
+    const affectedUserIds = new Set(tenantGroupMemberships.filter((membership) => affectedGroupIds.has(membership.groupId)).map((membership) => membership.userId));
+    const affectedPrincipals = {
+      affectedGroupCount: affectedGroupIds.size,
+      affectedUserCount: affectedUserIds.size,
+      externalIdentityMappingChangeCount: changes.filter((change) => change.objectType === 'identity_mapping' && change.operation !== 'noop' && change.operation !== 'conflict').length,
+    };
     return {
       valid: true,
       canonicalHash: compilation.preview.canonicalHash,
@@ -427,6 +470,7 @@ class ConfigBundleDiffService {
       changes,
       warnings,
       requiredAcknowledgements: warnings.flatMap((warning) => warning.acknowledgementId ? [warning.acknowledgementId] : []),
+      affectedPrincipals,
     };
   }
 }

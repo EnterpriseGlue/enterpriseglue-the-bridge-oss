@@ -3490,6 +3490,11 @@ const ConfigBundleDiffResponseOpenApiSchema = ConfigBundlePreviewResponseOpenApi
   changes: z.array(ConfigBundleDiffChangeOpenApiSchema),
   warnings: z.array(z.object({ id: z.string(), message: z.string(), acknowledgementId: z.string().optional() })),
   requiredAcknowledgements: z.array(z.string()),
+  affectedPrincipals: z.object({
+    affectedGroupCount: z.number().int().nonnegative(),
+    affectedUserCount: z.number().int().nonnegative(),
+    externalIdentityMappingChangeCount: z.number().int().nonnegative(),
+  }),
 });
 
 const ConfigBundleApplyRequestOpenApiSchema = ConfigBundleRequestOpenApiSchema.extend({

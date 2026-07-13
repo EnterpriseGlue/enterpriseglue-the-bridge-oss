@@ -12,6 +12,7 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persi
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 
@@ -38,6 +39,7 @@ function mockDataSource(
   assignments: unknown[] = [],
   runtimeResources: unknown[] = [],
   projects: unknown[] = [],
+  groupMemberships: unknown[] = [],
 ) {
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository: (entity: unknown) => {
@@ -53,6 +55,7 @@ function mockDataSource(
       if (entity === RbacRoleAssignment) return { find: vi.fn().mockResolvedValue(assignments) };
       if (entity === RuntimeResource) return { find: vi.fn().mockResolvedValue(runtimeResources) };
       if (entity === Project) return { find: vi.fn().mockResolvedValue(projects) };
+      if (entity === AuthzGroupMembership) return { find: vi.fn().mockResolvedValue(groupMemberships) };
       throw new Error('Unexpected repository');
     },
   });
@@ -257,6 +260,25 @@ describe('configBundleDiffService', () => {
     ]));
     expect(result.requiredAcknowledgements).toContain('config.engine_set_broad:engines.all');
     expect(result.requiredAcknowledgements).toContain('config.identity_mapping_broad:mapping.default-access');
+  });
+
+  it('summarizes affected current group members without returning identity details', async () => {
+    const group = {
+      id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,
+    };
+    mockDataSource([], [group], [], [], [], [], [], [], [], [], [{ tenantId: 'tenant-a', groupId: group.id, userId: 'user-1' }, { tenantId: 'tenant-a', groupId: group.id, userId: 'user-2' }]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./groups.json'] },
+      files: { './groups.json': { groups: [] } },
+    }, 'tenant-a');
+
+    expect(result.affectedPrincipals).toEqual({
+      affectedGroupCount: 1,
+      affectedUserCount: 2,
+      externalIdentityMappingChangeCount: 0,
+    });
   });
 
   it('diffs config-owned project-engine targets by deployment eligibility and authoritative ownership', async () => {
