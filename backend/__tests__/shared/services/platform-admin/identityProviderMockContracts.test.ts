@@ -73,7 +73,9 @@ describe('identity mock provider contracts', () => {
   });
 
   it.each([
+    ['wrong_audience', 'jwt audience invalid. expected: enterpriseglue-test-client'],
     ['expired_token', 'jwt expired'],
+    ['not_yet_valid_token', 'jwt not active'],
     ['missing_subject', 'OIDC ID token subject or nonce is invalid'],
   ] as const)('fails closed when the OIDC fixture returns %s', async (failureMode, message) => {
     const provider = new MockOidcProvider();

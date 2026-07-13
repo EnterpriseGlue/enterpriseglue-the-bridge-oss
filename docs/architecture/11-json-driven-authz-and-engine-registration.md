@@ -2022,7 +2022,7 @@ interface IdentityMockController {
 
 - [ ] ⬜ Serve discovery metadata, authorization, token, JWKS, userinfo, and optional group/app-role API endpoints on an ephemeral port.
 - [ ] ⬜ Issue signed JWTs with configurable issuer, audience, subject, groups, roles, scopes, expiry, nonce, and key id.
-- [ ] ⬜ Support key rotation, invalid signature, wrong issuer/audience, expired/not-yet-valid token, missing subject, group overage marker, and provider timeout scenarios. The deterministic OIDC fixture now covers signing-key rotation, invalid and expired tokens, missing subject, discovery failures, timeout, and Entra-style group-overage claims; wrong-audience and not-yet-valid fixtures remain pending.
+- [x] ✅ Support key rotation, invalid signature, wrong issuer/audience, expired/not-yet-valid token, missing subject, group overage marker, and provider timeout scenarios. The deterministic OIDC fixture covers signing-key rotation, invalid and expired/not-yet-valid tokens, missing subject, discovery failures, wrong audience, timeout, and Entra-style group-overage claims.
 - [ ] ⬜ Support changing a subject's groups/roles between login and scheduled reconciliation.
 
 #### Mock SAML Identity Provider

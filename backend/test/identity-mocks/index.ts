@@ -2,7 +2,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { IdentityProviderAdapter, NormalizedExternalIdentity, ProviderIdentityInput } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
 
-export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'group_overage' | 'expired_token' | 'missing_subject' | 'timeout';
+export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'wrong_audience' | 'group_overage' | 'expired_token' | 'not_yet_valid_token' | 'missing_subject' | 'timeout';
 
 interface SigningMaterial {
   privateKey: string;
@@ -59,6 +59,12 @@ export class MockOidcProvider {
     });
   }
 
+  issueIdTokenWithNotBefore(claims: Record<string, unknown>, notBefore: string | number): string {
+    return jwt.sign({ ...claims, iss: this.issuer, aud: this.clientId }, this.signingMaterial.privateKey, {
+      algorithm: 'RS256', keyid: String(this.signingMaterial.publicJwk.kid), expiresIn: '5m', notBefore,
+    });
+  }
+
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     const url = String(input);
     if (this.failureMode === 'timeout') throw new Error('OIDC provider request timed out');
@@ -73,7 +79,13 @@ export class MockOidcProvider {
     if (url === `${this.issuer}/jwks`) return Response.json({ keys: [this.signingMaterial.publicJwk] });
     if (url === `${this.issuer}/token` && init?.method === 'POST') {
       if (this.failureMode === 'invalid_token') return Response.json({ id_token: 'invalid.token.value' });
+      if (this.failureMode === 'wrong_audience') {
+        return Response.json({ id_token: jwt.sign({ ...this.tokenClaims, iss: this.issuer, aud: 'wrong-audience' }, this.signingMaterial.privateKey, {
+          algorithm: 'RS256', keyid: String(this.signingMaterial.publicJwk.kid), expiresIn: '5m',
+        }) });
+      }
       if (this.failureMode === 'expired_token') return Response.json({ id_token: this.issueIdToken(undefined, -1) });
+      if (this.failureMode === 'not_yet_valid_token') return Response.json({ id_token: this.issueIdTokenWithNotBefore(this.tokenClaims, '5m') });
       if (this.failureMode === 'missing_subject') return Response.json({ id_token: this.issueIdToken({ email: 'person@example.test', email_verified: true, nonce: 'nonce-1', groups: ['ops'] }) });
       if (this.failureMode === 'group_overage') {
         return Response.json({ id_token: this.issueIdToken({
