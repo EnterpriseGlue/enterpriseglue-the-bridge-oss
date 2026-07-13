@@ -1850,7 +1850,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ `GET /api/identity/sync-runs` and `GET /api/identity/sync-runs/:id/events`
   - Exposes provider-neutral login/scheduled reconciliation diagnostics.
 - [x] ✅ `GET /api/auth/providers/enabled`
-  - Returns minimal provider-id-bound OIDC/SAML/LDAP direct-login options without secrets or mapping details. The login UI merges these options with legacy providers, redirects OIDC/SAML by provider id, and presents a dedicated direct-LDAP credential form.
+  - Returns minimal provider-id-bound OIDC/SAML/LDAP direct-login options without secrets or mapping details. The login UI treats these as canonical, falls back to legacy provider buttons only when no direct provider-neutral option exists, redirects OIDC/SAML by provider id, and presents a dedicated direct-LDAP credential form.
 - [x] ✅ `GET /api/auth/providers/:providerId/start` for direct OIDC and SAML providers
   - Starts OIDC login for the exact provider id with PKCE and nonce. Starts SAML login with signed, expiring RelayState because cross-site SAML POST callbacks cannot safely depend on a Lax cookie. Both bind provider, tenant, and return path.
 - [x] ✅ `POST /api/auth/providers/saml/callback`

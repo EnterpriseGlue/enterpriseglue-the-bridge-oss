@@ -171,7 +171,8 @@ export default function Login() {
   const hasTriggeredAutoSsoRedirect = useRef(false);
   const localLoginDisabledByPolicy = !ssoLoading && ssoProviders.length > 0;
   
-  // Legacy provider rows remain available while provider-neutral OIDC/LDAP login rolls out.
+  // Prefer the canonical provider-neutral registry. Legacy rows remain only as
+  // a fallback while installations finish moving their provider definitions.
   useEffect(() => {
     setSsoLoading(true);
     Promise.all([
@@ -191,7 +192,7 @@ export default function Login() {
             loginMethod: provider.loginMethod,
           }))
           : [];
-        setSsoProviders([...legacy, ...identity]);
+        setSsoProviders(identity.length > 0 ? identity : legacy);
       })
       .catch(() => setSsoProviders([]))
       .finally(() => setSsoLoading(false));
