@@ -148,7 +148,7 @@ function adapterType(providerType: string): IdentityProviderType {
 }
 
 class SsoNormalizedIdentityServiceClass {
-  async upsertIdentity(input: UpsertSsoNormalizedIdentityInput): Promise<{ id: string; created: boolean }> {
+  async upsertIdentity(input: UpsertSsoNormalizedIdentityInput): Promise<{ id: string; created: boolean; groupMembershipsCreated: number; groupMembershipsRemoved: number }> {
     const dataSource = await getDataSource();
     return this.upsertIdentityInStore(dataSource, input);
   }
@@ -156,7 +156,7 @@ class SsoNormalizedIdentityServiceClass {
   async upsertIdentityWithManager(
     manager: EntityManager,
     input: UpsertSsoNormalizedIdentityInput
-  ): Promise<{ id: string; created: boolean }> {
+  ): Promise<{ id: string; created: boolean; groupMembershipsCreated: number; groupMembershipsRemoved: number }> {
     return this.upsertIdentityInStore(manager, input);
   }
 
@@ -310,7 +310,7 @@ class SsoNormalizedIdentityServiceClass {
   private async upsertIdentityInStore(
     store: SsoNormalizedIdentityStore,
     input: UpsertSsoNormalizedIdentityInput
-  ): Promise<{ id: string; created: boolean }> {
+  ): Promise<{ id: string; created: boolean; groupMembershipsCreated: number; groupMembershipsRemoved: number }> {
     const tenantId = normalizeNullableText(input.tenantId);
     const providerId = normalizeRequiredText(input.providerId, 'providerId');
     const providerSubject = normalizeRequiredText(input.providerSubject, 'providerSubject');
@@ -359,7 +359,7 @@ class SsoNormalizedIdentityServiceClass {
       directoryTenantId: update.providerTenantId,
       observedAt: now,
     });
-    await identityEntitlementMappingService.syncMembershipsInStore(store, update.userId, tenantId, normalized);
+    const membershipSync = await identityEntitlementMappingService.syncMembershipsInStore(store, update.userId, tenantId, normalized);
 
     if (existing) {
       await repo.update({ id: existing.id }, update);
@@ -367,7 +367,7 @@ class SsoNormalizedIdentityServiceClass {
         tenantId, providerId, providerType: update.providerType, subjectId: providerSubject,
         directoryTenantId: update.providerTenantId, userId: update.userId, emailHint: update.email, now,
       });
-      return { id: existing.id, created: false };
+      return { id: existing.id, created: false, groupMembershipsCreated: membershipSync.created, groupMembershipsRemoved: membershipSync.removed };
     }
 
     const id = generateId();
@@ -381,7 +381,7 @@ class SsoNormalizedIdentityServiceClass {
       tenantId, providerId, providerType: update.providerType, subjectId: providerSubject,
       directoryTenantId: update.providerTenantId, userId: update.userId, emailHint: update.email, now,
     });
-    return { id, created: true };
+    return { id, created: true, groupMembershipsCreated: membershipSync.created, groupMembershipsRemoved: membershipSync.removed };
   }
 }
 

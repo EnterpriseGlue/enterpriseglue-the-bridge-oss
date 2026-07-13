@@ -66,7 +66,7 @@ describe('ssoNormalizedIdentityService', () => {
       now: 1234,
     });
 
-    expect(result).toEqual({ id: expect.any(String), created: true });
+    expect(result).toEqual({ id: expect.any(String), created: true, groupMembershipsCreated: 0, groupMembershipsRemoved: 0 });
     expect(qb.where).toHaveBeenCalledWith('identity.providerId = :providerId', { providerId: 'provider-1' });
     expect(qb.andWhere).toHaveBeenCalledWith('identity.providerSubject = :providerSubject', { providerSubject: 'subject-1' });
     expect(qb.andWhere).toHaveBeenCalledWith('identity.tenantId = :tenantId', { tenantId: 'tenant-a' });
@@ -134,7 +134,7 @@ describe('ssoNormalizedIdentityService', () => {
       now: 5678,
     });
 
-    expect(result).toEqual({ id: 'identity-1', created: false });
+    expect(result).toEqual({ id: 'identity-1', created: false, groupMembershipsCreated: 0, groupMembershipsRemoved: 0 });
     expect(qb.andWhere).toHaveBeenCalledWith('identity.tenantId IS NULL');
     expect(update).toHaveBeenCalledWith({ id: 'identity-1' }, expect.objectContaining({
       providerId: 'microsoft',

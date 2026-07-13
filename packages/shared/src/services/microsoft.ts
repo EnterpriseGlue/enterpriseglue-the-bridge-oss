@@ -148,7 +148,7 @@ async function syncMicrosoftAuthorizationForUser(
   userInfo: MicrosoftUserInfo,
   ssoClaims: SsoClaims
 ): Promise<SsoSyncCounts> {
-  await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
+  const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
     providerId: 'microsoft',
     providerType: 'microsoft',
     providerSubject: userInfo.oid,
@@ -164,9 +164,9 @@ async function syncMicrosoftAuthorizationForUser(
   const groupSync = await ssoGroupMappingService.syncMembershipsForUserWithManager(manager, userId, ssoClaims, 'microsoft');
   const assignmentSync = await ssoAssignmentMappingService.syncAssignmentsForUserWithManager(manager, userId, ssoClaims, 'microsoft');
   return {
-    groupMembershipsCreated: groupSync.created,
+    groupMembershipsCreated: groupSync.created + (normalizedIdentitySync.groupMembershipsCreated || 0),
     groupMembershipsUpdated: groupSync.updated,
-    groupMembershipsRemoved: groupSync.removed,
+    groupMembershipsRemoved: groupSync.removed + (normalizedIdentitySync.groupMembershipsRemoved || 0),
     assignmentsCreated: assignmentSync.created,
     assignmentsUpdated: assignmentSync.updated,
     assignmentsRemoved: assignmentSync.removed,

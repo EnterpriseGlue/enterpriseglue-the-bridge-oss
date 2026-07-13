@@ -43,7 +43,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.j
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({
   ssoNormalizedIdentityService: {
-    upsertIdentityWithManager: vi.fn().mockResolvedValue({ id: 'identity-1', created: true }),
+    upsertIdentityWithManager: vi.fn().mockResolvedValue({ id: 'identity-1', created: true, groupMembershipsCreated: 2, groupMembershipsRemoved: 1 }),
   },
 }));
 
@@ -145,7 +145,8 @@ describe('microsoft service', () => {
     expect(groupSyncOrder).toBeLessThan(engineSyncOrder);
     expect(ssoSyncDiagnosticsService.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({
       providerId: 'microsoft',
-      groupMembershipsCreated: 1,
+      groupMembershipsCreated: 3,
+      groupMembershipsRemoved: 1,
       assignmentsCreated: 1,
       details: expect.objectContaining({ email: 'sso-user@example.com' }),
     }));
