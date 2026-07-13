@@ -1825,7 +1825,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ `GET /api/config-bundles/runs/:id`
   - Returns one run with diagnostics.
 - [x] ✅ `GET /api/authz/config-bundles/export`
-  - Exports current config-owned roles, groups, and engines as JSON. Export coverage for the remaining apply-supported object families is pending.
+  - Exports all apply-supported config-owned roles, groups, engines, Engine Sets, runtime resource sets, identity providers/mappings, scoped group assignments, and project-engine targets as JSON. It retains secret references only and fails instead of omitting an unresolved config reference.
 - [ ] ⬜ `POST /api/config-bundles/validate-secret-refs`
   - Optional preflight check for secret reference availability without returning secret values.
 - [x] ✅ `GET|POST|PUT|DELETE /api/identity/providers`
@@ -2242,7 +2242,7 @@ Phase 0 exit criteria:
 
 ### Phase 5: APIs And OpenAPI
 
-- [x] ✅ Add config bundle preview/diff/apply APIs, hash-bound apply audit events, recent apply-run history API, server-side export of config-owned roles/groups/engines, and `pnpm authz:config` CI preview/apply command. Multi-file folder/ZIP import and export of the remaining config families remain pending.
+- [x] ✅ Add config bundle preview/diff/apply APIs, hash-bound apply audit events, recent apply-run history API, server-side export of all apply-supported config-owned object families, and `pnpm authz:config` CI preview/apply command. Multi-file folder/ZIP import remains pending.
 - [x] ✅ Add runtime resource inventory and runtime resource set read/preview/reconcile APIs. On-demand reconciliation preserves richer lineage and deactivates only definitions absent from a confirmed engine response.
 - [ ] ⬜ Add provider-neutral identity provider, identity mapping, mapping test, sync-run, and sync-event APIs.
 - [x] ✅ Add direct deployment receipt and deployment lineage APIs with machine-principal authorization and idempotency keys. Receipts are merged into the canonical deployment history, so proxy and externally reported deployment lineage use one model.

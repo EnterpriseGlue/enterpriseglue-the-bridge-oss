@@ -67,7 +67,6 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
   const engineKeys = new Set(engines.map((engine) => engine.key));
   const engineSetKeys = new Set(engineSets.map((engineSet) => engineSet.key));
   const runtimeResourceSetKeys = new Set(runtimeResourceSets.map((set) => set.key));
-  const providerKeys = new Set(identityProviders.map((provider) => provider.key));
   const permissionScopes = new Map(PermissionCatalog.map((permission) => [permission.key, permission.scope]));
 
   roles.forEach((role, index) => {
@@ -104,9 +103,8 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
   });
 
   identityMappings.forEach((mapping, index) => {
-    if (providerKeys.size > 0 && !providerKeys.has(mapping.providerKey)) {
-      errors.push({ path: `./identity-mappings.json.identityMappings.${index}.providerKey`, message: `Unknown identity provider key: ${mapping.providerKey}` });
-    }
+    // Providers may be intentionally pre-existing and managed outside this
+    // bundle. The persisted diff/apply resolver validates that reference.
     if (!groupKeys.has(mapping.targetGroupKey)) {
       errors.push({ path: `./identity-mappings.json.identityMappings.${index}.targetGroupKey`, message: `Unknown group key: ${mapping.targetGroupKey}` });
     }
