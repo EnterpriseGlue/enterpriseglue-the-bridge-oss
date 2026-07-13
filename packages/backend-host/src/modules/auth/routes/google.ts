@@ -114,7 +114,6 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
     logger.info('[Google Auth] User provisioned:', { 
       id: user.id, 
       email: user.email, 
-      platformRole: user.platformRole,
       isNew: !user.lastLoginAt 
     });
 

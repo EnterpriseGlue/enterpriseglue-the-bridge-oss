@@ -114,7 +114,6 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
     logger.info('[Microsoft Auth] User provisioned:', { 
       id: user.id, 
       email: user.email, 
-      platformRole: user.platformRole,
       isNew: !user.lastLoginAt 
     });
 
