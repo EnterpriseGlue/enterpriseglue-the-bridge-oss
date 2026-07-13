@@ -147,9 +147,15 @@ async function syncMicrosoftAuthorizationForUser(
   manager: any,
   userId: string,
   userInfo: MicrosoftUserInfo,
-  ssoClaims: SsoClaims
+  ssoClaims: SsoClaims,
+  legacyPlatformRole: 'admin' | 'user'
 ): Promise<SsoSyncCounts> {
   const baselineMembership = await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
+  if (legacyPlatformRole === 'admin') {
+    await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, userId);
+  } else {
+    await authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager(manager, userId);
+  }
   const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
     providerId: 'microsoft',
     providerType: 'microsoft',
@@ -233,7 +239,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
           updatedAt: now,
         });
 
-        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims);
+        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, platformRole);
 
         return {
           ...user,
@@ -269,7 +275,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
           lockedUntil: null,
         });
 
-        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims);
+        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, platformRole);
 
         return {
           ...user,
@@ -303,7 +309,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
       });
 
       const newUser = await userRepo.findOneBy({ id: userId });
-      syncCounts = await syncMicrosoftAuthorizationForUser(manager, userId, userInfo, ssoClaims);
+      syncCounts = await syncMicrosoftAuthorizationForUser(manager, userId, userInfo, ssoClaims, resolvedRole);
       return newUser;
     });
 

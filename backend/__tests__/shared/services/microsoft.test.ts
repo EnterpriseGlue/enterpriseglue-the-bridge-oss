@@ -31,6 +31,8 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.
 vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({
   authzGroupService: {
     ensureAuthenticatedUserMembershipWithManager: vi.fn().mockResolvedValue({ id: 'baseline-1', created: true }),
+    ensureLegacyPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ id: 'admin-1', created: true }),
+    removeLegacyPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ removed: false }),
   },
 }));
 
@@ -146,6 +148,8 @@ describe('microsoft service', () => {
       'microsoft',
     );
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
+    expect(authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
+    expect(authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
     const snapshotOrder = (ssoNormalizedIdentityService.upsertIdentityWithManager as unknown as Mock).mock.invocationCallOrder[0];
     const groupSyncOrder = (ssoGroupMappingService.syncMembershipsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];
     const engineSyncOrder = (ssoAssignmentMappingService.syncAssignmentsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];

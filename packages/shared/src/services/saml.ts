@@ -366,9 +366,15 @@ async function syncSamlAuthorizationForUser(
   userInfo: SamlUserInfo,
   providerId: string,
   tenantId: string | null,
-  ssoClaims: SsoClaims
+  ssoClaims: SsoClaims,
+  legacyPlatformRole: PlatformRole
 ): Promise<SsoSyncCounts> {
   const baselineMembership = await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
+  if (legacyPlatformRole === 'admin') {
+    await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, userId);
+  } else {
+    await authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager(manager, userId);
+  }
   const subject = samlSubject(userInfo);
   const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
     tenantId,
@@ -457,7 +463,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
           updatedAt: now,
         });
 
-        syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims);
+        syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims, platformRole);
 
         return {
           ...user,
@@ -490,7 +496,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
           lockedUntil: null,
         });
 
-        syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims);
+        syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims, platformRole);
 
         return {
           ...user,
@@ -522,7 +528,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
         lastLoginAt: now,
       });
 
-      syncCounts = await syncSamlAuthorizationForUser(manager, userId, userInfo, providerId, tenantId, ssoClaims);
+      syncCounts = await syncSamlAuthorizationForUser(manager, userId, userInfo, providerId, tenantId, ssoClaims, resolvedRole);
       return await userRepo.findOneBy({ id: userId });
     });
 

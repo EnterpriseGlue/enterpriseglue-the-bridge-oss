@@ -169,9 +169,15 @@ async function syncGoogleAuthorizationForUser(
   manager: any,
   userId: string,
   userInfo: GoogleUserInfo,
-  ssoClaims: SsoClaims
+  ssoClaims: SsoClaims,
+  legacyPlatformRole: 'admin' | 'user'
 ): Promise<SsoSyncCounts> {
   const baselineMembership = await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
+  if (legacyPlatformRole === 'admin') {
+    await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, userId);
+  } else {
+    await authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager(manager, userId);
+  }
   const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
     providerId: 'google',
     providerType: 'google',
@@ -237,7 +243,7 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo) {
           lastLoginAt: now,
           updatedAt: now,
         });
-        syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims);
+        syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims, platformRole);
         return { ...user, email: userInfo.email, platformRole, firstName: userInfo.given_name || user.firstName, lastName: userInfo.family_name || user.lastName };
       }
 
@@ -252,7 +258,7 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo) {
           platformRole, lastLoginAt: now, updatedAt: now,
           mustResetPassword: false, failedLoginAttempts: 0, lockedUntil: null,
         });
-        syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims);
+        syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims, platformRole);
         return { ...user, authProvider: 'google', googleId: userInfo.sub, platformRole, firstName: userInfo.given_name || user.firstName, lastName: userInfo.family_name || user.lastName };
       }
 
@@ -263,7 +269,7 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo) {
         isActive: true, mustResetPassword: false, failedLoginAttempts: 0, createdAt: now, updatedAt: now, lastLoginAt: now,
       });
       const newUser = await userRepo.findOneBy({ id: userId });
-      syncCounts = await syncGoogleAuthorizationForUser(manager, userId, userInfo, ssoClaims);
+      syncCounts = await syncGoogleAuthorizationForUser(manager, userId, userInfo, ssoClaims, resolvedRole);
       return newUser;
     });
 
