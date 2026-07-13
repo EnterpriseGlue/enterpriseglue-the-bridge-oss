@@ -90,6 +90,7 @@ export const DEFAULT_PLATFORM_GROUP_IDS = {
 
 const AUTHENTICATED_USER_BASELINE_SOURCE_REF = 'authenticated-user-baseline';
 const BOOTSTRAP_PLATFORM_ADMIN_SOURCE_REF = 'bootstrap-platform-administrator';
+const MANUAL_PLATFORM_ADMIN_SOURCE_REF = 'manual-platform-administrator';
 const LEGACY_PLATFORM_ADMIN_SOURCE_REF = 'legacy-platform-role-administrator';
 const LEGACY_SSO_PLATFORM_ADMIN_SOURCE_REF_PREFIX = 'legacy-sso-platform-role:';
 
@@ -542,6 +543,32 @@ export class AuthzGroupService {
     );
   }
 
+  async ensureManualPlatformAdministratorMembershipWithManager(
+    manager: EntityManager,
+    userId: string
+  ): Promise<{ id: string; created: boolean }> {
+    return this.ensureSystemGroupMembershipWithManager(
+      manager,
+      DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+      userId,
+      MANUAL_PLATFORM_ADMIN_SOURCE_REF,
+      'manual'
+    );
+  }
+
+  async removeManualPlatformAdministratorMembershipWithManager(
+    manager: EntityManager,
+    userId: string
+  ): Promise<{ removed: boolean }> {
+    return this.removeSystemGroupMembershipWithManager(
+      manager,
+      DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+      userId,
+      MANUAL_PLATFORM_ADMIN_SOURCE_REF,
+      'manual'
+    );
+  }
+
   /**
    * Keeps a legacy SSO role mapping effective through the canonical platform
    * administrator group. The provider-specific source reference ensures one
@@ -601,31 +628,13 @@ export class AuthzGroupService {
     manager: EntityManager,
     userId: string
   ): Promise<{ removed: boolean }> {
-    const membershipRepo = manager.getRepository(AuthzGroupMembership);
-    const membership = await membershipRepo.findOneBy({
-      groupId: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+    return this.removeSystemGroupMembershipWithManager(
+      manager,
+      DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
       userId,
-      source: 'system',
-      sourceRef: LEGACY_PLATFORM_ADMIN_SOURCE_REF,
-    });
-    if (!membership) return { removed: false };
-
-    await membershipRepo.delete({ id: membership.id });
-    await recordGroupAudit(manager, {
-      tenantId: null,
-      userId: null,
-      action: 'authz.group_membership.legacy_platform_admin_remove',
-      resourceType: 'authz_group_membership',
-      resourceId: membership.id,
-      details: {
-        membershipId: membership.id,
-        groupId: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
-        userId,
-        source: 'system',
-        sourceRef: LEGACY_PLATFORM_ADMIN_SOURCE_REF,
-      },
-    });
-    return { removed: true };
+      LEGACY_PLATFORM_ADMIN_SOURCE_REF,
+      'system'
+    );
   }
 
   async backfillAuthenticatedUserMemberships(
@@ -774,7 +783,7 @@ export class AuthzGroupService {
     groupId: string,
     userId: string,
     sourceRef: string,
-    source: Extract<AuthzGroupSource, 'sso' | 'system'> = 'system'
+    source: Extract<AuthzGroupSource, 'manual' | 'sso' | 'system'> = 'system'
   ): Promise<{ id: string; created: boolean }> {
     const groupRepo = manager.getRepository(AuthzGroup);
     const group = await groupRepo.findOneBy({ id: groupId });
@@ -820,6 +829,29 @@ export class AuthzGroupService {
       },
     });
     return { id, created: true };
+  }
+
+  private async removeSystemGroupMembershipWithManager(
+    manager: EntityManager,
+    groupId: string,
+    userId: string,
+    sourceRef: string,
+    source: Extract<AuthzGroupSource, 'manual' | 'sso' | 'system'>
+  ): Promise<{ removed: boolean }> {
+    const membershipRepo = manager.getRepository(AuthzGroupMembership);
+    const membership = await membershipRepo.findOneBy({ groupId, userId, source, sourceRef });
+    if (!membership) return { removed: false };
+
+    await membershipRepo.delete({ id: membership.id });
+    await recordGroupAudit(manager, {
+      tenantId: null,
+      userId: null,
+      action: 'authz.group_membership.remove',
+      resourceType: 'authz_group_membership',
+      resourceId: membership.id,
+      details: { membershipId: membership.id, groupId, userId, source, sourceRef },
+    });
+    return { removed: true };
   }
 
   async removeMembership(id: string, removedById?: string | null): Promise<void> {

@@ -45,13 +45,14 @@ router.get('/api/users', requireAuth, requireAction('platform.users.read'), asyn
  * ✨ Uses validation middleware
  */
 router.post('/api/users', requireAuth, requireAction('platform.users.create'), createUserLimiter, validateBody(createUserSchema), asyncHandler(async (req, res) => {
-  const { email, firstName, lastName, platformRole, sendEmail } = req.body;
+  const { email, firstName, lastName, role, platformRole, sendEmail } = req.body;
+  const requestedPlatformRole = platformRole || role || 'user';
 
   const user = await userService.createPendingUser({
     email,
     firstName,
     lastName,
-    platformRole: platformRole || 'user',
+    platformRole: requestedPlatformRole,
     createdByUserId: req.user!.userId,
   });
 
@@ -61,7 +62,7 @@ router.post('/api/users', requireAuth, requireAction('platform.users.create'), c
     tenantSlug: 'default',
     resourceType: 'platform_user',
     resourceName: 'Platform access',
-    platformRole: (platformRole || 'user'),
+    platformRole: requestedPlatformRole,
     createdByUserId: req.user!.userId,
     invitedByName: req.user!.email,
     deliveryMethod: sendEmail ? 'email' : 'manual',
@@ -105,7 +106,12 @@ router.get('/api/users/:id', requireAuth, requireAction('platform.users.read'), 
  */
 router.put('/api/users/:id', requireAuth, requireAction('platform.users.update'), validateBody(updateUserSchema), asyncHandler(async (req, res) => {
   const userId = String(req.params.id);
-  const user = await userService.updateUser(userId, req.body);
+  const { role, ...input } = req.body;
+  const requestedPlatformRole = input.platformRole || role;
+  const user = await userService.updateUser(
+    userId,
+    requestedPlatformRole ? { ...input, platformRole: requestedPlatformRole } : input
+  );
   res.json(user);
 }));
 

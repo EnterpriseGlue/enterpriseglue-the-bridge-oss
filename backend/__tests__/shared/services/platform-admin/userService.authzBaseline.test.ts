@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const dataSource = vi.hoisted(() => ({ transaction: vi.fn() }));
 const authzGroupService = vi.hoisted(() => ({
   ensureAuthenticatedUserMembershipWithManager: vi.fn(),
-  ensureLegacyPlatformAdministratorMembershipWithManager: vi.fn(),
-  removeLegacyPlatformAdministratorMembershipWithManager: vi.fn(),
+  ensureManualPlatformAdministratorMembershipWithManager: vi.fn(),
+  removeManualPlatformAdministratorMembershipWithManager: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn(async () => dataSource) }));
@@ -23,8 +23,8 @@ describe('UserService authorization baseline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authzGroupService.ensureAuthenticatedUserMembershipWithManager.mockResolvedValue({ id: 'baseline-1', created: true });
-    authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager.mockResolvedValue({ id: 'admin-1', created: true });
-    authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager.mockResolvedValue({ removed: true });
+    authzGroupService.ensureManualPlatformAdministratorMembershipWithManager.mockResolvedValue({ id: 'admin-1', created: true });
+    authzGroupService.removeManualPlatformAdministratorMembershipWithManager.mockResolvedValue({ removed: true });
   });
 
   function mockCreateTransaction(platformRole: 'admin' | 'user') {
@@ -64,10 +64,10 @@ describe('UserService authorization baseline', () => {
 
     expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'user' }));
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
-    expect(authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
+    expect(authzGroupService.ensureManualPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
   });
 
-  it('adds the platform-administrator system group when a legacy admin is created', async () => {
+  it('adds a manually managed platform-administrator membership when an admin is created', async () => {
     const { manager, userRepo } = mockCreateTransaction('admin');
 
     await userService.createUser({
@@ -78,10 +78,10 @@ describe('UserService authorization baseline', () => {
 
     expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'admin' }));
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
-    expect(authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
+    expect(authzGroupService.ensureManualPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
   });
 
-  it('removes only the legacy-derived administrator membership when a user is demoted', async () => {
+  it('removes only the manual administrator membership when a user is demoted', async () => {
     const { manager, userRepo } = mockCreateTransaction('admin');
     userRepo.findOneBy
       .mockResolvedValueOnce({
@@ -98,7 +98,7 @@ describe('UserService authorization baseline', () => {
     await userService.updateUser('user-1', { platformRole: 'user' });
 
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
-    expect(authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
-    expect(authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
+    expect(authzGroupService.removeManualPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
+    expect(authzGroupService.ensureManualPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
   });
 });

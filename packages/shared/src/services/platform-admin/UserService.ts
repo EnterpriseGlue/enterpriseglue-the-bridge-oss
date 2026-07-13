@@ -200,7 +200,7 @@ export class UserService {
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
       if (normalizedPlatformRole === 'admin') {
-        await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, userId);
+        await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, userId);
       }
       return userRepo.findOneBy({ id: userId });
     });
@@ -249,7 +249,7 @@ export class UserService {
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
       if (normalizedPlatformRole === 'admin') {
-        await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, userId);
+        await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, userId);
       }
       return userRepo.findOneBy({ id: userId });
     });
@@ -279,9 +279,9 @@ export class UserService {
         await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, id);
       }
       if (nextPlatformRole === 'admin') {
-        await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, id);
+        await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, id);
       } else if (input.platformRole !== undefined) {
-        await authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager(manager, id);
+        await authzGroupService.removeManualPlatformAdministratorMembershipWithManager(manager, id);
       }
       return userRepo.findOneBy({ id });
     });

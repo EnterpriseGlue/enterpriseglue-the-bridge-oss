@@ -162,6 +162,31 @@ describe('users routes', () => {
     }));
   });
 
+  it('uses the preferred role field for the canonical user-management grant', async () => {
+    const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
+    const { invitationService } = await import('@enterpriseglue/shared/services/invitations.js');
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:create');
+    (userService.createPendingUser as unknown as Mock).mockResolvedValue({ id: 'u-admin', email: 'admin@example.com' });
+    (invitationService.createInvitation as unknown as Mock).mockResolvedValue({
+      invitationId: 'inv-admin',
+      inviteUrl: 'http://frontend.test/t/default/invite/token-admin',
+      oneTimePassword: 'RevealMe123!',
+      emailSent: false,
+    });
+
+    const response = await request(app)
+      .post('/api/users')
+      .send({ email: 'admin@example.com', role: 'admin', sendEmail: false });
+
+    expect(response.status).toBe(201);
+    expect(userService.createPendingUser).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'admin@example.com',
+      platformRole: 'admin',
+    }));
+    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'admin' }));
+  });
+
   it('lists users with granular users:view permission', async () => {
     const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
     permissionGate.allowedPermissions.clear();
@@ -220,6 +245,20 @@ describe('users routes', () => {
 
     expect(response.status).toBe(200);
     expect(userService.updateUser).toHaveBeenCalledWith('user-2', { firstName: 'Updated' });
+  });
+
+  it('uses the preferred role field when updating platform access', async () => {
+    const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:update');
+    (userService.updateUser as unknown as Mock).mockResolvedValue({ id: 'user-2', platformRole: 'admin' });
+
+    const response = await request(app)
+      .put('/api/users/user-2')
+      .send({ role: 'admin' });
+
+    expect(response.status).toBe(200);
+    expect(userService.updateUser).toHaveBeenCalledWith('user-2', { platformRole: 'admin' });
   });
 
   it('soft deactivates a user through DELETE /api/users/:id', async () => {
