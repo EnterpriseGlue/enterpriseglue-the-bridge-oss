@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
-import { ldapIdentityProviderAdapter, samlIdentityProviderAdapter } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
+import { ldapIdentityProviderAdapter, oidcIdentityProviderAdapter, samlIdentityProviderAdapter } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
 import { MockLdapDirectory, MockOidcProvider, MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
 
 describe('identity mock provider contracts', () => {
@@ -56,5 +56,19 @@ describe('identity mock provider contracts', () => {
     await expect(genericOidcService.exchangeCode(provider.configuration(), {
       code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
     })).rejects.toThrow('OIDC ID token header is invalid');
+  });
+
+  it('emits an Entra-style group-overage marker that authorization rejects before synchronization', async () => {
+    const provider = new MockOidcProvider();
+    provider.setFailureMode('group_overage');
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+
+    const claims = await genericOidcService.exchangeCode(provider.configuration(), {
+      code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
+    });
+
+    expect(() => oidcIdentityProviderAdapter.normalizeIdentity({
+      providerKey: 'entra-mock', subjectId: claims.sub, claims,
+    })).toThrow('OIDC group claims are incomplete');
   });
 });

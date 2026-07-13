@@ -2,7 +2,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { IdentityProviderAdapter, NormalizedExternalIdentity, ProviderIdentityInput } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
 
-export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token';
+export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'group_overage';
 
 interface SigningMaterial {
   privateKey: string;
@@ -72,6 +72,12 @@ export class MockOidcProvider {
     if (url === `${this.issuer}/jwks`) return Response.json({ keys: [this.signingMaterial.publicJwk] });
     if (url === `${this.issuer}/token` && init?.method === 'POST') {
       if (this.failureMode === 'invalid_token') return Response.json({ id_token: 'invalid.token.value' });
+      if (this.failureMode === 'group_overage') {
+        return Response.json({ id_token: this.issueIdToken({
+          sub: 'user-1', email: 'person@example.test', email_verified: true, nonce: 'nonce-1', hasgroups: true,
+          _claim_names: { groups: 'src1' }, _claim_sources: { src1: { endpoint: 'https://graph.example.test/me/getMemberObjects' } },
+        }) });
+      }
       return Response.json({ id_token: this.issueIdToken() });
     }
     return new Response('not found', { status: 404 });
