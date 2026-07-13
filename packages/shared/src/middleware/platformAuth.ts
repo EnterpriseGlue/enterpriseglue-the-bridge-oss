@@ -35,7 +35,6 @@ async function hasAllPlatformPermissions(req: Request, permissions: Permission[]
     const allowed = await permissionService.hasPermission(permission, {
       userId: req.user.userId,
       tenantId: req.tenant?.tenantId || null,
-      platformRole: req.user.platformRole || (req.user as { role?: string }).role,
       resourceType: 'platform',
     });
     if (!allowed) {

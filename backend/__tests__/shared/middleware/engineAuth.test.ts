@@ -75,7 +75,6 @@ describe('engineAuth middleware', () => {
     expect(next).toHaveBeenCalledWith();
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'engine',
       resourceId: 'engine-1',
     }));

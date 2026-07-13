@@ -59,7 +59,6 @@ async function hasEnginePermission(req: Request, engineId: string, permission?: 
     if (await permissionService.hasPermission(candidate, {
       userId: req.user!.userId,
       tenantId: req.tenant?.tenantId || null,
-      platformRole: req.user!.platformRole || (req.user as any).role,
       resourceType: 'engine',
       resourceId: engineId,
     })) {

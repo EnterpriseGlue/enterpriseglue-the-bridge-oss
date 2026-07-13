@@ -16,7 +16,6 @@ type PermissionFallback = Permission | Permission[];
 async function hasProjectPermissionFallback(params: {
   userId: string;
   tenantId?: string | null;
-  platformRole?: string;
   projectId: string;
   permission?: PermissionFallback;
 }): Promise<boolean> {
@@ -29,7 +28,6 @@ async function hasProjectPermissionFallback(params: {
     if (await permissionService.hasPermission(permission, {
       userId: params.userId,
       tenantId: params.tenantId || null,
-      platformRole: params.platformRole,
       resourceType: 'project',
       resourceId: params.projectId,
     })) {
@@ -90,7 +88,6 @@ export function requireProjectRole(
       const hasScopedPermission = await hasProjectPermissionFallback({
         userId,
         tenantId: req.tenant?.tenantId || null,
-        platformRole: req.user?.platformRole || (req.user as any)?.role,
         projectId,
         permission,
       });
@@ -146,7 +143,6 @@ export function requireProjectAccess(
       const hasScopedPermission = await hasProjectPermissionFallback({
         userId,
         tenantId: req.tenant?.tenantId || null,
-        platformRole: req.user?.platformRole || (req.user as any)?.role,
         projectId,
         permission,
       });
@@ -207,7 +203,6 @@ export function requireFileAccess(
       const hasScopedPermission = await hasProjectPermissionFallback({
         userId,
         tenantId: req.tenant?.tenantId || null,
-        platformRole: req.user?.platformRole || (req.user as any)?.role,
         projectId,
         permission,
       });
@@ -263,7 +258,6 @@ export function requireFileEditAccess(
       const hasScopedPermission = await hasProjectPermissionFallback({
         userId,
         tenantId: req.tenant?.tenantId || null,
-        platformRole: req.user?.platformRole || (req.user as any)?.role,
         projectId,
         permission,
       });
@@ -333,7 +327,6 @@ export function requireEngineRole(
         if (await permissionService.hasPermission(candidate, {
           userId,
           tenantId: req.tenant?.tenantId || null,
-          platformRole: req.user?.platformRole || (req.user as any)?.role,
           resourceType: 'engine',
           resourceId: engineId,
         })) {
