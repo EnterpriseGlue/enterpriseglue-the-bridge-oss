@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   filterConfigBundleChanges,
+  formatConfigBundleObjectType,
   getConfigBundleChangeRisk,
   groupConfigBundleChanges,
 } from '@src/features/platform-admin/components/configBundleDiff';
@@ -32,5 +33,11 @@ describe('ConfigurationBundleSettingsTab diff helpers', () => {
       ['review', 1],
       ['informational', 1],
     ]);
+  });
+
+  it('uses operator-facing labels for authorization object types', () => {
+    expect(formatConfigBundleObjectType('assignment')).toBe('Scoped role assignment');
+    expect(formatConfigBundleObjectType('project_engine_target')).toBe('Project-engine target');
+    expect(formatConfigBundleObjectType('identity_mapping')).toBe('Identity mapping');
   });
 });

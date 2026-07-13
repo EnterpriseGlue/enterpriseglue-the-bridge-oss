@@ -7,6 +7,22 @@ export type ConfigBundleDiffChange = {
 
 export type ConfigBundleChangeRisk = 'requires_attention' | 'review' | 'informational';
 
+const objectTypeLabels: Record<string, string> = {
+  assignment: 'Scoped role assignment',
+  engine: 'Engine',
+  engine_set: 'Engine Set',
+  group: 'Group',
+  identity_mapping: 'Identity mapping',
+  identity_provider: 'Identity provider',
+  project_engine_target: 'Project-engine target',
+  role: 'Role',
+  runtime_resource_set: 'Runtime resource set',
+};
+
+export function formatConfigBundleObjectType(objectType: string): string {
+  return objectTypeLabels[objectType] || objectType.replace(/_/g, ' ');
+}
+
 export function getConfigBundleChangeRisk(change: ConfigBundleDiffChange): ConfigBundleChangeRisk {
   if (change.operation === 'conflict' || change.operation === 'archive') return 'requires_attention';
   if (change.operation === 'update') return 'review';
