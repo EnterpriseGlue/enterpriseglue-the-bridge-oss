@@ -1817,15 +1817,15 @@ The implementation should extend existing packages rather than introduce an auth
 ## Proposed APIs
 
 - [x] ✅ `POST /api/authz/config-bundles/preview` and `POST /api/authz/config-bundles/diff`
-  - Preview validates the bundle; diff covers persisted roles, groups, engines, Engine Sets, runtime resource sets, identity providers, identity mappings, project-engine targets, and supported group assignments, and reports source-ownership conflicts and authoritative archives. Warnings, acknowledgements, and affected-object analysis remain pending.
+  - Preview validates the bundle; diff covers persisted roles, groups, engines, Engine Sets, runtime resource sets, identity providers, identity mappings, project-engine targets, and supported group assignments, and reports source-ownership conflicts and authoritative archives. It returns warnings and required acknowledgements for broad/destructive changes; affected-object analysis remains pending.
 - [x] ✅ `POST /api/authz/config-bundles/apply`
   - Applies an exact previewed bundle hash for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, identity providers, and identity mappings. Unsupported object families still fail closed.
 - [x] ✅ `GET /api/authz/config-bundles/runs`
   - Lists recent apply runs, including persisted reconciliation receipts.
 - [ ] ⬜ `GET /api/config-bundles/runs/:id`
   - Returns one run with diagnostics.
-- [ ] ⬜ `GET /api/config-bundles/export`
-  - Exports current config-managed records as JSON.
+- [x] ✅ `GET /api/authz/config-bundles/export`
+  - Exports current config-owned roles, groups, and engines as JSON. Export coverage for the remaining apply-supported object families is pending.
 - [ ] ⬜ `POST /api/config-bundles/validate-secret-refs`
   - Optional preflight check for secret reference availability without returning secret values.
 - [x] ✅ `GET|POST|PUT|DELETE /api/identity/providers`
