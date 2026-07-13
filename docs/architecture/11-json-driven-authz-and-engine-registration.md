@@ -1852,7 +1852,8 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Extract API-client and service-account credential routes into `routes/authz/machines.ts`, retaining existing reveal-once token and platform-action behavior.
 - [x] ✅ Extract Engine Set and runtime-resource inventory/materialization routes into `routes/authz/engine-sets.ts`, retaining tenant filtering and deployment-reconciliation behavior.
 - [x] ✅ Extract the roles/permissions catalog routes into `routes/authz/roles.ts`, retaining scoped-manager filtering and custom-role allow-only validation.
-- [ ] ⬜ Split the remaining `packages/backend-host/src/modules/platform-admin/routes/authz.ts` families into focused assignments/groups, identity, targets, external registration, and audit routers.
+- [x] ✅ Extract role-assignment and group routes into `routes/authz/assignments.ts`, retaining scoped-manager assignment/removal boundaries and manual group membership behavior.
+- [ ] ⬜ Split the remaining `packages/backend-host/src/modules/platform-admin/routes/authz.ts` families into focused identity, targets, external registration, and audit routers.
 - [x] ✅ Add the external machine-authenticated deployment receipt route with API deployment eligibility, action/OpenAPI metadata, audit logging, and inventory materialization. Runtime scope settings, inventory reads, and reconciliation routes remain pending.
 - [x] ✅ Update `packages/backend-host/src/modules/mission-control/engines/routes.ts` manual engine create/update/list/detail schemas and serializers, including runtime scope, deployment integration, metadata discovery, pipeline receipt ingestion, managed-field protection, and canonical deployment-history reads.
 - [ ] ⬜ Update auth start/callback routes and provider services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit.
@@ -2181,7 +2182,7 @@ This phase is required because the current implementation still carries compatib
 #### Module Boundaries
 
 - [ ] ⬜ Split the 8k+ line Access Control page into tab/domain components before adding Identity, Config Imports, and Runtime Resources.
-- [ ] ⬜ Split the platform authz router into assignments/groups, identity, targets, external registration, and audit routers. Roles/permissions, engine sets/runtime resources, policies, machines, and configuration bundles are already isolated.
+- [ ] ⬜ Split the platform authz router into identity, targets, external registration, and audit routers. Roles/permissions, assignments/groups, engine sets/runtime resources, policies, machines, and configuration bundles are already isolated.
 - [ ] ⬜ Split action and OpenAPI registrations into domain modules with aggregate validation exports so strict inventory guards remain authoritative.
 - [ ] ⬜ Keep shared types generated/imported from shared schemas instead of duplicating hand-maintained frontend interfaces.
 
