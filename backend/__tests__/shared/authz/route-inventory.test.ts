@@ -436,6 +436,7 @@ describe('authorization route inventory validation', () => {
           ['POST', '/api/identity/mappings/test', 'platform.self'],
           ['POST', '/api/identity/mappings/stored-snapshot-preview', 'platform.self'],
           ['POST', '/api/authz/legacy-mapping-coverage/{id}/verify', 'ssoMapping.byId'],
+          ['POST', '/api/authz/legacy-mapping-retirement/disable', 'platform.self'],
         ],
       },
       {

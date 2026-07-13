@@ -26,6 +26,7 @@ export interface LegacyMappingRetirementReadiness {
   verifiedReplacementCount: number;
   blockers: Array<{ id: string; family: LegacyMappingCoverageItem['family']; reason: string }>;
 }
+export interface LegacyMappingRetirementResult { platformRoleMappingsDisabled: number; groupMappingsDisabled: number; engineAssignmentMappingsDisabled: number; }
 
 function matchShape(mapping: { claimType: string; claimOperator: string | null; claimValue: string }, candidate: IdentityEntitlementMapping): boolean {
   const matchOperator = mapping.claimOperator === null || mapping.claimOperator === 'equals'
@@ -116,6 +117,23 @@ class LegacyMappingCoverageService {
       return [];
     });
     return { ready: blockers.length === 0, activeLegacyMappingCount: coverage.length, verifiedReplacementCount: coverage.length - blockers.length, blockers };
+  }
+
+  async retireLegacyMappings(tenantId?: string | null, actorId?: string | null): Promise<LegacyMappingRetirementResult> {
+    const normalizedTenantId = tenantId?.trim() || null;
+    const readiness = await this.getRetirementReadiness(normalizedTenantId);
+    if (!readiness.ready) throw Errors.forbidden('Legacy mapping retirement is blocked until every active mapping has a current verified replacement');
+    const dataSource = await getDataSource();
+    return dataSource.transaction(async (manager) => {
+      const now = Date.now();
+      const platform = await manager.getRepository(SsoClaimsMapping).update({ isActive: true }, { isActive: false, updatedAt: now });
+      const tenantWhere = normalizedTenantId ? [{ tenantId: normalizedTenantId, isActive: true }, { tenantId: IsNull(), isActive: true }] : { tenantId: IsNull(), isActive: true };
+      const groups = await manager.getRepository(SsoGroupMapping).update(tenantWhere as any, { isActive: false, updatedAt: now });
+      const engines = await manager.getRepository(SsoAssignmentMapping).update(tenantWhere as any, { isActive: false, updatedAt: now });
+      const result = { platformRoleMappingsDisabled: platform.affected || 0, groupMappingsDisabled: groups.affected || 0, engineAssignmentMappingsDisabled: engines.affected || 0 };
+      await manager.getRepository(AuditLog).insert({ id: generateId(), tenantId: normalizedTenantId, userId: actorId || null, action: 'authz.legacy_mapping_retirement.disable', resourceType: 'platform', resourceId: null, ipAddress: null, userAgent: null, details: JSON.stringify({ readiness, result, rollback: 'Re-enable individual legacy mappings through their existing Active control if rollback is required.' }), createdAt: now });
+      return result;
+    });
   }
 }
 

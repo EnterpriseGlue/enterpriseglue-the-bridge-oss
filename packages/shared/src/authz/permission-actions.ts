@@ -522,6 +522,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'POST', route: '/api/identity/mappings/test', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/identity/mappings/stored-snapshot-preview', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/authz/legacy-mapping-coverage/{id}/verify', resourceResolver: 'ssoMapping.byId' },
+      { method: 'POST', route: '/api/authz/legacy-mapping-retirement/disable', resourceResolver: 'platform.self' },
     ],
   },
   {
