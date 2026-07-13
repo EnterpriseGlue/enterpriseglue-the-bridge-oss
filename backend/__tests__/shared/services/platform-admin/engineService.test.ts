@@ -19,58 +19,51 @@ describe('EngineService', () => {
     vi.clearAllMocks();
   });
 
-  it('returns owner role when user is owner', async () => {
+  it('returns the canonical owner role for an engine', async () => {
     const engineRepo = {
       findOne: vi.fn().mockResolvedValue({ id: 'engine-1', ownerId: 'user-1', delegateId: null }),
     };
-    const memberRepo = {
-      findOne: vi.fn().mockResolvedValue(null),
-    };
+    const assignmentSpy = vi.spyOn(permissionService, 'getAssignedEngineRole').mockResolvedValue('owner');
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Engine) return engineRepo;
-        if (entity === EngineMember) return memberRepo;
         throw new Error('Unexpected repository');
       },
     });
 
     const role = await service.getEngineRole('user-1', 'engine-1');
     expect(role).toBe('owner');
+    expect(assignmentSpy).toHaveBeenCalledWith('user-1', 'engine-1', undefined);
   });
 
-  it('returns membership role when user is member', async () => {
+  it('returns the canonical member role for an engine', async () => {
     const engineRepo = {
       findOne: vi.fn().mockResolvedValue({ id: 'engine-1', ownerId: 'owner-1', delegateId: null }),
     };
-    const memberRepo = {
-      findOne: vi.fn().mockResolvedValue({ role: 'operator' }),
-    };
+    const assignmentSpy = vi.spyOn(permissionService, 'getAssignedEngineRole').mockResolvedValue('operator');
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Engine) return engineRepo;
-        if (entity === EngineMember) return memberRepo;
         throw new Error('Unexpected repository');
       },
     });
 
     const role = await service.getEngineRole('user-1', 'engine-1');
     expect(role).toBe('operator');
+    expect(assignmentSpy).toHaveBeenCalledWith('user-1', 'engine-1', undefined);
   });
 
   it('checks access for required roles', async () => {
     const engineRepo = {
       findOne: vi.fn().mockResolvedValue({ id: 'engine-1', ownerId: 'owner-1', delegateId: null }),
     };
-    const memberRepo = {
-      findOne: vi.fn().mockResolvedValue({ role: 'deployer' }),
-    };
+    vi.spyOn(permissionService, 'getAssignedEngineRole').mockResolvedValue('deployer');
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Engine) return engineRepo;
-        if (entity === EngineMember) return memberRepo;
         throw new Error('Unexpected repository');
       },
     });
@@ -106,15 +99,7 @@ describe('EngineService', () => {
 
   it('includes engines granted by custom scoped RBAC assignments', async () => {
     const engine = { id: 'engine-1', name: 'Engine 1', ownerId: 'owner-1', delegateId: null, environmentTagId: null };
-    const engineRepo = {
-      find: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([engine]),
-    };
-    const memberRepo = {
-      find: vi.fn().mockResolvedValue([]),
-    };
+    const engineRepo = { find: vi.fn().mockResolvedValue([engine]) };
     const tagRepo = {
       find: vi.fn().mockResolvedValue([]),
     };
@@ -132,7 +117,6 @@ describe('EngineService', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Engine) return engineRepo;
-        if (entity === EngineMember) return memberRepo;
         if (entity === EnvironmentTag) return tagRepo;
         if (entity === RbacRoleAssignment) return assignmentRepo;
         throw new Error('Unexpected repository');

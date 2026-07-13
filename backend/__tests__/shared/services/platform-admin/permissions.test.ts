@@ -72,14 +72,34 @@ describe('permissionService', () => {
     vi.clearAllMocks();
   });
 
-  it('grants admin role all permissions', async () => {
-    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: vi.fn() });
+  it('does not grant access from a legacy platform role field', async () => {
+    const assignmentQb = {
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([]),
+    };
+    const grantQb = {
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getOne: vi.fn().mockResolvedValue(null),
+    };
+    const groupMembership = createGroupMembershipRepo();
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroupMembership) return groupMembership.repo;
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+        if (entity === PermissionGrant) return { createQueryBuilder: vi.fn().mockReturnValue(grantQb) };
+        if (entity === RbacRolePermission || entity === RbacRole) return {};
+        throw new Error('Unexpected repository');
+      },
+    });
 
     const result = await permissionService.hasPermission(PlatformPermissions.USER_VIEW, {
       userId: 'user-1',
       platformRole: 'admin',
     });
-    expect(result).toBe(true);
+    expect(result).toBe(false);
   });
 
   it('checks explicit grants when roles do not match', async () => {
@@ -1328,7 +1348,7 @@ describe('permissionService', () => {
     });
   });
 
-  it('returns current user permission snapshots for known project and engine scopes', async () => {
+  it('returns current user permission snapshots for canonical project and engine scopes', async () => {
     const projectAssignmentQb = {
       select: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
@@ -1367,16 +1387,12 @@ describe('permissionService', () => {
         .mockReturnValueOnce(runtimeAssignmentQb),
     };
     const groupMembership = createGroupMembershipRepo();
+    const catalogSpy = vi.spyOn(permissionService, 'getPermissionCatalog').mockResolvedValue([]);
+    const versionSpy = vi.spyOn(permissionService as any, 'getAuthorizationVersion').mockResolvedValue('authz:test');
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === AuthzGroupMembership) return groupMembership.repo;
-        if (entity === User) return { findOne: vi.fn().mockResolvedValue({ id: 'user-1', platformRole: 'admin' }) };
-        if (entity === Project) return { find: vi.fn().mockResolvedValue([{ id: 'project-owned' }]) };
-        if (entity === ProjectMember) return { find: vi.fn().mockResolvedValue([{ projectId: 'project-member' }]) };
-        if (entity === ProjectMemberRole) return { find: vi.fn().mockResolvedValue([]) };
-        if (entity === Engine) return { find: vi.fn().mockResolvedValue([{ id: 'engine-owned' }]) };
-        if (entity === EngineMember) return { find: vi.fn().mockResolvedValue([{ engineId: 'engine-member' }]) };
         if (entity === PermissionGrant) return { createQueryBuilder: vi.fn().mockReturnValue(grantQb) };
         if (entity === RbacRoleAssignment) return assignmentRepo;
         throw new Error('Unexpected repository');
@@ -1386,23 +1402,15 @@ describe('permissionService', () => {
     const snapshot = await permissionService.getCurrentUserPermissions('user-1');
 
     expect(snapshot.userId).toBe('user-1');
-    expect(snapshot.authorizationVersion).toMatch(/^authz:/);
-    expect(snapshot.platform).toContain(PlatformPermissions.USER_VIEW);
-    expect(snapshot.projects.map((project) => project.resourceId)).toEqual([
-      'project-member',
-      'project-owned',
-      'project-rbac',
-    ]);
-    expect(snapshot.engines.map((engine) => engine.resourceId)).toEqual([
-      'engine-member',
-      'engine-owned',
-      'engine-rbac',
-    ]);
-    expect(snapshot.projects[0].permissions).toContain(ProjectPermissions.FILES_VIEW);
-    expect(snapshot.engines[0].permissions).toContain(EnginePermissions.INSTANCE_VIEW);
+    expect(snapshot.authorizationVersion).toBe('authz:test');
+    expect(snapshot.platform).toEqual([]);
+    expect(snapshot.projects.map((project) => project.resourceId)).toEqual(['project-rbac']);
+    expect(snapshot.engines.map((engine) => engine.resourceId)).toEqual(['engine-rbac']);
+    catalogSpy.mockRestore();
+    versionSpy.mockRestore();
   });
 
-  it('keeps legacy role permission behavior', () => {
+  it('keeps legacy role definitions available for migration', () => {
     expect(permissionService.roleHasPermission(PlatformPermissions.USER_VIEW, { platformRole: 'developer' })).toBe(true);
     expect(permissionService.roleHasPermission(PlatformPermissions.USER_MANAGE, { platformRole: 'developer' })).toBe(false);
     expect(permissionService.roleHasPermission(ProjectPermissions.DEPLOY, { projectRole: 'developer' })).toBe(true);

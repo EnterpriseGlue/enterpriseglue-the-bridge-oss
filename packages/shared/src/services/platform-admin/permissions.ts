@@ -2593,9 +2593,8 @@ class PermissionServiceClass {
    * Check if user has a specific permission.
    *
    * Resolution order:
-   * 1. Check legacy role fields and memberships
-   * 2. Check scoped RBAC role assignments
-   * 3. Check explicit permission grants
+   * 1. Check scoped RBAC role assignments
+   * 2. Check explicit permission grants
    */
   async hasPermission(
     permission: Permission,
@@ -2613,44 +2612,6 @@ class PermissionServiceClass {
     const principal = this.resolvePermissionPrincipal(context);
     const candidatePermissions = compatiblePermissionCandidates(permission);
     const sources: PermissionEvaluationSource[] = [];
-
-    if (principal.principalType === 'user') {
-      const legacyRoles = await this.resolveLegacyRoles({
-        ...context,
-        userId: principal.principalId,
-      });
-
-      if (legacyRoles.platformRole === 'admin') {
-        sources.push({ type: 'legacy-role', role: 'admin', source: 'platform' });
-        return { allowed: true, reason: 'role:platform:admin', sources };
-      }
-
-      const platformRolePermission = candidatePermissions.find((candidate) =>
-        this.roleHasPermission(candidate, { platformRole: legacyRoles.platformRole })
-      );
-      if (legacyRoles.platformRole && platformRolePermission) {
-        sources.push({ type: 'legacy-role', role: legacyRoles.platformRole, source: 'platform' });
-        return { allowed: true, reason: `role:platform:${legacyRoles.platformRole}`, sources };
-      }
-
-      for (const projectRole of legacyRoles.projectRoles) {
-        const projectRolePermission = candidatePermissions.find((candidate) =>
-          this.roleHasPermission(candidate, { projectRole })
-        );
-        if (projectRolePermission) {
-          sources.push({ type: 'legacy-role', role: projectRole, source: 'project' });
-          return { allowed: true, reason: `role:project:${projectRole}`, sources };
-        }
-      }
-
-      const engineRolePermission = candidatePermissions.find((candidate) =>
-        this.roleHasPermission(candidate, { engineRole: legacyRoles.engineRole })
-      );
-      if (legacyRoles.engineRole && engineRolePermission) {
-        sources.push({ type: 'legacy-role', role: legacyRoles.engineRole, source: 'engine' });
-        return { allowed: true, reason: `role:engine:${legacyRoles.engineRole}`, sources };
-      }
-    }
 
     for (const candidatePermission of candidatePermissions) {
       const roleAssignmentSources = await this.getRoleAssignmentPermissionSources(
@@ -2687,20 +2648,19 @@ class PermissionServiceClass {
   async getCurrentUserPermissions(userId: string, tenantId?: string | null): Promise<CurrentUserPermissionsSnapshot> {
     const dataSource = await getDataSource();
     const generatedAt = Date.now();
-    const platformRole = await this.getUserPlatformRole(dataSource, userId);
     const projectIds = await this.getKnownProjectIds(dataSource, userId, tenantId);
     const engineIds = await this.getKnownEngineIds(dataSource, userId, tenantId);
 
     return {
       userId,
-      platform: await this.evaluatePermissionSet(userId, platformRole, 'platform', undefined, tenantId),
+      platform: await this.evaluatePermissionSet(userId, 'platform', undefined, tenantId),
       projects: await Promise.all(projectIds.map(async (projectId) => ({
         resourceId: projectId,
-        permissions: await this.evaluatePermissionSet(userId, platformRole, 'project', projectId, tenantId),
+        permissions: await this.evaluatePermissionSet(userId, 'project', projectId, tenantId),
       }))),
       engines: await Promise.all(engineIds.map(async (engineId) => ({
         resourceId: engineId,
-        permissions: await this.evaluatePermissionSet(userId, platformRole, 'engine', engineId, tenantId),
+        permissions: await this.evaluatePermissionSet(userId, 'engine', engineId, tenantId),
       }))),
       authorizationVersion: await this.getAuthorizationVersion(dataSource, {
         userId,
@@ -2815,7 +2775,6 @@ class PermissionServiceClass {
 
   private async evaluatePermissionSet(
     userId: string,
-    platformRole: string | undefined,
     scope: ResourceType,
     resourceId?: string,
     tenantId?: string | null
@@ -2823,16 +2782,11 @@ class PermissionServiceClass {
     const permissions = (await this.getPermissionCatalog())
       .filter((permission) => permission.scope === scope)
       .map((permission) => permission.key);
-    if (platformRole === 'admin') {
-      return permissions.sort();
-    }
-
     const allowed = await Promise.all(permissions.map(async (permission) => ({
       permission,
       allowed: (await this.evaluatePermission(permission, {
         userId,
         tenantId,
-        platformRole,
         resourceType: scope,
         resourceId,
       })).allowed,
@@ -2846,24 +2800,6 @@ class PermissionServiceClass {
 
   private async getKnownProjectIds(dataSource: DataSource, userId: string, tenantId?: string | null): Promise<string[]> {
     const ids = new Set<string>();
-    const owned = await dataSource.getRepository(Project).find({
-      where: tenantScopedWhere({ ownerId: userId }, tenantId),
-      select: ['id'],
-    });
-    owned.forEach((project) => ids.add(project.id));
-
-    const memberships = await dataSource.getRepository(ProjectMember).find({
-      where: { userId },
-      select: ['projectId'],
-    });
-    memberships.forEach((membership) => ids.add(membership.projectId));
-
-    const roleRows = await dataSource.getRepository(ProjectMemberRole).find({
-      where: { userId },
-      select: ['projectId'],
-    });
-    roleRows.forEach((roleRow) => ids.add(roleRow.projectId));
-
     const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
     const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
@@ -2871,7 +2807,6 @@ class PermissionServiceClass {
       .where('1 = 1')
       .andWhere('assignment.scopeType = :resourceType', { resourceType: 'project' })
       .andWhere('assignment.scopeId IS NOT NULL')
-      .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
     this.addPrincipalAssignmentFilter(assignmentQb, 'assignment', userId, groupIds);
     addTenantScopeFilter(assignmentQb, 'assignment', tenantId);
@@ -2898,28 +2833,6 @@ class PermissionServiceClass {
   private async getKnownEngineIds(dataSource: DataSource, userId: string, tenantId?: string | null): Promise<string[]> {
     const ids = new Set<string>();
     const normalizedTenantId = normalizeTenantId(tenantId);
-    const directlyOwned = await dataSource.getRepository(Engine).find({
-      where: normalizedTenantId
-        ? [
-          { ownerId: userId, tenantId: normalizedTenantId },
-          { ownerId: userId, tenantId: IsNull() },
-          { delegateId: userId, tenantId: normalizedTenantId },
-          { delegateId: userId, tenantId: IsNull() },
-        ]
-        : [
-          { ownerId: userId },
-          { delegateId: userId },
-        ],
-      select: ['id'],
-    });
-    directlyOwned.forEach((engine) => ids.add(engine.id));
-
-    const memberships = await dataSource.getRepository(EngineMember).find({
-      where: { userId },
-      select: ['engineId'],
-    });
-    memberships.forEach((membership) => ids.add(membership.engineId));
-
     const explicitGrantQb = dataSource.getRepository(PermissionGrant)
       .createQueryBuilder('grant')
       .select(['grant.resourceId'])
@@ -2939,7 +2852,6 @@ class PermissionServiceClass {
       .select(['assignment.resourceId', 'assignment.scopeId'])
       .where('1 = 1')
       .andWhere('assignment.scopeType = :resourceType', { resourceType: 'engine' })
-      .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
     this.addPrincipalAssignmentFilter(assignmentQb, 'assignment', userId, groupIds);
     addTenantScopeFilter(assignmentQb, 'assignment', tenantId);
@@ -2954,7 +2866,6 @@ class PermissionServiceClass {
       .createQueryBuilder('assignment')
       .select(['assignment.scopeId'])
       .where('assignment.scopeType = :scopeType', { scopeType: 'engine_set' })
-      .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
     this.addPrincipalAssignmentFilter(engineSetAssignmentQb, 'assignment', userId, groupIds);
     addTenantScopeFilter(engineSetAssignmentQb, 'assignment', tenantId);
@@ -2982,7 +2893,6 @@ class PermissionServiceClass {
       .where('assignment.scopeType IN (:...scopeTypes)', {
         scopeTypes: ['engine_runtime_resource', 'engine_runtime_resource_set'],
       })
-      .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
     this.addPrincipalAssignmentFilter(runtimeAssignmentQb, 'assignment', userId, groupIds);
     addTenantScopeFilter(runtimeAssignmentQb, 'assignment', tenantId);
@@ -3314,7 +3224,6 @@ class PermissionServiceClass {
       .where('1 = 1')
       .andWhere('rolePermission.permissionId = :permission', { permission })
       .andWhere('role.isArchived = :isArchived', { isArchived: false })
-      .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
     await this.addPermissionPrincipalAssignmentFilter(dataSource, qb, 'assignment', principal, tenantId);
     addTenantScopeFilter(qb, 'assignment', tenantId);
@@ -3363,7 +3272,6 @@ class PermissionServiceClass {
         .where('rolePermission.permissionId = :permission', { permission })
         .andWhere('role.isArchived = :isArchived', { isArchived: false })
         .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
-        .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
         .andWhere('assignment.scopeType = :runtimeSetScope', { runtimeSetScope: 'engine_runtime_resource_set' })
         .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
       await this.addPermissionPrincipalAssignmentFilter(dataSource, runtimeSetQb, 'assignment', principal, tenantId);
@@ -3378,7 +3286,6 @@ class PermissionServiceClass {
         .where('rolePermission.permissionId = :permission', { permission })
         .andWhere('role.isArchived = :isArchived', { isArchived: false })
         .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
-        .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
         .andWhere('assignment.scopeType = :engineSetScope', { engineSetScope: 'engine_set' })
         .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
       await this.addPermissionPrincipalAssignmentFilter(dataSource, engineSetQb, 'assignment', principal, tenantId);
@@ -3409,7 +3316,6 @@ class PermissionServiceClass {
       .andWhere('rolePermission.permissionId = :permission', { permission })
       .andWhere('role.isArchived = :isArchived', { isArchived: false })
       .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
-      .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .andWhere('assignment.scopeType = :engineSetScopeType', { engineSetScopeType: 'engine_set' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
     await this.addPermissionPrincipalAssignmentFilter(dataSource, engineSetQb, 'assignment', principal, tenantId);
@@ -3636,7 +3542,6 @@ class PermissionServiceClass {
       .andWhere('(assignment.scopeType = :resourceType OR assignment.resourceType = :resourceType)', { resourceType: 'engine' })
       .andWhere('(assignment.scopeId = :engineId OR assignment.resourceId = :engineId OR (assignment.scopeId IS NULL AND assignment.resourceId IS NULL))', { engineId })
       .andWhere('role.isArchived = :isArchived', { isArchived: false })
-      .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
     this.addPrincipalAssignmentFilter(qb, 'assignment', userId, groupIds);
     addTenantScopeFilter(qb, 'assignment', tenantId);
@@ -3664,7 +3569,6 @@ class PermissionServiceClass {
       .where('1 = 1')
       .andWhere('(assignment.scopeType = :resourceType OR assignment.resourceType = :resourceType)', { resourceType: 'engine' })
       .andWhere('role.isArchived = :isArchived', { isArchived: false })
-      .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
     this.addPrincipalAssignmentFilter(qb, 'assignment', userId, groupIds);
     addTenantScopeFilter(qb, 'assignment', tenantId);

@@ -72,26 +72,10 @@ export class EngineService {
   async getEngineRole(userId: string, engineId: string, tenantId?: string | null): Promise<EngineRole | null> {
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
-    const memberRepo = dataSource.getRepository(EngineMember);
-    
-    // Get engine to check owner/delegate
-    const engine = await engineRepo.findOne({ where: { id: engineId } });
+    const engine = await engineRepo.findOne({ where: { id: engineId }, select: ['id', 'tenantId'] });
 
     if (!engine) return null;
     if (tenantId && engine.tenantId && engine.tenantId !== tenantId) return null;
-    
-    // Check if owner or delegate
-    if (engine.ownerId === userId) return 'owner';
-    if (engine.delegateId === userId) return 'delegate';
-    
-    // Check engine_members table
-    const membership = await memberRepo.findOne({
-      where: { engineId, userId }
-    });
-
-    if (membership?.role) {
-      return membership.role as EngineRole;
-    }
 
     return await permissionService.getAssignedEngineRole(userId, engineId, tenantId);
   }
@@ -111,68 +95,11 @@ export class EngineService {
   async getUserEngines(userId: string, tenantId?: string | null): Promise<EngineWithDetails[]> {
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
-    const memberRepo = dataSource.getRepository(EngineMember);
     const tagRepo = dataSource.getRepository(EnvironmentTag);
     const results: EngineWithDetails[] = [];
-
-    // Get engines where user is owner (include null tenantId for legacy data)
-    const ownedEngines = tenantId
-      ? await engineRepo.find({ where: [{ ownerId: userId, tenantId }, { ownerId: userId, tenantId: IsNull() }] })
-      : await engineRepo.find({ where: { ownerId: userId } });
     const tagIds = new Set<string>();
-    ownedEngines.forEach(e => e.environmentTagId && tagIds.add(e.environmentTagId));
-    
-    for (const engine of ownedEngines) {
-      results.push({
-        engine,
-        role: 'owner',
-        environmentTag: null, // Will populate below
-      });
-    }
 
-    // Get engines where user is delegate (include null tenantId for legacy data)
-    const delegatedEngines = tenantId
-      ? await engineRepo.find({ where: [{ delegateId: userId, tenantId }, { delegateId: userId, tenantId: IsNull() }] })
-      : await engineRepo.find({ where: { delegateId: userId } });
-    delegatedEngines.forEach(e => e.environmentTagId && tagIds.add(e.environmentTagId));
-    
-    for (const engine of delegatedEngines) {
-      const alreadyAdded = results.some(r => r.engine.id === engine.id);
-      if (!alreadyAdded) {
-        results.push({
-          engine,
-          role: 'delegate',
-          environmentTag: null,
-        });
-      }
-    }
-
-    // Get engines where user is a member (operator/deployer)
-    const memberships = await memberRepo.find({ where: { userId } });
-
-    if (memberships.length > 0) {
-      const memberEngineIds = memberships.map(m => m.engineId);
-      // Filter member engines by tenant if specified (include null tenantId for legacy data)
-      const memberEngines = tenantId 
-        ? await engineRepo.find({ where: [{ id: In(memberEngineIds), tenantId }, { id: In(memberEngineIds), tenantId: IsNull() }] })
-        : await engineRepo.find({ where: { id: In(memberEngineIds) } });
-      memberEngines.forEach(e => e.environmentTagId && tagIds.add(e.environmentTagId));
-
-      for (const engine of memberEngines) {
-        if (!results.find(r => r.engine.id === engine.id)) {
-          const membership = memberships.find(m => m.engineId === engine.id);
-          const role = (membership?.role as EngineRole) || null;
-          if (!role) continue;
-          results.push({
-            engine,
-            role,
-            environmentTag: null,
-          });
-        }
-      }
-    }
-
-    // Include engines granted through scoped RBAC role assignments, including all-engine assignments.
+    // Canonical role assignments are the sole source of engine discovery.
     const assignedEngineRoles = await permissionService.getAssignedEngineRoles(userId, tenantId);
     const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
