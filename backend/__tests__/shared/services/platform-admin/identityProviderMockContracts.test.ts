@@ -26,7 +26,10 @@ describe('identity mock provider contracts', () => {
     expect(() => directory.bind('person@example.test', 'wrong')).toThrow('LDAP invalid credentials');
     const entry = directory.bind('person@example.test', 'directory-password');
     const identity = ldapIdentityProviderAdapter.normalizeIdentity({ providerKey: 'ldap-mock', subjectId: entry.subjectId, claims: { memberOf: entry.memberOf } });
-    expect(identity.entitlements).toEqual([{ type: 'group', externalId: 'cn=operations,ou=groups,dc=example,dc=test' }]);
+    expect(identity.entitlements).toEqual(expect.arrayContaining([
+      { type: 'authenticated', externalId: 'authenticated' },
+      { type: 'group', externalId: 'cn=operations,ou=groups,dc=example,dc=test' },
+    ]));
   });
 
   it('accepts a token signed with rotated provider key material', async () => {
