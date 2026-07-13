@@ -16,6 +16,7 @@ import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilit
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
+import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 
 const router = Router();
 
@@ -43,6 +44,7 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
   const capabilities = await buildUserCapabilities({
     userId: user.id,
   });
+  const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
   const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
@@ -94,6 +96,7 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
   res.json({
     user: {
       ...result.user,
+      platformRole: platformAdministratorUserIds.has(user.id) ? 'admin' : 'user',
       capabilities,
       isEmailVerified: true,
       mustResetPassword: false,

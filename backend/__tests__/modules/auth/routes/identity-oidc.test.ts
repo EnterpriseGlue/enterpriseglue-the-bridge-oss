@@ -19,6 +19,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayServi
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js', () => ({ identityProviderProvisioningService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService }));
 vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
+  getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
+}));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ AuditActions: { LOGIN_SUCCESS: 'auth.login.success' }, auditFromRequest: vi.fn(() => ({})), logAudit: vi.fn() }));
 
 const provider = {

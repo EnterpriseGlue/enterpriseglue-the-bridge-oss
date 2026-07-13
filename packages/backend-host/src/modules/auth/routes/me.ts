@@ -18,6 +18,7 @@ import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
+import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 
 const router = Router();
 
@@ -45,13 +46,14 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
     user.email.toLowerCase() === config.adminEmail.toLowerCase() &&
     user.createdByUserId === null;
   const isEmailVerified = Boolean(user.isEmailVerified) || isAdminVerificationExempt;
+  const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
 
   res.json({
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
-    platformRole: user.platformRole || 'user',
+    platformRole: platformAdministratorUserIds.has(user.id) ? 'admin' : 'user',
     capabilities,
     isActive: Boolean(user.isActive),
     isEmailVerified,
@@ -106,13 +108,14 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
     userId: user.id,
     tenantId: req.tenant?.tenantId || null,
   });
+  const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
 
   res.json({
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
-    platformRole: user.platformRole || 'user',
+    platformRole: platformAdministratorUserIds.has(user.id) ? 'admin' : 'user',
     capabilities,
     isActive: Boolean(user.isActive),
     isEmailVerified: Boolean(user.isEmailVerified),

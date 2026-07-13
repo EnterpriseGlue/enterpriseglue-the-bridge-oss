@@ -23,6 +23,10 @@ vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
   buildUserCapabilities: vi.fn().mockResolvedValue({ canManagePlatform: false }),
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
+  getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
+}));
+
 vi.mock('@enterpriseglue/shared/db/adapters/QueryHelpers.js', () => ({
   addCaseInsensitiveEquals: (qb: any) => qb,
   getDatabaseType: vi.fn().mockReturnValue('postgres'),

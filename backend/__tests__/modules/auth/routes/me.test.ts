@@ -34,6 +34,10 @@ vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
   }),
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
+  getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
+}));
+
 describe('GET /api/auth/me', () => {
   let app: express.Application;
 

@@ -18,6 +18,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
+import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 
 const router = Router();
 
@@ -196,6 +197,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
     userId: user.id,
     tenantId: req.tenant?.tenantId || null,
   });
+  const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
   
   // Set tokens in HTTP-only cookies (same pattern as Microsoft OAuth)
   res.cookie('accessToken', accessToken, {
@@ -221,7 +223,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      platformRole: user.platformRole || 'user',
+      platformRole: platformAdministratorUserIds.has(user.id) ? 'admin' : 'user',
       mustResetPassword: Boolean(user.mustResetPassword),
       capabilities,
       isEmailVerified,

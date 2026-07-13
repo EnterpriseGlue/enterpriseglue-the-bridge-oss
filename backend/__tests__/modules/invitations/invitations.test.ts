@@ -114,6 +114,10 @@ vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
   buildUserCapabilities: vi.fn().mockResolvedValue({ canManageUsers: false }),
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
+  getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
+}));
+
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
