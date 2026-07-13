@@ -431,6 +431,21 @@ describe('mission-control engines routes', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('rejects manual ingestion-control updates to externally managed engines', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOneBy = vi.fn().mockResolvedValue({ id: 'e1', registrationSource: 'external_api', managementMode: 'external_managed', tenantId: null, fieldOwnershipJson: '{}' });
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne, findOneBy, update }) });
+
+    const response = await request(app).put('/engines-api/engines/e1').send({ metadataDiscoveryEnabled: false });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error || '')).toContain('metadataDiscoveryEnabled');
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('rejects manual updates to config-locked engine fields', async () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
