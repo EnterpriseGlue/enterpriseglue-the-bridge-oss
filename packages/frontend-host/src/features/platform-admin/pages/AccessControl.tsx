@@ -59,6 +59,7 @@ import {
   type AuthzAuditFilterState,
   type SsoAssignmentDiagnostics,
 } from './access-control';
+import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
   formatSsoSyncCounts as presentSsoSyncCounts,
@@ -189,7 +190,6 @@ import {
   type AuthzResourceType,
 } from '../hooks/useAuthzApi';
 
-type CoreAssignmentResourceType = 'platform' | 'project' | 'engine' | 'engine_runtime_resource' | 'engine_runtime_resource_set' | 'external_engine_system';
 type AssignmentPrincipalType = 'user' | 'group' | 'api_client' | 'service_account';
 type EffectiveAccessSource = EffectiveAccessResult['sources'][number];
 type PrincipalSummaryStatus = 'active' | 'archived' | 'revoked' | 'unknown';
@@ -447,14 +447,6 @@ const resourceRelationshipHeaders = [
   { key: 'details', header: 'Details' },
 ];
 
-const effectiveAccessSourceHeaders = [
-  { key: 'type', header: 'Source' },
-  { key: 'grant', header: 'Grant' },
-  { key: 'principal', header: 'Principal' },
-  { key: 'scope', header: 'Scope' },
-  { key: 'lineage', header: 'Lineage' },
-  { key: 'audit', header: 'Audit' },
-];
 
 const authzGroupHeaders = [
   { key: 'name', header: 'Group' },
