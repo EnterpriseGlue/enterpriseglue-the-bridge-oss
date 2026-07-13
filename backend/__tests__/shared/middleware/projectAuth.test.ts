@@ -58,12 +58,12 @@ describe('projectAuth middleware', () => {
     expect(next).toHaveBeenCalledWith();
     expect(permissionService.hasPermission).toHaveBeenCalledWith(
       'project:settings:manage',
-      expect.objectContaining({
+      {
         userId: 'user-1',
-        platformRole: 'user',
+        tenantId: null,
         resourceType: 'project',
         resourceId: 'project-1',
-      })
+      }
     );
   });
 

@@ -494,6 +494,7 @@ describe('requireAction project resource resolvers', () => {
       resourceType: 'project',
       resourceId: projectId,
     }));
+    expect((permissionService.hasPermission as unknown as Mock).mock.calls.every(([, context]) => !('platformRole' in context))).toBe(true);
   });
 
   it('resolves a project-scoped action from a folder id', async () => {

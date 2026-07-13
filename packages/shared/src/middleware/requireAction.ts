@@ -416,11 +416,9 @@ async function resolveProjectVisibleCollection(
   );
   if (requestedIds.length === 0) {
     const tenantId = req.tenant?.tenantId || null;
-    const platformRole = req.user!.platformRole || (req.user as { role?: string }).role;
     const hasCollectionWideAccess = await permissionService.hasPermission(action.permissionId, {
       userId: req.user!.userId,
       tenantId,
-      platformRole,
       resourceType: 'project',
     });
     if (hasCollectionWideAccess) {
@@ -457,7 +455,6 @@ async function resolveProjectVisibleCollection(
     const allowed = await permissionService.hasPermission(action.permissionId, {
       userId: req.user!.userId,
       tenantId: req.tenant?.tenantId || null,
-      platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
       resourceType: 'project',
       resourceId: projectId,
     });
@@ -483,11 +480,9 @@ async function resolveEngineVisibleCollection(
   );
   if (requestedIds.length === 0) {
     const tenantId = req.tenant?.tenantId || null;
-    const platformRole = req.user!.platformRole || (req.user as { role?: string }).role;
     const hasCollectionWideAccess = await permissionService.hasPermission(action.permissionId, {
       userId: req.user!.userId,
       tenantId,
-      platformRole,
       resourceType: 'engine',
     });
     if (hasCollectionWideAccess) {
@@ -527,7 +522,6 @@ async function resolveEngineVisibleCollection(
     const allowed = await permissionService.hasPermission(action.permissionId, {
       userId: req.user!.userId,
       tenantId: req.tenant?.tenantId || null,
-      platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
       resourceType: 'engine',
       resourceId: engineId,
     });
@@ -708,7 +702,6 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
       const context: PermissionContext = {
         userId: req.user.userId,
         tenantId: req.tenant?.tenantId || null,
-        platformRole: req.user.platformRole || (req.user as { role?: string }).role,
         resourceType: resource.type,
         resourceId: resource.id || undefined,
       };
@@ -847,7 +840,6 @@ async function resolveInvitationTarget(req: Request): Promise<{
   const baseContext = {
     userId: req.user!.userId,
     tenantId: req.tenant?.tenantId || null,
-    platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
   };
 
   if (resourceType === 'tenant') {
@@ -948,7 +940,7 @@ export function requireRuntimeCollectionAction(actionId: string, options: Requir
       const tenantId = req.tenant?.tenantId || null;
       const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId }, select: ['id', 'tenantId', 'runtimeAccessScope'] });
       if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
-      const context = { userId: req.user.userId, tenantId, platformRole: req.user.platformRole || (req.user as { role?: string }).role, resourceType: 'engine' as const, resourceId: engineId };
+      const context = { userId: req.user.userId, tenantId, resourceType: 'engine' as const, resourceId: engineId };
       const broad = await permissionService.hasPermission(action.permissionId, context);
       let keys: string[] | undefined;
       if (!broad && engine.runtimeAccessScope === 'resource_aware') {
@@ -992,7 +984,6 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
       const context: PermissionContext = {
         userId: req.user.userId,
         tenantId,
-        platformRole: req.user.platformRole || (req.user as { role?: string }).role,
         resourceType: 'engine',
         resourceId: engineId,
       };
@@ -1086,7 +1077,6 @@ export function requireRuntimeProcessInstanceSelectionAction(
       const context: PermissionContext = {
         userId: req.user.userId,
         tenantId,
-        platformRole: req.user.platformRole || (req.user as { role?: string }).role,
         resourceType: 'engine',
         resourceId: engineId,
       };
@@ -1157,7 +1147,6 @@ export function requireRuntimeMigrationAction(
       const context: PermissionContext = {
         userId: req.user.userId,
         tenantId,
-        platformRole: req.user.platformRole || (req.user as { role?: string }).role,
         resourceType: 'engine',
         resourceId: engineId,
       };
