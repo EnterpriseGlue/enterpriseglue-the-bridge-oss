@@ -206,6 +206,7 @@ describe('starbase projects routes', () => {
       mode: 'manual',
       projectId,
       engineId: 'engine-1',
+      deploymentIntegration: 'enterpriseglue_proxy',
       checks: [
         { id: 'project.permission.deploy', allowed: true, reason: 'User has project deploy permission' },
       ],
