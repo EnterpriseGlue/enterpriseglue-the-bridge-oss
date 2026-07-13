@@ -437,6 +437,21 @@ type DeploymentReceiptView = {
   receivedAt: number
 }
 
+type DeploymentHistoryView = {
+  id: string
+  engineDeploymentId: string | null
+  deploymentName: string | null
+  deploymentTime: string | null
+  projectId: string | null
+  ingestionSource: string
+  lineageQuality: 'complete' | 'reported' | 'discovered' | 'inferred'
+  reportingPrincipalId: string | null
+  deployedAt: number
+  reconciledAt: number | null
+  resourceCount: number
+  status: string
+}
+
 type EngineAccessMember = {
   id: string
   engineId: string
@@ -636,6 +651,13 @@ function getSnapshotStatusTagType(value: unknown): any {
   return 'gray'
 }
 
+function getDeploymentLineageTagType(value: DeploymentHistoryView['lineageQuality']): any {
+  if (value === 'complete') return 'green'
+  if (value === 'reported') return 'blue'
+  if (value === 'discovered') return 'purple'
+  return 'gray'
+}
+
 function EngineRegistrationDetail({ label, value, tagValue }: { label: string; value: React.ReactNode; tagValue?: unknown }) {
   return (
     <div style={{ minWidth: 0 }}>
@@ -652,6 +674,9 @@ function EngineRegistrationDetail({ label, value, tagValue }: { label: string; v
 function EngineDeploymentSection({
   canViewProjectAccess,
   error,
+  history,
+  historyError,
+  historyLoading,
   isLoading,
   receipts,
   receiptsError,
@@ -660,6 +685,9 @@ function EngineDeploymentSection({
 }: {
   canViewProjectAccess: boolean
   error: unknown
+  history: DeploymentHistoryView[]
+  historyError: unknown
+  historyLoading: boolean
   isLoading: boolean
   receipts: DeploymentReceiptView[]
   receiptsError: unknown
@@ -743,6 +771,37 @@ function EngineDeploymentSection({
           ))}
         </div>
       )}
+      <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-4)', display: 'grid', gap: 'var(--spacing-3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+          <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Deployment history</h4>
+          <Tag type="blue" size="sm">{history.length} records</Tag>
+        </div>
+        {historyLoading ? <InlineLoading description="Loading deployment history" /> : historyError ? (
+          <InlineNotification lowContrast kind="error" title="Failed to load deployment history" subtitle={getUiErrorMessage(historyError, 'Failed to load deployment history')} hideCloseButton />
+        ) : history.length === 0 ? (
+          <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>No deployment history has been recorded for this engine.</div>
+        ) : (
+          <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+            {history.slice(0, 10).map((deployment) => (
+              <div key={deployment.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 'var(--spacing-3)', alignItems: 'start', padding: 'var(--spacing-3)', border: '1px solid var(--color-border-subtle)', borderRadius: 6, background: 'var(--color-bg-primary)' }}>
+                <div style={{ minWidth: 0, display: 'grid', gap: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflowWrap: 'anywhere' }}>{deployment.deploymentName || deployment.engineDeploymentId || deployment.id}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
+                    {deployment.projectId ? `Project ${deployment.projectId}` : 'No project lineage'} | {deployment.resourceCount} resources
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    {deployment.reconciledAt ? `Reconciled ${formatEngineTimestamp(deployment.reconciledAt)}` : `Recorded ${formatEngineTimestamp(deployment.deployedAt)}`}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <Tag type={getDeploymentLineageTagType(deployment.lineageQuality)} size="sm">{deployment.lineageQuality}</Tag>
+                  <Tag type={formatEngineRegistrationStatus(deployment.ingestionSource) === 'Config-managed' ? 'cyan' : 'gray'} size="sm">{deployment.ingestionSource}</Tag>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-4)', display: 'grid', gap: 'var(--spacing-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
           <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Pipeline receipts</h4>
@@ -1286,6 +1345,15 @@ export default function Engines() {
       { credentials: 'include' }
     ),
   })
+  const deploymentHistoryQ = useQuery({
+    queryKey: ['engines', editing?.id, 'deployment-history'],
+    enabled: Boolean(engineModal.isOpen && editing?.id && canViewEditingDeployments),
+    queryFn: () => apiClient.get<DeploymentHistoryView[]>(
+      `/engines-api/engines/${encodeURIComponent(String(editing?.id))}/deployment-history`,
+      undefined,
+      { credentials: 'include' }
+    ),
+  })
   const runtimeResourcesQ = useQuery({
     queryKey: ['engines', editing?.id, 'runtime-resources'],
     enabled: Boolean(engineModal.isOpen && editing?.id && editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed),
@@ -1812,6 +1880,9 @@ export default function Engines() {
           <EngineDeploymentSection
             canViewProjectAccess={canViewEditingProjectAccess}
             error={deploymentTargetsQ.error}
+            history={deploymentHistoryQ.data || []}
+            historyError={deploymentHistoryQ.error}
+            historyLoading={deploymentHistoryQ.isLoading}
             isLoading={deploymentTargetsQ.isLoading}
             receipts={deploymentReceiptsQ.data || []}
             receiptsError={deploymentReceiptsQ.error}

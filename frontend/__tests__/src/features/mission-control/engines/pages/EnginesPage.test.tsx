@@ -176,7 +176,7 @@ describe('EnginesPage', () => {
       engines: [
         {
           resourceId: 'engine-1',
-          permissions: [EnginePermission.INSTANCE_VIEW, EnginePermission.MEMBERS_VIEW, EnginePermission.PROJECT_ACCESS_VIEW],
+          permissions: [EnginePermission.INSTANCE_VIEW, EnginePermission.MEMBERS_VIEW, EnginePermission.PROJECT_ACCESS_VIEW, EnginePermission.DEPLOY_VIEW],
         },
       ],
       generatedAt: 1,
@@ -240,6 +240,13 @@ describe('EnginesPage', () => {
           environment: { id: 'env-prod', name: 'Production', color: '#24a148', manualDeployAllowed: true },
           lastSeenAt: 1704067300000,
           updatedAt: 1704067400000,
+        },
+      ];
+      if (url === '/engines-api/engines/engine-1/deployment-history') return [
+        {
+          id: 'history-1', engineDeploymentId: 'deployment-1', deploymentName: 'Payments release', deploymentTime: null,
+          projectId: 'project-1', ingestionSource: 'pipeline_receipt', lineageQuality: 'reported', reportingPrincipalId: 'release-bot',
+          deployedAt: 1704067200000, reconciledAt: 1704067300000, resourceCount: 2, status: 'success',
         },
       ];
       if (url === '/engines-api/engines/engine-1/members') return {
@@ -356,6 +363,10 @@ describe('EnginesPage', () => {
     expect(screen.getByText('SSO-managed assignment; Source ref sso-group:payments-ops; SSO mapping mapping-1')).toBeInTheDocument();
     expect(screen.getByText('1 pending invite also exists for this engine.')).toBeInTheDocument();
     expect(await screen.findByText('Deployment targets')).toBeInTheDocument();
+    expect(await screen.findByText('Deployment history')).toBeInTheDocument();
+    expect(screen.getByText('Payments release')).toBeInTheDocument();
+    expect(screen.getByText('reported')).toBeInTheDocument();
+    expect(screen.getByText('pipeline_receipt')).toBeInTheDocument();
     expect(await screen.findByText('Payments App')).toBeInTheDocument();
     expect(screen.getByText('Manual, API, Import')).toBeInTheDocument();
     expect(screen.getByText('Legacy')).toBeInTheDocument();
