@@ -910,6 +910,7 @@ router.get('/api/authz/external-engines/:id/audit', apiLimiter, requireAuth, req
     const action = req.query.action === 'all' ? undefined : req.query.action;
     const entries = await auditRepo.find({
       where: {
+        tenantId: req.tenant?.tenantId || IsNull(),
         resourceType: 'engine',
         resourceId: String(req.params.id),
         action: typeof action === 'string' ? action : In([...externalEngineAuditActions]),
