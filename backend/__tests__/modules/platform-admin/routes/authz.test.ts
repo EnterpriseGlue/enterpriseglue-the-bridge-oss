@@ -1703,6 +1703,34 @@ describe('platform-admin authz routes', () => {
     });
   });
 
+  it('excludes externally registered engines owned by another tenant', async () => {
+    const ownRegistration = { id: 'registration-own', engineId: 'engine-own', externalId: 'own', registrationSource: 'external_api', externalSystemId: null, labelsJson: '{}', capabilitiesJson: null, lastRegisteredAt: 1, updatedAt: 1 };
+    const foreignRegistration = { ...ownRegistration, id: 'registration-foreign', engineId: 'engine-foreign', externalId: 'foreign' };
+    const ownEngine = { id: 'engine-own', tenantId: 'tenant-a', name: 'Own engine', baseUrl: 'https://own.example.com', type: 'camunda8', externalId: 'own', registrationSource: 'external_api', capabilitiesJson: null, createdAt: 1, updatedAt: 1 };
+    const foreignEngine = { ...ownEngine, id: 'engine-foreign', tenantId: 'tenant-b', name: 'Foreign engine', externalId: 'foreign' };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity.name === 'ExternalEngineRegistration') return { find: vi.fn().mockResolvedValue([ownRegistration, foreignRegistration]) };
+        if (entity.name === 'Engine') return { find: vi.fn().mockResolvedValue([ownEngine, foreignEngine]) };
+        if (entity.name === 'ExternalEngineSystem') return { find: vi.fn().mockResolvedValue([]) };
+        return { find: vi.fn().mockResolvedValue([]) };
+      },
+    });
+    const tenantApp = express();
+    tenantApp.use(express.json());
+    tenantApp.use((req, _res, next) => {
+      req.tenant = { tenantId: 'tenant-a' } as any;
+      next();
+    });
+    tenantApp.use(authzRouter);
+
+    const response = await request(tenantApp).get('/api/authz/external-engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveLength(1);
+    expect(response.body[0]).toMatchObject({ id: 'engine-own', externalId: 'own' });
+  });
+
   it('filters external engine registration audit entries', async () => {
     const auditFind = vi.fn().mockResolvedValue([
       {
