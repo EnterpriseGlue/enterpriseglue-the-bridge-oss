@@ -31,4 +31,39 @@ describe('externalIdentityService', () => {
       .rejects.toThrow('already linked to a different user account');
     expect(update).not.toHaveBeenCalled();
   });
+
+  it('recovers a concurrent first login without allowing the external subject to move users', async () => {
+    const findOne = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'identity-1', userId: 'user-1' });
+    const update = vi.fn().mockResolvedValue(undefined);
+    const insert = vi.fn().mockRejectedValue(new Error('duplicate key'));
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === ExternalIdentity) return { findOne, update, insert };
+      throw new Error('Unexpected repository');
+    }});
+
+    await expect(externalIdentityService.upsert({
+      tenantId: 'tenant-a', providerId: 'oidc-1', providerType: 'oidc', subjectId: 'sub-1', userId: 'user-1', now: 100,
+    })).resolves.toEqual({ id: 'identity-1', created: false });
+
+    expect(update).toHaveBeenCalledWith({ id: 'identity-1' }, expect.objectContaining({ userId: 'user-1', lastSeenAt: 100 }));
+  });
+
+  it('fails closed when a concurrent first login discovers a link for another user', async () => {
+    const findOne = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'identity-1', userId: 'user-2' });
+    const update = vi.fn();
+    const insert = vi.fn().mockRejectedValue(new Error('duplicate key'));
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === ExternalIdentity) return { findOne, update, insert };
+      throw new Error('Unexpected repository');
+    }});
+
+    await expect(externalIdentityService.upsert({
+      tenantId: 'tenant-a', providerId: 'oidc-1', providerType: 'oidc', subjectId: 'sub-1', userId: 'user-1', now: 100,
+    })).rejects.toThrow('already linked to a different user account');
+    expect(update).not.toHaveBeenCalled();
+  });
 });

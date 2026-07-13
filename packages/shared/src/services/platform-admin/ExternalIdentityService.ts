@@ -1,9 +1,13 @@
-import type { DataSource, EntityManager } from 'typeorm';
+import type { DataSource, EntityManager, Repository } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 
 type ExternalIdentityStore = DataSource | EntityManager;
+type ExternalIdentityUpdate = Pick<ExternalIdentity,
+  'tenantId' | 'providerId' | 'providerType' | 'subjectId' | 'directoryTenantId' |
+  'userId' | 'emailHint' | 'status' | 'lastSeenAt' | 'updatedAt'
+>;
 
 export interface UpsertExternalIdentityInput {
   tenantId?: string | null;
@@ -62,15 +66,31 @@ class ExternalIdentityService {
       updatedAt: now,
     };
     if (existing) {
-      if (existing.userId !== update.userId) {
-        throw new Error('External identity is already linked to a different user account');
-      }
-      await repo.update({ id: existing.id }, update);
-      return { id: existing.id, created: false };
+      return this.updateExisting(repo, existing, update);
     }
     const id = generateId();
-    await repo.insert({ id, identityKey, ...update, linkedAt: now, createdAt: now });
-    return { id, created: true };
+    try {
+      await repo.insert({ id, identityKey, ...update, linkedAt: now, createdAt: now });
+      return { id, created: true };
+    } catch (error) {
+      // The canonical unique key makes competing first logins deterministic. Re-read
+      // after a duplicate-key failure so a concurrent request cannot reassign a subject.
+      const concurrentlyCreated = await repo.findOne({ where: { identityKey } });
+      if (!concurrentlyCreated) throw error;
+      return this.updateExisting(repo, concurrentlyCreated, update);
+    }
+  }
+
+  private async updateExisting(
+    repo: Repository<ExternalIdentity>,
+    existing: Pick<ExternalIdentity, 'id' | 'userId'>,
+    update: ExternalIdentityUpdate,
+  ): Promise<{ id: string; created: false }> {
+    if (existing.userId !== update.userId) {
+      throw new Error('External identity is already linked to a different user account');
+    }
+    await repo.update({ id: existing.id }, update);
+    return { id: existing.id, created: false };
   }
 }
 

@@ -1237,7 +1237,7 @@ ExternalIdentity
   lastAuthenticatedAt
 ```
 
-- [ ] ⬜ Enforce unique `(tenantId, providerId, subjectId)` and allow one user to link multiple providers.
+- [x] ✅ Enforce unique `(tenantId, providerId, subjectId)` through the collision-safe canonical external-identity key and allow one user to link multiple providers. The persistence constraint prevents duplicate links across database engines, and the upsert service re-reads after a competing first-login insert so it either updates the same user's link or fails closed when the subject belongs to another user.
 - [ ] ⬜ Link by verified email only when the provider and platform policy permit it; ambiguous or conflicting email matches fail closed and require admin resolution. Provider-scoped opt-in and conflict rejection are implemented; admin resolution workflow remains pending.
 - [ ] ⬜ Keep local credentials independent so an approved break-glass account remains usable when external providers fail.
 - [x] ✅ Provider deactivation removes provider-managed memberships and marks provider identity records as disabled without deleting manual, API, automation, or other-provider access.
