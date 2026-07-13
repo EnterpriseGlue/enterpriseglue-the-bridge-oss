@@ -17,6 +17,7 @@ import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-as
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { matchRuntimeResourceSetSelector, type RuntimeResourceSetSelector } from './RuntimeResourceInventoryService.js';
 import { EnginePermissions, SystemRoleDefinitions } from './permissions.js';
+import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
@@ -38,6 +39,15 @@ export interface ConfigBundleDiffChange {
     newlyMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
     noLongerMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
     detailsTruncated: boolean;
+  };
+  identitySnapshotPreview?: {
+    scanned: number;
+    matches: number;
+    nonMatches: number;
+    failed: number;
+    truncated: boolean;
+    latestSnapshotAt: number | null;
+    warnings: string[];
   };
 }
 
@@ -395,6 +405,19 @@ class ConfigBundleDiffService {
         existing.matchOperator !== mapping.source.operator || existing.syncMode !== mapping.syncMode || !existing.isActive
       ) changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'update', currentId: existing.id, reason: 'Config-owned identity mapping differs from desired provider, entitlement, target group, sync mode, or active state' });
       else changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned identity mapping already matches the desired state' });
+      const change = changes[changes.length - 1];
+      if (change?.objectType === 'identity_mapping' && change.key === mapping.key && change.operation !== 'conflict' && provider) {
+        try {
+          change.identitySnapshotPreview = await identityEntitlementMappingService.previewStoredSnapshots({
+            providerKey: mapping.providerKey,
+            entitlementType: mapping.source.type,
+            externalId: mapping.source.externalId || null,
+            matchOperator: mapping.source.operator,
+          }, normalizedTenantId);
+        } catch {
+          // Snapshot availability is diagnostic only; diff and apply remain independent of it.
+        }
+      }
     }
 
     const desiredProjectEngineTargets = values(compilation.files, './project-engine-targets.json', 'projectEngineTargets');

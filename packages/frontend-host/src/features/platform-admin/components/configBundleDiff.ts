@@ -16,6 +16,7 @@ export type ConfigBundleDiffChange = {
     noLongerMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
     detailsTruncated: boolean;
   };
+  identitySnapshotPreview?: { scanned: number; matches: number; nonMatches: number; failed: number; truncated: boolean; latestSnapshotAt: number | null; warnings: string[] };
 };
 
 export type ConfigBundleChangeRisk = 'requires_attention' | 'review' | 'informational';
