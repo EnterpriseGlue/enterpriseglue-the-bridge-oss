@@ -2720,33 +2720,6 @@ class PermissionServiceClass {
     return decisions.filter((decision) => decision.allowed).map((decision) => decision.resource);
   }
 
-  /**
-   * Check if a role implicitly grants a permission
-   */
-  roleHasPermission(
-    permission: Permission,
-    roles: { platformRole?: string; projectRole?: string; engineRole?: string }
-  ): boolean {
-    const { platformRole, projectRole, engineRole } = roles;
-
-    // Check platform role permissions
-    if (platformRole && PlatformRolePermissions[platformRole]?.includes(permission as any)) {
-      return true;
-    }
-
-    // Check project role permissions
-    if (projectRole && ProjectRolePermissions[projectRole]?.includes(permission as ProjectPermission)) {
-      return true;
-    }
-
-    // Check engine role permissions
-    if (engineRole && EngineRolePermissions[engineRole]?.includes(permission as EnginePermission)) {
-      return true;
-    }
-
-    return false;
-  }
-
   private async evaluatePermissionSet(
     userId: string,
     scope: ResourceType,

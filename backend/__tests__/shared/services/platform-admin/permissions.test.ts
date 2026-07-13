@@ -8,6 +8,7 @@ import {
   ProjectRolePermissions,
   ProjectPermissions,
   SYSTEM_ROLE_IDS,
+  SystemRoleDefinitions,
   permissionService,
 } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { listAuthzActions } from '@enterpriseglue/shared/authz/permission-actions.js';
@@ -1410,36 +1411,52 @@ describe('permissionService', () => {
     versionSpy.mockRestore();
   });
 
-  it('keeps legacy role definitions available for migration', () => {
-    expect(permissionService.roleHasPermission(PlatformPermissions.USER_VIEW, { platformRole: 'developer' })).toBe(true);
-    expect(permissionService.roleHasPermission(PlatformPermissions.USER_MANAGE, { platformRole: 'developer' })).toBe(false);
-    expect(permissionService.roleHasPermission(ProjectPermissions.DEPLOY, { projectRole: 'developer' })).toBe(true);
-    expect(permissionService.roleHasPermission(ProjectPermissions.DEPLOY, { projectRole: 'editor' })).toBe(false);
-    expect(permissionService.roleHasPermission(EnginePermissions.ENGINE_EDIT, { engineRole: 'operator' })).toBe(false);
-    expect(permissionService.roleHasPermission(ProjectPermissions.PROJECT_DELETE, { projectRole: 'owner' })).toBe(true);
-    expect(permissionService.roleHasPermission(ProjectPermissions.PROJECT_DELETE, { projectRole: 'delegate' })).toBe(false);
-    expect(permissionService.roleHasPermission(ProjectPermissions.DELEGATE_MANAGE, { projectRole: 'owner' })).toBe(true);
-    expect(permissionService.roleHasPermission(ProjectPermissions.DELEGATE_MANAGE, { projectRole: 'delegate' })).toBe(false);
-    expect(permissionService.roleHasPermission(ProjectPermissions.OWNERSHIP_TRANSFER, { projectRole: 'owner' })).toBe(true);
-    expect(permissionService.roleHasPermission(ProjectPermissions.OWNERSHIP_TRANSFER, { projectRole: 'delegate' })).toBe(false);
-    expect(permissionService.roleHasPermission(ProjectPermissions.MEMBERS_ADD, { projectRole: 'delegate' })).toBe(true);
-    expect(permissionService.roleHasPermission(ProjectPermissions.MEMBERS_REMOVE, { projectRole: 'developer' })).toBe(false);
-    expect(permissionService.roleHasPermission(ProjectPermissions.FILES_VIEW, { projectRole: 'viewer' })).toBe(true);
-    expect(permissionService.roleHasPermission(EnginePermissions.MEMBERS_MANAGE, { engineRole: 'delegate' })).toBe(true);
-    expect(permissionService.roleHasPermission(EnginePermissions.MEMBERS_ADD, { engineRole: 'delegate' })).toBe(true);
-    expect(permissionService.roleHasPermission(EnginePermissions.SECRETS_VIEW, { engineRole: 'delegate' })).toBe(true);
-    expect(permissionService.roleHasPermission(EnginePermissions.SECRETS_MANAGE, { engineRole: 'delegate' })).toBe(true);
-    expect(permissionService.roleHasPermission(EnginePermissions.SECRETS_VIEW, { engineRole: 'operator' })).toBe(false);
-    expect(permissionService.roleHasPermission(EnginePermissions.MEMBERS_REMOVE, { engineRole: 'operator' })).toBe(false);
-    expect(permissionService.roleHasPermission(EnginePermissions.PROJECT_ACCESS_APPROVE, { engineRole: 'delegate' })).toBe(true);
-    expect(permissionService.roleHasPermission(EnginePermissions.PROJECT_ACCESS_APPROVE, { engineRole: 'operator' })).toBe(false);
-    expect(permissionService.roleHasPermission(EnginePermissions.ENVIRONMENT_LOCK, { engineRole: 'delegate' })).toBe(true);
-    expect(permissionService.roleHasPermission(EnginePermissions.DELEGATE_MANAGE, { engineRole: 'owner' })).toBe(true);
-    expect(permissionService.roleHasPermission(EnginePermissions.DELEGATE_MANAGE, { engineRole: 'delegate' })).toBe(false);
-    expect(permissionService.roleHasPermission(EnginePermissions.OWNERSHIP_TRANSFER, { engineRole: 'owner' })).toBe(true);
-    expect(permissionService.roleHasPermission(EnginePermissions.OWNERSHIP_TRANSFER, { engineRole: 'delegate' })).toBe(false);
-    expect(permissionService.roleHasPermission(EnginePermissions.DEPLOY, { engineRole: 'deployer' })).toBe(true);
-    expect(permissionService.roleHasPermission(EnginePermissions.PROCESS_START, { engineRole: 'deployer' })).toBe(false);
+  it('seeds canonical system roles with the expected permissions', () => {
+    const permissionsFor = (roleId: string) => SystemRoleDefinitions.find((role) => role.id === roleId)?.permissions || [];
+
+    expect(permissionsFor(SYSTEM_ROLE_IDS.PLATFORM_DEVELOPER)).toContain(PlatformPermissions.USER_VIEW);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.PLATFORM_DEVELOPER)).not.toContain(PlatformPermissions.USER_MANAGE);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.PROJECT_DEVELOPER)).toContain(ProjectPermissions.DEPLOY);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.PROJECT_EDITOR)).not.toContain(ProjectPermissions.DEPLOY);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_OPERATOR)).not.toContain(EnginePermissions.ENGINE_EDIT);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.PROJECT_OWNER)).toEqual(expect.arrayContaining([
+      ProjectPermissions.PROJECT_DELETE,
+      ProjectPermissions.DELEGATE_MANAGE,
+      ProjectPermissions.OWNERSHIP_TRANSFER,
+    ]));
+    expect(permissionsFor(SYSTEM_ROLE_IDS.PROJECT_DELEGATE)).toEqual(expect.arrayContaining([
+      ProjectPermissions.MEMBERS_ADD,
+    ]));
+    expect(permissionsFor(SYSTEM_ROLE_IDS.PROJECT_DELEGATE)).not.toEqual(expect.arrayContaining([
+      ProjectPermissions.PROJECT_DELETE,
+      ProjectPermissions.DELEGATE_MANAGE,
+      ProjectPermissions.OWNERSHIP_TRANSFER,
+    ]));
+    expect(permissionsFor(SYSTEM_ROLE_IDS.PROJECT_DEVELOPER)).not.toContain(ProjectPermissions.MEMBERS_REMOVE);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.PROJECT_VIEWER)).toContain(ProjectPermissions.FILES_VIEW);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_DELEGATE)).toEqual(expect.arrayContaining([
+      EnginePermissions.MEMBERS_MANAGE,
+      EnginePermissions.MEMBERS_ADD,
+      EnginePermissions.SECRETS_VIEW,
+      EnginePermissions.SECRETS_MANAGE,
+      EnginePermissions.PROJECT_ACCESS_APPROVE,
+      EnginePermissions.ENVIRONMENT_LOCK,
+    ]));
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_OPERATOR)).not.toEqual(expect.arrayContaining([
+      EnginePermissions.SECRETS_VIEW,
+      EnginePermissions.MEMBERS_REMOVE,
+      EnginePermissions.PROJECT_ACCESS_APPROVE,
+    ]));
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_OWNER)).toEqual(expect.arrayContaining([
+      EnginePermissions.DELEGATE_MANAGE,
+      EnginePermissions.OWNERSHIP_TRANSFER,
+    ]));
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_DELEGATE)).not.toEqual(expect.arrayContaining([
+      EnginePermissions.DELEGATE_MANAGE,
+      EnginePermissions.OWNERSHIP_TRANSFER,
+    ]));
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_DEPLOYER)).toContain(EnginePermissions.DEPLOY);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_DEPLOYER)).not.toContain(EnginePermissions.PROCESS_START);
   });
 
   it('keeps engine deployer deployment-focused without Mission Control mutation permissions', () => {
@@ -1459,7 +1476,7 @@ describe('permissionService', () => {
 
     for (const permission of missionControlMutationPermissions) {
       expect(EngineRolePermissions.deployer).not.toContain(permission);
-      expect(permissionService.roleHasPermission(permission, { engineRole: 'deployer' })).toBe(false);
+      expect(SystemRoleDefinitions.find((role) => role.id === SYSTEM_ROLE_IDS.ENGINE_DEPLOYER)?.permissions).not.toContain(permission);
     }
   });
 
