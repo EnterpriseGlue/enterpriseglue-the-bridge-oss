@@ -1,4 +1,48 @@
 import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js'
+
+export const MAX_RUNTIME_RESOURCE_PAGE_SIZE = 100
+
+function runtimeFilterNotSupported(message: string): AppError {
+  return new AppError('runtime_filter_not_supported', message, 403)
+}
+
+/**
+ * Resource-aware routes must never query an unbounded central-engine
+ * collection. This normalizes an omitted limit and rejects attempts to exceed
+ * the supported post-filtering page size.
+ */
+export function getBoundedRuntimeResourceQuery<T extends Record<string, unknown>>(params: T): T & { maxResults: number } {
+  const maxResults = params.maxResults
+  if (maxResults !== undefined && (
+    typeof maxResults !== 'number'
+    || !Number.isInteger(maxResults)
+    || maxResults < 1
+    || maxResults > MAX_RUNTIME_RESOURCE_PAGE_SIZE
+  )) {
+    throw runtimeFilterNotSupported(`Resource-aware runtime queries require maxResults between 1 and ${MAX_RUNTIME_RESOURCE_PAGE_SIZE}`)
+  }
+
+  return { ...params, maxResults: maxResults ?? MAX_RUNTIME_RESOURCE_PAGE_SIZE }
+}
+
+/**
+ * fetchAndLock has the same high-cardinality risk as collection reads. Limit
+ * its resource-aware result set before resolving returned definition lineage.
+ */
+export function getBoundedRuntimeFetchAndLockRequest<T extends Record<string, unknown>>(body: T): T & { maxTasks: number } {
+  const maxTasks = body.maxTasks
+  if (maxTasks !== undefined && (
+    typeof maxTasks !== 'number'
+    || !Number.isInteger(maxTasks)
+    || maxTasks < 1
+    || maxTasks > MAX_RUNTIME_RESOURCE_PAGE_SIZE
+  )) {
+    throw runtimeFilterNotSupported(`Resource-aware external task fetches require maxTasks between 1 and ${MAX_RUNTIME_RESOURCE_PAGE_SIZE}`)
+  }
+
+  return { ...body, maxTasks: maxTasks ?? MAX_RUNTIME_RESOURCE_PAGE_SIZE }
+}
 
 /**
  * Runtime APIs such as jobs and external tasks expose a process definition id
@@ -11,6 +55,10 @@ export async function filterRuntimeItemsByProcessDefinitionKeys<T extends { proc
   authorizedDefinitionKeys?: string[],
 ): Promise<T[]> {
   if (!authorizedDefinitionKeys) return items
+
+  if (items.length > MAX_RUNTIME_RESOURCE_PAGE_SIZE) {
+    throw runtimeFilterNotSupported('The engine returned an unbounded runtime collection for a resource-aware request')
+  }
 
   const allowedKeys = new Set(authorizedDefinitionKeys)
   const definitionIds = [...new Set(items

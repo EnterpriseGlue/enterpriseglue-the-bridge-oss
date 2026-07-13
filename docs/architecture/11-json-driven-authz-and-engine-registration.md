@@ -1668,7 +1668,7 @@ interface RuntimeAuthorizationFilterService {
 - [ ] ⬜ For `engine_wide`, use the existing engine-permission fast path without runtime materialization.
 - [ ] ⬜ For `resource_aware`, push allowed keys/tenant ids into the engine query when the engine API supports it.
 - [ ] ⬜ Add engine-adapter query capability metadata for process keys, decision keys, tenant filters, instance lineage, history, jobs, incidents, batches, and counts.
-- [ ] ⬜ Permit bounded post-filtering only with an explicit result/page cap; otherwise fail closed with `runtime_filter_not_supported` rather than fetching an unbounded central-engine collection.
+- [x] ✅ Permit bounded post-filtering only with an explicit result/page cap; otherwise fail closed with `runtime_filter_not_supported` rather than fetching an unbounded central-engine collection. Resource-aware jobs, job definitions, external-task queries, and fetch-and-lock use a server-enforced 100-item bound; jobs/job definitions also push process-definition keys into engine queries.
 - [ ] ⬜ Resolve detail/mutation objects live from the engine or verified inventory before evaluation; never trust a client-supplied process key for an instance/job/incident id.
 - [ ] ⬜ For batch/migration requests, resolve and evaluate every affected stable parent resource before invoking the engine.
 - [ ] ⬜ Return sanitized per-row action decisions only for rows already visible to the principal.
@@ -2243,7 +2243,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add route coverage proving resource-aware process-instance collections query only authorized process-definition keys and fail closed before any engine query when no runtime resources are visible.
 - [x] ✅ Resolve direct process-instance modification and process-definition modification/restart batch creation to their inherited or exact runtime resource before authorization. Resource-aware multi-instance batch mutations require explicit process instance ids and evaluate every inherited definition before the engine call.
 - [x] ✅ Resolve both source and target process definitions before migration preview, plan, validation, and execution authorization; explicit active-source instance requests are evaluated through inherited process-definition access. Query-based batch/migration selection remains intentionally denied for resource-aware engines until a bounded composite selector resolver is implemented.
-- [x] ✅ Resolve jobs and job definitions through their referenced process definition before authorizing detail or mutation routes; resource-aware collections filter their returned items by the authorized process-definition inventory.
+- [x] ✅ Resolve jobs and job definitions through their referenced process definition before authorizing detail or mutation routes; resource-aware collections push each authorized process-definition key into bounded engine queries and fail closed if an engine ignores the bounded result limit.
 - [x] ✅ Resolve user tasks and task-scoped variables/forms through their referenced process definition; resource-aware task lists and counts query only authorized process-definition keys.
 - [x] ✅ Resolve external-task mutations through their referenced process definition; resource-aware external-task queries and fetch-and-lock calls are constrained to authorized process-definition keys.
 - [x] ✅ Route direct process-instance mutations, direct job retries, and synchronous migration execution through the same process-definition and migration guards as their batch equivalents.

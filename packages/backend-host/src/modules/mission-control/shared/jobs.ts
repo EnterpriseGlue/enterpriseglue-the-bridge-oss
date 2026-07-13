@@ -22,6 +22,7 @@ import {
   SetJobDefinitionRetriesRequest,
   SetJobDefinitionSuspensionStateRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/job.js';
+import { getBoundedRuntimeResourceQuery } from './runtime-resource-filter.js';
 
 const r = Router();
 
@@ -31,8 +32,19 @@ r.use('/mission-control-api', requireAuth);
 // Query jobs
 r.get('/mission-control-api/jobs', requireRuntimeCollectionAction('engine.runtime.jobs.read', { resourceKind: 'process_definition' }), validateQuery(JobQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await listJobs(engineId, req.query);
-  res.json(await filterRuntimeItemsByProcessDefinitionKeys(engineId, data, req.authorizedRuntimeResourceKeys));
+  const keys = req.authorizedRuntimeResourceKeys;
+  if (!keys) {
+    return res.json(await listJobs(engineId, req.query));
+  }
+
+  const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
+  const visibleKeys = keys.filter((key) => !requestedKey || key === requestedKey);
+  const query = getBoundedRuntimeResourceQuery(req.query);
+  const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
+    const data = await listJobs(engineId, { ...query, processDefinitionKey });
+    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey]);
+  }));
+  res.json(collections.flat());
 }));
 
 // Get job by ID
@@ -93,8 +105,19 @@ r.put('/mission-control-api/jobs/:id/suspended', requireRuntimeDefinitionAction(
 // Query job definitions
 r.get('/mission-control-api/job-definitions', requireRuntimeCollectionAction('engine.runtime.job-definitions.read', { resourceKind: 'process_definition' }), validateQuery(JobDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await listJobDefinitions(engineId, req.query);
-  res.json(await filterRuntimeItemsByProcessDefinitionKeys(engineId, data, req.authorizedRuntimeResourceKeys));
+  const keys = req.authorizedRuntimeResourceKeys;
+  if (!keys) {
+    return res.json(await listJobDefinitions(engineId, req.query));
+  }
+
+  const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
+  const visibleKeys = keys.filter((key) => !requestedKey || key === requestedKey);
+  const query = getBoundedRuntimeResourceQuery(req.query);
+  const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
+    const data = await listJobDefinitions(engineId, { ...query, processDefinitionKey });
+    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey]);
+  }));
+  res.json(collections.flat());
 }));
 
 // Set job definition retries

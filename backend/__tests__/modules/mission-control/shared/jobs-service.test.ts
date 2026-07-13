@@ -8,6 +8,11 @@ import {
   setJobDefinitionRetriesById,
   filterRuntimeItemsByProcessDefinitionKeys,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/jobs-service.js';
+import {
+  getBoundedRuntimeFetchAndLockRequest,
+  getBoundedRuntimeResourceQuery,
+  MAX_RUNTIME_RESOURCE_PAGE_SIZE,
+} from '../../../../../packages/backend-host/src/modules/mission-control/shared/runtime-resource-filter.js';
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   getJobs: vi.fn().mockResolvedValue([]),
@@ -68,5 +73,42 @@ describe('jobs-service', () => {
     expect(result).toEqual([{ id: 'job-1', processDefinitionId: 'definition-payments' }]);
     expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition/definition-payments');
     expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition/definition-hr');
+  });
+
+  it('fails closed when a resource-aware engine ignores the bounded result limit', async () => {
+    await expect(filterRuntimeItemsByProcessDefinitionKeys(
+      'engine-1',
+      Array.from({ length: MAX_RUNTIME_RESOURCE_PAGE_SIZE + 1 }, (_, index) => ({
+        id: `job-${index}`,
+        processDefinitionId: `definition-${index}`,
+      })),
+      ['payments'],
+    )).rejects.toMatchObject({
+      code: 'runtime_filter_not_supported',
+      statusCode: 403,
+    });
+
+    const { camundaGet } = await import('@enterpriseglue/shared/services/bpmn-engine-client.js');
+    expect(camundaGet).not.toHaveBeenCalled();
+  });
+
+  it('normalizes omitted resource-aware result limits and rejects unsafe limits', () => {
+    expect(getBoundedRuntimeResourceQuery({ processDefinitionKey: 'payments' })).toEqual({
+      processDefinitionKey: 'payments',
+      maxResults: MAX_RUNTIME_RESOURCE_PAGE_SIZE,
+    });
+    expect(() => getBoundedRuntimeResourceQuery({ maxResults: MAX_RUNTIME_RESOURCE_PAGE_SIZE + 1 })).toThrow(
+      'Resource-aware runtime queries require maxResults',
+    );
+  });
+
+  it('normalizes resource-aware fetch-and-lock limits and rejects unsafe limits', () => {
+    expect(getBoundedRuntimeFetchAndLockRequest({ topics: [] })).toEqual({
+      topics: [],
+      maxTasks: MAX_RUNTIME_RESOURCE_PAGE_SIZE,
+    });
+    expect(() => getBoundedRuntimeFetchAndLockRequest({ maxTasks: MAX_RUNTIME_RESOURCE_PAGE_SIZE + 1 })).toThrow(
+      'Resource-aware external task fetches require maxTasks',
+    );
   });
 });

@@ -125,7 +125,7 @@ describe('mission-control external task routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(listExternalTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments' });
+    expect(listExternalTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100 });
   });
 
   it('completes external tasks through process modify permission', async () => {
