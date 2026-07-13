@@ -4,13 +4,12 @@
  * Provides authorization check endpoint and policy management for admins.
  */
 
-import { Router, Request, Response, NextFunction, raw } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { z } from 'zod';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
-import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
@@ -55,15 +54,9 @@ import { In, IsNull, Not } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { getEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js';
-import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
-import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
-import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
-import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
-import { configBundleExportService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleExportService.js';
-import { configBundleArchiveService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleArchiveService.js';
-import { configBundleIdentityReplayTaskService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
+import { registerConfigBundleRoutes } from './authz/config-bundles.js';
 import {
   evaluateMissionControlStarbaseBridge,
   evaluateStarbaseMissionControlBridge,
@@ -87,37 +80,6 @@ const authzCheckBatchSchema = z.object({
 const legacyMappingCoverageVerificationSchema = z.object({ family: z.enum(['platform_role', 'group', 'engine_assignment']), candidateIdentityMappingId: z.string().min(1), note: z.string().min(3).max(2000) });
 const legacyMappingRetirementSchema = z.object({ confirmation: z.literal('RETIRE_LEGACY_MAPPINGS') });
 const globalLegacyMappingRetirementSchema = z.object({ confirmation: z.literal('RETIRE_GLOBAL_LEGACY_MAPPINGS') });
-const configBundlePreviewSchema = z.object({
-  bundle: z.unknown(),
-  files: z.record(z.string(), z.unknown()),
-});
-const configBundleApplySchema = configBundlePreviewSchema.extend({
-  expectedPreviewHash: z.string().min(1),
-  expectedSecretPreflightHash: z.string().min(1).max(255).optional(),
-  acknowledgements: z.array(z.string().min(1).max(500)).max(100).optional(),
-  idempotencyKey: z.string().min(8).max(160).optional(),
-  expectedTenantScope: z.string().min(1).max(255).optional(),
-  identityReconciliationMode: z.enum(['none', 'preview', 'apply']).optional(),
-});
-
-function configBundleRunResponse(row: ConfigBundleApplyRun): Record<string, unknown> {
-  let result: Record<string, unknown> = {};
-  try { result = row.resultJson ? JSON.parse(row.resultJson) as Record<string, unknown> : {}; } catch { /* preserve run-history availability */ }
-  return {
-    id: row.id,
-    bundleKey: row.bundleKey,
-    bundleApiVersion: row.bundleApiVersion,
-    canonicalHash: row.canonicalHash,
-    idempotencyKey: row.idempotencyKey,
-    actorId: row.actorId,
-    status: row.status,
-    errorMessage: row.errorMessage,
-    completedAt: row.completedAt,
-    createdAt: row.createdAt,
-    ...result,
-  };
-}
-
 const idParamSchema = z.object({ id: z.string().uuid() });
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
 const runtimeResourceQuerySchema = z.object({ engineId: z.string().min(1), resourceKind: z.enum(['process_definition', 'decision_definition']).optional(), includeInactive: z.enum(['true', 'false']).optional() });
@@ -1389,133 +1351,7 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
   }
 }));
 
-/** Validate a config bundle for CI/CD without resolving secrets or mutating state. */
-router.post('/api/authz/config-bundles/import-zip', apiLimiter, requireConfigBundleAccess, raw({ type: ['application/zip', 'application/octet-stream'], limit: '1mb' }), asyncHandler(async (req: Request, res: Response) => {
-  const payload = configBundleArchiveService.readZip(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
-  await logAudit({
-    tenantId: req.tenant?.tenantId || undefined,
-    userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
-    action: 'authz.config_bundle.import_zip',
-    resourceType: 'config_bundle',
-    resourceId: String((payload.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
-    details: { fileCount: Object.keys(payload.files).length, actorType: req.apiClient ? 'api_client' : 'user' },
-  });
-  res.json(payload);
-}));
-router.post('/api/authz/config-bundles/preview', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
-  const preview = configBundlePreviewService.preview(req.body);
-  res.status(preview.valid ? 200 : 422).json(preview);
-}));
-
-/** Check configured secret references without returning their values or mutating state. */
-router.post('/api/authz/config-bundles/validate-secret-refs', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
-  const preflight = configBundleSecretPreflightService.check(req.body);
-  await logAudit({
-    tenantId: req.tenant?.tenantId || undefined,
-    userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
-    action: 'authz.config_bundle.secret_preflight',
-    resourceType: 'config_bundle',
-    resourceId: String((req.body.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
-    details: {
-      canonicalHash: preflight.canonicalHash || null,
-      valid: preflight.valid,
-      available: preflight.available,
-      references: preflight.references.map(({ reference, available, reason }) => ({ reference, available, reason: reason || null })),
-      actorType: req.apiClient ? 'api_client' : 'user',
-    },
-  });
-  res.status(preflight.valid ? 200 : 422).json(preflight);
-}));
-
-/** Compare a validated bundle with persisted config-owned role and group state. */
-router.post('/api/authz/config-bundles/diff', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
-  const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null);
-  res.status(diff.valid ? 200 : 422).json(diff);
-}));
-
-/** Apply a hash-bound config bundle after a successful persisted-state diff. */
-router.post('/api/authz/config-bundles/apply', apiLimiter, requireConfigBundleAccess, validateBody(configBundleApplySchema), requireTargetTransferAccess, asyncHandler(async (req: Request, res: Response) => {
-  const actorId = req.apiClient?.createdById || req.apiClient?.id || req.user!.userId;
-  const result = await configBundleApplyService.apply({
-    ...req.body,
-    tenantId: req.tenant?.tenantId || null,
-    actorId,
-  });
-  await logAudit({
-    tenantId: req.tenant?.tenantId || undefined,
-    userId: actorId,
-    action: 'authz.config_bundle.apply',
-    resourceType: 'config_bundle',
-    resourceId: String((req.body.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
-    details: {
-      canonicalHash: result.canonicalHash,
-      created: result.created,
-      updated: result.updated,
-      archived: result.archived,
-      mode: (req.body.bundle as { mode?: string })?.mode || null,
-      idempotencyKey: req.body.idempotencyKey || null,
-      applyRunId: result.applyRunId || null,
-      idempotent: result.idempotent === true,
-      acknowledgements: req.body.acknowledgements || [],
-      reconciliation: result.reconciliation,
-      actorType: req.apiClient ? 'api_client' : 'user',
-      apiClientId: req.apiClient?.id || null,
-    },
-  });
-  res.status(200).json(result);
-}));
-
-/** Recent hash-bound applies are the operational history for UI and CI diagnostics. */
-router.get('/api/authz/config-bundles/runs', apiLimiter, requireConfigBundleAccess, validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
-  const tenantId = req.tenant?.tenantId || null;
-  const rows = await (await getDataSource()).getRepository(ConfigBundleApplyRun).find({
-    where: tenantId ? { tenantId } : { tenantId: IsNull() },
-    order: { createdAt: 'DESC' },
-    take: Number(req.query.limit || 25),
-  });
-  res.json(rows.map(configBundleRunResponse));
-}));
-
-/** One persisted apply receipt for UI and CI failure/reconciliation diagnostics. */
-router.get('/api/authz/config-bundles/runs/:id', apiLimiter, requireConfigBundleAccess, validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
-  const tenantId = req.tenant?.tenantId || null;
-  const runId = String(req.params.id);
-  const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
-    where: tenantId ? { id: runId, tenantId } : { id: runId, tenantId: IsNull() },
-  });
-  if (!row) throw Errors.notFound('Configuration bundle apply run');
-  res.json(configBundleRunResponse(row));
-}));
-
-/** Durable continuation state for bounded stored identity snapshot replay. */
-router.get('/api/authz/config-bundles/runs/:id/identity-replay-tasks', apiLimiter, requireConfigBundleAccess, validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
-  const tenantId = req.tenant?.tenantId || null;
-  const runId = String(req.params.id);
-  const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
-    where: tenantId ? { id: runId, tenantId } : { id: runId, tenantId: IsNull() },
-  });
-  if (!row) throw Errors.notFound('Configuration bundle apply run');
-  const tasks = await configBundleIdentityReplayTaskService.listForApplyRun(runId, tenantId);
-  res.json(tasks.map((task) => ({
-    id: task.id,
-    providerId: task.providerId,
-    status: task.status,
-    attempts: task.attempts,
-    nextAttemptAt: task.nextAttemptAt,
-    scanned: task.scanned,
-    created: task.created,
-    removed: task.removed,
-    failed: task.failed,
-    lastError: task.lastError,
-    completedAt: task.completedAt,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
-  })));
-}));
-
-router.get('/api/authz/config-bundles/export', apiLimiter, requireConfigBundleAccess, validateQuery(z.object({ bundleKey: z.string().min(3).max(160), tenantKey: z.string().min(1).max(160).optional() })), asyncHandler(async (req: Request, res: Response) => {
-  res.json(await configBundleExportService.exportBundle({ bundleKey: String(req.query.bundleKey), tenantKey: req.query.tenantKey ? String(req.query.tenantKey) : undefined, tenantId: req.tenant?.tenantId || null }));
-}));
+registerConfigBundleRoutes(router, { requireConfigBundleAccess, requireTargetTransferAccess });
 
 // ============================================================================
 // API Client Management (Admin Only)
