@@ -450,8 +450,6 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
 
       if (existingByEntraId) {
         const user = existingByEntraId;
-        const platformRole = user.platformRole === 'admin' || resolvedRole === 'admin' ? 'admin' : 'user';
-
         await userRepo.update({ id: user.id }, {
           email: userInfo.email,
           authProvider: 'saml',
@@ -468,7 +466,6 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
           ...user,
           email: userInfo.email,
           authProvider: 'saml',
-          platformRole,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
         };
@@ -478,8 +475,6 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
 
       if (existingByEmail) {
         const user = existingByEmail;
-        const platformRole = user.platformRole === 'admin' || resolvedRole === 'admin' ? 'admin' : 'user';
-
         await userRepo.update({ id: user.id }, {
           authProvider: 'saml',
           entraId: userInfo.oid || user.entraId,
@@ -499,7 +494,6 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
           ...user,
           authProvider: 'saml',
           entraId: userInfo.oid || user.entraId,
-          platformRole,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
         };
@@ -527,7 +521,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
 
       syncCounts = await syncSamlAuthorizationForUser(manager, userId, userInfo, providerId, tenantId, ssoClaims, resolvedRole);
       const newUser = await userRepo.findOneBy({ id: userId });
-      return newUser ? { ...newUser, platformRole: resolvedRole } : newUser;
+      return newUser;
     });
 
     await ssoSyncDiagnosticsService.completeRun(runId, {

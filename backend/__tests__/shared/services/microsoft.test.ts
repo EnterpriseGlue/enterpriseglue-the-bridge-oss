@@ -80,7 +80,7 @@ describe('microsoft service', () => {
       findOneBy: vi.fn()
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 'user-1', email: 'sso-user@example.com', authProvider: 'microsoft' }),
+        .mockResolvedValueOnce({ id: 'user-1', email: 'sso-user@example.com', authProvider: 'microsoft', platformRole: 'user' }),
       update: vi.fn(),
       insert: vi.fn().mockResolvedValue(undefined),
     };
@@ -94,7 +94,7 @@ describe('microsoft service', () => {
     (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
     (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('admin');
 
-    await provisionMicrosoftUser({
+    const result = await provisionMicrosoftUser({
       oid: 'oid-123',
       email: 'sso-user@example.com',
       given_name: 'Sso',
@@ -111,6 +111,7 @@ describe('microsoft service', () => {
     }));
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'user' }));
+    expect(result).toEqual(expect.objectContaining({ id: 'user-1', platformRole: 'user' }));
     expect(authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(
       manager,
       expect.any(String),

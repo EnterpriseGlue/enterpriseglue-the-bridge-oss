@@ -227,8 +227,6 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
         // User exists - update profile and last login. The persisted platform
         // role remains compatibility data; SSO authorization is group-backed.
         const user = existingByEntraId;
-        const platformRole = user.platformRole === 'admin' || resolvedRole === 'admin' ? 'admin' : 'user';
-
         await userRepo.update({ id: user.id }, {
           email: userInfo.email,
           entraEmail: userInfo.email,
@@ -243,7 +241,6 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
         return {
           ...user,
           email: userInfo.email,
-          platformRole,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
         };
@@ -255,8 +252,6 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
       if (existingByEmail) {
         // Email exists but not linked to Microsoft account - link the accounts
         const user = existingByEmail;
-        const platformRole = user.platformRole === 'admin' || resolvedRole === 'admin' ? 'admin' : 'user';
-
         await userRepo.update({ id: user.id }, {
           authProvider: 'microsoft',
           entraId: userInfo.oid,
@@ -277,7 +272,6 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
           ...user,
           authProvider: 'microsoft',
           entraId: userInfo.oid,
-          platformRole,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
         };
@@ -307,7 +301,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
 
       const newUser = await userRepo.findOneBy({ id: userId });
       syncCounts = await syncMicrosoftAuthorizationForUser(manager, userId, userInfo, ssoClaims, resolvedRole);
-      return newUser ? { ...newUser, platformRole: resolvedRole } : newUser;
+      return newUser;
     });
 
     await ssoSyncDiagnosticsService.completeRun(runId, {
