@@ -60,6 +60,7 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
+import { AuditReferenceLinks as EffectiveAccessAuditReferenceLinks, findEffectiveAccessSourceAuditEntries as findEffectiveAccessAuditEntries, formatAuditReferences as formatEffectiveAccessAuditReferences } from './access-control/auditReferences';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
   formatSsoSyncCounts as presentSsoSyncCounts,
@@ -2462,7 +2463,7 @@ function EffectiveAccess({
     ),
   );
   const sourceRows = React.useMemo(() => (evaluateM.data?.sources || []).map((source, index) => {
-    const auditReferenceEntries = findEffectiveAccessSourceAuditEntries(source, auditEntries);
+    const auditReferenceEntries = findEffectiveAccessAuditEntries(source, auditEntries);
     return {
       id: `${source.type}-${source.assignmentId || source.roleId || source.permission || index}`,
       type: source.type,
@@ -2470,7 +2471,7 @@ function EffectiveAccess({
       principal: formatEffectiveAccessPrincipal(source),
       scope: formatEffectiveAccessScope(source),
       lineage: formatEffectiveAccessLineage(source),
-      audit: formatAuditReferences(auditReferenceEntries),
+      audit: formatEffectiveAccessAuditReferences(auditReferenceEntries),
       auditEntries: auditReferenceEntries,
     };
   }), [auditEntries, evaluateM.data]);
@@ -2612,7 +2613,7 @@ function EffectiveAccess({
                           if (cell.info.header === 'audit') {
                             return (
                               <TableCell key={cell.id}>
-                                <AuditReferenceLinks entries={sourceRow?.auditEntries || []} onOpen={onOpenAuditReference} />
+                                <EffectiveAccessAuditReferenceLinks entries={sourceRow?.auditEntries || []} onOpen={onOpenAuditReference} />
                               </TableCell>
                             );
                           }
