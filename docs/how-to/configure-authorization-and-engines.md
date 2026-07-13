@@ -4,7 +4,7 @@ Summary: Target operator workflow for configuring EnterpriseGlue roles, groups, 
 
 Audience: Platform administrators, identity administrators, engine operators, and deployment engineers.
 
-Status: **Target guide for the RBAC/config refactor.** The current release still uses the existing Platform Settings, Access Control, SSO, and Engines APIs/UI. JSON bundle preview/apply, provider-neutral LDAP/OIDC/SAML adapters, runtime-resource sets, and first-class customer-sidecar connection mode are not implemented yet. Do not use the target API paths or environment settings in production until their checklist items are complete.
+Status: **Incremental implementation guide for the RBAC/config refactor.** Platform Settings, Access Control, SSO, Engines, JSON bundle preview/apply/export, runtime-resource sets, provider-neutral identity mapping foundations, and engine ingestion controls are implemented in this worktree. Customer-sidecar transport, provider API reconciliation for every protocol, deployment startup automation, and other unchecked roadmap items remain target work; use only the documented implemented routes/settings in production.
 
 Related design:
 
