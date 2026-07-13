@@ -337,6 +337,10 @@ class ConfigBundleApplyService {
               isArchived: false,
               source: 'config',
               sourceRef: `config_bundle:${manifest.metadata.key}`,
+              ownershipMode: desired.ownershipMode || 'config_locked',
+              sourceHash: diff.canonicalHash,
+              lastAppliedAt: now,
+              driftStatus: 'in_sync',
               createdById: input.actorId,
               createdAt: now,
               updatedAt: now,
@@ -359,6 +363,10 @@ class ConfigBundleApplyService {
               scope: desired.scope,
               isArchived: false,
               isAssignable: true,
+              ownershipMode: desired.ownershipMode || 'config_locked',
+              sourceHash: diff.canonicalHash,
+              lastAppliedAt: now,
+              driftStatus: 'in_sync',
               updatedAt: now,
             });
             await rolePermissionRepo.delete({ roleId: change.currentId });
@@ -374,7 +382,14 @@ class ConfigBundleApplyService {
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.role.update', resourceType: 'role', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, roleKey: desired.key, canonicalHash: diff.canonicalHash } });
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
-            await roleRepo.update({ id: change.currentId }, { isArchived: true, isAssignable: false, updatedAt: now });
+            await roleRepo.update({ id: change.currentId }, {
+              isArchived: true,
+              isAssignable: false,
+              sourceHash: diff.canonicalHash,
+              lastAppliedAt: now,
+              driftStatus: 'in_sync',
+              updatedAt: now,
+            });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.role.archive', resourceType: 'role', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, roleKey: change.key, canonicalHash: diff.canonicalHash } });
             archived += 1;
           }
@@ -392,6 +407,10 @@ class ConfigBundleApplyService {
               description: desired.description || null,
               source: 'config',
               sourceRef: `config_bundle:${manifest.metadata.key}`,
+              ownershipMode: desired.ownershipMode || 'config_locked',
+              sourceHash: diff.canonicalHash,
+              lastAppliedAt: now,
+              driftStatus: 'in_sync',
               isSystem: false,
               isArchived: false,
               createdById: input.actorId,
@@ -401,11 +420,26 @@ class ConfigBundleApplyService {
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.group.create', resourceType: 'authz_group', resourceId: groupId, details: { bundleKey: manifest.metadata.key, groupKey: desired.key, canonicalHash: diff.canonicalHash } });
             created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
-            await groupRepo.update({ id: change.currentId }, { name: desired.name, description: desired.description || null, isArchived: false, updatedAt: now });
+            await groupRepo.update({ id: change.currentId }, {
+              name: desired.name,
+              description: desired.description || null,
+              isArchived: false,
+              ownershipMode: desired.ownershipMode || 'config_locked',
+              sourceHash: diff.canonicalHash,
+              lastAppliedAt: now,
+              driftStatus: 'in_sync',
+              updatedAt: now,
+            });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.group.update', resourceType: 'authz_group', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, groupKey: desired.key, canonicalHash: diff.canonicalHash } });
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
-            await groupRepo.update({ id: change.currentId }, { isArchived: true, updatedAt: now });
+            await groupRepo.update({ id: change.currentId }, {
+              isArchived: true,
+              sourceHash: diff.canonicalHash,
+              lastAppliedAt: now,
+              driftStatus: 'in_sync',
+              updatedAt: now,
+            });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.group.archive', resourceType: 'authz_group', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, groupKey: change.key, canonicalHash: diff.canonicalHash } });
             archived += 1;
           }

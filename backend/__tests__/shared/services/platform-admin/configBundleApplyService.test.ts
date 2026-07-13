@@ -151,10 +151,44 @@ describe('configBundleApplyService', () => {
       roleKeyIdentity: 'tenant-a:custom.engine.deployer',
       source: 'config',
       sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked',
+      sourceHash: preview.canonicalHash,
+      driftStatus: 'in_sync',
     }));
-    expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ key: 'group.deployers', source: 'config', sourceRef: 'config_bundle:acme.authz' }));
+    expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'group.deployers',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked',
+      sourceHash: preview.canonicalHash,
+      driftStatus: 'in_sync',
+    }));
     expect(permissionInsert).toHaveBeenCalledWith([expect.objectContaining({ permissionId: 'engine:deploy' })]);
     expect(auditInsert).toHaveBeenCalledTimes(2);
+  });
+
+  it('persists config-warning ownership for roles and groups', async () => {
+    const { roleInsert, groupInsert } = setupDataSource();
+    const warningFiles = {
+      './roles.json': {
+        roles: [{ key: 'custom.engine.deployer', name: 'Deployer', scope: 'engine', permissions: ['engine:deploy'], ownershipMode: 'config_warn' }],
+      },
+      './groups.json': {
+        groups: [{ key: 'group.deployers', name: 'Deployers', ownershipMode: 'config_warn' }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle, files: warningFiles });
+
+    await configBundleApplyService.apply({
+      bundle,
+      files: warningFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(roleInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync' }));
+    expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync' }));
   });
 
   it('requires acknowledgement before an authoritative apply archives a config-owned object', async () => {

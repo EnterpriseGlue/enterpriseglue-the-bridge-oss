@@ -141,6 +141,7 @@ export interface RoleAssignment {
 }
 
 export type AuthzGroupSource = 'manual' | 'sso' | 'api' | 'automation' | 'system' | 'config';
+export type AuthzOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
 
 export interface AuthzGroup {
   id: string;
@@ -150,6 +151,10 @@ export interface AuthzGroup {
   description: string | null;
   source: AuthzGroupSource;
   sourceRef: string | null;
+  ownershipMode: AuthzOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
   isSystem: boolean;
   isArchived: boolean;
   createdById: string | null;

@@ -12,6 +12,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, type DataSource } from 'typeorm';
 
 export type AuthzGroupSource = 'manual' | 'sso' | 'api' | 'automation' | 'system' | 'config';
+export type AuthzGroupOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
 
 export interface AuthzGroupView {
   id: string;
@@ -21,6 +22,10 @@ export interface AuthzGroupView {
   description: string | null;
   source: AuthzGroupSource;
   sourceRef: string | null;
+  ownershipMode: AuthzGroupOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
   isSystem: boolean;
   isArchived: boolean;
   createdById: string | null;
@@ -164,6 +169,10 @@ function toGroupView(group: AuthzGroup): AuthzGroupView {
     description: group.description,
     source: group.source as AuthzGroupSource,
     sourceRef: group.sourceRef,
+    ownershipMode: (group.ownershipMode || (group.source === 'config' ? 'config_locked' : 'manual')) as AuthzGroupOwnershipMode,
+    sourceHash: group.sourceHash || null,
+    lastAppliedAt: group.lastAppliedAt ? Number(group.lastAppliedAt) : null,
+    driftStatus: group.driftStatus || null,
     isSystem: group.isSystem,
     isArchived: group.isArchived,
     createdById: group.createdById,
@@ -314,6 +323,10 @@ export class AuthzGroupService {
       description: input.description?.trim() || null,
       source: input.source || 'manual',
       sourceRef: input.sourceRef || null,
+      ownershipMode: input.source === 'config' ? 'config_locked' : 'manual',
+      sourceHash: null,
+      lastAppliedAt: null,
+      driftStatus: null,
       isSystem: Boolean(input.isSystem),
       isArchived: false,
       createdById: input.createdById || null,
@@ -347,7 +360,8 @@ export class AuthzGroupService {
     if (group.isSystem && input.isArchived) {
       throw Errors.validation('System groups cannot be archived');
     }
-    if (group.source !== 'manual') {
+    const isConfigWarn = group.source === 'config' && group.ownershipMode === 'config_warn';
+    if (group.source !== 'manual' && !isConfigWarn) {
       throw Errors.forbidden('Source-managed groups must be updated by their source');
     }
 
@@ -356,6 +370,7 @@ export class AuthzGroupService {
       name: input.name?.trim() || group.name,
       description: input.description !== undefined ? input.description?.trim() || null : group.description,
       isArchived: input.isArchived ?? group.isArchived,
+      ...(isConfigWarn ? { driftStatus: 'drifted' } : {}),
       updatedAt: Date.now(),
     });
     await recordGroupAudit(dataSource, {
@@ -371,6 +386,8 @@ export class AuthzGroupService {
         previousName: group.name,
         nextName: input.name?.trim() || group.name,
         isArchived: input.isArchived ?? group.isArchived,
+        ownershipMode: group.ownershipMode || 'manual',
+        driftStatus: isConfigWarn ? 'drifted' : group.driftStatus || null,
       },
     });
   }

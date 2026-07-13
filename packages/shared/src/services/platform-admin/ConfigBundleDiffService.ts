@@ -273,9 +273,10 @@ class ConfigBundleDiffService {
         (existing.description || null) !== (role.description || null) ||
         existing.scope !== role.scope ||
         existing.isArchived ||
+        (existing.ownershipMode || 'config_locked') !== (role.ownershipMode || 'config_locked') ||
         !samePermissions(rolePermissionsByRoleId.get(existing.id) || [], permissions)
       ) {
-        changes.push({ objectType: 'role', key: role.key, operation: 'update', currentId: existing.id, reason: 'Config-owned role differs from the desired name, scope, description, archive state, or permissions', ...(hasPermissionChanges(permissionChanges) ? { permissionChanges } : {}), affectedAssignmentCount });
+        changes.push({ objectType: 'role', key: role.key, operation: 'update', currentId: existing.id, reason: 'Config-owned role differs from the desired name, scope, description, ownership mode, archive state, or permissions', ...(hasPermissionChanges(permissionChanges) ? { permissionChanges } : {}), affectedAssignmentCount });
       } else {
         changes.push({ objectType: 'role', key: role.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned role already matches the desired state' });
       }
@@ -287,8 +288,13 @@ class ConfigBundleDiffService {
         changes.push({ objectType: 'group', key: group.key, operation: 'create', reason: 'No persisted group uses this tenant-scoped key' });
       } else if (existing.source !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
         changes.push({ objectType: 'group', key: group.key, operation: 'conflict', currentId: existing.id, reason: 'Existing group is not owned by this configuration bundle' });
-      } else if (existing.name !== group.name || (existing.description || null) !== (group.description || null) || existing.isArchived) {
-        changes.push({ objectType: 'group', key: group.key, operation: 'update', currentId: existing.id, reason: 'Config-owned group differs from the desired name, description, or archive state' });
+      } else if (
+        existing.name !== group.name ||
+        (existing.description || null) !== (group.description || null) ||
+        existing.isArchived ||
+        (existing.ownershipMode || 'config_locked') !== (group.ownershipMode || 'config_locked')
+      ) {
+        changes.push({ objectType: 'group', key: group.key, operation: 'update', currentId: existing.id, reason: 'Config-owned group differs from the desired name, description, ownership mode, or archive state' });
       } else {
         changes.push({ objectType: 'group', key: group.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned group already matches the desired state' });
       }

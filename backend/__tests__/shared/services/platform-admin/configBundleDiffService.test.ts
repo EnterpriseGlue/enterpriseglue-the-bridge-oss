@@ -125,6 +125,37 @@ describe('configBundleDiffService', () => {
     ]));
   });
 
+  it('detects role and group ownership-mode changes as updates', async () => {
+    mockDataSource([
+      {
+        id: 'role-1', tenantId: 'tenant-a', key: 'custom.engine.deployer', name: 'Deployer', description: null,
+        scope: 'engine', source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_locked', isArchived: false,
+      },
+    ], [
+      {
+        id: 'group-1', tenantId: 'tenant-a', key: 'group.deployers', name: 'Deployers', description: null,
+        source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_locked', isArchived: false,
+      },
+    ], [{ roleId: 'role-1', permissionId: 'engine:instance:view' }]);
+
+    const result = await configBundleDiffService.diff({
+      bundle,
+      files: {
+        './roles.json': {
+          roles: [{ key: 'custom.engine.deployer', name: 'Deployer', scope: 'engine', permissions: ['engine:instance:view'], ownershipMode: 'config_warn' }],
+        },
+        './groups.json': {
+          groups: [{ key: 'group.deployers', name: 'Deployers', ownershipMode: 'config_warn' }],
+        },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'role', key: 'custom.engine.deployer', operation: 'update' }),
+      expect.objectContaining({ objectType: 'group', key: 'group.deployers', operation: 'update' }),
+    ]));
+  });
+
   it('reports expanded role permission additions, removals, and affected assignments', async () => {
     mockDataSource([
       { id: 'role-1', tenantId: 'tenant-a', key: 'custom.engine.deployer', name: 'Deployer', description: null, scope: 'engine', isArchived: false, source: 'config', sourceRef: 'config_bundle:acme.authz' },

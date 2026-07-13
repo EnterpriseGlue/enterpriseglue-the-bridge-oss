@@ -402,7 +402,7 @@ Interface requirements:
 - [ ] ⬜ Execute domain writes through existing role/group/engine/assignment/mapping/target services or shared lower-level commands used by both UI and bundle apply.
 - [x] ✅ Let apply select reconciliation behavior: `none`, `preview`, or asynchronous `apply`; never block a large config transaction on a full directory scan. `none`, read-only stored-snapshot `preview`, and bounded post-transaction `apply` are implemented. Required source-scoped cleanup for changed mappings remains transactional. Truncated apply pages persist provider/cursor tasks and an explicitly enabled leased worker resumes them with retry backoff; run details expose the task lifecycle.
 - [ ] ⬜ Export source-owned production objects without secret values and without test fixture data.
-- [ ] ⬜ Keep manual UI management available according to object ownership mode (`manual`, `config_warn`, or `config_locked`).
+- [x] ✅ Roles and groups now persist ownership/provenance (`ownershipMode`, source hash, last applied time, drift status). `config_locked` remains read-only; `config_warn` permits local role/group edits and marks them drifted; config apply restores `in_sync` state. Assignment, Engine Set, and project-engine target ownership controls remain pending.
 - [ ] ⬜ Add config bundle version and normalized object fingerprints to every apply run and affected object lineage.
 
 ## Engine JSON Design
@@ -1932,7 +1932,7 @@ Editor behavior:
 - [ ] ⬜ Add search, category filter, risk filter, `Selected only` toggle, selected permission count, and unsaved-change protection.
 - [ ] ⬜ Show permission key, plain-language description, risk tag, and implications without requiring a separate Permissions tab lookup.
 - [ ] ⬜ Require the existing acknowledgement flow for sensitive permissions before save.
-- [ ] ⬜ Show config ownership: `config_locked` is read-only; `config_warn` permits edits but marks drift; manual roles remain editable.
+- [x] ✅ Show role config ownership: `config_locked` is read-only; `config_warn` permits edits and visibly marks local drift; manual roles remain editable. The Groups Access Control surface follows the same ownership behavior.
 - [ ] ⬜ Use a sticky Carbon action bar with Save and Cancel; do not put a save button in every permission row.
 - [x] ✅ Remove the unbounded role-permission matrix from the primary Roles workflow. Custom roles are edited in the focused scoped editor; system roles are duplicated before mutation. A bounded role-comparison view remains optional future work.
 - [ ] ⬜ Verify no page-level horizontal overflow at supported desktop and tablet widths and ensure long permission labels wrap inside their category.
@@ -2298,7 +2298,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add Mission Control filters and empty states that explain when the user can see the engine but has no visible process or decision resources. Dashboard context and the selected-engine dashboard view now label resource-scoped runtime access, and Process definitions plus Decisions show authorized-subset empty states; remaining collection views remain pending.
 - [ ] ⬜ Ensure dashboard and Mission Control counters are based on authorized runtime subsets.
 - [ ] ⬜ Show `Customer-managed engine authentication` or `No EnterpriseGlue-managed credentials` for sidecar engines instead of implying missing security.
-- [ ] ⬜ Complete generic config ownership modes: config-locked engines are enforced and config-warn engine edits are marked as drift; config-sourced custom roles/groups/memberships are read-only. Add persisted `config_warn` ownership and drift-warning behavior for roles, groups, assignments, Engine Sets, and project-engine targets after the generic ownership schema is available.
+- [ ] ⬜ Complete generic config ownership modes: config-locked engines are enforced and config-warn engine edits are marked as drift. Roles and groups now persist `config_warn` ownership and drift-warning behavior; memberships remain source-owned. Add equivalent persisted ownership/drift controls for assignments, Engine Sets, and project-engine targets.
 - [ ] ⬜ Add duplicate-system-role-to-config-role flow in the UI export/import path.
 - [ ] ⬜ Add disabled/editable field behavior for config-owned objects.
 - [ ] ⬜ Add effective-access links from config diff rows.

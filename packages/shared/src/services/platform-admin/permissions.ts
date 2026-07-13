@@ -215,6 +215,7 @@ export type RoleScope = ResourceType;
 export type PrincipalType = AuthzPrincipalType;
 export type RoleKind = 'system' | 'custom';
 export type RoleSource = 'system' | 'manual' | 'config' | 'api' | 'automation';
+export type ConfigOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
 export type PermissionKind = 'system' | 'custom';
 export type RoleAssignmentSource = 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap';
 
@@ -257,6 +258,10 @@ export interface RoleSummary {
   isArchived: boolean;
   source: RoleSource;
   sourceRef: string | null;
+  ownershipMode: ConfigOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
   permissionCount: number;
   createdAt: number;
   updatedAt: number;
@@ -1758,6 +1763,10 @@ class PermissionServiceClass {
       isArchived: role.isArchived,
       source: (role.source || (role.kind === 'system' ? 'system' : 'manual')) as RoleSource,
       sourceRef: role.sourceRef || null,
+      ownershipMode: (role.ownershipMode || (role.source === 'config' ? 'config_locked' : 'manual')) as ConfigOwnershipMode,
+      sourceHash: role.sourceHash || null,
+      lastAppliedAt: role.lastAppliedAt ? Number(role.lastAppliedAt) : null,
+      driftStatus: role.driftStatus || null,
       permissionCount: counts.get(role.id) || 0,
       createdAt: Number(role.createdAt),
       updatedAt: Number(role.updatedAt),
@@ -1791,6 +1800,10 @@ class PermissionServiceClass {
       isArchived: role.isArchived,
       source: (role.source || (role.kind === 'system' ? 'system' : 'manual')) as RoleSource,
       sourceRef: role.sourceRef || null,
+      ownershipMode: (role.ownershipMode || (role.source === 'config' ? 'config_locked' : 'manual')) as ConfigOwnershipMode,
+      sourceHash: role.sourceHash || null,
+      lastAppliedAt: role.lastAppliedAt ? Number(role.lastAppliedAt) : null,
+      driftStatus: role.driftStatus || null,
       permissionCount: permissions.length,
       permissions: permissions.map((permission) => permission.permissionId as Permission),
       createdAt: Number(role.createdAt),
@@ -1832,6 +1845,10 @@ class PermissionServiceClass {
         isArchived: false,
         source,
         sourceRef,
+        ownershipMode: source === 'config' ? 'config_locked' : 'manual',
+        sourceHash: null,
+        lastAppliedAt: null,
+        driftStatus: null,
         createdById: input.createdById,
         createdAt: now,
         updatedAt: now,
@@ -1929,7 +1946,8 @@ class PermissionServiceClass {
     if (role.kind !== 'custom' || !role.isEditable) {
       throw new Error('System roles cannot be edited');
     }
-    if (role.source === 'config') {
+    const isConfigWarn = role.source === 'config' && role.ownershipMode === 'config_warn';
+    if (role.source === 'config' && !isConfigWarn) {
       throw new Error('Config-managed roles must be updated through their configuration bundle');
     }
     const normalizedTenantId = normalizeTenantId(input.tenantId);
@@ -1938,7 +1956,10 @@ class PermissionServiceClass {
     }
 
     const now = Date.now();
-    const updates: Partial<RbacRole> = { updatedAt: now };
+    const updates: Partial<RbacRole> = {
+      updatedAt: now,
+      ...(isConfigWarn ? { driftStatus: 'drifted' } : {}),
+    };
     if (input.name !== undefined) {
       const name = input.name.trim();
       if (!name) {
@@ -1974,6 +1995,8 @@ class PermissionServiceClass {
           scope: role.scope,
           changedFields: Object.keys(updates).filter((key) => key !== 'updatedAt'),
           permissionIds: permissionIds || undefined,
+          ownershipMode: role.ownershipMode || 'manual',
+          driftStatus: updates.driftStatus || role.driftStatus || null,
         },
       });
     });

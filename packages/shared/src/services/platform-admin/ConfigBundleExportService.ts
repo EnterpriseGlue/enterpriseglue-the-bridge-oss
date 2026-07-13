@@ -62,8 +62,8 @@ class ConfigBundleExportService {
     for (const permission of permissions) permissionIdsByRole.set(permission.roleId, [...(permissionIdsByRole.get(permission.roleId) || []), permission.permissionId]);
 
     const files: Record<string, unknown> = {};
-    if (roles.length) files['./roles.json'] = { roles: sortedByKey(roles).map((role) => ({ key: role.key, name: role.name, description: role.description || undefined, scope: role.scope, permissions: [...(permissionIdsByRole.get(role.id) || [])].sort(), ownershipMode: 'config_locked' })) };
-    if (groups.length) files['./groups.json'] = { groups: sortedByKey(groups).map((group) => ({ key: group.key, name: group.name, description: group.description || undefined, ownershipMode: 'config_locked' })) };
+    if (roles.length) files['./roles.json'] = { roles: sortedByKey(roles).map((role) => ({ key: role.key, name: role.name, description: role.description || undefined, scope: role.scope, permissions: [...(permissionIdsByRole.get(role.id) || [])].sort(), ownershipMode: role.ownershipMode || 'config_locked' })) };
+    if (groups.length) files['./groups.json'] = { groups: sortedByKey(groups).map((group) => ({ key: group.key, name: group.name, description: group.description || undefined, ownershipMode: group.ownershipMode || 'config_locked' })) };
     if (engines.length) files['./engines.json'] = { engines: [...engines]
       .filter((engine): engine is Engine & { configKey: string } => Boolean(engine.configKey))
       .sort((left, right) => left.configKey.localeCompare(right.configKey))

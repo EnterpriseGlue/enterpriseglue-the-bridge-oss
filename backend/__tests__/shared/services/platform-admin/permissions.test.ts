@@ -2126,6 +2126,38 @@ describe('permissionService', () => {
       .rejects.toThrow('Config-managed roles must be updated through their configuration bundle');
   });
 
+  it('allows config-warning custom role edits and marks the role as drifted', async () => {
+    const roleUpdate = vi.fn();
+    const auditInsert = vi.fn();
+    const role = {
+      id: 'role-config-warning', tenantId: 'tenant-a', name: 'Warning role', scope: 'engine', kind: 'custom', isEditable: true,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', driftStatus: 'in_sync', isArchived: false,
+    };
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { update: roleUpdate };
+        if (entity === AuditLog) return { insert: auditInsert };
+        throw new Error('Unexpected repository');
+      },
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { findOne: vi.fn().mockResolvedValue(role) };
+        throw new Error('Unexpected repository');
+      },
+      transaction: async (callback: any) => callback(manager),
+    });
+
+    await permissionService.updateCustomRole('role-config-warning', {
+      tenantId: 'tenant-a', name: 'Locally changed', updatedById: 'admin-1',
+    });
+
+    expect(roleUpdate).toHaveBeenCalledWith('role-config-warning', expect.objectContaining({
+      name: 'Locally changed', driftStatus: 'drifted',
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ details: expect.stringContaining('drifted') }));
+  });
+
   it('writes audit records for custom role lifecycle changes', async () => {
     const roleInsert = vi.fn().mockResolvedValue(undefined);
     const roleUpdate = vi.fn().mockResolvedValue(undefined);

@@ -1283,7 +1283,7 @@ function getPolicyConditionsJson(policy: AuthzPolicy | null) {
 }
 
 function isEditableGroup(group: AuthzGroup) {
-  return group.source === 'manual' && !group.isSystem;
+  return !group.isSystem && (group.source === 'manual' || (group.source === 'config' && group.ownershipMode === 'config_warn'));
 }
 
 function projectEngineTargetFormFromTarget(target: ProjectEngineTarget): ProjectEngineTargetFormState {
@@ -4557,7 +4557,9 @@ function GroupsPanel({
   const selectedGroupUnavailableReason = !canManage
     ? 'Missing permission platform:authz:roles:manage'
     : selectedGroup && !isEditableGroup(selectedGroup)
-      ? 'Source-owned groups are managed by their source'
+      ? selectedGroup?.source === 'config' && selectedGroup.ownershipMode === 'config_locked'
+        ? 'This group is locked by its configuration bundle'
+        : 'Source-owned groups are managed by their source'
       : selectedGroup?.isArchived
         ? 'Archived groups cannot be changed'
         : undefined;
@@ -4607,7 +4609,9 @@ function GroupsPanel({
                     const rowUnavailableReason = !canManage
                       ? 'Missing permission platform:authz:roles:manage'
                       : !editable
-                        ? 'Source-owned groups are managed by their source'
+                        ? group?.source === 'config' && group.ownershipMode === 'config_locked'
+                          ? 'This group is locked by its configuration bundle'
+                          : 'Source-owned groups are managed by their source'
                         : group?.isArchived
                           ? 'Archived groups cannot be changed'
                           : undefined;
@@ -4615,7 +4619,7 @@ function GroupsPanel({
                       <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                         {row.cells.map((cell) => {
                           if (cell.info.header === 'source') {
-                            return <TableCell key={cell.id}><Tag type={authzSourceTagType(cell.value)}>{formatAuthzSource(cell.value)}</Tag></TableCell>;
+                            return <TableCell key={cell.id}><div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={group?.source === 'config' && group.ownershipMode === 'config_warn' ? 'warm-gray' : authzSourceTagType(cell.value)}>{group?.source === 'config' && group.ownershipMode === 'config_warn' ? 'Config warning' : formatAuthzSource(cell.value)}</Tag>{group?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</div></TableCell>;
                           }
                           if (cell.info.header === 'status') {
                             return <TableCell key={cell.id}><Tag type={cell.value === 'Active' ? 'green' : 'gray'}>{cell.value}</Tag></TableCell>;

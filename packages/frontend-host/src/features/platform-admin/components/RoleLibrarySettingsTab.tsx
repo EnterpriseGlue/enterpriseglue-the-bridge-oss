@@ -8,7 +8,7 @@ import { GuardedAction, UnauthorizedEmptyState, useActionDecision } from '../../
 import { getPermissionRiskForKey } from '../../../shared/auth/permissionRisk';
 
 type Scope = 'platform' | 'project' | 'engine' | 'engine_runtime_resource';
-interface Role { id: string; key: string; name: string; description: string | null; scope: Scope; kind: 'system' | 'custom'; isEditable: boolean; isArchived: boolean; source?: string; sourceRef?: string | null; permissionCount: number; }
+interface Role { id: string; key: string; name: string; description: string | null; scope: Scope; kind: 'system' | 'custom'; isEditable: boolean; isArchived: boolean; source?: string; sourceRef?: string | null; ownershipMode?: 'manual' | 'config_locked' | 'config_warn'; driftStatus?: string | null; permissionCount: number; }
 interface RoleDetail extends Role { permissions: string[]; }
 export interface RoleLibraryPermission { key: string; scope: Scope; category: string; label: string; description: string; }
 
@@ -114,7 +114,8 @@ export default function RoleLibrarySettingsTab() {
   const visibleRoles = roles.filter((role) => `${role.name} ${role.key}`.toLowerCase().includes(roleSearch.toLowerCase()));
   const selectedRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === selected?.scope);
   const createRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === form.scope);
-  const editable = Boolean(selected?.kind === 'custom' && selected.isEditable && !selected.isArchived && selected.source !== 'config');
+  const configWarnEditable = selected?.source === 'config' && selected.ownershipMode === 'config_warn';
+  const editable = Boolean(selected?.kind === 'custom' && selected.isEditable && !selected.isArchived && (selected.source !== 'config' || configWarnEditable));
   const hasUnsavedRoleChanges = Boolean(detail && (
     draft.length !== detail.permissions.length || draft.some((permission) => !detail.permissions.includes(permission))
   ));
@@ -157,12 +158,12 @@ export default function RoleLibrarySettingsTab() {
       <div>
         <Search id="role-library-search" labelText="Search roles" value={roleSearch} onChange={(event) => setRoleSearch(event.target.value)} />
         <div style={{ marginTop: 'var(--spacing-3)', border: '1px solid var(--cds-border-subtle)', maxHeight: '34rem', overflowY: 'auto' }}>
-          {visibleRoles.map((role) => <button key={role.id} type="button" onClick={() => setSelectedId(role.id)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: 'var(--spacing-4)', border: 0, borderBottom: '1px solid var(--cds-border-subtle)', background: selected?.id === role.id ? 'var(--cds-layer-selected)' : 'transparent', color: 'inherit', cursor: 'pointer' }}><strong>{role.name}</strong><div style={{ marginTop: 'var(--spacing-2)', display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={role.kind === 'system' ? 'cool-gray' : 'blue'}>{role.kind}</Tag><Tag type="gray">{role.scope}</Tag>{role.source === 'config' && <Tag type="purple">Managed by config</Tag>}</div></button>)}
+          {visibleRoles.map((role) => <button key={role.id} type="button" onClick={() => setSelectedId(role.id)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: 'var(--spacing-4)', border: 0, borderBottom: '1px solid var(--cds-border-subtle)', background: selected?.id === role.id ? 'var(--cds-layer-selected)' : 'transparent', color: 'inherit', cursor: 'pointer' }}><strong>{role.name}</strong><div style={{ marginTop: 'var(--spacing-2)', display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={role.kind === 'system' ? 'cool-gray' : 'blue'}>{role.kind}</Tag><Tag type="gray">{role.scope}</Tag>{role.source === 'config' && <Tag type={role.ownershipMode === 'config_warn' ? 'warm-gray' : 'purple'}>{role.ownershipMode === 'config_warn' ? 'Config warning' : 'Managed by config'}</Tag>}{role.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</div></button>)}
         </div>
       </div>
       <div>{selected && detail ? <>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-4)', alignItems: 'start', flexWrap: 'wrap' }}><div><h4 style={{ margin: 0 }}>{selected.name}</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{selected.description || 'No description'} · {selected.permissionCount} permissions</p></div><div style={{ display: 'flex', gap: 'var(--spacing-3)' }}>{selected.kind === 'system' && <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={() => startCreate(true)}>Duplicate</Button></GuardedAction>}</div></div>
-        {selected.source === 'config' && <InlineNotification kind="info" title="Managed by configuration" subtitle="Update this role in its configuration bundle to avoid drift." hideCloseButton lowContrast style={{ marginTop: 'var(--spacing-4)' }} />}
+        {selected.source === 'config' && <InlineNotification kind={configWarnEditable ? 'warning' : 'info'} title={configWarnEditable ? 'Configuration warning mode' : 'Managed by configuration'} subtitle={configWarnEditable ? 'Local edits are allowed and will be marked as drift until the configuration bundle is reconciled.' : 'Update this role in its configuration bundle.'} hideCloseButton lowContrast style={{ marginTop: 'var(--spacing-4)' }} />}
         {editable && <div style={{ position: 'sticky', top: 'var(--spacing-3)', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', marginTop: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => setDraft(detail.permissions)}>Reset</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => save.mutate()}>Save</Button></GuardedAction></div>}
         <div style={{ marginTop: 'var(--spacing-5)' }}><PermissionPicker permissions={selectedRolePermissions} draft={draft} editable={editable && manage.allowed} idPrefix="role-library" onToggle={toggle} /></div>
       </> : <InlineNotification kind="info" title="Select a role" subtitle="Choose a role from the library to inspect its permissions." hideCloseButton lowContrast />}</div>

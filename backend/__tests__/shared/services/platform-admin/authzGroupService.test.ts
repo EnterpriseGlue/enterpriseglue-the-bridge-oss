@@ -255,4 +255,32 @@ describe('authzGroupService', () => {
     expect(groupRepo.update).not.toHaveBeenCalled();
     expect(membershipRepo.delete).not.toHaveBeenCalled();
   });
+
+  it('allows a config-warning group edit and marks its state as drifted', async () => {
+    const groupRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'group-config-warning', tenantId: 'tenant-a', key: 'group.warning', name: 'Warning group', description: null,
+        source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', driftStatus: 'in_sync',
+        isSystem: false, isArchived: false,
+      }),
+      update: vi.fn(),
+    };
+    const auditRepo = { insert: vi.fn() };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroup) return groupRepo;
+        if (entity === AuditLog) return auditRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await authzGroupService.updateGroup('group-config-warning', {
+      tenantId: 'tenant-a', name: 'Locally changed', updatedById: 'admin-1',
+    });
+
+    expect(groupRepo.update).toHaveBeenCalledWith({ id: 'group-config-warning' }, expect.objectContaining({
+      name: 'Locally changed', driftStatus: 'drifted',
+    }));
+    expect(auditRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ details: expect.stringContaining('drifted') }));
+  });
 });
