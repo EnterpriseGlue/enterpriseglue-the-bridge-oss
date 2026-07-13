@@ -53,11 +53,30 @@ function entitlement(type: ExternalEntitlementType, value: string): ExternalEnti
   return { type, externalId: value };
 }
 
+/**
+ * Entra and compatible OIDC providers omit group values when a token exceeds
+ * their group-claim limit. Treating that token as an empty group set would
+ * incorrectly remove access in authoritative mappings.
+ */
+export function hasIncompleteOidcGroupClaims(claims: Record<string, unknown>): boolean {
+  if (claims.hasgroups === true || claims.groups_overage === true || claims.group_overage === true) return true;
+  const claimNames = claims._claim_names;
+  return Boolean(
+    claimNames
+    && typeof claimNames === 'object'
+    && !Array.isArray(claimNames)
+    && Object.prototype.hasOwnProperty.call(claimNames, 'groups'),
+  );
+}
+
 class ClaimsIdentityAdapter implements IdentityProviderAdapter {
   constructor(readonly type: IdentityProviderType) {}
 
   normalizeIdentity(input: ProviderIdentityInput): NormalizedExternalIdentity {
     const claims = input.claims || {};
+    if (this.type === 'oidc' && hasIncompleteOidcGroupClaims(claims)) {
+      throw new Error('OIDC group claims are incomplete; resolve group overage before synchronizing authorization');
+    }
     const entitlements = [
       ...values(claims.groups ?? claims.group ?? claims.memberOf).map((value) => entitlement('group', value)),
       ...values(claims.roles ?? claims.role ?? claims.appRoles).map((value) => entitlement('role', value)),

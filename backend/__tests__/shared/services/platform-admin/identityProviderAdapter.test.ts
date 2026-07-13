@@ -29,6 +29,16 @@ describe('identity provider adapters', () => {
     expect(ldapIdentityProviderAdapter.normalizeIdentity({ providerKey: 'ldap', subjectId: 'uuid-1', claims: { memberOf: ['CN=Ops,DC=example', 'CN=Ops,DC=example'] }, observedAt: 1 }).entitlements)
       .toEqual([{ type: 'group', externalId: 'CN=Ops,DC=example' }]);
   });
+
+  it.each([
+    { hasgroups: true },
+    { groups_overage: true },
+    { _claim_names: { groups: 'src1' }, _claim_sources: { src1: { endpoint: 'https://graph.example.test/me/getMemberObjects' } } },
+  ])('fails closed when an OIDC response reports incomplete group claims', (claims) => {
+    expect(() => oidcIdentityProviderAdapter.normalizeIdentity({
+      providerKey: 'entra-prod', subjectId: 'oid-1', claims,
+    })).toThrow('OIDC group claims are incomplete');
+  });
 });
 
 function identityAdapterContract(name: string, adapter: IdentityProviderAdapter) {

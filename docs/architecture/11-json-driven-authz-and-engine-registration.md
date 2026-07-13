@@ -1139,7 +1139,7 @@ LDAP may be used in either of two ways:
 - [x] ✅ Make verified-email account linking an explicit, provider-scoped setting that defaults to disabled. A new external subject cannot claim an existing local account unless its provider enables the setting; missing linked users and conflicting verified-email changes fail closed.
 - [x] ✅ Make an existing `(tenant, provider, subject)` external-identity link immutable. Refreshes may update seen metadata, but cannot reassign the subject to another user.
 - [x] ✅ Add a bounded replay of sanitized normalized identity snapshots for selected providers, exposed as audited `POST /api/identity/providers/:key/replay-memberships` and invoked after config-managed mapping changes. It never contacts the provider, reports truncation/failures in the config-apply receipt, and lets mapping changes repair known provider-managed memberships without waiting for another login.
-- [ ] ⬜ Fail login closed when the configured provider requires authoritative entitlement synchronization and normalization or persistence fails.
+- [x] ✅ Fail provider-neutral login closed when authoritative entitlement normalization or persistence fails. OIDC group-overage markers (`hasgroups`, group-overage flags, or `_claim_names.groups`) are rejected before any user, entitlement snapshot, or membership write; v1 does not silently preserve stale browser-login access for an incomplete claim set.
 - [ ] ⬜ Keep additive and authoritative modes per mapping.
 - [ ] ⬜ Keep `scope` entitlements restricted to API/machine use unless a product use case explicitly approves human mapping.
 
