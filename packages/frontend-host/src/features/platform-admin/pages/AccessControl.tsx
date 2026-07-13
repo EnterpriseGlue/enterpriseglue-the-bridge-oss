@@ -60,7 +60,7 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
-import { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
+import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -191,7 +191,6 @@ import {
   type AuthzResourceType,
 } from '../hooks/useAuthzApi';
 
-type AssignmentPrincipalType = 'user' | 'group' | 'api_client' | 'service_account';
 type EffectiveAccessSource = EffectiveAccessResult['sources'][number];
 type PrincipalSummaryStatus = 'active' | 'archived' | 'revoked' | 'unknown';
 
