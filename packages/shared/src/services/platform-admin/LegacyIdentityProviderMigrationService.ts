@@ -4,6 +4,7 @@ import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/e
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 type LegacyMigratableProviderType = 'microsoft' | 'google' | 'oidc';
+type EnvironmentMigratableProviderType = 'microsoft' | 'google';
 
 export interface LegacyIdentityProviderMigrationDraft {
   legacyProvider: {
@@ -24,6 +25,7 @@ export interface LegacyIdentityProviderMigrationDraft {
       clientId: string;
       callbackUrl: string;
       scopes: string[];
+      clientSecretRef?: string;
     };
   };
   requirements: Array<'client_secret_reference' | 'identity_provider_redirect_uri' | 'identity_mappings' | 'legacy_provider_cutover'>;
@@ -104,6 +106,61 @@ class LegacyIdentityProviderMigrationServiceClass {
       },
       requirements: ['client_secret_reference', 'identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'],
       warnings,
+    };
+  }
+
+  /** Lists safe drafts for legacy providers configured only through environment variables. */
+  listEnvironmentDrafts(): LegacyIdentityProviderMigrationDraft[] {
+    const drafts: LegacyIdentityProviderMigrationDraft[] = [];
+    if (config.microsoftClientId && config.microsoftClientSecret && config.microsoftTenantId && config.microsoftRedirectUri) {
+      drafts.push(this.createEnvironmentDraft('microsoft'));
+    }
+    if (config.googleClientId && config.googleClientSecret && config.googleRedirectUri) {
+      drafts.push(this.createEnvironmentDraft('google'));
+    }
+    return drafts;
+  }
+
+  createEnvironmentDraft(type: EnvironmentMigratableProviderType): LegacyIdentityProviderMigrationDraft {
+    const isMicrosoft = type === 'microsoft';
+    const clientId = isMicrosoft ? config.microsoftClientId : config.googleClientId;
+    const directoryTenantId = isMicrosoft ? config.microsoftTenantId : null;
+    if (!clientId || (isMicrosoft && !directoryTenantId)) {
+      throw Errors.validation(`The legacy ${type} environment configuration is incomplete`);
+    }
+    const secretReference = isMicrosoft ? 'env://MICROSOFT_CLIENT_SECRET' : 'env://GOOGLE_CLIENT_SECRET';
+    const issuer = isMicrosoft
+      ? `https://login.microsoftonline.com/${encodeURIComponent(directoryTenantId!)}/v2.0`
+      : 'https://accounts.google.com';
+    return {
+      legacyProvider: {
+        id: `environment:${type}`,
+        name: isMicrosoft ? 'Microsoft Entra ID environment configuration' : 'Google environment configuration',
+        type,
+        enabled: true,
+        clientSecretConfigured: true,
+      },
+      provider: {
+        key: `legacy-environment-${type}`,
+        protocol: 'oidc',
+        isEnabled: false,
+        authenticationMode: 'direct',
+        directoryTenantId: directoryTenantId || null,
+        configuration: {
+          issuerUrl: issuer,
+          clientId,
+          callbackUrl: callbackUrl(),
+          scopes: isMicrosoft ? ['openid', 'profile', 'email', 'User.Read'] : ['openid', 'profile', 'email'],
+          clientSecretRef: secretReference,
+        },
+      },
+      requirements: ['identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'],
+      warnings: [
+        'The generated provider is disabled to avoid two active login paths during migration.',
+        `The generated configuration references ${secretReference}; the environment variable must remain available until the secret is moved to the configured secret provider.`,
+        'Update the identity provider application redirect URI to the generated callback URL before cutover.',
+        'Configure provider-neutral identity mappings before disabling the legacy provider.',
+      ],
     };
   }
 }

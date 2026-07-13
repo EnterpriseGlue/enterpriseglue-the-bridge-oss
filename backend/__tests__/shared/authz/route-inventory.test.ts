@@ -458,6 +458,7 @@ describe('authorization route inventory validation', () => {
         routes: [
           ['POST', '/api/sso/providers', 'platform.self'],
           ['POST', '/api/identity/providers', 'platform.self'],
+          ['GET', '/api/identity/providers/environment-migration-drafts', 'platform.self'],
           ['GET', '/api/identity/providers/legacy-migration-draft/{legacyProviderId}', 'platform.self'],
           ['PUT', '/api/identity/providers/{key}', 'platform.self'],
           ['DELETE', '/api/identity/providers/{key}', 'platform.self'],

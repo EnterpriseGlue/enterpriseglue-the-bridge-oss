@@ -2095,12 +2095,18 @@ const LegacyIdentityProviderMigrationDraftSchema = z.object({
   legacyProvider: z.object({ id: z.string(), name: z.string(), type: z.enum(['microsoft', 'google', 'oidc']), enabled: z.boolean(), clientSecretConfigured: z.boolean() }),
   provider: z.object({
     key: z.string(), protocol: z.literal('oidc'), isEnabled: z.literal(false), authenticationMode: z.literal('direct'), directoryTenantId: z.string().nullable(),
-    configuration: z.object({ issuerUrl: z.string().url(), clientId: z.string(), callbackUrl: z.string().url(), scopes: z.array(z.string()) }),
+    configuration: z.object({ issuerUrl: z.string().url(), clientId: z.string(), callbackUrl: z.string().url(), scopes: z.array(z.string()), clientSecretRef: z.string().optional() }),
   }),
   requirements: z.array(z.enum(['client_secret_reference', 'identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'])),
   warnings: z.array(z.string()),
 });
 registry.register('LegacyIdentityProviderMigrationDraft', LegacyIdentityProviderMigrationDraftSchema);
+registry.registerPath({
+  method: 'get',
+  path: '/api/identity/providers/environment-migration-drafts',
+  ...authzExtension('platform.sso.providers.manage', 'GET', '/api/identity/providers/environment-migration-drafts'),
+  responses: { 200: { description: 'Non-secret disabled provider-neutral drafts for configured legacy environment providers', content: { 'application/json': { schema: z.array(LegacyIdentityProviderMigrationDraftSchema) } } } },
+});
 registry.registerPath({
   method: 'get',
   path: '/api/identity/providers/legacy-migration-draft/{legacyProviderId}',

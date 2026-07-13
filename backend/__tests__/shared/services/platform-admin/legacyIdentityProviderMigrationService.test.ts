@@ -2,13 +2,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { legacyIdentityProviderMigrationService } from '@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js';
 
+const testConfig = vi.hoisted(() => ({
+  frontendUrl: 'https://app.example.test',
+  microsoftClientId: undefined as string | undefined,
+  microsoftClientSecret: undefined as string | undefined,
+  microsoftTenantId: undefined as string | undefined,
+  microsoftRedirectUri: undefined as string | undefined,
+  googleClientId: undefined as string | undefined,
+  googleClientSecret: undefined as string | undefined,
+  googleRedirectUri: undefined as string | undefined,
+}));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
+vi.mock('@enterpriseglue/shared/config/index.js', () => ({ config: testConfig }));
 
 describe('legacyIdentityProviderMigrationService', () => {
   const findOneBy = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.assign(testConfig, {
+      microsoftClientId: undefined, microsoftClientSecret: undefined, microsoftTenantId: undefined, microsoftRedirectUri: undefined,
+      googleClientId: undefined, googleClientSecret: undefined, googleRedirectUri: undefined,
+    });
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({ findOneBy }),
     });
@@ -54,5 +70,20 @@ describe('legacyIdentityProviderMigrationService', () => {
 
     findOneBy.mockResolvedValueOnce({ id: 'legacy-oidc', type: 'oidc', clientId: 'client', issuerUrl: null });
     await expect(legacyIdentityProviderMigrationService.createDraft('legacy-oidc')).rejects.toThrow('no issuer URL');
+  });
+
+  it('creates disabled environment-backed drafts with opaque environment references', () => {
+    Object.assign(testConfig, {
+      microsoftClientId: 'entra-client', microsoftClientSecret: 'not-exported', microsoftTenantId: 'directory-tenant', microsoftRedirectUri: 'https://old.example.test/api/auth/microsoft/callback',
+      googleClientId: 'google-client', googleClientSecret: 'not-exported', googleRedirectUri: 'https://old.example.test/api/auth/google/callback',
+    });
+
+    const drafts = legacyIdentityProviderMigrationService.listEnvironmentDrafts();
+
+    expect(drafts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: expect.objectContaining({ key: 'legacy-environment-microsoft', isEnabled: false, configuration: expect.objectContaining({ clientSecretRef: 'env://MICROSOFT_CLIENT_SECRET' }) }) }),
+      expect.objectContaining({ provider: expect.objectContaining({ key: 'legacy-environment-google', isEnabled: false, configuration: expect.objectContaining({ clientSecretRef: 'env://GOOGLE_CLIENT_SECRET' }) }) }),
+    ]));
+    expect(JSON.stringify(drafts)).not.toContain('not-exported');
   });
 });

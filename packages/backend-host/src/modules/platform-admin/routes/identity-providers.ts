@@ -26,6 +26,17 @@ const syncRunsQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max
 router.get('/api/identity/providers', requireAuth, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
   res.json(await identityProviderService.list(req.tenant?.tenantId || null));
 }));
+router.get('/api/identity/providers/environment-migration-drafts', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
+  const drafts = legacyIdentityProviderMigrationService.listEnvironmentDrafts();
+  await logAudit({
+    action: 'identity.provider.environment_migration_drafts.read',
+    userId: req.user!.userId,
+    resourceType: 'platform',
+    resourceId: req.tenant?.tenantId || 'platform',
+    details: { providerTypes: drafts.map((draft) => draft.legacyProvider.type) },
+  });
+  res.json(drafts);
+}));
 router.get('/api/identity/providers/legacy-migration-draft/:legacyProviderId', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
   const draft = await legacyIdentityProviderMigrationService.createDraft(legacyProviderIdSchema.parse(req.params.legacyProviderId));
   await logAudit({

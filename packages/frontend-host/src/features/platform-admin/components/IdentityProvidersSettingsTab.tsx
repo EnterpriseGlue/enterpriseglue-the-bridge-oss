@@ -31,7 +31,7 @@ interface LegacySsoProvider {
 }
 type LegacyMigrationDraft = {
   legacyProvider: { id: string; name: string; type: 'microsoft' | 'google' | 'oidc'; enabled: boolean; clientSecretConfigured: boolean };
-  provider: { key: string; protocol: 'oidc'; isEnabled: false; authenticationMode: 'direct'; directoryTenantId: string | null; configuration: { issuerUrl: string; clientId: string; callbackUrl: string; scopes: string[] } };
+  provider: { key: string; protocol: 'oidc'; isEnabled: false; authenticationMode: 'direct'; directoryTenantId: string | null; configuration: { issuerUrl: string; clientId: string; callbackUrl: string; scopes: string[]; clientSecretRef?: string } };
   requirements: string[];
   warnings: string[];
 };
@@ -82,6 +82,7 @@ export default function IdentityProvidersSettingsTab() {
   const manage = useActionDecision('platform.sso.providers.manage', resource);
   const providersQuery = useQuery({ queryKey: ['identity-providers'], queryFn: () => apiClient.get<IdentityProvider[]>('/api/identity/providers'), enabled: read.allowed });
   const legacyProvidersQuery = useQuery({ queryKey: ['legacy-sso-providers-for-migration'], queryFn: () => apiClient.get<LegacySsoProvider[]>('/api/sso/providers'), enabled: manage.allowed });
+  const environmentMigrationDraftsQuery = useQuery({ queryKey: ['environment-identity-provider-migration-drafts'], queryFn: () => apiClient.get<LegacyMigrationDraft[]>('/api/identity/providers/environment-migration-drafts'), enabled: manage.allowed });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<IdentityProvider | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -113,15 +114,16 @@ export default function IdentityProvidersSettingsTab() {
   const previewMemberships = useMutation({ mutationFn: ({ key, cursor }: { key: string; cursor?: string }) => apiClient.post<MembershipPreviewResult>(`/api/identity/providers/${encodeURIComponent(key)}/reconciliation-preview`, cursor ? { cursor } : {}), onSuccess: (result, input) => { setPreviewResult({ providerKey: input.key, result }); setPreviewCursors((current) => ({ ...current, [input.key]: result.nextCursor || undefined })); setError(null); }, onError: (value: unknown) => setError(parseApiError(value, 'Unable to preview stored membership changes').message) });
   const replayMemberships = useMutation({ mutationFn: ({ key, cursor }: { key: string; cursor?: string }) => apiClient.post<MembershipReplayResult>(`/api/identity/providers/${encodeURIComponent(key)}/replay-memberships`, cursor ? { cursor } : {}), onSuccess: (result, input) => { setReplayResult({ providerKey: input.key, result }); setReplayCursors((current) => ({ ...current, [input.key]: result.nextCursor || undefined })); setError(null); }, onError: (value: unknown) => setError(parseApiError(value, 'Unable to replay stored memberships').message) });
   const testConnection = useMutation({ mutationFn: (key: string) => apiClient.post<ConnectionTestResult>(`/api/identity/providers/${encodeURIComponent(key)}/test-connection`, {}), onSuccess: (result, key) => { setConnectionResult({ providerKey: key, result }); setError(null); }, onError: (value: unknown) => setError(parseApiError(value, 'Unable to test provider connection').message) });
+  const openMigrationDraft = (draft: LegacyMigrationDraft) => {
+    setEditing(null);
+    setForm({ ...emptyForm(), key: draft.provider.key, protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: draft.provider.directoryTenantId || '', issuerUrl: draft.provider.configuration.issuerUrl, clientId: draft.provider.configuration.clientId, clientSecretRef: draft.provider.configuration.clientSecretRef || '', callbackUrl: draft.provider.configuration.callbackUrl, scopes: draft.provider.configuration.scopes.join(' ') });
+    setMigrationDraft(draft);
+    setError(null);
+    setOpen(true);
+  };
   const prepareLegacyMigration = useMutation({
     mutationFn: (id: string) => apiClient.get<LegacyMigrationDraft>(`/api/identity/providers/legacy-migration-draft/${encodeURIComponent(id)}`),
-    onSuccess: (draft) => {
-      setEditing(null);
-      setForm({ ...emptyForm(), key: draft.provider.key, protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: draft.provider.directoryTenantId || '', issuerUrl: draft.provider.configuration.issuerUrl, clientId: draft.provider.configuration.clientId, callbackUrl: draft.provider.configuration.callbackUrl, scopes: draft.provider.configuration.scopes.join(' ') });
-      setMigrationDraft(draft);
-      setError(null);
-      setOpen(true);
-    },
+    onSuccess: openMigrationDraft,
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to prepare the legacy provider migration').message),
   });
 
@@ -135,6 +137,7 @@ export default function IdentityProvidersSettingsTab() {
 
   const rows = providersQuery.data || [];
   const legacyMigratableProviders = (legacyProvidersQuery.data || []).filter((provider) => provider.type === 'microsoft' || provider.type === 'google' || provider.type === 'oidc');
+  const environmentMigrationDrafts = environmentMigrationDraftsQuery.data || [];
   return <>
     <Tile>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-5)', alignItems: 'center', marginBottom: 'var(--spacing-5)' }}>
@@ -156,6 +159,13 @@ export default function IdentityProvidersSettingsTab() {
             {legacyMigratableProviders.map((provider) => <SelectItem key={provider.id} value={provider.id} text={`${provider.name} (${provider.type.toUpperCase()})`} />)}
           </Select>
           <Button kind="secondary" size="sm" disabled={!legacyProviderId || prepareLegacyMigration.isPending} onClick={() => prepareLegacyMigration.mutate(legacyProviderId)}>Prepare migration</Button>
+        </div>
+      </div>}
+      {manage.allowed && environmentMigrationDrafts.length > 0 && <div style={{ borderTop: '1px solid var(--cds-border-subtle)', paddingTop: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}>
+        <h4 style={{ margin: 0, fontSize: '0.875rem' }}>Migrate environment configuration</h4>
+        <p style={{ margin: 'var(--spacing-2) 0 var(--spacing-3)', color: 'var(--cds-text-secondary)' }}>Prepare a disabled OIDC draft that references the existing deployment secret by environment-variable name. The value is not read or shown.</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)' }}>
+          {environmentMigrationDrafts.map((draft) => <Button key={draft.legacyProvider.id} kind="secondary" size="sm" onClick={() => openMigrationDraft(draft)}>Prepare {draft.legacyProvider.type === 'microsoft' ? 'Microsoft Entra ID' : 'Google'} migration</Button>)}
         </div>
       </div>}
       <DataTable rows={rows} headers={[{ key: 'key', header: 'Key' }, { key: 'protocol', header: 'Protocol' }, { key: 'mode', header: 'Mode' }, { key: 'sync', header: 'Sync' }, { key: 'status', header: 'Status' }, { key: 'source', header: 'Source' }, { key: 'actions', header: '' }]} isSortable>
@@ -201,7 +211,7 @@ export default function IdentityProvidersSettingsTab() {
     </Tile>
     <Modal open={open} modalHeading={editing ? 'Edit identity provider' : 'Add identity provider'} primaryButtonText={editing ? 'Save' : 'Add'} secondaryButtonText="Cancel" primaryButtonDisabled={!manage.allowed || save.isPending} onRequestClose={() => setOpen(false)} onRequestSubmit={() => save.mutate(form)}>
       {error && <InlineNotification kind="error" title="Provider not saved" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
-      {migrationDraft && <InlineNotification kind="info" title={`Migration draft for ${migrationDraft.legacyProvider.name}`} subtitle={`This provider remains disabled. Add a client secret reference, update the identity-provider redirect URI, configure identity mappings, test sign-in, then complete the legacy cutover. ${migrationDraft.warnings[0] || ''}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+      {migrationDraft && <InlineNotification kind="info" title={`Migration draft for ${migrationDraft.legacyProvider.name}`} subtitle={`This provider remains disabled. ${migrationDraft.requirements.includes('client_secret_reference') ? 'Add a client secret reference, ' : 'Confirm the environment-backed client secret reference, '}update the identity-provider redirect URI, configure identity mappings, test sign-in, then complete the legacy cutover. ${migrationDraft.warnings[0] || ''}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       <TextInput id="identity-provider-key" labelText="Provider key" value={form.key} disabled={Boolean(editing)} onChange={(event) => update('key', event.target.value)} helperText="Stable key used by JSON configuration and sign-in links." />
       <Select id="identity-provider-protocol" labelText="Protocol" value={form.protocol} disabled={Boolean(editing)} onChange={(event) => update('protocol', event.target.value as Protocol)}><SelectItem value="oidc" text="OpenID Connect" /><SelectItem value="saml" text="SAML 2.0" /><SelectItem value="ldap" text="LDAP" /></Select>
       <Select id="identity-provider-mode" labelText="Authentication mode" value={form.authenticationMode} onChange={(event) => update('authenticationMode', event.target.value as AuthenticationMode)}><SelectItem value="claims_only" text="Claims only" /><SelectItem value="direct" text="Direct sign-in" /></Select>

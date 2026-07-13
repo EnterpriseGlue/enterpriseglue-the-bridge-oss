@@ -19,6 +19,7 @@ const service = vi.hoisted(() => ({
   testConnection: vi.fn(),
   testSamlMetadata: vi.fn(),
   createLegacyMigrationDraft: vi.fn(),
+  listEnvironmentMigrationDrafts: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -32,7 +33,7 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
   requireAction: () => (_req: any, _res: any, next: any) => next(),
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService: service }));
-vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js', () => ({ legacyIdentityProviderMigrationService: { createDraft: service.createLegacyMigrationDraft } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js', () => ({ legacyIdentityProviderMigrationService: { createDraft: service.createLegacyMigrationDraft, listEnvironmentDrafts: service.listEnvironmentMigrationDrafts } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { previewMemberships: service.previewMemberships, replayMemberships: service.replayMemberships } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun, listRuns: service.listRuns } }));
@@ -71,6 +72,9 @@ describe('identity provider routes', () => {
       requirements: ['client_secret_reference', 'identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'],
       warnings: ['The legacy client secret is not copied.'],
     });
+    service.listEnvironmentMigrationDrafts.mockReturnValue([
+      { legacyProvider: { id: 'environment:microsoft', name: 'Microsoft Entra ID environment configuration', type: 'microsoft', enabled: true, clientSecretConfigured: true }, provider: { key: 'legacy-environment-microsoft', protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: 'directory-tenant', configuration: { issuerUrl: 'https://login.microsoftonline.com/directory-tenant/v2.0', clientId: 'client-1', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid'], clientSecretRef: 'env://MICROSOFT_CLIENT_SECRET' } }, requirements: ['identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'], warnings: ['Environment-backed secret reference.'] },
+    ]);
     app = express();
     app.use(express.json());
     app.use(identityProvidersRouter);
@@ -98,6 +102,18 @@ describe('identity provider routes', () => {
       details: expect.objectContaining({ clientSecretConfigured: true }),
     }));
     expect(JSON.stringify(response.body)).not.toContain('clientSecretEnc');
+  });
+
+  it('lists non-secret environment-backed legacy migration drafts', async () => {
+    const response = await request(app).get('/api/identity/providers/environment-migration-drafts');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([expect.objectContaining({
+      legacyProvider: expect.objectContaining({ id: 'environment:microsoft' }),
+      provider: expect.objectContaining({ configuration: expect.objectContaining({ clientSecretRef: 'env://MICROSOFT_CLIENT_SECRET' }) }),
+    })]);
+    expect(service.listEnvironmentMigrationDrafts).toHaveBeenCalledOnce();
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.environment_migration_drafts.read', details: { providerTypes: ['microsoft'] } }));
   });
 
   it('lists bounded synchronization history for one provider', async () => {
