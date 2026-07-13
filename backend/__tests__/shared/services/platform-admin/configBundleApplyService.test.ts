@@ -11,6 +11,7 @@ import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persisten
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigRoleAssignmentOverride.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
@@ -91,6 +92,7 @@ function setupDataSource() {
   const runtimeResourceSetMaterializationRepo = { find: vi.fn().mockResolvedValue([]) };
   const runtimeResourceRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
   const assignmentRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn(), delete: vi.fn() };
+  const assignmentOverrideRepo = { delete: vi.fn() };
   const projectRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
   const targetRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
   const providerRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
@@ -106,6 +108,7 @@ function setupDataSource() {
     if (entity === RuntimeResourceSetMaterialization) return runtimeResourceSetMaterializationRepo;
     if (entity === RuntimeResource) return runtimeResourceRepo;
     if (entity === RbacRoleAssignment) return assignmentRepo;
+    if (entity === ConfigRoleAssignmentOverride) return assignmentOverrideRepo;
     if (entity === Project) return projectRepo;
     if (entity === ProjectEngineTarget) return targetRepo;
     if (entity === IdentityProvider) return providerRepo;
@@ -121,7 +124,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, engineRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, engineRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
