@@ -12,6 +12,7 @@ const ssoProviderServiceMock = vi.hoisted(() => ({
   updateProvider: vi.fn(),
   deleteProvider: vi.fn(),
   toggleProvider: vi.fn(),
+  migrateDefaultRoleToIdentityMapping: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -55,6 +56,7 @@ describe('platform-admin sso-providers routes', () => {
     ssoProviderServiceMock.updateProvider.mockResolvedValue(undefined);
     ssoProviderServiceMock.deleteProvider.mockResolvedValue(undefined);
     ssoProviderServiceMock.toggleProvider.mockResolvedValue(undefined);
+    ssoProviderServiceMock.migrateDefaultRoleToIdentityMapping.mockResolvedValue({ mapping: { id: 'mapping-1' }, created: true });
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: () => ({
@@ -107,6 +109,14 @@ describe('platform-admin sso-providers routes', () => {
         riskReasons: ['platform_admin_default_role'],
       }),
     }));
+  });
+
+  it('converts an acknowledged admin default role into an explicit identity mapping', async () => {
+    ssoProviderServiceMock.getProvider.mockResolvedValue({ id: 'provider-1', defaultRole: 'admin' });
+    const response = await request(app).post('/api/sso/providers/provider-1/migrate-default-role').send({ providerKey: 'entra-main', riskAcknowledged: true });
+    expect(response.status).toBe(201);
+    expect(ssoProviderServiceMock.migrateDefaultRoleToIdentityMapping).toHaveBeenCalledWith('provider-1', 'entra-main');
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'sso.provider.default_role_migrate' }));
   });
 
   it('rejects updating a provider to admin default role without risk acknowledgement', async () => {

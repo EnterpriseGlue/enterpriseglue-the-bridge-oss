@@ -61,6 +61,7 @@ const updateProviderSchema = createProviderSchema.partial();
 const toggleProviderSchema = z.object({
   riskAcknowledged: z.boolean().optional(),
 }).default({});
+const migrateDefaultRoleSchema = z.object({ providerKey: z.string().min(1).max(160), riskAcknowledged: z.boolean().optional() });
 
 type SsoProviderRiskInput = {
   enabled?: boolean;
@@ -306,6 +307,25 @@ router.delete(
  * POST /api/platform-admin/sso/providers/:id/toggle
  * Toggle provider enabled status (admin only)
  */
+router.post(
+  '/api/sso/providers/:id/migrate-default-role',
+  requireAuth,
+  requireAction('platform.sso.providers.manage'),
+  validateParams(providerIdSchema),
+  validateBody(migrateDefaultRoleSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const providerId = String(req.params.id);
+    const existing = await ssoProviderService.getProvider(providerId);
+    if (!existing) throw Errors.providerNotFound();
+    if (existing.defaultRole === 'admin' && req.body.riskAcknowledged !== true) {
+      throw Errors.validation('High-risk SSO provider change requires acknowledgement', { riskReasons: ['platform_admin_default_role'] });
+    }
+    const result = await ssoProviderService.migrateDefaultRoleToIdentityMapping(providerId, req.body.providerKey);
+    await logAudit({ action: 'sso.provider.default_role_migrate', userId: req.user!.userId, resourceType: 'sso_provider', resourceId: providerId, details: { providerKey: req.body.providerKey, legacyDefaultRole: existing.defaultRole, mappingId: result.mapping.id, created: result.created, riskAcknowledged: existing.defaultRole === 'admin' } });
+    res.status(201).json(result);
+  })
+);
+
 router.post(
   '/api/sso/providers/:id/toggle',
   requireAuth,

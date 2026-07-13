@@ -8,10 +8,16 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import type { LegacyPlatformRole, PlatformRole as SharedPlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
 import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
 import { secretResolver } from './SecretResolver.js';
+import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
+import { DEFAULT_PLATFORM_GROUP_IDS } from './AuthzGroupService.js';
+import { IsNull } from 'typeorm';
 
 export type SsoProviderType = 'microsoft' | 'google' | 'saml' | 'oidc';
 export type PlatformRole = SharedPlatformRole;
@@ -88,6 +94,24 @@ export interface SsoProviderPublic {
 }
 
 class SsoProviderServiceClass {
+  async migrateDefaultRoleToIdentityMapping(id: string, providerKey: string) {
+    const dataSource = await getDataSource();
+    return dataSource.transaction(async (manager) => {
+      const legacy = await manager.getRepository(SsoProvider).findOneBy({ id });
+      if (!legacy) throw Errors.providerNotFound(id);
+      const provider = await manager.getRepository(IdentityProvider).findOne({ where: { key: providerKey.trim(), tenantId: IsNull() } });
+      if (!provider) throw Errors.notFound('Global provider-neutral identity provider');
+      const targetGroupId = normalizeRoleValue(legacy.defaultRole) === 'admin'
+        ? DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS
+        : DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS;
+      const group = await manager.getRepository(AuthzGroup).findOneBy({ id: targetGroupId });
+      if (!group || group.isArchived) throw Errors.notFound('System authorization group');
+      const mappingRepo = manager.getRepository(IdentityEntitlementMapping);
+      const existing = await mappingRepo.findOne({ where: { tenantId: IsNull(), providerId: provider.id, targetGroupId, entitlementType: 'authenticated', externalId: 'authenticated', matchOperator: 'exact', syncMode: 'authoritative', isActive: true } });
+      const mapping = existing || await identityEntitlementMappingService.create({ providerKey: provider.key, targetGroupKey: group.key, entitlementType: 'authenticated', externalId: 'authenticated', matchOperator: 'exact', syncMode: 'authoritative' }, null, manager);
+      return { legacyProviderId: legacy.id, legacyDefaultRole: normalizeRoleValue(legacy.defaultRole), providerKey: provider.key, mapping, created: !existing };
+    });
+  }
   private hasText(value: string | null | undefined): boolean {
     return typeof value === 'string' && value.trim().length > 0;
   }
