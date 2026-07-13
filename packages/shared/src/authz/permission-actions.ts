@@ -330,6 +330,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'POST', route: '/api/authz/config-bundles/apply', resourceResolver: 'platform.self' },
       { method: 'GET', route: '/api/authz/config-bundles/runs', resourceResolver: 'platform.self' },
       { method: 'GET', route: '/api/authz/config-bundles/runs/{id}', resourceResolver: 'platform.self' },
+      { method: 'GET', route: '/api/authz/config-bundles/runs/{id}/identity-replay-tasks', resourceResolver: 'platform.self' },
       { method: 'GET', route: '/api/authz/config-bundles/export', resourceResolver: 'platform.self' },
     ],
   },

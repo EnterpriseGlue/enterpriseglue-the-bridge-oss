@@ -9,6 +9,7 @@ import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/mi
 import { startBatchPollerIfActive } from './poller/batchPoller.js';
 import { startSsoDiagnosticsPollerIfEnabled } from './poller/ssoDiagnosticsPoller.js';
 import { startRuntimeInventoryPollerIfEnabled } from './poller/runtimeInventoryPoller.js';
+import { startConfigBundleIdentityReplayPollerIfEnabled } from './poller/configBundleIdentityReplayPoller.js';
 import { runConfigBundleBootstrap } from './services/configBundleBootstrap.js';
 import { getConnectionPool, ConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
 import {
@@ -141,6 +142,7 @@ export async function startServer() {
   void startBatchPollerIfActive();
   void startSsoDiagnosticsPollerIfEnabled();
   void startRuntimeInventoryPollerIfEnabled();
+  void startConfigBundleIdentityReplayPollerIfEnabled();
 
   // Graceful shutdown
   process.on('SIGINT', () => process.exit(0));

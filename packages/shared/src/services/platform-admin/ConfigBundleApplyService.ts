@@ -25,6 +25,7 @@ import { createHash } from 'node:crypto';
 import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBundleDiffService.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
+import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
 
 export type ConfigBundleIdentityReconciliationMode = 'none' | 'preview' | 'apply';
 
@@ -254,31 +255,31 @@ class ConfigBundleApplyService {
       return fail(`Configuration apply requires acknowledgement: ${missingAcknowledgements.join(', ')}`, 422);
     }
 
-    if (idempotencyKey) {
-      const runRepo = dataSource.getRepository(ConfigBundleApplyRun);
-      const scopeKey = actualTenantScope;
-      applyRunId = generateId();
-      try {
-        await runRepo.insert({
-          id: applyRunId,
-          tenantId,
-          tenantScopeKey: scopeKey,
-          bundleKey: manifest.metadata.key,
-          canonicalHash: diff.canonicalHash,
-          idempotencyKey,
-          actorId: input.actorId,
-          status: 'pending',
-          resultJson: null,
-          errorMessage: null,
-          completedAt: null,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        });
-      } catch (error) {
+    const runRepo = dataSource.getRepository(ConfigBundleApplyRun);
+    const scopeKey = actualTenantScope;
+    applyRunId = generateId();
+    try {
+      await runRepo.insert({
+        id: applyRunId,
+        tenantId,
+        tenantScopeKey: scopeKey,
+        bundleKey: manifest.metadata.key,
+        canonicalHash: diff.canonicalHash,
+        idempotencyKey,
+        actorId: input.actorId,
+        status: 'pending',
+        resultJson: null,
+        errorMessage: null,
+        completedAt: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    } catch (error) {
+      if (idempotencyKey) {
         const concurrent = await runRepo.findOne({ where: { tenantScopeKey: scopeKey, idempotencyKey } });
         if (concurrent) return replayExistingApplyRun(concurrent, diff.canonicalHash, manifest.metadata.key);
-        throw error;
       }
+      throw error;
     }
 
     const desiredRoles = new Map(entries(compilation.files, './roles.json', 'roles').map((role) => [role.key, role]));
@@ -690,15 +691,37 @@ class ConfigBundleApplyService {
           }
         } else {
           try {
-            const replay = await ssoNormalizedIdentityService.replayMemberships({ tenantId, providerIds });
+            const replays = await Promise.all(providerIds.map((providerId) => ssoNormalizedIdentityService.replayMemberships({ tenantId, providerIds: [providerId] })));
+            const replay = {
+              scanned: replays.reduce((total, item) => total + item.scanned, 0),
+              created: replays.reduce((total, item) => total + item.created, 0),
+              removed: replays.reduce((total, item) => total + item.removed, 0),
+              failed: replays.reduce((total, item) => total + item.failed, 0),
+              truncated: replays.some((item) => item.truncated),
+            };
+            let queueFailures = 0;
+            await Promise.all(replays.map(async (item, index) => {
+              if (!item.truncated || !item.nextCursor) return;
+              try {
+                await configBundleIdentityReplayTaskService.enqueue({
+                  tenantId,
+                  applyRunId: applyRunId!,
+                  providerId: providerIds[index],
+                  cursor: item.nextCursor,
+                  initial: item,
+                });
+              } catch {
+                queueFailures += 1;
+              }
+            }));
             identitySnapshot = {
               mode: 'apply',
-              status: replay.truncated ? 'truncated' : replay.failed > 0 ? 'failed' : 'completed',
+              status: queueFailures > 0 || replay.failed > 0 ? 'failed' : replay.truncated ? 'truncated' : 'completed',
               providerCount: providerIds.length,
               scanned: replay.scanned,
               created: replay.created,
               removed: replay.removed,
-              failed: replay.failed,
+              failed: replay.failed + queueFailures,
             };
           } catch {
             identitySnapshot = { mode: 'apply', status: 'failed', providerCount: providerIds.length, scanned: 0, created: 0, removed: 0, failed: 1 };

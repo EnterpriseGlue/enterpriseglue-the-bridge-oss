@@ -23,6 +23,9 @@ const configBundleApplyMock = vi.hoisted(() => ({
     reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 },
   }),
 }));
+const configBundleIdentityReplayTaskMock = vi.hoisted(() => ({
+  listForApplyRun: vi.fn().mockResolvedValue([{ id: 'identity-task-1', providerId: 'provider-1', status: 'queued', attempts: 0, nextAttemptAt: null, scanned: 500, created: 2, removed: 1, failed: 0, lastError: null, completedAt: null, createdAt: 1, updatedAt: 1 }]),
+}));
 const configBundleSecretPreflightMock = vi.hoisted(() => ({
   check: vi.fn().mockReturnValue({
     valid: true,
@@ -73,6 +76,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js', () => ({
   configBundleApplyService: configBundleApplyMock,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js', () => ({
+  configBundleIdentityReplayTaskService: configBundleIdentityReplayTaskMock,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js', () => ({
@@ -2091,6 +2097,14 @@ describe('platform-admin authz routes', () => {
       changes: [expect.objectContaining({ objectType: 'group', key: 'group.ops', operation: 'create' })],
       reconciliation: expect.objectContaining({ identitySnapshot: expect.objectContaining({ scanned: 2 }) }),
     });
+  });
+
+  it('returns durable stored identity replay tasks only for a visible configuration apply', async () => {
+    const response = await request(app).get('/api/authz/config-bundles/runs/config-run-1/identity-replay-tasks');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([expect.objectContaining({ id: 'identity-task-1', providerId: 'provider-1', status: 'queued', scanned: 500 })]);
+    expect(configBundleIdentityReplayTaskMock.listForApplyRun).toHaveBeenCalledWith('config-run-1', null);
   });
 
   it('allows configuration-scoped API clients to apply bundles and preserves machine audit lineage', async () => {

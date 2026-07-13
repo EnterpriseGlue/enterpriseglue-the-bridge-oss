@@ -395,7 +395,7 @@ Interface requirements:
 - [x] ✅ Make the current schema preview side-effect free; provider connectivity checks are explicit optional operations, never implicit network calls during schema validation.
 - [ ] ⬜ Bind apply to the exact canonical preview hash and reject stale previews.
 - [ ] ⬜ Execute domain writes through existing role/group/engine/assignment/mapping/target services or shared lower-level commands used by both UI and bundle apply.
-- [ ] ⬜ Let apply select reconciliation behavior: `none`, `preview`, or asynchronous `apply`; never block a large config transaction on a full directory scan. `none`, read-only stored-snapshot `preview`, and bounded post-transaction `apply` are implemented. Required source-scoped cleanup for changed mappings remains transactional; persistent background continuation for truncated replay pages remains pending.
+- [x] ✅ Let apply select reconciliation behavior: `none`, `preview`, or asynchronous `apply`; never block a large config transaction on a full directory scan. `none`, read-only stored-snapshot `preview`, and bounded post-transaction `apply` are implemented. Required source-scoped cleanup for changed mappings remains transactional. Truncated apply pages persist provider/cursor tasks and an explicitly enabled leased worker resumes them with retry backoff; run details expose the task lifecycle.
 - [ ] ⬜ Export source-owned production objects without secret values and without test fixture data.
 - [ ] ⬜ Keep manual UI management available according to object ownership mode (`manual`, `config_warn`, or `config_locked`).
 - [ ] ⬜ Add config bundle version and normalized object fingerprints to every apply run and affected object lineage.

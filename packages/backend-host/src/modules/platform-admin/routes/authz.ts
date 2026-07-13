@@ -60,6 +60,7 @@ import { configBundleDiffService } from '@enterpriseglue/shared/services/platfor
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundleExportService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleExportService.js';
 import { configBundleArchiveService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleArchiveService.js';
+import { configBundleIdentityReplayTaskService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
 import {
@@ -1455,6 +1456,32 @@ router.get('/api/authz/config-bundles/runs/:id', apiLimiter, requireConfigBundle
   });
   if (!row) throw Errors.notFound('Configuration bundle apply run');
   res.json(configBundleRunResponse(row));
+}));
+
+/** Durable continuation state for bounded stored identity snapshot replay. */
+router.get('/api/authz/config-bundles/runs/:id/identity-replay-tasks', apiLimiter, requireConfigBundleAccess, validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenant?.tenantId || null;
+  const runId = String(req.params.id);
+  const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
+    where: tenantId ? { id: runId, tenantId } : { id: runId, tenantId: IsNull() },
+  });
+  if (!row) throw Errors.notFound('Configuration bundle apply run');
+  const tasks = await configBundleIdentityReplayTaskService.listForApplyRun(runId, tenantId);
+  res.json(tasks.map((task) => ({
+    id: task.id,
+    providerId: task.providerId,
+    status: task.status,
+    attempts: task.attempts,
+    nextAttemptAt: task.nextAttemptAt,
+    scanned: task.scanned,
+    created: task.created,
+    removed: task.removed,
+    failed: task.failed,
+    lastError: task.lastError,
+    completedAt: task.completedAt,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  })));
 }));
 
 router.get('/api/authz/config-bundles/export', apiLimiter, requireConfigBundleAccess, validateQuery(z.object({ bundleKey: z.string().min(3).max(160), tenantKey: z.string().min(1).max(160).optional() })), asyncHandler(async (req: Request, res: Response) => {
