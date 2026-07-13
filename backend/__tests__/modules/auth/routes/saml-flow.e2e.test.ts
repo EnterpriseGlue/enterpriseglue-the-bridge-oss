@@ -288,8 +288,28 @@ describe('SAML auth flow e2e harness', () => {
       .send({ SAMLResponse: 'mock-saml-response', RelayState: relayState });
 
     expect(callbackResponse.status).toBe(302);
-    expect(callbackResponse.headers.location).toContain('error=saml_auth_failed');
+    expect(callbackResponse.headers.location).toBe(
+      `${config.frontendUrl}/login?error=saml_auth_failed&message=${encodeURIComponent('SAML assertion has already been used')}`,
+    );
     expect(provisionSamlUser as unknown as Mock).not.toHaveBeenCalled();
+  });
+
+  it('does not log or reflect raw SAML parser failure text into the login redirect', async () => {
+    const agent = request.agent(app);
+    const startResponse = await agent.get('/api/auth/saml/start');
+    const relayState = getCookieValue(getSetCookieHeader(startResponse.headers), 'oauth_state');
+    (validateSamlPostResponse as unknown as Mock).mockRejectedValueOnce(new Error('Invalid assertion <SAMLResponse>raw-secret</SAMLResponse>'));
+
+    const callbackResponse = await agent
+      .post('/api/auth/saml/callback')
+      .type('form')
+      .send({ SAMLResponse: 'mock-saml-response', RelayState: relayState });
+
+    expect(callbackResponse.status).toBe(302);
+    expect(callbackResponse.headers.location).toBe(
+      `${config.frontendUrl}/login?error=saml_auth_failed&message=${encodeURIComponent('SAML authentication failed')}`,
+    );
+    expect(callbackResponse.headers.location).not.toContain('raw-secret');
   });
 
   it('redirects to login error when provisioned user is deactivated', async () => {

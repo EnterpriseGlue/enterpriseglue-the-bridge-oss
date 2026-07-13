@@ -1204,7 +1204,7 @@ ExternalIdentity
 - [x] ✅ Provider deactivation removes provider-managed memberships and marks provider identity records as disabled without deleting manual, API, automation, or other-provider access.
 - [x] ✅ Add provider-scoped refresh-session lineage and revocation for provider-neutral OIDC, SAML, and LDAP sessions. Provider archival revokes only refresh sessions issued by that provider; existing access JWTs remain valid only until their short normal expiry.
 - [ ] ⬜ Add immediate access-JWT revocation for a deactivated or unlinked provider when the normal short access-token expiry is insufficient.
-- [x] ✅ Persist only allowlisted normalized identity attributes and entitlement ids; raw JWTs, SAML assertions, LDAP responses, unrestricted claims, and unrelated profile attributes are not stored in identity snapshots. Groups, roles, and scopes are normalized deterministically for reconciliation.
+- [x] ✅ Persist only allowlisted normalized identity attributes and entitlement ids; raw JWTs, SAML assertions, LDAP responses, unrestricted claims, and unrelated profile attributes are not stored in identity snapshots. SAML callback errors are logged and redirected only as allowlisted reason codes, never as raw parser or assertion text. Groups, roles, and scopes are normalized deterministically for reconciliation.
 
 ## Project-Engine Targets
 

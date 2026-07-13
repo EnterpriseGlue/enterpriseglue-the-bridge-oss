@@ -24,6 +24,13 @@ import {
 
 const router = Router();
 
+function samlCallbackFailureMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  return message === 'SAML assertion has already been used'
+    ? message
+    : 'SAML authentication failed';
+}
+
 /**
  * Check if SAML auth is enabled
  * GET /api/auth/saml/status
@@ -152,10 +159,8 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
 
     res.redirect(getSsoRedirectUrl(ssoState));
   } catch (error: any) {
-    logger.error('[SAML Auth] Callback failed:', error);
-
-    const rawMessage = String(error?.message || 'Authentication failed');
-    const safeMessage = rawMessage.replace(/[<>]/g, '').slice(0, 200);
+    const safeMessage = samlCallbackFailureMessage(error);
+    logger.warn('[SAML Auth] Callback failed', { reason: safeMessage === 'SAML assertion has already been used' ? 'assertion_replayed' : 'authentication_failed' });
     const errorUrl = `${config.frontendUrl}/login?error=saml_auth_failed&message=${encodeURIComponent(safeMessage)}`;
     return res.redirect(errorUrl);
   }
