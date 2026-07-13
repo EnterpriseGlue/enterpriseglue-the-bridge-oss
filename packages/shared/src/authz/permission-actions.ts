@@ -1087,6 +1087,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'PUT', route: '/api/sso/providers/{id}', resourceResolver: 'platform.self' },
       { method: 'DELETE', route: '/api/sso/providers/{id}', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/sso/providers/{id}/toggle', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/sso/providers/{id}/migrate-default-role', resourceResolver: 'platform.self' },
     ],
   },
   {

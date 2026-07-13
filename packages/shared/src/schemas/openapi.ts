@@ -2068,6 +2068,14 @@ registry.registerPath({
   responses: { 200: { description: 'SSO provider enabled state toggled', content: { 'application/json': { schema: z.object({ enabled: z.boolean() }) } } }, 404: { description: 'Provider not found' } },
 });
 
+registry.registerPath({
+  method: 'post',
+  path: '/api/sso/providers/{id}/migrate-default-role',
+  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/sso/providers/{id}/migrate-default-role'),
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({ providerKey: z.string().min(1).max(160), riskAcknowledged: z.boolean().optional() }) } } } },
+  responses: { 201: { description: 'Legacy provider default role converted to an explicit identity mapping' }, 400: { description: 'Conversion validation failed' }, 404: { description: 'Provider not found' } },
+});
+
 // Provider-neutral identity providers. Configuration holds only references to
 // secrets; the values behind those references are never returned by this API.
 const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);

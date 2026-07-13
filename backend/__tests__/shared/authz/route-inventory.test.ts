@@ -479,6 +479,7 @@ describe('authorization route inventory validation', () => {
           ['PUT', '/api/sso/providers/{id}', 'platform.self'],
           ['DELETE', '/api/sso/providers/{id}', 'platform.self'],
           ['POST', '/api/sso/providers/{id}/toggle', 'platform.self'],
+          ['POST', '/api/sso/providers/{id}/migrate-default-role', 'platform.self'],
         ],
       },
     ];
