@@ -34,6 +34,10 @@ describe('identity mapping routes', () => {
     const response = await request(app).post('/api/identity/mappings').send({ providerKey: 'identity.oidc.main', targetGroupKey: 'group.operators', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact' });
     expect(response.status).toBe(201); expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ providerKey: 'identity.oidc.main' }), 'tenant-1'); expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.mapping.create' }));
   });
+  it('accepts authenticated identity mappings for explicit provider defaults', async () => {
+    const response = await request(app).post('/api/identity/mappings').send({ providerKey: 'identity.oidc.main', targetGroupKey: 'authenticated-users', entitlementType: 'authenticated', externalId: 'authenticated', matchOperator: 'exact' });
+    expect(response.status).toBe(201); expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ entitlementType: 'authenticated', externalId: 'authenticated' }), 'tenant-1');
+  });
   it('atomically provisions a new group, mapping, and scoped assignment', async () => {
     const response = await request(app).post('/api/identity/mappings/provision-access').send({ providerKey: 'identity.oidc.main', newGroup: { key: 'group.operators', name: 'Operators' }, entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1' });
     expect(response.status).toBe(201);
