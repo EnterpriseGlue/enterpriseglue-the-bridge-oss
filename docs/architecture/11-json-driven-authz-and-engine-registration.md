@@ -728,11 +728,11 @@ OAuth2 client credentials keep the current public configuration shape, but secre
 
 ### Secret References
 
-- [ ] ⬜ Add one `SecretResolver` contract shared by config preview/apply, identity providers, engine clients, and connection tests.
-- [ ] ⬜ Support `encrypted_local` and `external_ref` storage modes; persist ciphertext or opaque reference metadata, never the resolved plaintext.
+- [x] ✅ Add one `SecretResolver` contract shared by config preflight/apply storage, identity providers, engine clients, and connection tests.
+- [x] ✅ Support `encrypted_local` and `external_ref` storage modes; persist ciphertext or opaque reference metadata, never the resolved plaintext.
 - [x] ✅ Replace current SSO provider base64 writes with authenticated AES-GCM encryption through the shared `SecretResolver`.
 - [x] ✅ Replace direct runtime consumption of `Engine.passwordEnc` with secret resolution/decryption at the engine-client boundary for BPMN client, deployment, health, and Mission Control engine calls.
-- [ ] ⬜ Add importer secret-ref validation for environment variables without returning values.
+- [x] ✅ Add importer secret-ref availability validation for environment variables and approved file references without returning values.
 - [ ] ⬜ Add optional Kubernetes Secret, Docker secret, and Vault adapters later.
 - [ ] ⬜ Reject plaintext secret fields by default.
 - [ ] ⬜ Audit secret reference identifiers and change events, but never resolved values; unredacted-audit permission does not reveal credentials.
@@ -1826,7 +1826,7 @@ The implementation should extend existing packages rather than introduce an auth
   - Returns one tenant-scoped apply receipt with planned changes, reconciliation details, and sanitized error diagnostics.
 - [x] ✅ `GET /api/authz/config-bundles/export`
   - Exports all apply-supported config-owned roles, groups, engines, Engine Sets, runtime resource sets, identity providers/mappings, scoped group assignments, and project-engine targets as JSON. It retains secret references only and fails instead of omitting an unresolved config reference.
-- [ ] ⬜ `POST /api/config-bundles/validate-secret-refs`
+- [x] ✅ `POST /api/authz/config-bundles/validate-secret-refs`
   - Optional preflight check for secret reference availability without returning secret values.
 - [x] ✅ `GET|POST|PUT|DELETE /api/identity/providers`
   - Manages provider-neutral OIDC, SAML, and LDAP provider definitions with secret references, archival delete semantics, audit entries, and exact action/OpenAPI metadata.

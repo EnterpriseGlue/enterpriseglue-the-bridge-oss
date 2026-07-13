@@ -25,6 +25,7 @@ describe('authorization route inventory validation', () => {
   it('documents typed configuration bundle lifecycle contracts', () => {
     const openApi = generateOpenApi();
     const preview = openApi.paths['/api/authz/config-bundles/preview'].post;
+    const secretPreflight = openApi.paths['/api/authz/config-bundles/validate-secret-refs'].post;
     const diff = openApi.paths['/api/authz/config-bundles/diff'].post;
     const apply = openApi.paths['/api/authz/config-bundles/apply'].post;
     const runs = openApi.paths['/api/authz/config-bundles/runs'].get;
@@ -34,6 +35,7 @@ describe('authorization route inventory validation', () => {
 
     expect(preview.requestBody).toBeDefined();
     expect(preview.responses['200'].content['application/json'].schema).toBeDefined();
+    expect(secretPreflight.responses['200'].content['application/json'].schema).toBeDefined();
     expect(diff.responses['200'].content['application/json'].schema).toBeDefined();
     expect(apply.requestBody.content['application/json'].schema).toBeDefined();
     expect(apply.responses['200'].content['application/json'].schema).toBeDefined();
@@ -120,6 +122,7 @@ describe('authorization route inventory validation', () => {
           ['PUT', '/api/authz/roles/{id}'],
           ['DELETE', '/api/authz/roles/{id}'],
           ['POST', '/api/authz/config-bundles/preview'],
+          ['POST', '/api/authz/config-bundles/validate-secret-refs'],
           ['POST', '/api/authz/config-bundles/import-zip'],
           ['POST', '/api/authz/config-bundles/diff'],
           ['POST', '/api/authz/config-bundles/apply'],

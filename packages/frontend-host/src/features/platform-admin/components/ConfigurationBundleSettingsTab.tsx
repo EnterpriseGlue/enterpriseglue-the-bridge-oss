@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Button, Checkbox, InlineNotification, Select, SelectItem, Tag, TextArea, TextInput, Tile } from '@carbon/react';
-import { Download, Play, Time, Upload, View } from '@carbon/icons-react';
+import { Checkmark, Download, Play, Time, Upload, View } from '@carbon/icons-react';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
@@ -16,6 +16,7 @@ import {
 type Preview = { valid: boolean; canonicalHash?: string; errors: Array<{ path: string; message: string }>; counts: Record<string, number> };
 type DiffWarning = { id: string; message: string; acknowledgementId?: string };
 type Diff = Preview & { changes: ConfigBundleDiffChange[]; warnings: DiffWarning[]; requiredAcknowledgements: string[]; affectedPrincipals: { affectedGroupCount: number; affectedUserCount: number; externalIdentityMappingChangeCount: number } };
+type SecretPreflight = { valid: boolean; canonicalHash?: string; available: boolean; errors: Array<{ path: string; message: string }>; references: Array<{ reference: string; locations: string[]; available: boolean; reason?: string }> };
 type ApplyRun = { id: string; bundleKey: string; actorId: string | null; createdAt: number; canonicalHash?: string; created?: number; updated?: number; archived?: number; mode?: string | null; status?: 'pending' | 'succeeded' | 'failed'; errorMessage?: string | null; completedAt?: number | null; reconciliation?: ApplyResult['reconciliation']; changes?: ConfigBundleDiffChange[] };
 type ApplyResult = { reconciliation: { engineSetCount: number; runtimeResourceSetCount: number; engineCount: number; identitySnapshot: { status: 'not_needed' | 'completed' | 'truncated' | 'failed'; providerCount: number; scanned: number; created: number; removed: number; failed: number } } };
 const placeholder = '{\n  "bundle": {\n    "apiVersion": "enterpriseglue.ai/v1alpha1",\n    "kind": "EnterpriseGlueConfigBundle",\n    "metadata": { "key": "example.authz", "owner": "platform" },\n    "tenantKey": "default",\n    "mode": "preview_only",\n    "settings": {},\n    "imports": ["./groups.json"]\n  },\n  "files": { "./groups.json": { "groups": [] } }\n}';
@@ -26,9 +27,10 @@ export default function ConfigurationBundleSettingsTab() {
   const [source, setSource] = useState(placeholder);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [diff, setDiff] = useState<Diff | null>(null);
+  const [secretPreflight, setSecretPreflight] = useState<SecretPreflight | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'preview' | 'apply' | null>(null);
+  const [busy, setBusy] = useState<'preview' | 'preflight' | 'apply' | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [runs, setRuns] = useState<ApplyRun[]>([]);
   const [selectedRun, setSelectedRun] = useState<ApplyRun | null>(null);
@@ -57,6 +59,12 @@ export default function ConfigurationBundleSettingsTab() {
     catch (value) { setError(parseApiError(value, 'Configuration apply failed').message); }
     finally { setBusy(null); }
   };
+  const preflightSecrets = async () => {
+    setBusy('preflight'); setError(null);
+    try { setSecretPreflight(await apiClient.post<SecretPreflight>('/api/authz/config-bundles/validate-secret-refs', parse())); }
+    catch (value) { setError(parseApiError(value, 'Secret reference validation failed').message); setSecretPreflight(null); }
+    finally { setBusy(null); }
+  };
   const loadRuns = async () => {
     try { setRuns(await apiClient.get<ApplyRun[]>('/api/authz/config-bundles/runs?limit=10')); }
     catch (value) { setError(parseApiError(value, 'Configuration history could not be loaded').message); }
@@ -75,7 +83,7 @@ export default function ConfigurationBundleSettingsTab() {
       const input = isZip
         ? JSON.stringify(await apiClient.postRaw('/api/authz/config-bundles/import-zip', file, { headers: { 'content-type': 'application/zip' } }), null, 2)
         : await file.text();
-      setSource(input); setPreview(null); setDiff(null); setApplyResult(null); setAcknowledgements([]); setApplyIdempotencyKey(null); setError(null);
+      setSource(input); setPreview(null); setDiff(null); setSecretPreflight(null); setApplyResult(null); setAcknowledgements([]); setApplyIdempotencyKey(null); setError(null);
     }
     catch { setError('The selected configuration file could not be read.'); }
     finally { event.target.value = ''; }
@@ -120,9 +128,10 @@ export default function ConfigurationBundleSettingsTab() {
     {error && <InlineNotification kind="error" title="Configuration bundle" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
     <TextArea id="configuration-bundle-json" labelText="Configuration bundle JSON" value={source} onChange={(event) => setSource(event.target.value)} rows={22} helperText="Use the same bundle and files shape as CI/CD. Folder-style ZIP archives must contain bundle.json. Secret references only; plaintext secrets are rejected." />
     <input ref={uploadRef} type="file" accept="application/json,.json,application/zip,.zip" onChange={importJson} style={{ display: 'none' }} />
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}><Button kind="tertiary" renderIcon={Upload} disabled={busy !== null} onClick={() => uploadRef.current?.click()}>Import JSON or ZIP</Button><Button kind="tertiary" renderIcon={Download} disabled={busy !== null} onClick={exportJson}>Export JSON</Button><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="secondary" renderIcon={View} disabled={busy !== null} onClick={previewBundle}>Preview changes</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="primary" renderIcon={Play} disabled={!preview?.valid || !preview.canonicalHash || busy !== null || missingAcknowledgements.length > 0} onClick={applyBundle}>Apply exact preview</Button></GuardedAction><Button kind="ghost" renderIcon={Time} disabled={busy !== null} onClick={loadRuns}>Refresh history</Button></div>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}><Button kind="tertiary" renderIcon={Upload} disabled={busy !== null} onClick={() => uploadRef.current?.click()}>Import JSON or ZIP</Button><Button kind="tertiary" renderIcon={Download} disabled={busy !== null} onClick={exportJson}>Export JSON</Button><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="secondary" renderIcon={View} disabled={busy !== null} onClick={previewBundle}>Preview changes</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="secondary" renderIcon={Checkmark} disabled={busy !== null} onClick={preflightSecrets}>Check secret references</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="primary" renderIcon={Play} disabled={!preview?.valid || !preview.canonicalHash || busy !== null || missingAcknowledgements.length > 0} onClick={applyBundle}>Apply exact preview</Button></GuardedAction><Button kind="ghost" renderIcon={Time} disabled={busy !== null} onClick={loadRuns}>Refresh history</Button></div>
     {applyResult && <InlineNotification kind={applyResult.reconciliation.identitySnapshot.status === 'failed' ? 'error' : applyResult.reconciliation.identitySnapshot.status === 'truncated' ? 'warning' : 'success'} title="Configuration applied" subtitle={`Materialized ${applyResult.reconciliation.engineSetCount} Engine Sets, ${applyResult.reconciliation.runtimeResourceSetCount} runtime resource sets, and refreshed ${applyResult.reconciliation.engineCount} engines.${applyResult.reconciliation.identitySnapshot.status === 'not_needed' ? '' : ` Identity replay ${applyResult.reconciliation.identitySnapshot.status}: ${applyResult.reconciliation.identitySnapshot.scanned} snapshots, ${applyResult.reconciliation.identitySnapshot.created} added, ${applyResult.reconciliation.identitySnapshot.removed} removed.`}`} hideCloseButton style={{ marginTop: 'var(--spacing-5)' }} />}
     {preview && <div style={{ marginTop: 'var(--spacing-6)' }}><h4 style={{ margin: 0 }}>Preview</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{preview.valid ? `Hash ${preview.canonicalHash}` : 'Validation failed'}</p>{preview.errors.map((issue) => <InlineNotification key={`${issue.path}:${issue.message}`} kind="error" title={issue.path} subtitle={issue.message} hideCloseButton style={{ marginBottom: 'var(--spacing-3)' }} />)}{Object.entries(preview.counts).map(([path, count]) => <Tag key={path} type="cool-gray" style={{ marginRight: 'var(--spacing-2)' }}>{path}: {count}</Tag>)}</div>}
+    {secretPreflight && <div style={{ marginTop: 'var(--spacing-5)' }}><h4 style={{ margin: 0 }}>Secret reference availability</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{secretPreflight.valid ? secretPreflight.available ? 'All configured secret references are available. Values are not returned.' : 'One or more configured secret references are unavailable. Values are not returned.' : 'The bundle must be valid before secret references can be checked.'}</p>{secretPreflight.errors.map((issue) => <InlineNotification key={`${issue.path}:${issue.message}`} kind="error" title={issue.path} subtitle={issue.message} hideCloseButton style={{ marginBottom: 'var(--spacing-3)' }} />)}{secretPreflight.references.map((reference) => <div key={reference.reference} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-2)', borderBottom: '1px solid var(--cds-border-subtle)' }}><Tag type={reference.available ? 'green' : 'red'}>{reference.available ? 'available' : 'unavailable'}</Tag><strong>{reference.reference}</strong><span style={{ color: 'var(--cds-text-secondary)', flex: '1 1 16rem' }}>{reference.locations.join(', ')}</span>{reference.reason && <span style={{ color: 'var(--cds-text-secondary)' }}>{reference.reason.replace(/_/g, ' ')}</span>}</div>)}</div>}
     {diff?.affectedPrincipals && (diff.affectedPrincipals.affectedGroupCount > 0 || diff.affectedPrincipals.externalIdentityMappingChangeCount > 0) ? <div style={{ marginTop: 'var(--spacing-5)' }}><h4 style={{ margin: 0 }}>Known access impact</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{diff.affectedPrincipals.affectedUserCount} current group members across {diff.affectedPrincipals.affectedGroupCount} groups may be affected.{diff.affectedPrincipals.externalIdentityMappingChangeCount > 0 ? ` ${diff.affectedPrincipals.externalIdentityMappingChangeCount} identity mapping change${diff.affectedPrincipals.externalIdentityMappingChangeCount === 1 ? '' : 's'} may also affect externally managed identities.` : ''}</p></div> : null}
     {diff?.warnings?.length ? <div style={{ marginTop: 'var(--spacing-5)' }}>{diff.warnings.map((warning) => <div key={warning.id} style={{ marginBottom: 'var(--spacing-3)' }}><InlineNotification kind="warning" title="Configuration review required" subtitle={warning.message} hideCloseButton lowContrast />{warning.acknowledgementId ? <Checkbox id={`configuration-acknowledgement-${warning.id}`} labelText="I have reviewed and accept this configuration change." checked={acknowledgements.includes(warning.acknowledgementId)} onChange={(_, data) => toggleAcknowledgement(warning.acknowledgementId!, data.checked)} style={{ marginTop: 'var(--spacing-3)' }} /> : null}</div>)}</div> : null}
     {diff?.changes?.length ? <div style={{ marginTop: 'var(--spacing-6)', display: 'grid', gap: 'var(--spacing-4)' }}>

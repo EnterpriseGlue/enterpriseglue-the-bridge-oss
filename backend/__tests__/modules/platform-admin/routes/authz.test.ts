@@ -23,6 +23,15 @@ const configBundleApplyMock = vi.hoisted(() => ({
     reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 },
   }),
 }));
+const configBundleSecretPreflightMock = vi.hoisted(() => ({
+  check: vi.fn().mockReturnValue({
+    valid: true,
+    canonicalHash: 'preview-hash',
+    available: false,
+    errors: [],
+    references: [{ reference: 'MISSING_ENGINE_TOKEN', locations: ['./engines.json.engines.0.auth.tokenRef'], available: false, reason: 'environment_variable_missing' }],
+  }),
+}));
 const apiClientAuthMock = vi.hoisted(() => ({
   requireApiClientAction: vi.fn(() => (req: any, _res: any, next: any) => {
     req.apiClient = { id: 'client-1', createdById: 'user-1', scopes: ['config:bundle:manage'] };
@@ -63,6 +72,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js', () => ({
   configBundleApplyService: configBundleApplyMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js', () => ({
+  configBundleSecretPreflightService: configBundleSecretPreflightMock,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
@@ -1968,6 +1981,27 @@ describe('platform-admin authz routes', () => {
 
     expect(invalidResponse.status).toBe(422);
     expect(invalidResponse.body).toMatchObject({ valid: false });
+  });
+
+  it('checks configuration secret references without returning secret values', async () => {
+    const response = await request(app)
+      .post('/api/authz/config-bundles/validate-secret-refs')
+      .send({
+        bundle: {
+          apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle', metadata: { key: 'acme.authz', owner: 'platform' },
+          tenantKey: 'acme', mode: 'preview_only', settings: {}, imports: ['./engines.json'],
+        },
+        files: { './engines.json': { engines: [] } },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      valid: true,
+      available: false,
+      references: [expect.objectContaining({ reference: 'MISSING_ENGINE_TOKEN', available: false })],
+    });
+    expect(JSON.stringify(response.body)).not.toContain('secret-value');
+    expect(configBundleSecretPreflightMock.check).toHaveBeenCalledTimes(1);
   });
 
   it('returns a persisted-state diff for validated configuration bundles', async () => {

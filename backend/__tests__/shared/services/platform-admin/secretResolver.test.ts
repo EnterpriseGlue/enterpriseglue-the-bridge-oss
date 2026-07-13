@@ -32,6 +32,16 @@ describe('SecretResolver', () => {
     }
   });
 
+  it('checks external reference availability without returning its secret value', () => {
+    vi.stubEnv('EG_TEST_PROVIDER_SECRET', 'external-secret');
+    try {
+      expect(secretResolver.checkExternalReference('EG_TEST_PROVIDER_SECRET')).toEqual({ available: true });
+      expect(secretResolver.checkExternalReference('EG_TEST_MISSING_SECRET')).toEqual({ available: false, reason: 'environment_variable_missing' });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('preserves external references while normalizing engine credential writes', () => {
     expect(secretResolver.normalizeForStorage('ref:EG_ENGINE_PASSWORD')).toBe('ref:EG_ENGINE_PASSWORD');
     expect(secretResolver.normalizeForStorage(null)).toBeNull();
@@ -43,6 +53,8 @@ describe('SecretResolver', () => {
     writeFileSync(secretPath, 'file-secret');
     const resolver = new SecretResolver(() => ({ provider: 'file', fileRoot: root }));
     try {
+      expect(resolver.checkExternalReference(pathToFileURL(secretPath).toString())).toEqual({ available: true });
+      expect(resolver.checkExternalReference('file:///etc/passwd')).toEqual({ available: false, reason: 'file_outside_root' });
       expect(resolver.resolveStored(`ref:${pathToFileURL(secretPath).toString()}`)).toBe('file-secret');
       expect(() => resolver.resolveStored('ref:file:///etc/passwd')).toThrow('outside EG_CONFIG_SECRET_FILE_ROOT');
     } finally {

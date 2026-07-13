@@ -55,6 +55,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { getEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
+import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundleExportService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleExportService.js';
@@ -1372,6 +1373,26 @@ router.post('/api/authz/config-bundles/import-zip', apiLimiter, requireConfigBun
 router.post('/api/authz/config-bundles/preview', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
   const preview = configBundlePreviewService.preview(req.body);
   res.status(preview.valid ? 200 : 422).json(preview);
+}));
+
+/** Check configured secret references without returning their values or mutating state. */
+router.post('/api/authz/config-bundles/validate-secret-refs', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+  const preflight = configBundleSecretPreflightService.check(req.body);
+  await logAudit({
+    tenantId: req.tenant?.tenantId || undefined,
+    userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
+    action: 'authz.config_bundle.secret_preflight',
+    resourceType: 'config_bundle',
+    resourceId: String((req.body.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
+    details: {
+      canonicalHash: preflight.canonicalHash || null,
+      valid: preflight.valid,
+      available: preflight.available,
+      references: preflight.references.map(({ reference, available, reason }) => ({ reference, available, reason: reason || null })),
+      actorType: req.apiClient ? 'api_client' : 'user',
+    },
+  });
+  res.status(preflight.valid ? 200 : 422).json(preflight);
 }));
 
 /** Compare a validated bundle with persisted config-owned role and group state. */

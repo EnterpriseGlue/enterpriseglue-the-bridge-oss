@@ -1,5 +1,5 @@
 import { encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
-import { readFileSync } from 'node:fs';
+import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { relative, resolve } from 'node:path';
 import { config } from '@enterpriseglue/shared/config/index.js';
@@ -9,6 +9,11 @@ export type StoredSecretKind = 'encrypted_local' | 'external_ref' | 'legacy';
 export type SecretResolverSettings = {
   provider: 'env' | 'file';
   fileRoot?: string;
+};
+
+export type SecretReferenceAvailability = {
+  available: boolean;
+  reason?: 'file_provider_not_configured' | 'file_outside_root' | 'file_unavailable' | 'environment_variable_missing';
 };
 
 /**
@@ -42,6 +47,35 @@ export class SecretResolver {
     if (this.isExternalReference(value)) return 'external_ref';
     if (isEncrypted(value)) return 'encrypted_local';
     return 'legacy';
+  }
+
+  /**
+   * Checks whether an opaque external reference can be resolved without
+   * returning its value. This is safe for config-bundle preflight output.
+   */
+  checkExternalReference(reference: string): SecretReferenceAvailability {
+    if (reference.startsWith('file://')) {
+      const settings = this.settings();
+      if (settings.provider !== 'file' || !settings.fileRoot) return { available: false, reason: 'file_provider_not_configured' };
+      try {
+        const root = resolve(settings.fileRoot);
+        const filePath = resolve(fileURLToPath(reference));
+        const pathFromRoot = relative(root, filePath);
+        if (pathFromRoot.startsWith('..') || pathFromRoot === '' || pathFromRoot.includes(`..${process.platform === 'win32' ? '\\' : '/'}`)) {
+          return { available: false, reason: 'file_outside_root' };
+        }
+        accessSync(filePath, constants.R_OK);
+        return statSync(filePath).size > 0
+          ? { available: true }
+          : { available: false, reason: 'file_unavailable' };
+      } catch {
+        return { available: false, reason: 'file_unavailable' };
+      }
+    }
+
+    return process.env[reference]
+      ? { available: true }
+      : { available: false, reason: 'environment_variable_missing' };
   }
 
   resolveStored(value: string | null | undefined): string | null {
