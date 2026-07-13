@@ -144,7 +144,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
 
   let preparedImport: Awaited<ReturnType<typeof prepareLatestEngineImport>> | null = null;
   if (importEngineId) {
-    await assertUserCanImportFromEngine(userId, importEngineId);
+    await assertUserCanImportFromEngine(userId, importEngineId, req.tenant?.tenantId || null);
     preparedImport = await prepareLatestEngineImport(importEngineId);
   }
 

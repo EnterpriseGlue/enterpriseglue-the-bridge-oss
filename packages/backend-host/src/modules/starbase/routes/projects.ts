@@ -445,7 +445,7 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
 
   let preparedImport: Awaited<ReturnType<typeof prepareLatestEngineImport>> | null = null;
   if (importEngineId) {
-    await assertUserCanImportFromEngine(userId, importEngineId);
+    await assertUserCanImportFromEngine(userId, importEngineId, req.tenant?.tenantId || null);
     preparedImport = await prepareLatestEngineImport(importEngineId);
   }
 
@@ -506,7 +506,11 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
 }));
 
 r.post('/starbase-api/projects/import-preview', apiLimiter, requireAuth, validateBody(importPreviewBodySchema), requireAction('project.import.preview', { resourceResolver: 'engine.byId', resourceIdFrom: 'body', resourceIdKey: 'engineId' }), asyncHandler(async (req: Request, res: Response) => {
-  const preview = await previewLatestEngineImport(req.user!.userId, String(req.body.engineId).trim());
+  const preview = await previewLatestEngineImport(
+    req.user!.userId,
+    String(req.body.engineId).trim(),
+    req.tenant?.tenantId || null
+  );
   res.json(preview);
 }));
 

@@ -185,7 +185,11 @@ async function collectLatestDmnFiles(engineId: string): Promise<PreparedEngineIm
   return files;
 }
 
-export async function assertUserCanImportFromEngine(userId: string, engineId: string): Promise<void> {
+export async function assertUserCanImportFromEngine(
+  userId: string,
+  engineId: string,
+  tenantId: string | null = null
+): Promise<void> {
   const dataSource = await getDataSource();
   const engineRepo = dataSource.getRepository(Engine);
   const engine = await engineRepo.findOne({ where: { id: engineId }, select: ['id'] });
@@ -194,9 +198,10 @@ export async function assertUserCanImportFromEngine(userId: string, engineId: st
     throw Errors.engineNotFound(engineId);
   }
 
-  const hasAccess = await engineService.hasEngineAccess(userId, engineId, ENGINE_MEMBER_ROLES) ||
+  const hasAccess = await engineService.hasEngineAccess(userId, engineId, ENGINE_MEMBER_ROLES, tenantId) ||
     await permissionService.hasPermission(EnginePermissions.DEPLOY_VIEW, {
       userId,
+      tenantId,
       resourceType: 'engine',
       resourceId: engineId,
     });
@@ -221,8 +226,12 @@ export async function prepareLatestEngineImport(engineId: string): Promise<Prepa
   };
 }
 
-export async function previewLatestEngineImport(userId: string, engineId: string): Promise<EngineImportPreview> {
-  await assertUserCanImportFromEngine(userId, engineId);
+export async function previewLatestEngineImport(
+  userId: string,
+  engineId: string,
+  tenantId: string | null = null
+): Promise<EngineImportPreview> {
+  await assertUserCanImportFromEngine(userId, engineId, tenantId);
   const prepared = await prepareLatestEngineImport(engineId);
 
   return {

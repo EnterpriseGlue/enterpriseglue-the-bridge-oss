@@ -482,7 +482,7 @@ describe('starbase projects routes', () => {
       resourceType: 'engine',
       resourceId: 'engine-1',
     }));
-    expect(routeMocks.previewLatestEngineImport).toHaveBeenCalledWith('user-1', 'engine-1');
+    expect(routeMocks.previewLatestEngineImport).toHaveBeenCalledWith('user-1', 'engine-1', null);
     expect(response.body).toMatchObject({
       engineId: 'engine-1',
       allowed: true,

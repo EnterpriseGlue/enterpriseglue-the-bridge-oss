@@ -143,6 +143,7 @@ describe('engine import service', () => {
     await expect(assertUserCanImportFromEngine('user-1', 'engine-1')).resolves.toBeUndefined();
     expect(mocks.hasPermission).toHaveBeenCalledWith('engine:deploy:view', {
       userId: 'user-1',
+      tenantId: null,
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
