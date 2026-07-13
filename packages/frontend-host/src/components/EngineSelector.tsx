@@ -10,16 +10,8 @@ type Engine = {
   baseUrl: string
 }
 
-type EngineWithAccess = Engine & {
-  isOwner?: boolean
-  isDelegate?: boolean
-  myRole?: string
-}
-
-const MISSION_CONTROL_ROLES = new Set(['owner', 'delegate', 'operator'])
-
-async function fetchAccessibleEngines(): Promise<EngineWithAccess[]> {
-  return apiClient.get<EngineWithAccess[]>('/engines-api/engines', undefined, { credentials: 'include' }).catch(() => [])
+async function fetchAccessibleEngines(): Promise<Engine[]> {
+  return apiClient.get<Engine[]>('/engines-api/engines', undefined, { credentials: 'include' }).catch(() => [])
 }
 
 interface EngineSelectorProps {
@@ -38,25 +30,18 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
   })
 
   const engines = React.useMemo(() => {
-    const data = enginesQuery.data || []
-    return data.filter((engine) => {
-      const role = String(engine.myRole || '')
-      return MISSION_CONTROL_ROLES.has(role)
-    })
+    // The route is guarded by engine.visibleCollection. Do not re-filter by
+    // legacy display roles here: custom and runtime-derived grants may not
+    // have a synthetic owner/delegate/operator value.
+    return [...(enginesQuery.data || [])].sort((a, b) =>
+      (a.name || a.baseUrl).localeCompare(b.name || b.baseUrl)
+    )
   }, [enginesQuery.data])
 
   // Auto-select engine: single engine or first alphabetically
   React.useEffect(() => {
-    if (engines.length > 0 && !selectedEngineId) {
-      if (engines.length === 1) {
-        setSelectedEngineId(engines[0].id)
-      } else {
-        // Select first engine alphabetically by name
-        const sorted = [...engines].sort((a, b) => 
-          (a.name || a.baseUrl).localeCompare(b.name || b.baseUrl)
-        )
-        setSelectedEngineId(sorted[0].id)
-      }
+    if (engines.length > 0 && (!selectedEngineId || !engines.some((engine) => engine.id === selectedEngineId))) {
+      setSelectedEngineId(engines[0].id)
     }
   }, [engines, selectedEngineId, setSelectedEngineId])
 
