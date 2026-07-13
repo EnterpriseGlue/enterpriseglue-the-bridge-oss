@@ -20,6 +20,7 @@ describe('identity provider adapters', () => {
         { type: 'group', externalId: 'g1' }, { type: 'group', externalId: 'g2' },
         { type: 'role', externalId: 'operator' },
         { type: 'scope', externalId: 'engines.read' }, { type: 'scope', externalId: 'files.read' },
+        { type: 'attribute', externalId: 'email_domain:example.com' },
       ],
     }));
   });
@@ -74,6 +75,7 @@ function identityAdapterContract(name: string, adapter: IdentityProviderAdapter)
           { type: 'role', externalId: 'operator' },
           { type: 'scope', externalId: 'engine.read' },
           { type: 'scope', externalId: 'files.read' },
+          { type: 'attribute', externalId: 'email_domain:example.com' },
         ],
       });
     });

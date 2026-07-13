@@ -170,6 +170,43 @@ function normalizeEmailDomainValue(value: string): string {
   return atIndex >= 0 ? normalized.slice(atIndex + 1) : normalized;
 }
 
+function migrationEntitlement(legacy: SsoClaimsMapping): {
+  entitlementType: 'group' | 'role' | 'attribute';
+  externalId: string | null;
+  matchOperator: 'exact' | 'contains' | 'exists';
+} | null {
+  if (legacy.claimType === 'group' || legacy.claimType === 'role') {
+    const matchOperator = legacy.claimOperator === null || legacy.claimOperator === 'equals'
+      ? 'exact'
+      : legacy.claimOperator === 'contains'
+        ? 'contains'
+        : legacy.claimOperator === 'exists'
+          ? 'exists'
+          : null;
+    if (!matchOperator) return null;
+    return {
+      entitlementType: legacy.claimType,
+      externalId: matchOperator === 'exists' ? null : legacy.claimValue,
+      matchOperator,
+    };
+  }
+
+  // The legacy domain matcher and explicit equality both normalize to the
+  // domain portion. Only these exact forms preserve semantics without adding
+  // wildcard or arbitrary-claim support to provider-neutral mappings.
+  const exactDomain = legacy.claimOperator === 'equals'
+    ? normalizeEmailDomainValue(legacy.claimValue)
+    : legacy.claimOperator === null && legacy.claimValue.trim().startsWith('*@')
+      ? normalizeEmailDomainValue(legacy.claimValue)
+      : '';
+  if (!exactDomain) return null;
+  return {
+    entitlementType: 'attribute',
+    externalId: `email_domain:${exactDomain}`,
+    matchOperator: 'exact',
+  };
+}
+
 function claimExists(values: string[]): boolean {
   return values.length > 0;
 }
@@ -298,10 +335,8 @@ class SsoClaimsMappingServiceClass {
       const legacy = await manager.getRepository(SsoClaimsMapping).findOneBy({ id });
       if (!legacy) throw Errors.notFound('SSO mapping');
       if (!legacy.isActive) throw Errors.validation('Only active SSO mappings can be migrated');
-      const entitlementType = legacy.claimType === 'group' ? 'group' : legacy.claimType === 'role' ? 'role' : null;
-      if (!entitlementType) throw Errors.validation('Only group and role claim mappings can be migrated automatically');
-      const matchOperator = legacy.claimOperator === null || legacy.claimOperator === 'equals' ? 'exact' : legacy.claimOperator === 'contains' ? 'contains' : legacy.claimOperator === 'exists' ? 'exists' : null;
-      if (!matchOperator) throw Errors.validation('Only equals, contains, and exists claim operators can be migrated automatically');
+      const entitlement = migrationEntitlement(legacy);
+      if (!entitlement) throw Errors.validation('Only exact group, role, and email-domain mappings plus group or role contains/exists mappings can be migrated automatically');
       const provider = await manager.getRepository(IdentityProvider).findOne({ where: { key: providerKey, tenantId: IsNull() } });
       if (!provider) throw Errors.notFound('Global provider-neutral identity provider');
       const targetGroupKey = input.newGroup?.key || input.targetGroupKey!.trim();
@@ -314,7 +349,7 @@ class SsoClaimsMappingServiceClass {
         createdGroup = group;
       }
       if (!group) throw Errors.notFound('Global authorization group');
-      const externalId = matchOperator === 'exists' ? null : legacy.claimValue;
+      const { entitlementType, externalId, matchOperator } = entitlement;
       const existingMapping = await manager.getRepository(IdentityEntitlementMapping).findOne({
         where: {
           tenantId: IsNull(), providerId: provider.id, targetGroupId: group.id, entitlementType,

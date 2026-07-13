@@ -156,15 +156,19 @@ export const inMemoryIdentityProviderAdapter: IdentityProviderAdapter = {
     const values = (value: unknown): string[] => [...new Set((Array.isArray(value) ? value : value == null ? [] : [value])
       .map((entry) => String(entry).trim()).filter(Boolean))].sort();
     const scopes = values(input.claims.scp ?? input.claims.scope).flatMap((value) => value.split(/\s+/)).filter(Boolean).sort();
+    const email = input.email?.trim().toLowerCase() || undefined;
+    const atIndex = email?.lastIndexOf('@') ?? -1;
+    const emailDomain = atIndex > 0 && atIndex < (email?.length ?? 0) - 1 ? email!.slice(atIndex + 1) : null;
     const entitlements = [
       { type: 'authenticated' as const, externalId: 'authenticated' },
       ...values(input.claims.groups ?? input.claims.group ?? input.claims.memberOf).map((externalId) => ({ type: 'group' as const, externalId })),
       ...values(input.claims.roles ?? input.claims.role ?? input.claims.appRoles).map((externalId) => ({ type: 'role' as const, externalId })),
       ...scopes.map((externalId) => ({ type: 'scope' as const, externalId })),
+      ...(emailDomain ? [{ type: 'attribute' as const, externalId: `email_domain:${emailDomain}` }] : []),
     ];
     return {
       providerKey: input.providerKey.trim(), providerType: 'oidc', subjectId,
-      username: input.username?.trim() || undefined, email: input.email?.trim().toLowerCase() || undefined,
+      username: input.username?.trim() || undefined, email,
       directoryTenantId: input.directoryTenantId?.trim() || undefined, observedAt: input.observedAt ?? Date.now(),
       entitlements: entitlements.filter((entry, index) => entitlements.findIndex((candidate) => candidate.type === entry.type && candidate.externalId === entry.externalId) === index),
     };

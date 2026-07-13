@@ -49,6 +49,13 @@ function scopeValues(value: unknown): string[] {
   return values(value).flatMap((entry) => entry.split(/\s+/)).filter(Boolean).sort();
 }
 
+function emailDomainValue(email?: string | null): string | null {
+  const normalized = email?.trim().toLowerCase() || '';
+  const atIndex = normalized.lastIndexOf('@');
+  if (atIndex <= 0 || atIndex === normalized.length - 1) return null;
+  return normalized.slice(atIndex + 1);
+}
+
 function entitlement(type: ExternalEntitlementType, value: string): ExternalEntitlement {
   return { type, externalId: value };
 }
@@ -84,6 +91,9 @@ class ClaimsIdentityAdapter implements IdentityProviderAdapter {
       ...values(claims.groups ?? claims.group ?? claims.memberOf).map((value) => entitlement('group', value)),
       ...values(claims.roles ?? claims.role ?? claims.appRoles).map((value) => entitlement('role', value)),
       ...scopeValues(claims.scp ?? claims.scope).map((value) => entitlement('scope', value)),
+      // Store only the domain, never the email address, as an authorization
+      // attribute. This supports exact provider-neutral email-domain mapping.
+      ...(emailDomainValue(input.email) ? [entitlement('attribute', `email_domain:${emailDomainValue(input.email)}`)] : []),
     ];
     const seen = new Set<string>();
     return {

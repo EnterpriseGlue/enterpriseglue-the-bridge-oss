@@ -303,4 +303,29 @@ describe('SsoClaimsMappingService', () => {
     expect(createIdentityMapping).not.toHaveBeenCalled();
     expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ roleId: 'system.platform.user' }), expect.anything());
   });
+
+  it('converts an exact legacy email-domain rule into a sanitized attribute mapping', async () => {
+    const legacy = { id: 'legacy-domain', isActive: true, claimType: 'email_domain', claimOperator: 'equals', claimValue: '*@enterpriseglue.ai', targetRole: 'admin' };
+    const provider = { id: 'provider-1', key: 'entra' };
+    const group = { id: 'group-1', key: 'enterpriseglue-admins', isArchived: false };
+    const getRepository = vi.fn((entity) => {
+      if (entity === SsoClaimsMapping) return { findOneBy: vi.fn().mockResolvedValue(legacy) };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(provider) };
+      if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue(group) };
+      if (entity === IdentityEntitlementMapping) return { findOne: vi.fn().mockResolvedValue(null) };
+      throw new Error(`Unexpected repository: ${entity.name}`);
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: async (callback: any) => callback({ getRepository }) });
+    createIdentityMapping.mockResolvedValue({ id: 'identity-domain-1', providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: 'attribute', externalId: 'email_domain:enterpriseglue.ai', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, configKey: null, sourceRef: null });
+    assignRole.mockResolvedValue({ id: 'assignment-1' });
+
+    await ssoClaimsMappingService.migrateToProviderNeutral('legacy-domain', {
+      providerKey: 'entra', targetGroupKey: group.key, createdById: 'admin-1',
+    });
+
+    expect(createIdentityMapping).toHaveBeenCalledWith({
+      providerKey: 'entra', targetGroupKey: group.key, entitlementType: 'attribute',
+      externalId: 'email_domain:enterpriseglue.ai', matchOperator: 'exact', syncMode: 'authoritative',
+    }, null, expect.anything());
+  });
 });
