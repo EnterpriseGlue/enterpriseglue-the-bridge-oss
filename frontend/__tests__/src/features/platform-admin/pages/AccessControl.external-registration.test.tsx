@@ -90,6 +90,7 @@ describe('AccessControl external registration', () => {
     expect(screen.getAllByText('Engine registration').length).toBeGreaterThan(0);
     expect(screen.getByText('engine:register')).toBeInTheDocument();
     expect(screen.getByLabelText('Client name')).toBeInTheDocument();
+    expect(document.getElementById('api-client-scope-config-bundle-manage')).toBeInTheDocument();
     expect(document.getElementById('api-client-scope-deployment-execute')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Create Client/i })).toBeDisabled();
     expect(screen.getAllByText('CI deployer').length).toBeGreaterThan(0);
@@ -131,6 +132,7 @@ describe('AccessControl external registration', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
     fireEvent.change(screen.getByLabelText('Client name'), { target: { value: 'Deploy bot' } });
+    fireEvent.click(document.getElementById('api-client-scope-config-bundle-manage')!);
     fireEvent.click(document.getElementById('api-client-scope-deployment-execute')!);
     const createClientButton = screen.getByRole('button', { name: /Create Client/i });
     await waitFor(() => expect(createClientButton).not.toBeDisabled());
@@ -138,7 +140,7 @@ describe('AccessControl external registration', () => {
 
     await waitFor(() => expect(createApiClient).toHaveBeenCalledWith({
       name: 'Deploy bot',
-      scopes: ['engine:register', 'deployment:execute'],
+      scopes: ['engine:register', 'config:bundle:manage', 'deployment:execute'],
     }));
   }, 60000);
 

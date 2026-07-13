@@ -2251,7 +2251,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add OpenAPI `x-enterpriseglue-authz` metadata.
 - [ ] ⬜ Add OpenAPI `x-enterpriseglue-authz` metadata for every Mission Control route, including collection filter mode and runtime resource resolver.
 - [ ] ⬜ Add route inventory entries and tests.
-- [ ] ⬜ Add API client/service account scopes for CI/CD config apply.
+- [x] ✅ Add the API-client-only `config:bundle:manage` scope for CI/CD configuration lifecycle routes. It is enforced together with a platform-scoped `platform:authz:roles:manage` RBAC assignment; deployment service accounts intentionally remain deployment-only.
 - [ ] ⬜ Add rate limits and payload size limits.
 
 ### Phase 6: UI
@@ -2286,7 +2286,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add `pnpm authz:config` CLI commands for validate, preview, hash-bound apply, and export. It uses machine credentials, prints JSON for CI, and returns distinct nonzero usage/validation/request exit codes.
 - [x] ✅ Add a manually dispatched, environment-protected GitHub Actions preview/apply workflow. It requires a reviewed commit SHA, uploads sanitized receipts, serializes target-environment runs, and requires an explicit `APPLY` confirmation for mutation.
 - [ ] ⬜ Add Docker/Kubernetes secret reference examples.
-- [ ] ⬜ Add documentation for least-privilege API client creation.
+- [x] ✅ Document least-privilege configuration API-client creation, scoped role assignment, Environment-secret storage, and rotation/revocation.
 - [x] ✅ Add machine-readable CLI output and distinct usage, preview-validation, and request/runtime exit codes for CI. Finer-grained authorization, conflict, and reconciliation exit codes remain pending.
 - [ ] ⬜ Add disabled-by-default `EG_CONFIG_*` settings to shared config validation, `backend/.env.example`, every Docker/OpenShift env example, `docs/reference/configuration.md`, and `docs/reference/configuration-matrix.md`.
 - [ ] ⬜ Add optional `infra/docker/compose/docker-compose.config-bundle.yml` with read-only bundle and separate secret mounts; update dev, production, image, and self-host startup paths to include it only when configured.

@@ -4,7 +4,7 @@
  * Provides authorization check endpoint and policy management for admins.
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { z } from 'zod';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
@@ -20,6 +20,7 @@ import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/pers
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { requireApiClientAction } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import {
@@ -36,6 +37,7 @@ import {
   deploymentEligibilityService,
   apiClientService,
   serviceAccountService,
+  API_CLIENT_TOKEN_PREFIX,
   ApiClientScopes,
   ServiceAccountScopes,
   AllPermissions,
@@ -411,7 +413,11 @@ async function assertCanRemoveScopedAssignment(req: Request, id: string): Promis
 
 const apiClientCreateSchema = z.object({
   name: z.string().min(1).max(255),
-  scopes: z.array(z.enum([ApiClientScopes.ENGINE_REGISTER, ApiClientScopes.DEPLOYMENT_EXECUTE])).min(1).optional(),
+  scopes: z.array(z.enum([
+    ApiClientScopes.CONFIG_BUNDLE_MANAGE,
+    ApiClientScopes.ENGINE_REGISTER,
+    ApiClientScopes.DEPLOYMENT_EXECUTE,
+  ])).min(1).optional(),
 });
 
 const serviceAccountCreateSchema = z.object({
@@ -696,6 +702,29 @@ const router = Router();
 
 function requirePlatformAction(actionId: string) {
   return requireAction(actionId, { resourceResolver: 'platform.self' });
+}
+
+function hasApiClientBearerToken(req: Request): boolean {
+  const authorization = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+  return authorization.startsWith(`Bearer ${API_CLIENT_TOKEN_PREFIX}_`);
+}
+
+/**
+ * Config bundles can be changed by an interactive platform administrator or
+ * by an explicitly scoped API client that also holds the matching RBAC action.
+ */
+function requireConfigBundleAccess(req: Request, res: Response, next: NextFunction) {
+  if (hasApiClientBearerToken(req)) {
+    return requireApiClientAction(
+      ApiClientScopes.CONFIG_BUNDLE_MANAGE,
+      'platform.authz.roles.manage',
+    )(req, res, next);
+  }
+
+  return requireAuth(req, res, (error?: unknown) => {
+    if (error) return next(error);
+    return requirePlatformAction('platform.authz.roles.manage')(req, res, next);
+  });
 }
 
 function parseJsonObject(value: string | null | undefined): Record<string, unknown> | null {
@@ -1306,27 +1335,28 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
 }));
 
 /** Validate a config bundle for CI/CD without resolving secrets or mutating state. */
-router.post('/api/authz/config-bundles/preview', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/config-bundles/preview', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
   const preview = configBundlePreviewService.preview(req.body);
   res.status(preview.valid ? 200 : 422).json(preview);
 }));
 
 /** Compare a validated bundle with persisted config-owned role and group state. */
-router.post('/api/authz/config-bundles/diff', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/config-bundles/diff', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
   const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null);
   res.status(diff.valid ? 200 : 422).json(diff);
 }));
 
 /** Apply a hash-bound config bundle after a successful persisted-state diff. */
-router.post('/api/authz/config-bundles/apply', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(configBundleApplySchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/config-bundles/apply', apiLimiter, requireConfigBundleAccess, validateBody(configBundleApplySchema), asyncHandler(async (req: Request, res: Response) => {
+  const actorId = req.apiClient?.createdById || req.apiClient?.id || req.user!.userId;
   const result = await configBundleApplyService.apply({
     ...req.body,
     tenantId: req.tenant?.tenantId || null,
-    actorId: req.user!.userId,
+    actorId,
   });
   await logAudit({
     tenantId: req.tenant?.tenantId || undefined,
-    userId: req.user!.userId,
+    userId: actorId,
     action: 'authz.config_bundle.apply',
     resourceType: 'config_bundle',
     resourceId: String((req.body.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
@@ -1336,13 +1366,15 @@ router.post('/api/authz/config-bundles/apply', apiLimiter, requireAuth, requireP
       updated: result.updated,
       archived: result.archived,
       mode: (req.body.bundle as { mode?: string })?.mode || null,
+      actorType: req.apiClient ? 'api_client' : 'user',
+      apiClientId: req.apiClient?.id || null,
     },
   });
   res.status(200).json(result);
 }));
 
 /** Recent hash-bound applies are the operational history for UI and CI diagnostics. */
-router.get('/api/authz/config-bundles/runs', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
+router.get('/api/authz/config-bundles/runs', apiLimiter, requireConfigBundleAccess, validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenant?.tenantId || null;
   const rows = await (await getDataSource()).getRepository(AuditLog).find({
     where: { action: 'authz.config_bundle.apply', ...(tenantId ? { tenantId } : { tenantId: IsNull() }) },
@@ -1356,7 +1388,7 @@ router.get('/api/authz/config-bundles/runs', apiLimiter, requireAuth, requirePla
   }));
 }));
 
-router.get('/api/authz/config-bundles/export', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateQuery(z.object({ bundleKey: z.string().min(3).max(160), tenantKey: z.string().min(1).max(160).optional() })), asyncHandler(async (req: Request, res: Response) => {
+router.get('/api/authz/config-bundles/export', apiLimiter, requireConfigBundleAccess, validateQuery(z.object({ bundleKey: z.string().min(3).max(160), tenantKey: z.string().min(1).max(160).optional() })), asyncHandler(async (req: Request, res: Response) => {
   res.json(await configBundleExportService.exportBundle({ bundleKey: String(req.query.bundleKey), tenantKey: req.query.tenantKey ? String(req.query.tenantKey) : undefined, tenantId: req.tenant?.tenantId || null }));
 }));
 

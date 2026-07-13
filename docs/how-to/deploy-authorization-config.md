@@ -120,7 +120,15 @@ schema validate
 -> archive receipt and sanitized diff
 ```
 
-Machine access currently uses a dedicated bearer token whose principal has `platform.authz.roles.manage`. It must not use a human Platform Admin token. Dedicated API-client/service-account scopes are still planned; until then, issue and rotate a narrow non-human credential through the deployment secret store.
+Machine access uses a dedicated API client with the `config:bundle:manage` scope and a scoped role assignment that grants `platform:authz:roles:manage`. Both checks are required. It must not use a human Platform Admin token; issue and rotate the reveal-once machine token through the deployment secret store.
+
+### Create A Least-Privilege Configuration Client
+
+1. In **Platform Settings > Access Control > API clients**, create an API client with only **Configuration bundles** selected.
+2. In **Role Library**, create a platform-scoped custom role containing only `platform:authz:roles:manage` unless a broader reviewed configuration role already exists.
+3. In **Assignments**, assign that role to the API client at platform scope.
+4. Store the reveal-once token as the target GitHub Environment's `ENTERPRISEGLUE_CONFIG_TOKEN` secret. Record its prefix, owner, target environment, and rotation date outside the bundle.
+5. Revoke or rotate the token immediately after a suspected leak. A client without the scope, without the RBAC role assignment, or after revocation cannot preview, apply, export, or read bundle history.
 
 Use the repository CLI:
 
@@ -150,7 +158,7 @@ The CLI calls the same backend APIs used by the UI. It never connects directly t
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
 
 - `ENTERPRISEGLUE_API_URL` as an Environment variable;
-- `ENTERPRISEGLUE_CONFIG_TOKEN` as an Environment secret for a non-human principal with `platform.authz.roles.manage`;
+- `ENTERPRISEGLUE_CONFIG_TOKEN` as an Environment secret for an API client with `config:bundle:manage` and an RBAC assignment granting `platform:authz:roles:manage`;
 - required reviewers for environments that permit `apply`.
 
 Dispatch `preview` first against an immutable reviewed commit SHA, inspect the uploaded JSON receipt, then dispatch `apply` for that same SHA. The workflow requires the literal `APPLY` confirmation and serializes runs per environment. It is intentionally not triggered by pull requests and never uses a repository-wide human credential.

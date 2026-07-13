@@ -78,6 +78,20 @@ describe('ApiClientService', () => {
       });
   });
 
+  it('supports configuration bundle scoped tokens', async () => {
+    const created = await service.createClient({
+      name: 'Configuration automation',
+      scopes: [ApiClientScopes.CONFIG_BUNDLE_MANAGE],
+    });
+
+    await expect(service.authenticateToken(created.token, ApiClientScopes.CONFIG_BUNDLE_MANAGE))
+      .resolves
+      .toMatchObject({
+        id: created.client.id,
+        scopes: [ApiClientScopes.CONFIG_BUNDLE_MANAGE],
+      });
+  });
+
   it('rejects tokens without the required scope', async () => {
     const created = await service.createClient({ name: 'Engine registration', scopes: [ApiClientScopes.ENGINE_REGISTER] });
     rows[0].scopesJson = JSON.stringify([]);

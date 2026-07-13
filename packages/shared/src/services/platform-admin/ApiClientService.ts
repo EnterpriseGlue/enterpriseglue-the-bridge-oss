@@ -8,6 +8,7 @@ import { hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/passw
 export const API_CLIENT_TOKEN_PREFIX = 'egac';
 
 export const ApiClientScopes = {
+  CONFIG_BUNDLE_MANAGE: 'config:bundle:manage',
   ENGINE_REGISTER: 'engine:register',
   DEPLOYMENT_EXECUTE: 'deployment:execute',
 } as const;

@@ -691,6 +691,7 @@ const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([
 ]);
 
 const API_CLIENT_SCOPE_OPTIONS = [
+  { id: 'config:bundle:manage', label: 'Configuration bundles' },
   { id: 'engine:register', label: 'Engine registration' },
   { id: 'deployment:execute', label: 'Deployment execution' },
 ];

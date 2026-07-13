@@ -46,6 +46,7 @@ jobs:
       ENTERPRISEGLUE_API_URL: ${{ vars.ENTERPRISEGLUE_API_URL }}
       ENTERPRISEGLUE_API_TOKEN: ${{ secrets.ENTERPRISEGLUE_CONFIG_TOKEN }}
       BUNDLE_PATH: ${{ inputs.bundle_path }}
+      GIT_REF: ${{ inputs.git_ref }}
       OPERATION: ${{ inputs.operation }}
       CONFIRM_APPLY: ${{ inputs.confirm_apply }}
     steps:
@@ -77,6 +78,10 @@ jobs:
           git ls-files --error-unmatch -- "$BUNDLE_PATH" >/dev/null
           if [[ "$OPERATION" == "apply" && "$CONFIRM_APPLY" != "APPLY" ]]; then
             echo "Apply requires confirm_apply=APPLY" >&2
+            exit 64
+          fi
+          if [[ "$OPERATION" == "apply" && ! "$GIT_REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "Apply requires git_ref to be a full immutable commit SHA" >&2
             exit 64
           fi
 

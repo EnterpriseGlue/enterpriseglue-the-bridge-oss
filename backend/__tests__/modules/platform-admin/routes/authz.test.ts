@@ -20,6 +20,12 @@ const sharedPermissionServiceMock = vi.hoisted(() => ({
 const configBundleApplyMock = vi.hoisted(() => ({
   apply: vi.fn().mockResolvedValue({ canonicalHash: 'preview-hash', created: 2, updated: 0, archived: 0, changes: [] }),
 }));
+const apiClientAuthMock = vi.hoisted(() => ({
+  requireApiClientAction: vi.fn(() => (req: any, _res: any, next: any) => {
+    req.apiClient = { id: 'client-1', createdById: 'user-1', scopes: ['config:bundle:manage'] };
+    next();
+  }),
+}));
 
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
@@ -31,6 +37,8 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
     next();
   },
 }));
+
+vi.mock('@enterpriseglue/shared/middleware/apiClientAuth.js', () => apiClientAuthMock);
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -108,9 +116,11 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
     DEPLOYMENT_EXECUTE: 'deployment:execute',
   },
   ApiClientScopes: {
+    CONFIG_BUNDLE_MANAGE: 'config:bundle:manage',
     ENGINE_REGISTER: 'engine:register',
     DEPLOYMENT_EXECUTE: 'deployment:execute',
   },
+  API_CLIENT_TOKEN_PREFIX: 'egac',
   ssoClaimsMappingService: {
     getAllMappings: vi.fn().mockResolvedValue([]),
     createMapping: vi.fn().mockResolvedValue({ id: 'sso-mapping-1' }),
@@ -1961,6 +1971,26 @@ describe('platform-admin authz routes', () => {
     expect(response.body).toMatchObject({ canonicalHash: 'preview-hash', created: 2 });
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       expectedPreviewHash: 'preview-hash',
+      actorId: 'user-1',
+    }));
+  });
+
+  it('allows configuration-scoped API clients to apply bundles and preserves machine audit lineage', async () => {
+    const response = await request(app)
+      .post('/api/authz/config-bundles/apply')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle' },
+        files: {},
+        expectedPreviewHash: 'preview-hash',
+      });
+
+    expect(response.status).toBe(200);
+    expect(apiClientAuthMock.requireApiClientAction).toHaveBeenCalledWith(
+      'config:bundle:manage',
+      'platform.authz.roles.manage',
+    );
+    expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       actorId: 'user-1',
     }));
   });

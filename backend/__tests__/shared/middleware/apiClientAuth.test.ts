@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ApiClientService.js', () => ({
   ApiClientScopes: {
+    CONFIG_BUNDLE_MANAGE: 'config:bundle:manage',
     ENGINE_REGISTER: 'engine:register',
     DEPLOYMENT_EXECUTE: 'deployment:execute',
   },
@@ -130,6 +131,38 @@ describe('apiClientAuth middleware', () => {
       statusCode: 403,
       message: 'API client is not authorized for action: engine.external-registration.upsert',
     }));
+  });
+
+  it('authorizes configuration API clients only with the configuration scope and RBAC action', async () => {
+    mocks.authenticateToken.mockResolvedValueOnce({
+      id: 'api-client-1',
+      name: 'Configuration automation',
+      tokenPrefix: 'egac_api-cli',
+      scopes: ['config:bundle:manage'],
+      isActive: true,
+      createdById: 'admin-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      authenticatedAt: Date.now(),
+    });
+    const req: any = {
+      headers: { authorization: 'Bearer token-1' },
+      tenant: { tenantId: 'tenant-1' },
+    };
+    const next = vi.fn();
+
+    await requireApiClientAction('config:bundle:manage', 'platform.authz.roles.manage')(req, {} as any, next);
+
+    expect(mocks.authenticateToken).toHaveBeenCalledWith('token-1', 'config:bundle:manage');
+    expect(mocks.hasPermission).toHaveBeenCalledWith('platform:authz:roles:manage', {
+      principalType: 'api_client',
+      principalId: 'api-client-1',
+      tenantId: 'tenant-1',
+      resourceType: 'platform',
+    });
+    expect(next).toHaveBeenCalledWith();
   });
 
   it('authorizes engine-registration API clients against an external-system scoped role assignment', async () => {
