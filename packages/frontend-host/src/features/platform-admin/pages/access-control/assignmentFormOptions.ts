@@ -9,6 +9,7 @@ export type AssignmentFormValues = {
   resourceType: CoreAssignmentResourceType;
   resourceId: string;
 };
+export type AssignmentFormState = AssignmentFormValues & { runtimeEngineId: string };
 
 const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([
   'system.api.engine_registrar',
