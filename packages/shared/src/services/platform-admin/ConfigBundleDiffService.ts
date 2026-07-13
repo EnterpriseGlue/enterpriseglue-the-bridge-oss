@@ -10,6 +10,7 @@ import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructur
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 
@@ -74,7 +75,7 @@ class ConfigBundleDiffService {
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources] = await Promise.all([
+    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
@@ -86,6 +87,7 @@ class ConfigBundleDiffService {
       dataSource.getRepository(ProjectEngineTarget).find(),
       dataSource.getRepository(RbacRoleAssignment).find(),
       dataSource.getRepository(RuntimeResource).find(),
+      dataSource.getRepository(Project).find(),
     ]);
     const rolePermissionsByRoleId = new Map<string, string[]>();
     for (const permission of rolePermissions) {
@@ -107,6 +109,7 @@ class ConfigBundleDiffService {
     const identityMappingsByKey = new Map(tenantIdentityMappings.filter((mapping) => mapping.configKey).map((mapping) => [mapping.configKey!, mapping]));
     const tenantProjectEngineTargets = projectEngineTargets.filter((target) => (target.tenantId || null) === normalizedTenantId);
     const projectEngineTargetsByPair = new Map(tenantProjectEngineTargets.map((target) => [`${target.projectId}:${target.engineId}`, target]));
+    const tenantProjectIds = new Set(projects.filter((project) => (project.tenantId || null) === normalizedTenantId).map((project) => project.id));
     const tenantAssignments = assignments.filter((assignment) => (assignment.tenantId || null) === normalizedTenantId);
     const assignmentsByKey = new Map(tenantAssignments.map((assignment) => [assignment.assignmentKey, assignment]));
     const tenantRuntimeResources = runtimeResources.filter((resource) => (resource.tenantId || null) === normalizedTenantId);
@@ -252,7 +255,7 @@ class ConfigBundleDiffService {
       const projectId = target.projectRef.id;
       const engine = enginesByConfigKey.get(target.engineRef.engineKey);
       const key = target.key || `${projectId || 'unresolved-project'}:${target.engineRef.engineKey}`;
-      if (!projectId || !engine) {
+      if (!projectId || !tenantProjectIds.has(projectId) || !engine) {
         changes.push({ objectType: 'project_engine_target', key, operation: 'conflict', reason: 'Project-engine target references an unresolved project id or configured engine' });
         continue;
       }
