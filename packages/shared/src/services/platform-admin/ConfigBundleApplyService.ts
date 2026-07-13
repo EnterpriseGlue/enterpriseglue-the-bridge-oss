@@ -591,6 +591,7 @@ class ConfigBundleApplyService {
       const sourceRef = `config_bundle:${manifest.metadata.key}`;
       const desiredKeys = new Set<string>();
       for (const assignment of desiredAssignments) {
+        const sourceHash = objectFingerprint('assignment', assignment.key || hashCanonicalConfig(assignment), assignment);
         if (assignment.principal.type !== 'group') fail('Config apply currently supports group principals only', 422);
         if (!['platform', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(assignment.scope.type)) fail(`Config apply does not yet support ${assignment.scope.type} assignment scopes`, 422);
         const role = roleByKey.get(assignment.roleKey);
@@ -617,11 +618,11 @@ class ConfigBundleApplyService {
         const existing = await assignmentRepo.findOne({ where: { assignmentKey } });
         if (!existing) {
           const assignmentId = generateId();
-          await assignmentRepo.insert({ id: assignmentId, tenantId, userId: null, principalType: 'group', principalId: group.id, assignmentKey, roleId: role.id, resourceType: null, resourceId: null, scopeType: assignment.scope.type, scopeId: scopeId || null, source: 'config', sourceMappingId: null, sourceRef, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', expiresAt: assignment.expiresAt || null, lastSeenAt: now, createdById: input.actorId, createdAt: now, updatedAt: now });
+          await assignmentRepo.insert({ id: assignmentId, tenantId, userId: null, principalType: 'group', principalId: group.id, assignmentKey, roleId: role.id, resourceType: null, resourceId: null, scopeType: assignment.scope.type, scopeId: scopeId || null, source: 'config', sourceMappingId: null, sourceRef, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', expiresAt: assignment.expiresAt || null, lastSeenAt: now, createdById: input.actorId, createdAt: now, updatedAt: now });
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.assignment.create', resourceType: 'role_assignment', resourceId: assignmentId, details: { bundleKey: manifest.metadata.key, roleKey: assignment.roleKey, principalGroupKey: assignment.principal.key, scopeType: assignment.scope.type, canonicalHash: diff.canonicalHash } });
           created += 1;
         } else if (existing.expiresAt !== (assignment.expiresAt || null) || existing.ownershipMode !== (assignment.ownershipMode || 'config_locked')) {
-          await assignmentRepo.update({ id: existing.id }, { expiresAt: assignment.expiresAt || null, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', lastSeenAt: now, updatedAt: now });
+          await assignmentRepo.update({ id: existing.id }, { expiresAt: assignment.expiresAt || null, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', lastSeenAt: now, updatedAt: now });
           updated += 1;
         }
         await assignmentOverrideRepo.delete({ assignmentKey, sourceRef });
@@ -638,6 +639,7 @@ class ConfigBundleApplyService {
 
       const targetKeys = new Set<string>();
       for (const target of desiredTargets) {
+        const sourceHash = objectFingerprint('project_engine_target', target.key || `${target.projectRef.id}:${target.engineRef.engineKey}`, target);
         if (!target.projectRef.id) fail('Config project-engine targets currently require projectRef.id', 422);
         const project = await projectRepo.findOne({ where: { id: target.projectRef.id } });
         const engine = engineByKey.get(target.engineRef.engineKey);
@@ -646,7 +648,7 @@ class ConfigBundleApplyService {
         targetKeys.add(pairKey);
         const existing = await targetRepo.findOne({ where: { projectId: project.id, engineId: engine.id } });
         const values = {
-          status: target.status, source: 'config', sourceRef, ownershipMode: target.ownershipMode || 'config_locked', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', externalSystemId: null, externalProjectId: null, externalEngineId: null, externalTargetId: null,
+          status: target.status, source: 'config', sourceRef, ownershipMode: target.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', externalSystemId: null, externalProjectId: null, externalEngineId: null, externalTargetId: null,
           allowManualDeploy: target.allowManualDeploy, allowCiDeploy: target.allowCiDeploy, allowApiDeploy: target.allowApiDeploy, allowImport: target.allowImport,
           approvedById: null, approvalStatus: 'not_required', approvedAt: null, policyTagsJson: null, diagnosticsJson: null, lastSeenAt: now, updatedAt: now,
         };
