@@ -124,6 +124,7 @@ apply_config_bundle() {
     return
   fi
   [[ -f "$EG_CONFIG_BUNDLE_FILE" ]] || error "EG_CONFIG_BUNDLE_FILE does not exist: $EG_CONFIG_BUNDLE_FILE"
+  [[ "$OPENSHIFT_OVERLAY" != "dev" ]] || error "EG_CONFIG_BUNDLE_FILE requires a staging or prod overlay with the config-bundle component"
   [[ "${EG_CONFIG_BOOTSTRAP_MODE:-disabled}" != "disabled" ]] || error "EG_CONFIG_BOOTSTRAP_MODE must be validate or apply when EG_CONFIG_BUNDLE_FILE is set"
 
   local bundle_hash
@@ -205,9 +206,11 @@ main() {
   print_arch_summary
   create_or_update_pull_secret
   apply_base_manifests
-  apply_config_bundle
   apply_runtime_secret
   apply_runtime_config
+  # Runtime ConfigMap values must exist before this hash annotation triggers a
+  # new backend pod. Otherwise a rollout can start with stale bootstrap mode.
+  apply_config_bundle
   set_images_and_route
   wait_for_rollout
   verify_health
