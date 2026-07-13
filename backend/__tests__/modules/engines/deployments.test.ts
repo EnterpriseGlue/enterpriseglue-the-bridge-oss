@@ -6,6 +6,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import { apiClientService } from '@enterpriseglue/shared/services/platform-admin/ApiClientService.js';
 import { serviceAccountService } from '@enterpriseglue/shared/services/platform-admin/ServiceAccountService.js';
 import { deploymentEligibilityService } from '@enterpriseglue/shared/services/platform-admin/DeploymentEligibilityService.js';
+import { getAuthzActionDefinition } from '@enterpriseglue/shared/authz/permission-actions.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -204,6 +205,12 @@ describe('engines deployments routes', () => {
           insert: vi.fn().mockResolvedValue({}),
         };
       },
+    });
+  });
+
+  it('registers engine.deployment-receipts.create as a high-risk audited action', () => {
+    expect(getAuthzActionDefinition('engine.deployment-receipts.create')).toMatchObject({
+      permissionId: 'engine:deploy', risk: 'high', audit: true,
     });
   });
 
