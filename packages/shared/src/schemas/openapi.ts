@@ -3490,10 +3490,18 @@ const ConfigBundleRequestOpenApiSchema = z.object({
   files: z.record(z.string(), z.unknown()),
 });
 
+const ConfigBundleValidationIssueOpenApiSchema = z.object({
+  path: z.string(),
+  message: z.string(),
+  severity: z.literal('error'),
+  remediation: z.string(),
+  objectKey: z.string().optional(),
+});
+
 const ConfigBundlePreviewResponseOpenApiSchema = z.object({
   valid: z.boolean(),
   canonicalHash: z.string().optional(),
-  errors: z.array(z.object({ path: z.string(), message: z.string() })),
+  errors: z.array(ConfigBundleValidationIssueOpenApiSchema),
   counts: z.record(z.string(), z.number().int().nonnegative()),
   expandedRolePermissions: z.record(z.string(), z.array(z.string())).optional(),
   roleTemplateBaselines: z.record(z.string(), z.object({ copyFromRoleKey: z.string(), fingerprint: z.string(), permissions: z.array(z.string()) })).optional(),
@@ -3504,7 +3512,7 @@ const ConfigBundleSecretPreflightResponseOpenApiSchema = z.object({
   canonicalHash: z.string().optional(),
   availabilityHash: z.string().optional(),
   available: z.boolean(),
-  errors: z.array(z.object({ path: z.string(), message: z.string() })),
+  errors: z.array(ConfigBundleValidationIssueOpenApiSchema),
   references: z.array(z.object({
     reference: z.string(),
     locations: z.array(z.string()),

@@ -31,6 +31,7 @@ describe('configBundlePreviewService', () => {
         },
         './assignments.json': {
           assignments: [{
+            key: 'assignment.missing',
             principal: { type: 'group', key: 'group.missing' },
             roleKey: 'custom.engine.operator',
             scope: { type: 'engine', engineKey: 'engine.missing' },
@@ -41,7 +42,13 @@ describe('configBundlePreviewService', () => {
 
     expect(result).toMatchObject({ valid: false });
     expect(result.errors).toEqual(expect.arrayContaining([
-      expect.objectContaining({ path: './assignments.json.assignments.0.principal.key', message: 'Unknown group key: group.missing' }),
+      expect.objectContaining({
+        path: './assignments.json.assignments.0.principal.key',
+        message: 'Unknown group key: group.missing',
+        severity: 'error',
+        objectKey: 'assignment.missing',
+        remediation: expect.stringContaining('Define the referenced object'),
+      }),
       expect.objectContaining({ path: './assignments.json.assignments.0.scope.engineKey', message: 'Unknown engine key: engine.missing' }),
     ]));
   });

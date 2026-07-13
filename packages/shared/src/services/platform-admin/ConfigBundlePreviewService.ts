@@ -20,10 +20,17 @@ const FILE_SCHEMAS: Record<string, z.ZodType> = {
 };
 
 export interface ConfigBundlePreviewInput { bundle: unknown; files: Record<string, unknown>; }
+export interface ConfigBundleValidationIssue {
+  path: string;
+  message: string;
+  severity: 'error';
+  remediation: string;
+  objectKey?: string;
+}
 export interface ConfigBundlePreview {
   valid: boolean;
   canonicalHash?: string;
-  errors: Array<{ path: string; message: string }>;
+  errors: ConfigBundleValidationIssue[];
   counts: Record<string, number>;
   /** Explicit effective permissions for copied config roles; never a runtime authorization source. */
   expandedRolePermissions?: Record<string, string[]>;
@@ -37,8 +44,57 @@ export interface ConfigBundleCompilation {
   files?: Record<string, unknown>;
 }
 
-function issues(prefix: string, error: z.ZodError): Array<{ path: string; message: string }> {
+type RawValidationIssue = Pick<ConfigBundleValidationIssue, 'path' | 'message'>;
+
+function issues(prefix: string, error: z.ZodError): RawValidationIssue[] {
   return error.issues.map((issue) => ({ path: [prefix, ...issue.path].join('.'), message: issue.message }));
+}
+
+function remediationFor(message: string): string {
+  if (message.includes('Imported file is missing')) return 'Add the declared file to the bundle files map, or remove it from bundle.imports.';
+  if (message.includes('File is not declared')) return 'Add the file path to bundle.imports, or remove the undeclared file from the bundle.';
+  if (message.includes('Unknown permission')) return 'Use a permission id from the EnterpriseGlue permission catalog that matches the role scope.';
+  if (message.includes('Unknown role key') || message.includes('Unknown group key') || message.includes('Unknown engine key') || message.includes('Unknown Engine Set key') || message.includes('Unknown runtime resource set key')) return 'Define the referenced object in this bundle or use an existing stable key.';
+  if (message.includes('scope')) return 'Use values that share the required authorization scope.';
+  if (message.includes('Duplicate')) return 'Use one unique stable key or import path for each configuration object.';
+  if (message.includes('plaintext') || message.includes('Secret')) return 'Replace the value with an allowed opaque env:// or file:// secret reference.';
+  return 'Correct the value at this path and run preview again before applying the bundle.';
+}
+
+function objectKeyForPath(path: string, input: ConfigBundlePreviewInput): string | undefined {
+  const candidates: Array<{ prefix: string; value: unknown }> = [
+    { prefix: 'bundle', value: input.bundle },
+    ...Object.entries(input.files).map(([prefix, value]) => ({ prefix, value })),
+  ].sort((left, right) => right.prefix.length - left.prefix.length);
+  const candidate = candidates.find(({ prefix }) => path === prefix || path.startsWith(`${prefix}.`));
+  if (!candidate) return undefined;
+
+  const segments = path.slice(candidate.prefix.length).replace(/^\./, '').split('.').filter(Boolean);
+  let current: unknown = candidate.value;
+  let objectKey: string | undefined;
+  for (const segment of segments) {
+    if (!current || typeof current !== 'object') break;
+    const next = (current as Record<string, unknown>)[segment];
+    // Config-object keys live on entries of a top-level collection. Do not
+    // mistake nested reference fields such as principal.key for object keys.
+    if (Array.isArray(current) && next && typeof next === 'object' && typeof (next as { key?: unknown }).key === 'string') {
+      objectKey = (next as { key: string }).key;
+    }
+    current = next;
+  }
+  return objectKey;
+}
+
+function enrichIssues(errors: RawValidationIssue[], input: ConfigBundlePreviewInput): ConfigBundleValidationIssue[] {
+  return errors.map((issue) => {
+    const objectKey = objectKeyForPath(issue.path, input);
+    return {
+      ...issue,
+      severity: 'error',
+      remediation: remediationFor(issue.message),
+      ...(objectKey ? { objectKey } : {}),
+    };
+  });
 }
 
 function fileEntries(normalizedFiles: Record<string, unknown>, path: string, property: string): any[] {
@@ -52,8 +108,8 @@ function fileEntries(normalizedFiles: Record<string, unknown>, path: string, pro
  * its references against persisted records. This phase deliberately does not
  * touch the database or attempt connectivity/secret resolution.
  */
-function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): Array<{ path: string; message: string }> {
-  const errors: Array<{ path: string; message: string }> = [];
+function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): RawValidationIssue[] {
+  const errors: RawValidationIssue[] = [];
   const roles = fileEntries(normalizedFiles, './roles.json', 'roles');
   const groups = fileEntries(normalizedFiles, './groups.json', 'groups');
   const engines = fileEntries(normalizedFiles, './engines.json', 'engines');
@@ -144,7 +200,7 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
 }
 
 function expandRoleTemplates(normalizedFiles: Record<string, unknown>): {
-  errors: Array<{ path: string; message: string }>;
+  errors: RawValidationIssue[];
   expandedRolePermissions: Record<string, string[]>;
   roleTemplateBaselines: Record<string, { copyFromRoleKey: string; fingerprint: string; permissions: string[] }>;
 } {
@@ -157,7 +213,7 @@ function expandRoleTemplates(normalizedFiles: Record<string, unknown>): {
   const resolved = new Map<string, string[]>();
   const roleTemplateBaselines: Record<string, { copyFromRoleKey: string; fingerprint: string; permissions: string[] }> = {};
   const resolving = new Set<string>();
-  const errors: Array<{ path: string; message: string }> = [];
+  const errors: RawValidationIssue[] = [];
 
   const resolve = (key: string): string[] | null => {
     const cached = resolved.get(key);
@@ -215,8 +271,8 @@ function expandRoleTemplates(normalizedFiles: Record<string, unknown>): {
 class ConfigBundlePreviewService {
   compile(input: ConfigBundlePreviewInput): ConfigBundleCompilation {
     const parsedBundle = EnterpriseGlueConfigBundleSchema.safeParse(input.bundle);
-    if (!parsedBundle.success) return { preview: { valid: false, errors: issues('bundle', parsedBundle.error), counts: {} } };
-    const errors: Array<{ path: string; message: string }> = [];
+    if (!parsedBundle.success) return { preview: { valid: false, errors: enrichIssues(issues('bundle', parsedBundle.error), input), counts: {} } };
+    const errors: RawValidationIssue[] = [];
     const counts: Record<string, number> = {};
     const normalizedFiles: Record<string, unknown> = {};
     for (const path of parsedBundle.data.imports) {
@@ -239,7 +295,7 @@ class ConfigBundlePreviewService {
         roleTemplateBaselines = expanded.roleTemplateBaselines;
       }
     }
-    if (errors.length > 0) return { preview: { valid: false, errors, counts } };
+    if (errors.length > 0) return { preview: { valid: false, errors: enrichIssues(errors, input), counts } };
     return {
       preview: {
         valid: true,

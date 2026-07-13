@@ -391,7 +391,7 @@ Interface requirements:
 
 - [x] ✅ Accept a single JSON envelope or a folder-style ZIP containing `bundle.json` plus declared imported JSON files. ZIP content is converted to the same envelope before normal validation, diff, or apply.
 - [ ] ⬜ Reject undeclared files, path traversal, duplicate object keys, unknown schema versions, plaintext secrets, and test-only fixture files.
-- [ ] ⬜ Extend current file-and-path validation errors with object keys, severity, and remediation guidance.
+- [x] ✅ Extend config-bundle preview, diff, and secret-preflight validation errors with object keys when derivable, error severity, and deterministic remediation guidance for UI and CI/CD consumers.
 - [x] ✅ Make the current schema preview side-effect free; provider connectivity checks are explicit optional operations, never implicit network calls during schema validation.
 - [ ] ⬜ Bind apply to the exact canonical preview hash and reject stale previews.
 - [ ] ⬜ Execute domain writes through existing role/group/engine/assignment/mapping/target services or shared lower-level commands used by both UI and bundle apply.

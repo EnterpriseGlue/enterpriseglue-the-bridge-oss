@@ -1,4 +1,4 @@
-import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
+import { configBundlePreviewService, type ConfigBundlePreviewInput, type ConfigBundleValidationIssue } from './ConfigBundlePreviewService.js';
 import { secretResolver, type SecretReferenceAvailability } from './SecretResolver.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 
@@ -12,7 +12,7 @@ export interface ConfigBundleSecretPreflight {
   canonicalHash?: string;
   availabilityHash?: string;
   available: boolean;
-  errors: Array<{ path: string; message: string }>;
+  errors: ConfigBundleValidationIssue[];
   references: ConfigBundleSecretReferenceStatus[];
 }
 
