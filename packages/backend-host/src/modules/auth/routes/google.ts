@@ -17,6 +17,13 @@ import {
 import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import {
+  appendSsoStartQuery,
+  getSsoRedirectUrl,
+  getSsoReturnPath,
+  notifySsoUserProvisioned,
+  parseSsoState,
+} from './sso-state.js';
 
 const router = Router();
 
@@ -46,7 +53,7 @@ router.get('/api/auth/google', apiLimiter, asyncHandler(async (req: Request, res
     });
   }
 
-  return res.redirect('/api/auth/google/start');
+  return res.redirect(appendSsoStartQuery(req, '/api/auth/google/start'));
 }));
 
 /**
@@ -75,6 +82,8 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
       logger.error('[Google Auth] State mismatch - possible CSRF attack');
       return res.status(400).json({ error: 'Invalid state parameter' });
     }
+
+    const ssoState = parseSsoState(state);
 
     // Clear state cookie
     res.clearCookie('oauth_state');
@@ -125,6 +134,14 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
       return res.redirect(errorUrl);
     }
 
+    await notifySsoUserProvisioned(req, {
+      provider: 'google',
+      tenantSlug: ssoState?.tenantSlug ?? null,
+      returnTo: getSsoReturnPath(ssoState),
+      user,
+      userInfo,
+    });
+
     // Generate JWT tokens
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
@@ -155,7 +172,7 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
       maxAge: config.jwtRefreshTokenExpires * 1000,
     });
 
-    res.redirect(`${config.frontendUrl}/`);
+    res.redirect(getSsoRedirectUrl(ssoState));
 }));
 
 export default router;

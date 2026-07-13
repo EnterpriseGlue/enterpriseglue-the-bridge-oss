@@ -78,6 +78,7 @@ const testCookieParser: express.RequestHandler = (req, _res, next) => {
 
 describe('Google OAuth flow e2e harness', () => {
   let app: express.Application;
+  let ssoProvisionedHook: Mock;
 
   beforeEach(() => {
     app = express();
@@ -87,6 +88,8 @@ describe('Google OAuth flow e2e harness', () => {
     app.use(googleRouter);
     app.use(googleStartRouter);
     app.use(errorHandler);
+    ssoProvisionedHook = vi.fn().mockResolvedValue(undefined);
+    app.locals.onSsoUserProvisioned = ssoProvisionedHook;
 
     vi.clearAllMocks();
 
@@ -145,6 +148,38 @@ describe('Google OAuth flow e2e harness', () => {
     expect(provisionGoogleUser as unknown as Mock).toHaveBeenCalledWith(
       expect.objectContaining({ email: 'google-user@example.com', sub: 'google-123' })
     );
+    expect(ssoProvisionedHook).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'google',
+      tenantSlug: null,
+      returnTo: '/',
+      user: expect.objectContaining({ id: 'user-1' }),
+    }));
+  });
+
+  it('preserves tenant context through Google start and callback', async () => {
+    const agent = request.agent(app);
+
+    const initResponse = await agent.get('/api/auth/google?tenantSlug=default');
+    expect(initResponse.status).toBe(302);
+    expect(initResponse.headers.location).toBe('/api/auth/google/start?tenantSlug=default');
+
+    const startResponse = await agent.get(initResponse.headers.location);
+    expect(startResponse.status).toBe(302);
+    const state = getCookieValue(getSetCookieHeader(startResponse.headers), 'oauth_state');
+    expect(state).toBeTruthy();
+    expect(getGoogleAuthorizationUrl as unknown as Mock).toHaveBeenCalledWith(state);
+
+    const callbackResponse = await agent
+      .get('/api/auth/google/callback')
+      .query({ code: 'auth-code', state });
+
+    expect(callbackResponse.status).toBe(302);
+    expect(callbackResponse.headers.location).toBe(`${config.frontendUrl}/t/default/`);
+    expect(ssoProvisionedHook).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'google',
+      tenantSlug: 'default',
+      returnTo: '/t/default/',
+    }));
   });
 
   it('rejects callback when state does not match cookie', async () => {

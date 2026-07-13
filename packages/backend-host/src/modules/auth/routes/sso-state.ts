@@ -2,7 +2,7 @@ import type { Request } from 'express';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { signSamlRelayState, verifySamlRelayState } from '@enterpriseglue/shared/utils/samlRelayState.js';
 
-export type SsoProviderType = 'microsoft' | 'saml' | 'oidc' | 'ldap';
+export type SsoProviderType = 'microsoft' | 'google' | 'saml' | 'oidc' | 'ldap';
 
 export interface SsoState {
   timestamp: number;

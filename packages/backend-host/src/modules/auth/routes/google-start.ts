@@ -4,6 +4,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { isGoogleAuthEnabled, getGoogleAuthorizationUrl } from '@enterpriseglue/shared/services/google.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { buildSsoState } from './sso-state.js';
 
 const router = Router();
 
@@ -11,7 +12,7 @@ const router = Router();
  * Initiate Google OAuth flow (no HTTP param inputs)
  * GET /api/auth/google/start
  */
-router.get('/api/auth/google/start', apiLimiter, async (_req: Request, res: Response) => {
+router.get('/api/auth/google/start', apiLimiter, async (req: Request, res: Response) => {
   try {
     const enabled = await isGoogleAuthEnabled();
     if (!enabled) {
@@ -21,12 +22,7 @@ router.get('/api/auth/google/start', apiLimiter, async (_req: Request, res: Resp
       });
     }
 
-    const state = Buffer.from(
-      JSON.stringify({
-        timestamp: Date.now(),
-        nonce: Math.random().toString(36).substring(7),
-      })
-    ).toString('base64');
+    const state = buildSsoState(req);
 
     res.cookie('oauth_state', state, {
       httpOnly: true,
