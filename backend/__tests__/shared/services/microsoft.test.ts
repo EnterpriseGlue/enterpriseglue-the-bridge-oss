@@ -33,6 +33,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', (
     ensureAuthenticatedUserMembershipWithManager: vi.fn().mockResolvedValue({ id: 'baseline-1', created: true }),
     ensureLegacyPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ id: 'admin-1', created: true }),
     removeLegacyPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ removed: false }),
+    syncLegacySsoPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ created: false, removed: false }),
   },
 }));
 
@@ -91,7 +92,7 @@ describe('microsoft service', () => {
     };
 
     (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-    (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('user');
+    (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('admin');
 
     await provisionMicrosoftUser({
       oid: 'oid-123',
@@ -109,6 +110,13 @@ describe('microsoft service', () => {
       details: expect.objectContaining({ email: 'sso-user@example.com' }),
     }));
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'user' }));
+    expect(authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(
+      manager,
+      expect.any(String),
+      'microsoft',
+      'admin'
+    );
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(
       manager,
       expect.objectContaining({
@@ -148,7 +156,13 @@ describe('microsoft service', () => {
       'microsoft',
     );
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
-    expect(authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
+    expect(authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(
+      manager,
+      expect.any(String),
+      'microsoft',
+      'admin'
+    );
+    expect(authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
     expect(authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
     const snapshotOrder = (ssoNormalizedIdentityService.upsertIdentityWithManager as unknown as Mock).mock.invocationCallOrder[0];
     const groupSyncOrder = (ssoGroupMappingService.syncMembershipsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];

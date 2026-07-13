@@ -30,6 +30,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', (
     ensureAuthenticatedUserMembershipWithManager: vi.fn().mockResolvedValue({ id: 'baseline-1', created: true }),
     ensureLegacyPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ id: 'admin-1', created: true }),
     removeLegacyPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ removed: false }),
+    syncLegacySsoPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ created: false, removed: false }),
   },
 }));
 
@@ -124,6 +125,16 @@ describe('saml service - provisionSamlUser', () => {
       { id: 'user-1' },
       expect.objectContaining({ authProvider: 'saml', email: 'saml-user@example.com' })
     );
+    expect(userRepo.update).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.not.objectContaining({ platformRole: expect.anything() })
+    );
+    expect(authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(
+      manager,
+      'user-1',
+      'provider-saml-1',
+      'user'
+    );
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(
       manager,
       expect.objectContaining({
@@ -165,7 +176,13 @@ describe('saml service - provisionSamlUser', () => {
       'tenant-a',
     );
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
-    expect(authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
+    expect(authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(
+      manager,
+      'user-1',
+      'provider-saml-1',
+      'user'
+    );
+    expect(authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
     expect(authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
     const snapshotOrder = (ssoNormalizedIdentityService.upsertIdentityWithManager as unknown as Mock).mock.invocationCallOrder[0];
     const groupSyncOrder = (ssoGroupMappingService.syncMembershipsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];

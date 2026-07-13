@@ -367,14 +367,15 @@ async function syncSamlAuthorizationForUser(
   providerId: string,
   tenantId: string | null,
   ssoClaims: SsoClaims,
-  legacyPlatformRole: PlatformRole
+  resolvedPlatformRole: PlatformRole
 ): Promise<SsoSyncCounts> {
   const baselineMembership = await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
-  if (legacyPlatformRole === 'admin') {
-    await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, userId);
-  } else {
-    await authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager(manager, userId);
-  }
+  const legacyRoleMembership = await authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager(
+    manager,
+    userId,
+    providerId,
+    resolvedPlatformRole
+  );
   const subject = samlSubject(userInfo);
   const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
     tenantId,
@@ -393,9 +394,9 @@ async function syncSamlAuthorizationForUser(
   const groupSync = await ssoGroupMappingService.syncMembershipsForUserWithManager(manager, userId, ssoClaims, providerId, tenantId);
   const assignmentSync = await ssoAssignmentMappingService.syncAssignmentsForUserWithManager(manager, userId, ssoClaims, providerId, tenantId);
   return {
-    groupMembershipsCreated: groupSync.created + (normalizedIdentitySync.groupMembershipsCreated || 0) + (baselineMembership.created ? 1 : 0),
+    groupMembershipsCreated: groupSync.created + (normalizedIdentitySync.groupMembershipsCreated || 0) + (baselineMembership.created ? 1 : 0) + (legacyRoleMembership.created ? 1 : 0),
     groupMembershipsUpdated: groupSync.updated,
-    groupMembershipsRemoved: groupSync.removed + (normalizedIdentitySync.groupMembershipsRemoved || 0),
+    groupMembershipsRemoved: groupSync.removed + (normalizedIdentitySync.groupMembershipsRemoved || 0) + (legacyRoleMembership.removed ? 1 : 0),
     assignmentsCreated: assignmentSync.created,
     assignmentsUpdated: assignmentSync.updated,
     assignmentsRemoved: assignmentSync.removed,
@@ -449,8 +450,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
 
       if (existingByEntraId) {
         const user = existingByEntraId;
-        const currentRole = user.platformRole || 'user';
-        const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
+        const platformRole = user.platformRole === 'admin' || resolvedRole === 'admin' ? 'admin' : 'user';
 
         await userRepo.update({ id: user.id }, {
           email: userInfo.email,
@@ -458,12 +458,11 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
           entraEmail: userInfo.email,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
-          platformRole,
           lastLoginAt: now,
           updatedAt: now,
         });
 
-        syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims, platformRole);
+        syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims, resolvedRole);
 
         return {
           ...user,
@@ -479,8 +478,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
 
       if (existingByEmail) {
         const user = existingByEmail;
-        const currentRole = user.platformRole || 'user';
-        const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
+        const platformRole = user.platformRole === 'admin' || resolvedRole === 'admin' ? 'admin' : 'user';
 
         await userRepo.update({ id: user.id }, {
           authProvider: 'saml',
@@ -488,7 +486,6 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
           entraEmail: userInfo.email,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
-          platformRole,
           lastLoginAt: now,
           updatedAt: now,
           mustResetPassword: false,
@@ -496,7 +493,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
           lockedUntil: null,
         });
 
-        syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims, platformRole);
+        syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims, resolvedRole);
 
         return {
           ...user,
@@ -519,7 +516,7 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
         entraEmail: userInfo.email,
         firstName: userInfo.given_name || null,
         lastName: userInfo.family_name || null,
-        platformRole: resolvedRole,
+        platformRole: 'user',
         isActive: true,
         mustResetPassword: false,
         failedLoginAttempts: 0,
@@ -529,7 +526,8 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
       });
 
       syncCounts = await syncSamlAuthorizationForUser(manager, userId, userInfo, providerId, tenantId, ssoClaims, resolvedRole);
-      return await userRepo.findOneBy({ id: userId });
+      const newUser = await userRepo.findOneBy({ id: userId });
+      return newUser ? { ...newUser, platformRole: resolvedRole } : newUser;
     });
 
     await ssoSyncDiagnosticsService.completeRun(runId, {

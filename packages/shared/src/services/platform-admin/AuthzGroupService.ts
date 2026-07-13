@@ -90,6 +90,7 @@ export const DEFAULT_PLATFORM_GROUP_IDS = {
 
 const AUTHENTICATED_USER_BASELINE_SOURCE_REF = 'authenticated-user-baseline';
 const LEGACY_PLATFORM_ADMIN_SOURCE_REF = 'legacy-platform-role-administrator';
+const LEGACY_SSO_PLATFORM_ADMIN_SOURCE_REF_PREFIX = 'legacy-sso-platform-role:';
 
 export const DEFAULT_PLATFORM_GROUPS = [
   {
@@ -528,6 +529,61 @@ export class AuthzGroupService {
     );
   }
 
+  /**
+   * Keeps a legacy SSO role mapping effective through the canonical platform
+   * administrator group. The provider-specific source reference ensures one
+   * SSO provider cannot remove a grant managed by another source.
+   */
+  async syncLegacySsoPlatformAdministratorMembershipWithManager(
+    manager: EntityManager,
+    userId: string,
+    providerId: string,
+    role: 'admin' | 'user'
+  ): Promise<{ created: boolean; removed: boolean }> {
+    const normalizedProviderId = providerId.trim();
+    if (!normalizedProviderId) {
+      throw new Error('SSO provider identifier is required for legacy role synchronization');
+    }
+
+    const sourceRef = `${LEGACY_SSO_PLATFORM_ADMIN_SOURCE_REF_PREFIX}${normalizedProviderId}`;
+    if (role === 'admin') {
+      const membership = await this.ensureSystemGroupMembershipWithManager(
+        manager,
+        DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+        userId,
+        sourceRef,
+        'sso'
+      );
+      return { created: membership.created, removed: false };
+    }
+
+    const membershipRepo = manager.getRepository(AuthzGroupMembership);
+    const membership = await membershipRepo.findOneBy({
+      groupId: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+      userId,
+      source: 'sso',
+      sourceRef,
+    });
+    if (!membership) return { created: false, removed: false };
+
+    await membershipRepo.delete({ id: membership.id });
+    await recordGroupAudit(manager, {
+      tenantId: null,
+      userId: null,
+      action: 'authz.group_membership.legacy_sso_platform_admin_remove',
+      resourceType: 'authz_group_membership',
+      resourceId: membership.id,
+      details: {
+        membershipId: membership.id,
+        groupId: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+        userId,
+        source: 'sso',
+        sourceRef,
+      },
+    });
+    return { created: false, removed: true };
+  }
+
   async removeLegacyPlatformAdministratorMembershipWithManager(
     manager: EntityManager,
     userId: string
@@ -704,7 +760,8 @@ export class AuthzGroupService {
     manager: EntityManager,
     groupId: string,
     userId: string,
-    sourceRef: string
+    sourceRef: string,
+    source: Extract<AuthzGroupSource, 'sso' | 'system'> = 'system'
   ): Promise<{ id: string; created: boolean }> {
     const groupRepo = manager.getRepository(AuthzGroup);
     const group = await groupRepo.findOneBy({ id: groupId });
@@ -716,7 +773,7 @@ export class AuthzGroupService {
     const existing = await membershipRepo.findOneBy({
       groupId: group.id,
       userId,
-      source: 'system',
+      source,
       sourceRef,
     });
     if (existing) return { id: existing.id, created: false };
@@ -728,7 +785,7 @@ export class AuthzGroupService {
       tenantId: null,
       groupId: group.id,
       userId,
-      source: 'system',
+      source,
       sourceRef,
       expiresAt: null,
       createdById: null,
@@ -745,7 +802,7 @@ export class AuthzGroupService {
         membershipId: id,
         groupId: group.id,
         userId,
-        source: 'system',
+        source,
         sourceRef,
       },
     });

@@ -148,14 +148,15 @@ async function syncMicrosoftAuthorizationForUser(
   userId: string,
   userInfo: MicrosoftUserInfo,
   ssoClaims: SsoClaims,
-  legacyPlatformRole: 'admin' | 'user'
+  resolvedPlatformRole: 'admin' | 'user'
 ): Promise<SsoSyncCounts> {
   const baselineMembership = await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
-  if (legacyPlatformRole === 'admin') {
-    await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, userId);
-  } else {
-    await authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager(manager, userId);
-  }
+  const legacyRoleMembership = await authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager(
+    manager,
+    userId,
+    'microsoft',
+    resolvedPlatformRole
+  );
   const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
     providerId: 'microsoft',
     providerType: 'microsoft',
@@ -172,9 +173,9 @@ async function syncMicrosoftAuthorizationForUser(
   const groupSync = await ssoGroupMappingService.syncMembershipsForUserWithManager(manager, userId, ssoClaims, 'microsoft');
   const assignmentSync = await ssoAssignmentMappingService.syncAssignmentsForUserWithManager(manager, userId, ssoClaims, 'microsoft');
   return {
-    groupMembershipsCreated: groupSync.created + (normalizedIdentitySync.groupMembershipsCreated || 0) + (baselineMembership.created ? 1 : 0),
+    groupMembershipsCreated: groupSync.created + (normalizedIdentitySync.groupMembershipsCreated || 0) + (baselineMembership.created ? 1 : 0) + (legacyRoleMembership.created ? 1 : 0),
     groupMembershipsUpdated: groupSync.updated,
-    groupMembershipsRemoved: groupSync.removed + (normalizedIdentitySync.groupMembershipsRemoved || 0),
+    groupMembershipsRemoved: groupSync.removed + (normalizedIdentitySync.groupMembershipsRemoved || 0) + (legacyRoleMembership.removed ? 1 : 0),
     assignmentsCreated: assignmentSync.created,
     assignmentsUpdated: assignmentSync.updated,
     assignmentsRemoved: assignmentSync.removed,
@@ -223,23 +224,21 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
       const existingByEntraId = await userRepo.findOneBy({ entraId: userInfo.oid });
 
       if (existingByEntraId) {
-        // User exists - update profile and last login
+        // User exists - update profile and last login. The persisted platform
+        // role remains compatibility data; SSO authorization is group-backed.
         const user = existingByEntraId;
-        // Use SSO-resolved role, but don't downgrade admins (manual admin override persists)
-        const currentRole = user.platformRole || 'user';
-        const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
+        const platformRole = user.platformRole === 'admin' || resolvedRole === 'admin' ? 'admin' : 'user';
 
         await userRepo.update({ id: user.id }, {
           email: userInfo.email,
           entraEmail: userInfo.email,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
-          platformRole,
           lastLoginAt: now,
           updatedAt: now,
         });
 
-        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, platformRole);
+        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole);
 
         return {
           ...user,
@@ -256,9 +255,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
       if (existingByEmail) {
         // Email exists but not linked to Microsoft account - link the accounts
         const user = existingByEmail;
-        // Use SSO-resolved role, but don't downgrade admins
-        const currentRole = user.platformRole || 'user';
-        const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
+        const platformRole = user.platformRole === 'admin' || resolvedRole === 'admin' ? 'admin' : 'user';
 
         await userRepo.update({ id: user.id }, {
           authProvider: 'microsoft',
@@ -266,7 +263,6 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
           entraEmail: userInfo.email,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
-          platformRole,
           lastLoginAt: now,
           updatedAt: now,
           // Clear password-related fields since they're using Microsoft now
@@ -275,7 +271,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
           lockedUntil: null,
         });
 
-        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, platformRole);
+        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole);
 
         return {
           ...user,
@@ -287,7 +283,8 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
         };
       }
 
-      // New user - create account with SSO-resolved role
+      // New users retain the non-authoritative compatibility default. The SSO
+      // claim result below is synchronized to a source-managed group.
       const userId = generateId();
 
       await userRepo.insert({
@@ -299,7 +296,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
         entraEmail: userInfo.email,
         firstName: userInfo.given_name || null,
         lastName: userInfo.family_name || null,
-        platformRole: resolvedRole,
+        platformRole: 'user',
         isActive: true,
         mustResetPassword: false, // Microsoft handles password policy
         failedLoginAttempts: 0,
@@ -310,7 +307,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
 
       const newUser = await userRepo.findOneBy({ id: userId });
       syncCounts = await syncMicrosoftAuthorizationForUser(manager, userId, userInfo, ssoClaims, resolvedRole);
-      return newUser;
+      return newUser ? { ...newUser, platformRole: resolvedRole } : newUser;
     });
 
     await ssoSyncDiagnosticsService.completeRun(runId, {

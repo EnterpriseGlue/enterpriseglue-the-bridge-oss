@@ -22,6 +22,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', (
     ensureAuthenticatedUserMembershipWithManager: vi.fn().mockResolvedValue({ id: 'baseline-1', created: true }),
     ensureLegacyPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ id: 'admin-1', created: true }),
     removeLegacyPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ removed: false }),
+    syncLegacySsoPlatformAdministratorMembershipWithManager: vi.fn().mockResolvedValue({ created: false, removed: false }),
   },
 }));
 
@@ -63,8 +64,13 @@ describe('google service', () => {
     expect(result).toEqual(expect.objectContaining({ id: 'user-1', email: 'google-user@example.com' }));
     expect(normalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({ providerId: 'google', providerSubject: 'google-subject-1', providerTenantId: 'example.com', userId: 'user-1' }));
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
-    expect(authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
+    expect(authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1', 'google', 'user');
+    expect(authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
     expect(authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
+    expect(repository.update).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.not.objectContaining({ platformRole: expect.anything() })
+    );
     expect(syncDiagnosticsService.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({ groupMembershipsCreated: 3, groupMembershipsRemoved: 1 }));
   });
 });

@@ -1211,7 +1211,7 @@ external entitlement
 
 ### Current Authorization Migration Status And Next Steps
 
-The platform now has a group-backed baseline for new and existing active users, including local, invited, bootstrap, provider-neutral, Microsoft, Google, and legacy SAML accounts. Legacy `User.platformRole` and legacy SSO mapping evaluation remain compatibility inputs; their resulting administrator state is mirrored into a source-scoped system group, so they are no longer the only representation of access.
+The platform now has a group-backed baseline for new and existing active users, including local, invited, bootstrap, provider-neutral, Microsoft, Google, and legacy SAML accounts. Legacy `User.platformRole` remains compatibility data. Legacy SSO claim evaluation writes a provider-scoped `source = sso` membership to `platform-administrators`; it no longer overwrites the persisted role column. Existing local legacy administrators retain their separate `source = system` compatibility membership until explicit retirement, so an SSO provider cannot revoke local administration.
 
 Implement the remaining work in this order:
 
@@ -1219,7 +1219,7 @@ Implement the remaining work in this order:
 - [ ] ⬜ Complete provider-neutral conversion coverage for remaining legacy SSO mapping shapes. Keep unsupported dynamic, negated, custom-claim, email-domain, and broad-selector mappings blocked from automatic conversion and provide a deliberate redesign path using groups, Engine Sets, and normal assignments.
 - [ ] ⬜ Run representative mapping conversion, Effective Access verification, and scoped/global retirement in a deployed environment. Record verification evidence before disabling any legacy mapping evaluator.
 - [ ] ⬜ Change session and middleware contracts to use authenticated principal and tenant identity with evaluator decisions. Retain `platformRole` as display/migration data only until all protected route families have parity tests.
-- [ ] ⬜ Stop new platform-role mutations in SSO and invitation flows after the default-group migration is deployed. Continue group synchronization as the sole authorization write path, then remove source-scoped compatibility memberships only through an explicit retirement migration.
+- [x] ✅ Stop elevated platform-role mutations in SSO and invitation flows. Microsoft, Google, and legacy SAML provisioning keep `User.platformRole` unchanged for existing users and create new users with only the schema's `user` compatibility default; their resolved legacy claim role is synchronized through a provider-scoped SSO administrator-group membership. Invitation-created accounts likewise use only the non-privileged `user` compatibility default and receive resource access through the canonical baseline and requested scoped membership flows. Source-scoped compatibility memberships remain until explicit retirement.
 - [ ] ⬜ Remove legacy evaluator grants and direct legacy membership/owner/delegate fallbacks after all route families, collection visibility, and UI action guards pass their parity gates.
 
 ### External Identity Linking
@@ -2150,7 +2150,7 @@ This phase is required because the current implementation still carries compatib
 
 - [ ] ⬜ Seed bootstrap local admin through `system.platform.admin` assignment instead of `User.platformRole = admin` authorization. The bootstrap account now receives the source-managed `platform-administrators` group in the same transaction; the legacy field is retained only while compatibility middleware remains active.
 - [ ] ⬜ Change local/SSO session contracts to carry principal and tenant identity; treat any legacy platform-role field as display/migration data only until removed.
-- [ ] ⬜ Stop SSO provisioning and invitations from mutating platform roles; map authenticated users to internal groups and assignments. New local, invited, and SSO users now receive group-backed baseline access and legacy SSO role resolution mirrors into a source-scoped administrator group; legacy column mutations remain until provider-default and legacy-mapping retirement pass.
+- [x] ✅ Stop SSO provisioning and invitations from granting elevated platform roles through `User.platformRole`; map authenticated users to internal groups and assignments. New local, invited, and SSO users receive group-backed baseline access. Microsoft, Google, and legacy SAML now preserve the persisted compatibility column and synchronize legacy claim results through provider-scoped SSO administrator-group memberships; legacy column reads remain until session and evaluator retirement gates pass.
 - [ ] ⬜ Stop project/engine/member/governance services from calling `syncLegacyRoleAssignments`; write canonical assignments at the originating command boundary.
 - [ ] ⬜ Remove evaluator grants from platform role, ProjectMember/ProjectMemberRole, EngineMember, owner/delegate, and explicit legacy permission tables.
 - [ ] ⬜ Preserve accountable owner/delegate fields only as governance metadata and require explicit effective role assignments for access.

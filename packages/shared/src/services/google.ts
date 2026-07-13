@@ -170,14 +170,15 @@ async function syncGoogleAuthorizationForUser(
   userId: string,
   userInfo: GoogleUserInfo,
   ssoClaims: SsoClaims,
-  legacyPlatformRole: 'admin' | 'user'
+  resolvedPlatformRole: 'admin' | 'user'
 ): Promise<SsoSyncCounts> {
   const baselineMembership = await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
-  if (legacyPlatformRole === 'admin') {
-    await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, userId);
-  } else {
-    await authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager(manager, userId);
-  }
+  const legacyRoleMembership = await authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager(
+    manager,
+    userId,
+    'google',
+    resolvedPlatformRole
+  );
   const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
     providerId: 'google',
     providerType: 'google',
@@ -192,8 +193,8 @@ async function syncGoogleAuthorizationForUser(
     claims: ssoClaims,
   });
   return {
-    groupMembershipsCreated: (normalizedIdentitySync.groupMembershipsCreated || 0) + (baselineMembership.created ? 1 : 0),
-    groupMembershipsRemoved: normalizedIdentitySync.groupMembershipsRemoved || 0,
+    groupMembershipsCreated: (normalizedIdentitySync.groupMembershipsCreated || 0) + (baselineMembership.created ? 1 : 0) + (legacyRoleMembership.created ? 1 : 0),
+    groupMembershipsRemoved: (normalizedIdentitySync.groupMembershipsRemoved || 0) + (legacyRoleMembership.removed ? 1 : 0),
   };
 }
 
@@ -234,43 +235,42 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo) {
 
       if (existingByGoogleId) {
         const user = existingByGoogleId;
-        const platformRole = (user.platformRole || 'user') === 'admin' ? 'admin' : resolvedRole;
+        const platformRole = user.platformRole === 'admin' || resolvedRole === 'admin' ? 'admin' : 'user';
         await userRepo.update({ id: user.id }, {
           email: userInfo.email,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
-          platformRole,
           lastLoginAt: now,
           updatedAt: now,
         });
-        syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims, platformRole);
+        syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole);
         return { ...user, email: userInfo.email, platformRole, firstName: userInfo.given_name || user.firstName, lastName: userInfo.family_name || user.lastName };
       }
 
       const existingByEmail = await userRepo.findOneBy({ email: userInfo.email });
       if (existingByEmail) {
         const user = existingByEmail;
-        const platformRole = (user.platformRole || 'user') === 'admin' ? 'admin' : resolvedRole;
+        const platformRole = user.platformRole === 'admin' || resolvedRole === 'admin' ? 'admin' : 'user';
         await userRepo.update({ id: user.id }, {
           authProvider: 'google', googleId: userInfo.sub,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
-          platformRole, lastLoginAt: now, updatedAt: now,
+          lastLoginAt: now, updatedAt: now,
           mustResetPassword: false, failedLoginAttempts: 0, lockedUntil: null,
         });
-        syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims, platformRole);
+        syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole);
         return { ...user, authProvider: 'google', googleId: userInfo.sub, platformRole, firstName: userInfo.given_name || user.firstName, lastName: userInfo.family_name || user.lastName };
       }
 
       const userId = generateId();
       await userRepo.insert({
         id: userId, email: userInfo.email, authProvider: 'google', passwordHash: null, googleId: userInfo.sub,
-        firstName: userInfo.given_name || null, lastName: userInfo.family_name || null, platformRole: resolvedRole,
+        firstName: userInfo.given_name || null, lastName: userInfo.family_name || null, platformRole: 'user',
         isActive: true, mustResetPassword: false, failedLoginAttempts: 0, createdAt: now, updatedAt: now, lastLoginAt: now,
       });
       const newUser = await userRepo.findOneBy({ id: userId });
       syncCounts = await syncGoogleAuthorizationForUser(manager, userId, userInfo, ssoClaims, resolvedRole);
-      return newUser;
+      return newUser ? { ...newUser, platformRole: resolvedRole } : newUser;
     });
 
     await ssoSyncDiagnosticsService.completeRun(runId, { providerId: 'google', userId: result?.id ?? null, ...syncCounts, details: { email: userInfo.email } });
