@@ -137,7 +137,7 @@ describe('configBundleApplyService', () => {
       './engines.json': {
         engines: [{
           key: 'engine.prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.com/engine-rest',
-          labels: { environment: 'prod', country: 'TR' }, auth: { type: 'basic', username: 'eg-client', passwordRef: 'PAYMENTS_ENGINE_PASSWORD' },
+          labels: { environment: 'prod', country: 'TR' }, auth: { type: 'basic', username: 'eg-client', passwordRef: 'PAYMENTS_ENGINE_PASSWORD' }, metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false,
         }],
       },
     };
@@ -151,7 +151,7 @@ describe('configBundleApplyService', () => {
     expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
       configKey: 'engine.prod-payments', configKeyIdentity: 'tenant-a:engine.prod-payments', registrationSource: 'config',
       sourceRef: 'config_bundle:acme.authz', passwordEnc: 'ref:PAYMENTS_ENGINE_PASSWORD', runtimeAccessScope: 'engine_wide',
-      deploymentIntegration: 'enterpriseglue_proxy', connectionMode: 'direct',
+      deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false, connectionMode: 'direct',
     }));
     expect(materializeEngineSetsForEngine).toHaveBeenCalled();
     expect(materializeForEngine).toHaveBeenCalled();
