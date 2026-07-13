@@ -744,7 +744,7 @@ router.get(
       const engineId = String(req.params.engineId);
       const userId = req.user!.userId;
 
-      const role = await engineService.getEngineRole(userId, engineId);
+      const role = await engineService.getEngineRole(userId, engineId, req.tenant?.tenantId || null);
 
       res.json({ role });
     } catch (error) {

@@ -33,7 +33,7 @@ r.get('/starbase-api/projects/:projectId/engine-deployments', apiLimiter, requir
   const userId = req.user!.userId;
   const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
 
-  const userEngines = await engineService.getUserEngines(userId);
+  const userEngines = await engineService.getUserEngines(userId, req.tenant?.tenantId || null);
   const visibleEngineIds = userEngines.map((e) => String(e.engine.id));
   if (visibleEngineIds.length === 0) {
     return res.json([]);
@@ -63,7 +63,7 @@ r.get('/starbase-api/projects/:projectId/files/:fileId/deployments', apiLimiter,
   const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
   const scanLimit = Math.min(5000, Math.max(1, parseInt(String(req.query.scanLimit || '1000'), 10) || 1000));
 
-  const userEngines = await engineService.getUserEngines(userId);
+  const userEngines = await engineService.getUserEngines(userId, req.tenant?.tenantId || null);
   const visibleEngineIds = userEngines.map((e) => String(e.engine.id));
   if (visibleEngineIds.length === 0) {
     return res.json([]);
@@ -208,7 +208,7 @@ r.get('/starbase-api/projects/:projectId/files/:fileId/deployments/history', api
   const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit || '200'), 10) || 200));
   const scanLimit = Math.min(20000, Math.max(1, parseInt(String(req.query.scanLimit || '5000'), 10) || 5000));
 
-  const userEngines = await engineService.getUserEngines(userId);
+  const userEngines = await engineService.getUserEngines(userId, req.tenant?.tenantId || null);
   const visibleEngineIds = userEngines.map((e) => String(e.engine.id));
   if (visibleEngineIds.length === 0) {
     return res.json([]);
@@ -345,7 +345,7 @@ r.get('/starbase-api/projects/:projectId/engine-deployments/latest', apiLimiter,
   const userId = req.user!.userId;
   const scanLimit = Math.min(20000, Math.max(1, parseInt(String(req.query.limit || '5000'), 10) || 5000));
 
-  const userEngines = await engineService.getUserEngines(userId);
+  const userEngines = await engineService.getUserEngines(userId, req.tenant?.tenantId || null);
   const visibleEngineIds = userEngines.map((e) => String(e.engine.id));
   if (visibleEngineIds.length === 0) {
     return res.json([]);

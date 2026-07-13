@@ -214,6 +214,7 @@ describe('engines management routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('role');
+    expect(engineService.getEngineRole).toHaveBeenCalledWith('owner-1', 'e1', null);
   });
 
   it('gets user engines list', async () => {

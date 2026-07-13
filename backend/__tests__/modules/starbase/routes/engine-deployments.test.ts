@@ -19,6 +19,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-1' };
     next();
   },
 }));
@@ -140,6 +141,7 @@ describe('starbase engine-deployments routes', () => {
         projectId: '11111111-1111-4111-8111-111111111111',
       }),
     }));
+    expect(engineService.getUserEngines).toHaveBeenCalledWith('user-1', 'tenant-1');
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
       resourceType: 'project',
