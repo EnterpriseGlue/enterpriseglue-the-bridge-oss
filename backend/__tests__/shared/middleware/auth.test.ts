@@ -4,6 +4,7 @@ import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { Request, Response, NextFunction } from 'express';
 
 vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
@@ -12,6 +13,15 @@ vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  permissionService: {
+    hasPermission: vi.fn(),
+  },
+  PlatformPermissions: {
+    AUTHZ_ROLES_MANAGE: 'platform:authz:roles:manage',
+  },
 }));
 
 // Test fixture tokens — not real secrets (CWE-547)
@@ -29,6 +39,7 @@ describe('auth middleware', () => {
     res = {};
     next = vi.fn();
     vi.clearAllMocks();
+    (permissionService.hasPermission as any).mockResolvedValue(false);
   });
 
   describe('requireAuth', () => {
@@ -160,18 +171,24 @@ describe('auth middleware', () => {
   });
 
   describe('requireAdmin', () => {
-    it('allows admin users', () => {
-      req.user = { userId: 'admin-1', type: 'access', platformRole: 'admin', email: 'admin@example.com' };
+    it('allows users with the canonical platform-administration permission', async () => {
+      req.user = { userId: 'admin-1', type: 'access', platformRole: 'user', email: 'admin@example.com' };
+      (permissionService.hasPermission as any).mockResolvedValue(true);
 
-      requireAdmin(req as Request, res as Response, next);
+      await requireAdmin(req as Request, res as Response, next);
 
       expect(next).toHaveBeenCalled();
+      expect(permissionService.hasPermission).toHaveBeenCalledWith(PlatformPermissions.AUTHZ_ROLES_MANAGE, {
+        userId: 'admin-1',
+        tenantId: null,
+        resourceType: 'platform',
+      });
     });
 
-    it('reports non-admin users', () => {
-      req.user = { userId: 'user-1', type: 'access', platformRole: 'user', email: 'user@example.com' };
+    it('does not grant admin access from a legacy platform role claim', async () => {
+      req.user = { userId: 'user-1', type: 'access', platformRole: 'admin', email: 'user@example.com' };
 
-      requireAdmin(req as Request, res as Response, next);
+      await requireAdmin(req as Request, res as Response, next);
 
       expect(next).toHaveBeenCalled();
       const error = (next as any).mock.calls[0][0];
@@ -179,8 +196,8 @@ describe('auth middleware', () => {
       expect(error?.message).toContain('Admin access required');
     });
 
-    it('reports when no user', () => {
-      requireAdmin(req as Request, res as Response, next);
+    it('reports when no user', async () => {
+      await requireAdmin(req as Request, res as Response, next);
 
       expect(next).toHaveBeenCalled();
       const error = (next as any).mock.calls[0][0];

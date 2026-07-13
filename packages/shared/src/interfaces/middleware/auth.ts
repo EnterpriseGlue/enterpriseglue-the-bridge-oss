@@ -4,6 +4,7 @@ import { Errors, AppError } from './errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 /**
  * Authentication middleware
@@ -136,19 +137,28 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 }
 
 /**
- * Middleware to require admin role
+ * Middleware to require canonical platform-administration permission.
  * Must be used after requireAuth
  */
-export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.user) {
     return next(Errors.unauthorized('Authentication required'));
   }
 
-  if (req.user.platformRole !== 'admin') {
-    return next(Errors.adminRequired());
+  try {
+    const allowed = await permissionService.hasPermission(PlatformPermissions.AUTHZ_ROLES_MANAGE, {
+      userId: req.user.userId,
+      tenantId: req.tenant?.tenantId || null,
+      resourceType: 'platform',
+    });
+    if (!allowed) {
+      return next(Errors.adminRequired());
+    }
+  } catch {
+    return next(Errors.internal('Authorization check failed'));
   }
 
-  next();
+  return next();
 }
 
 export function requireOnboarding(req: Request, res: Response, next: NextFunction) {
