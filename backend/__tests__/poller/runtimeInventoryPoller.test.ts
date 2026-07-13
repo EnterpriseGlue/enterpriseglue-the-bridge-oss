@@ -41,6 +41,7 @@ describe('runtimeInventoryPoller', () => {
       { id: 'central-a', tenantId: 'tenant-a', runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active' },
       { id: 'distributed-a', tenantId: 'tenant-a', runtimeAccessScope: 'engine_wide', lifecycleStatus: 'active' },
       { id: 'inactive-a', tenantId: 'tenant-a', runtimeAccessScope: 'resource_aware', lifecycleStatus: 'decommissioned' },
+      { id: 'discovery-disabled', tenantId: 'tenant-a', runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active', metadataDiscoveryEnabled: false },
       { id: 'central-b', tenantId: 'tenant-b', runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active' },
     ]);
 
