@@ -63,6 +63,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(false),
+    getVisibleRuntimeResources: vi.fn().mockResolvedValue([]),
     getKnownProjectIdsForUser: vi.fn().mockResolvedValue([]),
     getKnownEngineIdsForUser: vi.fn().mockResolvedValue([]),
     syncLegacyRoleAssignments: vi.fn().mockResolvedValue(undefined),
@@ -181,6 +182,45 @@ describe('mission-control decisions routes', () => {
 
     expect(response.status).toBe(403);
     expect(listDecisionDefinitions).not.toHaveBeenCalled();
+  });
+
+  it('returns only authorized decision definition keys for a resource-aware engine', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'engine-1',
+              tenantId: null,
+              runtimeAccessScope: 'resource_aware',
+            }),
+          };
+        }
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
+      { resourceKey: 'credit-decision' },
+    ]);
+    (listDecisionDefinitions as unknown as Mock).mockResolvedValue([
+      { id: 'credit:1', key: 'credit-decision' },
+      { id: 'fraud:1', key: 'fraud-decision' },
+    ]);
+
+    const response = await request(app)
+      .get('/mission-control-api/decision-definitions')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      { id: 'credit:1', key: 'credit-decision' },
+    ]);
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'engine-1',
+      resourceKind: 'decision_definition',
+      permission: 'engine:instance:view',
+    }));
   });
 
   it('does not infer a Starbase edit target from a matching decision key without deployment lineage', async () => {
