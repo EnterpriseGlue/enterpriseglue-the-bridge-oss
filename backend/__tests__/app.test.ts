@@ -32,6 +32,9 @@ describe('app', () => {
     const response = await request(app).get('/health');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ status: 'ok' });
+    expect(response.body).toEqual({
+      status: 'ok',
+      configBootstrap: { mode: 'disabled', status: 'disabled', hash: null, message: null },
+    });
   });
 });

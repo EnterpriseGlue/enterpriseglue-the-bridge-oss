@@ -9,6 +9,7 @@ import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/mi
 import { startBatchPollerIfActive } from './poller/batchPoller.js';
 import { startSsoDiagnosticsPollerIfEnabled } from './poller/ssoDiagnosticsPoller.js';
 import { startRuntimeInventoryPollerIfEnabled } from './poller/runtimeInventoryPoller.js';
+import { runConfigBundleBootstrap } from './services/configBundleBootstrap.js';
 import { getConnectionPool, ConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
 import {
   buildEnterpriseBackendRouteOpenApiAuthzMetadata,
@@ -92,6 +93,13 @@ export async function startServer() {
   await backfillMissingPlatformRoles();
 
   await backfillKnownUserProfiles({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded });
+
+  try {
+    await runConfigBundleBootstrap();
+  } catch (error) {
+    console.error('Configuration bundle bootstrap failed:', error);
+    if (config.configFailClosed) throw error;
+  }
 
   // Seed Git providers on first run
   try {

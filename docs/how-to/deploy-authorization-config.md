@@ -4,7 +4,7 @@ Summary: Target deployment and CI/CD contract for EnterpriseGlue authorization, 
 
 Audience: Platform engineers, security engineers, and CI/CD maintainers.
 
-Status: **Partially implemented runbook.** API-driven configuration-bundle preview, hash-bound apply, export, apply history, and the `pnpm authz:config` CLI are available. Mounted bootstrap bundles, startup reconciliation/readiness integration, and Docker/OpenShift bundle mounts remain planned. Existing deployments continue to start without a bundle.
+Status: **Partially implemented runbook.** API-driven configuration-bundle preview, hash-bound apply, export, apply history, and the `pnpm authz:config` CLI are available. File-based bootstrap validation/apply is available behind disabled-by-default `EG_CONFIG_*` settings. Docker/OpenShift bundle mounts and post-apply reconciliation/readiness integration remain planned. Existing deployments continue to start without a bundle.
 
 Related guides:
 
@@ -18,7 +18,7 @@ Related guides:
 
 Support two apply paths that use the same validation and apply services:
 
-1. **Bootstrap mount (planned):** optional, read-only bundle mounted into the backend for deterministic first deployment and restart reconciliation.
+1. **Bootstrap file (implemented):** optional JSON payload path read by the backend after migrations and catalog seeding. Docker/OpenShift read-only mounts remain planned.
 2. **CI/CD API apply (implemented):** recommended for later updates because preview, approval, apply, export, and run status are explicit deployment stages.
 
 Do not make automatic startup apply the default. Existing standalone installations must still start without a bundle.
@@ -37,6 +37,8 @@ Do not make automatic startup apply the default. Existing standalone installatio
 | `EG_CONFIG_MAX_BYTES` | Positive integer | Bundle upload/read size limit |
 
 Names are target contracts and must be added to shared configuration validation, backend `.env.example`, Docker/OpenShift templates, configuration reference, and configuration matrix together.
+
+Implemented now: shared configuration validation, backend `.env.example`, file-size/hash validation, `validate`/`apply` startup modes, production fail-closed default, and sanitized `/health` bootstrap status. Docker/OpenShift templates and startup reconciliation remain pending.
 
 ## Startup Ordering
 

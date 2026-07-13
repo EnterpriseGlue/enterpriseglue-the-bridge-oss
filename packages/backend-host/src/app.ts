@@ -12,6 +12,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { runWithBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import { registerRoutes } from './routes/index.js';
 import type { NotificationTenantResolver } from '@enterpriseglue/enterprise-plugin-api/backend';
+import { getConfigBootstrapStatus } from './services/configBundleBootstrap.js';
 
 interface CreateAppOptions {
   registerBaseRoutes?: boolean;
@@ -196,7 +197,9 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   }
 
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok' });
+    const configBootstrap = getConfigBootstrapStatus();
+    res.status(configBootstrap.status === 'failed' && config.configFailClosed ? 503 : 200)
+      .json({ status: configBootstrap.status === 'failed' ? 'degraded' : 'ok', configBootstrap });
   });
 
   // Register all application routes

@@ -130,6 +130,14 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   // Proxy
   trustProxy: z.string().default('1'),
 
+  // Optional configuration bundle bootstrap. Disabled unless explicitly enabled.
+  configBundlePath: z.string().min(1).optional(),
+  configBootstrapMode: z.enum(['disabled', 'validate', 'apply']).default('disabled'),
+  configExpectedSha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
+  configExpectedTenantScope: z.string().min(1).default('platform'),
+  configFailClosed: z.boolean().default(false),
+  configMaxBytes: z.number().int().positive().max(10 * 1024 * 1024).default(1024 * 1024),
+
   // Environment
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
 });
@@ -226,6 +234,14 @@ function loadConfig(): Config {
     googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
     encryptionKey: process.env.ENCRYPTION_KEY,
     trustProxy: process.env.TRUST_PROXY,
+    configBundlePath: envOrUndefined(process.env.EG_CONFIG_BUNDLE_PATH),
+    configBootstrapMode: envOrUndefined(process.env.EG_CONFIG_BOOTSTRAP_MODE),
+    configExpectedSha256: envOrUndefined(process.env.EG_CONFIG_EXPECTED_SHA256),
+    configExpectedTenantScope: envOrUndefined(process.env.EG_CONFIG_EXPECTED_TENANT_SCOPE),
+    configFailClosed: process.env.EG_CONFIG_FAIL_CLOSED === undefined
+      ? inferredNodeEnv === 'production'
+      : process.env.EG_CONFIG_FAIL_CLOSED === 'true',
+    configMaxBytes: process.env.EG_CONFIG_MAX_BYTES ? Number(process.env.EG_CONFIG_MAX_BYTES) : undefined,
     nodeEnv: inferredNodeEnv,
   };
 

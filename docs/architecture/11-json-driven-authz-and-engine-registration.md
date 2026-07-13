@@ -2288,11 +2288,11 @@ Phase 0 exit criteria:
 - [x] ✅ Add Docker Compose and OpenShift secret-reference examples that keep secret bytes outside JSON bundles and mount only read-only files. Bootstrap mounting remains explicitly pending.
 - [x] ✅ Document least-privilege configuration API-client creation, scoped role assignment, Environment-secret storage, and rotation/revocation.
 - [x] ✅ Add machine-readable CLI output and distinct usage, preview-validation, and request/runtime exit codes for CI. Finer-grained authorization, conflict, and reconciliation exit codes remain pending.
-- [ ] ⬜ Add disabled-by-default `EG_CONFIG_*` settings to shared config validation, `backend/.env.example`, every Docker/OpenShift env example, `docs/reference/configuration.md`, and `docs/reference/configuration-matrix.md`.
+- [ ] ⬜ Add disabled-by-default `EG_CONFIG_*` settings to every deployment template and configuration reference. Shared validation, backend `.env.example`, startup file bootstrap, fail-closed behavior, and sanitized health status are complete; Docker/OpenShift env examples and reference matrices remain pending.
 - [ ] ⬜ Add optional `infra/docker/compose/docker-compose.config-bundle.yml` with read-only bundle and separate secret mounts; update dev, production, image, and self-host startup paths to include it only when configured.
 - [ ] ⬜ Ensure production backend images expose a non-root-readable config mount path without baking customer bundles into images.
 - [ ] ⬜ Add optional OpenShift ConfigMap/projected bundle volume, separate secret references, bundle-hash rollout annotation, and readiness behavior to Kustomize base/overlays and deployment scripts.
-- [ ] ⬜ Enforce startup order: migrations, immutable catalog seed, optional bundle validation/apply, required reconciliation, then readiness.
+- [ ] ⬜ Enforce complete startup order including required reconciliation and readiness. Migrations, catalog seeding, and optional file bundle validation/apply now run before the backend listens; reconciliation/readiness gating remains pending.
 - [ ] ⬜ Add sanitized config status to health/readiness, logs, metrics, and deployment receipts.
 - [ ] ⬜ Update Docker, OpenShift, deployment-runbook, SSO, configuration-reference, security-hardening, and troubleshooting documentation in the same implementation milestone.
 - [ ] ⬜ Keep [Configure Authorization, Identity, And Engines](../how-to/configure-authorization-and-engines.md) and [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md) synchronized with executable schemas and scripts through CI example validation.
