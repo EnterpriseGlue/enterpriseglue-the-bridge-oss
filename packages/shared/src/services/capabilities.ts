@@ -5,11 +5,6 @@ import type { UserCapabilities } from '@enterpriseglue/shared/contracts/auth';
 export interface BuildUserCapabilitiesInput {
   userId: string;
   tenantId?: string | null;
-  /**
-   * Retained only for response and caller compatibility. Authorization is
-   * resolved from canonical assignments and explicit grants.
-   */
-  platformRole?: string | null;
 }
 
 export async function buildUserCapabilities({

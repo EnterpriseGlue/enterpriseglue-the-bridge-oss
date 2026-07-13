@@ -41,7 +41,6 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
   const user = await userRepo.findOneByOrFail({ id: result.user.id });
   const capabilities = await buildUserCapabilities({
     userId: user.id,
-    platformRole: user.platformRole,
   });
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);

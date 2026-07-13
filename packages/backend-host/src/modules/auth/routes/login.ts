@@ -194,7 +194,6 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   const capabilities = await buildUserCapabilities({
     userId: user.id,
     tenantId: req.tenant?.tenantId || null,
-    platformRole: user.platformRole,
   });
   
   // Set tokens in HTTP-only cookies (same pattern as Microsoft OAuth)

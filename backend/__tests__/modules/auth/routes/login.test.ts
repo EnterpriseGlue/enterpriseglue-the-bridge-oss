@@ -190,7 +190,7 @@ describe('auth login routes', () => {
     );
     expect(refreshTokenRepo.insert).toHaveBeenCalled();
     expect(buildUserCapabilities as unknown as Mock).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'user-1', platformRole: 'user' })
+      expect.objectContaining({ userId: 'user-1', tenantId: null })
     );
   });
 
