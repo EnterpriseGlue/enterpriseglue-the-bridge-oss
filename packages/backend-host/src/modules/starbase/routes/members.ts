@@ -173,7 +173,6 @@ const router = Router();
 function projectPermissionContext(req: any, projectId: string) {
   return {
     userId: req.user!.userId,
-    platformRole: req.user!.platformRole || req.user!.role,
     resourceType: 'project' as const,
     resourceId: projectId,
   };

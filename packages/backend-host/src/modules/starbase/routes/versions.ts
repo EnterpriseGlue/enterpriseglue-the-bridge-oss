@@ -25,7 +25,6 @@ function projectPermissionContext(req: Request, projectId: string) {
   return {
     userId: req.user!.userId,
     tenantId: req.tenant?.tenantId || null,
-    platformRole: req.user!.platformRole || (req.user as any).role,
     resourceType: 'project' as const,
     resourceId: projectId,
   };
