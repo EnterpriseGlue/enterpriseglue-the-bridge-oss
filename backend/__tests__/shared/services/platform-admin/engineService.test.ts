@@ -6,6 +6,7 @@ import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
 import { EngineMember } from '@enterpriseglue/shared/db/entities/EngineMember.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/db/entities/EnvironmentTag.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/db/entities/RbacRoleAssignment.js';
+import { User } from '@enterpriseglue/shared/db/entities/User.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -132,6 +133,42 @@ describe('EngineService', () => {
       }),
     ]);
     expect(assignmentSpy).toHaveBeenCalledWith('user-1', undefined);
+  });
+
+  it('lists effective engine members from canonical assignments with role precedence', async () => {
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1' }) };
+    const assignmentQb = {
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([
+        { id: 'legacy-owner', principalId: 'user-1', roleId: 'system.engine.owner', createdById: null, createdAt: 10, source: 'legacy' },
+        { id: 'manual-operator', principalId: 'user-1', roleId: 'system.engine.operator', createdById: 'admin-1', createdAt: 20, source: 'manual' },
+        { id: 'sso-deployer', principalId: 'user-2', roleId: 'system.engine.deployer', createdById: null, createdAt: 15, source: 'sso' },
+      ]),
+    };
+    const assignmentRepo = { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+    const userRepo = {
+      find: vi.fn().mockResolvedValue([
+        { id: 'user-1', email: 'owner@example.test', firstName: 'Owner', lastName: null },
+        { id: 'user-2', email: 'deployer@example.test', firstName: 'Deployer', lastName: null },
+      ]),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return engineRepo;
+        if (entity === RbacRoleAssignment) return assignmentRepo;
+        if (entity === User) return userRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const members = await service.getEngineMembers('engine-1');
+
+    expect(members).toEqual([
+      expect.objectContaining({ id: 'legacy-owner', userId: 'user-1', role: 'owner', source: 'legacy' }),
+      expect.objectContaining({ id: 'sso-deployer', userId: 'user-2', role: 'deployer', source: 'sso' }),
+    ]);
   });
 
   it('mirrors delegate governance changes into managed role assignments', async () => {

@@ -34,6 +34,7 @@ export interface EngineMemberWithUser {
   role: string;
   grantedById: string | null;
   createdAt: number;
+  source?: string;
   user: {
     id: string;
     email: string;
@@ -53,6 +54,8 @@ const ENGINE_STANDARD_MEMBER_SYSTEM_ROLE_IDS = [
   SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
   SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
 ] as const;
+
+const ENGINE_ACCESS_ROLE_PRECEDENCE = ['owner', 'delegate', 'operator', 'deployer'] as const;
 
 const ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID: Record<'operator' | 'deployer', string> = {
   operator: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
@@ -164,38 +167,30 @@ export class EngineService {
   }
 
   /**
-   * Get engine members (owner, delegate, operators, deployers)
-   * Includes owner and delegate from engines table plus members from engine_members table
+   * Get effective direct user assignments for an engine. Accountable owner and
+   * delegate columns remain governance metadata and are not an access source.
    */
   async getEngineMembers(engineId: string): Promise<EngineMemberWithUser[]> {
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
-    const memberRepo = dataSource.getRepository(EngineMember);
     const userRepo = dataSource.getRepository(User);
 
-    // Get engine to include owner and delegate
     const engine = await engineRepo.findOne({ where: { id: engineId } });
 
     if (!engine) {
       return [];
     }
 
-    // Get members from engine_members table
-    const members = await memberRepo.find({ where: { engineId } });
     const assignmentMembers = await dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
       .where('assignment.scopeType = :scopeType', { scopeType: 'engine' })
       .andWhere('(assignment.scopeId = :engineId OR assignment.scopeId IS NULL)', { engineId })
       .andWhere('assignment.principalType = :principalType', { principalType: 'user' })
       .andWhere('assignment.roleId IN (:...roleIds)', { roleIds: ENGINE_ACCESS_DISPLAY_SYSTEM_ROLE_IDS })
-      .andWhere('assignment.source != :legacySource', { legacySource: 'legacy' })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() })
       .getMany();
 
-    // Collect all user IDs (owner, delegate, and members)
     const userIds = new Set<string>();
-    if (engine.ownerId) userIds.add(engine.ownerId);
-    if (engine.delegateId) userIds.add(engine.delegateId);
-    members.forEach(m => userIds.add(m.userId));
     assignmentMembers.forEach((assignment) => {
       if (assignment.principalId) userIds.add(assignment.principalId);
     });
@@ -211,70 +206,31 @@ export class EngineService {
       userMap = new Map(userList.map(u => [u.id, u]));
     }
 
-    const result: EngineMemberWithUser[] = [];
-
-    // Add owner first
-    if (engine.ownerId) {
-      result.push({
-        id: `owner-${engine.ownerId}`,
-        engineId,
-        userId: engine.ownerId,
-        role: 'owner',
-        grantedById: null,
-        createdAt: engine.createdAt || Date.now(),
-        user: userMap.get(engine.ownerId) || null,
-      });
-    }
-
-    // Add delegate
-    if (engine.delegateId) {
-      result.push({
-        id: `delegate-${engine.delegateId}`,
-        engineId,
-        userId: engine.delegateId,
-        role: 'delegate',
-        grantedById: engine.ownerId,
-        createdAt: engine.updatedAt || Date.now(),
-        user: userMap.get(engine.delegateId) || null,
-      });
-    }
-
-    // Add operators and deployers
-    for (const member of members) {
-      if (member.userId === engine.ownerId || member.userId === engine.delegateId) {
-        continue;
-      }
-      result.push({
-        id: member.id,
-        engineId: member.engineId,
-        userId: member.userId,
-        role: member.role,
-        grantedById: member.grantedById,
-        createdAt: member.createdAt,
-        user: userMap.get(member.userId) || null,
-      });
-    }
-
-    const existingUserIds = new Set(result.map((member) => member.userId));
+    const resultByUserId = new Map<string, EngineMemberWithUser>();
     for (const assignment of assignmentMembers) {
-      if (!assignment.principalId || existingUserIds.has(assignment.principalId)) {
-        continue;
-      }
+      if (!assignment.principalId) continue;
       const role = ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE[assignment.roleId];
       if (!role) continue;
-      result.push({
+      const existing = resultByUserId.get(assignment.principalId);
+      if (existing && ENGINE_ACCESS_ROLE_PRECEDENCE.indexOf(existing.role as typeof ENGINE_ACCESS_ROLE_PRECEDENCE[number]) <= ENGINE_ACCESS_ROLE_PRECEDENCE.indexOf(role)) {
+        continue;
+      }
+      resultByUserId.set(assignment.principalId, {
         id: assignment.id,
         engineId,
         userId: assignment.principalId,
         role,
         grantedById: assignment.createdById,
         createdAt: assignment.createdAt,
+        source: assignment.source,
         user: userMap.get(assignment.principalId) || null,
       });
-      existingUserIds.add(assignment.principalId);
     }
 
-    return result;
+    return Array.from(resultByUserId.values()).sort((left, right) => {
+      const roleOrder = ENGINE_ACCESS_ROLE_PRECEDENCE.indexOf(left.role as typeof ENGINE_ACCESS_ROLE_PRECEDENCE[number]) - ENGINE_ACCESS_ROLE_PRECEDENCE.indexOf(right.role as typeof ENGINE_ACCESS_ROLE_PRECEDENCE[number]);
+      return roleOrder || left.createdAt - right.createdAt || left.userId.localeCompare(right.userId);
+    });
   }
 
   /**
