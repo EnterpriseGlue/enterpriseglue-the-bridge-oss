@@ -105,7 +105,7 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
 
   it('accepts stable engine metadata labels and rejects display-oriented keys', () => {
     expect(ConfigEnginesFileSchema.safeParse({
-      engines: [{ key: 'engine-prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://engine.example.com/engine-rest', labels: { country: 'TR', business_unit: 'payments', customer_segment: 'enterprise' }, auth: { type: 'bearer', tokenRef: 'EG_ENGINE_TOKEN' } }],
+      engines: [{ key: 'engine-prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://engine.example.com/engine-rest', labels: { country: 'TR', businessUnit: 'payments', customer_segment: 'enterprise' }, auth: { type: 'bearer', tokenRef: 'EG_ENGINE_TOKEN' } }],
     }).success).toBe(true);
     expect(ConfigEnginesFileSchema.safeParse({
       engines: [{ key: 'engine-prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://engine.example.com/engine-rest', labels: { 'Business Unit': 'payments' }, auth: { type: 'bearer', tokenRef: 'EG_ENGINE_TOKEN' } }],
