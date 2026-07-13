@@ -2256,7 +2256,7 @@ Phase 0 exit criteria:
 
 ### Phase 6: UI
 
-- [x] ✅ Add Platform Settings Configuration tab with pasted JSON preview/diff and exact-hash apply. Export, run history, upload/ZIP import, and CI CLI remain pending.
+- [x] ✅ Add Platform Settings Configuration tab with pasted JSON preview/diff and exact-hash apply, server-side export, and recent apply-run history. Upload/ZIP import remains pending; the API-driven CI CLI is documented and available separately.
 - [x] ✅ Add paste and JSON file import/export controls using Carbon components. ZIP and multi-file folder import remain pending.
 - [x] ✅ Add diff viewer with search, operation/object-type/priority filters, and attention-first risk grouping.
 - [x] ✅ Bind apply to the exact canonical preview hash.
@@ -2287,7 +2287,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add GitHub Actions example.
 - [ ] ⬜ Add Docker/Kubernetes secret reference examples.
 - [ ] ⬜ Add documentation for least-privilege API client creation.
-- [ ] ⬜ Add machine-readable exit codes for CI.
+- [x] ✅ Add machine-readable CLI output and distinct usage, preview-validation, and request/runtime exit codes for CI. Finer-grained authorization, conflict, and reconciliation exit codes remain pending.
 - [ ] ⬜ Add disabled-by-default `EG_CONFIG_*` settings to shared config validation, `backend/.env.example`, every Docker/OpenShift env example, `docs/reference/configuration.md`, and `docs/reference/configuration-matrix.md`.
 - [ ] ⬜ Add optional `infra/docker/compose/docker-compose.config-bundle.yml` with read-only bundle and separate secret mounts; update dev, production, image, and self-host startup paths to include it only when configured.
 - [ ] ⬜ Ensure production backend images expose a non-root-readable config mount path without baking customer bundles into images.

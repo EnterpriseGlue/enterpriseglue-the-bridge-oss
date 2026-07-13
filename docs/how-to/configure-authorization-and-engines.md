@@ -94,7 +94,7 @@ CI/CD should perform these steps:
 6. Verify readiness, expected hash, and no unresolved high-risk drift.
 7. Retain the previous bundle and apply receipt for rollback.
 
-See [Deploy Authorization Configuration](./deploy-authorization-config.md) for the target deployment contract.
+See [Deploy Authorization Configuration](./deploy-authorization-config.md) for the implemented API/CLI workflow and the remaining bootstrap-deployment work.
 
 ## Configure Roles And Groups
 
@@ -206,17 +206,31 @@ Config apply cannot create a second row that competes with a manual target. Prev
 
 ## Preview And Apply
 
-The target API workflow is:
+The implemented API workflow is:
 
 ```text
-POST /api/config-bundles/validate
-POST /api/config-bundles/preview
-POST /api/config-bundles/apply
-GET  /api/config-bundles/runs/:runId
-GET  /api/config-bundles/export
+POST /api/authz/config-bundles/preview
+POST /api/authz/config-bundles/diff
+POST /api/authz/config-bundles/apply
+GET  /api/authz/config-bundles/runs
+GET  /api/authz/config-bundles/export?bundleKey=<key>
 ```
 
-These routes are planned and not available yet.
+`preview` performs strict bundle validation and returns a canonical hash without mutation. `diff` compares a valid bundle with persisted configuration-managed state. `apply` requires the matching preview hash and records an apply run. `export` returns the source-owned state for one bundle key.
+
+For CI/CD, use the repository CLI rather than hand-writing API requests:
+
+```bash
+export ENTERPRISEGLUE_API_URL="https://enterpriseglue.example"
+export ENTERPRISEGLUE_API_TOKEN="$EG_CONFIG_TOKEN"
+
+pnpm authz:config validate ./enterpriseglue-config.json
+pnpm authz:config preview ./enterpriseglue-config.json
+pnpm authz:config apply ./enterpriseglue-config.json
+pnpm authz:config export acme-platform-authz
+```
+
+The token's principal needs `platform.authz.roles.manage`. `apply` performs its own preview and applies the returned canonical hash, so an edited or stale bundle is rejected. The CLI produces JSON and does not access the database directly.
 
 Preview must report:
 
@@ -254,8 +268,8 @@ Provider lockout rollback must also preserve a tested local break-glass administ
 
 ## Implementation Checklist
 
-- [ ] ⬜ Implement the bundle schemas, services, APIs, OpenAPI, and authorization metadata before publishing this guide as generally available.
+- [x] ✅ Implement bundle schemas, services, preview/diff/apply/export/history APIs, OpenAPI contracts, authorization metadata, and the API-driven CLI lifecycle.
 - [ ] ⬜ Add screenshots and exact UI navigation after the role editor, Identity, Configuration, Engine connection, and diagnostics surfaces are complete.
-- [ ] ⬜ Replace target API notices with executable examples after route names and request schemas are stable.
+- [x] ✅ Replace target API notices with the current executable API and CI CLI examples.
 - [ ] ⬜ Add tested standalone, OIDC, SAML, LDAP, distributed-engine, central-engine, external-registration, and customer-sidecar examples.
 - [ ] ⬜ Validate every documented example in CI against shared Zod/OpenAPI schemas.

@@ -4,7 +4,7 @@ Summary: Target deployment and CI/CD contract for EnterpriseGlue authorization, 
 
 Audience: Platform engineers, security engineers, and CI/CD maintainers.
 
-Status: **Implementation plan and future runbook.** The environment variables, config mount, scripts, startup reconciliation, and config bundle APIs in this document are not implemented yet. Existing deployments continue to use the current environment templates and Platform UI.
+Status: **Partially implemented runbook.** API-driven configuration-bundle preview, hash-bound apply, export, apply history, and the `pnpm authz:config` CLI are available. Mounted bootstrap bundles, startup reconciliation/readiness integration, and Docker/OpenShift bundle mounts remain planned. Existing deployments continue to start without a bundle.
 
 Related guides:
 
@@ -18,8 +18,8 @@ Related guides:
 
 Support two apply paths that use the same validation and apply services:
 
-1. **Bootstrap mount:** optional, read-only bundle mounted into the backend for deterministic first deployment and restart reconciliation.
-2. **CI/CD API apply:** recommended for later updates because preview, approval, apply, and run status are explicit deployment stages.
+1. **Bootstrap mount (planned):** optional, read-only bundle mounted into the backend for deterministic first deployment and restart reconciliation.
+2. **CI/CD API apply (implemented):** recommended for later updates because preview, approval, apply, export, and run status are explicit deployment stages.
 
 Do not make automatic startup apply the default. Existing standalone installations must still start without a bundle.
 
@@ -107,7 +107,7 @@ Required changes:
 
 ## CI/CD Apply Flow
 
-The target pipeline stages are:
+The implemented API-driven pipeline stages are:
 
 ```text
 schema validate
@@ -120,24 +120,48 @@ schema validate
 -> archive receipt and sanitized diff
 ```
 
-Machine access uses a dedicated API client or service account with narrowly scoped configuration permissions. It must not use a human Platform Admin token.
+Machine access currently uses a dedicated bearer token whose principal has `platform.authz.roles.manage`. It must not use a human Platform Admin token. Dedicated API-client/service-account scopes are still planned; until then, issue and rotate a narrow non-human credential through the deployment secret store.
 
-Target scripts:
+Use the repository CLI:
 
-```text
-scripts/validate-config-bundle.mjs
-scripts/preview-config-bundle.mjs
-scripts/apply-config-bundle.mjs
-scripts/verify-config-bundle.mjs
+```bash
+# All commands require a backend base URL without a trailing slash and a
+# non-human bearer token. JSON output is suitable for CI artifacts.
+export ENTERPRISEGLUE_API_URL="https://enterpriseglue.example"
+export ENTERPRISEGLUE_API_TOKEN="$EG_CONFIG_TOKEN"
+
+# Validates the local JSON and performs the server-side preview. Exit code 2
+# means the bundle was rejected by preview validation.
+pnpm authz:config validate ./enterpriseglue-config.json
+
+# Produces the canonical preview, including its hash. This has no side effects.
+pnpm authz:config preview ./enterpriseglue-config.json
+
+# Repeats preview and applies using the canonical hash returned by that exact
+# preview. Do not modify the file between preview approval and this command.
+pnpm authz:config apply ./enterpriseglue-config.json
+
+# Exports the server-side state owned by a previously applied bundle.
+pnpm authz:config export acme-platform-authz
 ```
 
-The scripts call the same backend APIs used by the UI. They do not connect directly to the database.
+The CLI calls the same backend APIs used by the UI. It never connects directly to the database. `apply` sends the server-produced canonical hash as `expectedPreviewHash`, so stale or altered bundles fail closed. The CLI returns `64` for invalid invocation, `2` for preview validation failure, and `1` for API, I/O, or transport failures.
+
+The corresponding authenticated routes are:
+
+```text
+POST /api/authz/config-bundles/preview
+POST /api/authz/config-bundles/diff
+POST /api/authz/config-bundles/apply
+GET  /api/authz/config-bundles/runs
+GET  /api/authz/config-bundles/export?bundleKey=<key>
+```
 
 Required behavior:
 
-- [ ] ⬜ Require expected environment/tenant id, bundle hash, idempotency key, and preview correlation id.
-- [ ] ⬜ Reject apply when the preview expired or current state changed.
-- [ ] ⬜ Print a sanitized machine-readable receipt suitable for CI artifacts.
+- [ ] ⬜ Add an explicit expected environment/tenant id and caller-supplied idempotency key to the CLI/API contract.
+- [x] ✅ Require the server-generated canonical preview hash on apply; the apply service rejects an altered or stale bundle.
+- [x] ✅ Print sanitized machine-readable preview, apply, and export responses suitable for CI artifacts.
 - [ ] ⬜ Return distinct exit codes for validation, authorization, conflict, reconciliation, and transport failures.
 - [ ] ⬜ Never print access tokens, provider secrets, engine credentials, certificates, LDAP bind passwords, or customer peer tokens.
 
