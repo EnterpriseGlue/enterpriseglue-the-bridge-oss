@@ -1083,6 +1083,13 @@ function formatSsoGroupMappingLineage(source: EffectiveAccessSource) {
   return `SSO group: ${mapping.claimType} ${mapping.claimKey} ${operator} ${mapping.claimValue}`;
 }
 
+function formatIdentityEntitlementMappingLineage(source: EffectiveAccessSource) {
+  const mapping = source.identityEntitlementMapping;
+  if (!mapping) return null;
+  const value = mapping.matchOperator === 'exists' ? 'any value' : mapping.externalId || '-';
+  return `Identity mapping: ${mapping.entitlementType} ${mapping.matchOperator} ${value}`;
+}
+
 function formatEngineRegistrationLineage(source: EffectiveAccessSource) {
   const registration = source.engineRegistration;
   if (!registration) return null;
@@ -1099,6 +1106,7 @@ function formatEffectiveAccessLineage(source: EffectiveAccessSource) {
   const parts = [
     source.source ? `Assignment source: ${source.source}` : null,
     source.groupMembership ? `Group membership: ${source.groupMembership.source}` : null,
+    formatIdentityEntitlementMappingLineage(source),
     formatSsoGroupMappingLineage(source),
     formatSsoMappingLineage(source),
     source.selectorFingerprint ? `Selector: ${source.selectorFingerprint}` : null,
@@ -1884,6 +1892,7 @@ function findEffectiveAccessSourceAuditEntries(source: EffectiveAccessSource, en
     source.groupMembership?.sourceRef,
     source.ssoMapping?.id,
     source.ssoGroupMapping?.id,
+    source.identityEntitlementMapping?.id,
     source.engineSetId,
     source.materializationId,
     source.engineRegistration?.registrationId,
@@ -1899,6 +1908,7 @@ function findEffectiveAccessSourceAuditEntries(source: EffectiveAccessSource, en
     if (source.groupMembership?.id && entry.resourceType === 'authz_group_membership' && auditEntryReferences(entry, [source.groupMembership.id])) return true;
     if (source.ssoMapping?.id && entry.resourceType === 'sso_assignment_mapping' && auditEntryReferences(entry, [source.ssoMapping.id])) return true;
     if (source.ssoGroupMapping?.id && entry.resourceType === 'sso_group_mapping' && auditEntryReferences(entry, [source.ssoGroupMapping.id])) return true;
+    if (source.identityEntitlementMapping?.id && entry.resourceType === 'identity_entitlement_mapping' && auditEntryReferences(entry, [source.identityEntitlementMapping.id])) return true;
     if (source.engineSetId && entry.resourceType === 'engine_set' && auditEntryReferences(entry, [source.engineSetId])) return true;
     return auditEntryReferences(entry, ids);
   });

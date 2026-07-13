@@ -604,6 +604,15 @@ export interface EffectiveAccessResult {
       targetGroupId: string;
       syncMode: string;
     } | null;
+    identityEntitlementMapping?: {
+      id: string;
+      providerId: string;
+      entitlementType: string;
+      externalId: string | null;
+      matchOperator: string;
+      targetGroupId: string;
+      syncMode: string;
+    } | null;
     permission?: string;
   }>;
 }
