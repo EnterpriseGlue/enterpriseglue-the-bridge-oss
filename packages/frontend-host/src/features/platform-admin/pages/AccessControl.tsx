@@ -60,7 +60,7 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
-import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
+import { getAssignableRolesForPrincipal, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -2433,13 +2433,7 @@ function RoleAssignmentsPanel({
   externalSystems: ExternalEngineSystem[];
   runtimeEngines: RuntimeResourceEngineOption[];
   loading: boolean;
-  onAssign: (form: {
-    principalType: AssignmentPrincipalType;
-    principalId: string;
-    roleId: string;
-    resourceType: CoreAssignmentResourceType;
-    resourceId: string;
-  }) => void;
+  onAssign: (form: AssignmentFormValues) => void;
   onRemove: (assignmentId: string) => void;
   pending: boolean;
   canCreate: boolean;

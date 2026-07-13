@@ -2,6 +2,13 @@ import type { RoleSummary } from '../../hooks/useAuthzApi';
 import type { CoreAssignmentResourceType } from './effectiveAccessPresentation';
 
 export type AssignmentPrincipalType = 'user' | 'group' | 'api_client' | 'service_account';
+export type AssignmentFormValues = {
+  principalType: AssignmentPrincipalType;
+  principalId: string;
+  roleId: string;
+  resourceType: CoreAssignmentResourceType;
+  resourceId: string;
+};
 
 const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([
   'system.api.engine_registrar',
