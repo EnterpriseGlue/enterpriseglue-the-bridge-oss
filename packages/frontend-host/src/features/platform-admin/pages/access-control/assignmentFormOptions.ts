@@ -10,6 +10,9 @@ export type AssignmentFormValues = {
   resourceId: string;
 };
 export type AssignmentFormState = AssignmentFormValues & { runtimeEngineId: string };
+export const DEFAULT_ASSIGNMENT_FORM_STATE: AssignmentFormState = {
+  principalType: 'user', principalId: '', roleId: '', resourceType: 'engine', resourceId: '', runtimeEngineId: '',
+};
 
 const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([
   'system.api.engine_registrar',
