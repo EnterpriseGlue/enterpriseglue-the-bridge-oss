@@ -53,6 +53,7 @@ import {
 import { AuthzAuditPanel, DEFAULT_AUTHZ_AUDIT_FILTER, type AuthzAuditFilterState } from './access-control/AuthzAuditPanel';
 import { SsoSyncDiagnosticsPanel } from './access-control/SsoSyncDiagnosticsPanel';
 import { SsoEngineAccessSnapshotsPanel } from './access-control/SsoEngineAccessSnapshotsPanel';
+import { SsoAssignmentDiagnosticsPanel, type SsoAssignmentDiagnostics } from './access-control/SsoAssignmentDiagnosticsPanel';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
   formatSsoSyncCounts as presentSsoSyncCounts,
@@ -374,22 +375,6 @@ interface SsoGroupMappingTestResult {
   memberships: Array<{ groupId: string; mappingId: string }>;
 }
 
-interface SsoAssignmentTestResult {
-  matchedMappings: Array<SsoAssignmentMapping & { targetResourceId: string | null; targetResourceIds: Array<string | null> }>;
-  assignments: Array<{ roleId: string; resourceType: 'engine'; resourceId: string | null; mappingId: string }>;
-}
-
-interface SsoAssignmentDiagnostics {
-  activeMappings: number;
-  inactiveMappings: number;
-  authoritativeMappings: number;
-  additiveMappings: number;
-  allEngineSelectors: number;
-  targetWarnings: Array<{ mapping: SsoAssignmentMapping; warning: string }>;
-  staleAssignments: RoleAssignment[];
-  ssoAssignmentCount: number;
-  targetSummaries: Array<{ mapping: SsoAssignmentMapping; summary: string; warning: string | null }>;
-}
 
 const roleAssignmentHeaders = [
   { key: 'principal', header: 'Principal' },
@@ -3658,86 +3643,6 @@ function ByResourcePanel({
   );
 }
 
-function SsoAssignmentDiagnosticsPanel({
-  diagnostics,
-  roles,
-  testResult,
-}: {
-  diagnostics: SsoAssignmentDiagnostics;
-  roles: RoleSummary[];
-  testResult: SsoAssignmentTestResult | null | undefined;
-}) {
-  return (
-    <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
-      <h3 style={{ margin: 0 }}>SSO diagnostics</h3>
-      <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
-        <Tag type="green">{diagnostics.activeMappings} active mapping{diagnostics.activeMappings === 1 ? '' : 's'}</Tag>
-        <Tag type="gray">{diagnostics.inactiveMappings} inactive mapping{diagnostics.inactiveMappings === 1 ? '' : 's'}</Tag>
-        <Tag type="blue">{diagnostics.authoritativeMappings} authoritative</Tag>
-        <Tag type="cyan">{diagnostics.additiveMappings} additive</Tag>
-        <Tag type={diagnostics.allEngineSelectors > 0 ? 'red' : 'gray'}>{diagnostics.allEngineSelectors} all-engine selector{diagnostics.allEngineSelectors === 1 ? '' : 's'}</Tag>
-        <Tag type={diagnostics.targetWarnings.length > 0 ? 'magenta' : 'gray'}>{diagnostics.targetWarnings.length} target warning{diagnostics.targetWarnings.length === 1 ? '' : 's'}</Tag>
-        <Tag type={diagnostics.staleAssignments.length > 0 ? 'red' : 'gray'}>{diagnostics.staleAssignments.length} stale SSO assignment{diagnostics.staleAssignments.length === 1 ? '' : 's'}</Tag>
-        <Tag type="cool-gray">{diagnostics.ssoAssignmentCount} SSO-managed assignment{diagnostics.ssoAssignmentCount === 1 ? '' : 's'}</Tag>
-      </div>
-
-      {diagnostics.allEngineSelectors > 0 && (
-        <InlineNotification
-          kind="warning"
-          title="All-engine selectors are broad"
-          subtitle="Review these mappings before enabling authoritative sync in production environments."
-          lowContrast
-        />
-      )}
-
-      <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
-        <strong>Target diagnostics</strong>
-        {diagnostics.targetSummaries.length === 0 ? (
-          <div>No SSO engine assignment mappings are configured.</div>
-        ) : diagnostics.targetSummaries.map(({ mapping, summary, warning }) => (
-          <div key={mapping.id} style={{ display: 'flex', gap: 'var(--spacing-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-            <code>{ssoClaimLabel(mapping)}</code>
-            <span>{selectorLabel(mapping)}</span>
-            <Tag type={warning ? 'magenta' : 'green'}>{summary}</Tag>
-            <span>{roleLabel(mapping.targetRoleId, roles)}</span>
-          </div>
-        ))}
-      </div>
-
-      {diagnostics.staleAssignments.length > 0 && (
-        <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
-          <strong>Stale SSO assignment lineage</strong>
-          {diagnostics.staleAssignments.map((assignment) => (
-            <div key={assignment.id} style={{ display: 'flex', gap: 'var(--spacing-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-              <code>{assignment.id}</code>
-              <span>{roleLabel(assignment.roleId, roles)} - {assignment.resourceType || assignment.scopeType}:{assignment.resourceId || assignment.scopeId || '*'}</span>
-              <Tag type="red">{assignment.sourceMappingId || 'missing mapping'}</Tag>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {testResult && (
-        <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
-          <strong>Claims preview</strong>
-          <div>
-            {testResult.matchedMappings.length} matched mapping{testResult.matchedMappings.length === 1 ? '' : 's'}; {testResult.assignments.length} assignment{testResult.assignments.length === 1 ? '' : 's'} would be created or refreshed.
-          </div>
-          {testResult.assignments.length > 0 && (
-            <div style={{ display: 'grid', gap: 'var(--spacing-1)' }}>
-              {testResult.assignments.map((assignment, index) => (
-                <div key={`${assignment.mappingId}-${assignment.roleId}-${assignment.resourceId || 'all'}-${index}`} style={{ display: 'flex', gap: 'var(--spacing-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Tag type="blue">{assignment.mappingId}</Tag>
-                  <span>{roleLabel(assignment.roleId, roles)} - {assignment.resourceId || 'all engines'}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 
 
