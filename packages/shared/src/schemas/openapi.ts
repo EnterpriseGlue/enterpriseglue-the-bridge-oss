@@ -2138,7 +2138,7 @@ registry.registerPath({
   path: '/api/identity/providers/{key}/test-connection',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/test-connection'),
   request: { params: z.object({ key: z.string() }) },
-  responses: { 200: { description: 'Protocol-specific identity provider connection result', content: { 'application/json': { schema: z.object({ status: z.enum(['connected', 'not_supported']), protocol: z.enum(['oidc', 'saml', 'ldap']), issuer: z.string().optional(), sampledIdentities: z.number().int().nonnegative().optional(), reason: z.string().optional() }) } } }, 404: { description: 'Identity provider not found' } },
+  responses: { 200: { description: 'Protocol-specific identity provider connection result', content: { 'application/json': { schema: z.object({ status: z.literal('connected'), protocol: z.enum(['oidc', 'saml', 'ldap']), issuer: z.string().optional(), sampledIdentities: z.number().int().nonnegative().optional(), entityDescriptorCount: z.number().int().nonnegative().optional() }) } } }, 404: { description: 'Identity provider not found' } },
 });
 registry.registerPath({
   method: 'delete',

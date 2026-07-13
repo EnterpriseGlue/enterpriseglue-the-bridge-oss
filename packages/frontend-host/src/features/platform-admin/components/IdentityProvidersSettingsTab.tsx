@@ -25,7 +25,7 @@ interface IdentityProvider {
 }
 type MembershipReplayResult = { runId: string | null; scanned: number; created: number; removed: number; failed: number; truncated: boolean; nextCursor: string | null };
 type SyncRun = { id: string; status: 'running' | 'success' | 'failed'; trigger: string; startedAt: number; completedAt: number | null; groupMembershipsCreated: number; groupMembershipsRemoved: number; errorMessage: string | null };
-type ConnectionTestResult = { status: 'connected' | 'not_supported'; protocol: Protocol; issuer?: string; sampledIdentities?: number; reason?: string };
+type ConnectionTestResult = { status: 'connected'; protocol: Protocol; issuer?: string; sampledIdentities?: number; entityDescriptorCount?: number };
 
 type FormState = {
   key: string; protocol: Protocol; isEnabled: boolean; authenticationMode: AuthenticationMode; directoryTenantId: string;
@@ -112,7 +112,7 @@ export default function IdentityProvidersSettingsTab() {
         <GuardedAction actionId="platform.sso.providers.manage" resource={resource}><Button kind="primary" size="sm" renderIcon={Add} onClick={startCreate}>Add provider</Button></GuardedAction>
       </div>
       {replayResult && <InlineNotification kind={replayResult.result.failed > 0 ? 'warning' : 'success'} title={`Stored membership replay: ${replayResult.providerKey}`} subtitle={`${replayResult.result.scanned} snapshots checked, ${replayResult.result.created} added, ${replayResult.result.removed} removed${replayResult.result.failed > 0 ? `, ${replayResult.result.failed} failed` : ''}${replayResult.result.truncated ? '. More snapshots remain; use Continue membership replay.' : '.'}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
-      {connectionResult && <InlineNotification kind={connectionResult.result.status === 'connected' ? 'success' : 'info'} title={`Connection test: ${connectionResult.providerKey}`} subtitle={connectionResult.result.status === 'connected' ? `${connectionResult.result.protocol.toUpperCase()} connection verified${connectionResult.result.issuer ? ` for ${connectionResult.result.issuer}` : ''}${connectionResult.result.sampledIdentities !== undefined ? `; sampled ${connectionResult.result.sampledIdentities} directory identities` : ''}.` : connectionResult.result.reason || 'This provider protocol does not support connection validation yet.'} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+      {connectionResult && <InlineNotification kind="success" title={`Connection test: ${connectionResult.providerKey}`} subtitle={`${connectionResult.result.protocol.toUpperCase()} connection verified${connectionResult.result.issuer ? ` for ${connectionResult.result.issuer}` : ''}${connectionResult.result.sampledIdentities !== undefined ? `; sampled ${connectionResult.result.sampledIdentities} directory identities` : ''}${connectionResult.result.entityDescriptorCount !== undefined ? `; validated ${connectionResult.result.entityDescriptorCount} SAML entity descriptors` : ''}.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       <DataTable rows={rows} headers={[{ key: 'key', header: 'Key' }, { key: 'protocol', header: 'Protocol' }, { key: 'mode', header: 'Mode' }, { key: 'sync', header: 'Sync' }, { key: 'status', header: 'Status' }, { key: 'source', header: 'Source' }, { key: 'actions', header: '' }]} isSortable>
         {({ rows: tableRows, headers, getHeaderProps, getRowProps, getTableProps }) => (
           <TableContainer>

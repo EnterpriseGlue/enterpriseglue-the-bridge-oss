@@ -10,6 +10,7 @@ import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/pl
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
 import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
+import { samlMetadataService } from '@enterpriseglue/shared/services/platform-admin/SamlMetadataService.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
@@ -44,7 +45,8 @@ router.post('/api/identity/providers/:key/test-connection', requireAuth, require
     const metadata = await genericOidcService.testConnection(JSON.parse(provider.configurationJson));
     result = { status: 'connected', protocol: 'oidc', issuer: metadata.issuer };
   } else {
-    result = { status: 'not_supported', protocol: 'saml', reason: 'SAML metadata connection validation is not implemented yet' };
+    const metadata = await samlMetadataService.testConnection(provider.configurationJson);
+    result = { status: 'connected', protocol: 'saml', entityDescriptorCount: metadata.entityDescriptorCount };
   }
   await logAudit({ action: 'identity.provider.connection_test', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, ...result } });
   res.json(result);
