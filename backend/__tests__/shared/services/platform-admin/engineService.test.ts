@@ -282,4 +282,81 @@ describe('EngineService', () => {
     }));
     expect(legacySyncSpy).not.toHaveBeenCalled();
   });
+
+  it('updates a legacy engine member with a direct canonical legacy assignment', async () => {
+    const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
+    const memberRepo = {
+      findOne: vi.fn().mockResolvedValue({ engineId: 'engine-1', userId: 'user-1', role: 'operator', grantedById: 'admin-1', createdAt: 100 }),
+    };
+    const transactionMemberRepo = {
+      delete: vi.fn().mockResolvedValue({ affected: 1 }),
+      insert: vi.fn().mockResolvedValue(undefined),
+    };
+    const engineRepo = {
+      findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-1' }),
+    };
+    const assignmentRepo = {
+      upsert: vi.fn().mockResolvedValue(undefined),
+      delete: vi.fn().mockResolvedValue({ affected: 1 }),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === EngineMember) return memberRepo;
+        if (entity === Engine) return engineRepo;
+        if (entity === RbacRoleAssignment) return assignmentRepo;
+        throw new Error('Unexpected repository');
+      },
+      transaction: async (callback: any) => callback({
+        getRepository: (entity: unknown) => {
+          if (entity === EngineMember) return transactionMemberRepo;
+          throw new Error('Unexpected transaction repository');
+        },
+      }),
+    });
+
+    await service.updateEngineMemberRole('engine-1', 'user-1', 'deployer', 'admin-2');
+
+    expect(assignmentRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'legacy:engine:engine-1:user-1:system.engine.deployer',
+      tenantId: 'tenant-1',
+      principalType: 'user',
+      principalId: 'user-1',
+      roleId: 'system.engine.deployer',
+      scopeType: 'engine',
+      scopeId: 'engine-1',
+      source: 'legacy',
+      sourceRef: 'engine_member:engine-1:user-1:deployer',
+    }), expect.objectContaining({ conflictPaths: ['id'] }));
+    expect(assignmentRepo.delete).toHaveBeenCalledWith({ id: expect.anything() });
+    expect(legacySyncSpy).not.toHaveBeenCalled();
+  });
+
+  it('removes canonical legacy assignments when a legacy engine member is removed', async () => {
+    const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
+    const memberRepo = {
+      findOne: vi.fn().mockResolvedValue({ engineId: 'engine-1', userId: 'user-1', role: 'operator' }),
+      delete: vi.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const assignmentQb = {
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([]),
+    };
+    const assignmentRepo = {
+      delete: vi.fn().mockResolvedValue({ affected: 1 }),
+      createQueryBuilder: vi.fn().mockReturnValue(assignmentQb),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === EngineMember) return memberRepo;
+        if (entity === RbacRoleAssignment) return assignmentRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.removeEngineMember('engine-1', 'user-1', 'admin-1');
+
+    expect(assignmentRepo.delete).toHaveBeenCalledWith({ id: expect.anything() });
+    expect(legacySyncSpy).not.toHaveBeenCalled();
+  });
 });

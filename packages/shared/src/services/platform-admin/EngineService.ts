@@ -15,7 +15,6 @@ import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { In, IsNull } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
 import { ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE, EnginePermissions, permissionService, SYSTEM_ROLE_IDS } from './permissions.js';
@@ -64,14 +63,6 @@ const ENGINE_GOVERNANCE_SOURCE = 'system';
 
 function engineGovernanceSourceRef(engineId: string, slot: 'owner' | 'delegate'): string {
   return `engine:${engineId}:governance-${slot}`;
-}
-
-async function syncLegacyEngineAssignments(engineId: string): Promise<void> {
-  try {
-    await permissionService.syncLegacyRoleAssignments({ engineIds: [engineId] });
-  } catch (error) {
-    logger.warn('Failed to sync legacy engine role assignments', { engineId, error });
-  }
 }
 
 export class EngineService {
@@ -455,7 +446,16 @@ export class EngineService {
           createdAt: Date.now(),
         });
       });
-      await syncLegacyEngineAssignments(engineId);
+      await this.writeLegacyEngineMemberAssignment(dataSource, {
+        engineId,
+        userId,
+        role: newRole,
+        grantedById: existing.grantedById,
+        createdAt: existing.createdAt,
+      });
+      if (existing.role !== newRole) {
+        await this.removeLegacyEngineMemberAssignments(dataSource, engineId, userId, [existing.role as 'operator' | 'deployer']);
+      }
       return;
     }
 
@@ -490,7 +490,7 @@ export class EngineService {
     const existing = await memberRepo.findOne({ where: { engineId, userId } });
     if (existing) {
       await memberRepo.delete({ engineId, userId });
-      await syncLegacyEngineAssignments(engineId);
+      await this.removeLegacyEngineMemberAssignments(dataSource, engineId, userId);
     }
 
     const assignments = await this.getDirectUserEngineMemberAssignments(dataSource, engineId, userId);
@@ -511,6 +511,66 @@ export class EngineService {
       .andWhere('assignment.source = :source', { source: 'manual' })
       .andWhere('assignment.roleId IN (:...roleIds)', { roleIds: ENGINE_STANDARD_MEMBER_SYSTEM_ROLE_IDS })
       .getMany();
+  }
+
+  private async writeLegacyEngineMemberAssignment(
+    dataSource: Awaited<ReturnType<typeof getDataSource>>,
+    input: { engineId: string; userId: string; role: 'operator' | 'deployer'; grantedById: string | null; createdAt: number },
+  ): Promise<void> {
+    const engine = await dataSource.getRepository(Engine).findOne({
+      where: { id: input.engineId },
+      select: ['id', 'tenantId'],
+    });
+    if (!engine) {
+      throw new Error('Engine not found');
+    }
+    const roleId = ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID[input.role];
+    const sourceRef = `engine_member:${input.engineId}:${input.userId}:${input.role}`;
+    const now = Date.now();
+    await dataSource.getRepository(RbacRoleAssignment).upsert({
+      id: `legacy:engine:${input.engineId}:${input.userId}:${roleId}`,
+      tenantId: engine.tenantId ?? null,
+      userId: input.userId,
+      principalType: 'user',
+      principalId: input.userId,
+      assignmentKey: canonicalRoleAssignmentKey({
+        tenantId: engine.tenantId ?? null,
+        principalType: 'user',
+        principalId: input.userId,
+        roleId,
+        scopeType: 'engine',
+        scopeId: input.engineId,
+        source: 'legacy',
+        sourceRef,
+      }),
+      roleId,
+      resourceType: 'engine',
+      resourceId: input.engineId,
+      scopeType: 'engine',
+      scopeId: input.engineId,
+      source: 'legacy',
+      sourceMappingId: sourceRef,
+      sourceRef,
+      expiresAt: null,
+      lastSeenAt: now,
+      createdById: input.grantedById,
+      createdAt: input.createdAt || now,
+      updatedAt: now,
+    }, {
+      conflictPaths: ['id'],
+      skipUpdateIfNoValuesChanged: true,
+    });
+  }
+
+  private async removeLegacyEngineMemberAssignments(
+    dataSource: Awaited<ReturnType<typeof getDataSource>>,
+    engineId: string,
+    userId: string,
+    roles: Array<'operator' | 'deployer'> = ['operator', 'deployer'],
+  ): Promise<void> {
+    await dataSource.getRepository(RbacRoleAssignment).delete({
+      id: In(roles.map((role) => `legacy:engine:${engineId}:${userId}:${ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID[role]}`)),
+    });
   }
 
   private async syncManagedEngineGovernanceAssignments(
