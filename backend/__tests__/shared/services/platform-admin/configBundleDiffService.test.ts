@@ -4,6 +4,7 @@ import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
@@ -40,6 +41,8 @@ function mockDataSource(
   runtimeResources: unknown[] = [],
   projects: unknown[] = [],
   groupMemberships: unknown[] = [],
+  runtimeResourceSets: unknown[] = [],
+  runtimeResourceSetMaterializations: unknown[] = [],
 ) {
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository: (entity: unknown) => {
@@ -47,7 +50,8 @@ function mockDataSource(
       if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue(groups) };
       if (entity === Engine) return { find: vi.fn().mockResolvedValue(engines) };
       if (entity === EngineSet) return { find: vi.fn().mockResolvedValue([]) };
-      if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue([]) };
+      if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue(runtimeResourceSets) };
+      if (entity === RuntimeResourceSetMaterialization) return { find: vi.fn().mockResolvedValue(runtimeResourceSetMaterializations) };
       if (entity === RbacRolePermission) return { find: vi.fn().mockResolvedValue(permissions) };
       if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue(identityProviders) };
       if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue(identityMappings) };
@@ -160,6 +164,35 @@ describe('configBundleDiffService', () => {
     expect(result.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({ objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'create' }),
     ]));
+  });
+
+  it('reports runtime resources entering and leaving a changed selector', async () => {
+    mockDataSource([], [], [], [{
+      id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz',
+      name: 'Central', baseUrl: 'https://central.example.com/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}', runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, pipelineReceiptEnabled: true, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active',
+    }], [], [], [], [], [
+      { id: 'resource-orders', tenantId: 'tenant-a', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'orders-v1', runtimeTenantId: '', isActive: true, labelsJson: '{}' },
+      { id: 'resource-payments', tenantId: 'tenant-a', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'payments-v1', runtimeTenantId: '', isActive: true, labelsJson: '{}' },
+    ], [], [], [{
+      id: 'set-1', tenantId: 'tenant-a', key: 'runtime.payments', name: 'Payments processes', description: null, engineId: 'engine-1', resourceKind: 'process_definition', selectorJson: JSON.stringify({ mode: 'prefix', prefix: 'payments-' }), runtimeTenantId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,
+    }], [{ tenantId: 'tenant-a', runtimeResourceSetId: 'set-1', runtimeResourceId: 'resource-payments' }]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json', './runtime-resource-sets.json'] },
+      files: {
+        './engines.json': { engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' } }] },
+        './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.central' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'orders-' } }] },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'update',
+      runtimeResourceChanges: {
+        matchedCount: 1, unmatchedCount: 1, detailsTruncated: false,
+        newlyMatched: [{ resourceKind: 'process_definition', resourceKey: 'orders-v1', runtimeTenantId: null }],
+        noLongerMatched: [{ resourceKind: 'process_definition', resourceKey: 'payments-v1', runtimeTenantId: null }],
+      },
+    }));
   });
 
   it('detects ingestion-control drift for config-owned engines', async () => {

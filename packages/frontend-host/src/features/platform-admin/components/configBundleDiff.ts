@@ -9,6 +9,13 @@ export type ConfigBundleDiffChange = {
     effectivePermissions: string[];
   };
   affectedAssignmentCount?: number;
+  runtimeResourceChanges?: {
+    matchedCount: number;
+    unmatchedCount: number;
+    newlyMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
+    noLongerMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
+    detailsTruncated: boolean;
+  };
 };
 
 export type ConfigBundleChangeRisk = 'requires_attention' | 'review' | 'informational';

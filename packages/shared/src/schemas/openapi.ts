@@ -3509,6 +3509,13 @@ const ConfigBundleDiffChangeOpenApiSchema = z.object({
     effectivePermissions: z.array(z.string()),
   }).optional(),
   affectedAssignmentCount: z.number().int().nonnegative().optional(),
+  runtimeResourceChanges: z.object({
+    matchedCount: z.number().int().nonnegative(),
+    unmatchedCount: z.number().int().nonnegative(),
+    newlyMatched: z.array(z.object({ resourceKind: z.string(), resourceKey: z.string(), runtimeTenantId: z.string().nullable() })),
+    noLongerMatched: z.array(z.object({ resourceKind: z.string(), resourceKey: z.string(), runtimeTenantId: z.string().nullable() })),
+    detailsTruncated: z.boolean(),
+  }).optional(),
 });
 
 const ConfigBundleDiffResponseOpenApiSchema = ConfigBundlePreviewResponseOpenApiSchema.extend({

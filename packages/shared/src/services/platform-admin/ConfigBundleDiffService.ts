@@ -3,6 +3,7 @@ import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
@@ -14,6 +15,7 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
+import { matchRuntimeResourceSetSelector, type RuntimeResourceSetSelector } from './RuntimeResourceInventoryService.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
@@ -29,6 +31,13 @@ export interface ConfigBundleDiffChange {
     effectivePermissions: string[];
   };
   affectedAssignmentCount?: number;
+  runtimeResourceChanges?: {
+    matchedCount: number;
+    unmatchedCount: number;
+    newlyMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
+    noLongerMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
+    detailsTruncated: boolean;
+  };
 }
 
 export interface ConfigBundleDiffWarning {
@@ -54,6 +63,7 @@ export interface ConfigBundleDiff {
 }
 
 const CONFIG_SOURCE = 'config';
+const RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT = 50;
 
 export function configBundleSourceRef(bundleKey: string): string {
   return `config_bundle:${bundleKey}`;
@@ -84,6 +94,33 @@ function rolePermissionChanges(current: string[], desired: string[]): NonNullabl
 
 function hasPermissionChanges(changes: NonNullable<ConfigBundleDiffChange['permissionChanges']>): boolean {
   return changes.additions.length > 0 || changes.removals.length > 0;
+}
+
+function runtimeResourceReference(resource: RuntimeResource): { resourceKind: string; resourceKey: string; runtimeTenantId: string | null } {
+  return { resourceKind: resource.resourceKind, resourceKey: resource.resourceKey, runtimeTenantId: resource.runtimeTenantId || null };
+}
+
+function runtimeResourceChangeSummary(
+  resources: RuntimeResource[],
+  existingMaterializations: Array<{ runtimeResourceId: string }>,
+  selector: RuntimeResourceSetSelector,
+): NonNullable<ConfigBundleDiffChange['runtimeResourceChanges']> {
+  const matchingResources = resources.filter((resource) => Boolean(matchRuntimeResourceSetSelector(resource, selector)));
+  const matchingIds = new Set(matchingResources.map((resource) => resource.id));
+  const existingIds = new Set(existingMaterializations.map((row) => row.runtimeResourceId));
+  const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
+  const newlyMatched = matchingResources.filter((resource) => !existingIds.has(resource.id));
+  const noLongerMatched = Array.from(existingIds)
+    .filter((resourceId) => !matchingIds.has(resourceId))
+    .map((resourceId) => resourceById.get(resourceId))
+    .filter((resource): resource is RuntimeResource => Boolean(resource));
+  return {
+    matchedCount: matchingResources.length,
+    unmatchedCount: resources.length - matchingResources.length,
+    newlyMatched: newlyMatched.slice(0, RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT).map(runtimeResourceReference),
+    noLongerMatched: noLongerMatched.slice(0, RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT).map(runtimeResourceReference),
+    detailsTruncated: newlyMatched.length > RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT || noLongerMatched.length > RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT,
+  };
 }
 
 function providerConfiguration(provider: any): Record<string, unknown> {
@@ -138,12 +175,13 @@ class ConfigBundleDiffService {
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships] = await Promise.all([
+    const [roles, groups, engines, engineSets, runtimeResourceSets, runtimeResourceSetMaterializations, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
       dataSource.getRepository(EngineSet).find(),
       dataSource.getRepository(RuntimeResourceSet).find(),
+      dataSource.getRepository(RuntimeResourceSetMaterialization).find(),
       dataSource.getRepository(RbacRolePermission).find(),
       dataSource.getRepository(IdentityProvider).find(),
       dataSource.getRepository(IdentityEntitlementMapping).find(),
@@ -181,6 +219,17 @@ class ConfigBundleDiffService {
     for (const assignment of tenantAssignments) assignmentCountByRoleId.set(assignment.roleId, (assignmentCountByRoleId.get(assignment.roleId) || 0) + 1);
     const tenantRuntimeResources = runtimeResources.filter((resource) => (resource.tenantId || null) === normalizedTenantId);
     const runtimeResourcesByIdentity = new Map(tenantRuntimeResources.map((resource) => [`${resource.engineId}:${resource.resourceKind}:${resource.resourceKey}:${resource.runtimeTenantId || ''}`, resource]));
+    const runtimeResourcesByEngineAndKind = new Map<string, RuntimeResource[]>();
+    for (const resource of tenantRuntimeResources) {
+      if (!resource.isActive) continue;
+      const key = `${resource.engineId}:${resource.resourceKind}`;
+      runtimeResourcesByEngineAndKind.set(key, [...(runtimeResourcesByEngineAndKind.get(key) || []), resource]);
+    }
+    const runtimeResourceSetMaterializationsBySetId = new Map<string, RuntimeResourceSetMaterialization[]>();
+    for (const materialization of runtimeResourceSetMaterializations) {
+      if ((materialization.tenantId || null) !== normalizedTenantId) continue;
+      runtimeResourceSetMaterializationsBySetId.set(materialization.runtimeResourceSetId, [...(runtimeResourceSetMaterializationsBySetId.get(materialization.runtimeResourceSetId) || []), materialization]);
+    }
     const tenantGroupMemberships = groupMemberships.filter((membership) => (membership.tenantId || null) === normalizedTenantId);
     const changes: ConfigBundleDiffChange[] = [];
     const warnings = broadConfigurationWarnings(compilation.files);
@@ -264,8 +313,16 @@ class ConfigBundleDiffService {
     for (const set of desiredRuntimeResourceSets) {
       const existing = runtimeResourceSetsByKey.get(set.key);
       const engine = enginesByConfigKey.get(set.engineRef.engineKey);
+      const resourceScopeChanged = !existing || existing.engineId !== engine?.id || existing.resourceKind !== set.resourceKind || existing.selectorJson !== JSON.stringify(set.selector);
+      const runtimeResourceChanges = engine && resourceScopeChanged
+        ? runtimeResourceChangeSummary(
+          runtimeResourcesByEngineAndKind.get(`${engine.id}:${set.resourceKind}`) || [],
+          existing ? runtimeResourceSetMaterializationsBySetId.get(existing.id) || [] : [],
+          set.selector as RuntimeResourceSetSelector,
+        )
+        : undefined;
       if (!existing) {
-        changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'create', reason: 'No persisted Runtime Resource Set uses this tenant-scoped key' });
+        changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'create', reason: 'No persisted Runtime Resource Set uses this tenant-scoped key', ...(runtimeResourceChanges ? { runtimeResourceChanges } : {}) });
       } else if (existing.source !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
         changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'conflict', currentId: existing.id, reason: 'Existing Runtime Resource Set is not owned by this configuration bundle' });
       } else if (
@@ -277,7 +334,7 @@ class ConfigBundleDiffService {
         existing.runtimeTenantId !== (set.runtimeTenantId || null) ||
         existing.isArchived
       ) {
-        changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'update', currentId: existing.id, reason: 'Config-owned Runtime Resource Set differs from the desired engine, selector, tenant, metadata, or archive state' });
+        changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'update', currentId: existing.id, reason: 'Config-owned Runtime Resource Set differs from the desired engine, selector, tenant, metadata, or archive state', ...(runtimeResourceChanges ? { runtimeResourceChanges } : {}) });
       } else {
         changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned Runtime Resource Set already matches the desired state' });
       }

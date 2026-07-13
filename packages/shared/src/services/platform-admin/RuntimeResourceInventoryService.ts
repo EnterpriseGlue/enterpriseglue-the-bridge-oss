@@ -61,7 +61,7 @@ function parseSelector(value: string): RuntimeResourceSetSelector {
   return parsed;
 }
 
-function matchResource(resource: RuntimeResource, selector: RuntimeResourceSetSelector): Record<string, unknown> | null {
+export function matchRuntimeResourceSetSelector(resource: RuntimeResource, selector: RuntimeResourceSetSelector): Record<string, unknown> | null {
   if (selector.mode === 'keys') return selector.keys.includes(resource.resourceKey) ? { mode: 'keys', resourceKey: resource.resourceKey } : null;
   if (selector.mode === 'prefix') return resource.resourceKey.startsWith(selector.prefix) ? { mode: 'prefix', prefix: selector.prefix, resourceKey: resource.resourceKey } : null;
   if (selector.mode === 'labels') {
@@ -150,7 +150,7 @@ class RuntimeResourceInventoryService {
     const selector = parseSelector(set.selectorJson);
     const fingerprint = selectorFingerprint(selector);
     const resources = await resourceRepo.find({ where: { engineId: set.engineId, resourceKind: set.resourceKind, isActive: true } });
-    const matches = resources.map((resource) => ({ resource, matchedBy: matchResource(resource, selector) })).filter((match): match is { resource: RuntimeResource; matchedBy: Record<string, unknown> } => Boolean(match.matchedBy));
+    const matches = resources.map((resource) => ({ resource, matchedBy: matchRuntimeResourceSetSelector(resource, selector) })).filter((match): match is { resource: RuntimeResource; matchedBy: Record<string, unknown> } => Boolean(match.matchedBy));
     const existing = await materializationRepo.find({ where: { runtimeResourceSetId } });
     const existingByResource = new Map(existing.map((row) => [row.runtimeResourceId, row]));
     const now = Date.now();
