@@ -59,8 +59,8 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
 
     // Handle Google errors
     if (error) {
-      logger.error('[Google Auth] OAuth error:', error, error_description);
-      const errorUrl = `${config.frontendUrl}/login?error=google_auth_failed&message=${encodeURIComponent(error_description as string || error as string)}`;
+      logger.warn('[Google Auth] OAuth callback rejected', { reason: 'provider_rejected' });
+      const errorUrl = `${config.frontendUrl}/login?error=google_auth_failed&message=${encodeURIComponent('Google authentication was rejected')}`;
       return res.redirect(errorUrl);
     }
 

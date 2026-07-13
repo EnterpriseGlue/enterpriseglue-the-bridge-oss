@@ -160,6 +160,18 @@ describe('Google OAuth flow e2e harness', () => {
     expect(exchangeGoogleCodeForTokens as unknown as Mock).not.toHaveBeenCalled();
   });
 
+  it('does not reflect provider error descriptions into the login redirect', async () => {
+    const response = await request(app)
+      .get('/api/auth/google/callback')
+      .query({ error: 'access_denied', error_description: '<token>raw-provider-detail</token>' });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe(
+      `${config.frontendUrl}/login?error=google_auth_failed&message=${encodeURIComponent('Google authentication was rejected')}`,
+    );
+    expect(response.headers.location).not.toContain('raw-provider-detail');
+  });
+
   it('redirects to login error when provisioned user is deactivated', async () => {
     const agent = request.agent(app);
 
