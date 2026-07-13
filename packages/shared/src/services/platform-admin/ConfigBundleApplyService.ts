@@ -216,7 +216,7 @@ class ConfigBundleApplyService {
     if (!compilation.preview.valid || !compilation.manifest || !compilation.files || !compilation.preview.canonicalHash) {
       return fail('Configuration bundle is invalid', 422);
     }
-    const manifest = compilation.manifest as { metadata: { key: string }; mode: string };
+    const manifest = compilation.manifest as { apiVersion: string; metadata: { key: string }; mode: string };
     if (manifest.mode === 'preview_only') {
       return fail('A preview_only bundle cannot be applied', 422);
     }
@@ -270,6 +270,7 @@ class ConfigBundleApplyService {
         tenantId,
         tenantScopeKey: scopeKey,
         bundleKey: manifest.metadata.key,
+        bundleApiVersion: manifest.apiVersion,
         canonicalHash: diff.canonicalHash,
         idempotencyKey,
         actorId: input.actorId,

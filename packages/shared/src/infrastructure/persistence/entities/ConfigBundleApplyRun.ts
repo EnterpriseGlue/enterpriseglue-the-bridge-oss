@@ -9,6 +9,7 @@ export class ConfigBundleApplyRun extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true }) tenantId!: string | null;
   @Column({ name: 'tenant_scope_key', type: 'text' }) tenantScopeKey!: string;
   @Column({ name: 'bundle_key', type: 'text' }) bundleKey!: string;
+  @Column({ name: 'bundle_api_version', type: 'text', nullable: true }) bundleApiVersion!: string | null;
   @Column({ name: 'canonical_hash', type: 'text' }) canonicalHash!: string;
   @Column({ name: 'idempotency_key', type: 'text', nullable: true }) idempotencyKey!: string | null;
   @Column({ name: 'actor_id', type: 'text', nullable: true }) actorId!: string | null;

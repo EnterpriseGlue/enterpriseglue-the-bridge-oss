@@ -106,6 +106,7 @@ function configBundleRunResponse(row: ConfigBundleApplyRun): Record<string, unkn
   return {
     id: row.id,
     bundleKey: row.bundleKey,
+    bundleApiVersion: row.bundleApiVersion,
     canonicalHash: row.canonicalHash,
     idempotencyKey: row.idempotencyKey,
     actorId: row.actorId,

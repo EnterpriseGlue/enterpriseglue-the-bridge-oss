@@ -3688,6 +3688,7 @@ const ConfigBundleApplyResponseOpenApiSchema = z.object({
 const ConfigBundleApplyRunOpenApiSchema = z.object({
   id: z.string(),
   bundleKey: z.string(),
+  bundleApiVersion: z.string().nullable(),
   idempotencyKey: z.string().nullable(),
   actorId: z.string().nullable(),
   status: z.enum(['pending', 'succeeded', 'failed']),
