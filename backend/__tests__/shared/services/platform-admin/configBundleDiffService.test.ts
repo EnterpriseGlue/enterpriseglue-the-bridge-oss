@@ -195,6 +195,40 @@ describe('configBundleDiffService', () => {
     }));
   });
 
+  it('warns when engine-wide access can bypass narrow runtime and pipeline-only deployment boundaries', async () => {
+    const projectId = '00000000-0000-4000-8000-000000000001';
+    mockDataSource([
+      { id: 'role-1', tenantId: 'tenant-a', key: 'custom.engine.deployer', name: 'Deployer', description: null, scope: 'engine', source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false },
+    ], [
+      { id: 'group-1', tenantId: 'tenant-a', key: 'group.deployers', name: 'Deployers', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false },
+    ], [{ roleId: 'role-1', permissionId: 'engine:deploy' }], [{
+      id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', name: 'Central', baseUrl: 'https://central.example.com/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}', runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, pipelineReceiptEnabled: true, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active',
+    }], [], [], [], [], [], [{ id: projectId, tenantId: 'tenant-a' }], [], [{
+      id: 'runtime-set-1', tenantId: 'tenant-a', key: 'runtime.payments', name: 'Payments', description: null, engineId: 'engine-1', resourceKind: 'process_definition', selectorJson: JSON.stringify({ mode: 'prefix', prefix: 'payments-' }), runtimeTenantId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,
+    }]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./roles.json', './groups.json', './engines.json', './runtime-resource-sets.json', './assignments.json', './project-engine-targets.json'] },
+      files: {
+        './roles.json': { roles: [{ key: 'custom.engine.deployer', name: 'Deployer', scope: 'engine', permissions: ['engine:deploy'] }] },
+        './groups.json': { groups: [{ key: 'group.deployers', name: 'Deployers' }] },
+        './engines.json': { engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' } }] },
+        './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments', engineRef: { engineKey: 'engine.central' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' } }] },
+        './assignments.json': { assignments: [
+          { key: 'assignment.engine', principal: { type: 'group', key: 'group.deployers' }, roleKey: 'custom.engine.deployer', scope: { type: 'engine', engineKey: 'engine.central' } },
+          { key: 'assignment.runtime', principal: { type: 'group', key: 'group.deployers' }, roleKey: 'custom.engine.deployer', scope: { type: 'engine_runtime_resource_set', runtimeResourceSetKey: 'runtime.payments' } },
+        ] },
+        './project-engine-targets.json': { projectEngineTargets: [{ key: 'target.pipeline', projectRef: { id: projectId }, engineRef: { engineKey: 'engine.central' }, allowCiDeploy: true }] },
+      },
+    }, 'tenant-a');
+
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'config.runtime_resource_set_engine_wide:runtime.payments' }),
+      expect.objectContaining({ id: expect.stringContaining('config.runtime_grant_shadow:group.deployers') }),
+      expect.objectContaining({ id: expect.stringContaining('config.pipeline_target_human_deployer:target.pipeline') }),
+    ]));
+  });
+
   it('detects ingestion-control drift for config-owned engines', async () => {
     mockDataSource([], [], [], [{
       id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz',

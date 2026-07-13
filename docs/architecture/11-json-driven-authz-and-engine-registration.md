@@ -2173,7 +2173,7 @@ Phase 0 exit criteria:
 - [x] ✅ Produce role permission diffs with additions, removals, expanded template permissions, and affected-assignment counts. The details are returned on the same object-level diff records and retained in apply receipts.
 - [x] ✅ Produce bounded runtime resource set diffs with matched/unmatched counts plus newly matched and no-longer-matched process or decision keys. The preview uses current runtime inventory and persisted materializations only; it does not contact engines or reconcile state.
 - [ ] ⬜ Validate identity provider references and preview normalized entitlement-to-group matches without contacting providers unless an explicit connectivity test is requested.
-- [ ] ⬜ Warn about broad runtime grants shadowing narrow resource sets, resource sets on `engine_wide` engines, and human deployment roles on pipeline-only targets. Display-name and regex identity matching are not accepted by the current config schema.
+- [x] ✅ Warn when the same group/role has both engine-wide and narrower runtime-resource-set assignments, when a Runtime Resource Set is attached to an `engine_wide` engine, and when a group deployment role is configured for a CI/API-only target. These are advisory warnings only; display-name and regex identity matching remain unsupported by the config schema.
 - [ ] ⬜ Preview deployment integration and lineage schema changes, including direct-engine deployments that cannot resolve project/file origin.
 - [ ] ⬜ Detect destructive authoritative removals.
 - [ ] ⬜ Detect drift between config-owned object hash and live object state.

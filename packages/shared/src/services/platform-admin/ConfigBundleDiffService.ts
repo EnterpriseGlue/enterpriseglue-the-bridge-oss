@@ -16,6 +16,7 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { matchRuntimeResourceSetSelector, type RuntimeResourceSetSelector } from './RuntimeResourceInventoryService.js';
+import { EnginePermissions, SystemRoleDefinitions } from './permissions.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
@@ -460,6 +461,46 @@ class ConfigBundleDiffService {
         changes.push({ objectType: 'assignment', key, operation: 'update', currentId: existing.id, reason: 'Config-owned scoped role assignment differs from the desired expiration' });
       } else {
         changes.push({ objectType: 'assignment', key, operation: 'noop', currentId: existing.id, reason: 'Config-owned scoped role assignment already matches the desired state' });
+      }
+    }
+
+    const rolePermissionsByKey = new Map<string, string[]>();
+    for (const role of tenantRoles) rolePermissionsByKey.set(role.key, rolePermissionsByRoleId.get(role.id) || []);
+    for (const role of SystemRoleDefinitions) rolePermissionsByKey.set(role.key, role.permissions);
+    for (const role of desiredRoles) rolePermissionsByKey.set(role.key, compilation.preview.expandedRolePermissions?.[role.key] || role.permissions || []);
+    const runtimeSetEngineKeyByKey = new Map(desiredRuntimeResourceSets.map((set) => [set.key, set.engineRef.engineKey]));
+    const desiredEngineByKey = new Map(desiredEngines.map((engine) => [engine.key, engine]));
+    for (const set of desiredRuntimeResourceSets) {
+      const engine = desiredEngineByKey.get(set.engineRef.engineKey) || enginesByConfigKey.get(set.engineRef.engineKey);
+      if (engine?.runtimeAccessScope === 'engine_wide') {
+        warnings.push({
+          id: `config.runtime_resource_set_engine_wide:${set.key}`,
+          message: `Runtime Resource Set ${set.key} is attached to engine-wide engine ${set.engineRef.engineKey}; engine-scoped access can bypass this narrower selector.`,
+        });
+      }
+    }
+    for (const broadAssignment of desiredAssignments.filter((assignment) => assignment.principal.type === 'group' && assignment.scope.type === 'engine')) {
+      for (const narrowAssignment of desiredAssignments.filter((assignment) => assignment.principal.type === 'group' && assignment.scope.type === 'engine_runtime_resource_set')) {
+        if (
+          broadAssignment.principal.key === narrowAssignment.principal.key &&
+          broadAssignment.roleKey === narrowAssignment.roleKey &&
+          broadAssignment.scope.engineKey === runtimeSetEngineKeyByKey.get(narrowAssignment.scope.runtimeResourceSetKey)
+        ) {
+          warnings.push({
+            id: `config.runtime_grant_shadow:${broadAssignment.principal.key}:${broadAssignment.roleKey}:${broadAssignment.scope.engineKey}:${narrowAssignment.scope.runtimeResourceSetKey}`,
+            message: `Engine-wide assignment for group ${broadAssignment.principal.key} and role ${broadAssignment.roleKey} can shadow its narrower Runtime Resource Set assignment ${narrowAssignment.scope.runtimeResourceSetKey}.`,
+          });
+        }
+      }
+    }
+    for (const target of desiredProjectEngineTargets.filter((candidate) => !candidate.allowManualDeploy && (candidate.allowCiDeploy || candidate.allowApiDeploy))) {
+      for (const assignment of desiredAssignments.filter((candidate) => candidate.principal.type === 'group' && candidate.scope.type === 'engine' && candidate.scope.engineKey === target.engineRef.engineKey)) {
+        if ((rolePermissionsByKey.get(assignment.roleKey) || []).includes(EnginePermissions.DEPLOY)) {
+          warnings.push({
+            id: `config.pipeline_target_human_deployer:${target.key || target.projectRef.id || target.projectRef.key}:${assignment.principal.key}:${assignment.roleKey}`,
+            message: `Pipeline-only target ${target.key || target.engineRef.engineKey} has a group deployment assignment for ${assignment.principal.key}; manual deployment remains disabled but this role can deploy where another target permits it.`,
+          });
+        }
       }
     }
 
