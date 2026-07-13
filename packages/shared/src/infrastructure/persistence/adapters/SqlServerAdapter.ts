@@ -11,7 +11,7 @@ import {
   EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  RbacPermission, RbacRole, RbacRoleAssignment, RbacRolePermission, SsoAssignmentMapping, SamlAssertionReplay, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
+  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SsoAssignmentMapping, SamlAssertionReplay, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
   GitProvider, SsoProvider, SsoClaimsMapping, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, ConfigBundleIdentityReplayTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
   Engine, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
@@ -26,7 +26,7 @@ const entities = [
   EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  RbacPermission, RbacRole, RbacRoleAssignment, RbacRolePermission, SsoAssignmentMapping, SamlAssertionReplay, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
+  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SsoAssignmentMapping, SamlAssertionReplay, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
   GitProvider, SsoProvider, SsoClaimsMapping, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, ConfigBundleIdentityReplayTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
   Engine, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
