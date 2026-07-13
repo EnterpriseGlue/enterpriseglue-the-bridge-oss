@@ -135,7 +135,7 @@ class ConfigBundleExportService {
     if (projectEngineTargets.length) files['./project-engine-targets.json'] = { projectEngineTargets: projectEngineTargets.filter((target) => target.status !== 'archived').map((target) => {
       const engineKey = engineKeyById.get(target.engineId);
       if (!engineKey) throw new Error(`Cannot export project-engine target ${target.id}: its engine is not config-owned by this bundle`);
-      return { projectRef: { id: target.projectId }, engineRef: { engineKey }, status: target.status, allowManualDeploy: target.allowManualDeploy, allowCiDeploy: target.allowCiDeploy, allowApiDeploy: target.allowApiDeploy, allowImport: target.allowImport, ownershipMode: 'config_locked' };
+      return { projectRef: { id: target.projectId }, engineRef: { engineKey }, status: target.status, allowManualDeploy: target.allowManualDeploy, allowCiDeploy: target.allowCiDeploy, allowApiDeploy: target.allowApiDeploy, allowImport: target.allowImport, ownershipMode: target.ownershipMode || 'config_locked' };
     }) };
     const imports = Object.keys(files);
     return withoutUndefined({

@@ -28,6 +28,18 @@ export class ProjectEngineTarget extends AppBaseEntity {
   @Column({ name: 'source_ref', type: 'text', nullable: true })
   sourceRef!: string | null;
 
+  @Column({ name: 'ownership_mode', type: 'text', default: 'manual' })
+  ownershipMode!: string;
+
+  @Column({ name: 'source_hash', type: 'text', nullable: true })
+  sourceHash!: string | null;
+
+  @Column({ name: 'last_applied_at', type: 'bigint', nullable: true })
+  lastAppliedAt!: number | null;
+
+  @Column({ name: 'drift_status', type: 'text', nullable: true })
+  driftStatus!: string | null;
+
   @Column({ name: 'external_system_id', type: 'text', nullable: true })
   externalSystemId!: string | null;
 

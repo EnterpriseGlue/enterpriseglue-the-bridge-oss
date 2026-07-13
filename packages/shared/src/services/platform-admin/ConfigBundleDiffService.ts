@@ -461,9 +461,10 @@ class ConfigBundleDiffService {
         existing.allowManualDeploy !== target.allowManualDeploy ||
         existing.allowCiDeploy !== target.allowCiDeploy ||
         existing.allowApiDeploy !== target.allowApiDeploy ||
-        existing.allowImport !== target.allowImport
+        existing.allowImport !== target.allowImport ||
+        (existing.ownershipMode || 'config_locked') !== (target.ownershipMode || 'config_locked')
       ) {
-        changes.push({ objectType: 'project_engine_target', key, operation: 'update', currentId: existing.id, reason: 'Config-owned project-engine target differs from desired status or deployment eligibility modes' });
+        changes.push({ objectType: 'project_engine_target', key, operation: 'update', currentId: existing.id, reason: 'Config-owned project-engine target differs from desired status, ownership mode, or deployment eligibility modes' });
       } else {
         changes.push({ objectType: 'project_engine_target', key, operation: 'noop', currentId: existing.id, reason: 'Config-owned project-engine target already matches the desired state' });
       }

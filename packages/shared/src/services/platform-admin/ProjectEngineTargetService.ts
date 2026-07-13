@@ -17,6 +17,7 @@ export type ProjectEngineTargetMode = 'manual' | 'ci' | 'api' | 'import';
 export type ProjectEngineTargetSource = 'manual' | 'legacy' | 'ci' | 'api' | 'import' | 'deployment_history' | 'external' | 'system' | 'automation' | 'config';
 export type ProjectEngineTargetStatus = 'active' | 'disabled' | 'archived';
 export type ProjectEngineTargetApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected';
+export type ProjectEngineTargetOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
 
 const SOURCE_OWNED_TARGET_SOURCES = new Set<ProjectEngineTargetSource>([
   'ci',
@@ -94,6 +95,10 @@ export interface ProjectEngineTargetView {
   status: ProjectEngineTargetStatus;
   source: ProjectEngineTargetSource;
   sourceRef: string | null;
+  ownershipMode: ProjectEngineTargetOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
   externalSystemId: string | null;
   externalProjectId: string | null;
   externalEngineId: string | null;
@@ -236,6 +241,10 @@ function toTargetView(
     status: target.status as ProjectEngineTargetStatus,
     source: target.source as ProjectEngineTargetSource,
     sourceRef: target.sourceRef,
+    ownershipMode: (target.ownershipMode || (target.source === 'config' ? 'config_locked' : 'manual')) as ProjectEngineTargetOwnershipMode,
+    sourceHash: target.sourceHash || null,
+    lastAppliedAt: target.lastAppliedAt === null ? null : Number(target.lastAppliedAt),
+    driftStatus: target.driftStatus || null,
     externalSystemId: target.externalSystemId,
     externalProjectId: target.externalProjectId,
     externalEngineId: target.externalEngineId,
@@ -335,6 +344,10 @@ export class ProjectEngineTargetService {
       status: input.status || 'active',
       source,
       sourceRef: input.sourceRef || null,
+      ownershipMode: source === 'config' ? 'config_locked' : 'manual',
+      sourceHash: null,
+      lastAppliedAt: null,
+      driftStatus: null,
       externalSystemId: normalizeString(input.externalSystemId),
       externalProjectId: normalizeString(input.externalProjectId),
       externalEngineId: normalizeString(input.externalEngineId),
@@ -372,6 +385,7 @@ export class ProjectEngineTargetService {
     const diagnosticsJson = stringifyDiagnostics(input.diagnostics);
     const now = Date.now();
 
+    const isConfigWarn = existing.source === 'config' && existing.ownershipMode === 'config_warn';
     await targetRepo.update({ id }, {
       status: input.status || existing.status,
       source,
@@ -389,6 +403,7 @@ export class ProjectEngineTargetService {
       approvedAt: resolveApprovedAt(approvalStatus, input.approvedAt, existing.approvedAt, now),
       policyTagsJson: policyTagsJson !== undefined ? policyTagsJson : existing.policyTagsJson,
       diagnosticsJson: diagnosticsJson !== undefined ? diagnosticsJson : existing.diagnosticsJson,
+      ...(isConfigWarn ? { driftStatus: 'drifted' } : {}),
       updatedAt: now,
     });
   }
@@ -516,7 +531,7 @@ export class ProjectEngineTargetService {
   }
 
   private assertCanChangeTarget(target: ProjectEngineTarget, allowSourceOwnedMutation = false): void {
-    if (allowSourceOwnedMutation || !isSourceOwnedProjectEngineTarget(target.source)) return;
+    if (allowSourceOwnedMutation || !isSourceOwnedProjectEngineTarget(target.source) || (target.source === 'config' && target.ownershipMode === 'config_warn')) return;
     throw Errors.conflict(projectEngineTargetOwnershipReason(target.source, target.sourceRef));
   }
 

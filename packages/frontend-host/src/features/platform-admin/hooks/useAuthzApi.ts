@@ -416,7 +416,7 @@ export interface EngineSetMaterializationResult {
 
 export type ProjectEngineTargetMode = 'manual' | 'ci' | 'api' | 'import';
 export type ProjectEngineTargetStatus = 'active' | 'disabled' | 'archived';
-export type ProjectEngineTargetSource = 'manual' | 'legacy' | 'ci' | 'api' | 'import' | 'deployment_history' | 'external' | 'system' | 'automation';
+export type ProjectEngineTargetSource = 'manual' | 'legacy' | 'ci' | 'api' | 'import' | 'deployment_history' | 'external' | 'system' | 'automation' | 'config';
 export type ProjectEngineTargetApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected';
 
 export interface ProjectEngineTarget {
@@ -431,6 +431,10 @@ export interface ProjectEngineTarget {
   status: ProjectEngineTargetStatus;
   source: ProjectEngineTargetSource;
   sourceRef: string | null;
+  ownershipMode: AuthzOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
   externalSystemId: string | null;
   externalProjectId: string | null;
   externalEngineId: string | null;

@@ -250,6 +250,31 @@ describe('projectEngineTargetService', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('allows config-warning target edits and marks drift', async () => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === ProjectEngineTarget) return {
+          findOneBy: vi.fn().mockResolvedValue({
+            id: 'target-warning', tenantId: null, projectId: 'project-1', engineId: 'engine-1',
+            source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn',
+            status: 'active', allowManualDeploy: true, allowCiDeploy: false, allowApiDeploy: false, allowImport: true,
+            approvedById: null, approvalStatus: 'not_required', approvedAt: null, policyTagsJson: null, diagnosticsJson: null,
+            externalSystemId: null, externalProjectId: null, externalEngineId: null, externalTargetId: null,
+          }),
+          update,
+        };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await projectEngineTargetService.updateTarget('target-warning', { allowCiDeploy: true });
+
+    expect(update).toHaveBeenCalledWith({ id: 'target-warning' }, expect.objectContaining({
+      allowCiDeploy: true, driftStatus: 'drifted',
+    }));
+  });
+
   it('allows source-owned target updates through an owning integration path', async () => {
     const update = vi.fn().mockResolvedValue(undefined);
 

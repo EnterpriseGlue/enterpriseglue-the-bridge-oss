@@ -796,7 +796,7 @@ const PROJECT_ENGINE_TARGET_MODES: Array<{ id: ProjectEngineTargetMode; label: s
   { id: 'import', label: 'Import' },
 ];
 
-const SOURCE_OWNED_PROJECT_TARGET_SOURCES = new Set<ProjectEngineTargetSource>(['ci', 'api', 'external', 'system', 'automation']);
+const SOURCE_OWNED_PROJECT_TARGET_SOURCES = new Set<ProjectEngineTargetSource>(['ci', 'api', 'external', 'system', 'automation', 'config']);
 
 const POLICY_EFFECTS: Array<{ id: AuthzPolicy['effect']; label: string }> = [
   { id: 'allow', label: 'Allow' },
@@ -1182,7 +1182,7 @@ function engineSetSelectorRiskDescription(reason: 'all_engines_selector' | 'any_
 }
 
 function isSourceOwnedProjectTarget(target: ProjectEngineTarget) {
-  return SOURCE_OWNED_PROJECT_TARGET_SOURCES.has(target.source);
+  return SOURCE_OWNED_PROJECT_TARGET_SOURCES.has(target.source) && !(target.source === 'config' && target.ownershipMode === 'config_warn');
 }
 
 function isSourceOwnedEngineSet(engineSet: EngineSetSummary) {
@@ -5271,7 +5271,7 @@ function ProjectEngineTargetsPanel({
                             return <TableCell key={cell.id}><Tag type={type}>{formatStatusLabel(status)}</Tag></TableCell>;
                           }
                           if (cell.info.header === 'source') {
-                            return <TableCell key={cell.id}><Tag type={sourceOwned ? 'cyan' : 'gray'}>{cell.value}</Tag></TableCell>;
+                            return <TableCell key={cell.id}><div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={target?.source === 'config' && target.ownershipMode === 'config_warn' ? 'warm-gray' : sourceOwned ? 'cyan' : 'gray'}>{target?.source === 'config' && target.ownershipMode === 'config_warn' ? 'Config warning' : cell.value}</Tag>{target?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</div></TableCell>;
                           }
                           if (cell.info.header === 'actions') {
                             return (

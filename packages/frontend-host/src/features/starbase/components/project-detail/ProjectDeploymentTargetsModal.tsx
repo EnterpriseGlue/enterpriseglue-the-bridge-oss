@@ -29,7 +29,7 @@ import type { ProjectEngineTargetPolicyMode } from '../../../../api/platform-adm
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 type ProjectEngineTargetStatus = 'active' | 'disabled' | 'archived'
-type ProjectEngineTargetSource = 'manual' | 'legacy' | 'ci' | 'api' | 'import' | 'deployment_history' | 'external' | 'system' | 'automation'
+type ProjectEngineTargetSource = 'manual' | 'legacy' | 'ci' | 'api' | 'import' | 'deployment_history' | 'external' | 'system' | 'automation' | 'config'
 type ProjectEngineTargetApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected'
 
 type ProjectEngineTarget = {
@@ -42,6 +42,10 @@ type ProjectEngineTarget = {
   status: ProjectEngineTargetStatus
   source: ProjectEngineTargetSource
   sourceRef: string | null
+  ownershipMode: 'manual' | 'config_locked' | 'config_warn'
+  sourceHash: string | null
+  lastAppliedAt: number | null
+  driftStatus: string | null
   externalSystemId: string | null
   externalProjectId: string | null
   externalEngineId: string | null
@@ -98,7 +102,7 @@ const statusItems: Array<{ id: ProjectEngineTargetStatus; label: string }> = [
   { id: 'disabled', label: 'Disabled' },
 ]
 
-const sourceOwnedTargetSources = new Set<ProjectEngineTargetSource>(['ci', 'api', 'external', 'system', 'automation'])
+const sourceOwnedTargetSources = new Set<ProjectEngineTargetSource>(['ci', 'api', 'external', 'system', 'automation', 'config'])
 
 function buildDeploymentTargetDiagnosticDecision(
   projectId: string,
@@ -515,7 +519,7 @@ function formatLabel(value: string): string {
 }
 
 function isSourceOwnedTarget(target: ProjectEngineTarget): boolean {
-  return sourceOwnedTargetSources.has(target.source)
+  return sourceOwnedTargetSources.has(target.source) && !(target.source === 'config' && target.ownershipMode === 'config_warn')
 }
 
 function sourceOwnedTargetReason(target: ProjectEngineTarget): string {

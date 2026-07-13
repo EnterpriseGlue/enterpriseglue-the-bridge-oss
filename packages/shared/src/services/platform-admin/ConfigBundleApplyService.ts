@@ -629,7 +629,7 @@ class ConfigBundleApplyService {
         targetKeys.add(pairKey);
         const existing = await targetRepo.findOne({ where: { projectId: project.id, engineId: engine.id } });
         const values = {
-          status: target.status, source: 'config', sourceRef, externalSystemId: null, externalProjectId: null, externalEngineId: null, externalTargetId: null,
+          status: target.status, source: 'config', sourceRef, ownershipMode: target.ownershipMode || 'config_locked', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', externalSystemId: null, externalProjectId: null, externalEngineId: null, externalTargetId: null,
           allowManualDeploy: target.allowManualDeploy, allowCiDeploy: target.allowCiDeploy, allowApiDeploy: target.allowApiDeploy, allowImport: target.allowImport,
           approvedById: null, approvalStatus: 'not_required', approvedAt: null, policyTagsJson: null, diagnosticsJson: null, lastSeenAt: now, updatedAt: now,
         };
@@ -649,7 +649,7 @@ class ConfigBundleApplyService {
         const existing = await targetRepo.find({ where: { source: 'config', sourceRef } });
         for (const target of existing) {
           if (targetKeys.has(`${target.projectId}:${target.engineId}`)) continue;
-          await targetRepo.update({ id: target.id }, { status: 'archived', updatedAt: now });
+          await targetRepo.update({ id: target.id }, { status: 'archived', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', updatedAt: now });
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.project_engine_target.archive', resourceType: 'project_engine_target', resourceId: target.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash } });
           archived += 1;
         }
