@@ -28,6 +28,11 @@ describe('identityProviderService', () => {
     await expect(identityProviderService.upsert({ key: 'bad', protocol: 'oidc', configuration: { issuerUrl: 'https://idp.test', clientId: 'x', clientSecret: 'raw' } })).rejects.toThrow('secret references');
     await expect(identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: { url: 'ldap://directory.test' } })).rejects.toThrow('ldaps://');
   });
+  it('rejects SHA-1 SAML provider configuration', async () => {
+    await expect(identityProviderService.upsert({ key: 'saml', protocol: 'saml', configuration: {
+      entityId: 'enterpriseglue', callbackUrl: 'https://app.example.test/callback', ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'SAML_CERT', signatureAlgorithm: 'sha1',
+    } })).rejects.toThrow('sha256 or sha512');
+  });
   it('requires a complete direct LDAP configuration', async () => {
     await expect(identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: { url: 'ldaps://directory.test' } })).rejects.toThrow('bindDn');
     const provider = await identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: {

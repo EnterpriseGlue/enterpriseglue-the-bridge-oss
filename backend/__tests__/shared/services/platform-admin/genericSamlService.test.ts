@@ -34,4 +34,11 @@ describe('GenericSamlService', () => {
     expect(() => genericSamlService.extractUserClaims(configuration, { 'urn:example:subject': 'subject-123' }))
       .toThrow('SAML assertion must contain an email address');
   });
+
+  it('rejects SHA-1 SAML signature configuration', () => {
+    expect(() => genericSamlService.extractUserClaims({ ...configuration, signatureAlgorithm: 'sha1' }, {
+      'urn:example:subject': 'subject-123',
+      'urn:example:email': 'person@example.test',
+    })).toThrow('SAML signatureAlgorithm must be sha256 or sha512');
+  });
 });

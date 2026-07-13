@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 const nodeSaml = require('@node-saml/node-saml');
 
 type SamlProfile = Record<string, unknown>;
-type SignatureAlgorithm = 'sha1' | 'sha256' | 'sha512';
+type SignatureAlgorithm = 'sha256' | 'sha512';
 
 export interface GenericSamlProviderConfiguration {
   entityId: string;
@@ -64,7 +64,10 @@ function first(profile: SamlProfile, ...keys: Array<string | undefined>): string
 }
 
 function configuration(raw: Record<string, unknown>): GenericSamlProviderConfiguration {
-  const signatureAlgorithm = raw.signatureAlgorithm === 'sha1' || raw.signatureAlgorithm === 'sha512' ? raw.signatureAlgorithm : 'sha256';
+  if (raw.signatureAlgorithm !== undefined && raw.signatureAlgorithm !== 'sha256' && raw.signatureAlgorithm !== 'sha512') {
+    throw new Error('SAML signatureAlgorithm must be sha256 or sha512');
+  }
+  const signatureAlgorithm: SignatureAlgorithm = raw.signatureAlgorithm === 'sha512' ? 'sha512' : 'sha256';
   return {
     entityId: required(raw.entityId, 'entityId'),
     callbackUrl: requireHttpsUrl(raw.callbackUrl, 'callbackUrl'),

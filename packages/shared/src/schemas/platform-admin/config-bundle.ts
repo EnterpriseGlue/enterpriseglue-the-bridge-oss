@@ -298,7 +298,7 @@ export const ConfigIdentityProviderSchema = z.discriminatedUnion('type', [
       emailAttribute: z.string().min(1).max(255).optional(),
       groupAttribute: z.string().min(1).max(255).optional(),
       signingCertificateRef: SecretReferenceSchema,
-      signatureAlgorithm: z.enum(['sha1', 'sha256', 'sha512']).default('sha256'),
+      signatureAlgorithm: z.enum(['sha256', 'sha512']).default('sha256'),
     }).strict(),
   }).strict(),
   CommonIdentityProviderSchema.extend({

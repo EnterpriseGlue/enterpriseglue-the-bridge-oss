@@ -46,6 +46,9 @@ function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<
     for (const field of ['entityId', 'callbackUrl', 'ssoUrl', 'signingCertificateRef']) {
       if (typeof configuration[field] !== 'string' || !String(configuration[field]).trim()) throw Errors.validation(`SAML providers require ${field}`);
     }
+    if (configuration.signatureAlgorithm !== undefined && configuration.signatureAlgorithm !== 'sha256' && configuration.signatureAlgorithm !== 'sha512') {
+      throw Errors.validation('SAML signatureAlgorithm must be sha256 or sha512');
+    }
   }
   if (protocol === 'ldap') {
     if (typeof configuration.url !== 'string' || !String(configuration.url).startsWith('ldaps://')) throw Errors.validation('LDAP providers require an ldaps:// URL');
