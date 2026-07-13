@@ -17,6 +17,7 @@ import {
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 
 const router = Router();
 
@@ -57,6 +58,7 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
     mustResetPassword: Boolean(user.mustResetPassword),
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
+    session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
   });
 }));
 
@@ -117,6 +119,7 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
     mustResetPassword: Boolean(user.mustResetPassword),
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
+    session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
   });
 }));
 

@@ -1,4 +1,13 @@
 export type PlatformRole = 'admin' | 'user';
+export interface AuthenticatedSessionContext {
+    principal: {
+        type: 'user';
+        id: string;
+    };
+    tenant: {
+        id: string | null;
+    };
+}
 export interface User {
     id: string;
     email: string;
@@ -11,6 +20,7 @@ export interface User {
     mustResetPassword: boolean;
     createdAt: number;
     lastLoginAt?: number;
+    session?: AuthenticatedSessionContext;
 }
 export interface LoginRequest {
     email: string;

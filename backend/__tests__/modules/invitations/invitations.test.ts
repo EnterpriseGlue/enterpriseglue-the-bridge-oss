@@ -472,6 +472,10 @@ describe('invitation and onboarding routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.user.email).toBe('invitee@example.com');
+    expect(response.body.user.session).toEqual({
+      principal: { type: 'user', id: 'user-1' },
+      tenant: { id: null },
+    });
     expect(response.headers['set-cookie']).toEqual(
       expect.arrayContaining([
         expect.stringContaining('onboardingToken=;'),

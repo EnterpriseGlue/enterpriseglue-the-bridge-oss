@@ -14,6 +14,7 @@ import { directLdapIdentityService } from '@enterpriseglue/shared/services/platf
 import type { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { auditFromRequest, logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
+import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 import { buildSignedSamlState, buildSsoState, getSsoRedirectUrl, parseSignedSamlState, parseSsoState } from './sso-state.js';
 
 const router = Router();
@@ -67,7 +68,7 @@ async function startSamlLogin(req: Request, res: Response, provider: IdentityPro
   res.redirect(authorizationUrl.toString());
 }
 
-async function setProviderSession(req: Request, res: Response, user: { id: string; email: string; platformRole?: string | null }, provider: IdentityProvider): Promise<void> {
+async function setProviderSession(req: Request, res: Response, user: { id: string; email: string }, provider: IdentityProvider): Promise<void> {
   const session = await authSessionService.issue(user, {
     identityProviderId: provider.id,
     userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
@@ -86,7 +87,17 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
     if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
     await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap' } }));
     await setProviderSession(req, res, user as any, provider);
-    res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, platformRole: user.platformRole }, expiresIn: config.jwtAccessTokenExpires });
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        platformRole: user.platformRole,
+        session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
+      },
+      expiresIn: config.jwtAccessTokenExpires,
+    });
   } catch (error) {
     if ((error as any)?.statusCode === 403) throw error;
     await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_FAILED, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap', reason: 'invalid_directory_credentials' } }));

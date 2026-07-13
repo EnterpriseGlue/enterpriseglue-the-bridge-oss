@@ -17,6 +17,7 @@ import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
+import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 
 const router = Router();
 
@@ -224,6 +225,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
       mustResetPassword: Boolean(user.mustResetPassword),
       capabilities,
       isEmailVerified,
+      session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
     },
     expiresIn: config.jwtAccessTokenExpires,
     emailVerificationRequired: !isEmailVerified, // Flag for frontend

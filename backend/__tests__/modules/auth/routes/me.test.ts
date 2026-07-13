@@ -69,6 +69,10 @@ describe('GET /api/auth/me', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.email).toBe('test@example.com');
+    expect(response.body.session).toEqual({
+      principal: { type: 'user', id: 'user-1' },
+      tenant: { id: null },
+    });
   });
 
   it('returns branding settings', async () => {

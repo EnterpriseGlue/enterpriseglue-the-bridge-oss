@@ -15,6 +15,7 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
+import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 
 const router = Router();
 
@@ -96,6 +97,7 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
       capabilities,
       isEmailVerified: true,
       mustResetPassword: false,
+      session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
     },
     expiresIn: config.jwtAccessTokenExpires,
     emailVerificationRequired: false,
