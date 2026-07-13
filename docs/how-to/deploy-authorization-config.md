@@ -228,7 +228,7 @@ Required behavior:
 - [x] ✅ Allow apply callers to select `none`, `preview`, or bounded `apply` replay for affected stored identity snapshots. Replay starts after the config database transaction commits; normal source-scoped cleanup for changed or disabled config mappings remains part of that transaction.
 - [x] ✅ Persist provider/cursor continuation tasks for truncated config-apply replay pages and process them through an explicitly enabled, leased backend worker with retry backoff and apply-run diagnostics.
 - [x] ✅ Print sanitized machine-readable preview, apply, and export responses suitable for CI artifacts.
-- [ ] ⬜ Return distinct exit codes for validation, authorization, conflict, reconciliation, and transport failures.
+- [x] ✅ Return distinct exit codes for validation (`2`), authorization (`3`), conflict (`4`), reconciliation (`5`), and transport/server failures (`6`). Usage errors return `64`.
 - [x] ✅ Sanitize all configuration CLI stdout/stderr before GitHub Actions or other CI systems can archive it. Access tokens, provider secrets and references, engine credentials, certificates, LDAP bind values, and customer peer tokens are redacted defensively even if an upstream response is malformed.
 
 ## Database Migrations And Compatibility
