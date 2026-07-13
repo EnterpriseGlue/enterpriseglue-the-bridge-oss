@@ -354,7 +354,7 @@ Authoritative mode must only touch records with `source = "config"` and matching
 
 ### JSON Configuration Interface Status And Extension
 
-The JSON bundle is partially implemented. The platform exposes strict schemas, canonical hashing, side-effect-free preview/diff, and hash-bound apply for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, provider-neutral identity providers, and identity mappings. Export/history, connection testing, bundle UI, and affected-principal analysis remain unimplemented.
+The JSON bundle is partially implemented. The platform exposes strict schemas, canonical hashing, side-effect-free preview/diff, and hash-bound apply for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, provider-neutral identity providers, and identity mappings. Server-side export/history, Platform Settings bundle UI, and protocol-specific provider connection testing are implemented; affected-principal analysis remains unimplemented.
 
 The implementation must provide one bundle compiler over the same domain services used by the UI. JSON apply must not write authorization tables directly or maintain a second business-rule implementation.
 
