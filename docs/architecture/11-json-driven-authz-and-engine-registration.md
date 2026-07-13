@@ -2291,7 +2291,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add disabled-by-default `EG_CONFIG_*` settings to every deployment template and configuration reference. Shared validation, backend `.env.example`, startup file bootstrap, fail-closed behavior, and sanitized health status are complete; Docker/OpenShift env examples and reference matrices remain pending.
 - [ ] ⬜ Add optional config-bundle mounting to every deployment path. `infra/docker/compose/docker-compose.config-bundle.yml` now provides a read-only payload and separate secret mount; dev, production image, self-host, and OpenShift script integration remain pending.
 - [ ] ⬜ Ensure production backend images expose a non-root-readable config mount path without baking customer bundles into images.
-- [ ] ⬜ Add optional OpenShift ConfigMap/projected bundle volume, separate secret references, bundle-hash rollout annotation, and readiness behavior to Kustomize base/overlays and deployment scripts.
+- [ ] ⬜ Complete optional OpenShift bootstrap deployment. The Kustomize base now projects optional bundle/secret volumes and the deploy script creates a bundle ConfigMap with hash-triggered rollout; explicit secret-management integration and readiness behavior remain pending.
 - [ ] ⬜ Enforce complete startup order including required reconciliation and readiness. Migrations, catalog seeding, and optional file bundle validation/apply now run before the backend listens; reconciliation/readiness gating remains pending.
 - [ ] ⬜ Add sanitized config status to health/readiness, logs, metrics, and deployment receipts.
 - [ ] ⬜ Update Docker, OpenShift, deployment-runbook, SSO, configuration-reference, security-hardening, and troubleshooting documentation in the same implementation milestone.

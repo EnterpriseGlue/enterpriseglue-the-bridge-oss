@@ -4,7 +4,7 @@ Summary: Deploy EnterpriseGlue to OpenShift using the repo's Kustomize overlays 
 
 Audience: Developers and architects.
 
-Current Kustomize overlays do not project or apply authorization configuration bundles. The target ConfigMap/Secret separation, bundle-hash rollout, fail-closed readiness, and rollback workflow is tracked in [Deploy Authorization Configuration](./deploy-authorization-config.md).
+The backend deployment projects optional configuration and secret volumes. The deployment script can create a bundle ConfigMap from `EG_CONFIG_BUNDLE_FILE` and annotates the pod template with its SHA-256 to trigger rollout. Post-apply reconciliation/readiness gating remains tracked in [Deploy Authorization Configuration](./deploy-authorization-config.md).
 
 ## Layout
 - Kustomize base: `infra/kubernetes/openshift/kustomize/base/`
@@ -77,6 +77,19 @@ DATABASE_TYPE=oracle
 ```
 
 See `infra/docker/env/examples/openshift.env.example` and `infra/kubernetes/openshift/examples/runtime-secret.example.yaml` for full examples.
+
+### Optional Configuration Bundle
+
+Set the following in the deployment environment to mount and bootstrap one JSON payload:
+
+```env
+EG_CONFIG_BUNDLE_FILE=./config/enterpriseglue.json
+EG_CONFIG_BOOTSTRAP_MODE=validate
+EG_CONFIG_EXPECTED_TENANT_SCOPE=platform
+EG_CONFIG_FAIL_CLOSED=true
+```
+
+The script calculates the bundle SHA-256, creates `enterpriseglue-config-bundle`, and rolls the backend. Use `apply` only after reviewing the API/CLI preview; the projected ConfigMap contains bundle JSON only, never secret values.
 
 ## Deploy
 Use the script entrypoint (default overlay is `prod`):

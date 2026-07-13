@@ -107,7 +107,35 @@ data:
   GIT_REPOS_PATH: "/app/data/repos"
   GIT_DEFAULT_BRANCH: "${GIT_DEFAULT_BRANCH:-main}"
   EXPOSE_BACKEND: "false"
+  EG_CONFIG_BOOTSTRAP_MODE: "${EG_CONFIG_BOOTSTRAP_MODE:-disabled}"
+  EG_CONFIG_EXPECTED_SHA256: "${EG_CONFIG_EXPECTED_SHA256:-}"
+  EG_CONFIG_EXPECTED_TENANT_SCOPE: "${EG_CONFIG_EXPECTED_TENANT_SCOPE:-platform}"
+  EG_CONFIG_FAIL_CLOSED: "${EG_CONFIG_FAIL_CLOSED:-true}"
+  EG_CONFIG_MAX_BYTES: "${EG_CONFIG_MAX_BYTES:-1048576}"
 EOF
+}
+
+apply_config_bundle() {
+  if [[ -z "${EG_CONFIG_BUNDLE_FILE:-}" ]]; then
+    log "No EG_CONFIG_BUNDLE_FILE configured; bootstrap bundle remains disabled"
+    return
+  fi
+  [[ -f "$EG_CONFIG_BUNDLE_FILE" ]] || error "EG_CONFIG_BUNDLE_FILE does not exist: $EG_CONFIG_BUNDLE_FILE"
+  [[ "${EG_CONFIG_BOOTSTRAP_MODE:-disabled}" != "disabled" ]] || error "EG_CONFIG_BOOTSTRAP_MODE must be validate or apply when EG_CONFIG_BUNDLE_FILE is set"
+
+  local bundle_hash
+  bundle_hash="$(node -e "const fs=require('fs'); const crypto=require('crypto'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$EG_CONFIG_BUNDLE_FILE")"
+  if [[ -n "${EG_CONFIG_EXPECTED_SHA256:-}" && "$bundle_hash" != "$EG_CONFIG_EXPECTED_SHA256" ]]; then
+    error "EG_CONFIG_EXPECTED_SHA256 does not match EG_CONFIG_BUNDLE_FILE"
+  fi
+  EG_CONFIG_EXPECTED_SHA256="$bundle_hash"
+
+  log "Applying configuration bundle ConfigMap (sha256=${bundle_hash})"
+  oc -n "$OPENSHIFT_NAMESPACE" create configmap enterpriseglue-config-bundle \
+    --from-file=bundle.json="$EG_CONFIG_BUNDLE_FILE" \
+    --dry-run=client -o yaml | oc -n "$OPENSHIFT_NAMESPACE" apply -f -
+  oc -n "$OPENSHIFT_NAMESPACE" patch deployment enterpriseglue-backend --type=merge \
+    -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"enterpriseglue.ai/config-bundle-sha256\":\"$bundle_hash\"}}}}}"
 }
 
 apply_base_manifests() {
@@ -148,6 +176,7 @@ verify_health() {
 main() {
   require_cmd oc
   require_cmd curl
+  require_cmd node
 
   require_env OPENSHIFT_NAMESPACE
   require_env OPENSHIFT_ROUTE_HOST
@@ -173,6 +202,7 @@ main() {
   print_arch_summary
   create_or_update_pull_secret
   apply_base_manifests
+  apply_config_bundle
   apply_runtime_secret
   apply_runtime_config
   set_images_and_route
