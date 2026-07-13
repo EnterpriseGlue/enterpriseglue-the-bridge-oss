@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@src/shared/notifications/ToastProvider';
 import Login from '@src/pages/Login';
 import { apiClient } from '@src/shared/api/client';
+import { redirectTo } from '@src/utils/redirect';
 
 const loginMock = vi.fn().mockResolvedValue(undefined);
 const navigateMock = vi.fn();
@@ -44,6 +45,8 @@ vi.mock('@src/shared/api/client', () => ({
   },
 }));
 
+vi.mock('@src/utils/redirect', () => ({ redirectTo: vi.fn() }));
+
 describe('Login', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,6 +55,7 @@ describe('Login', () => {
     authState.isLoading = false;
     (apiClient.get as any).mockImplementation((url: string) => {
       if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
+      if (url === '/api/auth/providers/enabled') return Promise.resolve([]);
       if (url === '/api/auth/branding') return Promise.resolve({ ssoAutoRedirectSingleProvider: false });
       return Promise.resolve({});
     });
@@ -93,6 +97,7 @@ describe('Login', () => {
   it('uses the branded header title text for the browser page title', async () => {
     (apiClient.get as any).mockImplementation((url: string) => {
       if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
+      if (url === '/api/auth/providers/enabled') return Promise.resolve([]);
       if (url === '/api/auth/branding') return Promise.resolve({ logoTitle: 'OneJOP', ssoAutoRedirectSingleProvider: false });
       return Promise.resolve({});
     });
@@ -135,5 +140,26 @@ describe('Login', () => {
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith('/t/default/', { replace: true });
     });
+  });
+
+  it('uses the provider-id LDAP login endpoint after selecting a directory provider', async () => {
+    const user = userEvent.setup();
+    (apiClient.get as any).mockImplementation((url: string) => {
+      if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
+      if (url === '/api/auth/providers/enabled') return Promise.resolve([{ id: 'ldap-1', key: 'corp-directory', protocol: 'ldap', loginMethod: 'password' }]);
+      if (url === '/api/auth/branding') return Promise.resolve({ ssoAutoRedirectSingleProvider: false });
+      return Promise.resolve({});
+    });
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={qc}><ToastProvider><MemoryRouter initialEntries={['/t/default/login']}><Login /></MemoryRouter></ToastProvider></QueryClientProvider>);
+
+    await user.click(await screen.findByRole('button', { name: /Sign in with corp-directory/i }));
+    await user.type(screen.getByLabelText('Username'), 'person@example.test');
+    await user.type(screen.getByLabelText('Password'), 'directory-password');
+    await user.click(screen.getByRole('button', { name: /Sign in with corp-directory/i }));
+
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/auth/providers/ldap-1/login', { username: 'person@example.test', password: 'directory-password' }));
+    expect(redirectTo).toHaveBeenCalledWith('/t/default/');
   });
 });

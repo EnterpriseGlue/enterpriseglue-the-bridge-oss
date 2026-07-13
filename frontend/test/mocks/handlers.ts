@@ -43,6 +43,7 @@ export const handlers = [
       { id: 'sso-1', name: 'Google', type: 'google' },
     ]);
   }),
+  http.get('/api/auth/providers/enabled', () => HttpResponse.json([])),
   http.get('/api/auth/branding', () => {
     return HttpResponse.json({});
   }),

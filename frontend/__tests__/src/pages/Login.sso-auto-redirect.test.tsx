@@ -32,11 +32,15 @@ describe('Login SSO auto-redirect behavior', () => {
 
   function setupApiResponses(options: {
     providers: Array<{ id: string; name: string; type: 'microsoft' | 'google' | 'saml' | 'oidc' }>;
+    identityProviders?: Array<{ id: string; key: string; protocol: 'oidc' | 'ldap'; loginMethod: 'redirect' | 'password' }>;
     autoRedirect: boolean;
   }) {
     (apiClient.get as any).mockImplementation((url: string) => {
       if (url === '/api/sso/providers/enabled') {
         return Promise.resolve(options.providers);
+      }
+      if (url === '/api/auth/providers/enabled') {
+        return Promise.resolve(options.identityProviders || []);
       }
       if (url === '/api/auth/branding') {
         return Promise.resolve({ ssoAutoRedirectSingleProvider: options.autoRedirect });
@@ -82,6 +86,20 @@ describe('Login SSO auto-redirect behavior', () => {
 
     await waitFor(() => {
       expect(redirectTo).toHaveBeenCalledWith('/api/auth/saml?tenantSlug=default');
+    });
+  });
+
+  it('auto-redirects provider-neutral OIDC through its exact provider id', async () => {
+    setupApiResponses({
+      providers: [],
+      identityProviders: [{ id: 'oidc-1', key: 'corp-oidc', protocol: 'oidc', loginMethod: 'redirect' }],
+      autoRedirect: true,
+    });
+
+    renderLogin('/t/default/login');
+
+    await waitFor(() => {
+      expect(redirectTo).toHaveBeenCalledWith('/api/auth/providers/oidc-1/start?tenantSlug=default');
     });
   });
 

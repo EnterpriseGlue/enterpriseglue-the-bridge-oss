@@ -20,9 +20,18 @@ interface SsoProviderButton {
   id: string;
   name: string;
   type: 'microsoft' | 'google' | 'saml' | 'oidc';
+  source: 'legacy' | 'identity';
+  loginMethod: 'redirect' | 'password';
   buttonLabel?: string;
   buttonColor?: string;
   iconUrl?: string;
+}
+
+interface IdentityProviderLoginOption {
+  id: string;
+  key: string;
+  protocol: 'oidc' | 'ldap';
+  loginMethod: 'redirect' | 'password';
 }
 
 interface PublicBranding {
@@ -150,6 +159,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [ssoProviders, setSsoProviders] = useState<SsoProviderButton[]>([]);
+  const [directLdapProvider, setDirectLdapProvider] = useState<SsoProviderButton | null>(null);
   const [ssoLoading, setSsoLoading] = useState(true);
   const [branding, setBranding] = useState<PublicBranding | null>(initialBranding);
   const [brandingFetchDone, setBrandingFetchDone] = useState(false);
@@ -161,11 +171,28 @@ export default function Login() {
   const hasTriggeredAutoSsoRedirect = useRef(false);
   const localLoginDisabledByPolicy = !ssoLoading && ssoProviders.length > 0;
   
-  // Fetch enabled SSO providers
+  // Legacy provider rows remain available while provider-neutral OIDC/LDAP login rolls out.
   useEffect(() => {
     setSsoLoading(true);
-    apiClient.get<SsoProviderButton[]>('/api/sso/providers/enabled')
-      .then(data => setSsoProviders(Array.isArray(data) ? data : []))
+    Promise.all([
+      apiClient.get<Array<Omit<SsoProviderButton, 'source' | 'loginMethod'>>>('/api/sso/providers/enabled').catch(() => []),
+      apiClient.get<IdentityProviderLoginOption[]>('/api/auth/providers/enabled').catch(() => []),
+    ])
+      .then(([legacyProviders, identityProviders]) => {
+        const legacy = Array.isArray(legacyProviders)
+          ? legacyProviders.map((provider) => ({ ...provider, source: 'legacy' as const, loginMethod: 'redirect' as const }))
+          : [];
+        const identity = Array.isArray(identityProviders)
+          ? identityProviders.map((provider) => ({
+            id: provider.id,
+            name: provider.key,
+            type: provider.protocol === 'ldap' ? 'oidc' as const : provider.protocol,
+            source: 'identity' as const,
+            loginMethod: provider.loginMethod,
+          }))
+          : [];
+        setSsoProviders([...legacy, ...identity]);
+      })
       .catch(() => setSsoProviders([]))
       .finally(() => setSsoLoading(false));
   }, []);
@@ -303,7 +330,7 @@ export default function Login() {
     if (hasTriggeredAutoSsoRedirect.current) return;
     if (ssoLoading || !brandingFetchDone) return;
     if (!branding?.ssoAutoRedirectSingleProvider) return;
-    if (ssoProviders.length !== 1) return;
+    if (ssoProviders.length !== 1 || ssoProviders[0].loginMethod !== 'redirect') return;
 
     const params = new URLSearchParams(location.search);
     const bypassLocal = params.get('local') === '1' || params.get('no_sso_redirect') === '1';
@@ -323,9 +350,7 @@ export default function Login() {
     }
 
     hasTriggeredAutoSsoRedirect.current = true;
-    const provider = ssoProviders[0];
-    const tenantQuery = tenantSlug ? `?tenantSlug=${encodeURIComponent(tenantSlug)}` : '';
-    redirectTo(`/api/auth/${provider.type}${tenantQuery}`);
+    redirectTo(providerLoginPath(ssoProviders[0], tenantSlug));
   }, [
     ssoLoading,
     brandingFetchDone,
@@ -374,10 +399,33 @@ export default function Login() {
     submitLogin();
   };
 
+  const providerLoginPath = (provider: SsoProviderButton, slug: string | null): string => {
+    const tenantQuery = slug ? `?tenantSlug=${encodeURIComponent(slug)}` : '';
+    return provider.source === 'identity'
+      ? `/api/auth/providers/${encodeURIComponent(provider.id)}/start${tenantQuery}`
+      : `/api/auth/${provider.type}${tenantQuery}`;
+  };
+
   const handleSsoLogin = (provider: SsoProviderButton) => {
-    // Redirect to backend OAuth endpoint for the provider
-    const tenantQuery = tenantSlug ? `?tenantSlug=${encodeURIComponent(tenantSlug)}` : '';
-    redirectTo(`/api/auth/${provider.type}${tenantQuery}`);
+    if (provider.source === 'identity' && provider.loginMethod === 'password') {
+      setDirectLdapProvider(provider);
+      return;
+    }
+    redirectTo(providerLoginPath(provider, tenantSlug));
+  };
+
+  const submitDirectLdapLogin = async () => {
+    if (!directLdapProvider || isLoading || !email || !password) return;
+    setIsLoading(true);
+    try {
+      await apiClient.post(`/api/auth/providers/${encodeURIComponent(directLdapProvider.id)}/login`, { username: email, password });
+      redirectTo(tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : `/t/${DEFAULT_TENANT_SLUG}/`);
+    } catch (err) {
+      const parsed = parseApiError(err, 'Directory sign-in failed');
+      notify({ kind: 'error', title: 'Directory sign-in failed', subtitle: parsed.message });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Get provider icon SVG
@@ -481,7 +529,18 @@ export default function Login() {
         </div>
 
         {/* Login form */}
-        {localLoginDisabledByPolicy ? (
+        {directLdapProvider ? (
+          <form onSubmit={(event) => { event.preventDefault(); submitDirectLdapLogin(); }}>
+            <div style={{ marginBottom: 'var(--spacing-5)' }}>
+              <TextInput id="ldap-username" labelText="Username" placeholder="Enter your directory username" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={isLoading} />
+            </div>
+            <div style={{ marginBottom: 'var(--spacing-6)' }}>
+              <TextInput id="ldap-password" labelText="Password" placeholder="Enter your directory password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required disabled={isLoading} />
+            </div>
+            <Button type="submit" kind="primary" disabled={isLoading || !email || !password} style={{ width: '100%' }}>{isLoading ? 'Signing in...' : `Sign in with ${directLdapProvider.name}`}</Button>
+            <Button type="button" kind="ghost" disabled={isLoading} onClick={() => { setDirectLdapProvider(null); setPassword(''); }} style={{ width: '100%', marginTop: 'var(--spacing-3)' }}>Choose another sign-in method</Button>
+          </form>
+        ) : localLoginDisabledByPolicy ? (
           <InlineNotification
             kind="info"
             title="Local sign-in disabled"
@@ -570,7 +629,7 @@ export default function Login() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
-              {ssoProviders.map(provider => (
+              {ssoProviders.filter((provider) => provider.id !== directLdapProvider?.id || provider.source !== directLdapProvider.source).map(provider => (
                 <Button
                   key={provider.id}
                   kind="tertiary"

@@ -1843,7 +1843,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ `GET /api/identity/sync-runs` and `GET /api/identity/sync-runs/:id/events`
   - Exposes provider-neutral login/scheduled reconciliation diagnostics.
 - [x] ✅ `GET /api/auth/providers/enabled`
-  - Returns minimal provider-id-bound OIDC/LDAP direct-login options without secrets or mapping details.
+  - Returns minimal provider-id-bound OIDC/LDAP direct-login options without secrets or mapping details. The login UI merges these options with legacy providers, redirects OIDC by provider id, and presents a dedicated direct-LDAP credential form.
 - [x] ✅ `GET /api/auth/providers/:providerId/start` for direct OIDC providers
   - Starts OIDC login for the exact provider id and binds provider, tenant, redirect, nonce, and anti-replay state. Provider-neutral SAML start/callback remains pending.
 - [x] ✅ `POST /api/auth/providers/:providerId/login`
