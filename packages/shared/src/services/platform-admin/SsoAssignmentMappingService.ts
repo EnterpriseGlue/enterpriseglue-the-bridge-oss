@@ -1,23 +1,30 @@
 import { createHash } from 'node:crypto';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
+import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
 import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { SsoAssignmentMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoAssignmentMapping.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import {
   EnginePermissions,
   PlatformPermissions,
+  permissionService,
   SYSTEM_ROLE_IDS,
 } from './permissions.js';
+import { authzGroupService } from './AuthzGroupService.js';
+import { identityEntitlementMappingService, type IdentityEntitlementMatchOperator, type ManagedIdentityEntitlementMapping } from './IdentityEntitlementMappingService.js';
 import { ssoEngineAccessSnapshotService } from './SsoEngineAccessSnapshotService.js';
 import {
   ssoClaimMatches,
@@ -82,6 +89,22 @@ export interface SsoAssignmentMappingView {
   isActive: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface LegacySsoAssignmentMappingMigrationInput {
+  providerKey: string;
+  targetGroupKey?: string;
+  newGroup?: { key: string; name: string; description?: string | null };
+  createdById?: string | null;
+}
+
+export interface ProviderNeutralSsoAssignmentMigrationResult {
+  legacyMappingId: string;
+  providerKey: string;
+  identityMapping: ManagedIdentityEntitlementMapping;
+  assignment: { id: string; warnings: string[] };
+  created: boolean;
+  createdGroup: AuthzGroup | null;
 }
 
 const ALLOWED_SSO_ENGINE_ROLE_IDS = new Set<string>([
@@ -310,6 +333,96 @@ async function recordSsoAssignmentMappingAudit(
 }
 
 class SsoAssignmentMappingServiceClass {
+  /**
+   * Creates the group-first replacement for an exact-engine legacy mapping.
+   * Dynamic selectors intentionally require an explicit Engine Set design so a
+   * migration can never silently broaden an engine grant.
+   */
+  async migrateToProviderNeutral(id: string, input: LegacySsoAssignmentMappingMigrationInput): Promise<ProviderNeutralSsoAssignmentMigrationResult> {
+    if (Boolean(input.targetGroupKey) === Boolean(input.newGroup)) throw Errors.validation('Provide exactly one of targetGroupKey or newGroup');
+    const providerKey = input.providerKey.trim();
+    const createdById = input.createdById?.trim();
+    if (!providerKey) throw Errors.validation('providerKey is required');
+    if (!createdById) throw Errors.validation('createdById is required');
+
+    const dataSource = await getDataSource();
+    return dataSource.transaction(async (manager) => {
+      const legacyMapping = await manager.getRepository(SsoAssignmentMapping).findOneBy({ id });
+      if (!legacyMapping) throw Errors.notFound('SSO engine assignment mapping');
+      if (!legacyMapping.isActive) throw Errors.validation('Only active SSO engine assignment mappings can be migrated');
+      if (legacyMapping.targetSelectorType !== 'engine_id' || !legacyMapping.targetEngineId) {
+        throw Errors.validation('Only exact engine targets can be migrated automatically. Recreate all-engine, external-id, and label selectors as an explicit group assignment with an Engine Set.');
+      }
+      if (legacyMapping.claimType !== 'group' && legacyMapping.claimType !== 'role') {
+        throw Errors.validation('Only group and role claim mappings can be migrated automatically');
+      }
+
+      const matchOperator: IdentityEntitlementMatchOperator | null = legacyMapping.claimOperator === null || legacyMapping.claimOperator === 'equals'
+        ? 'exact'
+        : legacyMapping.claimOperator === 'contains'
+          ? 'contains'
+          : legacyMapping.claimOperator === 'exists'
+            ? 'exists'
+            : null;
+      if (!matchOperator) throw Errors.validation('Only equals, contains, and exists claim operators can be migrated automatically');
+
+      const tenantId = normalizeTenantId(legacyMapping.tenantId);
+      const providerWhere = tenantId ? { tenantId, key: providerKey } : { tenantId: IsNull(), key: providerKey };
+      const provider = await manager.getRepository(IdentityProvider).findOne({ where: providerWhere });
+      if (!provider) throw Errors.notFound('Identity provider');
+
+      const engine = await manager.getRepository(Engine).findOne({
+        where: tenantId
+          ? [{ id: legacyMapping.targetEngineId, tenantId }, { id: legacyMapping.targetEngineId, tenantId: IsNull() }]
+          : { id: legacyMapping.targetEngineId },
+        select: ['id', 'tenantId'],
+      });
+      if (!engine) throw Errors.notFound('Target engine');
+
+      const targetGroupKey = input.newGroup?.key || input.targetGroupKey!.trim();
+      const groupRepo = manager.getRepository(AuthzGroup);
+      let group = await groupRepo.findOne({ where: tenantId ? { tenantId, key: targetGroupKey, isArchived: false } : { tenantId: IsNull(), key: targetGroupKey, isArchived: false } });
+      let createdGroup: AuthzGroup | null = null;
+      if (!group && input.newGroup) {
+        const created = await authzGroupService.createGroup({ tenantId, key: input.newGroup.key, name: input.newGroup.name, description: input.newGroup.description, source: 'manual', createdById }, manager);
+        group = await groupRepo.findOneBy({ id: created.id });
+        createdGroup = group;
+      }
+      if (!group) throw Errors.notFound('Authorization group');
+      if ((group.tenantId || null) !== tenantId) throw Errors.validation('The replacement group must use the legacy mapping tenant scope');
+
+      const disabledReasons = await this.getDisabledPlatformRiskReasons(manager, legacyMapping);
+      if (disabledReasons.length > 0) {
+        throw Errors.forbidden(`The legacy mapping cannot be converted while its SSO risk controls are disabled: ${disabledReasons.join(', ')}`);
+      }
+
+      const externalId = matchOperator === 'exists' ? null : legacyMapping.claimValue.trim();
+      if (matchOperator !== 'exists' && !externalId) throw Errors.validation('The legacy SSO engine assignment mapping has no claim value');
+      const existing = await manager.getRepository(IdentityEntitlementMapping).findOne({
+        where: {
+          tenantId: tenantId || IsNull(), providerId: provider.id, targetGroupId: group.id,
+          entitlementType: legacyMapping.claimType, externalId: externalId === null ? IsNull() : externalId,
+          matchOperator, syncMode: legacyMapping.syncMode, isActive: true,
+        } as any,
+      });
+      const identityMapping = existing
+        ? {
+          id: existing.id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key,
+          entitlementType: legacyMapping.claimType as 'group' | 'role', externalId, matchOperator,
+          syncMode: existing.syncMode as SsoAssignmentSyncMode, isActive: true, configKey: existing.configKey, sourceRef: existing.sourceRef,
+        }
+        : await identityEntitlementMappingService.create({
+          providerKey: provider.key, targetGroupKey: group.key, entitlementType: legacyMapping.claimType as 'group' | 'role',
+          externalId, matchOperator, syncMode: legacyMapping.syncMode as SsoAssignmentSyncMode,
+        }, tenantId, manager);
+      const assignment = await permissionService.assignRole({
+        tenantId, createdById, principalType: 'group', principalId: group.id, roleId: legacyMapping.targetRoleId,
+        resourceType: 'engine', resourceId: engine.id, source: 'legacy', sourceRef: `sso_assignment_mapping:${legacyMapping.id}`,
+      }, manager);
+      return { legacyMappingId: legacyMapping.id, providerKey: provider.key, identityMapping, assignment, created: !existing, createdGroup };
+    });
+  }
+
   async getAllMappings(tenantId?: string | null): Promise<SsoAssignmentMappingView[]> {
     const dataSource = await getDataSource();
     const normalizedTenantId = normalizeTenantId(tenantId);

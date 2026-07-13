@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import {
   AuditLog,
   Engine,
@@ -15,6 +18,12 @@ import {
 import { ssoAssignmentMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoAssignmentMappingService.js';
 import { EnginePermissions, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
+const { createGroup, createIdentityMapping, assignRole } = vi.hoisted(() => ({
+  createGroup: vi.fn(),
+  createIdentityMapping: vi.fn(),
+  assignRole: vi.fn(),
+}));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
@@ -25,6 +34,19 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoEngineAccessSnapshotS
     markAssignmentRemoved: vi.fn().mockResolvedValue(undefined),
     markMappingRemoved: vi.fn().mockResolvedValue(undefined),
   },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({
+  authzGroupService: { createGroup },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js', () => ({
+  identityEntitlementMappingService: { create: createIdentityMapping },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@enterpriseglue/shared/services/platform-admin/permissions.js')>()),
+  permissionService: { assignRole },
 }));
 
 function queryBuilder(result: unknown) {
@@ -81,6 +103,74 @@ function createDynamicEngineSetMocks(input: {
 describe('ssoAssignmentMappingService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('migrates an exact-engine SSO assignment mapping into a provider-neutral group grant', async () => {
+    const legacy = {
+      id: 'legacy-engine-operator', tenantId: null, isActive: true, claimType: 'group', claimOperator: 'equals', claimValue: 'operators',
+      targetSelectorType: 'engine_id', targetEngineId: 'engine-1', targetRoleId: 'system.engine.operator', syncMode: 'authoritative',
+    };
+    const provider = { id: 'provider-1', key: 'entra' };
+    const group = { id: 'group-1', key: 'entra-engine-operators', tenantId: null, isArchived: false };
+    const getRepository = vi.fn((entity) => {
+      if (entity === SsoAssignmentMapping) return { findOneBy: vi.fn().mockResolvedValue(legacy) };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(provider) };
+      if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }) };
+      if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue(group) };
+      if (entity === IdentityEntitlementMapping) return { findOne: vi.fn().mockResolvedValue(null) };
+      throw new Error(`Unexpected repository: ${(entity as any).name}`);
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: async (callback: any) => callback({ getRepository }) });
+    createIdentityMapping.mockResolvedValue({ id: 'identity-mapping-1', providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: 'group', externalId: 'operators', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, configKey: null, sourceRef: null });
+    assignRole.mockResolvedValue({ id: 'assignment-1', warnings: [] });
+
+    const result = await ssoAssignmentMappingService.migrateToProviderNeutral(legacy.id, {
+      providerKey: provider.key, targetGroupKey: group.key, createdById: 'admin-1',
+    });
+
+    expect(result).toMatchObject({ legacyMappingId: legacy.id, providerKey: provider.key, created: true, identityMapping: { id: 'identity-mapping-1' }, assignment: { id: 'assignment-1' }, createdGroup: null });
+    expect(createIdentityMapping).toHaveBeenCalledWith({ providerKey: provider.key, targetGroupKey: group.key, entitlementType: 'group', externalId: 'operators', matchOperator: 'exact', syncMode: 'authoritative' }, null, expect.anything());
+    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ tenantId: null, principalType: 'group', principalId: group.id, roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1', source: 'legacy', sourceRef: `sso_assignment_mapping:${legacy.id}` }), expect.anything());
+  });
+
+  it('reuses an equivalent provider-neutral mapping when an exact-engine conversion is retried', async () => {
+    const legacy = {
+      id: 'legacy-engine-deployer', tenantId: null, isActive: true, claimType: 'role', claimOperator: 'contains', claimValue: 'release',
+      targetSelectorType: 'engine_id', targetEngineId: 'engine-1', targetRoleId: 'system.engine.deployer', syncMode: 'additive',
+    };
+    const provider = { id: 'provider-1', key: 'entra' };
+    const group = { id: 'group-1', key: 'entra-engine-deployers', tenantId: null, isArchived: false };
+    const existingMapping = { id: 'identity-mapping-existing', syncMode: 'additive', configKey: null, sourceRef: null };
+    const getRepository = vi.fn((entity) => {
+      if (entity === SsoAssignmentMapping) return { findOneBy: vi.fn().mockResolvedValue(legacy) };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(provider) };
+      if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }) };
+      if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue(group) };
+      if (entity === IdentityEntitlementMapping) return { findOne: vi.fn().mockResolvedValue(existingMapping) };
+      throw new Error(`Unexpected repository: ${(entity as any).name}`);
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: async (callback: any) => callback({ getRepository }) });
+    assignRole.mockResolvedValue({ id: 'assignment-existing', warnings: [] });
+
+    const result = await ssoAssignmentMappingService.migrateToProviderNeutral(legacy.id, {
+      providerKey: provider.key, targetGroupKey: group.key, createdById: 'admin-1',
+    });
+
+    expect(result).toMatchObject({ created: false, identityMapping: { id: existingMapping.id }, assignment: { id: 'assignment-existing' } });
+    expect(createIdentityMapping).not.toHaveBeenCalled();
+    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ roleId: 'system.engine.deployer', sourceRef: `sso_assignment_mapping:${legacy.id}` }), expect.anything());
+  });
+
+  it('refuses dynamic legacy selectors instead of broadening access during conversion', async () => {
+    const legacy = { id: 'legacy-all-engines', isActive: true, targetSelectorType: 'all_engines', targetEngineId: null };
+    const getRepository = vi.fn((entity) => entity === SsoAssignmentMapping ? { findOneBy: vi.fn().mockResolvedValue(legacy) } : null);
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: async (callback: any) => callback({ getRepository }) });
+
+    await expect(ssoAssignmentMappingService.migrateToProviderNeutral(legacy.id, {
+      providerKey: 'entra', targetGroupKey: 'operators', createdById: 'admin-1',
+    })).rejects.toThrow('Only exact engine targets can be migrated automatically');
+    expect(createIdentityMapping).not.toHaveBeenCalled();
+    expect(assignRole).not.toHaveBeenCalled();
   });
 
   it('syncs SSO claims to an externally registered engine', async () => {

@@ -615,6 +615,11 @@ const ssoAssignmentMappingCreateSchema = z.object({
 });
 
 const ssoAssignmentMappingUpdateSchema = ssoAssignmentMappingCreateSchema.partial();
+const ssoAssignmentMappingProviderNeutralMigrationSchema = z.object({
+  providerKey: z.string().min(1).max(128),
+  targetGroupKey: z.string().min(1).max(160).optional(),
+  newGroup: z.object({ key: z.string().min(1).max(255), name: z.string().min(1).max(255), description: z.string().max(2000).nullable().optional() }).optional(),
+}).refine((value) => Boolean(value.targetGroupKey) !== Boolean(value.newGroup), { message: 'Provide exactly one of targetGroupKey or newGroup' });
 
 const ssoAssignmentMappingTestSchema = z.object({
   claims: z.record(z.string(), z.unknown()),
@@ -2512,6 +2517,12 @@ router.post('/api/authz/sso-assignment-mappings', apiLimiter, requireAuth, requi
     logger.error('Create SSO assignment mapping error:', error);
     throw Errors.badRequest(error.message || 'Failed to create SSO assignment mapping');
   }
+}));
+
+router.post('/api/authz/sso-assignment-mappings/:id/migrate-provider-neutral', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateParams(idParamSchema), validateBody(ssoAssignmentMappingProviderNeutralMigrationSchema), asyncHandler(async (req: Request, res: Response) => {
+  const result = await ssoAssignmentMappingService.migrateToProviderNeutral(String(req.params.id), { ...req.body, createdById: req.user!.userId });
+  await logAudit({ action: 'authz.sso_engine_assignment_mapping.provider_neutral_migration', userId: req.user!.userId, resourceType: 'sso_assignment_mapping', resourceId: result.legacyMappingId, details: { providerKey: result.providerKey, identityMappingId: result.identityMapping.id, assignmentId: result.assignment.id, created: result.created } });
+  res.status(result.created ? 201 : 200).json(result);
 }));
 
 router.put('/api/authz/sso-assignment-mappings/:id', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateParams(idParamSchema), validateBody(ssoAssignmentMappingUpdateSchema), asyncHandler(async (req: Request, res: Response) => {

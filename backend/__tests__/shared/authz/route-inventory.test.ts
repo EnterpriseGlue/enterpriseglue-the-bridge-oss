@@ -407,6 +407,7 @@ describe('authorization route inventory validation', () => {
         surfaceId: 'admin.access-control.sso-engine-assignments.edit',
         routes: [
           ['POST', '/api/authz/sso-assignment-mappings', 'platform.self'],
+          ['POST', '/api/authz/sso-assignment-mappings/{id}/migrate-provider-neutral', 'ssoMapping.byId'],
           ['PUT', '/api/authz/sso-assignment-mappings/:id', 'ssoMapping.byId'],
 	          ['DELETE', '/api/authz/sso-assignment-mappings/:id', 'ssoMapping.byId'],
 	          ['POST', '/api/authz/sso-assignment-mappings/test', 'platform.self'],

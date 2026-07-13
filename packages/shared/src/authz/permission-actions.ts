@@ -473,6 +473,7 @@ export const AUTHZ_ACTIONS = [
     ui: [{ surfaceId: 'admin.access-control.sso-engine-assignments.edit', behavior: 'disable' }],
     routes: [
       { method: 'POST', route: '/api/authz/sso-assignment-mappings', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/authz/sso-assignment-mappings/{id}/migrate-provider-neutral', resourceResolver: 'ssoMapping.byId' },
       { method: 'PUT', route: '/api/authz/sso-assignment-mappings/:id', resourceResolver: 'ssoMapping.byId' },
       { method: 'DELETE', route: '/api/authz/sso-assignment-mappings/:id', resourceResolver: 'ssoMapping.byId' },
       { method: 'POST', route: '/api/authz/sso-assignment-mappings/test', resourceResolver: 'platform.self' },
