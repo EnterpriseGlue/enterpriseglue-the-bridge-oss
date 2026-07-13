@@ -15,6 +15,7 @@ const mappingSchema = z.object({
 });
 const mappingUpdateSchema = mappingSchema.partial().extend({ isActive: z.boolean().optional() });
 const testSchema = mappingSchema.omit({ targetGroupKey: true }).extend({ claims: z.record(z.string(), z.unknown()) });
+const storedSnapshotPreviewSchema = mappingSchema.omit({ targetGroupKey: true }).extend({ limit: z.number().int().min(1).max(5000).optional() });
 const idSchema = z.string().min(1).max(128);
 
 router.get('/api/identity/mappings', requireAuth, requireAction('platform.sso.group-mappings.read'), asyncHandler(async (req, res) => {
@@ -40,6 +41,9 @@ router.delete('/api/identity/mappings/:id', requireAuth, requireAction('platform
 router.post('/api/identity/mappings/test', requireAuth, requireAction('platform.sso.group-mappings.manage'), validateBody(testSchema), asyncHandler(async (req, res) => {
   const result = await identityEntitlementMappingService.test(req.body, req.tenant?.tenantId || null);
   res.json(result);
+}));
+router.post('/api/identity/mappings/stored-snapshot-preview', requireAuth, requireAction('platform.sso.group-mappings.manage'), validateBody(storedSnapshotPreviewSchema), asyncHandler(async (req, res) => {
+  res.json(await identityEntitlementMappingService.previewStoredSnapshots(req.body, req.tenant?.tenantId || null));
 }));
 
 export default router;

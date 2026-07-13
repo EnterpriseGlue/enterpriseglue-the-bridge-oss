@@ -4,6 +4,7 @@ import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ExternalEntitlement, NormalizedExternalIdentity } from './IdentityProviderAdapter.js';
@@ -70,6 +71,29 @@ function validateInput(input: IdentityEntitlementMappingInput): void {
 }
 
 class IdentityEntitlementMappingService {
+  async previewStoredSnapshots(input: Omit<IdentityEntitlementMappingInput, 'targetGroupKey'> & { limit?: number }, tenantId?: string | null): Promise<{ scanned: number; matches: number; nonMatches: number; failed: number; truncated: boolean; latestSnapshotAt: number | null; warnings: Array<'stored_snapshots_only' | 'no_active_snapshots' | 'truncated'> }> {
+    validateInput({ ...input, targetGroupKey: 'preview-only' });
+    const dataSource = await getDataSource();
+    const provider = await dataSource.getRepository(IdentityProvider).findOne({ where: { ...tenantWhere(tenantId), key: normalized(input.providerKey, 'providerKey') } as any });
+    if (!provider) throw Errors.notFound('Identity provider not found');
+    const limit = Math.min(Math.max(input.limit ?? 500, 1), 5000);
+    const snapshots = await dataSource.getRepository(SsoNormalizedIdentity).find({ where: { ...(tenantId ? { tenantId } : { tenantId: IsNull() }), providerId: provider.id, providerStatus: 'active' } as any, order: { lastSeenAt: 'DESC' }, take: limit + 1 });
+    const selected = snapshots.slice(0, limit);
+    const result = { scanned: selected.length, matches: 0, nonMatches: 0, failed: 0, truncated: snapshots.length > limit, latestSnapshotAt: selected.reduce<number | null>((latest, item) => latest === null || item.lastSeenAt > latest ? item.lastSeenAt : latest, null), warnings: ['stored_snapshots_only'] as Array<'stored_snapshots_only' | 'no_active_snapshots' | 'truncated'> };
+    if (selected.length === 0) result.warnings.push('no_active_snapshots');
+    if (result.truncated) result.warnings.push('truncated');
+    const adapter = (await import('./IdentityProviderAdapter.js')).getIdentityProviderAdapter(provider.protocol);
+    for (const snapshot of selected) {
+      try {
+        const claims = JSON.parse(snapshot.claimsJson) as Record<string, unknown>;
+        const identity = adapter.normalizeIdentity({ providerKey: provider.id, subjectId: snapshot.providerSubject, claims, username: snapshot.email, email: snapshot.email, directoryTenantId: snapshot.providerTenantId, observedAt: snapshot.lastSeenAt });
+        if (matchesIdentityEntitlement(input, identity)) result.matches += 1;
+        else result.nonMatches += 1;
+      } catch { result.failed += 1; }
+    }
+    return result;
+  }
+
   async list(tenantId?: string | null): Promise<ManagedIdentityEntitlementMapping[]> {
     const dataSource = await getDataSource();
     const [mappings, providers, groups] = await Promise.all([

@@ -2172,7 +2172,7 @@ Phase 0 exit criteria:
 - [x] ✅ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets, Runtime Resource Sets, config-owned identity mappings, config-owned project-engine targets, and supported config-owned group assignments.
 - [x] ✅ Produce role permission diffs with additions, removals, expanded template permissions, and affected-assignment counts. The details are returned on the same object-level diff records and retained in apply receipts.
 - [x] ✅ Produce bounded runtime resource set diffs with matched/unmatched counts plus newly matched and no-longer-matched process or decision keys. The preview uses current runtime inventory and persisted materializations only; it does not contact engines or reconcile state.
-- [ ] ⬜ Validate identity provider references and preview normalized entitlement-to-group matches without contacting providers unless an explicit connectivity test is requested.
+- [x] ✅ Validate identity provider references and preview aggregate normalized entitlement matches from stored snapshots without contacting providers or changing memberships.
 - [x] ✅ Warn when the same group/role has both engine-wide and narrower runtime-resource-set assignments, when a Runtime Resource Set is attached to an `engine_wide` engine, and when a group deployment role is configured for a CI/API-only target. These are advisory warnings only; display-name and regex identity matching remain unsupported by the config schema.
 - [ ] ⬜ Preview deployment integration and lineage schema changes, including direct-engine deployments that cannot resolve project/file origin.
 - [ ] ⬜ Detect destructive authoritative removals.

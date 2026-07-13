@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { matchesIdentityEntitlement, identityEntitlementMappingService } from '@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { AuthzGroupMembership, IdentityEntitlementMapping } from '@enterpriseglue/shared/db/entities/index.js';
+import { AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
 import { vi, type Mock } from 'vitest';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -12,6 +12,20 @@ describe('identity entitlement mapping', () => {
     expect(matchesIdentityEntitlement({ entitlementType: 'group', externalId: 'group-prod', matchOperator: 'exact' }, identity)).toBe(true);
     expect(matchesIdentityEntitlement({ entitlementType: 'group', externalId: 'prod', matchOperator: 'contains' }, identity)).toBe(true);
     expect(matchesIdentityEntitlement({ entitlementType: 'scope', matchOperator: 'exists' }, identity)).toBe(false);
+  });
+
+  it('previews aggregate proposed mapping matches from stored snapshots only', async () => {
+    const providerRepo = { findOne: vi.fn().mockResolvedValue({ id: 'provider-1', key: 'identity.oidc.main', protocol: 'oidc' }) };
+    const snapshotRepo = { find: vi.fn().mockResolvedValue([
+      { providerSubject: 'subject-1', email: 'user@example.test', providerTenantId: null, claimsJson: JSON.stringify({ groups: ['operators'] }), lastSeenAt: 100 },
+      { providerSubject: 'subject-2', email: 'user2@example.test', providerTenantId: null, claimsJson: JSON.stringify({ groups: ['viewers'] }), lastSeenAt: 101 },
+    ]) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === IdentityProvider ? providerRepo : entity === SsoNormalizedIdentity ? snapshotRepo : {} });
+
+    const result = await identityEntitlementMappingService.previewStoredSnapshots({ providerKey: 'identity.oidc.main', entitlementType: 'group', externalId: 'operators', matchOperator: 'exact' }, 'tenant-a');
+
+    expect(result).toEqual({ scanned: 2, matches: 1, nonMatches: 1, failed: 0, truncated: false, latestSnapshotAt: 101, warnings: ['stored_snapshots_only'] });
+    expect(result).not.toHaveProperty('identities');
   });
 
   it('reconciles only provider-owned memberships for the matching mapping', async () => {

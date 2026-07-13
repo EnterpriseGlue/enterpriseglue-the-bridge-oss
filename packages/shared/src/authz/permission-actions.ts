@@ -514,6 +514,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'PUT', route: '/api/identity/mappings/{id}', resourceResolver: 'platform.self' },
       { method: 'DELETE', route: '/api/identity/mappings/{id}', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/identity/mappings/test', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/identity/mappings/stored-snapshot-preview', resourceResolver: 'platform.self' },
     ],
   },
   {

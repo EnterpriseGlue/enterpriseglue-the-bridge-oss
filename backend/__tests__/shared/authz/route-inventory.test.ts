@@ -430,6 +430,7 @@ describe('authorization route inventory validation', () => {
           ['PUT', '/api/identity/mappings/{id}', 'platform.self'],
           ['DELETE', '/api/identity/mappings/{id}', 'platform.self'],
           ['POST', '/api/identity/mappings/test', 'platform.self'],
+          ['POST', '/api/identity/mappings/stored-snapshot-preview', 'platform.self'],
         ],
       },
       {
