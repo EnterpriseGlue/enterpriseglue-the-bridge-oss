@@ -92,6 +92,7 @@ type EngineAccessResponse = {
   accessedEngines: Array<{
     engineId: string;
     engineName: string;
+    deploymentIntegration?: 'enterpriseglue_proxy' | 'direct_engine';
     manualDeployAllowed?: boolean;
     manualDeployDeniedReasons?: string[];
     ciDeployAllowed?: boolean;
@@ -275,6 +276,21 @@ describe('Git DeployDialog', () => {
       'href',
       '/admin/access-control?tab=effective-access&actionId=project-engine-target.deploy.use&permissionId=project%3Adeploy&resourceType=project_engine_target&resourceId=target-2'
     );
+  });
+
+  it('labels direct-engine targets as pipeline-managed', async () => {
+    renderDialog({
+      accessedEngines: [{
+        engineId: 'engine-manual', engineName: 'Manual Engine', manualDeployAllowed: true,
+        environment: { name: 'Dev', color: '#24a148' },
+      }, {
+        engineId: 'engine-pipeline', engineName: 'Pipeline Engine', deploymentIntegration: 'direct_engine',
+        manualDeployAllowed: false, manualDeployDeniedReasons: ['Engine is configured for direct deployment through a customer pipeline'],
+        environment: { name: 'Prod', color: '#da1e28' },
+      }], pendingRequests: [], availableEngines: [],
+    }, { connected: false, hasToken: false });
+
+    expect(await screen.findByRole('option', { name: 'Pipeline Engine — Prod (Pipeline-managed)' })).toBeDisabled();
   });
 
   it('shows a denial reason when no connected engine is eligible for manual deployment', async () => {
