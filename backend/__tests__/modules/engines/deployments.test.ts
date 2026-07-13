@@ -83,6 +83,7 @@ describe('engines deployments routes', () => {
   let app: express.Application;
   let engineDeploymentInserts: any[];
   let artifactInserts: any[];
+  let deploymentHistoryRows: any[];
   let mockEngine: any;
 
   beforeEach(async () => {
@@ -131,6 +132,7 @@ describe('engines deployments routes', () => {
     });
     engineDeploymentInserts = [];
     artifactInserts = [];
+    deploymentHistoryRows = [];
 
     mockEngine = {
       id: 'e1',
@@ -178,7 +180,7 @@ describe('engines deployments routes', () => {
         }
         if (entityName === 'EngineDeployment') {
           return {
-            find: vi.fn().mockResolvedValue([]),
+            find: vi.fn().mockImplementation(() => Promise.resolve(deploymentHistoryRows)),
             findOne: vi.fn().mockResolvedValue(null),
             insert: vi.fn().mockImplementation((row) => {
               engineDeploymentInserts.push(row);
@@ -242,11 +244,20 @@ describe('engines deployments routes', () => {
 
   it('lists sanitized canonical deployment history through deployment-read permission', async () => {
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'engine:deploy:view');
+    deploymentHistoryRows = [{
+      id: 'history-1', engineId: 'e1', camundaDeploymentId: 'camunda-1', camundaDeploymentName: 'Payments release', camundaDeploymentTime: null,
+      projectId: null, ingestionSource: 'engine_discovery', lineageQuality: 'discovered', reportingPrincipalId: null,
+      deployedAt: 1700000000000, reconciledAt: 1700000001000, resourceCount: 2, status: 'success', rawResponse: '{"secret":"must-not-leak"}', lineageJson: '{"internal":"must-not-leak"}',
+    }];
 
     const response = await request(app).get('/engines-api/engines/e1/deployment-history');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([]);
+    expect(response.body).toEqual([expect.objectContaining({
+      id: 'history-1', engineDeploymentId: 'camunda-1', lineageQuality: 'discovered', resourceCount: 2,
+    })]);
+    expect(response.body[0]).not.toHaveProperty('rawResponse');
+    expect(response.body[0]).not.toHaveProperty('lineageJson');
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:deploy:view', expect.objectContaining({
       userId: 'user-1', resourceType: 'engine', resourceId: 'e1',
     }));
