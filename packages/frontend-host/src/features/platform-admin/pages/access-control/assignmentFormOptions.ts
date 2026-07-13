@@ -21,6 +21,16 @@ export function assignmentResourceTypeOptions(principalType: AssignmentPrincipal
   if (principalType === 'service_account') return [{ id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }];
   return [{ id: 'platform', label: 'Platform' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_runtime_resource', label: 'Runtime resource' }, { id: 'engine_runtime_resource_set', label: 'Runtime resource set' }];
 }
+export function withAssignmentPrincipalType(state: AssignmentFormState, principalType: AssignmentPrincipalType): AssignmentFormState {
+  return {
+    ...state,
+    principalType,
+    principalId: '',
+    resourceType: principalType === 'service_account' && (state.resourceType === 'platform' || state.resourceType === 'external_engine_system') ? 'engine' : state.resourceType,
+    resourceId: principalType !== 'api_client' && state.resourceType === 'external_engine_system' ? '' : state.resourceId,
+    roleId: '',
+  };
+}
 
 const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([
   'system.api.engine_registrar',

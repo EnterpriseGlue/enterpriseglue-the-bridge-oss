@@ -60,7 +60,7 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
-import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
+import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, withAssignmentPrincipalType, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -2493,14 +2493,7 @@ function RoleAssignmentsPanel({
           selectedItem={ASSIGNMENT_PRINCIPAL_OPTIONS.find((item) => item.id === form.principalType) || ASSIGNMENT_PRINCIPAL_OPTIONS[0]}
           onChange={({ selectedItem }) => {
             const principalType = (selectedItem?.id || 'user') as AssignmentPrincipalType;
-            setForm((current) => ({
-              ...current,
-              principalType,
-              principalId: '',
-              resourceType: principalType === 'service_account' && (current.resourceType === 'platform' || current.resourceType === 'external_engine_system') ? 'engine' : current.resourceType,
-              resourceId: principalType !== 'api_client' && current.resourceType === 'external_engine_system' ? '' : current.resourceId,
-              roleId: '',
-            }));
+            setForm((current) => withAssignmentPrincipalType(current, principalType));
           }}
         />
         {form.principalType === 'api_client' ? (
