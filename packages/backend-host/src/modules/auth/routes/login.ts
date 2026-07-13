@@ -193,6 +193,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
 
   const capabilities = await buildUserCapabilities({
     userId: user.id,
+    tenantId: req.tenant?.tenantId || null,
     platformRole: user.platformRole,
   });
   

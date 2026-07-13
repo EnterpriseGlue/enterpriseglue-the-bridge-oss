@@ -36,6 +36,7 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
 
   const capabilities = await buildUserCapabilities({
     userId: user.id,
+    tenantId: req.tenant?.tenantId || null,
     platformRole: user.platformRole,
   });
 
@@ -102,6 +103,7 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
 
   const capabilities = await buildUserCapabilities({
     userId: user.id,
+    tenantId: req.tenant?.tenantId || null,
     platformRole: user.platformRole,
   });
 

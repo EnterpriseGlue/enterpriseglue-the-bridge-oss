@@ -41,15 +41,16 @@ describe('buildUserCapabilities', () => {
     const capabilities = await buildUserCapabilities({ userId: 'user-1', platformRole: 'admin' });
 
     expect(capabilities.canViewMissionControl).toBe(true);
-    expect(engineService.getUserEngines).toHaveBeenCalledWith('user-1');
+    expect(engineService.getUserEngines).toHaveBeenCalledWith('user-1', undefined);
   });
 
   it('does not pass the legacy platform role into permission evaluation', async () => {
-    await buildUserCapabilities({ userId: 'user-1', platformRole: 'admin' });
+    await buildUserCapabilities({ userId: 'user-1', tenantId: 'tenant-1', platformRole: 'admin' });
 
     expect(permissionService.hasPermission).toHaveBeenCalledTimes(7);
     for (const [, context] of (permissionService.hasPermission as any).mock.calls) {
-      expect(context).toEqual({ userId: 'user-1' });
+      expect(context).toEqual({ userId: 'user-1', tenantId: 'tenant-1' });
     }
+    expect(engineService.getUserEngines).toHaveBeenCalledWith('user-1', 'tenant-1');
   });
 });
