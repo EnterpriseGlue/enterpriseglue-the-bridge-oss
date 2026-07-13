@@ -2,22 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response, NextFunction } from 'express';
 import { authorize } from '@enterpriseglue/shared/middleware/authorize.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
-import { engineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { EnginePermissions, permissionService, PlatformPermissions, ProjectPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
-
-vi.mock('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js', () => ({
-  projectMemberService: {
-    getMembership: vi.fn(),
-  },
-}));
-
-vi.mock('@enterpriseglue/shared/services/platform-admin/EngineService.js', () => ({
-  engineService: {
-    getEngineRole: vi.fn(),
-  },
-}));
 
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
@@ -80,11 +66,7 @@ describe('authorize middleware', () => {
     );
   });
 
-  it('adds project membership info on permission success', async () => {
-    (projectMemberService.getMembership as any).mockResolvedValue({
-      role: 'owner',
-      projectId: 'project-1',
-    });
+  it('uses the project permission without hydrating legacy membership roles', async () => {
     (permissionService.hasPermission as any).mockResolvedValue(true);
     req.params = { projectId: 'project-1' } as any;
 
@@ -94,12 +76,11 @@ describe('authorize middleware', () => {
     });
     await middleware(req as Request, res as Response, next);
 
-    expect((req as any).projectRole).toBe('owner');
+    expect((req as any).projectRole).toBeUndefined();
     expect(next).toHaveBeenCalled();
   });
 
   it('logs denial when roles do not match', async () => {
-    (engineService.getEngineRole as any).mockResolvedValue('operator');
     req.params = { engineId: 'engine-1' } as any;
 
     const middleware = authorize({ engineRoles: ['owner'], auditDenials: true });
@@ -133,7 +114,6 @@ describe('authorize middleware', () => {
     expect(permissionService.hasPermission).toHaveBeenCalledWith(PlatformPermissions.AUTHZ_ROLES_VIEW, {
       userId: 'user-1',
       tenantId: null,
-      platformRole: 'user',
       resourceType: 'platform',
     });
     expect(next).toHaveBeenCalled();
@@ -153,14 +133,12 @@ describe('authorize middleware', () => {
     expect(permissionService.hasPermission).toHaveBeenCalledWith(PlatformPermissions.AUTHZ_ROLES_VIEW, {
       userId: 'user-1',
       tenantId: null,
-      platformRole: 'admin',
       resourceType: 'platform',
     });
     expect(next).not.toHaveBeenCalled();
   });
 
   it('allows project permissions for project checks', async () => {
-    (projectMemberService.getMembership as any).mockResolvedValue(null);
     (permissionService.hasPermission as any).mockResolvedValue(true);
     req.params = { projectId: 'project-1' } as any;
 
@@ -173,8 +151,6 @@ describe('authorize middleware', () => {
     expect(permissionService.hasPermission).toHaveBeenCalledWith(ProjectPermissions.PROJECT_SETTINGS, {
       userId: 'user-1',
       tenantId: null,
-      platformRole: 'user',
-      projectRole: undefined,
       resourceType: 'project',
       resourceId: 'project-1',
     });
@@ -182,7 +158,6 @@ describe('authorize middleware', () => {
   });
 
   it('allows engine permissions for engine checks', async () => {
-    (engineService.getEngineRole as any).mockResolvedValue(null);
     (permissionService.hasPermission as any).mockResolvedValue(true);
     req.params = { engineId: 'engine-1' } as any;
 
@@ -195,8 +170,6 @@ describe('authorize middleware', () => {
     expect(permissionService.hasPermission).toHaveBeenCalledWith(EnginePermissions.DEPLOY_VIEW, {
       userId: 'user-1',
       tenantId: null,
-      platformRole: 'user',
-      engineRole: undefined,
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
