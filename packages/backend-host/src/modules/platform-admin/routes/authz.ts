@@ -39,7 +39,6 @@ import {
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { AUTHZ_RESOURCE_TYPES } from '@enterpriseglue/shared/authz/permission-actions.js';
 import { In, IsNull, Not } from 'typeorm';
-import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { registerConfigBundleRoutes } from './authz/config-bundles.js';
 import { registerEngineSetRoutes } from './authz/engine-sets.js';
@@ -49,7 +48,9 @@ import { registerRoleRoutes } from './authz/roles.js';
 import { registerAssignmentRoutes } from './authz/assignments.js';
 import { registerProjectEngineTargetRoutes } from './authz/project-engine-targets.js';
 import { registerAuditRoutes } from './authz/audit.js';
+import { registerExternalEngineSystemRoutes } from './authz/external-engine-systems.js';
 import { isExternalEngineTenantVisible } from './authz/external-engine-tenant.js';
+import { parseExternalEngineFieldOwnership } from './authz/external-engine-ownership.js';
 import { parseExternalEngineJson, parseExternalEngineLabels } from './authz/external-engine-serialization.js';
 import {
   getExternalEngineCapabilityDiagnostics,
@@ -141,38 +142,6 @@ const authzEvaluateSchema = z.object({
   if (value.resourceType === 'engine_runtime_resource' && !value.resourceId && !value.runtimeResource) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['runtimeResource'], message: 'Runtime resource ID or selector is required' });
   }
-});
-
-const engineManagementModeSchema = z.enum(['external_managed', 'hybrid']);
-const engineFieldOwnerSchema = z.enum(['manual', 'external']);
-const engineFieldOwnershipSchema = z.record(z.string().min(1).max(128), engineFieldOwnerSchema);
-type EngineFieldOwnership = z.infer<typeof engineFieldOwnershipSchema>;
-
-const DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP: EngineFieldOwnership = {
-  identity: 'external',
-  connection: 'external',
-  metadata: 'external',
-  labels: 'external',
-  auth: 'external',
-  version: 'external',
-  display: 'manual',
-  environment: 'manual',
-};
-
-const externalEngineSystemCreateSchema = z.object({
-  key: z.string().min(1).max(255).regex(/^[a-z0-9][a-z0-9._-]*$/).optional(),
-  name: z.string().min(1).max(255),
-  description: z.string().max(2000).nullable().optional(),
-  defaultManagementMode: engineManagementModeSchema.optional(),
-  defaultFieldOwnership: engineFieldOwnershipSchema.optional(),
-});
-
-const externalEngineSystemUpdateSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().max(2000).nullable().optional(),
-  defaultManagementMode: engineManagementModeSchema.optional(),
-  defaultFieldOwnership: engineFieldOwnershipSchema.optional(),
-  isActive: z.boolean().optional(),
 });
 
 const ssoAssignmentMappingCreateSchema = z.object({
@@ -352,50 +321,6 @@ function requireTargetTransferAccess(req: Request, res: Response, next: NextFunc
   return requirePlatformAction('platform.project-engine-targets.manage')(req, res, next);
 }
 
-function normalizeExternalSystemKey(name: string): string {
-  return name.trim().toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 255) || 'external-engine-system';
-}
-
-function normalizeFieldOwnership(ownership?: EngineFieldOwnership | null): EngineFieldOwnership {
-  return {
-    ...DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP,
-    ...(ownership || {}),
-  };
-}
-
-function fieldOwnershipToJson(ownership?: EngineFieldOwnership | null): string {
-  return JSON.stringify(Object.fromEntries(
-    Object.entries(normalizeFieldOwnership(ownership)).sort(([left], [right]) => left.localeCompare(right))
-  ));
-}
-
-function parseFieldOwnership(value: string | null | undefined): EngineFieldOwnership {
-  const parsed = parseExternalEngineJson(value);
-  if (!parsed) return { ...DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP };
-  return normalizeFieldOwnership(Object.fromEntries(
-    Object.entries(parsed).filter((entry): entry is [string, 'manual' | 'external'] => entry[1] === 'manual' || entry[1] === 'external')
-  ));
-}
-
-function serializeExternalEngineSystem(system: ExternalEngineSystem) {
-  return {
-    id: system.id,
-    tenantId: system.tenantId,
-    key: system.key,
-    name: system.name,
-    description: system.description,
-    defaultManagementMode: system.defaultManagementMode === 'hybrid' ? 'hybrid' : 'external_managed',
-    defaultFieldOwnership: parseFieldOwnership(system.defaultFieldOwnershipJson),
-    isActive: system.isActive,
-    createdById: system.createdById,
-    createdAt: system.createdAt,
-    updatedAt: system.updatedAt,
-  };
-}
-
 // ============================================================================
 // Authorization Check Endpoint
 // ============================================================================
@@ -568,144 +493,7 @@ registerAssignmentRoutes(router, { requirePlatformAction });
 // External Engine Registration Inventory (Admin Only)
 // ============================================================================
 
-router.get('/api/authz/external-engine-systems', apiLimiter, requireAuth, requirePlatformAction('platform.external-engine-systems.read'), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const dataSource = await getDataSource();
-    const tenantId = req.tenant?.tenantId || null;
-    const tenantWhere = tenantId === null ? IsNull() : tenantId;
-    const systems = await dataSource.getRepository(ExternalEngineSystem).find({
-      where: [
-        { tenantId: tenantWhere },
-        { tenantId: IsNull() },
-      ],
-      order: { isActive: 'DESC', name: 'ASC' },
-    });
-    res.json(systems.map(serializeExternalEngineSystem));
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('List external engine systems error:', error);
-    throw Errors.internal('Failed to list external engine systems');
-  }
-}));
-
-router.post('/api/authz/external-engine-systems', apiLimiter, requireAuth, requirePlatformAction('platform.external-engine-systems.manage'), validateBody(externalEngineSystemCreateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const dataSource = await getDataSource();
-    const repo = dataSource.getRepository(ExternalEngineSystem);
-    const tenantId = req.tenant?.tenantId || null;
-    const now = Date.now();
-    const key = req.body.key?.trim() || normalizeExternalSystemKey(req.body.name);
-    const existing = await repo.findOne({ where: { tenantId: tenantId === null ? IsNull() : tenantId, key } });
-    if (existing) {
-      throw Errors.conflict('External engine system key already exists');
-    }
-
-    const payload = {
-      id: generateId(),
-      tenantId,
-      key,
-      name: req.body.name,
-      description: req.body.description ?? null,
-      defaultManagementMode: req.body.defaultManagementMode || 'external_managed',
-      defaultFieldOwnershipJson: fieldOwnershipToJson(req.body.defaultFieldOwnership),
-      isActive: true,
-      createdById: req.user!.userId,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await repo.insert(payload);
-    await logAudit({
-      tenantId: tenantId || undefined,
-      userId: req.user!.userId,
-      action: 'external_engine_system.create',
-      resourceType: 'external_engine_system',
-      resourceId: payload.id,
-      details: {
-        key,
-        defaultManagementMode: payload.defaultManagementMode,
-        defaultFieldOwnership: parseFieldOwnership(payload.defaultFieldOwnershipJson),
-      },
-    });
-    res.status(201).json(serializeExternalEngineSystem(payload as ExternalEngineSystem));
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Create external engine system error:', error);
-    throw Errors.badRequest(error.message || 'Failed to create external engine system');
-  }
-}));
-
-router.put('/api/authz/external-engine-systems/:id', apiLimiter, requireAuth, requirePlatformAction('platform.external-engine-systems.manage'), validateParams(resourceIdParamSchema), validateBody(externalEngineSystemUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const dataSource = await getDataSource();
-    const repo = dataSource.getRepository(ExternalEngineSystem);
-    const tenantId = req.tenant?.tenantId || null;
-    const tenantWhere = tenantId === null ? IsNull() : tenantId;
-    const system = await repo.findOne({
-      where: [
-        { id: String(req.params.id), tenantId: tenantWhere },
-        { id: String(req.params.id), tenantId: IsNull() },
-      ],
-    });
-    if (!system) throw Errors.notFound('External engine system');
-
-    const updates = {
-      name: req.body.name,
-      description: req.body.description === undefined ? undefined : req.body.description ?? null,
-      defaultManagementMode: req.body.defaultManagementMode,
-      defaultFieldOwnershipJson: req.body.defaultFieldOwnership === undefined ? undefined : fieldOwnershipToJson(req.body.defaultFieldOwnership),
-      isActive: req.body.isActive,
-      updatedAt: Date.now(),
-    };
-    await repo.update({ id: system.id }, updates);
-    await logAudit({
-      tenantId: tenantId || undefined,
-      userId: req.user!.userId,
-      action: 'external_engine_system.update',
-      resourceType: 'external_engine_system',
-      resourceId: system.id,
-      details: {
-        changedFields: Object.entries(updates).filter(([, value]) => value !== undefined).map(([key]) => key),
-      },
-    });
-    const updated = await repo.findOneBy({ id: system.id });
-    if (!updated) throw Errors.notFound('External engine system');
-    res.json(serializeExternalEngineSystem(updated));
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Update external engine system error:', error);
-    throw Errors.badRequest(error.message || 'Failed to update external engine system');
-  }
-}));
-
-router.delete('/api/authz/external-engine-systems/:id', apiLimiter, requireAuth, requirePlatformAction('platform.external-engine-systems.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const dataSource = await getDataSource();
-    const repo = dataSource.getRepository(ExternalEngineSystem);
-    const tenantId = req.tenant?.tenantId || null;
-    const tenantWhere = tenantId === null ? IsNull() : tenantId;
-    const system = await repo.findOne({
-      where: [
-        { id: String(req.params.id), tenantId: tenantWhere },
-        { id: String(req.params.id), tenantId: IsNull() },
-      ],
-    });
-    if (!system) throw Errors.notFound('External engine system');
-    await repo.update({ id: system.id }, { isActive: false, updatedAt: Date.now() });
-    await logAudit({
-      tenantId: tenantId || undefined,
-      userId: req.user!.userId,
-      action: 'external_engine_system.archive',
-      resourceType: 'external_engine_system',
-      resourceId: system.id,
-      details: { key: system.key },
-    });
-    res.status(204).send();
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Archive external engine system error:', error);
-    throw Errors.badRequest(error.message || 'Failed to archive external engine system');
-  }
-}));
+registerExternalEngineSystemRoutes(router, { requirePlatformAction });
 
 router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatformAction('platform.external-engines.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
@@ -749,7 +537,7 @@ router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatfo
             externalSystemId: registration.externalSystemId,
             externalSystemName: registration.externalSystemId ? systemsById.get(registration.externalSystemId)?.name || null : null,
             managementMode: registration.managementMode || engine.managementMode || (registration.registrationSource === 'external_api' ? 'external_managed' : 'manual'),
-            fieldOwnership: parseFieldOwnership(registration.fieldOwnershipJson || engine.fieldOwnershipJson),
+            fieldOwnership: parseExternalEngineFieldOwnership(registration.fieldOwnershipJson || engine.fieldOwnershipJson),
             driftStatus: registration.driftStatus || engine.driftStatus,
             lifecycleStatus: registration.lifecycleStatus || engine.lifecycleStatus || 'active',
             lastExternalSyncAt: registration.lastExternalSyncAt || engine.lastExternalSyncAt || registration.lastRegisteredAt || engine.externalUpdatedAt || null,
@@ -791,7 +579,7 @@ router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatfo
         externalSystemId: engine.externalSystemId,
         externalSystemName: engine.externalSystemId ? systemsById.get(engine.externalSystemId)?.name || null : null,
         managementMode: engine.managementMode || (engine.registrationSource === 'external_api' ? 'external_managed' : 'manual'),
-        fieldOwnership: parseFieldOwnership(engine.fieldOwnershipJson),
+        fieldOwnership: parseExternalEngineFieldOwnership(engine.fieldOwnershipJson),
         driftStatus: engine.driftStatus,
         lifecycleStatus: engine.lifecycleStatus || 'active',
         lastExternalSyncAt: engine.lastExternalSyncAt || engine.externalUpdatedAt || null,

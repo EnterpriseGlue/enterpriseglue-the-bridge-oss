@@ -1857,6 +1857,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Extract project-engine target CRUD, deployment eligibility, and Mission Control/Starbase bridge evaluations into `routes/authz/project-engine-targets.ts` with their existing action resolvers.
 - [x] ✅ Extract authorization-audit reads into `routes/authz/audit.ts`, retaining the existing platform audit action and query bounds.
 - [x] ✅ Extract external-engine tenant visibility, JSON serialization, and capability/materialization diagnostics into focused helpers; the remaining external registration routes still need their own router module.
+- [x] ✅ Extract external engine system catalog CRUD into `routes/authz/external-engine-systems.ts`, with shared field-ownership normalization used by catalog and inventory responses.
 - [ ] ⬜ Split the remaining `packages/backend-host/src/modules/platform-admin/routes/authz.ts` families into focused identity and external registration routers.
 - [x] ✅ Add the external machine-authenticated deployment receipt route with API deployment eligibility, action/OpenAPI metadata, audit logging, and inventory materialization. Runtime scope settings, inventory reads, and reconciliation routes remain pending.
 - [x] ✅ Update `packages/backend-host/src/modules/mission-control/engines/routes.ts` manual engine create/update/list/detail schemas and serializers, including runtime scope, deployment integration, metadata discovery, pipeline receipt ingestion, managed-field protection, and canonical deployment-history reads.
