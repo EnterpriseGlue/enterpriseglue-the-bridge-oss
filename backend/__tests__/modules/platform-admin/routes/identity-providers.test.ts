@@ -10,6 +10,7 @@ const service = vi.hoisted(() => ({
   upsert: vi.fn(),
   archive: vi.fn(),
   reconcile: vi.fn(),
+  previewMemberships: vi.fn(),
   replayMemberships: vi.fn(),
   startRun: vi.fn(),
   completeRun: vi.fn(),
@@ -31,7 +32,7 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService: service }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
-vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { replayMemberships: service.replayMemberships } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { previewMemberships: service.previewMemberships, replayMemberships: service.replayMemberships } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun, listRuns: service.listRuns } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService: { testConnection: service.testConnection } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService: { listDirectoryPage: vi.fn() } }));
@@ -54,6 +55,7 @@ describe('identity provider routes', () => {
     service.upsert.mockResolvedValue(provider);
     service.archive.mockResolvedValue(undefined);
     service.reconcile.mockResolvedValue({ processed: 3 });
+    service.previewMemberships.mockResolvedValue({ scanned: 3, additions: 1, removals: 1, unchanged: 1, failed: 0, truncated: false, nextCursor: null, latestSnapshotAt: 10, warnings: ['stored_snapshots_only'], mappings: [] });
     service.replayMemberships.mockResolvedValue({ scanned: 3, created: 1, removed: 1, failed: 0, truncated: false, nextCursor: null });
     service.startRun.mockResolvedValue('sync-run-1');
     service.completeRun.mockResolvedValue(undefined);
@@ -125,6 +127,16 @@ describe('identity provider routes', () => {
     expect(response.body).toEqual({ processed: 3 });
     expect(service.reconcile).toHaveBeenCalledWith('entra', 'tenant-1', 'manual');
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.reconcile' }));
+  });
+
+  it('previews normalized identity membership changes without replaying them', async () => {
+    const response = await request(app).post('/api/identity/providers/entra/reconciliation-preview').send({ limit: 25 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({ scanned: 3, additions: 1, removals: 1, warnings: ['stored_snapshots_only'] }));
+    expect(service.previewMemberships).toHaveBeenCalledWith({ tenantId: 'tenant-1', providerId: 'provider-1', limit: 25, cursor: undefined });
+    expect(service.replayMemberships).not.toHaveBeenCalled();
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.memberships.preview', resourceId: 'provider-1' }));
   });
 
   it('replays stored memberships for any provider without a directory call', async () => {

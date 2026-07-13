@@ -1,10 +1,12 @@
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { externalIdentityService } from './ExternalIdentityService.js';
 import { getIdentityProviderAdapter, type IdentityProviderType } from './IdentityProviderAdapter.js';
-import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
+import { identityEntitlementMappingService, matchesIdentityEntitlement, type IdentityEntitlementMatchOperator } from './IdentityEntitlementMappingService.js';
 import type { SsoClaims } from './SsoClaimsMappingService.js';
 
 type SsoNormalizedIdentityStore = DataSource | EntityManager;
@@ -39,6 +41,32 @@ export interface ReplayNormalizedIdentityMembershipsResult {
   failed: number;
   truncated: boolean;
   nextCursor: string | null;
+}
+
+export interface PreviewNormalizedIdentityMembershipsInput {
+  tenantId?: string | null;
+  providerId: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface PreviewNormalizedIdentityMembershipsResult {
+  scanned: number;
+  additions: number;
+  removals: number;
+  unchanged: number;
+  failed: number;
+  truncated: boolean;
+  nextCursor: string | null;
+  latestSnapshotAt: number | null;
+  warnings: Array<'stored_snapshots_only' | 'no_active_snapshots' | 'truncated'>;
+  mappings: Array<{
+    mappingId: string;
+    targetGroupId: string;
+    additions: number;
+    removals: number;
+    unchanged: number;
+  }>;
 }
 
 function normalizeNullableText(value?: string | null): string | null {
@@ -179,6 +207,103 @@ class SsoNormalizedIdentityServiceClass {
         result.failed += 1;
       }
     }
+    return result;
+  }
+
+  /**
+   * Plans membership changes from persisted, allowlisted identity snapshots.
+   * It deliberately does not contact a provider or write memberships.
+   */
+  async previewMemberships(input: PreviewNormalizedIdentityMembershipsInput): Promise<PreviewNormalizedIdentityMembershipsResult> {
+    const providerId = input.providerId.trim();
+    if (!providerId) throw new Error('providerId is required');
+
+    const limit = Math.min(Math.max(input.limit ?? 500, 1), 5000);
+    const dataSource = await getDataSource();
+    const cursor = decodeReplayCursor(input.cursor);
+    const qb = dataSource.getRepository(SsoNormalizedIdentity).createQueryBuilder('identity')
+      .where('identity.providerStatus = :providerStatus', { providerStatus: 'active' })
+      .andWhere('identity.providerId = :providerId', { providerId });
+    if (input.tenantId) qb.andWhere('identity.tenantId = :tenantId', { tenantId: input.tenantId });
+    else qb.andWhere('identity.tenantId IS NULL');
+    if (cursor) qb.andWhere('(identity.lastSeenAt > :cursorSeen OR (identity.lastSeenAt = :cursorSeen AND identity.id > :cursorId))', { cursorSeen: cursor.lastSeenAt, cursorId: cursor.id });
+    const identities = await qb.orderBy('identity.lastSeenAt', 'ASC').addOrderBy('identity.id', 'ASC').take(limit + 1).getMany();
+    const selected = identities.slice(0, limit);
+    const tenantId = input.tenantId || null;
+    const mappings = await dataSource.getRepository(IdentityEntitlementMapping).find();
+    const activeMappings = mappings.filter((mapping) => mapping.providerId === providerId && mapping.isActive && (mapping.tenantId || null) === tenantId);
+    const memberships = selected.length === 0 || activeMappings.length === 0
+      ? []
+      : await dataSource.getRepository(AuthzGroupMembership).find({
+        where: {
+          tenantId: tenantId || IsNull(),
+          source: 'identity_provider',
+          sourceRef: In(activeMappings.map((mapping) => `identity_mapping:${mapping.id}`)),
+          userId: In(selected.map((identity) => identity.userId)),
+        },
+      });
+    const membershipKeys = new Set(memberships
+      .filter((membership) => (membership.tenantId || null) === tenantId && membership.source === 'identity_provider')
+      .map((membership) => `${membership.userId}:${membership.groupId}:${membership.sourceRef || ''}`));
+    const summaryByMappingId = new Map(activeMappings.map((mapping) => [mapping.id, {
+      mappingId: mapping.id,
+      targetGroupId: mapping.targetGroupId,
+      additions: 0,
+      removals: 0,
+      unchanged: 0,
+    }]));
+    const result: PreviewNormalizedIdentityMembershipsResult = {
+      scanned: selected.length,
+      additions: 0,
+      removals: 0,
+      unchanged: 0,
+      failed: 0,
+      truncated: identities.length > limit,
+      nextCursor: identities.length > limit && selected.length > 0 ? encodeReplayCursor(selected[selected.length - 1]) : null,
+      latestSnapshotAt: selected.reduce<number | null>((latest, identity) => latest === null || identity.lastSeenAt > latest ? identity.lastSeenAt : latest, null),
+      warnings: ['stored_snapshots_only'],
+      mappings: [],
+    };
+    if (selected.length === 0) result.warnings.push('no_active_snapshots');
+    if (result.truncated) result.warnings.push('truncated');
+
+    for (const identity of selected) {
+      try {
+        const normalized = getIdentityProviderAdapter(adapterType(identity.providerType)).normalizeIdentity({
+          providerKey: identity.providerId,
+          subjectId: identity.providerSubject,
+          claims: parseStoredClaims(identity.claimsJson) as Record<string, unknown>,
+          username: identity.email,
+          email: identity.email,
+          directoryTenantId: identity.providerTenantId,
+          observedAt: identity.lastSeenAt,
+        });
+        for (const mapping of activeMappings) {
+          const summary = summaryByMappingId.get(mapping.id)!;
+          const sourceRef = `identity_mapping:${mapping.id}`;
+          const membershipKey = `${identity.userId}:${mapping.targetGroupId}:${sourceRef}`;
+          const existing = membershipKeys.has(membershipKey);
+          const matches = matchesIdentityEntitlement({
+            entitlementType: mapping.entitlementType as 'group' | 'role' | 'scope' | 'attribute',
+            externalId: mapping.externalId,
+            matchOperator: mapping.matchOperator as IdentityEntitlementMatchOperator,
+          }, normalized);
+          if (matches && !existing) {
+            result.additions += 1;
+            summary.additions += 1;
+          } else if (!matches && mapping.syncMode === 'authoritative' && existing) {
+            result.removals += 1;
+            summary.removals += 1;
+          } else if (existing) {
+            result.unchanged += 1;
+            summary.unchanged += 1;
+          }
+        }
+      } catch {
+        result.failed += 1;
+      }
+    }
+    result.mappings = Array.from(summaryByMappingId.values()).sort((left, right) => left.mappingId.localeCompare(right.mappingId));
     return result;
   }
 

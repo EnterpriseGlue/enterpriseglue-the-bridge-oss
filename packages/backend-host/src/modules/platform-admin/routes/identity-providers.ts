@@ -82,6 +82,15 @@ router.post('/api/identity/providers/:key/reconcile', requireAuth, requireAction
   await logAudit({ action: 'identity.provider.reconcile', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, protocol: provider.protocol, ...result } });
   res.json(result);
 }));
+router.post('/api/identity/providers/:key/reconciliation-preview', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
+  const key = providerKeySchema.parse(req.params.key);
+  const input = replayMembershipsSchema.parse(req.body || {});
+  const provider = await identityProviderService.getByKey(key, req.tenant?.tenantId || null);
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  const result = await ssoNormalizedIdentityService.previewMemberships({ tenantId: req.tenant?.tenantId || null, providerId: provider.id, limit: input.limit, cursor: input.cursor });
+  await logAudit({ action: 'identity.provider.memberships.preview', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, protocol: provider.protocol, scanned: result.scanned, additions: result.additions, removals: result.removals, failed: result.failed, truncated: result.truncated, warnings: result.warnings } });
+  res.json(result);
+}));
 router.post('/api/identity/providers/:key/replay-memberships', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
   const key = providerKeySchema.parse(req.params.key);
   const input = replayMembershipsSchema.parse(req.body || {});

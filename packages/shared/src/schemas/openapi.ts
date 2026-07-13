@@ -2126,6 +2126,25 @@ registry.registerPath({
   request: { params: z.object({ key: z.string() }) },
   responses: { 200: { description: 'Run one bounded LDAP directory reconciliation page', content: { 'application/json': { schema: z.object({ skipped: z.string().optional(), processed: z.number().int().optional() }) } } } },
 });
+const IdentityProviderReconciliationPreviewSchema = z.object({
+  scanned: z.number().int().nonnegative(),
+  additions: z.number().int().nonnegative(),
+  removals: z.number().int().nonnegative(),
+  unchanged: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+  nextCursor: z.string().nullable(),
+  latestSnapshotAt: z.number().nullable(),
+  warnings: z.array(z.enum(['stored_snapshots_only', 'no_active_snapshots', 'truncated'])),
+  mappings: z.array(z.object({ mappingId: z.string(), targetGroupId: z.string(), additions: z.number().int().nonnegative(), removals: z.number().int().nonnegative(), unchanged: z.number().int().nonnegative() })),
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/identity/providers/{key}/reconciliation-preview',
+  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/reconciliation-preview'),
+  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ limit: z.number().int().min(1).max(5000).optional(), cursor: z.string().min(1).max(512).optional() }) } } } },
+  responses: { 200: { description: 'Preview stored identity snapshot membership changes without persistence', content: { 'application/json': { schema: IdentityProviderReconciliationPreviewSchema } } }, 404: { description: 'Identity provider not found' } },
+});
 registry.registerPath({
   method: 'post',
   path: '/api/identity/providers/{key}/replay-memberships',

@@ -354,7 +354,7 @@ Authoritative mode must only touch records with `source = "config"` and matching
 
 ### JSON Configuration Interface Status And Extension
 
-The JSON bundle is partially implemented. The platform exposes strict schemas, canonical hashing, side-effect-free preview/diff, and hash-bound apply for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, provider-neutral identity providers, and identity mappings. Server-side export/history, Platform Settings bundle UI, protocol-specific provider connection testing, and aggregate current-membership impact analysis are implemented; exact external-identity impact remains intentionally unknown until provider reconciliation preview exists.
+The JSON bundle is partially implemented. The platform exposes strict schemas, canonical hashing, side-effect-free preview/diff, and hash-bound apply for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, provider-neutral identity providers, and identity mappings. Server-side export/history, Platform Settings bundle UI, protocol-specific provider connection testing, aggregate current-membership impact analysis, and stored-snapshot reconciliation preview are implemented. The reconciliation preview is exact for current normalized snapshots, reports no PII, and explicitly warns that it does not query the external provider.
 
 The implementation must provide one bundle compiler over the same domain services used by the UI. JSON apply must not write authorization tables directly or maintain a second business-rule implementation.
 
@@ -1817,7 +1817,7 @@ The implementation should extend existing packages rather than introduce an auth
 ## Proposed APIs
 
 - [x] ✅ `POST /api/authz/config-bundles/preview` and `POST /api/authz/config-bundles/diff`
-  - Preview validates the bundle; diff covers persisted roles, groups, engines, Engine Sets, runtime resource sets, identity providers, identity mappings, project-engine targets, and supported group assignments, and reports source-ownership conflicts and authoritative archives. It returns warnings and required acknowledgements for broad/destructive changes; affected-object analysis remains pending.
+  - Preview validates the bundle; diff covers persisted roles, groups, engines, Engine Sets, runtime resource sets, identity providers, identity mappings, project-engine targets, and supported group assignments, and reports source-ownership conflicts and authoritative archives. It returns warnings, required acknowledgements, and aggregate current-membership impact counts for broad/destructive changes.
 - [x] ✅ `POST /api/authz/config-bundles/apply`
   - Applies an exact previewed bundle hash for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, identity providers, and identity mappings. Unsupported object families still fail closed.
 - [x] ✅ `GET /api/authz/config-bundles/runs`
@@ -1836,8 +1836,8 @@ The implementation should extend existing packages rather than introduce an auth
   - Manages normalized entitlement-to-group mappings, sync mode, source lineage, and configuration-owned edit protection.
 - [x] ✅ `POST /api/identity/mappings/test`
   - Normalizes a sanitized provider sample and returns match results and normalized entitlements without persisting membership.
-- [ ] ⬜ `POST /api/identity/providers/:id/reconciliation-preview`
-  - Computes membership additions/removals and incomplete-provider warnings without persistence.
+- [x] ✅ `POST /api/identity/providers/:key/reconciliation-preview`
+  - Computes mapping-level membership additions/removals from bounded stored normalized snapshots without persistence or provider contact. The response is non-PII and explicitly reports snapshot-only, empty, and truncated-result warnings.
 - [ ] ⬜ `POST /api/identity/providers/:id/reconcile`
   - Starts an asynchronous provider reconciliation run and returns its run id.
 - [ ] ⬜ `GET /api/identity/sync-runs` and `GET /api/identity/sync-runs/:id/events`
@@ -1869,7 +1869,7 @@ Authorization:
 Config transport and response rules:
 
 - [ ] ⬜ Accept `application/json` for a single-file bundle and `application/zip` or multipart upload for a folder bundle.
-- [x] ✅ Return a canonical bundle hash, source key, object-level diff, warnings, required acknowledgement ids, and non-PII current-membership impact counts. Acknowledgements are enforced by hash-bound apply; schema-version metadata and exact external-identity reconciliation preview remain pending.
+- [x] ✅ Return a canonical bundle hash, source key, object-level diff, warnings, required acknowledgement ids, and non-PII current-membership impact counts. Acknowledgements are enforced by hash-bound apply. Provider reconciliation preview is available separately from the identity provider UI and is limited to current normalized snapshots.
 - [x] ✅ Add deterministic config-bundle preview validation for declared JSON imports with strict schema validation, object counts, undeclared/missing file rejection, and canonical SHA-256 hash. The current diff covers every object family that apply mutates, enforces required acknowledgements, and reports aggregate current-membership impact; exact external-identity reconciliation preview remains pending.
 - [x] ✅ Require idempotency keys for every apply caller. The API/CLI supports persisted tenant-scoped idempotency keys and replays completed matching receipts; the Platform Settings UI generates one per successful preview and reuses it for the corresponding apply attempt.
 - [ ] ⬜ Return `202 Accepted` plus a run id for asynchronous identity/runtime reconciliation triggered after apply.
