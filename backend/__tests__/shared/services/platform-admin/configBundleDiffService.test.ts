@@ -116,6 +116,31 @@ describe('configBundleDiffService', () => {
     ]));
   });
 
+  it('reports expanded role permission additions, removals, and affected assignments', async () => {
+    mockDataSource([
+      { id: 'role-1', tenantId: 'tenant-a', key: 'custom.engine.deployer', name: 'Deployer', description: null, scope: 'engine', isArchived: false, source: 'config', sourceRef: 'config_bundle:acme.authz' },
+    ], [], [
+      { roleId: 'role-1', permissionId: 'engine:view' },
+    ], [], [], [], [], [
+      { id: 'assignment-1', tenantId: 'tenant-a', roleId: 'role-1' },
+      { id: 'assignment-2', tenantId: 'tenant-a', roleId: 'role-1' },
+    ]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./roles.json'] },
+      files: {
+        './roles.json': {
+          roles: [{ key: 'custom.engine.deployer', name: 'Deployer', scope: 'engine', permissions: ['engine:deploy'] }],
+        },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'role', key: 'custom.engine.deployer', operation: 'update', affectedAssignmentCount: 2,
+      permissionChanges: { additions: ['engine:deploy'], removals: ['engine:view'], effectivePermissions: ['engine:deploy'] },
+    }));
+  });
+
   it('includes config-owned Runtime Resource Sets in the persisted-state diff', async () => {
     mockDataSource([], [], [], [{ id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central' }]);
     const result = await configBundleDiffService.diff({

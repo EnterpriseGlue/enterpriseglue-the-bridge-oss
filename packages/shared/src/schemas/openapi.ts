@@ -3503,6 +3503,12 @@ const ConfigBundleDiffChangeOpenApiSchema = z.object({
   operation: z.enum(['create', 'update', 'noop', 'archive', 'conflict']),
   reason: z.string(),
   currentId: z.string().optional(),
+  permissionChanges: z.object({
+    additions: z.array(z.string()),
+    removals: z.array(z.string()),
+    effectivePermissions: z.array(z.string()),
+  }).optional(),
+  affectedAssignmentCount: z.number().int().nonnegative().optional(),
 });
 
 const ConfigBundleDiffResponseOpenApiSchema = ConfigBundlePreviewResponseOpenApiSchema.extend({

@@ -2170,7 +2170,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Resolve imports with path traversal protection.
 - [ ] ⬜ Resolve all references against current database state and staged objects in the same bundle.
 - [x] ✅ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets, Runtime Resource Sets, config-owned identity mappings, config-owned project-engine targets, and supported config-owned group assignments.
-- [ ] ⬜ Produce role permission diffs with additions, removals, expanded template permissions, and affected assignments.
+- [x] ✅ Produce role permission diffs with additions, removals, expanded template permissions, and affected-assignment counts. The details are returned on the same object-level diff records and retained in apply receipts.
 - [ ] ⬜ Produce runtime resource set diffs with matched, unmatched, newly matched, and no-longer-matched process or decision keys.
 - [ ] ⬜ Validate identity provider references and preview normalized entitlement-to-group matches without contacting providers unless an explicit connectivity test is requested.
 - [ ] ⬜ Warn about broad runtime grants shadowing narrow resource sets, resource sets on `engine_wide` engines, and human deployment roles on pipeline-only targets. Display-name and regex identity matching are not accepted by the current config schema.

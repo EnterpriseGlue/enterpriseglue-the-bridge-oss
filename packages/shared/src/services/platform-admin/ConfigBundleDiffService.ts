@@ -23,6 +23,12 @@ export interface ConfigBundleDiffChange {
   operation: ConfigBundleDiffOperation;
   reason: string;
   currentId?: string;
+  permissionChanges?: {
+    additions: string[];
+    removals: string[];
+    effectivePermissions: string[];
+  };
+  affectedAssignmentCount?: number;
 }
 
 export interface ConfigBundleDiffWarning {
@@ -62,6 +68,22 @@ function samePermissions(left: string[], right: string[]): boolean {
   const normalizedLeft = [...new Set(left)].sort();
   const normalizedRight = [...new Set(right)].sort();
   return normalizedLeft.length === normalizedRight.length && normalizedLeft.every((value, index) => value === normalizedRight[index]);
+}
+
+function rolePermissionChanges(current: string[], desired: string[]): NonNullable<ConfigBundleDiffChange['permissionChanges']> {
+  const currentPermissions = Array.from(new Set(current)).sort();
+  const effectivePermissions = Array.from(new Set(desired)).sort();
+  const currentSet = new Set(currentPermissions);
+  const desiredSet = new Set(effectivePermissions);
+  return {
+    additions: effectivePermissions.filter((permission) => !currentSet.has(permission)),
+    removals: currentPermissions.filter((permission) => !desiredSet.has(permission)),
+    effectivePermissions,
+  };
+}
+
+function hasPermissionChanges(changes: NonNullable<ConfigBundleDiffChange['permissionChanges']>): boolean {
+  return changes.additions.length > 0 || changes.removals.length > 0;
 }
 
 function providerConfiguration(provider: any): Record<string, unknown> {
@@ -155,6 +177,8 @@ class ConfigBundleDiffService {
     const tenantAssignments = assignments.filter((assignment) => (assignment.tenantId || null) === normalizedTenantId);
     const assignmentsByKey = new Map(tenantAssignments.map((assignment) => [assignment.assignmentKey, assignment]));
     const assignmentsById = new Map(tenantAssignments.map((assignment) => [assignment.id, assignment]));
+    const assignmentCountByRoleId = new Map<string, number>();
+    for (const assignment of tenantAssignments) assignmentCountByRoleId.set(assignment.roleId, (assignmentCountByRoleId.get(assignment.roleId) || 0) + 1);
     const tenantRuntimeResources = runtimeResources.filter((resource) => (resource.tenantId || null) === normalizedTenantId);
     const runtimeResourcesByIdentity = new Map(tenantRuntimeResources.map((resource) => [`${resource.engineId}:${resource.resourceKind}:${resource.resourceKey}:${resource.runtimeTenantId || ''}`, resource]));
     const tenantGroupMemberships = groupMemberships.filter((membership) => (membership.tenantId || null) === normalizedTenantId);
@@ -168,8 +192,10 @@ class ConfigBundleDiffService {
     for (const role of desiredRoles) {
       const existing = rolesByKey.get(role.key);
       const permissions = compilation.preview.expandedRolePermissions?.[role.key] || role.permissions || [];
+      const permissionChanges = rolePermissionChanges(existing ? rolePermissionsByRoleId.get(existing.id) || [] : [], permissions);
+      const affectedAssignmentCount = existing ? assignmentCountByRoleId.get(existing.id) || 0 : 0;
       if (!existing) {
-        changes.push({ objectType: 'role', key: role.key, operation: 'create', reason: 'No persisted role uses this tenant-scoped key' });
+        changes.push({ objectType: 'role', key: role.key, operation: 'create', reason: 'No persisted role uses this tenant-scoped key', permissionChanges, affectedAssignmentCount });
       } else if (existing.source !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
         changes.push({ objectType: 'role', key: role.key, operation: 'conflict', currentId: existing.id, reason: 'Existing role is not owned by this configuration bundle' });
       } else if (
@@ -179,7 +205,7 @@ class ConfigBundleDiffService {
         existing.isArchived ||
         !samePermissions(rolePermissionsByRoleId.get(existing.id) || [], permissions)
       ) {
-        changes.push({ objectType: 'role', key: role.key, operation: 'update', currentId: existing.id, reason: 'Config-owned role differs from the desired name, scope, description, archive state, or permissions' });
+        changes.push({ objectType: 'role', key: role.key, operation: 'update', currentId: existing.id, reason: 'Config-owned role differs from the desired name, scope, description, archive state, or permissions', ...(hasPermissionChanges(permissionChanges) ? { permissionChanges } : {}), affectedAssignmentCount });
       } else {
         changes.push({ objectType: 'role', key: role.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned role already matches the desired state' });
       }
@@ -383,7 +409,7 @@ class ConfigBundleDiffService {
     if (manifest.mode === 'authoritative') {
       for (const role of tenantRoles) {
         if (role.source === CONFIG_SOURCE && role.sourceRef === sourceRef && !desiredRoleKeys.has(role.key) && !role.isArchived) {
-          changes.push({ objectType: 'role', key: role.key, operation: 'archive', currentId: role.id, reason: 'Config-owned role is absent from an authoritative bundle' });
+          changes.push({ objectType: 'role', key: role.key, operation: 'archive', currentId: role.id, reason: 'Config-owned role is absent from an authoritative bundle', permissionChanges: rolePermissionChanges(rolePermissionsByRoleId.get(role.id) || [], []), affectedAssignmentCount: assignmentCountByRoleId.get(role.id) || 0 });
         }
       }
       for (const group of tenantGroups) {

@@ -3,6 +3,12 @@ export type ConfigBundleDiffChange = {
   key: string;
   operation: string;
   reason: string;
+  permissionChanges?: {
+    additions: string[];
+    removals: string[];
+    effectivePermissions: string[];
+  };
+  affectedAssignmentCount?: number;
 };
 
 export type ConfigBundleChangeRisk = 'requires_attention' | 'review' | 'informational';
