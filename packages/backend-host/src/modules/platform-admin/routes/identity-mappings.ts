@@ -23,11 +23,12 @@ const provisionAccessSchema = mappingSchema.omit({ targetGroupKey: true }).exten
   targetGroupKey: z.string().min(1).max(160).optional(),
   newGroup: z.object({ key: z.string().min(1).max(255), name: z.string().min(1).max(255), description: z.string().max(2000).nullable().optional() }).optional(),
   roleId: z.string().min(1).max(160),
-  resourceType: z.enum(['engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set']),
-  resourceId: z.string().min(1).max(160),
+  resourceType: z.enum(['platform', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set']),
+  resourceId: z.string().min(1).max(160).optional(),
 }).superRefine((value, context) => {
   if (value.targetGroupKey && value.newGroup) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide either targetGroupKey or newGroup, not both', path: ['targetGroupKey'] });
   if (!value.targetGroupKey && !value.newGroup) context.addIssue({ code: z.ZodIssueCode.custom, message: 'targetGroupKey or newGroup is required', path: ['targetGroupKey'] });
+  if (value.resourceType !== 'platform' && !value.resourceId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'resourceId is required for non-platform access', path: ['resourceId'] });
 });
 const idSchema = z.string().min(1).max(128);
 
@@ -67,7 +68,7 @@ router.post('/api/identity/mappings/provision-access', requireAuth, requireActio
       principalId: mapping.targetGroupId,
       roleId: req.body.roleId,
       resourceType: req.body.resourceType,
-      resourceId: req.body.resourceId,
+      resourceId: req.body.resourceId || null,
     }, manager);
     return { mapping, assignment, createdGroup };
   });

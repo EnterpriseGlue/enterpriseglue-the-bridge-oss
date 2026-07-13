@@ -42,6 +42,11 @@ describe('identity mapping routes', () => {
     expect(permissions.assignRole).toHaveBeenCalledWith(expect.objectContaining({ principalType: 'group', principalId: 'group-1', resourceType: 'engine', resourceId: 'engine-1' }), { transaction: true });
     expect(response.body).toEqual(expect.objectContaining({ mapping, assignment: { id: 'assignment-1', warnings: [] }, createdGroup: { id: 'group-1' } }));
   });
+  it('atomically provisions platform-scoped group access without a synthetic resource id', async () => {
+    const response = await request(app).post('/api/identity/mappings/provision-access').send({ providerKey: 'identity.oidc.main', newGroup: { key: 'group.admins', name: 'Administrators' }, entitlementType: 'group', externalId: 'admins', matchOperator: 'exact', roleId: 'system.platform.admin', resourceType: 'platform' });
+    expect(response.status).toBe(201);
+    expect(permissions.assignRole).toHaveBeenCalledWith(expect.objectContaining({ principalType: 'group', roleId: 'system.platform.admin', resourceType: 'platform', resourceId: null }), { transaction: true });
+  });
   it('requires exactly one existing or new target group for transactional provisioning', async () => {
     const response = await request(app).post('/api/identity/mappings/provision-access').send({ providerKey: 'identity.oidc.main', targetGroupKey: 'group.operators', newGroup: { key: 'group.other', name: 'Other' }, entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1' });
     expect(response.status).toBe(400);
