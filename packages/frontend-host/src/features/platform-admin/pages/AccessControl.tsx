@@ -3332,9 +3332,9 @@ function ByResourcePanel({
                       </TableRow>
                     ) : rows.map((row) => (
                       <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
-                        {row.cells.map((cell) => (
-                          <TableCell key={cell.id}>{cell.value}</TableCell>
-                        ))}
+                        {row.cells.map((cell) => cell.info.header === 'source'
+                          ? <TableCell key={cell.id}><AssignmentSourceTag source={cell.value} /></TableCell>
+                          : <TableCell key={cell.id}>{cell.value}</TableCell>)}
                       </DataTableDataRow>
                     ))}
                   </TableBody>
