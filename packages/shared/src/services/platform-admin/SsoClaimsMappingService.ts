@@ -6,12 +6,19 @@
  */
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import type { PlatformRole as SharedPlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { SsoClaimsMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoClaimsMapping.js';
+import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import type { DataSource, EntityManager } from 'typeorm';
 import { IsNull } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { authzGroupService } from './AuthzGroupService.js';
+import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
+import { permissionService, SYSTEM_ROLE_IDS } from './permissions.js';
 
 export type ClaimType = 'group' | 'role' | 'email_domain' | 'custom';
 export type PlatformRole = SharedPlatformRole;
@@ -74,6 +81,13 @@ export interface SsoClaimRule {
   claimKey: string;
   claimValue: string;
   claimOperator?: SsoClaimOperator | string | null;
+}
+
+export interface LegacyPlatformMappingMigrationInput {
+  providerKey: string;
+  targetGroupKey?: string;
+  newGroup?: { key: string; name: string; description?: string | null };
+  createdById?: string | null;
 }
 
 function normalizeRoleValue(role?: string | null): PlatformRole {
@@ -273,6 +287,48 @@ export function ssoClaimMatches(claims: SsoClaims, rule: SsoClaimRule): boolean 
 }
 
 class SsoClaimsMappingServiceClass {
+  async migrateToProviderNeutral(id: string, input: LegacyPlatformMappingMigrationInput) {
+    if (Boolean(input.targetGroupKey) === Boolean(input.newGroup)) throw Errors.validation('Provide exactly one of targetGroupKey or newGroup');
+    const providerKey = input.providerKey.trim();
+    const createdById = input.createdById?.trim();
+    if (!providerKey) throw Errors.validation('providerKey is required');
+    if (!createdById) throw Errors.validation('createdById is required');
+    const dataSource = await getDataSource();
+    return dataSource.transaction(async (manager) => {
+      const legacy = await manager.getRepository(SsoClaimsMapping).findOneBy({ id });
+      if (!legacy) throw Errors.notFound('SSO mapping');
+      if (!legacy.isActive) throw Errors.validation('Only active SSO mappings can be migrated');
+      const entitlementType = legacy.claimType === 'group' ? 'group' : legacy.claimType === 'role' ? 'role' : null;
+      if (!entitlementType) throw Errors.validation('Only group and role claim mappings can be migrated automatically');
+      const matchOperator = legacy.claimOperator === null || legacy.claimOperator === 'equals' ? 'exact' : legacy.claimOperator === 'contains' ? 'contains' : legacy.claimOperator === 'exists' ? 'exists' : null;
+      if (!matchOperator) throw Errors.validation('Only equals, contains, and exists claim operators can be migrated automatically');
+      const provider = await manager.getRepository(IdentityProvider).findOne({ where: { key: providerKey, tenantId: IsNull() } });
+      if (!provider) throw Errors.notFound('Global provider-neutral identity provider');
+      const targetGroupKey = input.newGroup?.key || input.targetGroupKey!.trim();
+      const groupRepo = manager.getRepository(AuthzGroup);
+      let group = await groupRepo.findOne({ where: { key: targetGroupKey, tenantId: IsNull(), isArchived: false } });
+      let createdGroup: AuthzGroup | null = null;
+      if (!group && input.newGroup) {
+        const created = await authzGroupService.createGroup({ tenantId: null, key: input.newGroup.key, name: input.newGroup.name, description: input.newGroup.description, source: 'manual', createdById }, manager);
+        group = await groupRepo.findOneBy({ id: created.id });
+        createdGroup = group;
+      }
+      if (!group) throw Errors.notFound('Global authorization group');
+      const externalId = matchOperator === 'exists' ? null : legacy.claimValue;
+      const existingMapping = await manager.getRepository(IdentityEntitlementMapping).findOne({
+        where: {
+          tenantId: IsNull(), providerId: provider.id, targetGroupId: group.id, entitlementType,
+          externalId: externalId === null ? IsNull() : externalId, matchOperator, syncMode: 'authoritative', isActive: true,
+        },
+      });
+      const mapping = existingMapping
+        ? { id: existingMapping.id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType, externalId, matchOperator, syncMode: 'authoritative' as const, isActive: true, configKey: existingMapping.configKey, sourceRef: existingMapping.sourceRef }
+        : await identityEntitlementMappingService.create({ providerKey, targetGroupKey, entitlementType, externalId, matchOperator, syncMode: 'authoritative' }, null, manager);
+      const roleId = normalizeRoleValue(legacy.targetRole) === 'admin' ? SYSTEM_ROLE_IDS.PLATFORM_ADMIN : SYSTEM_ROLE_IDS.PLATFORM_USER;
+      const assignment = await permissionService.assignRole({ tenantId: null, createdById, principalType: 'group', principalId: group.id, roleId, resourceType: 'platform', resourceId: null }, manager);
+      return { legacyMappingId: legacy.id, mapping, assignment, created: !existingMapping, createdGroup };
+    });
+  }
   /**
    * Resolve platform role from SSO claims.
    * Returns the highest-priority matching role.

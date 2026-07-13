@@ -445,6 +445,7 @@ describe('authorization route inventory validation', () => {
         surfaceId: 'admin.sso.role-mappings.edit',
         routes: [
           ['POST', '/api/authz/sso-mappings', 'platform.self'],
+          ['POST', '/api/authz/sso-mappings/{id}/migrate-provider-neutral', 'ssoMapping.byId'],
           ['PUT', '/api/authz/sso-mappings/{id}', 'ssoMapping.byId'],
           ['DELETE', '/api/authz/sso-mappings/{id}', 'ssoMapping.byId'],
           ['POST', '/api/authz/sso-mappings/test', 'platform.self'],

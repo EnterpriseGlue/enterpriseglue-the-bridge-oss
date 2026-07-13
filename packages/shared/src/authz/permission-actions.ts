@@ -544,6 +544,7 @@ export const AUTHZ_ACTIONS = [
     ui: [{ surfaceId: 'admin.sso.role-mappings.edit', behavior: 'disable' }],
     routes: [
       { method: 'POST', route: '/api/authz/sso-mappings', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/authz/sso-mappings/{id}/migrate-provider-neutral', resourceResolver: 'ssoMapping.byId' },
       { method: 'PUT', route: '/api/authz/sso-mappings/{id}', resourceResolver: 'ssoMapping.byId' },
       { method: 'DELETE', route: '/api/authz/sso-mappings/{id}', resourceResolver: 'ssoMapping.byId' },
       { method: 'POST', route: '/api/authz/sso-mappings/test', resourceResolver: 'platform.self' },
