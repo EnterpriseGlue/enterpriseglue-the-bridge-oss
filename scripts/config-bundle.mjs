@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
+import { sanitizeConfigBundleError, toSanitizedJson } from './lib/config-bundle-output.mjs';
 
 const [command, argument] = process.argv.slice(2);
 const apiUrl = (process.env.ENTERPRISEGLUE_API_URL || '').replace(/\/$/, '');
 const token = process.env.ENTERPRISEGLUE_API_TOKEN;
 const idempotencyKey = process.env.ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY;
 const expectedTenantScope = process.env.ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE;
+const knownSecrets = [token];
 const needsFile = command === 'validate' || command === 'preview' || command === 'apply';
 const needsBundleKey = command === 'export';
 
@@ -28,7 +30,7 @@ if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument |
     if (needsBundleKey) {
       const { response, result } = await request(`/api/authz/config-bundles/export?bundleKey=${encodeURIComponent(argument)}`);
       if (!response.ok) throw new Error(result.message || result.error || `Export failed: ${response.status}`);
-      console.log(JSON.stringify(result, null, 2));
+      console.log(toSanitizedJson(result, knownSecrets));
     } else if (needsFile) {
       const isZip = argument.toLowerCase().endsWith('.zip');
       const payload = isZip
@@ -44,7 +46,7 @@ if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument |
         })()
         : JSON.parse(await readFile(argument, 'utf8'));
       const previewRequest = await request('/api/authz/config-bundles/preview', { method: 'POST', body: JSON.stringify(payload) });
-      console.log(JSON.stringify(previewRequest.result, null, 2));
+      console.log(toSanitizedJson(previewRequest.result, knownSecrets));
       if (!previewRequest.response.ok || !previewRequest.result.valid || !previewRequest.result.canonicalHash) {
         process.exitCode = 2;
       } else if (command === 'apply') {
@@ -55,11 +57,11 @@ if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument |
           expectedTenantScope,
         }) });
         if (!applyRequest.response.ok) throw new Error(applyRequest.result.message || applyRequest.result.error || `Apply failed: ${applyRequest.response.status}`);
-        console.log(JSON.stringify(applyRequest.result, null, 2));
+        console.log(toSanitizedJson(applyRequest.result, knownSecrets));
       }
     }
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(sanitizeConfigBundleError(error, knownSecrets));
     process.exitCode = 1;
   }
 }

@@ -203,7 +203,7 @@ Required behavior:
 - [x] ✅ Require the server-generated canonical preview hash on apply; the apply service rejects an altered or stale bundle.
 - [x] ✅ Print sanitized machine-readable preview, apply, and export responses suitable for CI artifacts.
 - [ ] ⬜ Return distinct exit codes for validation, authorization, conflict, reconciliation, and transport failures.
-- [ ] ⬜ Never print access tokens, provider secrets, engine credentials, certificates, LDAP bind passwords, or customer peer tokens.
+- [x] ✅ Sanitize all configuration CLI stdout/stderr before GitHub Actions or other CI systems can archive it. Access tokens, provider secrets and references, engine credentials, certificates, LDAP bind values, and customer peer tokens are redacted defensively even if an upstream response is malformed.
 
 ## Database Migrations And Compatibility
 
