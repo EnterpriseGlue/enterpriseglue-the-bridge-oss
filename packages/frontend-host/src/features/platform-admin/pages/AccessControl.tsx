@@ -6388,6 +6388,22 @@ export default function AccessControl() {
   const updateM = useUpdateSsoAssignmentMapping();
   const deleteM = useDeleteSsoAssignmentMapping();
   const testM = useTestSsoAssignmentMapping();
+  const migrateSsoAssignmentM = useMutation({
+    mutationFn: (input: { id: string; providerKey: string; targetGroupKey: string }) => apiClient.post(
+      `/api/authz/sso-assignment-mappings/${encodeURIComponent(input.id)}/migrate-provider-neutral`,
+      { providerKey: input.providerKey.trim(), targetGroupKey: input.targetGroupKey.trim() },
+    ),
+    onSuccess: () => {
+      void mappingsQ.refetch();
+      void identityEntitlementMappingsQ.refetch();
+      void groupsQ.refetch();
+      setSsoAssignmentMigrationTarget(null);
+      setSsoAssignmentMigrationProviderKey('');
+      setSsoAssignmentMigrationGroupKey('');
+      setSsoAssignmentMigrationError(null);
+    },
+    onError: (value: unknown) => setSsoAssignmentMigrationError(parseApiError(value, 'Unable to create the provider-neutral replacement').message),
+  });
   const runSsoSyncDiagnosticsM = useRunSsoSyncDiagnostics();
   const platformSettingsQ = usePlatformSyncSettings();
 
@@ -6428,6 +6444,10 @@ export default function AccessControl() {
   const [ssoGroupRiskAcknowledged, setSsoGroupRiskAcknowledged] = React.useState(false);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<SsoAssignmentMapping | null>(null);
+  const [ssoAssignmentMigrationTarget, setSsoAssignmentMigrationTarget] = React.useState<SsoAssignmentMapping | null>(null);
+  const [ssoAssignmentMigrationProviderKey, setSsoAssignmentMigrationProviderKey] = React.useState('');
+  const [ssoAssignmentMigrationGroupKey, setSsoAssignmentMigrationGroupKey] = React.useState('');
+  const [ssoAssignmentMigrationError, setSsoAssignmentMigrationError] = React.useState<string | null>(null);
   const [ssoHighRiskAcknowledged, setSsoHighRiskAcknowledged] = React.useState(false);
   const [apiClientToken, setApiClientToken] = React.useState<string | null>(null);
   const [serviceAccountToken, setServiceAccountToken] = React.useState<string | null>(null);
@@ -7964,9 +7984,25 @@ export default function AccessControl() {
                                       return <TableCell key={cell.id}>{cell.value ? <Tag type="gray">{cell.value}</Tag> : '-'}</TableCell>;
                                     }
                                     if (cell.info.header === 'actions') {
+                                      const canMigrateMapping = mapping?.targetSelectorType === 'engine_id' && Boolean(mapping.targetEngineId);
                                       return (
                                         <TableCell key={cell.id}>
                                           <Button kind="ghost" size="sm" disabled={!canManageSsoAssignments} title={ssoAssignmentsManageUnavailableReason} onClick={() => mapping && openEdit(mapping)}>Edit</Button>
+                                          <Button
+                                            kind="ghost"
+                                            size="sm"
+                                            disabled={!canManageSsoAssignments || !canMigrateMapping}
+                                            title={!canManageSsoAssignments ? ssoAssignmentsManageUnavailableReason : canMigrateMapping ? undefined : 'Only exact-engine mappings can be migrated. Recreate dynamic selectors with an Engine Set and group assignment.'}
+                                            onClick={() => {
+                                              if (!mapping) return;
+                                              setSsoAssignmentMigrationTarget(mapping);
+                                              setSsoAssignmentMigrationProviderKey('');
+                                              setSsoAssignmentMigrationGroupKey('');
+                                              setSsoAssignmentMigrationError(null);
+                                            }}
+                                          >
+                                            Create group-first replacement
+                                          </Button>
                                           <Button kind="ghost" size="sm" disabled={!canManageSsoAssignments} title={ssoAssignmentsManageUnavailableReason} renderIcon={TrashCan} hasIconOnly iconDescription="Delete mapping" onClick={() => mapping && deleteM.mutate(mapping.id)} />
                                         </TableCell>
                                       );
@@ -8951,6 +8987,30 @@ export default function AccessControl() {
             onToggle={(checked) => setSsoGroupForm((current) => ({ ...current, isActive: checked }))}
           />
         </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(ssoAssignmentMigrationTarget)}
+        onRequestClose={() => {
+          setSsoAssignmentMigrationTarget(null);
+          setSsoAssignmentMigrationError(null);
+        }}
+        onRequestSubmit={() => ssoAssignmentMigrationTarget && migrateSsoAssignmentM.mutate({
+          id: ssoAssignmentMigrationTarget.id,
+          providerKey: ssoAssignmentMigrationProviderKey,
+          targetGroupKey: ssoAssignmentMigrationGroupKey,
+        })}
+        modalHeading="Create group-first engine access replacement"
+        primaryButtonText={migrateSsoAssignmentM.isPending ? 'Creating...' : 'Create replacement'}
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={!canManageSsoAssignments || !ssoAssignmentMigrationProviderKey.trim() || !ssoAssignmentMigrationGroupKey.trim() || migrateSsoAssignmentM.isPending}
+      >
+        <p style={{ marginTop: 0, color: 'var(--cds-text-secondary)' }}>
+          This creates an identity mapping and an equivalent group engine-role assignment while leaving the SSO mapping active for validation. Verify access before disabling the legacy mapping.
+        </p>
+        {ssoAssignmentMigrationError && <InlineNotification kind="error" title="Replacement not created" subtitle={ssoAssignmentMigrationError} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+        <TextInput id="sso-assignment-migration-provider-key" labelText="Provider-neutral provider key" helperText="Use the stable key configured in Identity Providers." value={ssoAssignmentMigrationProviderKey} onChange={(event) => setSsoAssignmentMigrationProviderKey(event.target.value)} />
+        <TextInput id="sso-assignment-migration-group-key" labelText="Existing EnterpriseGlue group key" helperText="Members of this group receive the exact-engine role. Create a group first in Access Control if needed." value={ssoAssignmentMigrationGroupKey} onChange={(event) => setSsoAssignmentMigrationGroupKey(event.target.value)} />
       </Modal>
 
       <Modal
