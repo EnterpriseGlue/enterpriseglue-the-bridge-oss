@@ -9,6 +9,9 @@ import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persis
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -31,6 +34,8 @@ function mockDataSource(
   identityProviders: unknown[] = [],
   identityMappings: unknown[] = [],
   projectEngineTargets: unknown[] = [],
+  assignments: unknown[] = [],
+  runtimeResources: unknown[] = [],
 ) {
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository: (entity: unknown) => {
@@ -43,6 +48,8 @@ function mockDataSource(
       if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue(identityProviders) };
       if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue(identityMappings) };
       if (entity === ProjectEngineTarget) return { find: vi.fn().mockResolvedValue(projectEngineTargets) };
+      if (entity === RbacRoleAssignment) return { find: vi.fn().mockResolvedValue(assignments) };
+      if (entity === RuntimeResource) return { find: vi.fn().mockResolvedValue(runtimeResources) };
       throw new Error('Unexpected repository');
     },
   });
@@ -274,6 +281,57 @@ describe('configBundleDiffService', () => {
     }, 'tenant-a');
     expect(archived.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({ objectType: 'project_engine_target', key: `${projectId}:engine-central`, operation: 'archive', currentId: 'target-1' }),
+    ]));
+  });
+
+  it('diffs supported config-owned group assignments by canonical identity and expiration', async () => {
+    const role = { id: 'role-operator', tenantId: 'tenant-a', key: 'system.engine.operator', source: 'system', sourceRef: null };
+    const group = {
+      id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,
+    };
+    const assignmentKey = canonicalRoleAssignmentKey({
+      tenantId: 'tenant-a', principalType: 'group', principalId: group.id, roleId: role.id,
+      scopeType: 'platform', scopeId: null, source: 'config', sourceRef: 'config_bundle:acme.authz',
+    });
+    const assignment = {
+      id: 'assignment-1', tenantId: 'tenant-a', assignmentKey, principalType: 'group', principalId: group.id,
+      roleId: role.id, scopeType: 'platform', scopeId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', expiresAt: null,
+    };
+    const input = {
+      bundle: { ...bundle, imports: ['./groups.json', './assignments.json'] },
+      files: {
+        './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+        './assignments.json': { assignments: [{ key: 'assignment.operators', principal: { type: 'group', key: 'group.operators' }, roleKey: 'system.engine.operator', scope: { type: 'platform' } }] },
+      },
+    };
+
+    mockDataSource([role], [group], [], [], [], [], [], [assignment]);
+    const unchanged = await configBundleDiffService.diff(input, 'tenant-a');
+    expect(unchanged.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'assignment', key: 'assignment.operators', operation: 'noop', currentId: 'assignment-1' }),
+    ]));
+
+    const expiresAt = 1_900_000_000_000;
+    mockDataSource([role], [group], [], [], [], [], [], [{ ...assignment, expiresAt }]);
+    const changed = await configBundleDiffService.diff(input, 'tenant-a');
+    expect(changed.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'assignment', key: 'assignment.operators', operation: 'update', currentId: 'assignment-1' }),
+    ]));
+
+    mockDataSource([role], [group]);
+    const created = await configBundleDiffService.diff(input, 'tenant-a');
+    expect(created.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'assignment', key: 'assignment.operators', operation: 'create' }),
+    ]));
+
+    mockDataSource([role], [group], [], [], [], [], [], [assignment]);
+    const archived = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./assignments.json'] },
+      files: { './assignments.json': { assignments: [] } },
+    }, 'tenant-a');
+    expect(archived.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'assignment', key: assignmentKey, operation: 'archive', currentId: 'assignment-1' }),
     ]));
   });
 });

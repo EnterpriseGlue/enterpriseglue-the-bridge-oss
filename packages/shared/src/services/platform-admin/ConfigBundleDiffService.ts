@@ -8,12 +8,15 @@ import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persis
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'role' | 'group' | 'engine' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping' | 'project_engine_target';
+  objectType: 'role' | 'group' | 'engine' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping' | 'project_engine_target' | 'assignment';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
@@ -48,6 +51,14 @@ function providerConfiguration(provider: any): Record<string, unknown> {
   return provider[provider.type] || {};
 }
 
+function assignmentDisplayKey(assignment: any): string {
+  if (assignment.key) return assignment.key;
+  const principal = assignment.principal.key || assignment.principal.id;
+  const scope = assignment.scope;
+  const scopeReference = scope.engineKey || scope.engineSetKey || scope.runtimeResourceSetKey || scope.resourceKey || scope.projectRef?.id || scope.projectRef?.key || 'platform';
+  return `${assignment.principal.type}:${principal}:${assignment.roleKey}:${scope.type}:${scopeReference}`;
+}
+
 /**
  * Produces a persisted-state diff for the currently supported config-owned
  * objects. It is intentionally read-only and must be used before apply.
@@ -63,7 +74,7 @@ class ConfigBundleDiffService {
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders, identityMappings, projectEngineTargets] = await Promise.all([
+    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
@@ -73,6 +84,8 @@ class ConfigBundleDiffService {
       dataSource.getRepository(IdentityProvider).find(),
       dataSource.getRepository(IdentityEntitlementMapping).find(),
       dataSource.getRepository(ProjectEngineTarget).find(),
+      dataSource.getRepository(RbacRoleAssignment).find(),
+      dataSource.getRepository(RuntimeResource).find(),
     ]);
     const rolePermissionsByRoleId = new Map<string, string[]>();
     for (const permission of rolePermissions) {
@@ -94,6 +107,10 @@ class ConfigBundleDiffService {
     const identityMappingsByKey = new Map(tenantIdentityMappings.filter((mapping) => mapping.configKey).map((mapping) => [mapping.configKey!, mapping]));
     const tenantProjectEngineTargets = projectEngineTargets.filter((target) => (target.tenantId || null) === normalizedTenantId);
     const projectEngineTargetsByPair = new Map(tenantProjectEngineTargets.map((target) => [`${target.projectId}:${target.engineId}`, target]));
+    const tenantAssignments = assignments.filter((assignment) => (assignment.tenantId || null) === normalizedTenantId);
+    const assignmentsByKey = new Map(tenantAssignments.map((assignment) => [assignment.assignmentKey, assignment]));
+    const tenantRuntimeResources = runtimeResources.filter((resource) => (resource.tenantId || null) === normalizedTenantId);
+    const runtimeResourcesByIdentity = new Map(tenantRuntimeResources.map((resource) => [`${resource.engineId}:${resource.resourceKind}:${resource.resourceKey}:${resource.runtimeTenantId || ''}`, resource]));
     const changes: ConfigBundleDiffChange[] = [];
 
     const desiredRoles = values(compilation.files, './roles.json', 'roles');
@@ -259,6 +276,58 @@ class ConfigBundleDiffService {
       }
     }
 
+    const desiredAssignments = values(compilation.files, './assignments.json', 'assignments');
+    const desiredAssignmentKeys = new Set<string>();
+    for (const assignment of desiredAssignments) {
+      const key = assignmentDisplayKey(assignment);
+      if (assignment.principal.type !== 'group') {
+        changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: 'Config apply currently supports group principals only' });
+        continue;
+      }
+      if (!['platform', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(assignment.scope.type)) {
+        changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: `Config apply does not yet support ${assignment.scope.type} assignment scopes` });
+        continue;
+      }
+      const role = rolesByKey.get(assignment.roleKey);
+      const group = groupsByKey.get(assignment.principal.key);
+      let scopeId: string | null = assignment.scope.type === 'platform' ? null
+        : assignment.scope.type === 'engine' ? enginesByConfigKey.get(assignment.scope.engineKey)?.id || null
+        : assignment.scope.type === 'engine_set' ? engineSetsByKey.get(assignment.scope.engineSetKey)?.id || null
+        : assignment.scope.type === 'engine_runtime_resource_set' ? runtimeResourceSetsByKey.get(assignment.scope.runtimeResourceSetKey)?.id || null
+        : null;
+      if (assignment.scope.type === 'engine_runtime_resource') {
+        const engine = enginesByConfigKey.get(assignment.scope.engineKey);
+        scopeId = engine
+          ? runtimeResourcesByIdentity.get(`${engine.id}:${assignment.scope.resourceKind}:${assignment.scope.resourceKey}:${assignment.scope.runtimeTenantId || ''}`)?.id || null
+          : null;
+      }
+      if (!role || !group || (assignment.scope.type !== 'platform' && !scopeId)) {
+        changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: 'Assignment references an unresolved role, group, or scope' });
+        continue;
+      }
+      const assignmentKey = canonicalRoleAssignmentKey({
+        tenantId: normalizedTenantId,
+        principalType: 'group',
+        principalId: group.id,
+        roleId: role.id,
+        scopeType: assignment.scope.type,
+        scopeId,
+        source: CONFIG_SOURCE,
+        sourceRef,
+      });
+      desiredAssignmentKeys.add(assignmentKey);
+      const existing = assignmentsByKey.get(assignmentKey);
+      if (!existing) {
+        changes.push({ objectType: 'assignment', key, operation: 'create', reason: 'No persisted scoped role assignment uses this canonical config-owned identity' });
+      } else if (existing.source !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
+        changes.push({ objectType: 'assignment', key, operation: 'conflict', currentId: existing.id, reason: 'Existing scoped role assignment is not owned by this configuration bundle' });
+      } else if (existing.expiresAt !== (assignment.expiresAt || null)) {
+        changes.push({ objectType: 'assignment', key, operation: 'update', currentId: existing.id, reason: 'Config-owned scoped role assignment differs from the desired expiration' });
+      } else {
+        changes.push({ objectType: 'assignment', key, operation: 'noop', currentId: existing.id, reason: 'Config-owned scoped role assignment already matches the desired state' });
+      }
+    }
+
     if (manifest.mode === 'authoritative') {
       for (const role of tenantRoles) {
         if (role.source === CONFIG_SOURCE && role.sourceRef === sourceRef && !desiredRoleKeys.has(role.key) && !role.isArchived) {
@@ -296,6 +365,11 @@ class ConfigBundleDiffService {
       for (const target of tenantProjectEngineTargets) {
         if (target.source === CONFIG_SOURCE && target.sourceRef === sourceRef && !desiredProjectEngineTargetPairs.has(`${target.projectId}:${target.engineId}`) && target.status !== 'archived') {
           changes.push({ objectType: 'project_engine_target', key: `${target.projectId}:${target.engineId}`, operation: 'archive', currentId: target.id, reason: 'Config-owned project-engine target is absent from an authoritative bundle' });
+        }
+      }
+      for (const assignment of tenantAssignments) {
+        if (assignment.source === CONFIG_SOURCE && assignment.sourceRef === sourceRef && !desiredAssignmentKeys.has(assignment.assignmentKey)) {
+          changes.push({ objectType: 'assignment', key: assignment.assignmentKey, operation: 'archive', currentId: assignment.id, reason: 'Config-owned scoped role assignment is absent from an authoritative bundle' });
         }
       }
     }

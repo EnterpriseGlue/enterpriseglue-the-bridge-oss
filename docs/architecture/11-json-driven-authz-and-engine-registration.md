@@ -49,7 +49,7 @@ Current config-as-code status:
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
 - [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply persists the expanded permission list.
-- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine/Engine Set/Runtime Resource Set/identity-provider/identity-mapping/project-engine-target create, update, no-op, conflict, and authoritative-archive previews. Assignment detail remains outside the diff response; focused tests cover identity-mapping and project-engine-target lifecycle states.
+- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine/Engine Set/Runtime Resource Set/identity-provider/identity-mapping/project-engine-target/scoped-assignment create, update, no-op, conflict, and authoritative-archive previews. Focused tests cover identity-mapping, project-engine-target, and supported group-assignment lifecycle states.
 - [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for roles, groups, engines, Engine Sets, Runtime Resource Sets, scoped group assignments, provider-neutral identity providers/mappings, and project-engine targets. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, refuses unsupported object families rather than ignoring them, and source-cleans derived memberships when an authoritative config mapping is changed or disabled.
 - [x] ✅ Persist engine config provenance (`configKey`, source reference/hash, ownership mode, last applied time) plus `runtimeAccessScope`, `deploymentIntegration`, and `connectionMode` with backward-compatible defaults.
 - [x] ✅ Persist provider-neutral identity-provider keys and source references so entitlement mappings resolve configured providers safely; config-bundle creation/update/archive is supported.
@@ -1817,7 +1817,7 @@ The implementation should extend existing packages rather than introduce an auth
 ## Proposed APIs
 
 - [x] ✅ `POST /api/authz/config-bundles/preview` and `POST /api/authz/config-bundles/diff`
-  - Preview validates the bundle; diff covers persisted roles, groups, engines, Engine Sets, runtime resource sets, identity providers, identity mappings, and project-engine targets, and reports source-ownership conflicts and authoritative archives. Assignment detail, warnings, acknowledgements, and affected-object analysis remain pending.
+  - Preview validates the bundle; diff covers persisted roles, groups, engines, Engine Sets, runtime resource sets, identity providers, identity mappings, project-engine targets, and supported group assignments, and reports source-ownership conflicts and authoritative archives. Warnings, acknowledgements, and affected-object analysis remain pending.
 - [x] ✅ `POST /api/authz/config-bundles/apply`
   - Applies an exact previewed bundle hash for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, identity providers, and identity mappings. Unsupported object families still fail closed.
 - [ ] ⬜ `GET /api/config-bundles/runs`
@@ -2169,7 +2169,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Load multi-file folder bundle and single-file bundle.
 - [ ] ⬜ Resolve imports with path traversal protection.
 - [ ] ⬜ Resolve all references against current database state and staged objects in the same bundle.
-- [x] ✅ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets, Runtime Resource Sets, config-owned identity mappings, and config-owned project-engine targets. Assignment detail remains pending.
+- [x] ✅ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets, Runtime Resource Sets, config-owned identity mappings, config-owned project-engine targets, and supported config-owned group assignments.
 - [ ] ⬜ Produce role permission diffs with additions, removals, expanded template permissions, and affected assignments.
 - [ ] ⬜ Produce runtime resource set diffs with matched, unmatched, newly matched, and no-longer-matched process or decision keys.
 - [ ] ⬜ Validate identity provider references and preview normalized entitlement-to-group matches without contacting providers unless an explicit connectivity test is requested.
