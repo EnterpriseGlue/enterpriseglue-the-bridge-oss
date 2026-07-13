@@ -437,6 +437,7 @@ describe('authorization route inventory validation', () => {
           ['POST', '/api/identity/mappings/stored-snapshot-preview', 'platform.self'],
           ['POST', '/api/authz/legacy-mapping-coverage/{id}/verify', 'ssoMapping.byId'],
           ['POST', '/api/authz/legacy-mapping-retirement/disable', 'platform.self'],
+          ['POST', '/api/authz/legacy-mapping-retirement/disable-global', 'platform.self'],
         ],
       },
       {
@@ -452,6 +453,7 @@ describe('authorization route inventory validation', () => {
           ['PUT', '/api/authz/sso-mappings/{id}', 'ssoMapping.byId'],
           ['DELETE', '/api/authz/sso-mappings/{id}', 'ssoMapping.byId'],
           ['POST', '/api/authz/sso-mappings/test', 'platform.self'],
+          ['POST', '/api/authz/legacy-mapping-retirement/disable-global', 'platform.self'],
         ],
       },
       {

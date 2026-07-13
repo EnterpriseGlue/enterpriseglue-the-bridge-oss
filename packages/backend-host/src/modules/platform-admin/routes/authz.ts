@@ -86,6 +86,7 @@ const authzCheckBatchSchema = z.object({
 });
 const legacyMappingCoverageVerificationSchema = z.object({ family: z.enum(['platform_role', 'group', 'engine_assignment']), candidateIdentityMappingId: z.string().min(1), note: z.string().min(3).max(2000) });
 const legacyMappingRetirementSchema = z.object({ confirmation: z.literal('RETIRE_LEGACY_MAPPINGS') });
+const globalLegacyMappingRetirementSchema = z.object({ confirmation: z.literal('RETIRE_GLOBAL_LEGACY_MAPPINGS') });
 const configBundlePreviewSchema = z.object({
   bundle: z.unknown(),
   files: z.record(z.string(), z.unknown()),
@@ -2522,6 +2523,10 @@ router.post('/api/authz/legacy-mapping-coverage/:id/verify', apiLimiter, require
 
 router.post('/api/authz/legacy-mapping-retirement/disable', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateBody(legacyMappingRetirementSchema), asyncHandler(async (req: Request, res: Response) => {
   res.json(await legacyMappingCoverageService.retireLegacyMappings(req.tenant?.tenantId || null, req.user!.userId));
+}));
+
+router.post('/api/authz/legacy-mapping-retirement/disable-global', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateBody(globalLegacyMappingRetirementSchema), asyncHandler(async (req: Request, res: Response) => {
+  res.json(await legacyMappingCoverageService.retireLegacyMappings(null, req.user!.userId));
 }));
 
 router.post('/api/authz/sso-assignment-mappings', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateBody(ssoAssignmentMappingCreateSchema), asyncHandler(async (req: Request, res: Response) => {
