@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Add, Checkmark, Edit, TrashCan } from '@carbon/icons-react';
-import { Button, ComboBox, DataTable, InlineNotification, Modal, Select, SelectItem, SkeletonText, Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, TableRow, Tag, TextArea, Tile } from '@carbon/react';
+import { Button, ComboBox, DataTable, InlineNotification, Modal, Select, SelectItem, SkeletonText, Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, TableRow, Tag, TextArea, TextInput, Tile } from '@carbon/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
@@ -25,6 +25,7 @@ export default function IdentityMappingsSettingsTab() {
   const read = useActionDecision('platform.sso.group-mappings.read', resource);
   const manage = useActionDecision('platform.sso.group-mappings.manage', resource);
   const rolesManage = useActionDecision('platform.authz.roles.manage', resource);
+  const groupsManage = useActionDecision('platform.authz.groups.manage', resource);
   const mappingsQuery = useQuery({ queryKey: ['identity-mappings'], queryFn: () => apiClient.get<Mapping[]>('/api/identity/mappings'), enabled: read.allowed });
   const providersQuery = useQuery({ queryKey: ['identity-providers'], queryFn: () => apiClient.get<Provider[]>('/api/identity/providers'), enabled: manage.allowed });
   const groupsQuery = useQuery({ queryKey: ['authz-groups'], queryFn: () => apiClient.get<Group[]>('/api/authz/groups'), enabled: manage.allowed });
@@ -34,6 +35,9 @@ export default function IdentityMappingsSettingsTab() {
   const [editing, setEditing] = useState<Mapping | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [open, setOpen] = useState(false);
+  const [createGroupInFlow, setCreateGroupInFlow] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupKey, setNewGroupKey] = useState('');
   const [removeTarget, setRemoveTarget] = useState<Mapping | null>(null);
   const [accessTarget, setAccessTarget] = useState<Mapping | null>(null);
   const [accessRoleId, setAccessRoleId] = useState('');
@@ -55,11 +59,24 @@ export default function IdentityMappingsSettingsTab() {
   const runtimeResourceSets = (runtimeResourceSetsQuery.data || []).filter((set) => !set.isArchived);
 
   const save = useMutation({
-    mutationFn: (value: FormState) => {
-      const body = { providerKey: value.providerKey, targetGroupKey: value.targetGroupKey, entitlementType: value.entitlementType, externalId: value.matchOperator === 'exists' ? null : value.externalId.trim(), matchOperator: value.matchOperator, syncMode: value.syncMode };
-      return editing ? apiClient.put(`/api/identity/mappings/${encodeURIComponent(editing.id)}`, body) : apiClient.post('/api/identity/mappings', body);
+    mutationFn: async (value: FormState) => {
+      let targetGroupKey = value.targetGroupKey;
+      let createdGroupId: string | null = null;
+      if (createGroupInFlow) {
+        if (!groupsManage.allowed || !newGroupName.trim() || !newGroupKey.trim()) throw new Error('Group name and stable group key are required');
+        const group = await apiClient.post<{ id: string }>('/api/authz/groups', { name: newGroupName.trim(), key: newGroupKey.trim() });
+        createdGroupId = group.id;
+        targetGroupKey = newGroupKey.trim();
+      }
+      const body = { providerKey: value.providerKey, targetGroupKey, entitlementType: value.entitlementType, externalId: value.matchOperator === 'exists' ? null : value.externalId.trim(), matchOperator: value.matchOperator, syncMode: value.syncMode };
+      try {
+        return editing ? await apiClient.put(`/api/identity/mappings/${encodeURIComponent(editing.id)}`, body) : await apiClient.post('/api/identity/mappings', body);
+      } catch (error) {
+        if (createdGroupId) await apiClient.delete(`/api/authz/groups/${encodeURIComponent(createdGroupId)}`).catch(() => undefined);
+        throw error;
+      }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-mappings'] }); setOpen(false); setEditing(null); setError(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-mappings'] }); queryClient.invalidateQueries({ queryKey: ['authz-groups'] }); setOpen(false); setEditing(null); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setError(null); },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to save identity mapping').message),
   });
   const remove = useMutation({ mutationFn: (id: string) => apiClient.delete(`/api/identity/mappings/${encodeURIComponent(id)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-mappings'] }); setRemoveTarget(null); } });
@@ -86,8 +103,8 @@ export default function IdentityMappingsSettingsTab() {
     onSuccess: (result) => setSnapshotResult(`${result.matches} of ${result.scanned} stored identities match; ${result.nonMatches} do not${result.failed ? `; ${result.failed} could not be evaluated` : ''}${result.truncated ? '; result is truncated' : ''}.`),
     onError: (value: unknown) => setSnapshotResult(parseApiError(value, 'Stored identity preview failed').message),
   });
-  const startCreate = () => { setEditing(null); setForm(emptyForm()); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
-  const startEdit = (mapping: Mapping) => { setEditing(mapping); setForm({ ...emptyForm(), providerKey: mapping.providerKey, targetGroupKey: mapping.targetGroupKey, entitlementType: mapping.entitlementType, externalId: mapping.externalId || '', matchOperator: mapping.matchOperator, syncMode: mapping.syncMode }); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
+  const startCreate = () => { setEditing(null); setForm(emptyForm()); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
+  const startEdit = (mapping: Mapping) => { setEditing(mapping); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setForm({ ...emptyForm(), providerKey: mapping.providerKey, targetGroupKey: mapping.targetGroupKey, entitlementType: mapping.entitlementType, externalId: mapping.externalId || '', matchOperator: mapping.matchOperator, syncMode: mapping.syncMode }); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
 
   if (!read.allowed) return <UnauthorizedEmptyState title="Identity mappings unavailable" reason={read.reason || 'Missing identity mapping read permission.'} />;
   if (mappingsQuery.isLoading) return <SkeletonText paragraph lineCount={5} />;
@@ -98,10 +115,10 @@ export default function IdentityMappingsSettingsTab() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}><div><h3 style={{ margin: 0, fontSize: '1rem' }}>Identity Mappings</h3><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Map external groups, roles, scopes, or attributes to EnterpriseGlue authorization groups.</p></div><GuardedAction actionId="platform.sso.group-mappings.manage" resource={resource}><Button size="sm" kind="primary" renderIcon={Add} onClick={startCreate}>Add mapping</Button></GuardedAction></div>
       <DataTable rows={rows} headers={[{ key: 'provider', header: 'Provider' }, { key: 'entitlement', header: 'External entitlement' }, { key: 'group', header: 'EnterpriseGlue group' }, { key: 'sync', header: 'Sync' }, { key: 'source', header: 'Source' }, { key: 'actions', header: '' }]}>{({ rows: tableRows, headers, getHeaderProps, getRowProps, getTableProps }) => <TableContainer><Table {...getTableProps()} size="md"><TableHead><TableRow>{headers.map((header) => { const { key, ...headerProps } = getHeaderProps({ header }); return <TableHeader key={key} {...headerProps}>{header.header}</TableHeader>; })}</TableRow></TableHead><TableBody>{tableRows.map((row) => { const mapping = rows.find((item) => item.id === row.id)!; const { key, ...rowProps } = getRowProps({ row }); return <TableRow key={key} {...rowProps}><TableCell>{mapping.providerKey}</TableCell><TableCell><Tag type="cool-gray">{mapping.entitlementType}</Tag> {mapping.matchOperator === 'exists' ? 'Any value' : mapping.externalId}</TableCell><TableCell>{mapping.targetGroupKey}</TableCell><TableCell>{mapping.syncMode === 'authoritative' ? 'Authoritative' : 'Additive'}</TableCell><TableCell>{mapping.sourceRef ? 'Managed by config' : 'Manual'}</TableCell><TableCell><GuardedOverflowMenu size="sm" iconDescription="Mapping actions"><GuardedOverflowMenuItem decision={rolesManage} itemText="Grant engine access" unavailableReason={rolesManage.allowed ? null : rolesManage.reason || 'Missing role assignment permission'} onClick={() => { setAccessTarget(mapping); setAccessRoleId(''); setAccessScopeType('engine'); setAccessEngineId(''); setAccessRuntimeEngineId(''); }} /><GuardedOverflowMenuItem decision={manage} itemText="Edit" disabled={Boolean(mapping.sourceRef)} unavailableReason={mapping.sourceRef ? 'Managed by configuration' : null} onClick={() => startEdit(mapping)} /><GuardedOverflowMenuItem decision={manage} itemText="Delete" isDelete disabled={Boolean(mapping.sourceRef)} unavailableReason={mapping.sourceRef ? 'Managed by configuration' : null} onClick={() => setRemoveTarget(mapping)} /></GuardedOverflowMenu></TableCell></TableRow>; })}</TableBody></Table></TableContainer>}</DataTable>
     </Tile>
-    <Modal open={open} modalHeading={editing ? 'Edit identity mapping' : 'Add identity mapping'} primaryButtonText={editing ? 'Save' : 'Add'} secondaryButtonText="Cancel" primaryButtonDisabled={!manage.allowed || save.isPending} onRequestClose={() => setOpen(false)} onRequestSubmit={() => save.mutate(form)}>
+    <Modal open={open} modalHeading={editing ? 'Edit identity mapping' : 'Add identity mapping'} primaryButtonText={editing ? 'Save' : 'Add'} secondaryButtonText="Cancel" primaryButtonDisabled={!manage.allowed || save.isPending || (createGroupInFlow && (!groupsManage.allowed || !newGroupName.trim() || !newGroupKey.trim()))} onRequestClose={() => setOpen(false)} onRequestSubmit={() => save.mutate(form)}>
       {error && <InlineNotification kind="error" title="Mapping not saved" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       <ComboBox id="identity-mapping-provider" titleText="Identity provider" items={providers} itemToString={(item) => item?.key || ''} selectedItem={providers.find((provider) => provider.key === form.providerKey) || null} onChange={({ selectedItem }) => set('providerKey', selectedItem?.key || '')} />
-      <ComboBox id="identity-mapping-group" titleText="EnterpriseGlue group" items={groups} itemToString={(item) => item ? `${item.name} (${item.key})` : ''} selectedItem={groups.find((group) => group.key === form.targetGroupKey) || null} onChange={({ selectedItem }) => set('targetGroupKey', selectedItem?.key || '')} />
+      {createGroupInFlow ? <><TextInput id="identity-mapping-new-group-name" labelText="New EnterpriseGlue group name" value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} /><TextInput id="identity-mapping-new-group-key" labelText="New group key" helperText="Stable lowercase key used by JSON configuration and automation." value={newGroupKey} onChange={(event) => setNewGroupKey(event.target.value)} /><Button kind="tertiary" size="sm" onClick={() => setCreateGroupInFlow(false)}>Use an existing group</Button></> : <><ComboBox id="identity-mapping-group" titleText="EnterpriseGlue group" items={groups} itemToString={(item) => item ? `${item.name} (${item.key})` : ''} selectedItem={groups.find((group) => group.key === form.targetGroupKey) || null} onChange={({ selectedItem }) => set('targetGroupKey', selectedItem?.key || '')} />{!editing && <Button kind="tertiary" size="sm" disabled={!groupsManage.allowed} title={groupsManage.allowed ? undefined : groupsManage.reason || 'Missing group management permission'} onClick={() => setCreateGroupInFlow(true)}>Create a new group</Button>}</>}
       <Select id="identity-mapping-type" labelText="External entitlement type" value={form.entitlementType} onChange={(event) => set('entitlementType', event.target.value as EntitlementType)}><SelectItem value="group" text="Group" /><SelectItem value="role" text="Role" /><SelectItem value="scope" text="Scope" /><SelectItem value="attribute" text="Attribute" /></Select>
       <Select id="identity-mapping-operator" labelText="Match" value={form.matchOperator} onChange={(event) => set('matchOperator', event.target.value as MatchOperator)}><SelectItem value="exact" text="Exact" /><SelectItem value="contains" text="Contains" /><SelectItem value="exists" text="Exists" /></Select>
       {form.matchOperator !== 'exists' && <TextArea id="identity-mapping-external-id" labelText="External ID" value={form.externalId} onChange={(event) => set('externalId', event.target.value)} helperText="Use stable group IDs, role IDs, scopes, or attribute values rather than display names." />}
