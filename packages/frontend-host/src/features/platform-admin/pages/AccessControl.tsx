@@ -52,6 +52,7 @@ import {
 } from './accessControlPresentation';
 import { AuthzAuditPanel, DEFAULT_AUTHZ_AUDIT_FILTER, type AuthzAuditFilterState } from './access-control/AuthzAuditPanel';
 import { SsoSyncDiagnosticsPanel } from './access-control/SsoSyncDiagnosticsPanel';
+import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
   formatSsoSyncCounts as presentSsoSyncCounts,
   formatSsoSyncDetails as presentSsoSyncDetails,
@@ -3843,7 +3844,7 @@ function SsoEngineAccessSnapshotsPanel({
       {error ? (
         <InlineNotification kind="warning" title="Unable to load SSO engine access snapshots" lowContrast />
       ) : loading ? (
-        <DataTableSkeleton headers={ssoEngineAccessSnapshotHeaders} rowCount={3} />
+        <DataTableSkeleton headers={presentedSsoEngineAccessSnapshotHeaders} rowCount={3} />
       ) : snapshots.length === 0 ? (
         <InlineNotification kind="info" title="No SSO engine access snapshots yet" subtitle="Snapshots are recorded after SSO engine assignment sync creates or refreshes engine-scoped access." lowContrast />
       ) : (
@@ -3869,7 +3870,7 @@ function SsoEngineAccessSnapshotsPanel({
                 ].filter(Boolean).join('; ') || '-',
               };
             })}
-            headers={ssoEngineAccessSnapshotHeaders}
+            headers={presentedSsoEngineAccessSnapshotHeaders}
           >
             {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
               <Table {...getTableProps()} size="md">
@@ -3886,7 +3887,7 @@ function SsoEngineAccessSnapshotsPanel({
                       {row.cells.map((cell) => {
                         if (cell.info.header === 'status') {
                           const status = String(cell.value) as SsoEngineAccessSnapshot['status'];
-                          return <TableCell key={cell.id}><Tag type={getSsoEngineSnapshotStatusTagType(status)}>{formatStatusLabel(status)}</Tag></TableCell>;
+                          return <TableCell key={cell.id}><Tag type={presentSsoEngineSnapshotStatusTagType(status)}>{formatStatusLabel(status)}</Tag></TableCell>;
                         }
                         return <TableCell key={cell.id}>{cell.value}</TableCell>;
                       })}
