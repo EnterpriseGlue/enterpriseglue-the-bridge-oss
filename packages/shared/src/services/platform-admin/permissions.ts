@@ -2747,32 +2747,6 @@ class PermissionServiceClass {
     return false;
   }
 
-  private async resolveLegacyRoles(context: PermissionContext): Promise<{
-    platformRole?: string;
-    projectRoles: string[];
-    engineRole?: string;
-  }> {
-    if (!context.userId) {
-      return { projectRoles: [] };
-    }
-    const dataSource = await getDataSource();
-    const platformRole = context.platformRole || await this.getUserPlatformRole(dataSource, context.userId);
-    const projectRoles = context.projectRole
-      ? [context.projectRole]
-      : await this.getLegacyProjectRoles(dataSource, context.userId, context.resourceType, context.resourceId, context.tenantId);
-    const engineRole = context.engineRole || await this.getLegacyEngineRole(dataSource, context.userId, context.resourceType, context.resourceId, context.tenantId);
-
-    return { platformRole, projectRoles, engineRole };
-  }
-
-  private async getUserPlatformRole(dataSource: DataSource, userId: string): Promise<string | undefined> {
-    const user = await dataSource.getRepository(User).findOne({
-      where: { id: userId },
-      select: ['id', 'platformRole'],
-    });
-    return user?.platformRole || undefined;
-  }
-
   private async evaluatePermissionSet(
     userId: string,
     scope: ResourceType,
@@ -2941,71 +2915,6 @@ class PermissionServiceClass {
     }
 
     return Array.from(ids).sort();
-  }
-
-  private async getLegacyProjectRoles(
-    dataSource: DataSource,
-    userId: string,
-    resourceType?: ResourceType,
-    resourceId?: string,
-    tenantId?: string | null
-  ): Promise<string[]> {
-    if (resourceType !== 'project' || !resourceId) return [];
-
-    const roles = new Set<string>();
-    const project = await dataSource.getRepository(Project).findOne({
-      where: { id: resourceId },
-      select: ['id', 'ownerId', 'tenantId'],
-    });
-    const normalizedTenantId = normalizeTenantId(tenantId);
-    if (normalizedTenantId && project?.tenantId && project.tenantId !== normalizedTenantId) {
-      return [];
-    }
-    if (project?.ownerId === userId) {
-      roles.add('owner');
-    }
-
-    const membership = await dataSource.getRepository(ProjectMember).findOne({
-      where: { projectId: resourceId, userId },
-    });
-    if (membership?.role) {
-      roles.add(membership.role);
-    }
-
-    const roleRows = await dataSource.getRepository(ProjectMemberRole).find({
-      where: { projectId: resourceId, userId },
-    });
-    roleRows.forEach((row) => roles.add(row.role));
-
-    return Array.from(roles);
-  }
-
-  private async getLegacyEngineRole(
-    dataSource: DataSource,
-    userId: string,
-    resourceType?: ResourceType,
-    resourceId?: string,
-    tenantId?: string | null
-  ): Promise<string | undefined> {
-    if (resourceType !== 'engine' || !resourceId) return undefined;
-
-    const engine = await dataSource.getRepository(Engine).findOne({
-      where: { id: resourceId },
-      select: ['id', 'ownerId', 'delegateId', 'tenantId'],
-    });
-    if (!engine) return undefined;
-    const normalizedTenantId = normalizeTenantId(tenantId);
-    if (normalizedTenantId && engine.tenantId && engine.tenantId !== normalizedTenantId) {
-      return undefined;
-    }
-    if (engine.ownerId === userId) return 'owner';
-    if (engine.delegateId === userId) return 'delegate';
-
-    const membership = await dataSource.getRepository(EngineMember).findOne({
-      where: { engineId: resourceId, userId },
-    });
-
-    return membership?.role || undefined;
   }
 
   private async getUserGroupIdsForEvaluation(dataSource: DataSource, userId: string, tenantId?: string | null): Promise<string[]> {
