@@ -558,6 +558,13 @@ export interface EffectiveAccessResult {
   policyName?: string;
   baseAllowed: boolean;
   baseReason: string;
+  resolvedRuntimeResource?: {
+    id: string;
+    engineId: string;
+    resourceKind: 'process_definition' | 'decision_definition';
+    resourceKey: string;
+    runtimeTenantId: string;
+  };
   sources: Array<{
     type: string;
     assignmentId?: string;
@@ -962,7 +969,18 @@ export function useArchiveCustomRole() {
 
 export function useEvaluateAccess() {
   return useMutation({
-    mutationFn: (data: { userId: string; permission: string; resourceType?: AuthzResourceType; resourceId?: string }) =>
+    mutationFn: (data: {
+      userId: string;
+      permission: string;
+      resourceType?: AuthzResourceType;
+      resourceId?: string;
+      runtimeResource?: {
+        engineId: string;
+        resourceKind: 'process_definition' | 'decision_definition';
+        resourceKey: string;
+        runtimeTenantId?: string;
+      };
+    }) =>
       apiClient.post<EffectiveAccessResult>('/api/authz/evaluate', data),
   });
 }

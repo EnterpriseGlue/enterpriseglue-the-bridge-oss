@@ -787,6 +787,19 @@ export const EffectiveAccessEvaluateRequestSchema = z.object({
   permission: z.string().min(1),
   resourceType: AuthzResourceTypeSchema.optional(),
   resourceId: z.string().optional(),
+  runtimeResource: z.object({
+    engineId: z.string().min(1),
+    resourceKind: z.enum(['process_definition', 'decision_definition']),
+    resourceKey: z.string().min(1),
+    runtimeTenantId: z.string().max(255).optional(),
+  }).optional(),
+}).superRefine((value, ctx) => {
+  if (value.runtimeResource && value.resourceType !== 'engine_runtime_resource') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['runtimeResource'], message: 'Runtime resource selector requires resourceType engine_runtime_resource' });
+  }
+  if (value.resourceType === 'engine_runtime_resource' && !value.resourceId && !value.runtimeResource) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['runtimeResource'], message: 'Runtime resource ID or selector is required' });
+  }
 });
 
 export const EffectiveAccessEvaluateResponseSchema = z.object({
@@ -797,6 +810,13 @@ export const EffectiveAccessEvaluateResponseSchema = z.object({
   policyName: z.string().optional(),
   baseAllowed: z.boolean(),
   baseReason: z.string(),
+  resolvedRuntimeResource: z.object({
+    id: z.string(),
+    engineId: z.string(),
+    resourceKind: z.enum(['process_definition', 'decision_definition']),
+    resourceKey: z.string(),
+    runtimeTenantId: z.string(),
+  }).optional(),
   sources: z.array(z.object({
     type: z.string(),
     assignmentId: z.string().optional(),

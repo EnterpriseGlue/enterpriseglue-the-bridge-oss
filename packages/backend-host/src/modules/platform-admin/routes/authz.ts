@@ -12,6 +12,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js';
 import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js';
@@ -130,6 +131,19 @@ const authzEvaluateSchema = z.object({
   permission: z.string().min(1),
   resourceType: authzResourceTypeSchema.optional(),
   resourceId: z.string().optional(),
+  runtimeResource: z.object({
+    engineId: z.string().min(1),
+    resourceKind: z.enum(['process_definition', 'decision_definition']),
+    resourceKey: z.string().min(1),
+    runtimeTenantId: z.string().max(255).optional(),
+  }).optional(),
+}).superRefine((value, ctx) => {
+  if (value.runtimeResource && value.resourceType !== 'engine_runtime_resource') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['runtimeResource'], message: 'Runtime resource selector requires resourceType engine_runtime_resource' });
+  }
+  if (value.resourceType === 'engine_runtime_resource' && !value.resourceId && !value.runtimeResource) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['runtimeResource'], message: 'Runtime resource ID or selector is required' });
+  }
 });
 
 const customPermissionCreateSchema = z.object({
@@ -1249,16 +1263,41 @@ router.delete('/api/authz/group-memberships/:id', apiLimiter, requireAuth, requi
  */
 router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformAction('platform.authz.evaluate'), validateBody(authzEvaluateSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { userId, permission, resourceType, resourceId } = req.body;
+    const { userId, permission, resourceType, resourceId, runtimeResource } = req.body;
     if (!new Set<string>(Object.values(AllPermissions)).has(permission)) {
       throw Errors.validation('Unknown permission');
+    }
+
+    let resolvedResourceId = resourceId;
+    let resolvedRuntimeResource: Record<string, string> | undefined;
+    if (runtimeResource) {
+      const runtime = await (await getDataSource()).getRepository(RuntimeResource).findOne({
+        where: {
+          engineId: runtimeResource.engineId,
+          resourceKind: runtimeResource.resourceKind,
+          resourceKey: runtimeResource.resourceKey,
+          runtimeTenantId: runtimeResource.runtimeTenantId || '',
+          isActive: true,
+        },
+      });
+      if (!runtime || (runtime.tenantId || null) !== (req.tenant?.tenantId || null)) {
+        throw Errors.notFound('Runtime resource');
+      }
+      resolvedResourceId = runtime.id;
+      resolvedRuntimeResource = {
+        id: runtime.id,
+        engineId: runtime.engineId,
+        resourceKind: runtime.resourceKind,
+        resourceKey: runtime.resourceKey,
+        runtimeTenantId: runtime.runtimeTenantId,
+      };
     }
 
     const context: EvaluationContext = {
       userId,
       tenantId: req.tenant?.tenantId || null,
       resourceType,
-      resourceId,
+      resourceId: resolvedResourceId,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
       timestamp: Date.now(),
@@ -1275,6 +1314,7 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
       policyName: policy.policyName,
       baseAllowed: base.allowed,
       baseReason: base.reason,
+      resolvedRuntimeResource,
       sources: base.sources,
     });
   } catch (error: any) {

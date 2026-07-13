@@ -1737,7 +1737,7 @@ Required UI changes:
 - [x] ✅ Remove Dashboard legacy-role visibility fallbacks and project-member-only counts. Dashboard context now derives engine/process/deployment/metric visibility from evaluator snapshots and runtime-resource filtering; the deprecated owner/delegate response arrays remain empty for compatibility.
 - [ ] ⬜ Bulk actions show partial-denial diagnostics when selected rows span allowed and denied resources.
 - [ ] ⬜ Engine Detail > Access adds a `Runtime Resources` tab or section for process/decision resource sets, exact grants, and source lineage.
-- [ ] ⬜ Access Control Effective Access supports resource type `engine_runtime_resource` and input fields for engine, resource kind, resource key, and optional runtime tenant id.
+- [x] ✅ Access Control Effective Access supports `engine_runtime_resource` with engine, resource kind, definition key, and optional runtime tenant inputs. The backend resolves the selector against active tenant-owned runtime inventory before evaluating; it never trusts a frontend-supplied inventory ID.
 - [ ] ⬜ Config import preview shows which process/decision keys a runtime resource set currently materializes, plus unmatched selectors.
 
 ### Deployment And Starbase Bridge Impact

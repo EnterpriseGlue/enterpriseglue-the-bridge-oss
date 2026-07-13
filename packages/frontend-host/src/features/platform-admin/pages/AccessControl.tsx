@@ -2571,8 +2571,27 @@ function EffectiveAccess({
   const [userId, setUserId] = React.useState('');
   const [resourceType, setResourceType] = React.useState<CoreAssignmentResourceType>('platform');
   const [resourceId, setResourceId] = React.useState('');
+  const [runtimeEngineId, setRuntimeEngineId] = React.useState('');
+  const [runtimeResourceKind, setRuntimeResourceKind] = React.useState<'process_definition' | 'decision_definition'>('process_definition');
+  const [runtimeResourceKey, setRuntimeResourceKey] = React.useState('');
+  const [runtimeTenantId, setRuntimeTenantId] = React.useState('');
   const [permission, setPermission] = React.useState<string>('');
   const selectedPermission = permissions.find((item) => item.key === permission) || null;
+  const resourceTypeItems: Array<{ id: CoreAssignmentResourceType; label: string }> = [
+    { id: 'platform', label: 'Platform' },
+    { id: 'project', label: 'Project' },
+    { id: 'engine', label: 'Engine' },
+    { id: 'engine_runtime_resource', label: 'Runtime resource' },
+  ];
+  const isRuntimeResource = resourceType === 'engine_runtime_resource';
+  const canEvaluate = Boolean(
+    userId && permission && (
+      resourceType === 'platform' ||
+      (isRuntimeResource
+        ? runtimeEngineId.trim() && runtimeResourceKey.trim()
+        : resourceId.trim())
+    ),
+  );
   const sourceRows = React.useMemo(() => (evaluateM.data?.sources || []).map((source, index) => {
     const auditReferenceEntries = findEffectiveAccessSourceAuditEntries(source, auditEntries);
     return {
@@ -2592,7 +2611,13 @@ function EffectiveAccess({
       userId,
       permission,
       resourceType,
-      resourceId: resourceType === 'platform' ? undefined : resourceId,
+      resourceId: resourceType === 'platform' || isRuntimeResource ? undefined : resourceId,
+      runtimeResource: isRuntimeResource ? {
+        engineId: runtimeEngineId.trim(),
+        resourceKind: runtimeResourceKind,
+        resourceKey: runtimeResourceKey.trim(),
+        runtimeTenantId: runtimeTenantId.trim() || undefined,
+      } : undefined,
     });
   };
 
@@ -2604,22 +2629,62 @@ function EffectiveAccess({
           id="effective-resource-type"
           titleText="Resource type"
           label="Select resource type"
-          items={[
-            { id: 'platform', label: 'Platform' },
-            { id: 'project', label: 'Project' },
-            { id: 'engine', label: 'Engine' },
-          ]}
+          items={resourceTypeItems}
           itemToString={(item) => item?.label || ''}
-          selectedItem={{ id: resourceType, label: resourceType }}
-          onChange={({ selectedItem }) => setResourceType((selectedItem?.id || 'platform') as 'platform' | 'project' | 'engine')}
+          selectedItem={resourceTypeItems.find((item) => item.id === resourceType) || resourceTypeItems[0]}
+          onChange={({ selectedItem }) => {
+            const nextResourceType = (selectedItem?.id || 'platform') as CoreAssignmentResourceType;
+            setResourceType(nextResourceType);
+            setResourceId('');
+            if (nextResourceType !== 'engine_runtime_resource') {
+              setRuntimeEngineId('');
+              setRuntimeResourceKey('');
+              setRuntimeTenantId('');
+            }
+          }}
         />
-        <TextInput
-          id="effective-resource-id"
-          labelText="Resource ID"
-          disabled={resourceType === 'platform'}
-          value={resourceId}
-          onChange={(event) => setResourceId(event.target.value)}
-        />
+        {isRuntimeResource ? <>
+          <TextInput
+            id="effective-runtime-engine-id"
+            labelText="Engine ID"
+            value={runtimeEngineId}
+            onChange={(event) => setRuntimeEngineId(event.target.value)}
+          />
+          <Dropdown
+            id="effective-runtime-resource-kind"
+            titleText="Runtime kind"
+            label="Select runtime kind"
+            items={[
+              { id: 'process_definition', label: 'Process definition' },
+              { id: 'decision_definition', label: 'Decision definition' },
+            ]}
+            itemToString={(item) => item?.label || ''}
+            selectedItem={runtimeResourceKind === 'process_definition'
+              ? { id: 'process_definition', label: 'Process definition' }
+              : { id: 'decision_definition', label: 'Decision definition' }}
+            onChange={({ selectedItem }) => setRuntimeResourceKind((selectedItem?.id || 'process_definition') as 'process_definition' | 'decision_definition')}
+          />
+          <TextInput
+            id="effective-runtime-resource-key"
+            labelText="Definition key"
+            value={runtimeResourceKey}
+            onChange={(event) => setRuntimeResourceKey(event.target.value)}
+          />
+          <TextInput
+            id="effective-runtime-tenant-id"
+            labelText="Runtime tenant ID (optional)"
+            value={runtimeTenantId}
+            onChange={(event) => setRuntimeTenantId(event.target.value)}
+          />
+        </> : (
+          <TextInput
+            id="effective-resource-id"
+            labelText="Resource ID"
+            disabled={resourceType === 'platform'}
+            value={resourceId}
+            onChange={(event) => setResourceId(event.target.value)}
+          />
+        )}
         <Dropdown
           id="effective-permission"
           titleText="Permission"
@@ -2631,7 +2696,7 @@ function EffectiveAccess({
         />
       </div>
       <div>
-        <Button disabled={!userId || !permission || (resourceType !== 'platform' && !resourceId) || evaluateM.isPending} onClick={evaluate}>
+        <Button disabled={!canEvaluate || evaluateM.isPending} onClick={evaluate}>
           Evaluate
         </Button>
       </div>
@@ -2644,6 +2709,15 @@ function EffectiveAccess({
           title={evaluateM.data.allowed ? 'Access allowed' : 'Access denied'}
           subtitle={`${evaluateM.data.reason} (${evaluateM.data.sources.length} source${evaluateM.data.sources.length === 1 ? '' : 's'})`}
           lowContrast
+        />
+      )}
+      {evaluateM.data?.resolvedRuntimeResource && (
+        <InlineNotification
+          kind="info"
+          lowContrast
+          hideCloseButton
+          title="Resolved runtime resource"
+          subtitle={`${evaluateM.data.resolvedRuntimeResource.engineId} / ${evaluateM.data.resolvedRuntimeResource.resourceKind} / ${evaluateM.data.resolvedRuntimeResource.resourceKey}${evaluateM.data.resolvedRuntimeResource.runtimeTenantId ? ` / tenant ${evaluateM.data.resolvedRuntimeResource.runtimeTenantId}` : ''}`}
         />
       )}
       {evaluateM.data && sourceRows.length > 0 && (

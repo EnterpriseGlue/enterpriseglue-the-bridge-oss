@@ -1473,6 +1473,53 @@ describe('platform-admin authz routes', () => {
     expect(response.body.baseReason).toBe('role:platform:admin');
   });
 
+  it('resolves a runtime resource selector before evaluating access', async () => {
+    const findOne = vi.fn().mockResolvedValue({
+      id: 'runtime-resource-1',
+      tenantId: null,
+      engineId: 'engine-1',
+      resourceKind: 'process_definition',
+      resourceKey: 'invoice',
+      runtimeTenantId: 'finance',
+      isActive: true,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity.name === 'RuntimeResource'
+        ? { findOne }
+        : { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) },
+    });
+
+    const response = await request(app)
+      .post('/api/authz/evaluate')
+      .send({
+        userId: '00000000-0000-4000-8000-000000000001',
+        permission: 'platform:authz:check',
+        resourceType: 'engine_runtime_resource',
+        runtimeResource: {
+          engineId: 'engine-1',
+          resourceKind: 'process_definition',
+          resourceKey: 'invoice',
+          runtimeTenantId: 'finance',
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(findOne).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        engineId: 'engine-1',
+        resourceKind: 'process_definition',
+        resourceKey: 'invoice',
+        runtimeTenantId: 'finance',
+        isActive: true,
+      }),
+    });
+    expect(permissionService.evaluatePermission).toHaveBeenCalledWith(
+      'platform:authz:check',
+      expect.objectContaining({ resourceType: 'engine_runtime_resource', resourceId: 'runtime-resource-1' }),
+    );
+    expect(response.body.resolvedRuntimeResource).toMatchObject({ id: 'runtime-resource-1', resourceKey: 'invoice' });
+  });
+
   it('manages external registration API clients', async () => {
     const listResponse = await request(app).get('/api/authz/api-clients');
     expect(listResponse.status).toBe(200);
