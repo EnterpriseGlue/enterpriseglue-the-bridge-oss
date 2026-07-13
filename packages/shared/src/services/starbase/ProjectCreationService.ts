@@ -9,8 +9,7 @@ import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
 import { ProjectMemberRole } from '@enterpriseglue/shared/db/entities/ProjectMemberRole.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
-import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
-import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { writeLegacyProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/legacy-project-role-assignments.js';
 
 export interface CreateProjectInput {
   name: string;
@@ -69,8 +68,14 @@ class ProjectCreationServiceImpl {
       .orIgnore()
       .execute();
 
-    await permissionService.syncLegacyRoleAssignments({ projectIds: [projectId] })
-      .catch((error) => logger.warn('Failed to sync legacy project role assignments', { projectId, error }));
+    await writeLegacyProjectMemberRoleAssignments(dataSource, {
+      projectId,
+      tenantId: null,
+      userId: input.ownerId,
+      roles: ['owner'],
+      createdById: null,
+      createdAt: nowMs,
+    });
 
     return { projectId };
   }

@@ -14,6 +14,7 @@ import { EngineHealth } from '@enterpriseglue/shared/db/entities/EngineHealth.js
 import { EngineProjectAccess } from '@enterpriseglue/shared/db/entities/EngineProjectAccess.js';
 import { EngineAccessRequest } from '@enterpriseglue/shared/db/entities/EngineAccessRequest.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/db/entities/EnvironmentTag.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/db/entities/RbacRoleAssignment.js';
 import { projectQueryService } from '@enterpriseglue/shared/services/starbase/ProjectQueryService.js';
 import { applyPreparedEngineImportToProject } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
@@ -177,11 +178,13 @@ describe('ProjectQueryService', () => {
       orIgnore: vi.fn().mockReturnThis(),
       execute: roleExecute,
     };
+    const assignmentUpsert = vi.fn().mockResolvedValue(undefined);
     const manager = {
       getRepository: (entity: unknown) => {
         if (entity === Project) return { insert: projectInsert };
         if (entity === ProjectMember) return { createQueryBuilder: vi.fn().mockReturnValue(memberBuilder) };
         if (entity === ProjectMemberRole) return { createQueryBuilder: vi.fn().mockReturnValue(roleBuilder) };
+        if (entity === RbacRoleAssignment) return { upsert: assignmentUpsert };
         throw new Error('Unexpected manager repository');
       },
     };
@@ -224,6 +227,13 @@ describe('ProjectQueryService', () => {
       role: 'owner',
       createdAt: 123456,
     });
+    expect(assignmentUpsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'legacy:project:project-1:user-1:system.project.owner',
+        source: 'legacy',
+        sourceRef: 'project_member_role:project-1:user-1:owner',
+      }),
+    ]), expect.objectContaining({ conflictPaths: ['id'] }));
     expect(applyPreparedEngineImportToProject).toHaveBeenCalledWith({
       manager,
       projectId: 'project-1',
