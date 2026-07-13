@@ -10,14 +10,23 @@ import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence
 import { ProjectMemberRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMemberRole.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { In } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { permissionService } from './permissions.js';
-import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
+import { SYSTEM_ROLE_IDS } from './permissions.js';
 
 type ProjectRole = 'owner' | 'delegate' | 'developer' | 'editor' | 'viewer';
 
 const PROJECT_ROLE_ORDER: ProjectRole[] = ['owner', 'delegate', 'developer', 'editor', 'viewer'];
+
+const PROJECT_MEMBER_ROLE_TO_SYSTEM_ROLE_ID: Record<ProjectRole, string> = {
+  owner: SYSTEM_ROLE_IDS.PROJECT_OWNER,
+  delegate: SYSTEM_ROLE_IDS.PROJECT_DELEGATE,
+  developer: SYSTEM_ROLE_IDS.PROJECT_DEVELOPER,
+  editor: SYSTEM_ROLE_IDS.PROJECT_EDITOR,
+  viewer: SYSTEM_ROLE_IDS.PROJECT_VIEWER,
+};
 
 function normalizeRoles(input: ProjectRole[]): ProjectRole[] {
   const uniq = Array.from(new Set(input));
@@ -31,14 +40,6 @@ function computeEffectiveRole(roles: ProjectRole[]): ProjectRole {
     if (normalized.includes(r)) return r;
   }
   return 'viewer';
-}
-
-async function syncLegacyProjectAssignments(projectId: string): Promise<void> {
-  try {
-    await permissionService.syncLegacyRoleAssignments({ projectIds: [projectId] });
-  } catch (error) {
-    logger.warn('Failed to sync legacy project role assignments', { projectId, error });
-  }
 }
 
 export interface ProjectMemberWithUser {
@@ -236,7 +237,13 @@ export class ProjectMemberService {
         .execute();
     }
 
-    await syncLegacyProjectAssignments(projectId);
+    await this.writeLegacyProjectMemberAssignments(dataSource, {
+      projectId,
+      userId,
+      roles,
+      createdById: invitedById,
+      createdAt: now,
+    });
 
     return { id, projectId, userId, role: effectiveRole, roles };
   }
@@ -260,6 +267,7 @@ export class ProjectMemberService {
     await memberRepo.update({ projectId, userId }, { role: effectiveRole, updatedAt: now });
 
     await roleRepo.delete({ projectId, userId });
+    await this.removeLegacyProjectMemberAssignments(dataSource, projectId, userId);
 
     for (const r of roles) {
       await roleRepo.createQueryBuilder()
@@ -269,7 +277,13 @@ export class ProjectMemberService {
         .execute();
     }
 
-    await syncLegacyProjectAssignments(projectId);
+    await this.writeLegacyProjectMemberAssignments(dataSource, {
+      projectId,
+      userId,
+      roles,
+      createdById: null,
+      createdAt: now,
+    });
   }
 
   /**
@@ -282,7 +296,7 @@ export class ProjectMemberService {
 
     await roleRepo.delete({ projectId, userId });
     await memberRepo.delete({ projectId, userId });
-    await syncLegacyProjectAssignments(projectId);
+    await this.removeLegacyProjectMemberAssignments(dataSource, projectId, userId);
   }
 
   /**
@@ -373,7 +387,72 @@ export class ProjectMemberService {
 
     // Update project owner_id
     await projectRepo.update({ id: projectId }, { ownerId: toUserId });
-    await syncLegacyProjectAssignments(projectId);
+  }
+
+  private async writeLegacyProjectMemberAssignments(
+    dataSource: Awaited<ReturnType<typeof getDataSource>>,
+    input: { projectId: string; userId: string; roles: ProjectRole[]; createdById: string | null; createdAt: number },
+  ): Promise<void> {
+    const project = await dataSource.getRepository(Project).findOne({
+      where: { id: input.projectId },
+      select: ['id', 'tenantId'],
+    });
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    const now = Date.now();
+    const assignments = input.roles.map((role) => {
+      const roleId = PROJECT_MEMBER_ROLE_TO_SYSTEM_ROLE_ID[role];
+      const sourceRef = `project_member_role:${input.projectId}:${input.userId}:${role}`;
+      return {
+        id: `legacy:project:${input.projectId}:${input.userId}:${roleId}`,
+        tenantId: project.tenantId ?? null,
+        userId: input.userId,
+        principalType: 'user' as const,
+        principalId: input.userId,
+        assignmentKey: canonicalRoleAssignmentKey({
+          tenantId: project.tenantId ?? null,
+          principalType: 'user',
+          principalId: input.userId,
+          roleId,
+          scopeType: 'project',
+          scopeId: input.projectId,
+          source: 'legacy',
+          sourceRef,
+        }),
+        roleId,
+        resourceType: 'project' as const,
+        resourceId: input.projectId,
+        scopeType: 'project' as const,
+        scopeId: input.projectId,
+        source: 'legacy' as const,
+        sourceMappingId: sourceRef,
+        sourceRef,
+        expiresAt: null,
+        lastSeenAt: now,
+        createdById: input.createdById,
+        createdAt: input.createdAt || now,
+        updatedAt: now,
+      };
+    });
+
+    if (assignments.length > 0) {
+      await dataSource.getRepository(RbacRoleAssignment).upsert(assignments, {
+        conflictPaths: ['id'],
+        skipUpdateIfNoValuesChanged: true,
+      });
+    }
+  }
+
+  private async removeLegacyProjectMemberAssignments(
+    dataSource: Awaited<ReturnType<typeof getDataSource>>,
+    projectId: string,
+    userId: string,
+  ): Promise<void> {
+    await dataSource.getRepository(RbacRoleAssignment).delete({
+      id: In(Object.values(PROJECT_MEMBER_ROLE_TO_SYSTEM_ROLE_ID).map((roleId) => `legacy:project:${projectId}:${userId}:${roleId}`)),
+    });
   }
 
   /**
