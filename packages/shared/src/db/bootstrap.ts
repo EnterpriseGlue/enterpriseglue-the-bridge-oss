@@ -40,7 +40,8 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
       passwordHash: passwordHash,
       firstName: 'Admin',
       lastName: 'User',
-      platformRole: allowPlatformAdmin ? 'admin' : 'user',
+      // Compatibility metadata only; access comes from the canonical group below.
+      platformRole: 'user',
       isActive: true,
       mustResetPassword: false,
       failedLoginAttempts: 0,
@@ -56,13 +57,13 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
       await manager.getRepository(User).save(admin);
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, adminId);
       if (allowPlatformAdmin) {
-        await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, adminId);
+        await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, adminId);
       }
     });
 
     console.log(`✅ Admin account created: ${config.adminEmail}`);
     console.log(`   Password: [REDACTED - check ADMIN_PASSWORD environment variable]`);
-    console.log(`   Platform Role: ${allowPlatformAdmin ? 'admin' : 'user'}`);
+    console.log(`   Platform access: ${allowPlatformAdmin ? 'administrator' : 'user'}`);
     console.log(`⚠️  IMPORTANT: Change the admin password in production!`);
   } catch (error) {
     console.error('❌ Failed to bootstrap admin account:', error);

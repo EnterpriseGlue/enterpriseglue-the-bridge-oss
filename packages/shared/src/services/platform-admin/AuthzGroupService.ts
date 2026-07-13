@@ -89,6 +89,7 @@ export const DEFAULT_PLATFORM_GROUP_IDS = {
 } as const;
 
 const AUTHENTICATED_USER_BASELINE_SOURCE_REF = 'authenticated-user-baseline';
+const BOOTSTRAP_PLATFORM_ADMIN_SOURCE_REF = 'bootstrap-platform-administrator';
 const LEGACY_PLATFORM_ADMIN_SOURCE_REF = 'legacy-platform-role-administrator';
 const LEGACY_SSO_PLATFORM_ADMIN_SOURCE_REF_PREFIX = 'legacy-sso-platform-role:';
 
@@ -526,6 +527,18 @@ export class AuthzGroupService {
       DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
       userId,
       LEGACY_PLATFORM_ADMIN_SOURCE_REF
+    );
+  }
+
+  async ensureBootstrapPlatformAdministratorMembershipWithManager(
+    manager: EntityManager,
+    userId: string
+  ): Promise<{ id: string; created: boolean }> {
+    return this.ensureSystemGroupMembershipWithManager(
+      manager,
+      DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+      userId,
+      BOOTSTRAP_PLATFORM_ADMIN_SOURCE_REF
     );
   }
 

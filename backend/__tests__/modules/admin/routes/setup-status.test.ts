@@ -3,8 +3,8 @@ import request from 'supertest';
 import express from 'express';
 import setupStatusRouter from '../../../../../packages/backend-host/src/modules/admin/routes/setup-status.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { EmailSendConfig } from '@enterpriseglue/shared/db/entities/EmailSendConfig.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/db/entities/AuthzGroupMembership.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
@@ -51,20 +51,24 @@ describe('GET /api/admin/setup-status', () => {
     app.use(setupStatusRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
-    authState.user = { userId: 'user-1', platformRole: 'admin' };
-    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (_permission: string, context: { platformRole?: string }) =>
-      context.platformRole === 'admin'
-    );
+    authState.user = { userId: 'user-1' };
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
   });
 
   it('returns configured status when all checks pass', async () => {
-    const userRepo = { count: vi.fn().mockResolvedValue(1) };
     const emailConfigRepo = { count: vi.fn().mockResolvedValue(1) };
+    const membershipRepo = {
+      createQueryBuilder: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        getExists: vi.fn().mockResolvedValue(true),
+      }),
+    };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === User) return userRepo;
         if (entity === EmailSendConfig) return emailConfigRepo;
+        if (entity === AuthzGroupMembership) return membershipRepo;
         throw new Error('Unexpected repository');
       },
     });
@@ -74,7 +78,6 @@ describe('GET /api/admin/setup-status', () => {
     expect(response.status).toBe(200);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('platform:settings:manage', expect.objectContaining({
       userId: 'user-1',
-      platformRole: 'admin',
       resourceType: 'platform',
     }));
     expect(response.body.isConfigured).toBe(true);
@@ -94,13 +97,19 @@ describe('GET /api/admin/setup-status', () => {
   });
 
   it('returns not configured when missing admin user', async () => {
-    const userRepo = { count: vi.fn().mockResolvedValue(0) };
     const emailConfigRepo = { count: vi.fn().mockResolvedValue(0) };
+    const membershipRepo = {
+      createQueryBuilder: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        getExists: vi.fn().mockResolvedValue(false),
+      }),
+    };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === User) return userRepo;
         if (entity === EmailSendConfig) return emailConfigRepo;
+        if (entity === AuthzGroupMembership) return membershipRepo;
         throw new Error('Unexpected repository');
       },
     });
@@ -133,7 +142,7 @@ describe('POST /api/admin/mark-setup-complete', () => {
   });
 
   it('allows settings managers to mark setup complete without platform admin role', async () => {
-    authState.user = { userId: 'settings-1', platformRole: 'user' };
+    authState.user = { userId: 'settings-1' };
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
       permission === 'platform:settings:manage'
     );
@@ -144,7 +153,6 @@ describe('POST /api/admin/mark-setup-complete', () => {
     expect(response.body.success).toBe(true);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('platform:settings:manage', expect.objectContaining({
       userId: 'settings-1',
-      platformRole: 'user',
     }));
   });
 });
