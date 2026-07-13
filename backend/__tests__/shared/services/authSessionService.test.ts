@@ -6,6 +6,10 @@ import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionS
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({ generateAccessToken: vi.fn(() => 'access-token'), generateRefreshToken: vi.fn(() => 'refresh-token') }));
 vi.mock('@enterpriseglue/shared/utils/id.js', () => ({ generateId: vi.fn(() => 'session-1') }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({
+  DEFAULT_PLATFORM_GROUP_IDS: { PLATFORM_ADMINISTRATORS: 'system.group.platform_administrators' },
+  authzGroupService: { getUserGroupIds: vi.fn().mockResolvedValue([]) },
+}));
 
 describe('authSessionService', () => {
   const insert = vi.fn();

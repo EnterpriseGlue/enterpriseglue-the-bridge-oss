@@ -10,6 +10,7 @@ import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/
 import { IsNull, MoreThan } from 'typeorm';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
+import { resolveEffectiveSessionUser } from '@enterpriseglue/shared/services/AuthSessionService.js';
 
 const router = Router();
 
@@ -68,7 +69,7 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   }
 
   // Generate new access token
-  const accessToken = generateAccessToken(user);
+  const accessToken = generateAccessToken(await resolveEffectiveSessionUser(user));
 
   // Set new access token as httpOnly cookie
   res.cookie('accessToken', accessToken, {
