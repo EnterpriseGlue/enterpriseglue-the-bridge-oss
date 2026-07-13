@@ -48,6 +48,7 @@ import {
 } from './accessControlPresentation';
 import {
   AuthzAuditPanel,
+  AssignmentSourceTag,
   DEFAULT_AUTHZ_AUDIT_FILTER,
   EffectiveAccessPanel,
   PolicyInspectionTable,
@@ -3000,6 +3001,7 @@ function ByPrincipalPanel({
                             if (cell.info.header === 'grantType') {
                               return <TableCell key={cell.id}><Tag type={cell.value === 'Direct' ? 'blue' : 'teal'}>{cell.value}</Tag></TableCell>;
                             }
+                            if (cell.info.header === 'source') return <TableCell key={cell.id}><AssignmentSourceTag source={cell.value} /></TableCell>;
                             if (cell.info.header === 'audit') {
                               return (
                                 <TableCell key={cell.id}>
@@ -3038,6 +3040,7 @@ function ByPrincipalPanel({
                       return (
                         <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                           {row.cells.map((cell) => {
+                            if (cell.info.header === 'source') return <TableCell key={cell.id}><AssignmentSourceTag source={cell.value} /></TableCell>;
                             if (cell.info.header === 'audit') {
                               return (
                                 <TableCell key={cell.id}>
@@ -3293,6 +3296,7 @@ function ByResourcePanel({
                       return (
                         <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                           {row.cells.map((cell) => {
+                            if (cell.info.header === 'source') return <TableCell key={cell.id}><AssignmentSourceTag source={cell.value} /></TableCell>;
                             if (cell.info.header === 'audit') {
                               return (
                                 <TableCell key={cell.id}>
