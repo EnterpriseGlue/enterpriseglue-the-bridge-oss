@@ -76,7 +76,7 @@ Current config-as-code status:
 - [x] ✅ Make `enterpriseglue_authoritative` the v1 runtime authorization mode and keep engine-native mirroring/import as later explicit modes.
 - [x] ✅ Keep engine registration separate from engine authorization, then combine them in dropdown and deployment eligibility APIs.
 - [x] ✅ Keep runtime authorization based on database records and evaluator decisions, not direct JSON reads.
-- [x] ✅ Add API-only JSON config-bundle preview, diff, and hash-bound apply endpoints; import upload, export, and run history remain pending.
+- [x] ✅ Add API-only JSON config-bundle preview, diff, hash-bound apply, server-side export, and apply-run history endpoints. Folder/ZIP import remains pending.
 - [ ] ⬜ Add UI and CI/CD workflows for managing config bundles.
 - [ ] ⬜ Add config-managed source ownership and drift diagnostics for imported objects.
 - [x] ✅ Add a Role Library with a fixed-width role list and focused single-role grouped permission editor. The legacy matrix remains available in Access Control for compatibility until it can be removed.
@@ -1820,8 +1820,8 @@ The implementation should extend existing packages rather than introduce an auth
   - Preview validates the bundle; diff covers persisted roles, groups, engines, Engine Sets, runtime resource sets, identity providers, identity mappings, project-engine targets, and supported group assignments, and reports source-ownership conflicts and authoritative archives. Warnings, acknowledgements, and affected-object analysis remain pending.
 - [x] ✅ `POST /api/authz/config-bundles/apply`
   - Applies an exact previewed bundle hash for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, identity providers, and identity mappings. Unsupported object families still fail closed.
-- [ ] ⬜ `GET /api/config-bundles/runs`
-  - Lists preview/apply runs.
+- [x] ✅ `GET /api/authz/config-bundles/runs`
+  - Lists recent apply runs, including persisted reconciliation receipts.
 - [ ] ⬜ `GET /api/config-bundles/runs/:id`
   - Returns one run with diagnostics.
 - [ ] ⬜ `GET /api/config-bundles/export`
@@ -1870,7 +1870,7 @@ Config transport and response rules:
 
 - [ ] ⬜ Accept `application/json` for a single-file bundle and `application/zip` or multipart upload for a folder bundle.
 - [ ] ⬜ Return a canonical bundle hash, schema version, source key, object-level diff, warnings, required acknowledgements, and optional reconciliation preview.
-- [x] ✅ Add deterministic config-bundle preview validation for declared JSON imports with strict schema validation, object counts, undeclared/missing file rejection, and canonical SHA-256 hash. Diff, acknowledgements, and reconciliation preview remain in progress.
+- [x] ✅ Add deterministic config-bundle preview validation for declared JSON imports with strict schema validation, object counts, undeclared/missing file rejection, and canonical SHA-256 hash. The current diff covers every object family that apply mutates; acknowledgement and affected-principal previews remain pending.
 - [ ] ⬜ Require idempotency keys for every apply caller. The API/CLI now supports persisted tenant-scoped idempotency keys and replays completed matching receipts; interactive UI callers still need generated keys.
 - [ ] ⬜ Return `202 Accepted` plus a run id for asynchronous identity/runtime reconciliation triggered after apply.
 - [ ] ⬜ Keep config run and identity sync run ids cross-linked for diagnostics and audit.
@@ -1887,7 +1887,7 @@ Recommended placement:
 UI capabilities:
 
 - [ ] ⬜ Upload folder zip, single JSON file, or paste Git URL.
-- [ ] ⬜ Show schema validation results before diff.
+- [x] ✅ Show schema validation results before diff in Platform Settings > Configuration Bundles.
 - [ ] ⬜ Show object diff grouped by Engines, Engine Sets, Runtime Resource Sets, Roles, Groups, Identity Providers, Identity Mappings, Assignments, and Project-engine targets.
 - [ ] ⬜ Show warnings for all-engine selectors, regex mappings, external-only modes, secret ref failures, and destructive authoritative removals.
 - [x] ✅ Require an exact preview hash to prevent time-of-check/time-of-use drift, and require an expected tenant scope for CLI/CI applies so target credentials cannot apply to a different tenant.
