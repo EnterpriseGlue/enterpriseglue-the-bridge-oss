@@ -177,6 +177,17 @@ pnpm authz:config export acme-platform-authz
 
 The CLI calls the same backend APIs used by the UI. It never connects directly to the database. `apply` sends the server-produced canonical hash as `expectedPreviewHash`, so stale or altered bundles fail closed. Set `ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY` for CI retries: a completed matching apply returns its original receipt, while reusing the key with different bundle input is rejected. The CLI returns `64` for invalid invocation, `2` for preview validation failure, and `1` for API, I/O, or transport failures.
 
+Before promoting a bundle workflow or backend image, run the focused contract
+suite from the repository root:
+
+```bash
+pnpm test:authz-refactor
+```
+
+It runs the named identity-contract, identity-route-integration, and
+configuration-bundle suites. It does not replace the separate browser
+end-to-end environment that will use containerized identity providers.
+
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
 
 - `ENTERPRISEGLUE_API_URL` as an Environment variable;
