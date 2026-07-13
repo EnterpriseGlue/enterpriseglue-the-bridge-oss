@@ -2978,6 +2978,14 @@ registry.registerPath({
   responses: { 200: { description: 'Login successful', content: { 'application/json': { schema: z.object({ user: authenticatedSessionUserSchema, expiresIn: z.number(), emailVerificationRequired: z.boolean().optional() }) } } }, 401: { description: 'Invalid credentials' } },
 });
 
+// POST /api/auth/complete-onboarding
+registry.registerPath({
+  method: 'post',
+  path: '/api/auth/complete-onboarding',
+  request: { body: { content: { 'application/json': { schema: z.object({ firstName: z.string().min(1).max(100), lastName: z.string().min(1).max(100), newPassword: z.string().min(8) }) } } } },
+  responses: { 200: { description: 'Onboarding completed and session established', content: { 'application/json': { schema: z.object({ user: authenticatedSessionUserSchema, expiresIn: z.number(), emailVerificationRequired: z.literal(false) }) } } }, 400: { description: 'Invalid onboarding input or token' }, 401: { description: 'Invalid onboarding token' } },
+});
+
 // POST /api/auth/logout
 registry.registerPath({
   method: 'post',
