@@ -19,7 +19,8 @@ const SecretReferenceSchema = z.string()
   .max(512)
   .regex(/^[A-Za-z][A-Za-z0-9_.:/-]*$/, 'Secret references must be opaque identifiers');
 const PermissionIdSchema = z.string().min(3).max(255).regex(/^[a-z][a-z0-9-]*(?::[a-z0-9-]+)+$/);
-const LabelSchema = z.record(z.string().min(1).max(128), z.string().min(1).max(512));
+const LabelKeySchema = z.string().min(1).max(128).regex(/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/, 'Label keys must be stable lowercase identifiers');
+const LabelSchema = z.record(LabelKeySchema, z.string().min(1).max(512));
 
 const AllowedImportPaths = [
   './engines.json',

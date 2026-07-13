@@ -103,6 +103,15 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     }).success).toBe(false);
   });
 
+  it('accepts stable engine metadata labels and rejects display-oriented keys', () => {
+    expect(ConfigEnginesFileSchema.safeParse({
+      engines: [{ key: 'engine-prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://engine.example.com/engine-rest', labels: { country: 'TR', business_unit: 'payments', customer_segment: 'enterprise' }, auth: { type: 'bearer', tokenRef: 'EG_ENGINE_TOKEN' } }],
+    }).success).toBe(true);
+    expect(ConfigEnginesFileSchema.safeParse({
+      engines: [{ key: 'engine-prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://engine.example.com/engine-rest', labels: { 'Business Unit': 'payments' }, auth: { type: 'bearer', tokenRef: 'EG_ENGINE_TOKEN' } }],
+    }).success).toBe(false);
+  });
+
   it('keeps protocol-specific provider fields scoped to the selected adapter', () => {
     expect(ConfigIdentityProvidersFileSchema.safeParse({
       identityProviders: [{

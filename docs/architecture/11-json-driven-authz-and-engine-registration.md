@@ -2157,8 +2157,8 @@ Phase 0 exit criteria:
 - [x] ✅ Add config schemas for runtime resource sets with exact keys, prefix selectors, labels, project lineage, and optional runtime tenant id. Deployment-lineage selectors remain pending with the runtime inventory model.
 - [x] ✅ Add shared resource types for `engine_runtime_resource` and `engine_runtime_resource_set`, persisted `RuntimeResourceSet` selector/source metadata, a sanitized runtime resource inventory, and selector materialization with lineage. Evaluator resolution and runtime discovery routes remain pending.
 - [ ] ⬜ Add shared resource resolvers for process definition key, decision definition key, deployment id, and instance-inherited runtime resources.
-- [ ] ⬜ Add label validation for engine metadata keys such as `country`, `domain`, `environment`, `region`, `businessUnit`, `criticality`, and customer-defined keys.
-- [ ] ⬜ Document that labels, not display-only metadata, are used for Engine Set selectors and authorization-adjacent filtering.
+- [x] ✅ Add label validation for engine metadata keys such as `country`, `domain`, `environment`, `region`, `business_unit`, `criticality`, and customer-defined keys. Keys are stable lowercase identifiers; values remain customer-defined text.
+- [x] ✅ Document that labels, not display-only metadata, are used for Engine Set selectors and authorization-adjacent filtering.
 - [ ] ⬜ Add validation that secret refs are references only, not plaintext secrets.
 - [ ] ⬜ Add explicit validation and warning copy for `auth.type = "none"` as no EnterpriseGlue-managed endpoint credentials; permit it only for policy-approved `customer_sidecar` engines.
 - [ ] ⬜ Add tests for valid and invalid config bundles.
