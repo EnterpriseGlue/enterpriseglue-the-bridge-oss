@@ -57,6 +57,7 @@ import { getEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engi
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
 import { registerConfigBundleRoutes } from './authz/config-bundles.js';
+import { registerPolicyRoutes } from './authz/policies.js';
 import {
   evaluateMissionControlStarbaseBridge,
   evaluateStarbaseMissionControlBridge,
@@ -97,18 +98,6 @@ const externalEngineAuditQuerySchema = z.object({
 const externalEngineLifecycleBodySchema = z.object({
   reason: z.string().trim().max(500).optional(),
 });
-
-const policyCreateSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().optional(),
-  effect: z.enum(['allow', 'deny']),
-  resourceType: z.string().optional(),
-  action: z.string().optional(),
-  conditions: z.record(z.string(), z.unknown()).optional(),
-  priority: z.number().int().min(0).optional(),
-});
-
-const policyUpdateSchema = policyCreateSchema.partial();
 
 const ssoMappingCreateSchema = z.object({
   providerId: z.string().min(1).optional(),
@@ -2173,84 +2162,7 @@ router.delete('/api/authz/project-engine-targets/:id', apiLimiter, requireAuth, 
   }
 }));
 
-// ============================================================================
-// Policy Management (Admin Only)
-// ============================================================================
-
-/**
- * GET /api/platform-admin/authz/policies
- * List all authorization policies.
- */
-router.get('/api/authz/policies', apiLimiter, requireAuth, requirePlatformAction('platform.authz.policies.read'), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const policies = await policyService.getAllPolicies(req.tenant?.tenantId || null);
-    res.json(policies);
-  } catch (error: any) {
-    logger.error('Get policies error:', error);
-    throw Errors.internal('Failed to get policies');
-  }
-}));
-
-/**
- * POST /api/platform-admin/authz/policies
- * Create a new authorization policy.
- */
-router.post('/api/authz/policies', apiLimiter, requireAuth, requirePlatformAction('platform.authz.policies.manage'), validateBody(policyCreateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const { name, description, effect, priority, resourceType, action, conditions } = req.body;
-
-    const result = await policyService.createPolicy({
-      name,
-      description,
-      effect,
-      priority,
-      resourceType,
-      action,
-      conditions,
-      tenantId: req.tenant?.tenantId || null,
-      createdById: req.user!.userId,
-    });
-
-    res.status(201).json(result);
-  } catch (error: any) {
-    logger.error('Create policy error:', error);
-    throw Errors.internal('Failed to create policy');
-  }
-}));
-
-/**
- * PUT /api/platform-admin/authz/policies/:id
- * Update an authorization policy.
- */
-router.put('/api/authz/policies/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.policies.manage'), validateParams(idParamSchema), validateBody(policyUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const policyId = String(req.params.id);
-    await policyService.updatePolicy(policyId, {
-      ...req.body,
-      tenantId: req.tenant?.tenantId || null,
-      updatedById: req.user!.userId,
-    });
-    res.json({ success: true });
-  } catch (error: any) {
-    logger.error('Update policy error:', error);
-    throw Errors.internal('Failed to update policy');
-  }
-}));
-
-/**
- * DELETE /api/platform-admin/authz/policies/:id
- * Delete an authorization policy.
- */
-router.delete('/api/authz/policies/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.policies.manage'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const policyId = String(req.params.id);
-    await policyService.deletePolicy(policyId, req.user!.userId);
-    res.status(204).send();
-  } catch (error: any) {
-    logger.error('Delete policy error:', error);
-    throw Errors.internal('Failed to delete policy');
-  }
-}));
+registerPolicyRoutes(router, { requirePlatformAction });
 
 // ============================================================================
 // SSO Claims Mapping Management (Admin Only)

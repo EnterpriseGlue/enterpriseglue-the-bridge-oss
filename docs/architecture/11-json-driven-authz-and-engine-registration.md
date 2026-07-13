@@ -1848,7 +1848,8 @@ The implementation should extend existing packages rather than introduce an auth
 ### Backend Host
 
 - [x] ✅ Extract the configuration-bundle route family into `routes/authz/config-bundles.ts` with injected parent authorization middleware. Public URLs, middleware ordering, audit behavior, OpenAPI inventory, and route tests remain unchanged.
-- [ ] ⬜ Split the remaining `packages/backend-host/src/modules/platform-admin/routes/authz.ts` families into focused roles/permissions, assignments/groups, identity, engine sets/runtime resources, targets, policies, machines, and audit routers.
+- [x] ✅ Extract the authorization-policy route family into `routes/authz/policies.ts` with the same platform-action contract and no public API change.
+- [ ] ⬜ Split the remaining `packages/backend-host/src/modules/platform-admin/routes/authz.ts` families into focused roles/permissions, assignments/groups, identity, engine sets/runtime resources, targets, machines, and audit routers.
 - [x] ✅ Add the external machine-authenticated deployment receipt route with API deployment eligibility, action/OpenAPI metadata, audit logging, and inventory materialization. Runtime scope settings, inventory reads, and reconciliation routes remain pending.
 - [x] ✅ Update `packages/backend-host/src/modules/mission-control/engines/routes.ts` manual engine create/update/list/detail schemas and serializers, including runtime scope, deployment integration, metadata discovery, pipeline receipt ingestion, managed-field protection, and canonical deployment-history reads.
 - [ ] ⬜ Update auth start/callback routes and provider services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit.
