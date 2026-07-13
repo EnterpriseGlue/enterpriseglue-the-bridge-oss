@@ -8,6 +8,7 @@ import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/ent
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigRoleAssignmentOverride.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
@@ -310,6 +311,7 @@ class ConfigBundleApplyService {
       const runtimeResourceSetRepo = manager.getRepository(RuntimeResourceSet);
       const runtimeResourceRepo = manager.getRepository(RuntimeResource);
       const assignmentRepo = manager.getRepository(RbacRoleAssignment);
+      const assignmentOverrideRepo = manager.getRepository(ConfigRoleAssignmentOverride);
       const projectRepo = manager.getRepository(Project);
       const targetRepo = manager.getRepository(ProjectEngineTarget);
       const providerRepo = manager.getRepository(IdentityProvider);
@@ -608,6 +610,7 @@ class ConfigBundleApplyService {
           await assignmentRepo.update({ id: existing.id }, { expiresAt: assignment.expiresAt || null, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', lastSeenAt: now, updatedAt: now });
           updated += 1;
         }
+        await assignmentOverrideRepo.delete({ assignmentKey, sourceRef });
       }
       if (manifest.mode === 'authoritative') {
         const existing = await assignmentRepo.find({ where: { source: 'config', sourceRef } });

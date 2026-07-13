@@ -66,6 +66,7 @@ export { ProjectMemberRole } from './ProjectMemberRole.js';
 export { RbacPermission } from './RbacPermission.js';
 export { RbacRole } from './RbacRole.js';
 export { RbacRoleAssignment } from './RbacRoleAssignment.js';
+export { ConfigRoleAssignmentOverride } from './ConfigRoleAssignmentOverride.js';
 export { RbacRolePermission } from './RbacRolePermission.js';
 export { RuntimeResourceSet } from './RuntimeResourceSet.js';
 export { RuntimeResource } from './RuntimeResource.js';

@@ -2298,7 +2298,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add Mission Control filters and empty states that explain when the user can see the engine but has no visible process or decision resources. Dashboard context and the selected-engine dashboard view now label resource-scoped runtime access, and Process definitions plus Decisions show authorized-subset empty states; remaining collection views remain pending.
 - [ ] ⬜ Ensure dashboard and Mission Control counters are based on authorized runtime subsets.
 - [ ] ⬜ Show `Customer-managed engine authentication` or `No EnterpriseGlue-managed credentials` for sidecar engines instead of implying missing security.
-- [ ] ⬜ Complete generic config ownership modes: config-locked engines are enforced and config-warn engine edits are marked as drift. Roles, groups, Engine Sets, project-engine targets, and scoped role assignments now persist ownership/provenance through config diff/apply/export. Assignment deletion remains source-owned until an explicit config-override tombstone and reconciliation design is implemented; memberships remain source-owned.
+- [x] ✅ Complete generic config ownership modes for currently configurable resources. Roles, groups, Engine Sets, project-engine targets, and scoped role assignments persist ownership/provenance through config diff/apply/export. Removing a `config_warn` assignment writes a durable source-scoped tombstone; a matching config apply restores the assignment and clears only that override. Memberships remain source-owned.
 - [ ] ⬜ Add duplicate-system-role-to-config-role flow in the UI export/import path.
 - [ ] ⬜ Add disabled/editable field behavior for config-owned objects.
 - [ ] ⬜ Add effective-access links from config diff rows.

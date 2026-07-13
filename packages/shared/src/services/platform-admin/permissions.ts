@@ -32,6 +32,7 @@ import { RbacPermission } from '@enterpriseglue/shared/infrastructure/persistenc
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigRoleAssignmentOverride.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, IsNull, Not, type DataSource, type EntityManager } from 'typeorm';
@@ -2262,11 +2263,20 @@ class PermissionServiceClass {
     if (!assignment) {
       throw new Error('Role assignment not found');
     }
-    if (assignment.source !== 'manual') {
+    const configWarningAssignment = assignment.source === 'config' && assignment.ownershipMode === 'config_warn';
+    if (assignment.source !== 'manual' && !configWarningAssignment) {
       throw new Error('Only manual role assignments can be removed here');
     }
 
-    await assignmentRepo.delete({ id });
+    if (configWarningAssignment) {
+      await dataSource.transaction(async (manager) => {
+        await manager.getRepository(ConfigRoleAssignmentOverride).upsert({
+          tenantId: assignment.tenantId, assignmentKey: assignment.assignmentKey, sourceRef: assignment.sourceRef || '',
+          removedAssignmentId: assignment.id, removedById: removedById || null, createdAt: Date.now(), updatedAt: Date.now(),
+        }, { conflictPaths: ['tenantId', 'assignmentKey', 'sourceRef'] });
+        await manager.getRepository(RbacRoleAssignment).delete({ id });
+      });
+    } else await assignmentRepo.delete({ id });
     await recordAuthzAudit(dataSource, {
       tenantId: assignment.tenantId,
       userId: removedById || null,
@@ -2281,6 +2291,7 @@ class PermissionServiceClass {
         resourceType: assignment.scopeType,
         resourceId: assignment.scopeId,
         source: assignment.source,
+        configOverride: configWarningAssignment,
       },
     });
   }

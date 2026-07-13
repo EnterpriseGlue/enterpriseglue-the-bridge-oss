@@ -3068,7 +3068,7 @@ function RoleAssignmentsPanel({
                           if (cell.info.header === 'actions') {
                             return (
                               <TableCell key={cell.id}>
-                                {assignment?.source === 'manual' && (
+                                {(assignment?.source === 'manual' || (assignment?.source === 'config' && assignment.ownershipMode === 'config_warn')) && (
                                   <Button kind="ghost" size="sm" renderIcon={TrashCan} hasIconOnly iconDescription="Remove assignment" disabled={!canDelete} title={canDelete ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onRemove(assignment.id)} />
                                 )}
                               </TableCell>
