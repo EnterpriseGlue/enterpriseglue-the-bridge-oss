@@ -17,6 +17,11 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 
+const previewStoredSnapshots = vi.hoisted(() => vi.fn());
+vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js', () => ({
+  identityEntitlementMappingService: { previewStoredSnapshots },
+}));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
 const bundle = {
@@ -261,6 +266,7 @@ describe('configBundleDiffService', () => {
   });
 
   it('identifies creation for a provider-neutral identity mapping', async () => {
+    previewStoredSnapshots.mockResolvedValueOnce({ scanned: 4, matches: 3, nonMatches: 1, failed: 0, truncated: false, latestSnapshotAt: 123, warnings: ['stored_snapshots_only'] });
     mockDataSource([], [{
       id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
       source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,
@@ -280,8 +286,9 @@ describe('configBundleDiffService', () => {
     }, 'tenant-a');
 
     expect(result.changes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.operators', operation: 'create' }),
+      expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.operators', operation: 'create', identitySnapshotPreview: { scanned: 4, matches: 3, nonMatches: 1, failed: 0, truncated: false, latestSnapshotAt: 123, warnings: ['stored_snapshots_only'] } }),
     ]));
+    expect(previewStoredSnapshots).toHaveBeenCalledWith(expect.objectContaining({ providerKey: 'identity.oidc.main', externalId: 'operations' }), 'tenant-a');
   });
 
   it('identifies no-op and update states for config-owned identity mappings', async () => {
