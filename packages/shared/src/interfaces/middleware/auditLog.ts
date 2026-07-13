@@ -18,6 +18,16 @@ function getIpAddress(req: Request): string {
 }
 
 /**
+ * Audit tenancy follows the route that handled the request. It must not be
+ * inferred from a legacy role claim because that claim is no longer an
+ * authorization source.
+ */
+function getAuditTenantId(req: Request): string | undefined {
+  const originalUrl = String(req.originalUrl || '');
+  return originalUrl.startsWith('/api/t/') ? (req as any).tenant?.tenantId : undefined;
+}
+
+/**
  * Middleware to log action after successful response
  */
 export function auditLog(action: string, resourceType?: string) {
@@ -38,10 +48,7 @@ export function auditLog(action: string, resourceType?: string) {
           req.params.folderId) as string | undefined;
 
         // Log the audit entry
-        const isPlatformAdmin = req.user?.platformRole === 'admin';
-        const originalUrl = String(req.originalUrl || '');
-        const isTenantScopedRequest = originalUrl.startsWith('/api/t/');
-        const tenantId = isPlatformAdmin && !isTenantScopedRequest ? null : (req as any).tenant?.tenantId;
+        const tenantId = getAuditTenantId(req);
 
         logAudit({
           tenantId,
@@ -81,10 +88,7 @@ export function auditRequest(action: string, resourceType?: string) {
         req.params.fileId ||
         req.params.folderId) as string | undefined;
 
-      const isPlatformAdmin = req.user?.platformRole === 'admin';
-      const originalUrl = String(req.originalUrl || '');
-      const isTenantScopedRequest = originalUrl.startsWith('/api/t/');
-      const tenantId = isPlatformAdmin && !isTenantScopedRequest ? null : (req as any).tenant?.tenantId;
+      const tenantId = getAuditTenantId(req);
 
       await logAudit({
         tenantId,
