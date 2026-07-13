@@ -60,7 +60,7 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
-import { DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
+import { assignmentResourceTypeOptions, DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -2461,25 +2461,7 @@ function RoleAssignmentsPanel({
   });
   const selectedRuntimeResource = (runtimeResourcesQ.data || []).find((resource) => resource.id === form.resourceId) || null;
   const selectedRuntimeSet = (runtimeSetsQ.data || []).find((set) => set.id === form.resourceId) || null;
-  const resourceTypeItems = form.principalType === 'api_client'
-    ? [
-      { id: 'platform', label: 'Platform' },
-      { id: 'external_engine_system', label: 'External system' },
-      { id: 'project', label: 'Project' },
-      { id: 'engine', label: 'Engine' },
-    ]
-    : form.principalType === 'service_account'
-    ? [
-      { id: 'project', label: 'Project' },
-      { id: 'engine', label: 'Engine' },
-    ]
-    : [
-      { id: 'platform', label: 'Platform' },
-      { id: 'project', label: 'Project' },
-      { id: 'engine', label: 'Engine' },
-      { id: 'engine_runtime_resource', label: 'Runtime resource' },
-      { id: 'engine_runtime_resource_set', label: 'Runtime resource set' },
-    ];
+  const resourceTypeItems = assignmentResourceTypeOptions(form.principalType);
   const assignableRoles = React.useMemo(
     () => getAssignableRolesForPrincipal(roles, form.resourceType, form.principalType),
     [roles, form.resourceType, form.principalType],

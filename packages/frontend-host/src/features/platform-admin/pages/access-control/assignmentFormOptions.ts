@@ -13,6 +13,11 @@ export type AssignmentFormState = AssignmentFormValues & { runtimeEngineId: stri
 export const DEFAULT_ASSIGNMENT_FORM_STATE: AssignmentFormState = {
   principalType: 'user', principalId: '', roleId: '', resourceType: 'engine', resourceId: '', runtimeEngineId: '',
 };
+export function assignmentResourceTypeOptions(principalType: AssignmentPrincipalType) {
+  if (principalType === 'api_client') return [{ id: 'platform', label: 'Platform' }, { id: 'external_engine_system', label: 'External system' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }];
+  if (principalType === 'service_account') return [{ id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }];
+  return [{ id: 'platform', label: 'Platform' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_runtime_resource', label: 'Runtime resource' }, { id: 'engine_runtime_resource_set', label: 'Runtime resource set' }];
+}
 
 const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([
   'system.api.engine_registrar',
