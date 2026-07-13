@@ -122,12 +122,14 @@ export default function IdentityProvidersSettingsTab() {
         {({ rows: tableRows, headers, getHeaderProps, getRowProps, getTableProps }) => (
           <TableContainer>
             <Table {...getTableProps()} size="md">
-              <TableHead><TableRow>{headers.map((header) => (
-                <TableHeader {...getHeaderProps({ header })}>{header.header}</TableHeader>
-              ))}</TableRow></TableHead>
+              <TableHead><TableRow>{headers.map((header) => {
+                const { key, ...headerProps } = getHeaderProps({ header });
+                return <TableHeader key={key} {...headerProps}>{header.header}</TableHeader>;
+              })}</TableRow></TableHead>
               <TableBody>{tableRows.map((row) => {
                 const provider = rows.find((item) => item.id === row.id)!;
-                return <TableRow {...getRowProps({ row })}>
+                const { key, ...rowProps } = getRowProps({ row });
+                return <TableRow key={key} {...rowProps}>
                   <TableCell>{provider.key}</TableCell>
                   <TableCell><Tag type="cool-gray">{provider.protocol.toUpperCase()}</Tag></TableCell>
                   <TableCell>{provider.authenticationMode === 'direct' ? 'Direct sign-in' : 'Claims only'}</TableCell>

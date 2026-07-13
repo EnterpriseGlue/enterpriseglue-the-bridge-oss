@@ -2069,7 +2069,7 @@ Fixtures should include at least:
 
 - [x] ✅ Add reusable adapter contract helpers and fixtures under a dedicated `backend/test/identity-mocks/` boundary. The testkit exposes deterministic OIDC discovery/token/JWKS controls, SAML assertion attributes, LDAP bind fixtures, and an in-memory provider-neutral adapter without production-runtime imports.
 - [ ] ⬜ Add backend protocol-integration suites under `backend/test/integration/identity/` and keep existing service unit tests focused.
-- [ ] ⬜ Extend frontend MSW handlers in `frontend/test/mocks/handlers.ts` for identity/config APIs and failure variants.
+- [x] ✅ Extend frontend MSW handlers in `frontend/test/mocks/handlers.ts` for identity/config APIs and controlled provider failure variants. The Identity Providers tab exercises the real API client against those handlers for success, denied access, and failure rendering.
 - [ ] ⬜ Add a local identity mock compose/profile only if LDAP protocol fidelity requires a container; OIDC/SAML mocks should prefer ephemeral test processes.
 - [x] ✅ Add `test:identity-contract`, `test:identity-integration`, and `test:config-bundles` scripts plus the `test:authz-refactor` root aggregate. These run isolated protocol, route, mapping, and bundle suites; containerized protocol-faithful browser mocks remain a separate pending milestone.
 - [ ] ⬜ Publish no fixed mock ports or credentials; tests allocate ephemeral ports and use generated short-lived signing keys/certificates.
