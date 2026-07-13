@@ -133,6 +133,34 @@ describe('ssoAssignmentMappingService', () => {
     expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ tenantId: null, principalType: 'group', principalId: group.id, roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1', source: 'legacy', sourceRef: `sso_assignment_mapping:${legacy.id}` }), expect.anything());
   });
 
+  it('converts an allowlisted exact custom engine mapping into an attribute entitlement', async () => {
+    const legacy = {
+      id: 'legacy-engine-clearance', tenantId: null, isActive: true, claimType: 'custom', claimKey: 'clearance', claimOperator: 'equals', claimValue: 'release',
+      targetSelectorType: 'engine_id', targetEngineId: 'engine-1', targetRoleId: 'system.engine.deployer', syncMode: 'authoritative',
+    };
+    const provider = { id: 'provider-1', key: 'entra', configurationJson: JSON.stringify({ authorizationAttributeKeys: ['clearance'] }) };
+    const group = { id: 'group-1', key: 'release-deployers', tenantId: null, isArchived: false };
+    const getRepository = vi.fn((entity) => {
+      if (entity === SsoAssignmentMapping) return { findOneBy: vi.fn().mockResolvedValue(legacy) };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(provider) };
+      if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }) };
+      if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue(group) };
+      if (entity === IdentityEntitlementMapping) return { findOne: vi.fn().mockResolvedValue(null) };
+      throw new Error(`Unexpected repository: ${(entity as any).name}`);
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: async (callback: any) => callback({ getRepository }) });
+    createIdentityMapping.mockResolvedValue({ id: 'identity-custom-1' });
+    assignRole.mockResolvedValue({ id: 'assignment-1', warnings: [] });
+
+    await ssoAssignmentMappingService.migrateToProviderNeutral(legacy.id, {
+      providerKey: provider.key, targetGroupKey: group.key, createdById: 'admin-1',
+    });
+
+    expect(createIdentityMapping).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: provider.key, targetGroupKey: group.key, entitlementType: 'attribute', externalId: 'attribute:clearance:release', matchOperator: 'exact',
+    }), null, expect.anything());
+  });
+
   it('reuses an equivalent provider-neutral mapping when an exact-engine conversion is retried', async () => {
     const legacy = {
       id: 'legacy-engine-deployer', tenantId: null, isActive: true, claimType: 'role', claimOperator: 'contains', claimValue: 'release',

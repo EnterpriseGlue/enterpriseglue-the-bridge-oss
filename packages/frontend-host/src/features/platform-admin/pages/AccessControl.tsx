@@ -4315,6 +4315,7 @@ function SsoMappingsPanel({
   onCreateGroup,
   onEditGroup,
   onDeleteGroup,
+  onMigrateGroup,
 }: {
   platformMappings: SsoClaimsMapping[];
   groupMappings: SsoGroupMapping[];
@@ -4339,6 +4340,7 @@ function SsoMappingsPanel({
   onCreateGroup: () => void;
   onEditGroup: (mapping: SsoGroupMapping) => void;
   onDeleteGroup: (id: string) => void;
+  onMigrateGroup: (mapping: SsoGroupMapping) => void;
 }) {
   const activeGroups = groups.filter((group) => !group.isArchived);
 
@@ -4532,6 +4534,7 @@ function SsoMappingsPanel({
                                   return (
                                     <TableCell key={cell.id}>
                                       <Button kind="ghost" size="sm" disabled={!canManageGroups} title={canManageGroups ? undefined : 'Missing permission platform:sso-assignments:manage'} onClick={() => mapping && onEditGroup(mapping)}>Edit</Button>
+                                      <Button kind="ghost" size="sm" disabled={!canManageGroups} title={canManageGroups ? undefined : 'Missing permission platform:sso-assignments:manage'} onClick={() => mapping && onMigrateGroup(mapping)}>Create replacement</Button>
                                       <Button kind="ghost" size="sm" disabled={!canManageGroups} title={canManageGroups ? undefined : 'Missing permission platform:sso-assignments:manage'} renderIcon={TrashCan} hasIconOnly iconDescription="Delete group mapping" onClick={() => mapping && onDeleteGroup(mapping.id)} />
                                     </TableCell>
                                   );
@@ -6384,6 +6387,20 @@ export default function AccessControl() {
   const updateSsoGroupMappingM = useUpdateSsoGroupMapping();
   const deleteSsoGroupMappingM = useDeleteSsoGroupMapping();
   const testSsoGroupMappingM = useTestSsoGroupMapping();
+  const migrateSsoGroupM = useMutation({
+    mutationFn: (input: { id: string; providerKey: string }) => apiClient.post(
+      `/api/authz/sso-group-mappings/${encodeURIComponent(input.id)}/migrate-provider-neutral`,
+      { providerKey: input.providerKey.trim() },
+    ),
+    onSuccess: () => {
+      void ssoGroupMappingsQ.refetch();
+      void identityEntitlementMappingsQ.refetch();
+      setSsoGroupMigrationTarget(null);
+      setSsoGroupMigrationProviderKey('');
+      setSsoGroupMigrationError(null);
+    },
+    onError: (value: unknown) => setSsoGroupMigrationError(parseApiError(value, 'Unable to create the provider-neutral replacement').message),
+  });
   const createM = useCreateSsoAssignmentMapping();
   const updateM = useUpdateSsoAssignmentMapping();
   const deleteM = useDeleteSsoAssignmentMapping();
@@ -6442,6 +6459,9 @@ export default function AccessControl() {
   const [editingSsoGroupMapping, setEditingSsoGroupMapping] = React.useState<SsoGroupMapping | null>(null);
   const [ssoGroupForm, setSsoGroupForm] = React.useState<SsoGroupMappingFormState>(DEFAULT_SSO_GROUP_MAPPING_FORM);
   const [ssoGroupRiskAcknowledged, setSsoGroupRiskAcknowledged] = React.useState(false);
+  const [ssoGroupMigrationTarget, setSsoGroupMigrationTarget] = React.useState<SsoGroupMapping | null>(null);
+  const [ssoGroupMigrationProviderKey, setSsoGroupMigrationProviderKey] = React.useState('');
+  const [ssoGroupMigrationError, setSsoGroupMigrationError] = React.useState<string | null>(null);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<SsoAssignmentMapping | null>(null);
   const [ssoAssignmentMigrationTarget, setSsoAssignmentMigrationTarget] = React.useState<SsoAssignmentMapping | null>(null);
@@ -7889,6 +7909,11 @@ export default function AccessControl() {
                 onCreateGroup={openCreateSsoGroupMapping}
                 onEditGroup={openEditSsoGroupMapping}
                 onDeleteGroup={deleteSsoGroupMapping}
+                onMigrateGroup={(mapping) => {
+                  setSsoGroupMigrationTarget(mapping);
+                  setSsoGroupMigrationProviderKey('');
+                  setSsoGroupMigrationError(null);
+                }}
               />
             )}
           </TabPanel>
@@ -8859,6 +8884,28 @@ export default function AccessControl() {
       </Modal>
 
       <Modal
+        open={Boolean(ssoGroupMigrationTarget)}
+        onRequestClose={() => {
+          setSsoGroupMigrationTarget(null);
+          setSsoGroupMigrationError(null);
+        }}
+        onRequestSubmit={() => ssoGroupMigrationTarget && migrateSsoGroupM.mutate({
+          id: ssoGroupMigrationTarget.id,
+          providerKey: ssoGroupMigrationProviderKey,
+        })}
+        modalHeading="Create provider-neutral group replacement"
+        primaryButtonText={migrateSsoGroupM.isPending ? 'Creating...' : 'Create replacement'}
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={!ssoGroupMappingsManageDecision.allowed || !ssoGroupMigrationProviderKey.trim() || migrateSsoGroupM.isPending}
+      >
+        <p style={{ marginTop: 0, color: 'var(--cds-text-secondary)' }}>
+          This retains the legacy mapping while creating an equivalent identity-to-group mapping for validation. Exact email domains and allowlisted exact custom claims are supported; broad, negated, and regex claims require redesign.
+        </p>
+        {ssoGroupMigrationError && <InlineNotification kind="error" title="Replacement not created" subtitle={ssoGroupMigrationError} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+        <TextInput id="sso-group-migration-provider-key" labelText="Provider-neutral provider key" helperText="For a custom claim, this provider must allowlist the claim key." value={ssoGroupMigrationProviderKey} onChange={(event) => setSsoGroupMigrationProviderKey(event.target.value)} />
+      </Modal>
+
+      <Modal
         open={ssoGroupModalOpen}
         onRequestClose={() => {
           setSsoGroupModalOpen(false);
@@ -9006,10 +9053,10 @@ export default function AccessControl() {
         primaryButtonDisabled={!canManageSsoAssignments || !ssoAssignmentMigrationProviderKey.trim() || !ssoAssignmentMigrationGroupKey.trim() || migrateSsoAssignmentM.isPending}
       >
         <p style={{ marginTop: 0, color: 'var(--cds-text-secondary)' }}>
-          This creates an identity mapping and an equivalent group engine-role assignment while leaving the SSO mapping active for validation. Verify access before disabling the legacy mapping.
+          This creates an identity mapping and an equivalent group engine-role assignment while leaving the SSO mapping active for validation. Exact email domains and allowlisted exact custom claims are supported; broad, negated, and regex claims require redesign. Verify access before disabling the legacy mapping.
         </p>
         {ssoAssignmentMigrationError && <InlineNotification kind="error" title="Replacement not created" subtitle={ssoAssignmentMigrationError} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
-        <TextInput id="sso-assignment-migration-provider-key" labelText="Provider-neutral provider key" helperText="Use the stable key configured in Identity Providers." value={ssoAssignmentMigrationProviderKey} onChange={(event) => setSsoAssignmentMigrationProviderKey(event.target.value)} />
+        <TextInput id="sso-assignment-migration-provider-key" labelText="Provider-neutral provider key" helperText="Use the stable key configured in Identity Providers. For a custom claim, this provider must allowlist the claim key." value={ssoAssignmentMigrationProviderKey} onChange={(event) => setSsoAssignmentMigrationProviderKey(event.target.value)} />
         <TextInput id="sso-assignment-migration-group-key" labelText="Existing EnterpriseGlue group key" helperText="Members of this group receive the exact-engine role. Create a group first in Access Control if needed." value={ssoAssignmentMigrationGroupKey} onChange={(event) => setSsoAssignmentMigrationGroupKey(event.target.value)} />
       </Modal>
 

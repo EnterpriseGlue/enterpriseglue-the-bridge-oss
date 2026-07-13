@@ -304,6 +304,30 @@ describe('ssoGroupMappingService', () => {
     expect(identityEntitlementMappingService.create).toHaveBeenCalledWith({ providerKey: 'entra-main', targetGroupKey: 'ops', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', syncMode: 'authoritative' }, 'tenant-a', expect.anything());
   });
 
+  it('converts an exact email-domain group mapping into the sanitized attribute entitlement', async () => {
+    const legacyMapping = {
+      id: 'legacy-domain-1', tenantId: 'tenant-a', providerId: 'legacy-entra', claimType: 'email_domain', claimKey: 'email', claimValue: '*@enterpriseglue.ai', claimOperator: 'equals',
+      targetGroupId: 'group-1', syncMode: 'authoritative', priority: 0, isActive: true, createdAt: 1, updatedAt: 1,
+    };
+    const provider = { id: 'provider-1', tenantId: 'tenant-a', key: 'entra-main', configurationJson: '{}' };
+    const group = { id: 'group-1', tenantId: 'tenant-a', key: 'enterpriseglue-users', isArchived: false };
+    identityEntitlementMappingService.create.mockResolvedValue({ id: 'identity-domain-1' });
+    const getRepository = (entity: unknown) => {
+      if (entity === SsoGroupMapping) return { findOneBy: vi.fn().mockResolvedValue(legacyMapping) };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(provider) };
+      if (entity === AuthzGroup) return { findOneBy: vi.fn().mockResolvedValue(group) };
+      if (entity === IdentityEntitlementMapping) return { findOne: vi.fn().mockResolvedValue(null) };
+      throw new Error('Unexpected repository');
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: (callback: any) => callback({ getRepository }) });
+
+    await ssoGroupMappingService.migrateToProviderNeutral(legacyMapping.id, provider.key, 'tenant-a');
+
+    expect(identityEntitlementMappingService.create).toHaveBeenCalledWith({
+      providerKey: provider.key, targetGroupKey: group.key, entitlementType: 'attribute', externalId: 'email_domain:enterpriseglue.ai', matchOperator: 'exact', syncMode: 'authoritative',
+    }, 'tenant-a', expect.anything());
+  });
+
   it('refuses automatic conversion of legacy regex mappings', async () => {
     const legacyMapping = {
       id: 'legacy-regex-1', tenantId: null, providerId: null, claimType: 'group', claimKey: 'groups', claimValue: '^ops$', claimOperator: 'matches_regex',

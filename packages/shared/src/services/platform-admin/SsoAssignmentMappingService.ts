@@ -24,9 +24,11 @@ import {
   SYSTEM_ROLE_IDS,
 } from './permissions.js';
 import { authzGroupService } from './AuthzGroupService.js';
-import { identityEntitlementMappingService, type IdentityEntitlementMatchOperator, type ManagedIdentityEntitlementMapping } from './IdentityEntitlementMappingService.js';
+import { identityEntitlementMappingService, type ManagedIdentityEntitlementMapping } from './IdentityEntitlementMappingService.js';
 import { ssoEngineAccessSnapshotService } from './SsoEngineAccessSnapshotService.js';
 import {
+  authorizationAttributeKeysFromConfiguration,
+  providerNeutralLegacyEntitlement,
   ssoClaimMatches,
   type ClaimType,
   type SsoClaimOperator,
@@ -353,23 +355,19 @@ class SsoAssignmentMappingServiceClass {
       if (legacyMapping.targetSelectorType !== 'engine_id' || !legacyMapping.targetEngineId) {
         throw Errors.validation('Only exact engine targets can be migrated automatically. Recreate all-engine, external-id, and label selectors as an explicit group assignment with an Engine Set.');
       }
-      if (legacyMapping.claimType !== 'group' && legacyMapping.claimType !== 'role') {
-        throw Errors.validation('Only group and role claim mappings can be migrated automatically');
+      const needsProviderAttributeAllowlist = legacyMapping.claimType === 'custom' && legacyMapping.claimOperator === 'equals';
+      if (!needsProviderAttributeAllowlist && !providerNeutralLegacyEntitlement(legacyMapping, [])) {
+        throw Errors.validation('Only equals, contains, and exists legacy claim operators can be migrated automatically. Recreate wildcard, negated, and regex mappings explicitly.');
       }
-
-      const matchOperator: IdentityEntitlementMatchOperator | null = legacyMapping.claimOperator === null || legacyMapping.claimOperator === 'equals'
-        ? 'exact'
-        : legacyMapping.claimOperator === 'contains'
-          ? 'contains'
-          : legacyMapping.claimOperator === 'exists'
-            ? 'exists'
-            : null;
-      if (!matchOperator) throw Errors.validation('Only equals, contains, and exists claim operators can be migrated automatically');
-
       const tenantId = normalizeTenantId(legacyMapping.tenantId);
       const providerWhere = tenantId ? { tenantId, key: providerKey } : { tenantId: IsNull(), key: providerKey };
       const provider = await manager.getRepository(IdentityProvider).findOne({ where: providerWhere });
       if (!provider) throw Errors.notFound('Identity provider');
+      const entitlement = providerNeutralLegacyEntitlement(legacyMapping, authorizationAttributeKeysFromConfiguration(provider.configurationJson));
+      if (!entitlement) {
+        throw Errors.validation('Only group/role equals, contains, or exists mappings, exact email-domain mappings, and allowlisted exact custom claims can be migrated automatically. Recreate broad, negated, regex, wildcard, or unallowlisted mappings explicitly.');
+      }
+      const { entitlementType, externalId, matchOperator } = entitlement;
 
       const engine = await manager.getRepository(Engine).findOne({
         where: tenantId
@@ -396,23 +394,21 @@ class SsoAssignmentMappingServiceClass {
         throw Errors.forbidden(`The legacy mapping cannot be converted while its SSO risk controls are disabled: ${disabledReasons.join(', ')}`);
       }
 
-      const externalId = matchOperator === 'exists' ? null : legacyMapping.claimValue.trim();
-      if (matchOperator !== 'exists' && !externalId) throw Errors.validation('The legacy SSO engine assignment mapping has no claim value');
       const existing = await manager.getRepository(IdentityEntitlementMapping).findOne({
         where: {
           tenantId: tenantId || IsNull(), providerId: provider.id, targetGroupId: group.id,
-          entitlementType: legacyMapping.claimType, externalId: externalId === null ? IsNull() : externalId,
+          entitlementType, externalId: externalId === null ? IsNull() : externalId,
           matchOperator, syncMode: legacyMapping.syncMode, isActive: true,
         } as any,
       });
       const identityMapping = existing
         ? {
           id: existing.id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key,
-          entitlementType: legacyMapping.claimType as 'group' | 'role', externalId, matchOperator,
+          entitlementType, externalId, matchOperator,
           syncMode: existing.syncMode as SsoAssignmentSyncMode, isActive: true, configKey: existing.configKey, sourceRef: existing.sourceRef,
         }
         : await identityEntitlementMappingService.create({
-          providerKey: provider.key, targetGroupKey: group.key, entitlementType: legacyMapping.claimType as 'group' | 'role',
+          providerKey: provider.key, targetGroupKey: group.key, entitlementType,
           externalId, matchOperator, syncMode: legacyMapping.syncMode as SsoAssignmentSyncMode,
         }, tenantId, manager);
       const assignment = await permissionService.assignRole({

@@ -11,6 +11,8 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { IsNull, type DataSource, type EntityManager } from 'typeorm';
 import {
+  authorizationAttributeKeysFromConfiguration,
+  providerNeutralLegacyEntitlement,
   ssoClaimMatches,
   type ClaimType,
   type SsoClaimOperator,
@@ -18,7 +20,7 @@ import {
   ssoClaimOperatorIsRegex,
   ssoClaimOperatorRequiresValue,
 } from './SsoClaimsMappingService.js';
-import { identityEntitlementMappingService, type IdentityEntitlementMatchOperator, type ManagedIdentityEntitlementMapping } from './IdentityEntitlementMappingService.js';
+import { identityEntitlementMappingService, type ManagedIdentityEntitlementMapping } from './IdentityEntitlementMappingService.js';
 
 export type SsoGroupMappingSyncMode = 'authoritative' | 'additive';
 
@@ -143,26 +145,6 @@ function mappingUpdateAffectsMemberships(existing: SsoGroupMapping, merged: SsoG
   );
 }
 
-function providerNeutralEntitlementType(mapping: SsoGroupMapping): 'group' | 'role' {
-  if (mapping.claimType === 'group') return 'group';
-  if (mapping.claimType === 'role') return 'role';
-  throw Errors.validation('Only legacy group and role claim mappings can be migrated automatically. Recreate custom and email-domain mappings as an explicit provider-neutral design.');
-}
-
-function providerNeutralMatchOperator(mapping: SsoGroupMapping): IdentityEntitlementMatchOperator {
-  switch (mapping.claimOperator) {
-    case null:
-    case 'equals':
-      return 'exact';
-    case 'contains':
-      return 'contains';
-    case 'exists':
-      return 'exists';
-    default:
-      throw Errors.validation('Only equals, contains, and exists legacy claim operators can be migrated automatically. Recreate wildcard, negated, and regex mappings explicitly.');
-  }
-}
-
 class SsoGroupMappingServiceClass {
   async getAllMappings(tenantId?: string | null): Promise<SsoGroupMappingView[]> {
     const dataSource = await getDataSource();
@@ -217,11 +199,10 @@ class SsoGroupMappingServiceClass {
         throw Errors.forbidden('The legacy SSO group mapping is not available in this tenant');
       }
       if (!legacyMapping.isActive) throw Errors.validation('Only active legacy SSO group mappings can be migrated');
-
-      const entitlementType = providerNeutralEntitlementType(legacyMapping);
-      const matchOperator = providerNeutralMatchOperator(legacyMapping);
-      const externalId = matchOperator === 'exists' ? null : legacyMapping.claimValue.trim();
-      if (matchOperator !== 'exists' && !externalId) throw Errors.validation('The legacy SSO group mapping has no claim value');
+      const needsProviderAttributeAllowlist = legacyMapping.claimType === 'custom' && legacyMapping.claimOperator === 'equals';
+      if (!needsProviderAttributeAllowlist && !providerNeutralLegacyEntitlement(legacyMapping, [])) {
+        throw Errors.validation('Only equals, contains, and exists legacy claim operators can be migrated automatically. Recreate wildcard, negated, and regex mappings explicitly.');
+      }
 
       const [provider, group] = await Promise.all([
         manager.getRepository(IdentityProvider).findOne({ where: normalizedTenantId ? { tenantId: normalizedTenantId, key: normalizedProviderKey } : { tenantId: IsNull(), key: normalizedProviderKey } }),
@@ -230,6 +211,11 @@ class SsoGroupMappingServiceClass {
       if (!provider) throw Errors.notFound('Identity provider not found');
       if (!group || group.isArchived) throw Errors.notFound('Target group');
       if ((group.tenantId || null) !== normalizedTenantId) throw Errors.validation('The legacy mapping target group and replacement identity provider must use the same tenant scope');
+      const entitlement = providerNeutralLegacyEntitlement(legacyMapping, authorizationAttributeKeysFromConfiguration(provider.configurationJson));
+      if (!entitlement) {
+        throw Errors.validation('Only group/role equals, contains, or exists mappings, exact email-domain mappings, and allowlisted exact custom claims can be migrated automatically. Recreate broad, negated, regex, wildcard, or unallowlisted mappings explicitly.');
+      }
+      const { entitlementType, externalId, matchOperator } = entitlement;
 
       const existing = await manager.getRepository(IdentityEntitlementMapping).findOne({
         where: {

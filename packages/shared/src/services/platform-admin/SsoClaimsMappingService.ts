@@ -171,11 +171,27 @@ function normalizeEmailDomainValue(value: string): string {
   return atIndex >= 0 ? normalized.slice(atIndex + 1) : normalized;
 }
 
-function migrationEntitlement(legacy: SsoClaimsMapping, authorizationAttributeKeys: string[]): {
+export interface ProviderNeutralLegacyEntitlement {
   entitlementType: 'group' | 'role' | 'attribute';
   externalId: string | null;
   matchOperator: 'exact' | 'contains' | 'exists';
-} | null {
+}
+
+export function authorizationAttributeKeysFromConfiguration(configurationJson: string | null | undefined): string[] {
+  try {
+    const configured = JSON.parse(configurationJson || '{}').authorizationAttributeKeys;
+    return Array.isArray(configured)
+      ? configured.filter((key): key is string => typeof key === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function providerNeutralLegacyEntitlement(
+  legacy: Pick<SsoClaimsMapping, 'claimType' | 'claimKey' | 'claimValue' | 'claimOperator'>,
+  authorizationAttributeKeys: string[],
+): ProviderNeutralLegacyEntitlement | null {
   if (legacy.claimType === 'group' || legacy.claimType === 'role') {
     const matchOperator = legacy.claimOperator === null || legacy.claimOperator === 'equals'
       ? 'exact'
@@ -353,14 +369,7 @@ class SsoClaimsMappingServiceClass {
       if (!legacy.isActive) throw Errors.validation('Only active SSO mappings can be migrated');
       const provider = await manager.getRepository(IdentityProvider).findOne({ where: { key: providerKey, tenantId: IsNull() } });
       if (!provider) throw Errors.notFound('Global provider-neutral identity provider');
-      let authorizationAttributeKeys: string[] = [];
-      try {
-        const configured = JSON.parse(provider.configurationJson).authorizationAttributeKeys;
-        authorizationAttributeKeys = Array.isArray(configured) ? configured.filter((key): key is string => typeof key === 'string') : [];
-      } catch {
-        // A malformed stored configuration cannot authorize a custom-claim conversion.
-      }
-      const entitlement = migrationEntitlement(legacy, authorizationAttributeKeys);
+      const entitlement = providerNeutralLegacyEntitlement(legacy, authorizationAttributeKeysFromConfiguration(provider.configurationJson));
       if (!entitlement) throw Errors.validation('Only exact group, role, email-domain, and allowlisted custom-claim mappings plus group or role contains/exists mappings can be migrated automatically');
       const targetGroupKey = input.newGroup?.key || input.targetGroupKey!.trim();
       const groupRepo = manager.getRepository(AuthzGroup);
