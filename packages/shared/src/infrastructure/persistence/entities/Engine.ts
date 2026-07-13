@@ -104,6 +104,10 @@ export class Engine extends AppBaseEntity {
   @Column({ name: 'deployment_integration', type: 'text', default: 'enterpriseglue_proxy' })
   deploymentIntegration!: string;
 
+  /** Allows an engine to opt out of scheduled metadata discovery. */
+  @Column({ name: 'metadata_discovery_enabled', type: 'boolean', default: true })
+  metadataDiscoveryEnabled!: boolean;
+
   /** Direct connection or a customer-managed sidecar/gateway endpoint. */
   @Column({ name: 'connection_mode', type: 'text', default: 'direct' })
   connectionMode!: string;

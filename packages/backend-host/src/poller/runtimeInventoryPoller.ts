@@ -59,6 +59,7 @@ export async function runScheduledRuntimeInventoryReconciliationOnce(
   const engineRepo = (await getDataSource()).getRepository(Engine);
   const engines = await engineRepo.find({ where: { runtimeAccessScope: 'resource_aware' } });
   const candidates = engines.filter((engine) => engine.runtimeAccessScope === 'resource_aware'
+    && engine.metadataDiscoveryEnabled !== false
     && tenantIds.includes(engine.tenantId || null)
     && (engine.lifecycleStatus || 'active') === 'active');
   const results: RuntimeInventoryReconciliationResult[] = [];
