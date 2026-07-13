@@ -9,7 +9,7 @@ import type { IdentityProvider } from '@enterpriseglue/shared/infrastructure/per
 import type { OidcIdentityClaims } from './GenericOidcService.js';
 import type { IdentityProviderType } from './IdentityProviderAdapter.js';
 
-export interface ProvisionedIdentityUser { id: string; email: string; firstName: string | null; lastName: string | null; platformRole: string; isActive: boolean; }
+export interface ProvisionedIdentityUser { id: string; email: string; firstName: string | null; lastName: string | null; isActive: boolean; }
 export interface ProvisionIdentityInput {
   providerType: IdentityProviderType; subjectId: string; email: string; emailVerified: boolean; displayName?: string | null;
   firstName?: string | null; lastName?: string | null; directoryTenantId?: string | null; claims: Record<string, unknown>;
@@ -90,7 +90,7 @@ class IdentityProviderProvisioningService {
         tenantId: provider.tenantId, providerId: provider.id, providerType: input.providerType, providerSubject: input.subjectId, subjectClaim: input.providerType === 'ldap' ? 'directory_id' : 'sub', providerTenantId: input.directoryTenantId || provider.directoryTenantId, userId: user.id, email, displayName: input.displayName || null, firstName: input.firstName || null, lastName: input.lastName || null, claims: input.claims, authorizationAttributeKeys: authorizationAttributeKeys(provider), now,
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, user.id);
-      return { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, platformRole: user.platformRole, isActive: user.isActive };
+      return { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, isActive: user.isActive };
     });
   }
 }

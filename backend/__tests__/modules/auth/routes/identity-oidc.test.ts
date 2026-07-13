@@ -38,9 +38,9 @@ describe('provider-neutral OIDC routes', () => {
     identityProviderService.listEnabledDirectLoginProviders.mockResolvedValue([provider]);
     genericOidcService.createAuthorizationRequest.mockResolvedValue({ url: 'https://issuer.example.test/authorize', codeVerifier: 'verifier' });
     genericOidcService.exchangeCode.mockResolvedValue({ sub: 'subject-1', email: 'person@example.test', nonce: 'nonce' });
-    identityProviderProvisioningService.provisionOidcUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', platformRole: 'user', isActive: true });
-    identityProviderProvisioningService.provisionLdapUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', platformRole: 'user', isActive: true });
-    identityProviderProvisioningService.provisionSamlUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', platformRole: 'user', isActive: true });
+    identityProviderProvisioningService.provisionOidcUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
+    identityProviderProvisioningService.provisionLdapUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
+    identityProviderProvisioningService.provisionSamlUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
     directLdapIdentityService.authenticate.mockResolvedValue({ subjectId: 'ldap-user-1', email: 'person@example.test', displayName: 'Person', firstName: 'Person', lastName: 'Example', groups: ['ops'] });
     genericSamlService.createAuthorizationRequest.mockResolvedValue({ url: 'https://idp.example.test/sso?SAMLRequest=request', entryPoint: 'https://idp.example.test/sso' });
     genericSamlService.validatePostResponse.mockResolvedValue({ nameID: 'person@example.test', groups: ['ops'] });
