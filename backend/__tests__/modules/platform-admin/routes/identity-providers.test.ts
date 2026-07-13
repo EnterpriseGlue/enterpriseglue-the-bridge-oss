@@ -16,6 +16,7 @@ const service = vi.hoisted(() => ({
   failRun: vi.fn(),
   listRuns: vi.fn(),
   testConnection: vi.fn(),
+  testSamlMetadata: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -34,6 +35,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentitySer
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun, listRuns: service.listRuns } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService: { testConnection: service.testConnection } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService: { listDirectoryPage: vi.fn() } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SamlMetadataService.js', () => ({ samlMetadataService: { testConnection: service.testSamlMetadata } }));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }));
 
 const provider = {
@@ -58,6 +60,7 @@ describe('identity provider routes', () => {
     service.failRun.mockResolvedValue(undefined);
     service.listRuns.mockResolvedValue([{ id: 'sync-run-1', status: 'success', trigger: 'manual', startedAt: 10, completedAt: 11, groupMembershipsCreated: 1, groupMembershipsRemoved: 0, errorMessage: null }]);
     service.testConnection.mockResolvedValue({ issuer: 'https://login.example.test', authorizationEndpoint: 'https://login.example.test/auth', tokenEndpoint: 'https://login.example.test/token', jwksUri: 'https://login.example.test/jwks' });
+    service.testSamlMetadata.mockResolvedValue({ metadataUrl: 'https://idp.example.test/metadata.xml', entityDescriptorCount: 2 });
     app = express();
     app.use(express.json());
     app.use(identityProvidersRouter);
@@ -85,6 +88,16 @@ describe('identity provider routes', () => {
     expect(response.body).toEqual({ status: 'connected', protocol: 'oidc', issuer: 'https://login.example.test' });
     expect(service.testConnection).toHaveBeenCalledWith(JSON.parse(provider.configurationJson));
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.connection_test', resourceId: 'provider-1' }));
+  });
+
+  it('tests SAML metadata and returns a sanitized descriptor count', async () => {
+    service.getByKey.mockResolvedValue({ ...provider, protocol: 'saml', configurationJson: JSON.stringify({ entityId: 'enterpriseglue', callbackUrl: 'https://app.example.test/callback', metadataUrl: 'https://idp.example.test/metadata.xml' }) });
+
+    const response = await request(app).post('/api/identity/providers/entra/test-connection');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'connected', protocol: 'saml', entityDescriptorCount: 2 });
+    expect(service.testSamlMetadata).toHaveBeenCalledWith(expect.stringContaining('metadata.xml'));
   });
 
   it('creates a provider and audits sanitized definition metadata', async () => {
