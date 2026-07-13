@@ -89,7 +89,7 @@ export const DEFAULT_PLATFORM_GROUP_IDS = {
 } as const;
 
 const AUTHENTICATED_USER_BASELINE_SOURCE_REF = 'authenticated-user-baseline';
-const BOOTSTRAP_PLATFORM_ADMIN_SOURCE_REF = 'bootstrap-platform-administrator';
+const LEGACY_PLATFORM_ADMIN_SOURCE_REF = 'legacy-platform-role-administrator';
 
 export const DEFAULT_PLATFORM_GROUPS = [
   {
@@ -516,7 +516,7 @@ export class AuthzGroupService {
     );
   }
 
-  async ensureBootstrapPlatformAdministratorMembershipWithManager(
+  async ensureLegacyPlatformAdministratorMembershipWithManager(
     manager: EntityManager,
     userId: string
   ): Promise<{ id: string; created: boolean }> {
@@ -524,8 +524,39 @@ export class AuthzGroupService {
       manager,
       DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
       userId,
-      BOOTSTRAP_PLATFORM_ADMIN_SOURCE_REF
+      LEGACY_PLATFORM_ADMIN_SOURCE_REF
     );
+  }
+
+  async removeLegacyPlatformAdministratorMembershipWithManager(
+    manager: EntityManager,
+    userId: string
+  ): Promise<{ removed: boolean }> {
+    const membershipRepo = manager.getRepository(AuthzGroupMembership);
+    const membership = await membershipRepo.findOneBy({
+      groupId: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+      userId,
+      source: 'system',
+      sourceRef: LEGACY_PLATFORM_ADMIN_SOURCE_REF,
+    });
+    if (!membership) return { removed: false };
+
+    await membershipRepo.delete({ id: membership.id });
+    await recordGroupAudit(manager, {
+      tenantId: null,
+      userId: null,
+      action: 'authz.group_membership.legacy_platform_admin_remove',
+      resourceType: 'authz_group_membership',
+      resourceId: membership.id,
+      details: {
+        membershipId: membership.id,
+        groupId: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+        userId,
+        source: 'system',
+        sourceRef: LEGACY_PLATFORM_ADMIN_SOURCE_REF,
+      },
+    });
+    return { removed: true };
   }
 
   async backfillAuthenticatedUserMemberships(
@@ -581,6 +612,86 @@ export class AuthzGroupService {
           groupId: group.id,
           source: 'system',
           sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+          scanned: userIds.length,
+          created: missingUserIds.length,
+        },
+      });
+      return { scanned: userIds.length, created: missingUserIds.length };
+    });
+  }
+
+  async backfillLegacyPlatformAdministratorMemberships(
+    providedDataSource?: DataSource,
+    now: number = Date.now()
+  ): Promise<{ scanned: number; created: number }> {
+    const dataSource = providedDataSource || await getDataSource();
+    return this.backfillSystemGroupMemberships(dataSource, {
+      groupId: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+      sourceRef: LEGACY_PLATFORM_ADMIN_SOURCE_REF,
+      userWhere: { isActive: true, platformRole: 'admin' },
+      now,
+      auditAction: 'authz.group_membership.legacy_platform_admin_backfill',
+    });
+  }
+
+  private async backfillSystemGroupMemberships(
+    dataSource: DataSource,
+    input: {
+      groupId: string;
+      sourceRef: string;
+      userWhere: Record<string, unknown>;
+      now: number;
+      auditAction: string;
+    }
+  ): Promise<{ scanned: number; created: number }> {
+    return dataSource.transaction(async (manager) => {
+      const group = await manager.getRepository(AuthzGroup).findOneBy({ id: input.groupId });
+      if (!group || group.isArchived || group.source !== 'system' || group.tenantId !== null) {
+        throw new Error('Required system authorization group is unavailable');
+      }
+
+      const users = await manager.getRepository(User).find({
+        where: input.userWhere as any,
+        select: ['id'],
+      });
+      const userIds = users.map((user) => user.id);
+      if (userIds.length === 0) return { scanned: 0, created: 0 };
+
+      const membershipRepo = manager.getRepository(AuthzGroupMembership);
+      const existing = await membershipRepo.find({
+        where: {
+          groupId: group.id,
+          source: 'system',
+          sourceRef: input.sourceRef,
+        },
+        select: ['userId'],
+      });
+      const existingUserIds = new Set(existing.map((membership) => membership.userId));
+      const missingUserIds = userIds.filter((userId) => !existingUserIds.has(userId));
+      if (missingUserIds.length === 0) return { scanned: userIds.length, created: 0 };
+
+      await membershipRepo.insert(missingUserIds.map((userId) => ({
+        id: generateId(),
+        tenantId: null,
+        groupId: group.id,
+        userId,
+        source: 'system',
+        sourceRef: input.sourceRef,
+        expiresAt: null,
+        createdById: null,
+        createdAt: input.now,
+        updatedAt: input.now,
+      })));
+      await recordGroupAudit(manager, {
+        tenantId: null,
+        userId: null,
+        action: input.auditAction,
+        resourceType: 'authz_group',
+        resourceId: group.id,
+        details: {
+          groupId: group.id,
+          source: 'system',
+          sourceRef: input.sourceRef,
           scanned: userIds.length,
           created: missingUserIds.length,
         },

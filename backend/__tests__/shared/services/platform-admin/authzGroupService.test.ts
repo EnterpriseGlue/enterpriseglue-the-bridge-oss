@@ -300,6 +300,34 @@ describe('authzGroupService', () => {
     }));
   });
 
+  it('removes only the legacy-derived platform-administrator membership on demotion', async () => {
+    const membershipRepo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'legacy-admin-membership-1' }),
+      delete: vi.fn(),
+    };
+    const auditRepo = { insert: vi.fn() };
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroupMembership) return membershipRepo;
+        if (entity === AuditLog) return auditRepo;
+        throw new Error('Unexpected repository');
+      },
+    };
+
+    await expect(authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager(manager as any, 'user-1'))
+      .resolves.toEqual({ removed: true });
+    expect(membershipRepo.findOneBy).toHaveBeenCalledWith({
+      groupId: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+      userId: 'user-1',
+      source: 'system',
+      sourceRef: 'legacy-platform-role-administrator',
+    });
+    expect(membershipRepo.delete).toHaveBeenCalledWith({ id: 'legacy-admin-membership-1' });
+    expect(auditRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.group_membership.legacy_platform_admin_remove',
+    }));
+  });
+
   it('rejects manual mutations for config-managed groups and memberships', async () => {
     const groupRepo = {
       findOneBy: vi.fn().mockResolvedValue({

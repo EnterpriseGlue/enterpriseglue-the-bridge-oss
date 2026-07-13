@@ -200,7 +200,7 @@ export class UserService {
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
       if (normalizedPlatformRole === 'admin') {
-        await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, userId);
+        await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, userId);
       }
       return userRepo.findOneBy({ id: userId });
     });
@@ -249,7 +249,7 @@ export class UserService {
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
       if (normalizedPlatformRole === 'admin') {
-        await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, userId);
+        await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, userId);
       }
       return userRepo.findOneBy({ id: userId });
     });
@@ -261,20 +261,30 @@ export class UserService {
    */
   async updateUser(id: string, input: UpdateUserInput): Promise<UserDTO> {
     const dataSource = await getDataSource();
-    const userRepo = dataSource.getRepository(User);
+    const user = await dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+      const existing = await userRepo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('User', id);
 
-    const existing = await userRepo.findOneBy({ id });
-    if (!existing) throw Errors.notFound('User', id);
+      const updateData: any = { updatedAt: Date.now() };
+      if (input.firstName !== undefined) updateData.firstName = input.firstName;
+      if (input.lastName !== undefined) updateData.lastName = input.lastName;
+      if (input.platformRole !== undefined) updateData.platformRole = normalizeRoleValue(input.platformRole);
+      if (input.isActive !== undefined) updateData.isActive = input.isActive;
 
-    const updateData: any = { updatedAt: Date.now() };
-    if (input.firstName !== undefined) updateData.firstName = input.firstName;
-    if (input.lastName !== undefined) updateData.lastName = input.lastName;
-    if (input.platformRole !== undefined) updateData.platformRole = normalizeRoleValue(input.platformRole);
-    if (input.isActive !== undefined) updateData.isActive = input.isActive;
-
-    await userRepo.update({ id }, updateData);
-
-    const user = await userRepo.findOneBy({ id });
+      await userRepo.update({ id }, updateData);
+      const nextPlatformRole = updateData.platformRole ?? normalizeRoleValue(existing.platformRole);
+      const nextIsActive = updateData.isActive ?? existing.isActive;
+      if (nextIsActive) {
+        await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, id);
+      }
+      if (nextPlatformRole === 'admin') {
+        await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, id);
+      } else if (input.platformRole !== undefined) {
+        await authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager(manager, id);
+      }
+      return userRepo.findOneBy({ id });
+    });
     return toUserDTO(user!);
   }
 

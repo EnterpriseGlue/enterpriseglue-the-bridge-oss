@@ -56,7 +56,7 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
       await manager.getRepository(User).save(admin);
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, adminId);
       if (allowPlatformAdmin) {
-        await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, adminId);
+        await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, adminId);
       }
     });
 

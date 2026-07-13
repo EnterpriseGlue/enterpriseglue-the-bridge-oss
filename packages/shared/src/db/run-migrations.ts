@@ -574,6 +574,13 @@ export async function seedInitialData() {
   }
 
   try {
+    const result = await authzGroupService.backfillLegacyPlatformAdministratorMemberships(dataSource, now);
+    console.log(`  ✅ legacy platform-admin memberships reconciled (${result.created} created across ${result.scanned} active admins)`);
+  } catch (error: any) {
+    console.log('  Note: legacy platform-admin membership backfill:', error.message);
+  }
+
+  try {
     const result = await permissionService.syncLegacyRoleAssignments({ now }, dataSource);
     console.log(`  ✅ legacy role assignments synced (${result.upserted} upserted, ${result.removed} removed)`);
   } catch (error: any) {

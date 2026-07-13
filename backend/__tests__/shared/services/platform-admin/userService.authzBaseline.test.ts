@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const dataSource = vi.hoisted(() => ({ transaction: vi.fn() }));
 const authzGroupService = vi.hoisted(() => ({
   ensureAuthenticatedUserMembershipWithManager: vi.fn(),
-  ensureBootstrapPlatformAdministratorMembershipWithManager: vi.fn(),
+  ensureLegacyPlatformAdministratorMembershipWithManager: vi.fn(),
+  removeLegacyPlatformAdministratorMembershipWithManager: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn(async () => dataSource) }));
@@ -22,7 +23,8 @@ describe('UserService authorization baseline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authzGroupService.ensureAuthenticatedUserMembershipWithManager.mockResolvedValue({ id: 'baseline-1', created: true });
-    authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager.mockResolvedValue({ id: 'admin-1', created: true });
+    authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager.mockResolvedValue({ id: 'admin-1', created: true });
+    authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager.mockResolvedValue({ removed: true });
   });
 
   function mockCreateTransaction(platformRole: 'admin' | 'user') {
@@ -44,6 +46,7 @@ describe('UserService authorization baseline', () => {
     const userRepo = {
       createQueryBuilder: vi.fn(() => ({ getOne: vi.fn().mockResolvedValue(null) })),
       insert: vi.fn(),
+      update: vi.fn(),
       findOneBy: vi.fn().mockResolvedValue(user),
     };
     const manager = { getRepository: vi.fn(() => userRepo) };
@@ -61,7 +64,7 @@ describe('UserService authorization baseline', () => {
 
     expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'user' }));
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
-    expect(authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
+    expect(authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
   });
 
   it('adds the platform-administrator system group when a legacy admin is created', async () => {
@@ -75,6 +78,27 @@ describe('UserService authorization baseline', () => {
 
     expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'admin' }));
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
-    expect(authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
+    expect(authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
+  });
+
+  it('removes only the legacy-derived administrator membership when a user is demoted', async () => {
+    const { manager, userRepo } = mockCreateTransaction('admin');
+    userRepo.findOneBy
+      .mockResolvedValueOnce({
+        id: 'user-1', email: 'admin@example.test', firstName: null, lastName: null,
+        platformRole: 'admin', authProvider: 'local', isActive: true, isEmailVerified: true,
+        mustResetPassword: false, createdAt: 1, updatedAt: 1, lastLoginAt: null, createdByUserId: 'actor-1',
+      })
+      .mockResolvedValueOnce({
+        id: 'user-1', email: 'admin@example.test', firstName: null, lastName: null,
+        platformRole: 'user', authProvider: 'local', isActive: true, isEmailVerified: true,
+        mustResetPassword: false, createdAt: 1, updatedAt: 2, lastLoginAt: null, createdByUserId: 'actor-1',
+      });
+
+    await userService.updateUser('user-1', { platformRole: 'user' });
+
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
+    expect(authzGroupService.removeLegacyPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
+    expect(authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
   });
 });
