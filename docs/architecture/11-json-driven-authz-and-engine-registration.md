@@ -1856,9 +1856,10 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Extract role-assignment and group routes into `routes/authz/assignments.ts`, retaining scoped-manager assignment/removal boundaries and manual group membership behavior.
 - [x] ✅ Extract project-engine target CRUD, deployment eligibility, and Mission Control/Starbase bridge evaluations into `routes/authz/project-engine-targets.ts` with their existing action resolvers.
 - [x] ✅ Extract authorization-audit reads into `routes/authz/audit.ts`, retaining the existing platform audit action and query bounds.
-- [x] ✅ Extract external-engine tenant visibility, JSON serialization, and capability/materialization diagnostics into focused helpers; the remaining external registration routes still need their own router module.
+- [x] ✅ Extract external-engine tenant visibility, JSON serialization, field ownership, and capability/materialization diagnostics into focused helpers shared by registration routes.
 - [x] ✅ Extract external engine system catalog CRUD into `routes/authz/external-engine-systems.ts`, with shared field-ownership normalization used by catalog and inventory responses.
-- [ ] ⬜ Split the remaining `packages/backend-host/src/modules/platform-admin/routes/authz.ts` families into focused identity and external registration routers.
+- [x] ✅ Extract external engine inventory, audit, lifecycle, reconciliation, and tenant isolation into `routes/authz/external-engines.ts`; focused route coverage proves behavior and cross-tenant denial are retained.
+- [ ] ⬜ Split the remaining identity/SSO mapping families from `packages/backend-host/src/modules/platform-admin/routes/authz.ts` into focused routers.
 - [x] ✅ Add the external machine-authenticated deployment receipt route with API deployment eligibility, action/OpenAPI metadata, audit logging, and inventory materialization. Runtime scope settings, inventory reads, and reconciliation routes remain pending.
 - [x] ✅ Update `packages/backend-host/src/modules/mission-control/engines/routes.ts` manual engine create/update/list/detail schemas and serializers, including runtime scope, deployment integration, metadata discovery, pipeline receipt ingestion, managed-field protection, and canonical deployment-history reads.
 - [ ] ⬜ Update auth start/callback routes and provider services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit.
@@ -2187,7 +2188,7 @@ This phase is required because the current implementation still carries compatib
 #### Module Boundaries
 
 - [ ] ⬜ Split the 8k+ line Access Control page into tab/domain components before adding Identity, Config Imports, and Runtime Resources.
-- [ ] ⬜ Split the platform authz router into identity and external registration routers. Roles/permissions, assignments/groups, project-engine targets/bridges, engine sets/runtime resources, policies, machines, configuration bundles, and audit are already isolated.
+- [x] ✅ Split external registration into focused system and engine routers. Roles/permissions, assignments/groups, project-engine targets/bridges, engine sets/runtime resources, policies, machines, configuration bundles, audit, and external registration are now isolated; identity/SSO mappings remain in the parent router.
 - [ ] ⬜ Split action and OpenAPI registrations into domain modules with aggregate validation exports so strict inventory guards remain authoritative.
 - [ ] ⬜ Keep shared types generated/imported from shared schemas instead of duplicating hand-maintained frontend interfaces.
 
