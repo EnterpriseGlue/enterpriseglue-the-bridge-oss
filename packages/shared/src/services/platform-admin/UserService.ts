@@ -185,7 +185,7 @@ export class UserService {
     const now = Date.now();
 
     const dataSource = await getDataSource();
-    const user = await dataSource.transaction(async (manager) => {
+    const result = await dataSource.transaction(async (manager) => {
       const userRepo = manager.getRepository(User);
       let existingQb = userRepo.createQueryBuilder('u');
       existingQb = addCaseInsensitiveEquals(existingQb, 'u', 'email', 'email', email);
@@ -198,7 +198,9 @@ export class UserService {
         passwordHash,
         firstName: firstName || null,
         lastName: lastName || null,
-        platformRole: normalizedPlatformRole,
+        // Compatibility storage is intentionally non-privileged. Effective
+        // administration is represented by the canonical group membership.
+        platformRole: 'user',
         isActive: true,
         mustResetPassword: true,
         failedLoginAttempts: 0,
@@ -213,11 +215,13 @@ export class UserService {
       if (normalizedPlatformRole === 'admin') {
         await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, userId);
       }
-      return userRepo.findOneBy({ id: userId });
+      const user = await userRepo.findOneBy({ id: userId });
+      const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([userId], manager);
+      return { user, platformAdministratorUserIds };
     });
 
     return {
-      user: toUserDTO(user!),
+      user: toUserDTO(result.user!, { platformAdministratorUserIds: result.platformAdministratorUserIds }),
       temporaryPassword,
       verificationToken,
     };
@@ -231,7 +235,7 @@ export class UserService {
     const now = Date.now();
 
     const dataSource = await getDataSource();
-    const user = await dataSource.transaction(async (manager) => {
+    const result = await dataSource.transaction(async (manager) => {
       const userRepo = manager.getRepository(User);
       let existingQb = userRepo.createQueryBuilder('u');
       existingQb = addCaseInsensitiveEquals(existingQb, 'u', 'email', 'email', normalizedEmail);
@@ -245,7 +249,7 @@ export class UserService {
         passwordHash: null,
         firstName: firstName || null,
         lastName: lastName || null,
-        platformRole: normalizedPlatformRole,
+        platformRole: 'user',
         isActive: true,
         mustResetPassword: false,
         failedLoginAttempts: 0,
@@ -262,9 +266,11 @@ export class UserService {
       if (normalizedPlatformRole === 'admin') {
         await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, userId);
       }
-      return userRepo.findOneBy({ id: userId });
+      const user = await userRepo.findOneBy({ id: userId });
+      const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([userId], manager);
+      return { user, platformAdministratorUserIds };
     });
-    return toUserDTO(user!);
+    return toUserDTO(result.user!, { platformAdministratorUserIds: result.platformAdministratorUserIds });
   }
 
   /**
@@ -272,7 +278,7 @@ export class UserService {
    */
   async updateUser(id: string, input: UpdateUserInput): Promise<UserDTO> {
     const dataSource = await getDataSource();
-    const user = await dataSource.transaction(async (manager) => {
+    const result = await dataSource.transaction(async (manager) => {
       const userRepo = manager.getRepository(User);
       const existing = await userRepo.findOneBy({ id });
       if (!existing) throw Errors.notFound('User', id);
@@ -280,23 +286,25 @@ export class UserService {
       const updateData: any = { updatedAt: Date.now() };
       if (input.firstName !== undefined) updateData.firstName = input.firstName;
       if (input.lastName !== undefined) updateData.lastName = input.lastName;
-      if (input.platformRole !== undefined) updateData.platformRole = normalizeRoleValue(input.platformRole);
       if (input.isActive !== undefined) updateData.isActive = input.isActive;
 
       await userRepo.update({ id }, updateData);
-      const nextPlatformRole = updateData.platformRole ?? normalizeRoleValue(existing.platformRole);
       const nextIsActive = updateData.isActive ?? existing.isActive;
       if (nextIsActive) {
         await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, id);
       }
-      if (nextPlatformRole === 'admin') {
-        await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, id);
-      } else if (input.platformRole !== undefined) {
-        await authzGroupService.removeManualPlatformAdministratorMembershipWithManager(manager, id);
+      if (input.platformRole !== undefined) {
+        if (normalizeRoleValue(input.platformRole) === 'admin') {
+          await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, id);
+        } else {
+          await authzGroupService.removeManualPlatformAdministratorMembershipWithManager(manager, id);
+        }
       }
-      return userRepo.findOneBy({ id });
+      const updatedUser = await userRepo.findOneBy({ id });
+      const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([id], manager);
+      return { user: updatedUser, platformAdministratorUserIds };
     });
-    return toUserDTO(user!);
+    return toUserDTO(result.user!, { platformAdministratorUserIds: result.platformAdministratorUserIds });
   }
 
   /**
