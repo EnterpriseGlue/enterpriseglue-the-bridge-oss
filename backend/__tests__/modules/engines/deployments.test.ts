@@ -535,4 +535,19 @@ describe('engines deployments routes', () => {
       mode: 'api',
     }));
   });
+
+  it('rejects pipeline receipts when the engine disables receipt ingestion', async () => {
+    mockEngine.deploymentIntegration = 'direct_engine';
+    mockEngine.pipelineReceiptEnabled = false;
+
+    const response = await request(app)
+      .post('/engines-api/external/engines/e1/deployment-receipts')
+      .set('Authorization', 'Bearer token-1')
+      .send({
+        idempotencyKey: 'release-2026-07-13-disabled', projectId: 'project-1', engineDeploymentId: 'camunda-deployment-1',
+        artifacts: [{ resourceKind: 'process_definition', resourceKey: 'payments-order', version: 1 }],
+      });
+
+    expect(response.status).toBe(409);
+  });
 });
