@@ -10,7 +10,9 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ssoClaimsMappingService, type SsoClaims } from './platform-admin/SsoClaimsMappingService.js';
+import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIdentityService.js';
 import { ssoProviderService } from './platform-admin/SsoProviderService.js';
+import { ssoSyncDiagnosticsService, type SsoSyncCounts } from './platform-admin/SsoSyncDiagnosticsService.js';
 
 /**
  * Google user info from ID token
@@ -162,13 +164,37 @@ export function extractGoogleUserInfo(payload: any): GoogleUserInfo {
   };
 }
 
+async function syncGoogleAuthorizationForUser(
+  manager: any,
+  userId: string,
+  userInfo: GoogleUserInfo,
+  ssoClaims: SsoClaims
+): Promise<SsoSyncCounts> {
+  const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
+    providerId: 'google',
+    providerType: 'google',
+    providerSubject: userInfo.sub,
+    subjectClaim: 'sub',
+    providerTenantId: userInfo.hd || null,
+    userId,
+    email: userInfo.email,
+    displayName: userInfo.name || null,
+    firstName: userInfo.given_name || null,
+    lastName: userInfo.family_name || null,
+    claims: ssoClaims,
+  });
+  return {
+    groupMembershipsCreated: normalizedIdentitySync.groupMembershipsCreated || 0,
+    groupMembershipsRemoved: normalizedIdentitySync.groupMembershipsRemoved || 0,
+  };
+}
+
 /**
  * Create or update user from Google authentication
  * Just-In-Time (JIT) provisioning with SSO claims-based role mapping
  */
 export async function provisionGoogleUser(userInfo: GoogleUserInfo) {
   const dataSource = await getDataSource();
-  const userRepo = dataSource.getRepository(User);
   const now = Date.now();
   
   // Resolve platform role from SSO claims
@@ -185,86 +211,64 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo) {
     hd: userInfo.hd,
     resolvedRole,
   });
-  
-  // Check if user exists by googleId
-  const existingByGoogleId = await userRepo.findOneBy({ googleId: userInfo.sub });
-  
-  if (existingByGoogleId) {
-    // User exists - update profile and last login
-    const user = existingByGoogleId;
-    const currentRole = user.platformRole || 'user';
-    const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
-    
-    await userRepo.update({ id: user.id }, {
-      email: userInfo.email,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-      platformRole,
-      lastLoginAt: now,
-      updatedAt: now,
-    });
-    
-    return {
-      ...user,
-      email: userInfo.email,
-      platformRole,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-    };
-  }
-  
-  // Check if user exists by email
-  const existingByEmail = await userRepo.findOneBy({ email: userInfo.email });
-  
-  if (existingByEmail) {
-    // Email exists but not linked to Google - link the accounts
-    const user = existingByEmail;
-    const currentRole = user.platformRole || 'user';
-    const platformRole = currentRole === 'admin' ? 'admin' : resolvedRole;
-    
-    await userRepo.update({ id: user.id }, {
-      authProvider: 'google',
-      googleId: userInfo.sub,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-      platformRole,
-      lastLoginAt: now,
-      updatedAt: now,
-      mustResetPassword: false,
-      failedLoginAttempts: 0,
-      lockedUntil: null,
-    });
-    
-    return {
-      ...user,
-      authProvider: 'google',
-      googleId: userInfo.sub,
-      platformRole,
-      firstName: userInfo.given_name || user.firstName,
-      lastName: userInfo.family_name || user.lastName,
-    };
-  }
-  
-  // New user - create account with SSO-resolved role
-  const userId = generateId();
-  
-  await userRepo.insert({
-    id: userId,
-    email: userInfo.email,
-    authProvider: 'google',
-    passwordHash: null,
-    googleId: userInfo.sub,
-    firstName: userInfo.given_name || null,
-    lastName: userInfo.family_name || null,
-    platformRole: resolvedRole,
-    isActive: true,
-    mustResetPassword: false,
-    failedLoginAttempts: 0,
-    createdAt: now,
-    updatedAt: now,
-    lastLoginAt: now,
+
+  const runId = await ssoSyncDiagnosticsService.startRun({
+    providerId: 'google',
+    trigger: 'login',
+    details: { email: userInfo.email, hostedDomain: userInfo.hd || null },
   });
-  
-  const newUser = await userRepo.findOneBy({ id: userId });
-  return newUser;
+  let syncCounts: SsoSyncCounts = {};
+
+  try {
+    const result = await dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+      const existingByGoogleId = await userRepo.findOneBy({ googleId: userInfo.sub });
+
+      if (existingByGoogleId) {
+        const user = existingByGoogleId;
+        const platformRole = (user.platformRole || 'user') === 'admin' ? 'admin' : resolvedRole;
+        await userRepo.update({ id: user.id }, {
+          email: userInfo.email,
+          firstName: userInfo.given_name || user.firstName,
+          lastName: userInfo.family_name || user.lastName,
+          platformRole,
+          lastLoginAt: now,
+          updatedAt: now,
+        });
+        syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims);
+        return { ...user, email: userInfo.email, platformRole, firstName: userInfo.given_name || user.firstName, lastName: userInfo.family_name || user.lastName };
+      }
+
+      const existingByEmail = await userRepo.findOneBy({ email: userInfo.email });
+      if (existingByEmail) {
+        const user = existingByEmail;
+        const platformRole = (user.platformRole || 'user') === 'admin' ? 'admin' : resolvedRole;
+        await userRepo.update({ id: user.id }, {
+          authProvider: 'google', googleId: userInfo.sub,
+          firstName: userInfo.given_name || user.firstName,
+          lastName: userInfo.family_name || user.lastName,
+          platformRole, lastLoginAt: now, updatedAt: now,
+          mustResetPassword: false, failedLoginAttempts: 0, lockedUntil: null,
+        });
+        syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims);
+        return { ...user, authProvider: 'google', googleId: userInfo.sub, platformRole, firstName: userInfo.given_name || user.firstName, lastName: userInfo.family_name || user.lastName };
+      }
+
+      const userId = generateId();
+      await userRepo.insert({
+        id: userId, email: userInfo.email, authProvider: 'google', passwordHash: null, googleId: userInfo.sub,
+        firstName: userInfo.given_name || null, lastName: userInfo.family_name || null, platformRole: resolvedRole,
+        isActive: true, mustResetPassword: false, failedLoginAttempts: 0, createdAt: now, updatedAt: now, lastLoginAt: now,
+      });
+      const newUser = await userRepo.findOneBy({ id: userId });
+      syncCounts = await syncGoogleAuthorizationForUser(manager, userId, userInfo, ssoClaims);
+      return newUser;
+    });
+
+    await ssoSyncDiagnosticsService.completeRun(runId, { providerId: 'google', userId: result?.id ?? null, ...syncCounts, details: { email: userInfo.email } });
+    return result;
+  } catch (error) {
+    await ssoSyncDiagnosticsService.failRun(runId, error, { providerId: 'google', details: { email: userInfo.email } });
+    throw error;
+  }
 }
