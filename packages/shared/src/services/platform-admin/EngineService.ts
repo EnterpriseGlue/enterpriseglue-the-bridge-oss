@@ -379,7 +379,6 @@ export class EngineService {
       delegateId,
       updatedAt: Date.now(),
     });
-    await syncLegacyEngineAssignments(engineId);
   }
 
   /**
@@ -407,7 +406,6 @@ export class EngineService {
       delegateId: null,
       updatedAt: Date.now(),
     });
-    await syncLegacyEngineAssignments(engineId);
   }
 
   /**

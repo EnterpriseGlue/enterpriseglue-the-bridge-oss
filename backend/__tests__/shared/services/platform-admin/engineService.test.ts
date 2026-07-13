@@ -151,6 +151,7 @@ describe('EngineService', () => {
   });
 
   it('mirrors delegate governance changes into managed role assignments', async () => {
+    const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
     const engineRepo = {
       findOne: vi.fn().mockResolvedValue({
         id: 'engine-1',
@@ -176,13 +177,6 @@ describe('EngineService', () => {
       update: vi.fn().mockResolvedValue({ affected: 1 }),
       insert: vi.fn().mockResolvedValue({ identifiers: [] }),
     };
-    const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments').mockResolvedValue({
-      scannedProjects: 0,
-      scannedEngines: 1,
-      upserted: 0,
-      removed: 0,
-    });
-
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Engine) return engineRepo;
@@ -219,10 +213,11 @@ describe('EngineService', () => {
       sourceRef: 'engine:engine-1:governance-delegate',
       createdById: null,
     }));
-    expect(legacySyncSpy).toHaveBeenCalledWith({ engineIds: ['engine-1'] });
+    expect(legacySyncSpy).not.toHaveBeenCalled();
   });
 
   it('mirrors ownership transfer as accountable owner metadata plus managed owner assignment', async () => {
+    const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
     const engineRepo = {
       findOne: vi.fn().mockResolvedValue({
         id: 'engine-1',
@@ -255,13 +250,6 @@ describe('EngineService', () => {
       update: vi.fn().mockResolvedValue({ affected: 0 }),
       insert: vi.fn().mockResolvedValue({ identifiers: [] }),
     };
-    const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments').mockResolvedValue({
-      scannedProjects: 0,
-      scannedEngines: 1,
-      upserted: 0,
-      removed: 0,
-    });
-
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Engine) return engineRepo;
@@ -292,6 +280,6 @@ describe('EngineService', () => {
       sourceMappingId: null,
       sourceRef: 'engine:engine-1:governance-owner',
     }));
-    expect(legacySyncSpy).toHaveBeenCalledWith({ engineIds: ['engine-1'] });
+    expect(legacySyncSpy).not.toHaveBeenCalled();
   });
 });
