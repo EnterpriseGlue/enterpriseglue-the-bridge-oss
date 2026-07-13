@@ -2267,7 +2267,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add runtime resource inventory and runtime resource set read/preview/reconcile APIs. On-demand reconciliation preserves richer lineage and deactivates only definitions absent from a confirmed engine response.
 - [ ] ⬜ Add provider-neutral identity provider, identity mapping, mapping test, sync-run, and sync-event APIs.
 - [x] ✅ Add direct deployment receipt and deployment lineage APIs with machine-principal authorization and idempotency keys. Receipts are merged into the canonical deployment history, so proxy and externally reported deployment lineage use one model.
-- [ ] ⬜ Add OpenAPI schemas for every config object. The config-bundle lifecycle now has typed manifest, preview, diff, hash-bound apply, and apply-history contracts; individual imported file schemas and export response coverage remain pending.
+- [x] ✅ Add OpenAPI schemas for every config object. The config-bundle lifecycle now has typed manifest, imported-file schemas, preview, diff, hash-bound apply, apply-history, and export contracts.
 - [ ] ⬜ Add OpenAPI schemas for runtime authorization mode and unsupported-mode validation errors.
 - [ ] ⬜ Add OpenAPI schemas for engine `connectionMode`, endpoint-auth policy errors, sanitized transport diagnostics, and manual/external/config registration parity.
 - [ ] ⬜ Add OpenAPI `x-enterpriseglue-authz` metadata.

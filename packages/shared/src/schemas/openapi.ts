@@ -1733,6 +1733,15 @@ const {
   EngineOnboardingModeSchema,
   EngineRuntimeAuthorizationModeSchema,
   EnterpriseGlueConfigBundleSchema,
+  ConfigAssignmentsFileSchema,
+  ConfigEnginesFileSchema,
+  ConfigEngineSetsFileSchema,
+  ConfigGroupsFileSchema,
+  ConfigIdentityMappingsFileSchema,
+  ConfigIdentityProvidersFileSchema,
+  ConfigProjectEngineTargetsFileSchema,
+  ConfigRolesFileSchema,
+  ConfigRuntimeResourceSetsFileSchema,
   ProjectEngineTargetPolicyModeSchema,
   ProjectMemberSchema,
   AddProjectMemberRequest,
@@ -3519,9 +3528,21 @@ const SsoSyncDiagnosticsScanResultSchema = z.object({
   cleanup: z.record(z.string(), z.unknown()).optional(),
 });
 
+const ConfigBundleFilesOpenApiSchema = z.object({
+  './roles.json': ConfigRolesFileSchema.optional(),
+  './groups.json': ConfigGroupsFileSchema.optional(),
+  './engines.json': ConfigEnginesFileSchema.optional(),
+  './engine-sets.json': ConfigEngineSetsFileSchema.optional(),
+  './runtime-resource-sets.json': ConfigRuntimeResourceSetsFileSchema.optional(),
+  './assignments.json': ConfigAssignmentsFileSchema.optional(),
+  './project-engine-targets.json': ConfigProjectEngineTargetsFileSchema.optional(),
+  './identity-providers.json': ConfigIdentityProvidersFileSchema.optional(),
+  './identity-mappings.json': ConfigIdentityMappingsFileSchema.optional(),
+}).strict();
+
 const ConfigBundleRequestOpenApiSchema = z.object({
   bundle: EnterpriseGlueConfigBundleSchema,
-  files: z.record(z.string(), z.unknown()),
+  files: ConfigBundleFilesOpenApiSchema,
 });
 
 const ConfigBundleValidationIssueOpenApiSchema = z.object({
