@@ -307,7 +307,7 @@ export default function EngineMembersModal({
   canAddMembers = canManage,
   canUpdateMemberRoles = canManage,
   canRemoveMembers = canManage,
-  canManageDelegate = Boolean(engine?.myRole === 'owner'),
+  canManageDelegate = false,
   canViewProjectAccess = canManage,
   canApproveProjectAccess = canManage,
   canDenyProjectAccess = canManage,
