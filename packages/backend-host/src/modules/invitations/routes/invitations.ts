@@ -112,7 +112,6 @@ router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUse
 
   const pendingUser = existingUser || await userService.createPendingUser({
     email: normalizedEmail,
-    platformRole: 'user',
     createdByUserId: req.user!.userId,
   }).then((user) => ({ id: user.id, email: user.email } as Pick<User, 'id' | 'email'>));
 

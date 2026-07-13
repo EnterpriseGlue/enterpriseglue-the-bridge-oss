@@ -348,7 +348,6 @@ router.post(
 
       const pendingUser = targetUser || await userService.createPendingUser({
         email: emailLower,
-        platformRole: 'user',
         createdByUserId: granterId,
       }).then((user) => ({ id: user.id, email: user.email } as Pick<User, 'id' | 'email'>));
 
