@@ -23,6 +23,7 @@ interface IdentityProvider {
   ownershipMode: string;
   sourceRef: string | null;
 }
+type MembershipReplayResult = { scanned: number; created: number; removed: number; failed: number; truncated: boolean };
 
 type FormState = {
   key: string; protocol: Protocol; isEnabled: boolean; authenticationMode: AuthenticationMode; directoryTenantId: string;
@@ -68,6 +69,7 @@ export default function IdentityProvidersSettingsTab() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<IdentityProvider | null>(null);
+  const [replayResult, setReplayResult] = useState<{ providerKey: string; result: MembershipReplayResult } | null>(null);
 
   const save = useMutation({
     mutationFn: (payload: FormState) => {
@@ -82,6 +84,7 @@ export default function IdentityProvidersSettingsTab() {
   });
   const archive = useMutation({ mutationFn: (key: string) => apiClient.delete(`/api/identity/providers/${encodeURIComponent(key)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-providers'] }); setArchiveTarget(null); } });
   const reconcile = useMutation({ mutationFn: (key: string) => apiClient.post(`/api/identity/providers/${encodeURIComponent(key)}/reconcile`, {}), onError: (value: unknown) => setError(parseApiError(value, 'Unable to reconcile LDAP directory').message) });
+  const replayMemberships = useMutation({ mutationFn: (key: string) => apiClient.post<MembershipReplayResult>(`/api/identity/providers/${encodeURIComponent(key)}/replay-memberships`, {}), onSuccess: (result, key) => { setReplayResult({ providerKey: key, result }); setError(null); }, onError: (value: unknown) => setError(parseApiError(value, 'Unable to replay stored memberships').message) });
 
   const startCreate = () => { setEditing(null); setForm(emptyForm()); setError(null); setOpen(true); };
   const startEdit = (provider: IdentityProvider) => { setEditing(provider); setForm(formForProvider(provider)); setError(null); setOpen(true); };
@@ -101,6 +104,7 @@ export default function IdentityProvidersSettingsTab() {
         </div>
         <GuardedAction actionId="platform.sso.providers.manage" resource={resource}><Button kind="primary" size="sm" renderIcon={Add} onClick={startCreate}>Add provider</Button></GuardedAction>
       </div>
+      {replayResult && <InlineNotification kind={replayResult.result.failed > 0 ? 'warning' : 'success'} title={`Stored membership replay: ${replayResult.providerKey}`} subtitle={`${replayResult.result.scanned} snapshots checked, ${replayResult.result.created} added, ${replayResult.result.removed} removed${replayResult.result.failed > 0 ? `, ${replayResult.result.failed} failed` : ''}${replayResult.result.truncated ? '. More snapshots remain; run replay again.' : '.'}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       <DataTable rows={rows} headers={[{ key: 'key', header: 'Key' }, { key: 'protocol', header: 'Protocol' }, { key: 'mode', header: 'Mode' }, { key: 'sync', header: 'Sync' }, { key: 'status', header: 'Status' }, { key: 'source', header: 'Source' }, { key: 'actions', header: '' }]} isSortable>
         {({ rows: tableRows, headers, getHeaderProps, getRowProps, getTableProps }) => (
           <TableContainer>
@@ -120,6 +124,7 @@ export default function IdentityProvidersSettingsTab() {
                   <TableCell><GuardedOverflowMenu size="sm" iconDescription="Provider actions">
                     <GuardedOverflowMenuItem decision={manage} itemText="Edit" onClick={() => startEdit(provider)} />
                     {provider.protocol === 'ldap' && <GuardedOverflowMenuItem decision={manage} itemText="Reconcile directory" disabled={!provider.isEnabled || reconcile.isPending} onClick={() => reconcile.mutate(provider.key)} />}
+                    <GuardedOverflowMenuItem decision={manage} itemText="Replay stored memberships" disabled={!provider.isEnabled || replayMemberships.isPending} onClick={() => replayMemberships.mutate(provider.key)} />
                     <GuardedOverflowMenuItem decision={manage} itemText="Archive" isDelete onClick={() => setArchiveTarget(provider)} />
                   </GuardedOverflowMenu></TableCell>
                 </TableRow>;
