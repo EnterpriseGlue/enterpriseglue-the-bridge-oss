@@ -89,6 +89,21 @@ const PLATFORM_ROLES = [
   { value: 'user', label: 'Standard User' },
 ];
 
+function legacyMappingMigrationSupport(mapping: SsoClaimsMapping | null): { supported: boolean; reason?: string } {
+  if (!mapping) return { supported: false };
+  if (mapping.claimType === 'group' || mapping.claimType === 'role') {
+    return [null, 'equals', 'contains', 'exists'].includes(mapping.claimOperator ?? null)
+      ? { supported: true }
+      : { supported: false, reason: 'Only exact, contains, or exists group and role rules can be converted automatically.' };
+  }
+  if (mapping.claimType === 'email_domain') {
+    return mapping.claimOperator === 'equals' || (!mapping.claimOperator && mapping.claimValue.trim().startsWith('*@'))
+      ? { supported: true }
+      : { supported: false, reason: 'Only exact email-domain rules can be converted automatically.' };
+  }
+  return { supported: false, reason: 'Custom claims require an explicitly allowlisted provider-neutral attribute mapping.' };
+}
+
 export default function SsoSettingsTab() {
   const queryClient = useQueryClient();
   const platformAuthzResource = React.useMemo(() => ({ type: 'platform' as const }), []);
@@ -604,6 +619,7 @@ export default function SsoSettingsTab() {
 
   const providers = providersQuery.data || [];
   const mappings = mappingsQuery.data || [];
+  const migrationSupport = legacyMappingMigrationSupport(migrationMapping);
 
   const isLoading = (canReadProviders && providersQuery.isLoading) || (canReadMappings && mappingsQuery.isLoading);
   const error = (canReadProviders && providersQuery.error) || (canReadMappings && mappingsQuery.error);
@@ -1173,11 +1189,20 @@ export default function SsoSettingsTab() {
           providerKey: migrationProviderKey,
           targetGroupKey: migrationGroupKey,
         })}
-        primaryButtonDisabled={!canManageMappings || !migrationProviderKey.trim() || !migrationGroupKey.trim() || migrateLegacyPlatformMapping.isPending}
+        primaryButtonDisabled={!canManageMappings || !migrationSupport.supported || !migrationProviderKey.trim() || !migrationGroupKey.trim() || migrateLegacyPlatformMapping.isPending}
       >
         <p style={{ marginTop: 0, color: 'var(--cds-text-secondary)' }}>
           This retains the legacy mapping while creating an identity mapping and a platform role assignment for an EnterpriseGlue group. Verify sign-in behavior before disabling the legacy mapping.
         </p>
+        {!migrationSupport.supported && migrationSupport.reason && (
+          <InlineNotification
+            kind="warning"
+            title="Manual redesign required"
+            subtitle={migrationSupport.reason}
+            hideCloseButton
+            style={{ marginBottom: 'var(--spacing-5)' }}
+          />
+        )}
         {migrationError && <InlineNotification kind="error" title="Replacement not created" subtitle={migrationError} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
         <TextInput
           id="legacy-platform-migration-provider-key"
