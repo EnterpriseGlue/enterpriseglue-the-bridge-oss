@@ -5,12 +5,14 @@ const [command, argument] = process.argv.slice(2);
 const apiUrl = (process.env.ENTERPRISEGLUE_API_URL || '').replace(/\/$/, '');
 const token = process.env.ENTERPRISEGLUE_API_TOKEN;
 const idempotencyKey = process.env.ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY;
+const expectedTenantScope = process.env.ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE;
 const needsFile = command === 'validate' || command === 'preview' || command === 'apply';
 const needsBundleKey = command === 'export';
 
-if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument || !apiUrl || !token) {
+if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument || !apiUrl || !token || (command === 'apply' && !expectedTenantScope)) {
   console.error('Usage: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs <validate|preview|apply> <bundle.json>');
   console.error('   or: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs export <bundle-key>');
+  console.error('   apply also requires ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE.');
   process.exitCode = 64;
 } else {
   const request = async (path, options = {}) => {
@@ -38,6 +40,7 @@ if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument |
           ...payload,
           expectedPreviewHash: previewRequest.result.canonicalHash,
           ...(idempotencyKey ? { idempotencyKey } : {}),
+          expectedTenantScope,
         }) });
         if (!applyRequest.response.ok) throw new Error(applyRequest.result.message || applyRequest.result.error || `Apply failed: ${applyRequest.response.status}`);
         console.log(JSON.stringify(applyRequest.result, null, 2));

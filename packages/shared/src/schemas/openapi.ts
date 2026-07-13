@@ -3472,6 +3472,7 @@ const ConfigBundleDiffResponseOpenApiSchema = ConfigBundlePreviewResponseOpenApi
 const ConfigBundleApplyRequestOpenApiSchema = ConfigBundleRequestOpenApiSchema.extend({
   expectedPreviewHash: z.string().min(1),
   idempotencyKey: z.string().min(8).max(160).optional(),
+  expectedTenantScope: z.string().min(1).max(255).optional(),
 });
 
 const ConfigBundleApplyResponseOpenApiSchema = z.object({

@@ -1984,6 +1984,7 @@ describe('platform-admin authz routes', () => {
         files: {},
         expectedPreviewHash: 'preview-hash',
         idempotencyKey: 'config-apply-2026-07-13',
+        expectedTenantScope: 'platform',
       });
 
     expect(response.status).toBe(200);
@@ -1991,6 +1992,7 @@ describe('platform-admin authz routes', () => {
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       expectedPreviewHash: 'preview-hash',
       idempotencyKey: 'config-apply-2026-07-13',
+      expectedTenantScope: 'platform',
       actorId: 'user-1',
     }));
   });

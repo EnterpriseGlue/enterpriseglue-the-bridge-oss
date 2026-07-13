@@ -26,6 +26,7 @@ import { configBundlePreviewService, type ConfigBundlePreviewInput } from './Con
 export interface ConfigBundleApplyInput extends ConfigBundlePreviewInput {
   expectedPreviewHash: string;
   idempotencyKey?: string | null;
+  expectedTenantScope?: string | null;
   tenantId?: string | null;
   actorId: string;
 }
@@ -157,12 +158,17 @@ class ConfigBundleApplyService {
     }
 
     const tenantId = input.tenantId || null;
+    const actualTenantScope = tenantScopeKey(tenantId);
+    const expectedTenantScope = input.expectedTenantScope?.trim() || null;
+    if (expectedTenantScope && expectedTenantScope !== actualTenantScope) {
+      return fail(`Configuration bundle target tenant does not match the authenticated tenant (${actualTenantScope})`, 409);
+    }
     const dataSource = await getDataSource();
     const idempotencyKey = input.idempotencyKey?.trim() || null;
     let applyRunId: string | null = null;
     if (idempotencyKey) {
       const existing = await dataSource.getRepository(ConfigBundleApplyRun).findOne({
-        where: { tenantScopeKey: tenantScopeKey(tenantId), idempotencyKey },
+        where: { tenantScopeKey: actualTenantScope, idempotencyKey },
       });
       if (existing) return replayExistingApplyRun(existing, compilation.preview.canonicalHash, manifest.metadata.key);
     }
@@ -175,7 +181,7 @@ class ConfigBundleApplyService {
 
     if (idempotencyKey) {
       const runRepo = dataSource.getRepository(ConfigBundleApplyRun);
-      const scopeKey = tenantScopeKey(tenantId);
+      const scopeKey = actualTenantScope;
       applyRunId = generateId();
       try {
         await runRepo.insert({

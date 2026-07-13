@@ -147,6 +147,21 @@ describe('configBundleApplyService', () => {
     expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
+  it('rejects an apply when the expected tenant scope differs from the authenticated tenant', async () => {
+    const { dataSource } = setupDataSource();
+    const preview = configBundlePreviewService.preview({ bundle, files });
+
+    await expect(configBundleApplyService.apply({
+      bundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      expectedTenantScope: 'tenant-b',
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 409 });
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
   it('replays a completed idempotent apply and rejects the key for different bundle input', async () => {
     const { roleInsert, configRunRepo } = setupDataSource();
     const preview = configBundlePreviewService.preview({ bundle, files });
@@ -155,6 +170,7 @@ describe('configBundleApplyService', () => {
       files,
       expectedPreviewHash: preview.canonicalHash!,
       idempotencyKey: 'config-apply-2026-07-13',
+      expectedTenantScope: 'tenant-a',
       tenantId: 'tenant-a',
       actorId: 'admin-1',
     };

@@ -1889,7 +1889,7 @@ UI capabilities:
 - [ ] ⬜ Show schema validation results before diff.
 - [ ] ⬜ Show object diff grouped by Engines, Engine Sets, Runtime Resource Sets, Roles, Groups, Identity Providers, Identity Mappings, Assignments, and Project-engine targets.
 - [ ] ⬜ Show warnings for all-engine selectors, regex mappings, external-only modes, secret ref failures, and destructive authoritative removals.
-- [ ] ⬜ Require applying an exact preview hash to prevent time-of-check/time-of-use drift.
+- [x] ✅ Require an exact preview hash to prevent time-of-check/time-of-use drift, and require an expected tenant scope for CLI/CI applies so target credentials cannot apply to a different tenant.
 - [ ] ⬜ Show config-managed badges in Engine Detail, Access Control roles/groups/mappings, Engine Sets, and project deployment target views.
 - [ ] ⬜ Provide export current config button for backup and GitOps bootstrap.
 - [ ] ⬜ Provide copyable CI command examples after a successful UI preview.
