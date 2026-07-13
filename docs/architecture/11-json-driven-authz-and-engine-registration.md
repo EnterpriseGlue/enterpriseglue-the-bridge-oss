@@ -1855,7 +1855,7 @@ The implementation should extend existing packages rather than introduce an auth
   - Starts OIDC login for the exact provider id with PKCE and nonce. Starts SAML login with signed, expiring RelayState because cross-site SAML POST callbacks cannot safely depend on a Lax cookie. Both bind provider, tenant, and return path.
 - [x] ✅ `POST /api/auth/providers/saml/callback`
   - Validates signed RelayState, validates the selected provider's signed SAML assertion, provisions the normalized identity, synchronizes internal-group mappings, and creates only the normal authenticated session cookies.
-- [x] ✅ Record a short-lived, provider-scoped SHA-256 hash for each validated direct-SAML response before provisioning. The unique replay ledger rejects a duplicate assertion without retaining raw assertion data; expired entries are removed during consumption.
+- [x] ✅ Record a short-lived, provider-scoped SHA-256 hash for each validated direct-SAML response before provisioning. The provider-neutral and legacy callback paths share the unique replay ledger, which rejects a duplicate assertion without retaining raw assertion data; expired entries are removed during consumption.
 - [x] ✅ `POST /api/auth/providers/:providerId/login`
   - Performs direct LDAP authentication only for providers configured with `authenticationMode = direct`; rate limits and generic credential errors are mandatory.
 - [ ] ⬜ `GET /engines-api/engines/:engineId/runtime-resources`

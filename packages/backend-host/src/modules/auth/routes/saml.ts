@@ -13,6 +13,7 @@ import {
 import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { samlAssertionReplayService } from '@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js';
 import {
   appendSsoStartQuery,
   getSsoRedirectUrl,
@@ -86,6 +87,7 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
     const { profile, providerId } = ssoState?.providerId
       ? await validateSamlPostResponse(samlResponse, ssoState.providerId)
       : await validateSamlPostResponse(samlResponse);
+    await samlAssertionReplayService.consume({ providerId, samlResponse });
     const userInfo = extractSamlUserInfo(profile);
 
     logger.info('[SAML Auth] User info extracted:', {

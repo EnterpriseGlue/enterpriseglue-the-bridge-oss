@@ -13,6 +13,8 @@ import {
   provisionSamlUser,
 } from '@enterpriseglue/shared/services/saml.js';
 
+const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
+
 vi.mock('@enterpriseglue/shared/services/saml.js', () => ({
   getSamlStatus: vi.fn().mockResolvedValue({ enabled: true }),
   isSamlAuthEnabled: vi.fn().mockResolvedValue(true),
@@ -35,6 +37,8 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
     LOGIN_SUCCESS: 'LOGIN_SUCCESS',
   },
 }));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js', () => ({ samlAssertionReplayService }));
 
 function getCookieValue(setCookieHeader: string[] | undefined, cookieName: string): string | null {
   if (!setCookieHeader || setCookieHeader.length === 0) return null;
@@ -133,6 +137,7 @@ describe('SAML auth flow e2e harness', () => {
       platformRole: 'admin',
       isActive: true,
     });
+    samlAssertionReplayService.consume.mockResolvedValue(undefined);
   });
 
   it('completes start -> callback flow and sets auth cookies', async () => {
@@ -167,6 +172,7 @@ describe('SAML auth flow e2e harness', () => {
     expect(setCookies?.some((cookie) => cookie.startsWith('oauth_state='))).toBe(true);
 
     expect(validateSamlPostResponse as unknown as Mock).toHaveBeenCalledWith('mock-saml-response');
+    expect(samlAssertionReplayService.consume).toHaveBeenCalledWith({ providerId: 'provider-saml-1', samlResponse: 'mock-saml-response' });
     expect(extractSamlUserInfo as unknown as Mock).toHaveBeenCalledTimes(1);
     expect(provisionSamlUser as unknown as Mock).toHaveBeenCalledWith(
       expect.objectContaining({ email: 'saml-user@example.com', oid: 'oid-123' }),
@@ -268,6 +274,22 @@ describe('SAML auth flow e2e harness', () => {
     expect(callbackResponse.body).toEqual({ error: 'Invalid relay state' });
     expect(validateSamlPostResponse as unknown as Mock).not.toHaveBeenCalled();
     expect(ssoProvisionedHook).not.toHaveBeenCalled();
+  });
+
+  it('redirects without provisioning when a legacy SAML assertion was already consumed', async () => {
+    const agent = request.agent(app);
+    const startResponse = await agent.get('/api/auth/saml/start');
+    const relayState = getCookieValue(getSetCookieHeader(startResponse.headers), 'oauth_state');
+    samlAssertionReplayService.consume.mockRejectedValueOnce(new Error('SAML assertion has already been used'));
+
+    const callbackResponse = await agent
+      .post('/api/auth/saml/callback')
+      .type('form')
+      .send({ SAMLResponse: 'mock-saml-response', RelayState: relayState });
+
+    expect(callbackResponse.status).toBe(302);
+    expect(callbackResponse.headers.location).toContain('error=saml_auth_failed');
+    expect(provisionSamlUser as unknown as Mock).not.toHaveBeenCalled();
   });
 
   it('redirects to login error when provisioned user is deactivated', async () => {
