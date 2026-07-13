@@ -27,6 +27,7 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js';
 import { ServiceAccount } from '@enterpriseglue/shared/infrastructure/persistence/entities/ServiceAccount.js';
 import { SsoGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoGroupMapping.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { AuthzPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzPolicy.js';
 import { RbacPermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacPermission.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
@@ -509,6 +510,15 @@ export interface PermissionEvaluationSource {
     claimKey: string;
     claimValue: string;
     claimOperator: string | null;
+    targetGroupId: string;
+    syncMode: string;
+  } | null;
+  identityEntitlementMapping?: {
+    id: string;
+    providerId: string;
+    entitlementType: string;
+    externalId: string | null;
+    matchOperator: string;
     targetGroupId: string;
     syncMode: string;
   } | null;
@@ -3511,12 +3521,21 @@ class PermissionServiceClass {
         .filter((membership) => membership.source === 'sso' && membership.sourceRef)
         .map((membership) => membership.sourceRef as string)
     ));
-    const ssoGroupMappings = ssoGroupMappingIds.length > 0
-      ? await dataSource.getRepository(SsoGroupMapping).find({
-        where: tenantScopedWhere({ id: In(ssoGroupMappingIds) }, tenantId),
-      })
-      : [];
+    const identityEntitlementMappingIds = Array.from(new Set(
+      activeMemberships
+        .filter((membership) => membership.source === 'identity_provider' && membership.sourceRef?.startsWith('identity_mapping:'))
+        .map((membership) => membership.sourceRef!.slice('identity_mapping:'.length))
+    ));
+    const [ssoGroupMappings, identityEntitlementMappings] = await Promise.all([
+      ssoGroupMappingIds.length > 0
+        ? dataSource.getRepository(SsoGroupMapping).find({ where: tenantScopedWhere({ id: In(ssoGroupMappingIds) }, tenantId) })
+        : Promise.resolve([]),
+      identityEntitlementMappingIds.length > 0
+        ? dataSource.getRepository(IdentityEntitlementMapping).find({ where: tenantScopedWhere({ id: In(identityEntitlementMappingIds) }, tenantId) })
+        : Promise.resolve([]),
+    ]);
     const ssoGroupMappingById = new Map(ssoGroupMappings.map((mapping) => [mapping.id, mapping]));
+    const identityEntitlementMappingById = new Map(identityEntitlementMappings.map((mapping) => [mapping.id, mapping]));
 
     return sources.map((source) => {
       if (source.principalType !== 'group' || !source.principalId) return source;
@@ -3525,6 +3544,10 @@ class PermissionServiceClass {
       const mapping = membership?.source === 'sso' && membership.sourceRef
         ? ssoGroupMappingById.get(membership.sourceRef)
         : null;
+      const identityMappingId = membership?.source === 'identity_provider' && membership.sourceRef?.startsWith('identity_mapping:')
+        ? membership.sourceRef.slice('identity_mapping:'.length)
+        : null;
+      const identityMapping = identityMappingId ? identityEntitlementMappingById.get(identityMappingId) : null;
       return {
         ...source,
         groupId: source.principalId,
@@ -3548,6 +3571,17 @@ class PermissionServiceClass {
             claimOperator: mapping.claimOperator,
             targetGroupId: mapping.targetGroupId,
             syncMode: mapping.syncMode,
+          }
+          : null,
+        identityEntitlementMapping: identityMapping
+          ? {
+            id: identityMapping.id,
+            providerId: identityMapping.providerId,
+            entitlementType: identityMapping.entitlementType,
+            externalId: identityMapping.externalId,
+            matchOperator: identityMapping.matchOperator,
+            targetGroupId: identityMapping.targetGroupId,
+            syncMode: identityMapping.syncMode,
           }
           : null,
       };

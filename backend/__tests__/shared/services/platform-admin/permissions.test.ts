@@ -24,6 +24,7 @@ import {
   EngineMember,
   ExternalEngineRegistration,
   ExternalEngineSystem,
+  IdentityEntitlementMapping,
   PermissionGrant,
   Project,
   ProjectMember,
@@ -747,6 +748,31 @@ describe('permissionService', () => {
         targetGroupId: 'group-operators',
         syncMode: 'authoritative',
       },
+    });
+  });
+
+  it('explains provider-neutral identity mapping lineage for inherited group role assignments', async () => {
+    const assignmentQb = { innerJoin: vi.fn().mockReturnThis(), where: vi.fn().mockReturnThis(), andWhere: vi.fn().mockReturnThis(), getMany: vi.fn().mockResolvedValue([{ id: 'assignment-identity-group-engine-deployer', roleId: 'group-engine-role', principalType: 'group', principalId: 'group-operators', source: 'manual', sourceMappingId: null, sourceRef: null }]) };
+    const groupMembership = createGroupMembershipRepo(['group-operators']);
+    groupMembership.repo.find.mockResolvedValue([{ id: 'membership-identity-operators', groupId: 'group-operators', userId: 'user-1', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-operators', expiresAt: null }]);
+    const authzGroupRepo = { find: vi.fn().mockResolvedValue([{ id: 'group-operators', key: 'operators', name: 'Operators', isArchived: false }]) };
+    const identityMappingRepo = { find: vi.fn().mockResolvedValue([{ id: 'mapping-operators', providerId: 'identity.oidc.main', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', targetGroupId: 'group-operators', syncMode: 'authoritative' }]) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === AuthzGroupMembership) return groupMembership.repo;
+      if (entity === AuthzGroup) return authzGroupRepo;
+      if (entity === IdentityEntitlementMapping) return identityMappingRepo;
+      if (entity === SsoGroupMapping) return { find: vi.fn().mockResolvedValue([]) };
+      if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+      if (entity === RbacRolePermission || entity === RbacRole) return {};
+      throw new Error('Unexpected repository');
+    } });
+
+    const result = await permissionService.evaluatePermission(EnginePermissions.DEPLOY, { userId: 'user-1', platformRole: 'user', engineRole: 'none', resourceType: 'engine', resourceId: 'engine-1' });
+
+    expect(result.allowed).toBe(true);
+    expect(result.sources[0]).toMatchObject({
+      groupMembership: { id: 'membership-identity-operators', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-operators' },
+      identityEntitlementMapping: { id: 'mapping-operators', providerId: 'identity.oidc.main', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', targetGroupId: 'group-operators', syncMode: 'authoritative' },
     });
   });
 

@@ -1188,7 +1188,7 @@ external entitlement
 - [x] ✅ Add transactional provisioning at `POST /api/identity/mappings/provision-access`. It creates the provider-neutral mapping, either an existing or a new internal group, and the scoped group assignment in one database transaction, under mapping, group, and role-management action checks. The Identity Mappings create flow adopts it for engine, Engine Set, exact runtime-resource, and Runtime Resource Set scopes.
 - [ ] ⬜ Migrate or remove `SsoClaimsMapping` and `SsoAssignmentMapping`; do not retain three runtime mapping evaluators.
 - [ ] ⬜ Preserve the high-risk all-engine, regex, owner/delegate, and sensitive-permission guardrails on the resulting mapping plus group assignment workflow.
-- [ ] ⬜ Store mapping, group membership, assignment, and materialization ids in explanation lineage so the extra indirection remains understandable.
+- [x] ✅ Store provider-neutral mapping, legacy SSO-group mapping, group membership, assignment, and materialization ids in Effective Access explanation lineage so the extra indirection remains understandable. Legacy direct SSO assignment migration remains separate.
 
 ### External Identity Linking
 
