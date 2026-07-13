@@ -170,6 +170,7 @@ export const ConfigEngineSchema = z.object({
   connectionMode: z.enum(['direct', 'customer_sidecar']).default('direct'),
   runtimeAccessScope: z.enum(['engine_wide', 'resource_aware']).default('engine_wide'),
   deploymentIntegration: z.enum(['enterpriseglue_proxy', 'direct_engine']).default('enterpriseglue_proxy'),
+  metadataDiscoveryEnabled: z.boolean().default(true),
   version: z.string().max(255).nullable().optional(),
   environmentTagId: z.string().uuid().nullable().optional(),
   ownershipMode: ConfigOwnershipModeSchema.optional(),

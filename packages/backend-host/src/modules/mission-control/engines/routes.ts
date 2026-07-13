@@ -196,6 +196,7 @@ const createEngineBodySchema = z.object({
   environmentTagId: z.string().nullable().optional(),
   runtimeAccessScope: runtimeAccessScopeSchema.optional(),
   deploymentIntegration: deploymentIntegrationSchema.optional(),
+  metadataDiscoveryEnabled: z.boolean().optional(),
 })
 
 const updateEngineBodySchema = z.object({
@@ -214,6 +215,7 @@ const updateEngineBodySchema = z.object({
   environmentTagId: z.string().nullable().optional(),
   runtimeAccessScope: runtimeAccessScopeSchema.optional(),
   deploymentIntegration: deploymentIntegrationSchema.optional(),
+  metadataDiscoveryEnabled: z.boolean().optional(),
 })
 
 const DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP: EngineFieldOwnership = {
@@ -943,6 +945,7 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine
     environmentLocked: false,
     runtimeAccessScope: req.body.runtimeAccessScope || 'engine_wide',
     deploymentIntegration: req.body.deploymentIntegration || 'enterpriseglue_proxy',
+    metadataDiscoveryEnabled: req.body.metadataDiscoveryEnabled ?? true,
     tenantId,
     createdAt: now,
     updatedAt: now,
@@ -1031,6 +1034,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     environmentTagId: req.body.environmentTagId || null,
     runtimeAccessScope: req.body.runtimeAccessScope,
     deploymentIntegration: req.body.deploymentIntegration,
+    metadataDiscoveryEnabled: req.body.metadataDiscoveryEnabled,
     updatedAt: now,
   }
 
@@ -1438,6 +1442,7 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
     environmentTagId: req.body.environmentTagId === undefined ? undefined : req.body.environmentTagId || null,
     runtimeAccessScope: req.body.runtimeAccessScope,
     deploymentIntegration: req.body.deploymentIntegration,
+    metadataDiscoveryEnabled: req.body.metadataDiscoveryEnabled,
     driftStatus: isConfigWarnUpdate(existing, req.body) ? 'manual_override' : undefined,
     updatedAt: now,
   }
