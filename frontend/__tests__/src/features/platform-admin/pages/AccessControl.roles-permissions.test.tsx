@@ -273,9 +273,9 @@ describe('AccessControl roles and permissions', () => {
 
     const assignmentRow = screen.getAllByText('00000000-0000-4000-8000-000000000012')
       .map((principal) => principal.closest('tr'))
-      .find((row) => row && within(row).queryByText('sso'));
+      .find((row) => row && within(row).queryByText('Managed by SSO'));
     expect(assignmentRow).toBeTruthy();
-    expect(within(assignmentRow!).getByText('sso')).toBeInTheDocument();
+    expect(within(assignmentRow!).getByText('Managed by SSO')).toBeInTheDocument();
     expect(within(assignmentRow!).queryByLabelText('Remove assignment')).not.toBeInTheDocument();
   });
 
