@@ -10,6 +10,20 @@ export const ssoSyncEventHeaders = [
   { key: 'resource', header: 'Resource' }, { key: 'mapping', header: 'Mapping' }, { key: 'created', header: 'Created' }, { key: 'details', header: 'Details' },
 ];
 
+export interface SsoSyncDiagnosticsOptions {
+  includeProviderChecks: boolean;
+  includeSnapshotReplay: boolean;
+  refreshProviderClaims: boolean;
+  includeCleanup: boolean;
+}
+
+export const DEFAULT_SSO_DIAGNOSTICS_OPTIONS: SsoSyncDiagnosticsOptions = {
+  includeProviderChecks: false,
+  includeSnapshotReplay: false,
+  refreshProviderClaims: false,
+  includeCleanup: false,
+};
+
 export function formatSsoSyncStatus(value: string) { return value ? value.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ') : '-'; }
 export function formatSsoSyncTimestamp(value: number | null | undefined) { return value ? new Date(value).toLocaleString() : '-'; }
 export function formatSsoSyncProvider(providerId: string | null | undefined) { return providerId || 'Any provider'; }

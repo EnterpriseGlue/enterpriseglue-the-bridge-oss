@@ -59,8 +59,10 @@ import {
   formatSsoSyncResource as presentSsoSyncResource,
   getSsoSyncSeverityTagType as presentSsoSyncSeverityTagType,
   getSsoSyncStatusTagType as presentSsoSyncStatusTagType,
+  DEFAULT_SSO_DIAGNOSTICS_OPTIONS,
   ssoSyncEventHeaders as presentedSsoSyncEventHeaders,
   ssoSyncRunHeaders as presentedSsoSyncRunHeaders,
+  type SsoSyncDiagnosticsOptions,
 } from './access-control/ssoSyncPresentation';
 import {
   useArchiveCustomRole,
@@ -3733,20 +3735,6 @@ function SsoAssignmentDiagnosticsPanel({
     </div>
   );
 }
-
-type SsoSyncDiagnosticsOptions = {
-  includeProviderChecks: boolean;
-  includeSnapshotReplay: boolean;
-  refreshProviderClaims: boolean;
-  includeCleanup: boolean;
-};
-
-const DEFAULT_SSO_DIAGNOSTICS_OPTIONS: SsoSyncDiagnosticsOptions = {
-  includeProviderChecks: false,
-  includeSnapshotReplay: false,
-  refreshProviderClaims: false,
-  includeCleanup: false,
-};
 
 function SsoSyncDiagnosticsPanel({
   runs,
