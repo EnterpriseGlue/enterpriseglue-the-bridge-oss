@@ -1301,7 +1301,7 @@ The current database and evaluator use one effective target per `(tenantId, proj
 
 - [x] ✅ `hybrid` means manually owned and config/external-owned targets may coexist across different project/engine pairs, not as competing rows for the same pair.
 - [x] ✅ If config preview finds a manual row for the desired pair, return `ownership_conflict` by default.
-- [x] ✅ Allow an explicit hash-previewed `transferOwnership` instruction with a required reason. Apply converts the one existing row and records its previous source/source reference, actor, reason, and bundle hash in audit lineage. The additional target-manage authorization gate remains a route-level hardening item.
+- [x] ✅ Allow an explicit hash-previewed `transferOwnership` instruction with a required reason. Apply converts the one existing row and records its previous source/source reference, actor, reason, and bundle hash in audit lineage. Requests with that instruction require both normal config-bundle access and `platform.project-engine-targets.manage` (including API-client RBAC evaluation).
 - [x] ✅ If a manual apply chooses `skip`, preserve the manual row and report the desired object as unapplied drift through the default ownership conflict.
 - [x] ✅ Authoritative removal archives only rows owned by the same bundle/sourceRef; it never removes or weakens a manual target.
 - [x] ✅ Target mode flags are updated atomically on the one effective row so deployment eligibility never sees two contradictory mode sets.

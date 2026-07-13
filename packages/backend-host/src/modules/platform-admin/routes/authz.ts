@@ -762,6 +762,27 @@ function requireConfigBundleAccess(req: Request, res: Response, next: NextFuncti
   });
 }
 
+function bundleRequestsTargetOwnershipTransfer(value: unknown): boolean {
+  const files = (value as { files?: unknown } | null)?.files;
+  const targets = files && typeof files === 'object'
+    ? (files as Record<string, { projectEngineTargets?: unknown }> )['./project-engine-targets.json']?.projectEngineTargets
+    : null;
+  return Array.isArray(targets) && targets.some((target) => Boolean((target as { transferOwnership?: unknown } | null)?.transferOwnership));
+}
+
+/** A config apply may manage many object types, but target ownership transfer
+ * additionally changes the deployment authority boundary for an existing pair. */
+function requireTargetTransferAccess(req: Request, res: Response, next: NextFunction) {
+  if (!bundleRequestsTargetOwnershipTransfer(req.body)) return next();
+  if (hasApiClientBearerToken(req)) {
+    return requireApiClientAction(
+      ApiClientScopes.CONFIG_BUNDLE_MANAGE,
+      'platform.project-engine-targets.manage',
+    )(req, res, next);
+  }
+  return requirePlatformAction('platform.project-engine-targets.manage')(req, res, next);
+}
+
 function parseJsonObject(value: string | null | undefined): Record<string, unknown> | null {
   if (!value) return null;
   try {
@@ -1412,7 +1433,7 @@ router.post('/api/authz/config-bundles/diff', apiLimiter, requireConfigBundleAcc
 }));
 
 /** Apply a hash-bound config bundle after a successful persisted-state diff. */
-router.post('/api/authz/config-bundles/apply', apiLimiter, requireConfigBundleAccess, validateBody(configBundleApplySchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/config-bundles/apply', apiLimiter, requireConfigBundleAccess, validateBody(configBundleApplySchema), requireTargetTransferAccess, asyncHandler(async (req: Request, res: Response) => {
   const actorId = req.apiClient?.createdById || req.apiClient?.id || req.user!.userId;
   const result = await configBundleApplyService.apply({
     ...req.body,
