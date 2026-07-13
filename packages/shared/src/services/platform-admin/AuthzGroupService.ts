@@ -9,7 +9,7 @@ import { SYSTEM_ROLE_IDS } from '@enterpriseglue/shared/services/platform-admin/
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
-import { In, type DataSource } from 'typeorm';
+import { In, type DataSource, type EntityManager } from 'typeorm';
 
 export type AuthzGroupSource = 'manual' | 'sso' | 'api' | 'automation' | 'system' | 'config';
 export type AuthzGroupOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
@@ -182,7 +182,7 @@ function toGroupView(group: AuthzGroup): AuthzGroupView {
 }
 
 async function recordGroupAudit(
-  dataSource: DataSource,
+  dataSource: DataSource | EntityManager,
   entry: {
     tenantId?: string | null;
     userId?: string | null;
@@ -293,14 +293,14 @@ export class AuthzGroupService {
     return groups.map(toGroupView);
   }
 
-  async createGroup(input: CreateAuthzGroupInput): Promise<{ id: string }> {
+  async createGroup(input: CreateAuthzGroupInput, store?: DataSource | EntityManager): Promise<{ id: string }> {
     const name = input.name.trim();
     if (!name) throw Errors.validation('Group name is required');
     const key = (input.key?.trim() || groupKeyFromName(name));
     if (!key) throw Errors.validation('Group key is required');
 
     const tenantId = normalizeTenantId(input.tenantId);
-    const dataSource = await getDataSource();
+    const dataSource = store || await getDataSource();
     const repo = dataSource.getRepository(AuthzGroup);
     const duplicateQb = repo.createQueryBuilder('group')
       .where('group.key = :key', { key });

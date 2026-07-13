@@ -116,9 +116,9 @@ class IdentityEntitlementMappingService {
     });
   }
 
-  async create(input: IdentityEntitlementMappingInput, tenantId?: string | null): Promise<ManagedIdentityEntitlementMapping> {
+  async create(input: IdentityEntitlementMappingInput, tenantId?: string | null, store?: MappingStore): Promise<ManagedIdentityEntitlementMapping> {
     validateInput(input);
-    const dataSource = await getDataSource();
+    const dataSource = store || await getDataSource();
     const [provider, group] = await Promise.all([
       dataSource.getRepository(IdentityProvider).findOne({ where: { ...tenantWhere(tenantId), key: normalized(input.providerKey, 'providerKey') } as any }),
       dataSource.getRepository(AuthzGroup).findOne({ where: { ...tenantWhere(tenantId), key: normalized(input.targetGroupKey, 'targetGroupKey'), isArchived: false } as any }),

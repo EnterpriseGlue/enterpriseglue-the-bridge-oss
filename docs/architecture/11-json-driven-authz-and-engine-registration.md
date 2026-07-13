@@ -1185,6 +1185,7 @@ external entitlement
 - [ ] ⬜ Represent “all authenticated users” as an `exists` mapping to a configured internal group; remove provider `defaultRole` authorization mutation.
 - [ ] ⬜ Implement the SSO/Identity Engine Assignment UI as a wizard that selects or creates a managed internal group and creates a normal group role assignment at engine/Engine Set/runtime scope.
 - [x] ✅ Add the first engine-access bridge from Identity Mappings: an administrator can select an existing group or create a new internal group with a stable key, then grant an engine role to that group for one engine, an Engine Set, an exact runtime resource, or a Runtime Resource Set through the standard role-assignment API. A single transactional end-to-end wizard remains part of the broader milestone.
+- [x] ✅ Add transactional provisioning for an existing group at `POST /api/identity/mappings/provision-access`. It creates the provider-neutral mapping and the scoped group assignment in one database transaction, under mapping, group, and role-management action checks. Transactional in-flow group creation and UI adoption remain pending.
 - [ ] ⬜ Migrate or remove `SsoClaimsMapping` and `SsoAssignmentMapping`; do not retain three runtime mapping evaluators.
 - [ ] ⬜ Preserve the high-risk all-engine, regex, owner/delegate, and sensitive-permission guardrails on the resulting mapping plus group assignment workflow.
 - [ ] ⬜ Store mapping, group membership, assignment, and materialization ids in explanation lineage so the extra indirection remains understandable.

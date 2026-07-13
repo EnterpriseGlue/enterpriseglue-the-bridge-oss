@@ -2087,8 +2087,8 @@ class PermissionServiceClass {
     });
   }
 
-  async assignRole(input: CreateRoleAssignmentInput): Promise<{ id: string; warnings: string[] }> {
-    const dataSource = await getDataSource();
+  async assignRole(input: CreateRoleAssignmentInput, store?: DataSource | EntityManager): Promise<{ id: string; warnings: string[] }> {
+    const dataSource = store || await getDataSource();
     const role = await dataSource.getRepository(RbacRole).findOne({ where: { id: input.roleId } });
     if (!role) {
       throw new Error('Role not found');
@@ -2139,7 +2139,7 @@ class PermissionServiceClass {
 
     const existing = await duplicateQb.getOne();
     if (existing) {
-      return { id: existing.id, warnings: await this.getRuntimeAssignmentWarnings(dataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
+      return { id: existing.id, warnings: store ? [] : await this.getRuntimeAssignmentWarnings(dataSource as DataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
     }
 
     const id = generateId();
@@ -2187,7 +2187,7 @@ class PermissionServiceClass {
       },
     });
 
-    return { id, warnings: await this.getRuntimeAssignmentWarnings(dataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
+    return { id, warnings: store ? [] : await this.getRuntimeAssignmentWarnings(dataSource as DataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
   }
 
   private async getRuntimeAssignmentWarnings(
@@ -2370,7 +2370,7 @@ class PermissionServiceClass {
   }
 
   private async assertAssignablePrincipalExists(
-    dataSource: DataSource,
+    dataSource: DataSource | EntityManager,
     principal: { principalType: PrincipalType; principalId: string }
   ): Promise<void> {
     if (principal.principalType === 'api_client') {
@@ -2408,7 +2408,7 @@ class PermissionServiceClass {
   }
 
   private async assertMachinePrincipalCanReceiveRole(
-    dataSource: DataSource,
+    dataSource: DataSource | EntityManager,
     principal: { principalType: PrincipalType; principalId: string },
     role: RbacRole
   ): Promise<void> {
@@ -2480,7 +2480,7 @@ class PermissionServiceClass {
     return { resourceType: roleScope, resourceId: requestedResourceId, scopeType, scopeId: requestedResourceId };
   }
 
-  private async assertResourceExists(dataSource: DataSource, resourceType: ResourceType, resourceId: string | null, tenantId?: string | null): Promise<void> {
+  private async assertResourceExists(dataSource: DataSource | EntityManager, resourceType: ResourceType, resourceId: string | null, tenantId?: string | null): Promise<void> {
     if (resourceType === 'platform') return;
 
     if (resourceType === 'project') {
@@ -2551,7 +2551,7 @@ class PermissionServiceClass {
   }
 
   private async assertRuntimeScopeEnabled(
-    dataSource: DataSource,
+    dataSource: DataSource | EntityManager,
     scopeType: ResourceType,
     scopeId: string | null,
     tenantId?: string | null,

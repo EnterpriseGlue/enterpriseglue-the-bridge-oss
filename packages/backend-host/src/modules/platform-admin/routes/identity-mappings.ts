@@ -5,6 +5,8 @@ import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.j
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityEntitlementMappingService } from '@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
 const router = Router();
@@ -16,6 +18,11 @@ const mappingSchema = z.object({
 const mappingUpdateSchema = mappingSchema.partial().extend({ isActive: z.boolean().optional() });
 const testSchema = mappingSchema.omit({ targetGroupKey: true }).extend({ claims: z.record(z.string(), z.unknown()) });
 const storedSnapshotPreviewSchema = mappingSchema.omit({ targetGroupKey: true }).extend({ limit: z.number().int().min(1).max(5000).optional() });
+const provisionAccessSchema = mappingSchema.extend({
+  roleId: z.string().min(1).max(160),
+  resourceType: z.enum(['engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set']),
+  resourceId: z.string().min(1).max(160),
+});
 const idSchema = z.string().min(1).max(128);
 
 router.get('/api/identity/mappings', requireAuth, requireAction('platform.sso.group-mappings.read'), asyncHandler(async (req, res) => {
@@ -25,6 +32,25 @@ router.post('/api/identity/mappings', requireAuth, requireAction('platform.sso.g
   const mapping = await identityEntitlementMappingService.create(req.body, req.tenant?.tenantId || null);
   await logAudit({ action: 'identity.mapping.create', userId: req.user!.userId, resourceType: 'identity_entitlement_mapping', resourceId: mapping.id, details: { providerKey: mapping.providerKey, targetGroupKey: mapping.targetGroupKey, entitlementType: mapping.entitlementType, matchOperator: mapping.matchOperator } });
   res.status(201).json(mapping);
+}));
+router.post('/api/identity/mappings/provision-access', requireAuth, requireAction('platform.sso.group-mappings.manage'), requireAction('platform.authz.groups.manage'), requireAction('platform.authz.roles.manage'), validateBody(provisionAccessSchema), asyncHandler(async (req, res) => {
+  const tenantId = req.tenant?.tenantId || null;
+  const dataSource = await getDataSource();
+  const result = await dataSource.transaction(async (manager) => {
+    const mapping = await identityEntitlementMappingService.create(req.body, tenantId, manager);
+    const assignment = await permissionService.assignRole({
+      tenantId,
+      createdById: req.user!.userId,
+      principalType: 'group',
+      principalId: mapping.targetGroupId,
+      roleId: req.body.roleId,
+      resourceType: req.body.resourceType,
+      resourceId: req.body.resourceId,
+    }, manager);
+    return { mapping, assignment };
+  });
+  await logAudit({ action: 'identity.mapping.provision_access', userId: req.user!.userId, resourceType: 'identity_entitlement_mapping', resourceId: result.mapping.id, details: { targetGroupKey: result.mapping.targetGroupKey, roleId: req.body.roleId, resourceType: req.body.resourceType, resourceId: req.body.resourceId } });
+  res.status(201).json(result);
 }));
 router.put('/api/identity/mappings/:id', requireAuth, requireAction('platform.sso.group-mappings.manage'), validateBody(mappingUpdateSchema), asyncHandler(async (req, res) => {
   const id = idSchema.parse(req.params.id);

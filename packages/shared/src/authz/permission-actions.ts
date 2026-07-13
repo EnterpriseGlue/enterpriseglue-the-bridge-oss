@@ -512,6 +512,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'DELETE', route: '/api/authz/sso-group-mappings/:id', resourceResolver: 'ssoMapping.byId' },
       { method: 'POST', route: '/api/authz/sso-group-mappings/test', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/identity/mappings', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/identity/mappings/provision-access', resourceResolver: 'platform.self' },
       { method: 'PUT', route: '/api/identity/mappings/{id}', resourceResolver: 'platform.self' },
       { method: 'DELETE', route: '/api/identity/mappings/{id}', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/identity/mappings/test', resourceResolver: 'platform.self' },

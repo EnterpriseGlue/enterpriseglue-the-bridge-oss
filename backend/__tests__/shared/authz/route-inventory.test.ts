@@ -428,6 +428,7 @@ describe('authorization route inventory validation', () => {
           ['DELETE', '/api/authz/sso-group-mappings/:id', 'ssoMapping.byId'],
           ['POST', '/api/authz/sso-group-mappings/test', 'platform.self'],
           ['POST', '/api/identity/mappings', 'platform.self'],
+          ['POST', '/api/identity/mappings/provision-access', 'platform.self'],
           ['PUT', '/api/identity/mappings/{id}', 'platform.self'],
           ['DELETE', '/api/identity/mappings/{id}', 'platform.self'],
           ['POST', '/api/identity/mappings/test', 'platform.self'],
