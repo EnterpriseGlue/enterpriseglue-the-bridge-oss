@@ -653,6 +653,7 @@ const ssoGroupMappingTestSchema = z.object({
   claims: z.record(z.string(), z.unknown()),
   providerId: z.string().min(1).optional(),
 });
+const ssoGroupMappingProviderNeutralMigrationSchema = z.object({ providerKey: z.string().min(1).max(128) });
 
 const ssoSyncRunsQuerySchema = z.object({
   providerId: z.string().min(1).optional(),
@@ -2631,6 +2632,18 @@ router.post('/api/authz/sso-group-mappings', apiLimiter, requireAuth, requirePla
     logger.error('Create SSO group mapping error:', error);
     throw Errors.badRequest(error.message || 'Failed to create SSO group mapping');
   }
+}));
+
+router.post('/api/authz/sso-group-mappings/:id/migrate-provider-neutral', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateParams(idParamSchema), validateBody(ssoGroupMappingProviderNeutralMigrationSchema), asyncHandler(async (req: Request, res: Response) => {
+  const result = await ssoGroupMappingService.migrateToProviderNeutral(String(req.params.id), req.body.providerKey, req.tenant?.tenantId || null);
+  await logAudit({
+    action: 'authz.sso_group_mapping.provider_neutral_migration',
+    userId: req.user!.userId,
+    resourceType: 'sso_group_mapping',
+    resourceId: result.legacyMappingId,
+    details: { providerKey: result.providerKey, identityMappingId: result.identityMapping.id, created: result.created },
+  });
+  res.status(result.created ? 201 : 200).json(result);
 }));
 
 router.put('/api/authz/sso-group-mappings/:id', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateParams(idParamSchema), validateBody(ssoGroupMappingUpdateSchema), asyncHandler(async (req: Request, res: Response) => {

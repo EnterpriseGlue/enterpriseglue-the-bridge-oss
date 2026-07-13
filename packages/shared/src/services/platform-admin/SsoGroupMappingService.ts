@@ -2,6 +2,8 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { SsoGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoGroupMapping.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
@@ -16,6 +18,7 @@ import {
   ssoClaimOperatorIsRegex,
   ssoClaimOperatorRequiresValue,
 } from './SsoClaimsMappingService.js';
+import { identityEntitlementMappingService, type IdentityEntitlementMatchOperator, type ManagedIdentityEntitlementMapping } from './IdentityEntitlementMappingService.js';
 
 export type SsoGroupMappingSyncMode = 'authoritative' | 'additive';
 
@@ -51,6 +54,13 @@ export interface SsoGroupMappingView {
   isActive: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface ProviderNeutralSsoGroupMigrationResult {
+  legacyMappingId: string;
+  providerKey: string;
+  identityMapping: ManagedIdentityEntitlementMapping;
+  created: boolean;
 }
 
 function normalizeTenantId(tenantId?: string | null): string | null {
@@ -133,6 +143,26 @@ function mappingUpdateAffectsMemberships(existing: SsoGroupMapping, merged: SsoG
   );
 }
 
+function providerNeutralEntitlementType(mapping: SsoGroupMapping): 'group' | 'role' {
+  if (mapping.claimType === 'group') return 'group';
+  if (mapping.claimType === 'role') return 'role';
+  throw Errors.validation('Only legacy group and role claim mappings can be migrated automatically. Recreate custom and email-domain mappings as an explicit provider-neutral design.');
+}
+
+function providerNeutralMatchOperator(mapping: SsoGroupMapping): IdentityEntitlementMatchOperator {
+  switch (mapping.claimOperator) {
+    case null:
+    case 'equals':
+      return 'exact';
+    case 'contains':
+      return 'contains';
+    case 'exists':
+      return 'exists';
+    default:
+      throw Errors.validation('Only equals, contains, and exists legacy claim operators can be migrated automatically. Recreate wildcard, negated, and regex mappings explicitly.');
+  }
+}
+
 class SsoGroupMappingServiceClass {
   async getAllMappings(tenantId?: string | null): Promise<SsoGroupMappingView[]> {
     const dataSource = await getDataSource();
@@ -168,6 +198,68 @@ class SsoGroupMappingServiceClass {
     });
 
     return { id };
+  }
+
+  /**
+   * Creates an equivalent provider-neutral mapping while preserving the legacy
+   * mapping. Administrators can validate the replacement before disabling the
+   * old evaluator, so an incomplete migration never removes access.
+   */
+  async migrateToProviderNeutral(id: string, providerKey: string, tenantId?: string | null): Promise<ProviderNeutralSsoGroupMigrationResult> {
+    const normalizedProviderKey = providerKey.trim();
+    if (!normalizedProviderKey) throw Errors.validation('providerKey is required');
+    const dataSource = await getDataSource();
+    return dataSource.transaction(async (manager) => {
+      const legacyMapping = await manager.getRepository(SsoGroupMapping).findOneBy({ id });
+      if (!legacyMapping) throw Errors.notFound('SSO group mapping');
+      const normalizedTenantId = normalizeTenantId(tenantId);
+      if ((legacyMapping.tenantId || null) !== normalizedTenantId) {
+        throw Errors.forbidden('The legacy SSO group mapping is not available in this tenant');
+      }
+      if (!legacyMapping.isActive) throw Errors.validation('Only active legacy SSO group mappings can be migrated');
+
+      const entitlementType = providerNeutralEntitlementType(legacyMapping);
+      const matchOperator = providerNeutralMatchOperator(legacyMapping);
+      const externalId = matchOperator === 'exists' ? null : legacyMapping.claimValue.trim();
+      if (matchOperator !== 'exists' && !externalId) throw Errors.validation('The legacy SSO group mapping has no claim value');
+
+      const [provider, group] = await Promise.all([
+        manager.getRepository(IdentityProvider).findOne({ where: normalizedTenantId ? { tenantId: normalizedTenantId, key: normalizedProviderKey } : { tenantId: IsNull(), key: normalizedProviderKey } }),
+        manager.getRepository(AuthzGroup).findOneBy({ id: legacyMapping.targetGroupId }),
+      ]);
+      if (!provider) throw Errors.notFound('Identity provider not found');
+      if (!group || group.isArchived) throw Errors.notFound('Target group');
+      if ((group.tenantId || null) !== normalizedTenantId) throw Errors.validation('The legacy mapping target group and replacement identity provider must use the same tenant scope');
+
+      const existing = await manager.getRepository(IdentityEntitlementMapping).findOne({
+        where: {
+          tenantId: normalizedTenantId || IsNull(), providerId: provider.id, targetGroupId: group.id,
+          entitlementType, externalId, matchOperator, syncMode: legacyMapping.syncMode, isActive: true,
+        } as any,
+      });
+      if (existing) {
+        return {
+          legacyMappingId: legacyMapping.id,
+          providerKey: provider.key,
+          created: false,
+          identityMapping: {
+            id: existing.id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key,
+            entitlementType, externalId, matchOperator, syncMode: existing.syncMode as 'additive' | 'authoritative',
+            isActive: Boolean(existing.isActive), configKey: existing.configKey, sourceRef: existing.sourceRef,
+          },
+        };
+      }
+
+      const identityMapping = await identityEntitlementMappingService.create({
+        providerKey: provider.key,
+        targetGroupKey: group.key,
+        entitlementType,
+        externalId,
+        matchOperator,
+        syncMode: legacyMapping.syncMode as 'additive' | 'authoritative',
+      }, normalizedTenantId, manager);
+      return { legacyMappingId: legacyMapping.id, providerKey: provider.key, identityMapping, created: true };
+    });
   }
 
   async updateMapping(id: string, updates: Partial<SsoGroupMappingInput>): Promise<void> {

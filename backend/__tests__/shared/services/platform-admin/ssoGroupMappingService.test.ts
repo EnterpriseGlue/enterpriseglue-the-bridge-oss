@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { AuditLog, AuthzGroup, AuthzGroupMembership, PlatformSettings, SsoGroupMapping } from '@enterpriseglue/shared/db/entities/index.js';
+import { AuditLog, AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, PlatformSettings, SsoGroupMapping } from '@enterpriseglue/shared/db/entities/index.js';
 import { ssoGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.js';
+
+const identityEntitlementMappingService = vi.hoisted(() => ({ create: vi.fn() }));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js', () => ({ identityEntitlementMappingService }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -275,5 +279,39 @@ describe('ssoGroupMappingService', () => {
       claimValue: 'Ops',
       targetGroupId: 'missing-group',
     })).rejects.toThrow('Target group');
+  });
+
+  it('creates a provider-neutral replacement for an equivalent legacy group mapping without deleting the legacy mapping', async () => {
+    const legacyMapping = {
+      id: 'legacy-group-1', tenantId: 'tenant-a', providerId: 'legacy-entra', claimType: 'group', claimKey: 'groups', claimValue: 'ops', claimOperator: 'equals',
+      targetGroupId: 'group-1', syncMode: 'authoritative', priority: 0, isActive: true, createdAt: 1, updatedAt: 1,
+    };
+    const provider = { id: 'provider-1', tenantId: 'tenant-a', key: 'entra-main' };
+    const group = { id: 'group-1', tenantId: 'tenant-a', key: 'ops', isArchived: false };
+    identityEntitlementMappingService.create.mockResolvedValue({ id: 'identity-mapping-1', providerId: 'provider-1', providerKey: 'entra-main', targetGroupId: 'group-1', targetGroupKey: 'ops', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, configKey: null, sourceRef: null });
+    const getRepository = (entity: unknown) => {
+      if (entity === SsoGroupMapping) return { findOneBy: vi.fn().mockResolvedValue(legacyMapping) };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(provider) };
+      if (entity === AuthzGroup) return { findOneBy: vi.fn().mockResolvedValue(group) };
+      if (entity === IdentityEntitlementMapping) return { findOne: vi.fn().mockResolvedValue(null) };
+      throw new Error('Unexpected repository');
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: (callback: any) => callback({ getRepository }) });
+
+    const result = await ssoGroupMappingService.migrateToProviderNeutral('legacy-group-1', 'entra-main', 'tenant-a');
+
+    expect(result).toEqual(expect.objectContaining({ legacyMappingId: 'legacy-group-1', providerKey: 'entra-main', created: true }));
+    expect(identityEntitlementMappingService.create).toHaveBeenCalledWith({ providerKey: 'entra-main', targetGroupKey: 'ops', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', syncMode: 'authoritative' }, 'tenant-a', expect.anything());
+  });
+
+  it('refuses automatic conversion of legacy regex mappings', async () => {
+    const legacyMapping = {
+      id: 'legacy-regex-1', tenantId: null, providerId: null, claimType: 'group', claimKey: 'groups', claimValue: '^ops$', claimOperator: 'matches_regex',
+      targetGroupId: 'group-1', syncMode: 'authoritative', priority: 0, isActive: true, createdAt: 1, updatedAt: 1,
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: (callback: any) => callback({ getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue(legacyMapping) }) }) });
+
+    await expect(ssoGroupMappingService.migrateToProviderNeutral('legacy-regex-1', 'entra-main')).rejects.toThrow('Only equals, contains, and exists');
+    expect(identityEntitlementMappingService.create).not.toHaveBeenCalled();
   });
 });

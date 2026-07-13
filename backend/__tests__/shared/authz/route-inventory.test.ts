@@ -424,6 +424,7 @@ describe('authorization route inventory validation', () => {
         surfaceId: 'admin.access-control.sso-group-mappings.edit',
         routes: [
           ['POST', '/api/authz/sso-group-mappings', 'platform.self'],
+          ['POST', '/api/authz/sso-group-mappings/{id}/migrate-provider-neutral', 'ssoMapping.byId'],
           ['PUT', '/api/authz/sso-group-mappings/:id', 'ssoMapping.byId'],
           ['DELETE', '/api/authz/sso-group-mappings/:id', 'ssoMapping.byId'],
           ['POST', '/api/authz/sso-group-mappings/test', 'platform.self'],
