@@ -117,7 +117,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pnpm authz:config apply "$BUNDLE_PATH" | tee config-bundle-apply.json
+          node scripts/config-bundle.mjs apply "$BUNDLE_PATH" | tee config-bundle-apply.json
+          APPLY_RUN_ID="$(node -e "const receipt=require('./config-bundle-apply.json'); if (!receipt.applyRunId) process.exit(1); process.stdout.write(receipt.applyRunId)")"
+          node scripts/config-bundle.mjs wait "$APPLY_RUN_ID" | tee config-bundle-reconciliation.json
 
       - name: Upload apply receipt
         if: inputs.operation == 'apply'
@@ -125,5 +127,14 @@ jobs:
         with:
           name: config-bundle-apply-${{ github.run_id }}
           path: config-bundle-apply.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload reconciliation receipt
+        if: inputs.operation == 'apply'
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: config-bundle-reconciliation-${{ github.run_id }}
+          path: config-bundle-reconciliation.json
           if-no-files-found: error
           retention-days: 30

@@ -4,7 +4,7 @@ Summary: Target deployment and CI/CD contract for EnterpriseGlue authorization, 
 
 Audience: Platform engineers, security engineers, and CI/CD maintainers.
 
-Status: **Partially implemented runbook.** API-driven configuration-bundle preview, hash-bound apply, export, apply history, and the `pnpm authz:config` CLI are available. File-based bootstrap validation/apply, optional Docker/OpenShift mounts, and Engine Set/runtime-resource materialization receipts are available behind disabled-by-default `EG_CONFIG_*` settings. Provider identity reconciliation and full deployment-path coverage remain planned. Existing deployments continue to start without a bundle.
+Status: **Partially implemented runbook.** API-driven configuration-bundle preview, hash-bound apply, export, apply history, and the `pnpm authz:config` CLI are available. File-based bootstrap validation/apply, optional Docker/OpenShift mounts, Engine Set/runtime-resource materialization receipts, and durable stored-identity replay continuation are available behind disabled-by-default settings. Full deployment-path coverage remains planned. Existing deployments continue to start without a bundle.
 
 Related guides:
 
@@ -39,7 +39,7 @@ Do not make automatic startup apply the default. Existing standalone installatio
 
 Names are target contracts and must be added to shared configuration validation, backend `.env.example`, Docker/OpenShift templates, configuration reference, and configuration matrix together.
 
-Implemented now: shared configuration validation, backend `.env.example`, file-size/hash validation, `validate`/`apply` startup modes, production fail-closed default, optional Docker/OpenShift mounts, and sanitized health/readiness bootstrap status. Each successful apply receipt reports completed Engine Set/runtime-resource materialization counts. Provider identity reconciliation remains pending.
+Implemented now: shared configuration validation, backend `.env.example`, file-size/hash validation, `validate`/`apply` startup modes, production fail-closed default, optional Docker/OpenShift mounts, and sanitized health/readiness bootstrap status. Each successful apply receipt reports completed Engine Set/runtime-resource materialization counts; stored identity replay continuation is durable and can be awaited by CI.
 
 ## Startup Ordering
 
