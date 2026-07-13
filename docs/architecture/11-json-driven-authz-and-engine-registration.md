@@ -2285,7 +2285,7 @@ Phase 0 exit criteria:
 
 - [x] ✅ Add `pnpm authz:config` CLI commands for validate, preview, hash-bound apply, and export. It uses machine credentials, prints JSON for CI, and returns distinct nonzero usage/validation/request exit codes.
 - [x] ✅ Add a manually dispatched, environment-protected GitHub Actions preview/apply workflow. It requires a reviewed commit SHA, uploads sanitized receipts, serializes target-environment runs, and requires an explicit `APPLY` confirmation for mutation.
-- [ ] ⬜ Add Docker/Kubernetes secret reference examples.
+- [x] ✅ Add Docker Compose and OpenShift secret-reference examples that keep secret bytes outside JSON bundles and mount only read-only files. Bootstrap mounting remains explicitly pending.
 - [x] ✅ Document least-privilege configuration API-client creation, scoped role assignment, Environment-secret storage, and rotation/revocation.
 - [x] ✅ Add machine-readable CLI output and distinct usage, preview-validation, and request/runtime exit codes for CI. Finer-grained authorization, conflict, and reconciliation exit codes remain pending.
 - [ ] ⬜ Add disabled-by-default `EG_CONFIG_*` settings to shared config validation, `backend/.env.example`, every Docker/OpenShift env example, `docs/reference/configuration.md`, and `docs/reference/configuration-matrix.md`.

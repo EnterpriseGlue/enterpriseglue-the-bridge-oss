@@ -200,6 +200,72 @@ External secret-manager adapters can be extensions. All resolution goes through 
 
 Customer-sidecar downstream peer tokens are never EnterpriseGlue secret references because EnterpriseGlue must not receive them.
 
+### Docker Compose Secret Reference Example
+
+The following is the intended optional override once bootstrap mounting is enabled. It is not a current Compose feature: current deployments must use the API/CLI apply path and their existing secret injection.
+
+```yaml
+services:
+  backend:
+    environment:
+      EG_CONFIG_SECRET_PROVIDER: file
+      EG_CONFIG_SECRET_FILE_ROOT: /var/run/secrets/enterpriseglue
+    volumes:
+      - ${EG_CONFIG_SECRETS_HOST_PATH:?set-a-private-secret-directory}:/var/run/secrets/enterpriseglue:ro
+```
+
+The bundle would refer to a file without including its value:
+
+```json
+{
+  "key": "identity.oidc.production",
+  "type": "oidc",
+  "oidc": {
+    "clientSecretRef": "file:///var/run/secrets/enterpriseglue/oidc-client-secret"
+  }
+}
+```
+
+Keep the host secret directory outside the source repository and outside the non-secret config-bundle mount. Run the backend as a non-root user with read-only access to only the required files.
+
+### OpenShift Secret Reference Example
+
+Keep secret bytes in an OpenShift `Secret`, then mount individual keys at the same read-only path used by the bundle reference. The ConfigMap/projected bundle mount remains planned; this example documents the required separation.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: enterpriseglue-config-secrets
+type: Opaque
+stringData:
+  oidc-client-secret: replace-through-external-secret-management
+---
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: backend
+          env:
+            - name: EG_CONFIG_SECRET_PROVIDER
+              value: file
+            - name: EG_CONFIG_SECRET_FILE_ROOT
+              value: /var/run/secrets/enterpriseglue
+          volumeMounts:
+            - name: config-secrets
+              mountPath: /var/run/secrets/enterpriseglue
+              readOnly: true
+      volumes:
+        - name: config-secrets
+          secret:
+            secretName: enterpriseglue-config-secrets
+            defaultMode: 0400
+```
+
+Use External Secrets, Sealed Secrets, or the organization's managed secret operator to create the `Secret`; do not commit the literal `stringData` value. CI bundle exports, previews, apply receipts, logs, audits, and OpenAPI responses must contain only the reference URI.
+
 ## Readiness And Observability
 
 Expose sanitized status fields:
