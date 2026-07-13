@@ -112,6 +112,22 @@ describe('configBundleDiffService', () => {
     ]));
   });
 
+  it('detects ingestion-control drift for config-owned engines', async () => {
+    mockDataSource([], [], [], [{
+      id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz',
+      name: 'Central', baseUrl: 'https://central.example.com/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}',
+      runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false,
+      connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active',
+    }]);
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: { './engines.json': { engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', labels: {}, auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' } }] } },
+    }, 'tenant-a');
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'engine', key: 'engine.central', operation: 'update' }),
+    ]));
+  });
+
   it('includes config-owned identity providers in the persisted-state diff', async () => {
     mockDataSource([], [], [], [], []);
     const result = await configBundleDiffService.diff({

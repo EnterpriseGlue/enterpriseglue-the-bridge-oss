@@ -137,6 +137,8 @@ class ConfigBundleDiffService {
         existing.name !== engine.name || existing.baseUrl !== engine.baseUrl || existing.type !== engine.type ||
         existing.externalId !== (engine.externalId || null) || existing.labelsJson !== JSON.stringify(engine.labels || {}) ||
         existing.runtimeAccessScope !== engine.runtimeAccessScope || existing.deploymentIntegration !== engine.deploymentIntegration ||
+        (existing.metadataDiscoveryEnabled !== false) !== engine.metadataDiscoveryEnabled ||
+        (existing.pipelineReceiptEnabled !== false) !== engine.pipelineReceiptEnabled ||
         existing.connectionMode !== engine.connectionMode || existing.ownershipMode !== (engine.ownershipMode || 'config_locked') ||
         existing.lifecycleStatus === 'decommissioned'
       ) {
