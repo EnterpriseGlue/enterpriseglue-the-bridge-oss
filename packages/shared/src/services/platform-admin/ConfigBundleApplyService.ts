@@ -461,6 +461,7 @@ class ConfigBundleApplyService {
 
         if (change.objectType === 'engine') {
           const desired = desiredEngines.get(change.key);
+          const sourceHash = desired ? objectFingerprint('engine', desired.key, desired) : objectFingerprint('engine', change.key, { archived: true });
           if (change.operation === 'create' && desired) {
             const engineId = generateId();
             await engineRepo.insert({
@@ -468,7 +469,7 @@ class ConfigBundleApplyService {
               externalId: desired.externalId || null, labelsJson: JSON.stringify(desired.labels || {}),
               registrationSource: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`,
               configKey: desired.key, configKeyIdentity: canonicalEngineKeyIdentity(tenantId, desired.key),
-              sourceHash: diff.canonicalHash, lastAppliedAt: now, ownershipMode: desired.ownershipMode || 'config_locked',
+              sourceHash, lastAppliedAt: now, ownershipMode: desired.ownershipMode || 'config_locked',
               managementMode: 'hybrid', fieldOwnershipJson: null, driftStatus: 'in_sync', lifecycleStatus: 'active',
               lastExternalSyncAt: null, capabilitiesJson: null, capabilityStatus: null, externalUpdatedAt: null,
               ...engineCredentialFields(desired.auth), version: desired.version || null, ownerId: null, delegateId: null,
@@ -482,7 +483,7 @@ class ConfigBundleApplyService {
           } else if (change.operation === 'update' && desired && change.currentId) {
             await engineRepo.update({ id: change.currentId }, {
               name: desired.name, baseUrl: desired.baseUrl, type: desired.type, externalId: desired.externalId || null,
-              labelsJson: JSON.stringify(desired.labels || {}), sourceHash: diff.canonicalHash, lastAppliedAt: now,
+              labelsJson: JSON.stringify(desired.labels || {}), sourceHash, lastAppliedAt: now,
               ownershipMode: desired.ownershipMode || 'config_locked', lifecycleStatus: 'active', driftStatus: 'in_sync',
               ...engineCredentialFields(desired.auth), version: desired.version || null, environmentTagId: desired.environmentTagId || null,
               runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, metadataDiscoveryEnabled: desired.metadataDiscoveryEnabled, pipelineReceiptEnabled: desired.pipelineReceiptEnabled, connectionMode: desired.connectionMode, updatedAt: now,
@@ -498,18 +499,19 @@ class ConfigBundleApplyService {
         }
         if (change.objectType === 'engine_set') {
           const desired = desiredEngineSets.get(change.key);
+          const sourceHash = desired ? objectFingerprint('engine_set', desired.key, desired) : objectFingerprint('engine_set', change.key, { archived: true });
           const engineRows = await engineRepo.find();
           const keyToId = new Map(engineRows.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine.id]));
           if (change.operation === 'create' && desired) {
             const id = generateId();
             const selector = resolveConfigEngineSetSelector(desired.selector, keyToId);
-            await engineSetRepo.insert({ id, tenantId, key: desired.key, name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), selectorFingerprint: '', source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', isArchived: false, createdById: input.actorId, lastMaterializedAt: null, materializationStatus: 'pending', materializationError: null, createdAt: now, updatedAt: now });
+            await engineSetRepo.insert({ id, tenantId, key: desired.key, name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), selectorFingerprint: '', source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', isArchived: false, createdById: input.actorId, lastMaterializedAt: null, materializationStatus: 'pending', materializationError: null, createdAt: now, updatedAt: now });
             materializeIds.push(id); created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
             const selector = resolveConfigEngineSetSelector(desired.selector, keyToId);
-            await engineSetRepo.update({ id: change.currentId }, { name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), isArchived: false, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', materializationStatus: 'pending', updatedAt: now });
+            await engineSetRepo.update({ id: change.currentId }, { name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), isArchived: false, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', materializationStatus: 'pending', updatedAt: now });
             materializeIds.push(change.currentId); updated += 1;
-          } else if (change.operation === 'archive' && change.currentId) { await engineSetRepo.update({ id: change.currentId }, { isArchived: true, sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', materializationStatus: 'archived', updatedAt: now }); archived += 1; }
+          } else if (change.operation === 'archive' && change.currentId) { await engineSetRepo.update({ id: change.currentId }, { isArchived: true, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', materializationStatus: 'archived', updatedAt: now }); archived += 1; }
         }
         if (change.objectType === 'runtime_resource_set') {
           const desired = desiredRuntimeResourceSets.get(change.key);
