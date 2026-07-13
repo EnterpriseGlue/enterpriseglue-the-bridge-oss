@@ -6,12 +6,13 @@ import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persis
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'role' | 'group' | 'engine' | 'engine_set' | 'runtime_resource_set' | 'identity_provider';
+  objectType: 'role' | 'group' | 'engine' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
@@ -61,7 +62,7 @@ class ConfigBundleDiffService {
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders] = await Promise.all([
+    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders, identityMappings] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
@@ -69,6 +70,7 @@ class ConfigBundleDiffService {
       dataSource.getRepository(RuntimeResourceSet).find(),
       dataSource.getRepository(RbacRolePermission).find(),
       dataSource.getRepository(IdentityProvider).find(),
+      dataSource.getRepository(IdentityEntitlementMapping).find(),
     ]);
     const rolePermissionsByRoleId = new Map<string, string[]>();
     for (const permission of rolePermissions) {
@@ -86,6 +88,8 @@ class ConfigBundleDiffService {
     const runtimeResourceSetsByKey = new Map(tenantRuntimeResourceSets.map((set) => [set.key, set]));
     const tenantIdentityProviders = identityProviders.filter((provider) => (provider.tenantId || null) === normalizedTenantId);
     const identityProvidersByKey = new Map(tenantIdentityProviders.map((provider) => [provider.key, provider]));
+    const tenantIdentityMappings = identityMappings.filter((mapping) => (mapping.tenantId || null) === normalizedTenantId);
+    const identityMappingsByKey = new Map(tenantIdentityMappings.filter((mapping) => mapping.configKey).map((mapping) => [mapping.configKey!, mapping]));
     const changes: ConfigBundleDiffChange[] = [];
 
     const desiredRoles = values(compilation.files, './roles.json', 'roles');
@@ -205,6 +209,22 @@ class ConfigBundleDiffService {
       }
     }
 
+    const desiredIdentityMappings = values(compilation.files, './identity-mappings.json', 'identityMappings');
+    const desiredIdentityMappingKeys = new Set(desiredIdentityMappings.map((mapping) => mapping.key));
+    for (const mapping of desiredIdentityMappings) {
+      const existing = identityMappingsByKey.get(mapping.key);
+      const provider = identityProvidersByKey.get(mapping.providerKey);
+      const group = groupsByKey.get(mapping.targetGroupKey);
+      if (!existing) changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'create', reason: 'No persisted identity mapping uses this config key' });
+      else if (existing.sourceRef !== sourceRef) changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'conflict', currentId: existing.id, reason: 'Existing identity mapping is not owned by this configuration bundle' });
+      else if (
+        existing.providerId !== provider?.id || existing.targetGroupId !== group?.id ||
+        existing.entitlementType !== mapping.source.type || existing.externalId !== (mapping.source.externalId || null) ||
+        existing.matchOperator !== mapping.source.operator || existing.syncMode !== mapping.syncMode || !existing.isActive
+      ) changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'update', currentId: existing.id, reason: 'Config-owned identity mapping differs from desired provider, entitlement, target group, sync mode, or active state' });
+      else changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned identity mapping already matches the desired state' });
+    }
+
     if (manifest.mode === 'authoritative') {
       for (const role of tenantRoles) {
         if (role.source === CONFIG_SOURCE && role.sourceRef === sourceRef && !desiredRoleKeys.has(role.key) && !role.isArchived) {
@@ -232,6 +252,11 @@ class ConfigBundleDiffService {
       for (const provider of tenantIdentityProviders) {
         if (provider.sourceRef === sourceRef && !desiredIdentityProviderKeys.has(provider.key) && provider.isEnabled) {
           changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'archive', currentId: provider.id, reason: 'Config-owned identity provider is absent from an authoritative bundle' });
+        }
+      }
+      for (const mapping of tenantIdentityMappings) {
+        if (mapping.sourceRef === sourceRef && mapping.configKey && !desiredIdentityMappingKeys.has(mapping.configKey) && mapping.isActive) {
+          changes.push({ objectType: 'identity_mapping', key: mapping.configKey, operation: 'archive', currentId: mapping.id, reason: 'Config-owned identity mapping is absent from an authoritative bundle' });
         }
       }
     }

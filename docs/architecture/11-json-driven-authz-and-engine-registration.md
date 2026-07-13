@@ -2169,7 +2169,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Load multi-file folder bundle and single-file bundle.
 - [ ] ⬜ Resolve imports with path traversal protection.
 - [ ] ⬜ Resolve all references against current database state and staged objects in the same bundle.
-- [x] ✅ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets and Runtime Resource Sets. Assignment, identity mapping, and project-engine target diff details remain pending.
+- [x] ✅ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets, Runtime Resource Sets, and config-owned identity mappings. Assignment and project-engine target diff details remain pending.
 - [ ] ⬜ Produce role permission diffs with additions, removals, expanded template permissions, and affected assignments.
 - [ ] ⬜ Produce runtime resource set diffs with matched, unmatched, newly matched, and no-longer-matched process or decision keys.
 - [ ] ⬜ Validate identity provider references and preview normalized entitlement-to-group matches without contacting providers unless an explicit connectivity test is requested.
