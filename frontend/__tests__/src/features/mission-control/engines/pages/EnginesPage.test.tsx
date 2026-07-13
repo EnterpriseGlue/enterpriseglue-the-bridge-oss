@@ -34,7 +34,6 @@ import EnginesPage, {
   isConfigWarnEngine,
   isExternallyManagedEngine,
   isExternallyRegisteredEngine,
-  legacyEngineRoleHasPermission,
 } from '@src/features/mission-control/engines/EnginesPage';
 import { apiClient } from '@src/shared/api/client';
 import { EnginePermission } from '@src/shared/auth/permissions';
@@ -452,39 +451,34 @@ describe('EnginesPage', () => {
     expect(screen.queryByText('Engine details')).not.toBeInTheDocument();
   });
 
-  it('preserves legacy owner and delegate action access', () => {
+  it('does not derive engine actions from legacy display roles', () => {
     const noScopedPermissions = () => false;
 
     expect(getEngineActionPermissions({ id: 'engine-1', myRole: 'owner' }, noScopedPermissions)).toMatchObject({
-      canEdit: true,
-      canDelete: true,
-      canTest: true,
-      canViewSecrets: true,
-      canManageSecrets: true,
-      canViewMembers: true,
-      canManageMembers: true,
+      canEdit: false,
+      canDelete: false,
+      canTest: false,
+      canViewSecrets: false,
+      canManageSecrets: false,
+      canViewMembers: false,
+      canManageMembers: false,
     });
     expect(getEngineActionPermissions({ id: 'engine-1', myRole: 'delegate' }, noScopedPermissions)).toMatchObject({
-      canEdit: true,
-      canDelete: true,
-      canTest: true,
-      canViewSecrets: true,
-      canManageSecrets: true,
-      canViewMembers: true,
-      canManageMembers: true,
+      canEdit: false,
+      canDelete: false,
+      canTest: false,
+      canViewSecrets: false,
+      canManageSecrets: false,
+      canViewMembers: false,
+      canManageMembers: false,
     });
-  });
-
-  it('maps legacy operator and deployer roles without over-granting management actions', () => {
-    const noScopedPermissions = () => false;
-
     expect(getEngineActionPermissions({ id: 'engine-1', myRole: 'operator' }, noScopedPermissions)).toMatchObject({
       canEdit: false,
       canDelete: false,
       canTest: false,
       canViewSecrets: false,
       canManageSecrets: false,
-      canViewMembers: true,
+      canViewMembers: false,
       canManageMembers: false,
     });
     expect(getEngineActionPermissions({ id: 'engine-1', myRole: 'deployer' }, noScopedPermissions)).toMatchObject({
@@ -573,7 +567,7 @@ describe('EnginesPage', () => {
     });
   });
 
-  it('does not enable engine actions when scoped permissions, action decisions, and legacy roles are absent', () => {
+  it('does not enable engine actions when scoped permissions and action decisions are absent', () => {
     const noScopedPermissions = () => false;
     const noActions = () => false;
 
@@ -630,10 +624,6 @@ describe('EnginesPage', () => {
       canRevokeProjectAccess: true,
       canOpenMembers: true,
     });
-  });
-
-  it('does not grant delete to operator through legacy role mapping', () => {
-    expect(legacyEngineRoleHasPermission({ myRole: 'operator' }, EnginePermission.ENGINE_DELETE)).toBe(false);
   });
 
   it('detects externally registered engines for edit warnings', () => {

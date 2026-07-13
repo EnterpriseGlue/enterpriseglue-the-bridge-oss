@@ -66,93 +66,34 @@ function normalizeEngineType(type: unknown): EngineTypeId {
 type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean
 type EngineActionCheck = (engineId: string | null | undefined, actionId: string) => boolean
 
-function legacyEngineRole(engine: any): string {
-  return String(engine?.myRole || '')
-}
-
-const LEGACY_ENGINE_FULL_ACCESS_ROLES = new Set(['admin', 'owner'])
-const LEGACY_ENGINE_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
-  delegate: [
-    EnginePermission.ENGINE_EDIT,
-    EnginePermission.ENGINE_DELETE,
-    EnginePermission.ENGINE_ACTIVATE,
-    EnginePermission.SECRETS_VIEW,
-    EnginePermission.SECRETS_MANAGE,
-    EnginePermission.ENVIRONMENT_SET,
-    EnginePermission.ENVIRONMENT_LOCK,
-    EnginePermission.MEMBERS_MANAGE,
-    EnginePermission.MEMBERS_VIEW,
-    EnginePermission.MEMBERS_LOOKUP,
-    EnginePermission.MEMBERS_INVITE,
-    EnginePermission.MEMBERS_ADD,
-    EnginePermission.MEMBERS_UPDATE_ROLE,
-    EnginePermission.MEMBERS_REMOVE,
-    EnginePermission.PROJECT_ACCESS_VIEW,
-    EnginePermission.PROJECT_ACCESS_APPROVE,
-    EnginePermission.PROJECT_ACCESS_DENY,
-    EnginePermission.PROJECT_ACCESS_REVOKE,
-    EnginePermission.DEPLOY,
-    EnginePermission.DEPLOY_VIEW,
-    EnginePermission.PROCESS_START,
-    EnginePermission.PROCESS_CANCEL,
-    EnginePermission.PROCESS_MODIFY,
-    EnginePermission.INSTANCE_VIEW,
-    EnginePermission.INSTANCE_DELETE,
-    EnginePermission.INSTANCE_RETRY,
-    EnginePermission.VARIABLES_EDIT,
-  ],
-  operator: [
-    EnginePermission.MEMBERS_VIEW,
-    EnginePermission.DEPLOY,
-    EnginePermission.DEPLOY_VIEW,
-    EnginePermission.PROCESS_START,
-    EnginePermission.PROCESS_CANCEL,
-    EnginePermission.PROCESS_MODIFY,
-    EnginePermission.INSTANCE_VIEW,
-    EnginePermission.INSTANCE_DELETE,
-    EnginePermission.INSTANCE_RETRY,
-    EnginePermission.VARIABLES_EDIT,
-  ],
-  deployer: [
-    EnginePermission.DEPLOY,
-    EnginePermission.DEPLOY_VIEW,
-  ],
-}
-
-export function legacyEngineRoleHasPermission(engine: any, permission: string): boolean {
-  const role = legacyEngineRole(engine)
-  if (LEGACY_ENGINE_FULL_ACCESS_ROLES.has(role)) return true
-  return Boolean(LEGACY_ENGINE_ROLE_PERMISSIONS[role]?.includes(permission))
-}
-
 export function getEngineActionPermissions(engine: any, hasPermission: EnginePermissionCheck, hasAction?: EngineActionCheck) {
   const engineId = engine?.id
   const hasActionDecision = (actionId: string) => Boolean(engineId && hasAction?.(engineId, actionId))
-  const hasPermissionOrActionOrLegacy = (permission: string, actionId?: string) =>
-    hasPermission(engineId, permission) || Boolean(actionId && hasActionDecision(actionId)) || legacyEngineRoleHasPermission(engine, permission)
-  const canManageMembers = hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_MANAGE)
-  const canLookupMembers = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_LOOKUP, 'engine.members.lookup')
-  const canInviteMembers = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_INVITE, 'engine.members.invite')
-  const canAddMembers = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_ADD, 'engine.members.add')
-  const canUpdateMemberRoles = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_UPDATE_ROLE, 'engine.members.update-role')
-  const canRemoveMembers = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_REMOVE, 'engine.members.remove')
-  const canManageDelegate = hasPermissionOrActionOrLegacy(EnginePermission.DELEGATE_MANAGE, 'engine.delegate.manage')
-  const canViewProjectAccess = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.PROJECT_ACCESS_VIEW, 'engine.project-access.requests.read')
-  const canApproveProjectAccess = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.PROJECT_ACCESS_APPROVE, 'engine.project-access.requests.approve')
-  const canDenyProjectAccess = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.PROJECT_ACCESS_DENY, 'engine.project-access.requests.deny')
-  const canRevokeProjectAccess = canManageMembers || hasPermissionOrActionOrLegacy(EnginePermission.PROJECT_ACCESS_REVOKE, 'engine.project-access.revoke')
-  const canSetEnvironment = hasPermissionOrActionOrLegacy(EnginePermission.ENVIRONMENT_SET, 'engine.environment.set')
-  const canLockEnvironment = hasPermissionOrActionOrLegacy(EnginePermission.ENVIRONMENT_LOCK, 'engine.environment.lock')
-  const canTransferOwnership = hasPermissionOrActionOrLegacy(EnginePermission.OWNERSHIP_TRANSFER, 'engine.ownership.transfer')
-  const canViewDeployments = hasPermissionOrActionOrLegacy(EnginePermission.DEPLOY_VIEW, 'engine.deployments.read')
-  const canViewMembers = hasPermissionOrActionOrLegacy(EnginePermission.MEMBERS_VIEW, 'engine.members.read') || canLookupMembers
-  const canManageSecrets = hasPermissionOrActionOrLegacy(EnginePermission.SECRETS_MANAGE, 'engine.secrets.manage')
-  const canViewSecrets = hasPermissionOrActionOrLegacy(EnginePermission.SECRETS_VIEW, 'engine.secrets.view') || canManageSecrets
+  const hasPermissionOrAction = (permission: string, actionId?: string) =>
+    hasPermission(engineId, permission) || Boolean(actionId && hasActionDecision(actionId))
+  const canManageMembers = hasPermissionOrAction(EnginePermission.MEMBERS_MANAGE)
+  const canLookupMembers = canManageMembers || hasPermissionOrAction(EnginePermission.MEMBERS_LOOKUP, 'engine.members.lookup')
+  const canInviteMembers = canManageMembers || hasPermissionOrAction(EnginePermission.MEMBERS_INVITE, 'engine.members.invite')
+  const canAddMembers = canManageMembers || hasPermissionOrAction(EnginePermission.MEMBERS_ADD, 'engine.members.add')
+  const canUpdateMemberRoles = canManageMembers || hasPermissionOrAction(EnginePermission.MEMBERS_UPDATE_ROLE, 'engine.members.update-role')
+  const canRemoveMembers = canManageMembers || hasPermissionOrAction(EnginePermission.MEMBERS_REMOVE, 'engine.members.remove')
+  const canManageDelegate = hasPermissionOrAction(EnginePermission.DELEGATE_MANAGE, 'engine.delegate.manage')
+  const canViewProjectAccess = canManageMembers || hasPermissionOrAction(EnginePermission.PROJECT_ACCESS_VIEW, 'engine.project-access.requests.read')
+  const canApproveProjectAccess = canManageMembers || hasPermissionOrAction(EnginePermission.PROJECT_ACCESS_APPROVE, 'engine.project-access.requests.approve')
+  const canDenyProjectAccess = canManageMembers || hasPermissionOrAction(EnginePermission.PROJECT_ACCESS_DENY, 'engine.project-access.requests.deny')
+  const canRevokeProjectAccess = canManageMembers || hasPermissionOrAction(EnginePermission.PROJECT_ACCESS_REVOKE, 'engine.project-access.revoke')
+  const canSetEnvironment = hasPermissionOrAction(EnginePermission.ENVIRONMENT_SET, 'engine.environment.set')
+  const canLockEnvironment = hasPermissionOrAction(EnginePermission.ENVIRONMENT_LOCK, 'engine.environment.lock')
+  const canTransferOwnership = hasPermissionOrAction(EnginePermission.OWNERSHIP_TRANSFER, 'engine.ownership.transfer')
+  const canViewDeployments = hasPermissionOrAction(EnginePermission.DEPLOY_VIEW, 'engine.deployments.read')
+  const canViewMembers = hasPermissionOrAction(EnginePermission.MEMBERS_VIEW, 'engine.members.read') || canLookupMembers
+  const canManageSecrets = hasPermissionOrAction(EnginePermission.SECRETS_MANAGE, 'engine.secrets.manage')
+  const canViewSecrets = hasPermissionOrAction(EnginePermission.SECRETS_VIEW, 'engine.secrets.view') || canManageSecrets
 
   return {
-    canEdit: hasPermissionOrActionOrLegacy(EnginePermission.ENGINE_EDIT, 'engine.inventory.update'),
-    canDelete: hasPermission(engineId, EnginePermission.ENGINE_DELETE) || hasActionDecision('engine.inventory.delete') || legacyEngineRole(engine) === 'admin' || legacyEngineRole(engine) === 'owner' || legacyEngineRole(engine) === 'delegate',
-    canTest: hasPermissionOrActionOrLegacy(EnginePermission.ENGINE_EDIT, 'engine.inventory.update'),
+    canEdit: hasPermissionOrAction(EnginePermission.ENGINE_EDIT, 'engine.inventory.update'),
+    canDelete: hasPermissionOrAction(EnginePermission.ENGINE_DELETE, 'engine.inventory.delete'),
+    canTest: hasPermissionOrAction(EnginePermission.ENGINE_EDIT, 'engine.inventory.update'),
     canViewSecrets,
     canManageSecrets,
     canViewMembers,
@@ -178,15 +119,7 @@ export function getEngineActionPermissions(engine: any, hasPermission: EnginePer
 type EngineActionPermissions = ReturnType<typeof getEngineActionPermissions>
 
 function getEngineInventoryReadDecision(engine: any, permissions: any) {
-  const decision = evaluateActionSnapshot(permissions, 'engine.inventory.read', { type: 'engine', id: engine?.id ?? null })
-  if (decision.allowed || !legacyEngineRoleHasPermission(engine, EnginePermission.INSTANCE_VIEW)) return decision
-  return {
-    ...decision,
-    allowed: true,
-    state: 'allowed' as const,
-    reason: 'Allowed by legacy engine role compatibility',
-    diagnostics: undefined,
-  }
+  return evaluateActionSnapshot(permissions, 'engine.inventory.read', { type: 'engine', id: engine?.id ?? null })
 }
 
 export type EngineDetailSectionId = 'registration' | 'access' | 'deployment' | 'runtime'
