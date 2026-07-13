@@ -135,6 +135,26 @@ describe('legacyIdentityProviderMigrationService', () => {
     }
   });
 
+  it('refuses cutover when only unrelated identity mappings exist', async () => {
+    process.env.READY_MIGRATION_SECRET = 'test-secret';
+    const legacyProvider = { id: 'legacy-google', name: 'Google Workspace', type: 'google', defaultRole: 'user', enabled: true, updatedAt: 1 };
+    const targetProvider = { id: 'target-1', key: 'migrated-google', tenantId: 'tenant-1', protocol: 'oidc', authenticationMode: 'direct', isEnabled: true, configurationJson: JSON.stringify({ clientSecretRef: 'env://READY_MIGRATION_SECRET' }) };
+    const save = vi.fn();
+    const mappingCount = vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+    const getRepository = (entity: unknown) => {
+      if (entity === SsoProvider) return { findOneBy: vi.fn().mockResolvedValue(legacyProvider), save };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(targetProvider) };
+      if (entity === IdentityEntitlementMapping) return { count: mappingCount };
+      throw new Error('Unexpected repository');
+    };
+    (getDataSource as any).mockResolvedValue({ transaction: (callback: any) => callback({ getRepository }) });
+    try {
+      await expect(legacyIdentityProviderMigrationService.cutover({ legacyProviderId: 'legacy-google', targetProviderKey: 'migrated-google', tenantId: 'tenant-1' })).rejects.toThrow('missing the explicit authenticated identity default-role mapping');
+      expect(save).not.toHaveBeenCalled();
+      expect(legacyProvider.enabled).toBe(true);
+    } finally { delete process.env.READY_MIGRATION_SECRET; }
+  });
+
   it('refuses to cut over an environment-managed provider or an unready replacement', async () => {
     await expect(legacyIdentityProviderMigrationService.cutover({ legacyProviderId: 'environment:microsoft', targetProviderKey: 'migrated-entra' })).rejects.toThrow('Environment-based legacy authentication');
 
