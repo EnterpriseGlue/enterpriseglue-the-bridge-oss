@@ -158,7 +158,11 @@ Every engine record requires:
 - expected/reported capabilities;
 - runtime access scope;
 - deployment integration mode;
+- `metadataDiscoveryEnabled` (default `true`) to allow scheduled runtime/deployment metadata discovery;
+- `pipelineReceiptEnabled` (default `true`) to accept machine-authenticated direct-pipeline deployment receipts;
 - connection mode and EnterpriseGlue-to-endpoint authentication.
+
+`metadataDiscoveryEnabled: false` removes the engine from scheduled discovery but does not prevent an administrator from running an explicit manual reconciliation. `pipelineReceiptEnabled: false` rejects the direct-pipeline receipt endpoint for that engine. The receipt switch is relevant only to `direct_engine` deployment integration; EnterpriseGlue-proxy deployments do not use pipeline receipts.
 
 Engine registration never grants human access. Visibility comes from effective scoped permissions.
 
