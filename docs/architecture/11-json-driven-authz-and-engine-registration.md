@@ -1862,7 +1862,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Extract SSO synchronization run/event diagnostics and manual reconciliation into `routes/authz/sso-sync-diagnostics.ts`, retaining optional provider, snapshot replay, and cleanup checks.
 - [x] ✅ Extract platform-role SSO mapping CRUD, test, and provider-neutral migration into `routes/authz/sso-platform-mappings.ts`, preserving the existing action and audit contracts.
 - [x] ✅ Extract SSO engine-assignment mappings, access snapshots, manual-to-SSO transition cleanup, and legacy-mapping retirement checks into `routes/authz/sso-engine-assignments.ts`.
-- [ ] ⬜ Split the remaining identity/SSO mapping families from `packages/backend-host/src/modules/platform-admin/routes/authz.ts` into focused routers.
+- [x] ✅ Extract SSO group mapping CRUD, test, and provider-neutral migration into `routes/authz/sso-group-mappings.ts`; all SSO mapping and diagnostic route families are now isolated.
 - [x] ✅ Add the external machine-authenticated deployment receipt route with API deployment eligibility, action/OpenAPI metadata, audit logging, and inventory materialization. Runtime scope settings, inventory reads, and reconciliation routes remain pending.
 - [x] ✅ Update `packages/backend-host/src/modules/mission-control/engines/routes.ts` manual engine create/update/list/detail schemas and serializers, including runtime scope, deployment integration, metadata discovery, pipeline receipt ingestion, managed-field protection, and canonical deployment-history reads.
 - [ ] ⬜ Update auth start/callback routes and provider services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit.

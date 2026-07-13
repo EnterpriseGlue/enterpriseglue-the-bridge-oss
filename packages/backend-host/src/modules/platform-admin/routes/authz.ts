@@ -17,7 +17,6 @@ import { validateBody, validateParams, validateQuery } from '@enterpriseglue/sha
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import {
   policyService,
-  ssoGroupMappingService,
   permissionService,
   API_CLIENT_TOKEN_PREFIX,
   ApiClientScopes,
@@ -26,7 +25,6 @@ import {
   EvaluationContext,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { AUTHZ_RESOURCE_TYPES } from '@enterpriseglue/shared/authz/permission-actions.js';
-import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { registerConfigBundleRoutes } from './authz/config-bundles.js';
 import { registerEngineSetRoutes } from './authz/engine-sets.js';
 import { registerMachineRoutes } from './authz/machines.js';
@@ -40,6 +38,7 @@ import { registerExternalEngineSystemRoutes } from './authz/external-engine-syst
 import { registerSsoSyncDiagnosticsRoutes } from './authz/sso-sync-diagnostics.js';
 import { registerSsoPlatformMappingRoutes } from './authz/sso-platform-mappings.js';
 import { registerSsoEngineAssignmentRoutes } from './authz/sso-engine-assignments.js';
+import { registerSsoGroupMappingRoutes } from './authz/sso-group-mappings.js';
 
 // Validation schemas
 const authzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
@@ -78,39 +77,6 @@ const authzEvaluateSchema = z.object({
 });
 
 
-const ssoGroupMappingCreateSchema = z.object({
-  providerId: z.string().min(1).nullable().optional(),
-  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string().min(1),
-  claimValue: z.string().optional().default(''),
-  claimOperator: z.enum([
-    'equals',
-    'not_equals',
-    'contains',
-    'not_contains',
-    'contains_any',
-    'not_contains_any',
-    'contains_all',
-    'not_contains_all',
-    'matches_regex',
-    'not_matches_regex',
-    'exists',
-    'not_exists',
-  ]).nullable().optional(),
-  targetGroupId: z.string().min(1),
-  syncMode: z.enum(['authoritative', 'additive']).optional(),
-  priority: z.number().int().optional(),
-  isActive: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-});
-
-const ssoGroupMappingUpdateSchema = ssoGroupMappingCreateSchema.partial();
-
-const ssoGroupMappingTestSchema = z.object({
-  claims: z.record(z.string(), z.unknown()),
-  providerId: z.string().min(1).optional(),
-});
-const ssoGroupMappingProviderNeutralMigrationSchema = z.object({ providerKey: z.string().min(1).max(128) });
 
 const router = Router();
 
@@ -364,79 +330,7 @@ registerSsoEngineAssignmentRoutes(router, { requirePlatformAction });
 // SSO Group Mapping Management (Admin Only)
 // ============================================================================
 
-router.get('/api/authz/sso-group-mappings', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.read'), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const mappings = await ssoGroupMappingService.getAllMappings(req.tenant?.tenantId || null);
-    res.json(mappings);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Get SSO group mappings error:', error);
-    throw Errors.internal('Failed to get SSO group mappings');
-  }
-}));
-
-router.post('/api/authz/sso-group-mappings', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateBody(ssoGroupMappingCreateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const result = await ssoGroupMappingService.createMapping({
-      ...req.body,
-      tenantId: req.tenant?.tenantId || null,
-    });
-    res.status(201).json(result);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Create SSO group mapping error:', error);
-    throw Errors.badRequest(error.message || 'Failed to create SSO group mapping');
-  }
-}));
-
-router.post('/api/authz/sso-group-mappings/:id/migrate-provider-neutral', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateParams(idParamSchema), validateBody(ssoGroupMappingProviderNeutralMigrationSchema), asyncHandler(async (req: Request, res: Response) => {
-  const result = await ssoGroupMappingService.migrateToProviderNeutral(String(req.params.id), req.body.providerKey, req.tenant?.tenantId || null);
-  await logAudit({
-    action: 'authz.sso_group_mapping.provider_neutral_migration',
-    userId: req.user!.userId,
-    resourceType: 'sso_group_mapping',
-    resourceId: result.legacyMappingId,
-    details: { providerKey: result.providerKey, identityMappingId: result.identityMapping.id, created: result.created },
-  });
-  res.status(result.created ? 201 : 200).json(result);
-}));
-
-router.put('/api/authz/sso-group-mappings/:id', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateParams(idParamSchema), validateBody(ssoGroupMappingUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    await ssoGroupMappingService.updateMapping(String(req.params.id), {
-      ...req.body,
-      tenantId: req.tenant?.tenantId || null,
-    });
-    res.json({ success: true });
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Update SSO group mapping error:', error);
-    throw Errors.badRequest(error.message || 'Failed to update SSO group mapping');
-  }
-}));
-
-router.delete('/api/authz/sso-group-mappings/:id', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    await ssoGroupMappingService.deleteMapping(String(req.params.id));
-    res.status(204).send();
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Delete SSO group mapping error:', error);
-    throw Errors.internal('Failed to delete SSO group mapping');
-  }
-}));
-
-router.post('/api/authz/sso-group-mappings/test', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateBody(ssoGroupMappingTestSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const { claims, providerId } = req.body;
-    const result = await ssoGroupMappingService.testClaims(claims, providerId, req.tenant?.tenantId || null);
-    res.json(result);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Test SSO group mapping error:', error);
-    throw Errors.internal('Failed to test SSO group mapping');
-  }
-}));
+registerSsoGroupMappingRoutes(router, { requirePlatformAction });
 
 // ============================================================================
 // SSO Sync Diagnostics (Admin Only)
