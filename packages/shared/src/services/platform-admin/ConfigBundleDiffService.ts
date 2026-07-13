@@ -459,7 +459,13 @@ class ConfigBundleDiffService {
       if (!existing) {
         changes.push({ objectType: 'project_engine_target', key, operation: 'create', reason: 'No persisted project-engine target uses this project and configured engine pair' });
       } else if (existing.source !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
-        changes.push({ objectType: 'project_engine_target', key, operation: 'conflict', currentId: existing.id, reason: 'Existing project-engine target is not owned by this configuration bundle' });
+        if (target.transferOwnership) {
+          changes.push({ objectType: 'project_engine_target', key, operation: 'update', currentId: existing.id, reason: `Transfer ownership from ${existing.source}${existing.sourceRef ? ` (${existing.sourceRef})` : ''} to this configuration bundle: ${target.transferOwnership.reason}` });
+        } else {
+          changes.push({ objectType: 'project_engine_target', key, operation: 'conflict', currentId: existing.id, reason: 'ownership_conflict: existing project-engine target is not owned by this configuration bundle; add transferOwnership with a reviewable reason to transfer it' });
+        }
+      } else if (target.transferOwnership) {
+        changes.push({ objectType: 'project_engine_target', key, operation: 'conflict', currentId: existing.id, reason: 'transferOwnership is valid only when replacing a target owned by another source' });
       } else if (
         existing.status !== target.status ||
         existing.allowManualDeploy !== target.allowManualDeploy ||

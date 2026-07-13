@@ -466,6 +466,33 @@ describe('configBundleDiffService', () => {
     ]));
   });
 
+  it('requires an explicit reviewed instruction before a bundle takes ownership of a target', async () => {
+    const projectId = '00000000-0000-4000-8000-000000000002';
+    const engine = { id: 'engine-manual', tenantId: 'tenant-a', configKey: 'engine.manual', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', name: 'Managed engine', baseUrl: 'https://engine.example.test/rest', type: 'operaton', externalId: null, labelsJson: '{}', runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active' };
+    const target = { id: 'target-manual', tenantId: 'tenant-a', projectId, engineId: engine.id, source: 'manual', sourceRef: null, status: 'active', allowManualDeploy: true, allowCiDeploy: false, allowApiDeploy: false, allowImport: true };
+    const baseInput = {
+      bundle: { ...bundle, imports: ['./engines.json', './project-engine-targets.json'] },
+      files: {
+        './engines.json': { engines: [{ key: 'engine.manual', name: 'Managed engine', type: 'operaton', baseUrl: 'https://engine.example.test/rest', auth: { type: 'basic', username: 'eg', passwordRef: 'ENGINE_PASSWORD' } }] },
+        './project-engine-targets.json': { projectEngineTargets: [{ projectRef: { id: projectId }, engineRef: { engineKey: 'engine.manual' }, allowCiDeploy: true }] },
+      },
+    };
+    mockDataSource([], [], [], [engine], [], [], [target], [], [], [{ id: projectId, tenantId: 'tenant-a' }]);
+    const blocked = await configBundleDiffService.diff(baseInput, 'tenant-a');
+    expect(blocked.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'project_engine_target', operation: 'conflict', reason: expect.stringContaining('ownership_conflict') }),
+    ]));
+
+    const transferInput = {
+      ...baseInput,
+      files: { ...baseInput.files, './project-engine-targets.json': { projectEngineTargets: [{ projectRef: { id: projectId }, engineRef: { engineKey: 'engine.manual' }, allowCiDeploy: true, transferOwnership: { reason: 'Move deployment eligibility into reviewed configuration.' } }] } },
+    };
+    const transferred = await configBundleDiffService.diff(transferInput, 'tenant-a');
+    expect(transferred.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'project_engine_target', operation: 'update', currentId: 'target-manual', reason: expect.stringContaining('Transfer ownership') }),
+    ]));
+  });
+
   it('diffs supported config-owned group assignments by canonical identity and expiration', async () => {
     const role = { id: 'role-operator', tenantId: 'tenant-a', key: 'system.engine.operator', source: 'system', sourceRef: null };
     const group = {

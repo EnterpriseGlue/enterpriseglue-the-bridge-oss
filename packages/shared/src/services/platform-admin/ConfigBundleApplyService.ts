@@ -646,9 +646,11 @@ class ConfigBundleApplyService {
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.project_engine_target.create', resourceType: 'project_engine_target', resourceId: targetId, details: { bundleKey: manifest.metadata.key, projectId: project.id, engineKey: target.engineRef.engineKey, canonicalHash: diff.canonicalHash } });
           created += 1;
         } else {
-          if (existing.source !== 'config' || existing.sourceRef !== sourceRef) fail(`Config target conflicts with existing ${existing.source} target`, 409);
+          const transfersOwnership = existing.source !== 'config' || existing.sourceRef !== sourceRef;
+          if (transfersOwnership && !target.transferOwnership) fail(`Config target conflicts with existing ${existing.source} target`, 409);
+          if (!transfersOwnership && target.transferOwnership) fail('Config target ownership transfer no longer matches the previewed target', 409);
           await targetRepo.update({ id: existing.id }, values);
-          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.project_engine_target.update', resourceType: 'project_engine_target', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, projectId: project.id, engineKey: target.engineRef.engineKey, canonicalHash: diff.canonicalHash } });
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: transfersOwnership ? 'authz.config_bundle.project_engine_target.transfer_ownership' : 'authz.config_bundle.project_engine_target.update', resourceType: 'project_engine_target', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, projectId: project.id, engineKey: target.engineRef.engineKey, canonicalHash: diff.canonicalHash, ...(transfersOwnership ? { previousSource: existing.source, previousSourceRef: existing.sourceRef || null, transferReason: target.transferOwnership!.reason } : {}) } });
           updated += 1;
         }
       }

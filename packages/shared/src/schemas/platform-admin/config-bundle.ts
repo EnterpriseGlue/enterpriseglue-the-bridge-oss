@@ -361,6 +361,9 @@ export const ConfigProjectEngineTargetSchema = z.object({
   allowApiDeploy: z.boolean().default(false),
   allowImport: z.boolean().default(false),
   ownershipMode: ConfigOwnershipModeSchema.optional(),
+  transferOwnership: z.object({
+    reason: z.string().min(8).max(1000),
+  }).strict().optional(),
 }).strict().refine((target) => target.allowManualDeploy || target.allowCiDeploy || target.allowApiDeploy || target.allowImport, {
   message: 'At least one deployment mode must be allowed',
 });
