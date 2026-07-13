@@ -120,7 +120,7 @@ Required changes:
 - [x] ✅ Extend `configmap.yaml` with non-secret bootstrap settings.
 - [x] ✅ Update the OpenShift deployment script to create/apply the bundle ConfigMap before backend rollout when enabled.
 - [x] ✅ Include bundle hash annotations in the backend pod template so an intended bundle change triggers rollout.
-- [ ] ⬜ Complete readiness gating for migrations, catalog seed, config apply, and all required reconciliation. `/ready` fails after bootstrap configuration failure and successful apply receipts report Engine Set/runtime-resource materialization; provider identity reconciliation remains pending.
+- [ ] ⬜ Complete readiness gating for migrations, catalog seed, config apply, and all required reconciliation. `/ready` fails after bootstrap configuration failure; bootstrap diagnostics now report `pending` when durable stored-identity replay continuation remains, but readiness intentionally stays available while that bounded background work completes.
 - [ ] ⬜ Define failed-rollout behavior that leaves the previous ReplicaSet available when the new bundle fails closed.
 
 ## CI/CD Apply Flow

@@ -91,4 +91,17 @@ describe('configBundleBootstrap', () => {
 
     expect(apply).toHaveBeenCalledWith(expect.objectContaining({ expectedSecretPreflightHash: 'secret-preflight-hash' }));
   });
+
+  it('reports pending reconciliation when bootstrap creates durable replay continuation work', async () => {
+    config.configExpectedTenantScope = 'tenant-a';
+    apply.mockResolvedValue({
+      canonicalHash: 'preview-hash',
+      reconciliation: { identitySnapshot: { status: 'truncated' } },
+    });
+
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({
+      status: 'applied',
+      reconciliation: 'pending',
+    });
+  });
 });

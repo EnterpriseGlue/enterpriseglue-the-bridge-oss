@@ -11,7 +11,7 @@ export type ConfigBootstrapStatus = {
   status: 'disabled' | 'validated' | 'applied' | 'failed';
   hash: string | null;
   message: string | null;
-  reconciliation: 'not_run' | 'completed';
+  reconciliation: 'not_run' | 'completed' | 'pending';
   secretPreflight: 'not_required' | 'passed' | 'failed';
 };
 
@@ -51,7 +51,7 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
     if (checkedSecretPreflight) secretPreflight = 'passed';
     if (mode === 'apply') {
       if (!config.configExpectedTenantScope) throw new Error('EG_CONFIG_EXPECTED_TENANT_SCOPE is required when configuration bootstrap applies a bundle');
-      await configBundleApplyService.apply({
+      const result = await configBundleApplyService.apply({
         ...payload,
         expectedPreviewHash: preview.canonicalHash,
         expectedSecretPreflightHash: checkedSecretPreflight?.availabilityHash,
@@ -59,8 +59,11 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
         expectedTenantScope: config.configExpectedTenantScope,
         actorId: 'system:config-bootstrap',
       });
+      if (result.reconciliation?.identitySnapshot?.status === 'truncated') {
+        status = { ...status, reconciliation: 'pending' };
+      }
     }
-    status = { mode, status: mode === 'apply' ? 'applied' : 'validated', hash, message: null, reconciliation: mode === 'apply' ? 'completed' : 'not_run', secretPreflight };
+    status = { mode, status: mode === 'apply' ? 'applied' : 'validated', hash, message: null, reconciliation: mode === 'apply' && status.reconciliation !== 'pending' ? 'completed' : status.reconciliation, secretPreflight };
   } catch (error) {
     status = { mode, status: 'failed', hash: status.hash, message: error instanceof Error ? error.message : String(error), reconciliation: 'not_run', secretPreflight };
     throw error;
