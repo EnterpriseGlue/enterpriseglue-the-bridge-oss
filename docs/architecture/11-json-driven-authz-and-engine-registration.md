@@ -1206,6 +1206,19 @@ external entitlement
 - [ ] ⬜ Preserve the high-risk all-engine, regex, owner/delegate, and sensitive-permission guardrails on the resulting mapping plus group assignment workflow.
 - [x] ✅ Store provider-neutral mapping, legacy SSO-group mapping, group membership, assignment, and materialization ids in Effective Access explanation lineage so the extra indirection remains understandable. Effective Access and By Principal render provider-neutral mapping details and correlate their audit entries. Legacy direct SSO assignment migration remains separate.
 
+### Current Authorization Migration Status And Next Steps
+
+The platform now has a group-backed baseline for new and existing active users, including local, invited, bootstrap, provider-neutral, Microsoft, Google, and legacy SAML accounts. Legacy `User.platformRole` and legacy SSO mapping evaluation remain compatibility inputs; their resulting administrator state is mirrored into a source-scoped system group, so they are no longer the only representation of access.
+
+Implement the remaining work in this order:
+
+- [ ] ⬜ Replace legacy provider `defaultRole` with an explicit provider-neutral default internal-group mapping. A default user grant should use the existing `authenticated-users` group; a default administrator grant must be an explicit, auditable provider mapping to `platform-administrators` with the existing high-risk safeguards.
+- [ ] ⬜ Complete provider-neutral conversion coverage for remaining legacy SSO mapping shapes. Keep unsupported dynamic, negated, custom-claim, email-domain, and broad-selector mappings blocked from automatic conversion and provide a deliberate redesign path using groups, Engine Sets, and normal assignments.
+- [ ] ⬜ Run representative mapping conversion, Effective Access verification, and scoped/global retirement in a deployed environment. Record verification evidence before disabling any legacy mapping evaluator.
+- [ ] ⬜ Change session and middleware contracts to use authenticated principal and tenant identity with evaluator decisions. Retain `platformRole` as display/migration data only until all protected route families have parity tests.
+- [ ] ⬜ Stop new platform-role mutations in SSO and invitation flows after the default-group migration is deployed. Continue group synchronization as the sole authorization write path, then remove source-scoped compatibility memberships only through an explicit retirement migration.
+- [ ] ⬜ Remove legacy evaluator grants and direct legacy membership/owner/delegate fallbacks after all route families, collection visibility, and UI action guards pass their parity gates.
+
 ### External Identity Linking
 
 `ExternalIdentitySnapshot` is not the login-account link. Add a separate link record:
@@ -2132,9 +2145,9 @@ This phase is required because the current implementation still carries compatib
 
 #### Legacy Authorization Removal
 
-- [ ] ⬜ Seed bootstrap local admin through `system.platform.admin` assignment instead of `User.platformRole = admin` authorization.
+- [ ] ⬜ Seed bootstrap local admin through `system.platform.admin` assignment instead of `User.platformRole = admin` authorization. The bootstrap account now receives the source-managed `platform-administrators` group in the same transaction; the legacy field is retained only while compatibility middleware remains active.
 - [ ] ⬜ Change local/SSO session contracts to carry principal and tenant identity; treat any legacy platform-role field as display/migration data only until removed.
-- [ ] ⬜ Stop SSO provisioning and invitations from mutating platform roles; map authenticated users to internal groups and assignments.
+- [ ] ⬜ Stop SSO provisioning and invitations from mutating platform roles; map authenticated users to internal groups and assignments. New local, invited, and SSO users now receive group-backed baseline access and legacy SSO role resolution mirrors into a source-scoped administrator group; legacy column mutations remain until provider-default and legacy-mapping retirement pass.
 - [ ] ⬜ Stop project/engine/member/governance services from calling `syncLegacyRoleAssignments`; write canonical assignments at the originating command boundary.
 - [ ] ⬜ Remove evaluator grants from platform role, ProjectMember/ProjectMemberRole, EngineMember, owner/delegate, and explicit legacy permission tables.
 - [ ] ⬜ Preserve accountable owner/delegate fields only as governance metadata and require explicit effective role assignments for access.
@@ -2146,7 +2159,7 @@ This phase is required because the current implementation still carries compatib
 - [x] ✅ Add the provider-neutral `ExternalIdentity` account-link entity and service with unique tenant/provider/subject identity, user linkage, directory-tenant metadata, and active/last-seen lifecycle fields. Existing normalized SSO snapshots now maintain the link; provider and entitlement contract replacement remains in progress.
 - [ ] ⬜ Complete provider-id-bound OIDC/SAML start/callback flows and LDAP direct/claims-only modes. Generic OIDC, generic SAML, and direct LDAP support exact-provider-id login; LDAP claims-only reconciliation and legacy Microsoft/Google migration remain pending.
 - [x] ✅ Bind SAML start/callback state and metadata generation to an optional exact provider id. Explicit-provider login resolves the same configured SAML provider for authorization redirect, assertion validation, and metadata; legacy no-provider SAML login remains compatible. Generic OIDC, Microsoft configuration migration, and LDAP modes remain pending.
-- [ ] ⬜ Replace provider `defaultRole` with an explicit default/internal-group mapping and converge all external access through groups plus scoped assignments.
+- [ ] ⬜ Replace provider `defaultRole` with an explicit default/internal-group mapping and converge all external access through groups plus scoped assignments. The global `authenticated-users` group is already provisioned transactionally and backfilled for active accounts; provider-default migration and legacy default-role removal remain pending.
 - [ ] ⬜ Define verified-email account-linking policy, collision handling, unlink/deactivate behavior, and break-glass local account behavior.
 - [ ] ⬜ Allowlist persisted identity attributes and entitlements; do not persist raw tokens, full assertions, bind responses, or unrestricted claims JSON.
 
