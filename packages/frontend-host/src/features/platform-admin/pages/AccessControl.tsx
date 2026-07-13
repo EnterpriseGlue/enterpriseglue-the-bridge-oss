@@ -52,6 +52,17 @@ import {
 } from './accessControlPresentation';
 import { AuthzAuditPanel, DEFAULT_AUTHZ_AUDIT_FILTER, type AuthzAuditFilterState } from './access-control/AuthzAuditPanel';
 import {
+  formatSsoSyncCounts as presentSsoSyncCounts,
+  formatSsoSyncDetails as presentSsoSyncDetails,
+  formatSsoSyncDuration as presentSsoSyncDuration,
+  formatSsoSyncMapping as presentSsoSyncMapping,
+  formatSsoSyncResource as presentSsoSyncResource,
+  getSsoSyncSeverityTagType as presentSsoSyncSeverityTagType,
+  getSsoSyncStatusTagType as presentSsoSyncStatusTagType,
+  ssoSyncEventHeaders as presentedSsoSyncEventHeaders,
+  ssoSyncRunHeaders as presentedSsoSyncRunHeaders,
+} from './access-control/ssoSyncPresentation';
+import {
   useArchiveCustomRole,
   useArchiveExternalEngineSystem,
   useArchiveProjectEngineTarget,
@@ -337,27 +348,6 @@ const ssoGroupMappingHeaders = [
   { key: 'actions', header: '' },
 ];
 
-const ssoSyncRunHeaders = [
-  { key: 'status', header: 'Status' },
-  { key: 'provider', header: 'Provider' },
-  { key: 'user', header: 'User' },
-  { key: 'trigger', header: 'Trigger' },
-  { key: 'changes', header: 'Changes' },
-  { key: 'started', header: 'Started' },
-  { key: 'duration', header: 'Duration' },
-  { key: 'error', header: 'Error' },
-  { key: 'actions', header: '' },
-];
-
-const ssoSyncEventHeaders = [
-  { key: 'severity', header: 'Severity' },
-  { key: 'type', header: 'Type' },
-  { key: 'message', header: 'Message' },
-  { key: 'resource', header: 'Resource' },
-  { key: 'mapping', header: 'Mapping' },
-  { key: 'created', header: 'Created' },
-  { key: 'details', header: 'Details' },
-];
 
 const ssoEngineAccessSnapshotHeaders = [
   { key: 'principal', header: 'Principal' },
@@ -1192,17 +1182,6 @@ function formatTimestamp(value: number | null | undefined) {
   return value ? new Date(value).toLocaleString() : '-';
 }
 
-function getSsoSyncStatusTagType(status: SsoSyncRun['status']) {
-  if (status === 'success') return 'green';
-  if (status === 'failed') return 'red';
-  return 'blue';
-}
-
-function getSsoSyncSeverityTagType(severity: SsoSyncEvent['severity']) {
-  if (severity === 'error') return 'red';
-  if (severity === 'warning') return 'magenta';
-  return 'gray';
-}
 
 function getSsoEngineSnapshotStatusTagType(status: SsoEngineAccessSnapshot['status']) {
   if (status === 'active') return 'green';
@@ -1210,40 +1189,6 @@ function getSsoEngineSnapshotStatusTagType(status: SsoEngineAccessSnapshot['stat
   if (status === 'provider_identity_missing' || status === 'provider_group_missing' || status === 'engine_no_longer_matches_selector') return 'red';
   if (status === 'removed_by_sso' || status === 'removed_by_admin' || status === 'mapping_disabled') return 'purple';
   return 'gray';
-}
-
-function formatSsoSyncCounts(run: SsoSyncRun) {
-  const groupChanges = run.groupMembershipsCreated + run.groupMembershipsUpdated + run.groupMembershipsRemoved;
-  const assignmentChanges = run.assignmentsCreated + run.assignmentsUpdated + run.assignmentsRemoved;
-  return `Groups ${groupChanges}; assignments ${assignmentChanges}`;
-}
-
-function formatSsoSyncDuration(run: SsoSyncRun) {
-  if (!run.completedAt) return run.status === 'running' ? 'Running' : '-';
-  const durationMs = Math.max(run.completedAt - run.startedAt, 0);
-  if (durationMs < 1000) return `${durationMs} ms`;
-  return `${(durationMs / 1000).toFixed(1)} s`;
-}
-
-function formatSsoSyncDetails(details: string | null | undefined) {
-  if (!details || details === '{}') return '-';
-  try {
-    const parsed = JSON.parse(details);
-    if (!parsed || typeof parsed !== 'object') return String(parsed);
-    return formatDetails(parsed as Record<string, unknown>);
-  } catch {
-    return details.length > 160 ? `${details.slice(0, 157)}...` : details;
-  }
-}
-
-function formatSsoSyncResource(event: SsoSyncEvent) {
-  if (!event.resourceType) return '-';
-  return `${event.resourceType}:${event.resourceId || '*'}`;
-}
-
-function formatSsoSyncMapping(event: SsoSyncEvent) {
-  const parts = [event.mappingType || '', event.mappingId || ''].filter(Boolean);
-  return parts.length ? parts.join(':') : '-';
 }
 
 
@@ -3896,7 +3841,7 @@ function SsoSyncDiagnosticsPanel({
       )}
       {runsError && <InlineNotification kind="error" title="Unable to load SSO sync runs" lowContrast />}
       {loading ? (
-        <DataTableSkeleton headers={ssoSyncRunHeaders} rowCount={3} />
+        <DataTableSkeleton headers={presentedSsoSyncRunHeaders} rowCount={3} />
       ) : (
         <TableContainer>
           <DataTable
@@ -3906,13 +3851,13 @@ function SsoSyncDiagnosticsPanel({
               provider: providerLabel(run.providerId),
               user: run.userId || '-',
               trigger: formatStatusLabel(run.trigger),
-              changes: formatSsoSyncCounts(run),
+              changes: presentSsoSyncCounts(run),
               started: formatTimestamp(run.startedAt),
-              duration: formatSsoSyncDuration(run),
+              duration: presentSsoSyncDuration(run),
               error: run.errorMessage || run.errorCode || '-',
               actions: '',
             }))}
-            headers={ssoSyncRunHeaders}
+            headers={presentedSsoSyncRunHeaders}
           >
             {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
               <Table {...getTableProps()} size="md">
@@ -3935,7 +3880,7 @@ function SsoSyncDiagnosticsPanel({
                         {row.cells.map((cell) => {
                           if (cell.info.header === 'status') {
                             const status = cell.value as SsoSyncRun['status'];
-                            return <TableCell key={cell.id}><Tag type={getSsoSyncStatusTagType(status)}>{formatStatusLabel(status)}</Tag></TableCell>;
+                            return <TableCell key={cell.id}><Tag type={presentSsoSyncStatusTagType(status)}>{formatStatusLabel(status)}</Tag></TableCell>;
                           }
                           if (cell.info.header === 'actions') {
                             return (
@@ -3965,7 +3910,7 @@ function SsoSyncDiagnosticsPanel({
           <strong>{selectedRun.id} events</strong>
           {eventsError && <InlineNotification kind="error" title="Unable to load SSO sync events" lowContrast />}
           {eventsLoading ? (
-            <DataTableSkeleton headers={ssoSyncEventHeaders} rowCount={3} />
+            <DataTableSkeleton headers={presentedSsoSyncEventHeaders} rowCount={3} />
           ) : (
             <TableContainer>
               <DataTable
@@ -3974,12 +3919,12 @@ function SsoSyncDiagnosticsPanel({
                   severity: event.severity,
                   type: event.type,
                   message: event.message,
-                  resource: formatSsoSyncResource(event),
-                  mapping: formatSsoSyncMapping(event),
+                  resource: presentSsoSyncResource(event),
+                  mapping: presentSsoSyncMapping(event),
                   created: formatTimestamp(event.createdAt),
-                  details: formatSsoSyncDetails(event.details),
+                  details: presentSsoSyncDetails(event.details),
                 }))}
-                headers={ssoSyncEventHeaders}
+                headers={presentedSsoSyncEventHeaders}
               >
                 {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
                   <Table {...getTableProps()} size="md">
@@ -4000,7 +3945,7 @@ function SsoSyncDiagnosticsPanel({
                           {row.cells.map((cell) => {
                             if (cell.info.header === 'severity') {
                               const severity = cell.value as SsoSyncEvent['severity'];
-                              return <TableCell key={cell.id}><Tag type={getSsoSyncSeverityTagType(severity)}>{formatStatusLabel(severity)}</Tag></TableCell>;
+                              return <TableCell key={cell.id}><Tag type={presentSsoSyncSeverityTagType(severity)}>{formatStatusLabel(severity)}</Tag></TableCell>;
                             }
                             return <TableCell key={cell.id}>{cell.value}</TableCell>;
                           })}
