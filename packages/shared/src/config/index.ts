@@ -137,6 +137,8 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   configExpectedTenantScope: z.string().min(1).default('platform'),
   configFailClosed: z.boolean().default(false),
   configMaxBytes: z.number().int().positive().max(10 * 1024 * 1024).default(1024 * 1024),
+  configSecretProvider: z.enum(['env', 'file']).default('env'),
+  configSecretFileRoot: z.string().min(1).optional(),
 
   // Environment
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
@@ -242,6 +244,8 @@ function loadConfig(): Config {
       ? inferredNodeEnv === 'production'
       : process.env.EG_CONFIG_FAIL_CLOSED === 'true',
     configMaxBytes: process.env.EG_CONFIG_MAX_BYTES ? Number(process.env.EG_CONFIG_MAX_BYTES) : undefined,
+    configSecretProvider: envOrUndefined(process.env.EG_CONFIG_SECRET_PROVIDER),
+    configSecretFileRoot: envOrUndefined(process.env.EG_CONFIG_SECRET_FILE_ROOT),
     nodeEnv: inferredNodeEnv,
   };
 

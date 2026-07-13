@@ -216,7 +216,7 @@ env://OIDC_CLIENT_SECRET
 file:///var/run/secrets/enterpriseglue/oidc-client-secret
 ```
 
-External secret-manager adapters can be extensions. All resolution goes through the shared `SecretResolver` and returns redacted diagnostics.
+`env://NAME` references remain environment-backed. File-backed references use `file://` only when `EG_CONFIG_SECRET_PROVIDER=file` and `EG_CONFIG_SECRET_FILE_ROOT` are configured; paths outside that root are rejected. External secret-manager adapters can be extensions. All resolution goes through the shared `SecretResolver` and returns redacted diagnostics.
 
 Customer-sidecar downstream peer tokens are never EnterpriseGlue secret references because EnterpriseGlue must not receive them.
 
