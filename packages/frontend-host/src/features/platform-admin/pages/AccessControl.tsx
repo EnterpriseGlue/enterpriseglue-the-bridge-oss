@@ -60,6 +60,8 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
+import { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
+export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
   formatSsoSyncCounts as presentSsoSyncCounts,
@@ -1790,23 +1792,6 @@ export function filterRoles(roles: RoleSummary[], searchQuery: string, scopeFilt
     ].join(' ').toLowerCase();
 
     return matchesScope && (!query || searchable.includes(query));
-  });
-}
-
-export function getAssignableRolesForPrincipal(
-  roles: RoleSummary[],
-  resourceType: CoreAssignmentResourceType,
-  principalType: AssignmentPrincipalType,
-) {
-  const roleScope = resourceType === 'engine_runtime_resource' || resourceType === 'engine_runtime_resource_set'
-    ? 'engine'
-    : resourceType;
-  return roles.filter((role) => {
-    if (role.scope !== roleScope || !role.isAssignable || role.isArchived) return false;
-    if (principalType !== 'api_client' && principalType !== 'service_account') return true;
-    if (role.id === 'system.api.engine_registrar' && principalType !== 'api_client') return false;
-    if (role.id === 'system.api.external_engine_system_registrar' && principalType !== 'api_client') return false;
-    return role.kind === 'system' && MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS.has(role.id);
   });
 }
 
