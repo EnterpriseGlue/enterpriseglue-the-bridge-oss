@@ -51,18 +51,6 @@ export interface ProjectMemberWithUser {
   } | null;
 }
 
-export interface UserProject {
-  project: {
-    id: string;
-    name: string;
-    ownerId: string;
-    createdAt: number;
-  };
-  role: ProjectRole;
-  roles: ProjectRole[];
-  joinedAt: number;
-}
-
 export class ProjectMemberService {
   /**
    * Get all members of a project with user details
@@ -290,55 +278,6 @@ export class ProjectMemberService {
     await roleRepo.delete({ projectId, userId });
     await memberRepo.delete({ projectId, userId });
     await removeLegacyProjectMemberRoleAssignments(dataSource, projectId, userId);
-  }
-
-  /**
-   * Get all projects a user is a member of
-   */
-  async getUserProjects(userId: string): Promise<UserProject[]> {
-    const dataSource = await getDataSource();
-    const memberRepo = dataSource.getRepository(ProjectMember);
-    const roleRepo = dataSource.getRepository(ProjectMemberRole);
-
-    const result = await memberRepo.createQueryBuilder('pm')
-      .innerJoinAndSelect(Project, 'p', 'p.id = pm.projectId')
-      .where('pm.userId = :userId', { userId })
-      .select([
-        'p.id AS "projectId"',
-        'p.name AS "projectName"',
-        'p.ownerId AS "ownerId"',
-        'p.createdAt AS "projectCreatedAt"',
-        'pm.role AS role',
-        'pm.joinedAt AS "joinedAt"'
-      ])
-      .getRawMany();
-
-    const projectIds = result.map((r: any) => String(r.projectId));
-    const rolesRows = projectIds.length
-      ? await roleRepo.find({ where: { userId, projectId: In(projectIds) } })
-      : [];
-    const rolesByProject = new Map<string, ProjectRole[]>();
-    for (const rr of rolesRows) {
-      const pid = String(rr.projectId);
-      const role = rr.role as ProjectRole;
-      const arr = rolesByProject.get(pid) || [];
-      arr.push(role);
-      rolesByProject.set(pid, arr);
-    }
-
-    return result.map((r: any) => ({
-      project: {
-        id: r.projectId,
-        name: r.projectName,
-        ownerId: r.ownerId,
-        createdAt: r.projectCreatedAt,
-      },
-      role: computeEffectiveRole(
-        normalizeRoles(rolesByProject.get(String(r.projectId)) || [r.role as ProjectRole])
-      ),
-      roles: normalizeRoles(rolesByProject.get(String(r.projectId)) || [r.role as ProjectRole]),
-      joinedAt: r.joinedAt,
-    }));
   }
 
   /**
