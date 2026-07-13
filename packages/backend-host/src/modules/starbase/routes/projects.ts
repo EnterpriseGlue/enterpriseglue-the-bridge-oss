@@ -125,6 +125,7 @@ interface AccessedEngineResponse {
   engineId: string;
   engineName: string;
   baseUrl: string;
+  deploymentIntegration?: 'enterpriseglue_proxy' | 'direct_engine';
   environment: { name: string; color: string } | null;
   deploymentTarget?: {
     id: string;
@@ -702,7 +703,7 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
     const includeDeploymentDiagnostics = await canViewDeploymentDiagnostics(req);
     const engineRows = await engineRepo.find({
       where: { id: In(engineIds) },
-      select: ['id', 'name', 'baseUrl', 'environmentTagId']
+      select: ['id', 'name', 'baseUrl', 'environmentTagId', 'deploymentIntegration']
     });
     
     // Get environment tags for all engines
@@ -753,6 +754,7 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
         engineId: a.engineId,
         engineName: engine?.name || 'Unnamed Engine',
         baseUrl: engine?.baseUrl || '',
+        deploymentIntegration: engine?.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy',
         environment: envTag ? { name: envTag.name, color: envTag.color } : null,
         deploymentTarget: target ? {
           id: target.id,

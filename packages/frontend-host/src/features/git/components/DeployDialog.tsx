@@ -31,6 +31,7 @@ interface ConnectedEngine {
   engineId: string;
   engineName: string;
   baseUrl?: string;
+  deploymentIntegration?: 'enterpriseglue_proxy' | 'direct_engine';
   environment?: { name: string; color: string } | null;
   health?: { status: string; latencyMs?: number } | null;
   deploymentTarget?: {
@@ -439,7 +440,9 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
             const canDeployToEngine = canGitDeploy ? engine.ciDeployAllowed !== false : engine.manualDeployAllowed !== false;
             const envLabel = engine.environment?.name || '';
             const deniedReasons = getDeniedReasons(engine);
-            const unavailableLabel = deniedReasons?.[0]?.includes('Manual deployment is disabled')
+            const unavailableLabel = engine.deploymentIntegration === 'direct_engine'
+              ? 'Pipeline-managed'
+              : deniedReasons?.[0]?.includes('Manual deployment is disabled')
               ? 'CI/CD only'
               : 'Unavailable';
             const label = envLabel
