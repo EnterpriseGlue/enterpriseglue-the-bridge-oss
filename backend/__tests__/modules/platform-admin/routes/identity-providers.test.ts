@@ -18,6 +18,7 @@ const service = vi.hoisted(() => ({
   listRuns: vi.fn(),
   testConnection: vi.fn(),
   testSamlMetadata: vi.fn(),
+  createLegacyMigrationDraft: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -31,6 +32,7 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
   requireAction: () => (_req: any, _res: any, next: any) => next(),
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService: service }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js', () => ({ legacyIdentityProviderMigrationService: { createDraft: service.createLegacyMigrationDraft } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { previewMemberships: service.previewMemberships, replayMemberships: service.replayMemberships } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun, listRuns: service.listRuns } }));
@@ -63,6 +65,12 @@ describe('identity provider routes', () => {
     service.listRuns.mockResolvedValue([{ id: 'sync-run-1', status: 'success', trigger: 'manual', startedAt: 10, completedAt: 11, groupMembershipsCreated: 1, groupMembershipsRemoved: 0, errorMessage: null }]);
     service.testConnection.mockResolvedValue({ issuer: 'https://login.example.test', authorizationEndpoint: 'https://login.example.test/auth', tokenEndpoint: 'https://login.example.test/token', jwksUri: 'https://login.example.test/jwks' });
     service.testSamlMetadata.mockResolvedValue({ metadataUrl: 'https://idp.example.test/metadata.xml', entityDescriptorCount: 2 });
+    service.createLegacyMigrationDraft.mockResolvedValue({
+      legacyProvider: { id: 'legacy-google-1', name: 'Google', type: 'google', enabled: true, clientSecretConfigured: true },
+      provider: { key: 'legacy-google-legacy-google-1', protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: null, configuration: { issuerUrl: 'https://accounts.google.com', clientId: 'client-1', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid', 'email'] } },
+      requirements: ['client_secret_reference', 'identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'],
+      warnings: ['The legacy client secret is not copied.'],
+    });
     app = express();
     app.use(express.json());
     app.use(identityProvidersRouter);
@@ -73,6 +81,23 @@ describe('identity provider routes', () => {
     const response = await request(app).get('/api/identity/providers');
     expect(response.status).toBe(200);
     expect(service.list).toHaveBeenCalledWith('tenant-1');
+  });
+
+  it('returns a non-secret provider-neutral draft for a legacy provider migration', async () => {
+    const response = await request(app).get('/api/identity/providers/legacy-migration-draft/legacy-google-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({
+      legacyProvider: expect.objectContaining({ id: 'legacy-google-1', clientSecretConfigured: true }),
+      provider: expect.objectContaining({ protocol: 'oidc', isEnabled: false }),
+    }));
+    expect(service.createLegacyMigrationDraft).toHaveBeenCalledWith('legacy-google-1');
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'identity.provider.legacy_migration_draft',
+      resourceId: 'legacy-google-1',
+      details: expect.objectContaining({ clientSecretConfigured: true }),
+    }));
+    expect(JSON.stringify(response.body)).not.toContain('clientSecretEnc');
   });
 
   it('lists bounded synchronization history for one provider', async () => {

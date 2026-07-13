@@ -2091,6 +2091,23 @@ registry.registerPath({
   ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers'),
   responses: { 200: { description: 'List identity providers', content: { 'application/json': { schema: z.array(IdentityProviderResponseSchema) } } } },
 });
+const LegacyIdentityProviderMigrationDraftSchema = z.object({
+  legacyProvider: z.object({ id: z.string(), name: z.string(), type: z.enum(['microsoft', 'google', 'oidc']), enabled: z.boolean(), clientSecretConfigured: z.boolean() }),
+  provider: z.object({
+    key: z.string(), protocol: z.literal('oidc'), isEnabled: z.literal(false), authenticationMode: z.literal('direct'), directoryTenantId: z.string().nullable(),
+    configuration: z.object({ issuerUrl: z.string().url(), clientId: z.string(), callbackUrl: z.string().url(), scopes: z.array(z.string()) }),
+  }),
+  requirements: z.array(z.enum(['client_secret_reference', 'identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'])),
+  warnings: z.array(z.string()),
+});
+registry.register('LegacyIdentityProviderMigrationDraft', LegacyIdentityProviderMigrationDraftSchema);
+registry.registerPath({
+  method: 'get',
+  path: '/api/identity/providers/legacy-migration-draft/{legacyProviderId}',
+  ...authzExtension('platform.sso.providers.manage', 'GET', '/api/identity/providers/legacy-migration-draft/{legacyProviderId}'),
+  request: { params: z.object({ legacyProviderId: z.string().min(1).max(128) }) },
+  responses: { 200: { description: 'Non-secret disabled provider-neutral draft for a legacy OIDC provider migration', content: { 'application/json': { schema: LegacyIdentityProviderMigrationDraftSchema } } }, 400: { description: 'Legacy provider cannot be represented as OIDC' }, 404: { description: 'Legacy provider not found' } },
+});
 registry.registerPath({
   method: 'get',
   path: '/api/identity/providers/{key}',

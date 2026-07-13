@@ -128,6 +128,7 @@ describe('authorization route inventory validation', () => {
           ['POST', '/api/authz/config-bundles/apply'],
           ['GET', '/api/authz/config-bundles/runs'],
           ['GET', '/api/authz/config-bundles/runs/{id}'],
+          ['GET', '/api/authz/config-bundles/runs/{id}/identity-replay-tasks'],
           ['GET', '/api/authz/config-bundles/export'],
         ],
       },
@@ -457,6 +458,7 @@ describe('authorization route inventory validation', () => {
         routes: [
           ['POST', '/api/sso/providers', 'platform.self'],
           ['POST', '/api/identity/providers', 'platform.self'],
+          ['GET', '/api/identity/providers/legacy-migration-draft/{legacyProviderId}', 'platform.self'],
           ['PUT', '/api/identity/providers/{key}', 'platform.self'],
           ['DELETE', '/api/identity/providers/{key}', 'platform.self'],
           ['POST', '/api/identity/providers/{key}/reconcile', 'platform.self'],

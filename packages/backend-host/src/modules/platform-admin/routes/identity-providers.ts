@@ -5,6 +5,7 @@ import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.j
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
+import { legacyIdentityProviderMigrationService } from '@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js';
 import { ldapReconciliationService } from '@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js';
 import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
@@ -18,11 +19,27 @@ const router = Router();
 const schema = z.object({ key: z.string().min(1).max(128), protocol: z.enum(['oidc', 'saml', 'ldap']), isEnabled: z.boolean().optional(), authenticationMode: z.enum(['direct', 'claims_only']).optional(), directoryTenantId: z.string().optional().nullable(), configuration: z.record(z.string(), z.unknown()), sync: z.record(z.string(), z.unknown()).optional(), ownershipMode: z.string().max(64).optional(), sourceRef: z.string().optional().nullable() });
 
 const providerKeySchema = z.string().min(1).max(128);
+const legacyProviderIdSchema = z.string().min(1).max(128);
 const replayMembershipsSchema = z.object({ limit: z.number().int().min(1).max(5000).optional(), cursor: z.string().min(1).max(512).optional() });
 const syncRunsQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(10) });
 
 router.get('/api/identity/providers', requireAuth, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
   res.json(await identityProviderService.list(req.tenant?.tenantId || null));
+}));
+router.get('/api/identity/providers/legacy-migration-draft/:legacyProviderId', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
+  const draft = await legacyIdentityProviderMigrationService.createDraft(legacyProviderIdSchema.parse(req.params.legacyProviderId));
+  await logAudit({
+    action: 'identity.provider.legacy_migration_draft',
+    userId: req.user!.userId,
+    resourceType: 'sso_provider',
+    resourceId: draft.legacyProvider.id,
+    details: {
+      legacyProviderType: draft.legacyProvider.type,
+      generatedProviderKey: draft.provider.key,
+      clientSecretConfigured: draft.legacyProvider.clientSecretConfigured,
+    },
+  });
+  res.json(draft);
 }));
 router.get('/api/identity/providers/:key', requireAuth, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
   const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
