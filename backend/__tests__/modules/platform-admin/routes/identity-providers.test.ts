@@ -14,6 +14,7 @@ const service = vi.hoisted(() => ({
   startRun: vi.fn(),
   completeRun: vi.fn(),
   failRun: vi.fn(),
+  listRuns: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -29,7 +30,7 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService: service }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { replayMemberships: service.replayMemberships } }));
-vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun, listRuns: service.listRuns } }));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }));
 
 const provider = {
@@ -52,6 +53,7 @@ describe('identity provider routes', () => {
     service.startRun.mockResolvedValue('sync-run-1');
     service.completeRun.mockResolvedValue(undefined);
     service.failRun.mockResolvedValue(undefined);
+    service.listRuns.mockResolvedValue([{ id: 'sync-run-1', status: 'success', trigger: 'manual', startedAt: 10, completedAt: 11, groupMembershipsCreated: 1, groupMembershipsRemoved: 0, errorMessage: null }]);
     app = express();
     app.use(express.json());
     app.use(identityProvidersRouter);
@@ -62,6 +64,14 @@ describe('identity provider routes', () => {
     const response = await request(app).get('/api/identity/providers');
     expect(response.status).toBe(200);
     expect(service.list).toHaveBeenCalledWith('tenant-1');
+  });
+
+  it('lists bounded synchronization history for one provider', async () => {
+    const response = await request(app).get('/api/identity/providers/entra/sync-runs?limit=5');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([expect.objectContaining({ id: 'sync-run-1', trigger: 'manual' })]);
+    expect(service.listRuns).toHaveBeenCalledWith({ tenantId: 'tenant-1', providerId: 'provider-1', limit: 5 });
   });
 
   it('creates a provider and audits sanitized definition metadata', async () => {

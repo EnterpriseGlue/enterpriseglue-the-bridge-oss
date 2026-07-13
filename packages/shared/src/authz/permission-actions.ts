@@ -1043,6 +1043,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'GET', route: '/api/sso/providers/{id}', resourceResolver: 'platform.self' },
       { method: 'GET', route: '/api/identity/providers', resourceResolver: 'platform.self' },
       { method: 'GET', route: '/api/identity/providers/{key}', resourceResolver: 'platform.self' },
+      { method: 'GET', route: '/api/identity/providers/{key}/sync-runs', resourceResolver: 'platform.self' },
     ],
   },
   {

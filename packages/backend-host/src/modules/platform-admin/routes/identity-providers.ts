@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
+import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { ldapReconciliationService } from '@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js';
 import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
@@ -16,6 +16,7 @@ const schema = z.object({ key: z.string().min(1).max(128), protocol: z.enum(['oi
 
 const providerKeySchema = z.string().min(1).max(128);
 const replayMembershipsSchema = z.object({ limit: z.number().int().min(1).max(5000).optional() });
+const syncRunsQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(10) });
 
 router.get('/api/identity/providers', requireAuth, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
   res.json(await identityProviderService.list(req.tenant?.tenantId || null));
@@ -24,6 +25,11 @@ router.get('/api/identity/providers/:key', requireAuth, requireAction('platform.
   const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
   res.json(provider);
+}));
+router.get('/api/identity/providers/:key/sync-runs', requireAuth, requireAction('platform.sso.providers.read'), validateQuery(syncRunsQuerySchema), asyncHandler(async (req, res) => {
+  const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  res.json(await ssoSyncDiagnosticsService.listRuns({ tenantId: req.tenant?.tenantId || null, providerId: provider.id, limit: Number(req.query.limit || 10) }));
 }));
 router.post('/api/identity/providers', requireAuth, requireAction('platform.sso.providers.manage'), validateBody(schema), asyncHandler(async (req, res) => {
   const provider = await identityProviderService.upsert({ ...req.body, tenantId: req.tenant?.tenantId || null });

@@ -2099,6 +2099,13 @@ registry.registerPath({
   responses: { 200: { description: 'Identity provider', content: { 'application/json': { schema: IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found' } },
 });
 registry.registerPath({
+  method: 'get',
+  path: '/api/identity/providers/{key}/sync-runs',
+  ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers/{key}/sync-runs'),
+  request: { params: z.object({ key: z.string() }), query: z.object({ limit: z.coerce.number().int().min(1).max(100).optional() }) },
+  responses: { 200: { description: 'Recent identity provider synchronization runs', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), status: z.enum(['running', 'success', 'failed']), trigger: z.enum(['login', 'scheduled', 'manual', 'mapping_change', 'engine_change']), startedAt: z.number(), completedAt: z.number().nullable(), groupMembershipsCreated: z.number().int(), groupMembershipsRemoved: z.number().int(), errorMessage: z.string().nullable() })) } } }, 404: { description: 'Identity provider not found' } },
+});
+registry.registerPath({
   method: 'post',
   path: '/api/identity/providers',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers'),
