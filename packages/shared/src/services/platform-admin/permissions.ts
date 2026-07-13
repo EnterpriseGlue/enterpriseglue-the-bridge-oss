@@ -217,7 +217,7 @@ export type RoleKind = 'system' | 'custom';
 export type RoleSource = 'system' | 'manual' | 'config' | 'api' | 'automation';
 export type ConfigOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
 export type PermissionKind = 'system' | 'custom';
-export type RoleAssignmentSource = 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap';
+export type RoleAssignmentSource = 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap' | 'config';
 
 export interface PermissionDefinition {
   key: Permission;
@@ -398,6 +398,10 @@ export interface RoleAssignmentView {
   source: RoleAssignmentSource;
   sourceMappingId: string | null;
   sourceRef: string | null;
+  ownershipMode: ConfigOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
   expiresAt: number | null;
   lastSeenAt: number | null;
   createdById: string | null;
@@ -2069,6 +2073,10 @@ class PermissionServiceClass {
         source: assignment.source as RoleAssignmentSource,
         sourceMappingId: assignment.sourceRef || null,
         sourceRef: assignment.sourceRef,
+        ownershipMode: (assignment.ownershipMode || (assignment.source === 'config' ? 'config_locked' : 'manual')) as ConfigOwnershipMode,
+        sourceHash: assignment.sourceHash || null,
+        lastAppliedAt: assignment.lastAppliedAt ? Number(assignment.lastAppliedAt) : null,
+        driftStatus: assignment.driftStatus || null,
         expiresAt: assignment.expiresAt,
         lastSeenAt: assignment.lastSeenAt,
         createdById: assignment.createdById,

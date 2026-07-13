@@ -133,6 +133,10 @@ export interface RoleAssignment {
   source: RoleAssignmentSource;
   sourceMappingId: string | null;
   sourceRef: string | null;
+  ownershipMode: AuthzOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
   expiresAt: number | null;
   lastSeenAt: number | null;
   createdById: string | null;

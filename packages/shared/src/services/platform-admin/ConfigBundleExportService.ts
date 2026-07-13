@@ -129,7 +129,7 @@ class ConfigBundleExportService {
         if (!resource || !engineKey) throw new Error(`Cannot export scoped role assignment ${assignment.id}: its runtime resource is unresolved`);
         scope = { type: 'engine_runtime_resource', engineKey, resourceKind: resource.resourceKind, resourceKey: resource.resourceKey, runtimeTenantId: resource.runtimeTenantId || undefined };
       } else throw new Error(`Cannot export scoped role assignment ${assignment.id}: unsupported or unresolved ${assignment.scopeType} scope`);
-      return { principal: { type: 'group', key: groupKey }, roleKey, scope, expiresAt: assignment.expiresAt || undefined, ownershipMode: 'config_locked' };
+      return { principal: { type: 'group', key: groupKey }, roleKey, scope, expiresAt: assignment.expiresAt || undefined, ownershipMode: assignment.ownershipMode || 'config_locked' };
     }) };
 
     if (projectEngineTargets.length) files['./project-engine-targets.json'] = { projectEngineTargets: projectEngineTargets.filter((target) => target.status !== 'archived').map((target) => {

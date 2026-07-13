@@ -529,8 +529,8 @@ class ConfigBundleDiffService {
         changes.push({ objectType: 'assignment', key, operation: 'create', reason: 'No persisted scoped role assignment uses this canonical config-owned identity' });
       } else if (existing.source !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
         changes.push({ objectType: 'assignment', key, operation: 'conflict', currentId: existing.id, reason: 'Existing scoped role assignment is not owned by this configuration bundle' });
-      } else if (existing.expiresAt !== (assignment.expiresAt || null)) {
-        changes.push({ objectType: 'assignment', key, operation: 'update', currentId: existing.id, reason: 'Config-owned scoped role assignment differs from the desired expiration' });
+      } else if (existing.expiresAt !== (assignment.expiresAt || null) || (existing.ownershipMode || 'config_locked') !== (assignment.ownershipMode || 'config_locked')) {
+        changes.push({ objectType: 'assignment', key, operation: 'update', currentId: existing.id, reason: 'Config-owned scoped role assignment differs from the desired expiration or ownership mode' });
       } else {
         changes.push({ objectType: 'assignment', key, operation: 'noop', currentId: existing.id, reason: 'Config-owned scoped role assignment already matches the desired state' });
       }
