@@ -3808,7 +3808,7 @@ function GroupsPanel({
                           <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                             {row.cells.map((cell) => {
                               if (cell.info.header === 'source') {
-                                return <TableCell key={cell.id}><Tag type={authzSourceTagType(cell.value)}>{formatAuthzSource(cell.value)}</Tag></TableCell>;
+                                return <TableCell key={cell.id}><AssignmentSourceTag source={cell.value} /></TableCell>;
                               }
                               if (cell.info.header === 'actions') {
                                 return (
@@ -4153,7 +4153,7 @@ function EngineSetsPanel({
                           <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                             {row.cells.map((cell) => {
                               if (cell.info.header === 'source') {
-                                return <TableCell key={cell.id}><Tag type={authzSourceTagType(cell.value)}>{formatAuthzSource(cell.value)}</Tag></TableCell>;
+                                return <TableCell key={cell.id}><AssignmentSourceTag source={cell.value} /></TableCell>;
                               }
                               return <TableCell key={cell.id}>{cell.value}</TableCell>;
                             })}
