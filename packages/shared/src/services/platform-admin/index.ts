@@ -28,6 +28,7 @@ export * from './ApiClientService.js';
 export * from './ServiceAccountService.js';
 export * from './SsoClaimsMappingService.js';
 export * from './SsoAssignmentMappingService.js';
+export * from './LegacyMappingCoverageService.js';
 export * from './SsoEngineAccessSnapshotService.js';
 export * from './SsoGroupMappingService.js';
 export * from './SsoNormalizedIdentityService.js';

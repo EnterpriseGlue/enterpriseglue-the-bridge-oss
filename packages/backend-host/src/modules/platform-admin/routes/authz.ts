@@ -30,6 +30,7 @@ import {
   ssoAssignmentMappingService,
   ssoEngineAccessSnapshotService,
   ssoGroupMappingService,
+  legacyMappingCoverageService,
   ssoSyncDiagnosticsService,
   permissionService,
   authzGroupService,
@@ -2502,6 +2503,10 @@ router.get('/api/authz/sso-assignment-mappings', apiLimiter, requireAuth, requir
     logger.error('Get SSO assignment mappings error:', error);
     throw Errors.internal('Failed to get SSO assignment mappings');
   }
+}));
+
+router.get('/api/authz/legacy-mapping-coverage', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.read'), asyncHandler(async (req: Request, res: Response) => {
+  res.json(await legacyMappingCoverageService.getCoverage(req.tenant?.tenantId || null));
 }));
 
 router.post('/api/authz/sso-assignment-mappings', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateBody(ssoAssignmentMappingCreateSchema), asyncHandler(async (req: Request, res: Response) => {

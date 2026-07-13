@@ -495,6 +495,7 @@ export const AUTHZ_ACTIONS = [
     routes: [
       { method: 'GET', route: '/api/authz/sso-group-mappings', resourceResolver: 'platform.self' },
       { method: 'GET', route: '/api/identity/mappings', resourceResolver: 'platform.self' },
+      { method: 'GET', route: '/api/authz/legacy-mapping-coverage', resourceResolver: 'platform.self' },
     ],
   },
   {
