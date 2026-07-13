@@ -30,77 +30,6 @@ import { PlatformPermission, ProjectPermission } from '../../../shared/auth/perm
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import styles from './ProjectOverview.module.css'
 
-function getProjectMemberRoles(membership: ProjectMember | null | undefined): string[] {
-  if (!membership) return []
-  if (Array.isArray((membership as any).roles) && (membership as any).roles.length > 0) {
-    return (membership as any).roles.map((role: unknown) => String(role))
-  }
-  return membership.role ? [membership.role] : []
-}
-
-function legacyProjectRoleHasPermission(roles: string[], permission: string): boolean {
-  const normalized = new Set(roles)
-  if (normalized.has('owner')) return true
-
-  if (normalized.has('delegate')) {
-    return [
-      ProjectPermission.PROJECT_SETTINGS,
-      ProjectPermission.MEMBERS_MANAGE,
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.MEMBERS_SEARCH,
-      ProjectPermission.MEMBERS_INVITE,
-      ProjectPermission.MEMBERS_ADD,
-      ProjectPermission.MEMBERS_UPDATE_ROLE,
-      ProjectPermission.MEMBERS_REMOVE,
-      ProjectPermission.MEMBERS_MANAGE_DEPLOY_GRANT,
-      ProjectPermission.FILES_CREATE,
-      ProjectPermission.FILES_EDIT,
-      ProjectPermission.FILES_DELETE,
-      ProjectPermission.FILES_VIEW,
-      ProjectPermission.VERSIONS_CREATE,
-      ProjectPermission.VERSIONS_RESTORE,
-      ProjectPermission.GIT_PUSH,
-      ProjectPermission.GIT_PULL,
-      ProjectPermission.GIT_CONNECT,
-      ProjectPermission.DEPLOY,
-    ].includes(permission as any)
-  }
-
-  if (normalized.has('developer')) {
-    return [
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.FILES_CREATE,
-      ProjectPermission.FILES_EDIT,
-      ProjectPermission.FILES_DELETE,
-      ProjectPermission.FILES_VIEW,
-      ProjectPermission.VERSIONS_CREATE,
-      ProjectPermission.VERSIONS_RESTORE,
-      ProjectPermission.GIT_PUSH,
-      ProjectPermission.GIT_PULL,
-      ProjectPermission.DEPLOY,
-    ].includes(permission as any)
-  }
-
-  if (normalized.has('editor')) {
-    return [
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.FILES_CREATE,
-      ProjectPermission.FILES_EDIT,
-      ProjectPermission.FILES_VIEW,
-      ProjectPermission.VERSIONS_CREATE,
-    ].includes(permission as any)
-  }
-
-  if (normalized.has('viewer')) {
-    return [
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.FILES_VIEW,
-    ].includes(permission as any)
-  }
-
-  return false
-}
-
 function getProjectOverviewRowActionPermission(action: ProjectOverviewRowAction): string | null {
   switch (action) {
     case 'rename':
@@ -176,7 +105,7 @@ type BulkPermissionDenial = {
 
 type ProjectPermissionPredicate = (project: Project, permissionId: string) => boolean
 
-function getBulkPermissionDenial(
+export function getBulkPermissionDenial(
   projects: Project[],
   action: ProjectOverviewBulkAction,
   permissionIds: string[],
@@ -188,10 +117,8 @@ function getBulkPermissionDenial(
   const denied = projects.flatMap((project) => {
     const membership = membershipByProjectId.get(project.id)
     const membershipPending = membership === undefined
-    const roles = getProjectMemberRoles(membership)
     const hasAnyRequiredPermission = permissionIds.some((permission) =>
-      hasProjectPermissionForProject?.(project, permission) ||
-      legacyProjectRoleHasPermission(roles, permission)
+      hasProjectPermissionForProject?.(project, permission)
     )
     if (!hasAnyRequiredPermission && membershipPending) return []
     return hasAnyRequiredPermission ? [] : [{ project, permissionId: permissionIds[0] }]
@@ -562,27 +489,20 @@ export default function ProjectOverview() {
       { type: 'project', id: project.id }
     ).allowed) return null
     if (hasProjectPermission(project.id, permission)) return null
-    const membership = membershipByProjectId.get(project.id)
-    if (!membership) return null
-    return legacyProjectRoleHasPermission(getProjectMemberRoles(membership), permission)
-      ? null
-      : `Missing permission ${permission}`
-  }, [hasProjectPermission, membershipByProjectId, permissions])
+    return `Missing permission ${permission}`
+  }, [hasProjectPermission, permissions])
 
   const gitSettingsCanManageConnection = React.useMemo(() => {
     if (!gitSettingsProjectId) return false
     if (hasProjectPermission(gitSettingsProjectId, ProjectPermission.GIT_CONNECT)) return true
-    const membership = membershipByProjectId.get(gitSettingsProjectId)
-    return legacyProjectRoleHasPermission(getProjectMemberRoles(membership), ProjectPermission.GIT_CONNECT)
-  }, [gitSettingsProjectId, hasProjectPermission, membershipByProjectId])
+    return false
+  }, [gitSettingsProjectId, hasProjectPermission])
 
-  const hasProjectPermissionOrLegacy = React.useCallback((project: Project, permission: string) => {
-    if (hasProjectPermission(project.id, permission)) return true
-    const membership = membershipByProjectId.get(project.id)
-    return legacyProjectRoleHasPermission(getProjectMemberRoles(membership), permission)
-  }, [hasProjectPermission, membershipByProjectId])
+  const hasProjectPermissionForProject = React.useCallback((project: Project, permission: string) => (
+    hasProjectPermission(project.id, permission)
+  ), [hasProjectPermission])
 
-  const hasProjectActionOrLegacyPermission = React.useCallback((
+  const hasProjectActionOrPermission = React.useCallback((
     project: Project,
     actionId: string,
     permission: string
@@ -591,8 +511,8 @@ export default function ProjectOverview() {
       permissions,
       actionId,
       { type: 'project', id: project.id }
-    ).allowed || hasProjectPermissionOrLegacy(project, permission)
-  ), [hasProjectPermissionOrLegacy, permissions])
+    ).allowed || hasProjectPermissionForProject(project, permission)
+  ), [hasProjectPermissionForProject, permissions])
 
   const getProjectBulkActionUnavailableReason = React.useCallback((projects: Project[], action: ProjectOverviewBulkAction): string | null => {
     const permissionIds = getProjectOverviewBulkActionPermissions(action, pushEnabled, pullEnabled)
@@ -602,9 +522,9 @@ export default function ProjectOverview() {
       action,
       permissionIds,
       membershipByProjectId,
-      (project, permission) => hasProjectActionOrLegacyPermission(project, actionId, permission)
+      (project, permission) => hasProjectActionOrPermission(project, actionId, permission)
     )
-  }, [hasProjectActionOrLegacyPermission, membershipByProjectId, pullEnabled, pushEnabled])
+  }, [hasProjectActionOrPermission, membershipByProjectId, pullEnabled, pushEnabled])
 
   const getProjectBulkActionDiagnosticDecision = React.useCallback((
     projects: Project[],
@@ -619,9 +539,9 @@ export default function ProjectOverview() {
       reason,
       permissionIds,
       membershipByProjectId,
-      (project, permission) => hasProjectActionOrLegacyPermission(project, actionId, permission)
+      (project, permission) => hasProjectActionOrPermission(project, actionId, permission)
     )
-  }, [hasProjectActionOrLegacyPermission, membershipByProjectId, pullEnabled, pushEnabled])
+  }, [hasProjectActionOrPermission, membershipByProjectId, pullEnabled, pushEnabled])
 
   const bulkSyncUnavailableReason = React.useMemo(() => {
     if (bulkSyncProjects.length === 0) return null
@@ -635,13 +555,13 @@ export default function ProjectOverview() {
       'sync',
       [permissionId],
       membershipByProjectId,
-      (project, permission) => hasProjectActionOrLegacyPermission(project, 'project.git.sync.run', permission)
+      (project, permission) => hasProjectActionOrPermission(project, 'project.git.sync.run', permission)
     )
   }, [
     anySyncEnabled,
     bulkDirection,
     bulkSyncProjects,
-    hasProjectActionOrLegacyPermission,
+    hasProjectActionOrPermission,
     membershipByProjectId,
     pullEnabled,
     pushEnabled,
@@ -656,13 +576,13 @@ export default function ProjectOverview() {
       bulkSyncUnavailableReason,
       [permissionId],
       membershipByProjectId,
-      (project, permission) => hasProjectActionOrLegacyPermission(project, 'project.git.sync.run', permission)
+      (project, permission) => hasProjectActionOrPermission(project, 'project.git.sync.run', permission)
     )
   }, [
     bulkDirection,
     bulkSyncProjects,
     bulkSyncUnavailableReason,
-    hasProjectActionOrLegacyPermission,
+    hasProjectActionOrPermission,
     membershipByProjectId,
   ])
 

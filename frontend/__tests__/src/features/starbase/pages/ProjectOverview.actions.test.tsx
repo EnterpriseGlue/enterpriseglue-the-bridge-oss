@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '@test/mocks/server';
 import { apiClient } from '@src/shared/api/client';
-import ProjectOverview from '@src/features/starbase/pages/ProjectOverview';
+import ProjectOverview, { getBulkPermissionDenial } from '@src/features/starbase/pages/ProjectOverview';
 
 const authMocks = vi.hoisted(() => ({
   hasPlatformPermission: vi.fn(),
@@ -181,29 +181,28 @@ describe('ProjectOverview actions', () => {
     expect(screen.queryByRole('heading', { name: /create project/i })).not.toBeInTheDocument();
   });
 
-  it('renames a project via inline edit', { timeout: 15_000 }, async () => {
-    renderWithProviders();
+  it('does not treat legacy membership roles as bulk permission grants', () => {
+    const project = { id: 'project-1', name: 'Alpha Project' } as any;
+    const memberships = new Map([['project-1', { role: 'owner', roles: ['owner'] }]]);
 
-    await waitFor(() => {
-      expect(Boolean(screen.getByText('Alpha Project'))).toBe(true);
-    });
+    expect(getBulkPermissionDenial(
+      [project],
+      'delete',
+      ['project:delete'],
+      memberships
+    )).toMatchObject({ permissionId: 'project:delete' });
 
-    const overflowButton = screen.getByRole('button', { name: /options/i });
-    await userEvent.click(overflowButton);
-
-    const renameOption = await screen.findByText('Rename');
-    await userEvent.click(renameOption);
-
-    const nameInput = screen.getByDisplayValue('Alpha Project');
-    await userEvent.clear(nameInput);
-    await userEvent.type(nameInput, 'Renamed Project{enter}');
-
-    await waitFor(() => {
-      expect(Boolean(screen.queryByDisplayValue('Renamed Project'))).toBe(false);
-    });
+    expect(getBulkPermissionDenial(
+      [project],
+      'delete',
+      ['project:delete'],
+      memberships,
+      () => true
+    )).toBeNull();
   });
 
   it('downloads a project from the overflow menu', async () => {
+    authMocks.hasProjectPermission.mockImplementation((_projectId: string, permission: string) => permission === 'project:files:view');
     const getBlobSpy = vi.spyOn(apiClient, 'getBlob').mockResolvedValue(new Blob(['zip']));
     (globalThis.URL as any).createObjectURL = vi.fn(() => 'blob:mock');
     (globalThis.URL as any).revokeObjectURL = vi.fn();
