@@ -209,7 +209,7 @@ export default function CreateOnlineProjectModal({ open, onClose, existingProjec
                     <SelectItem
                       key={engine.id}
                       value={engine.id}
-                      text={`${engine.name} (${engine.role})`}
+                      text={engine.name}
                     />
                   ))}
                 </Select>

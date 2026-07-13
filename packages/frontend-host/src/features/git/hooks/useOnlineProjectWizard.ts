@@ -59,13 +59,10 @@ export type EngineImportPreview = {
   warnings: string[]
 }
 
-const IMPORT_FROM_ENGINE_ROLES = new Set(['owner', 'delegate', 'operator', 'deployer'])
-
 type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean
 
 export function canImportFromEngineRow(engine: EngineForImport, hasPermission: EnginePermissionCheck): boolean {
-  const role = String(engine?.myRole || '').toLowerCase()
-  return IMPORT_FROM_ENGINE_ROLES.has(role) || hasPermission(engine?.id, EnginePermission.DEPLOY_VIEW)
+  return hasPermission(engine?.id, EnginePermission.DEPLOY_VIEW)
 }
 
 export function formatImportPreviewSummary(preview: EngineImportPreview): string {
@@ -343,7 +340,6 @@ export function useOnlineProjectWizard({
       .map((engine: EngineForImport) => ({
         id: String(engine.id),
         name: String(engine.name || engine.baseUrl || 'Unnamed engine'),
-        role: String(engine.myRole || '').toLowerCase(),
       }))
       .sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))
   }, [hasEnginePermission, importableEnginesQuery.data, permissions])

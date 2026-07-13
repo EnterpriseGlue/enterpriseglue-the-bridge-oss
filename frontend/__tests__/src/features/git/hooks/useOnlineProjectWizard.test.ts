@@ -103,12 +103,12 @@ describe('useOnlineProjectWizard', () => {
     expect(typeof useOnlineProjectWizard).toBe('function');
   });
 
-  it('allows engine import from legacy engine roles or scoped deploy-view permission', () => {
+  it('requires scoped deploy-view permission for engine import', () => {
     const noScopedPermission = () => false;
     const deployViewPermission = (_engineId: string | null | undefined, permission: string) =>
       permission === EnginePermission.DEPLOY_VIEW;
 
-    expect(canImportFromEngineRow({ id: 'engine-1', myRole: 'deployer' }, noScopedPermission)).toBe(true);
+    expect(canImportFromEngineRow({ id: 'engine-1', myRole: 'deployer' }, noScopedPermission)).toBe(false);
     expect(canImportFromEngineRow({ id: 'engine-1', myRole: null }, deployViewPermission)).toBe(true);
     expect(canImportFromEngineRow({ id: 'engine-1', myRole: null }, noScopedPermission)).toBe(false);
   });
@@ -151,8 +151,8 @@ describe('useOnlineProjectWizard', () => {
     expect(apiClient.post).not.toHaveBeenCalledWith('/starbase-api/projects/import-preview', expect.anything());
   });
 
-  it('keeps legacy engine role compatibility for import preview', async () => {
-    setAuthPermissions({ platform: ['project:create'], projects: [], engines: [] });
+  it('allows import preview from the engine action snapshot', async () => {
+    setAuthPermissions({ platform: ['project:create'], projects: [], engines: [{ resourceId: 'engine-1', permissions: [EnginePermission.DEPLOY_VIEW] }] });
     authState.hasEnginePermission.mockReturnValue(false);
     (apiClient.get as unknown as Mock).mockImplementation((url: string) => {
       if (url === '/engines-api/engines') {
