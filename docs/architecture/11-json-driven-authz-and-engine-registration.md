@@ -2284,7 +2284,7 @@ Phase 0 exit criteria:
 ### Phase 7: CI/CD Tooling
 
 - [x] ✅ Add `pnpm authz:config` CLI commands for validate, preview, hash-bound apply, and export. It uses machine credentials, prints JSON for CI, and returns distinct nonzero usage/validation/request exit codes.
-- [ ] ⬜ Add GitHub Actions example.
+- [x] ✅ Add a manually dispatched, environment-protected GitHub Actions preview/apply workflow. It requires a reviewed commit SHA, uploads sanitized receipts, serializes target-environment runs, and requires an explicit `APPLY` confirmation for mutation.
 - [ ] ⬜ Add Docker/Kubernetes secret reference examples.
 - [ ] ⬜ Add documentation for least-privilege API client creation.
 - [x] ✅ Add machine-readable CLI output and distinct usage, preview-validation, and request/runtime exit codes for CI. Finer-grained authorization, conflict, and reconciliation exit codes remain pending.

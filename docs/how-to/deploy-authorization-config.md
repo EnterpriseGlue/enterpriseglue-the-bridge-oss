@@ -147,6 +147,14 @@ pnpm authz:config export acme-platform-authz
 
 The CLI calls the same backend APIs used by the UI. It never connects directly to the database. `apply` sends the server-produced canonical hash as `expectedPreviewHash`, so stale or altered bundles fail closed. The CLI returns `64` for invalid invocation, `2` for preview validation failure, and `1` for API, I/O, or transport failures.
 
+The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
+
+- `ENTERPRISEGLUE_API_URL` as an Environment variable;
+- `ENTERPRISEGLUE_CONFIG_TOKEN` as an Environment secret for a non-human principal with `platform.authz.roles.manage`;
+- required reviewers for environments that permit `apply`.
+
+Dispatch `preview` first against an immutable reviewed commit SHA, inspect the uploaded JSON receipt, then dispatch `apply` for that same SHA. The workflow requires the literal `APPLY` confirmation and serializes runs per environment. It is intentionally not triggered by pull requests and never uses a repository-wide human credential.
+
 The corresponding authenticated routes are:
 
 ```text
