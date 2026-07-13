@@ -2296,7 +2296,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Enforce complete startup order including required reconciliation and readiness. Migrations, catalog seeding, optional file bundle validation/apply, `/ready` bootstrap-failure gating, and Engine Set/runtime-resource materialization receipts are complete; provider identity reconciliation gating remains pending.
 - [ ] ⬜ Add sanitized config status to health/readiness, logs, metrics, and deployment receipts.
 - [ ] ⬜ Update Docker, OpenShift, deployment-runbook, SSO, configuration-reference, security-hardening, and troubleshooting documentation in the same implementation milestone.
-- [ ] ⬜ Keep [Configure Authorization, Identity, And Engines](../how-to/configure-authorization-and-engines.md) and [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md) synchronized with executable schemas and scripts through CI example validation.
+- [ ] ⬜ Keep [Configure Authorization, Identity, And Engines](../how-to/configure-authorization-and-engines.md) and [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md) synchronized with executable schemas and scripts through CI example validation. Bootstrap environment-variable parity is now guarded in CI; JSON example/schema validation remains pending.
 
 ### Phase 8: Verification
 
