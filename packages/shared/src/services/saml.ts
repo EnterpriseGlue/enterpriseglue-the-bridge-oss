@@ -8,6 +8,8 @@ import { ssoClaimsMappingService, type PlatformRole, type SsoClaims } from './pl
 import { ssoAssignmentMappingService } from './platform-admin/SsoAssignmentMappingService.js';
 import { ssoGroupMappingService } from './platform-admin/SsoGroupMappingService.js';
 import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIdentityService.js';
+import { identityEntitlementMappingService } from './platform-admin/IdentityEntitlementMappingService.js';
+import { getIdentityProviderAdapter } from './platform-admin/IdentityProviderAdapter.js';
 import { ssoProviderService } from './platform-admin/SsoProviderService.js';
 import { ssoSyncDiagnosticsService, type SsoSyncCounts } from './platform-admin/SsoSyncDiagnosticsService.js';
 
@@ -382,12 +384,20 @@ async function syncSamlAuthorizationForUser(
     lastName: userInfo.family_name || null,
     claims: ssoClaims,
   });
+  const identityMappingSync = await identityEntitlementMappingService.syncMembershipsInStore(manager, userId, tenantId, getIdentityProviderAdapter('saml').normalizeIdentity({
+    providerKey: providerId,
+    subjectId: subject.subject,
+    claims: ssoClaims,
+    username: userInfo.email,
+    email: userInfo.email,
+    directoryTenantId: userInfo.tid || null,
+  }));
   const groupSync = await ssoGroupMappingService.syncMembershipsForUserWithManager(manager, userId, ssoClaims, providerId, tenantId);
   const assignmentSync = await ssoAssignmentMappingService.syncAssignmentsForUserWithManager(manager, userId, ssoClaims, providerId, tenantId);
   return {
-    groupMembershipsCreated: groupSync.created,
+    groupMembershipsCreated: groupSync.created + identityMappingSync.created,
     groupMembershipsUpdated: groupSync.updated,
-    groupMembershipsRemoved: groupSync.removed,
+    groupMembershipsRemoved: groupSync.removed + identityMappingSync.removed,
     assignmentsCreated: assignmentSync.created,
     assignmentsUpdated: assignmentSync.updated,
     assignmentsRemoved: assignmentSync.removed,

@@ -6,6 +6,7 @@ import { ssoClaimsMappingService } from '@enterpriseglue/shared/services/platfor
 import { ssoAssignmentMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoAssignmentMappingService.js';
 import { ssoGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.js';
 import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
+import { identityEntitlementMappingService } from '@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js';
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -41,6 +42,12 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.j
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({
   ssoNormalizedIdentityService: {
     upsertIdentityWithManager: vi.fn().mockResolvedValue({ id: 'identity-1', created: true }),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js', () => ({
+  identityEntitlementMappingService: {
+    syncMembershipsInStore: vi.fn().mockResolvedValue({ created: 2, removed: 1 }),
   },
 }));
 
@@ -143,6 +150,12 @@ describe('saml service - provisionSamlUser', () => {
       'provider-saml-1',
       'tenant-a',
     );
+    expect(identityEntitlementMappingService.syncMembershipsInStore).toHaveBeenCalledWith(
+      manager,
+      'user-1',
+      'tenant-a',
+      expect.objectContaining({ providerKey: 'provider-saml-1', providerType: 'saml', subjectId: 'oid-123', email: 'saml-user@example.com' }),
+    );
     expect(ssoAssignmentMappingService.syncAssignmentsForUserWithManager).toHaveBeenCalledWith(
       manager,
       'user-1',
@@ -158,12 +171,16 @@ describe('saml service - provisionSamlUser', () => {
     const groupSyncOrder = (ssoGroupMappingService.syncMembershipsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];
     const engineSyncOrder = (ssoAssignmentMappingService.syncAssignmentsForUserWithManager as unknown as Mock).mock.invocationCallOrder[0];
     expect(snapshotOrder).toBeLessThan(groupSyncOrder);
+    const identitySyncOrder = (identityEntitlementMappingService.syncMembershipsInStore as unknown as Mock).mock.invocationCallOrder[0];
+    expect(snapshotOrder).toBeLessThan(identitySyncOrder);
+    expect(identitySyncOrder).toBeLessThan(groupSyncOrder);
     expect(groupSyncOrder).toBeLessThan(engineSyncOrder);
     expect(ssoSyncDiagnosticsService.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({
       tenantId: 'tenant-a',
       providerId: 'provider-saml-1',
       userId: 'user-1',
-      groupMembershipsCreated: 1,
+      groupMembershipsCreated: 3,
+      groupMembershipsRemoved: 1,
       assignmentsCreated: 1,
       details: expect.objectContaining({ email: 'saml-user@example.com' }),
     }));
