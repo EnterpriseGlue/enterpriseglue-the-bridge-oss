@@ -20,6 +20,13 @@ export interface LegacyMappingCoverageItem {
   verification: { candidateIdentityMappingId: string; verifiedById: string | null; verifiedAt: number; note: string } | null;
 }
 
+export interface LegacyMappingRetirementReadiness {
+  ready: boolean;
+  activeLegacyMappingCount: number;
+  verifiedReplacementCount: number;
+  blockers: Array<{ id: string; family: LegacyMappingCoverageItem['family']; reason: string }>;
+}
+
 function matchShape(mapping: { claimType: string; claimOperator: string | null; claimValue: string }, candidate: IdentityEntitlementMapping): boolean {
   const matchOperator = mapping.claimOperator === null || mapping.claimOperator === 'equals'
     ? 'exact'
@@ -98,6 +105,17 @@ class LegacyMappingCoverageService {
     if (!item || item.status !== 'replacement_candidate' || !item.candidateIdentityMappingIds.includes(input.candidateIdentityMappingId)) throw Errors.validation('The selected provider-neutral mapping is not a current replacement candidate');
     const dataSource = await getDataSource();
     await dataSource.getRepository(AuditLog).insert({ id: generateId(), tenantId, userId: input.actorId, action: 'authz.legacy_mapping_coverage.verify', resourceType: 'sso_mapping', resourceId: input.legacyMappingId, ipAddress: null, userAgent: null, details: JSON.stringify({ legacyMappingId: input.legacyMappingId, family: input.family, candidateIdentityMappingId: input.candidateIdentityMappingId, note }), createdAt: Date.now() });
+  }
+
+  async getRetirementReadiness(tenantId?: string | null): Promise<LegacyMappingRetirementReadiness> {
+    const coverage = await this.getCoverage(tenantId);
+    const blockers = coverage.flatMap((item) => {
+      if (item.status !== 'replacement_candidate') return [{ id: item.id, family: item.family, reason: item.reason }];
+      if (!item.verification) return [{ id: item.id, family: item.family, reason: 'A current replacement candidate exists but has not been verified.' }];
+      if (!item.candidateIdentityMappingIds.includes(item.verification.candidateIdentityMappingId)) return [{ id: item.id, family: item.family, reason: 'Recorded verification no longer matches a current replacement candidate.' }];
+      return [];
+    });
+    return { ready: blockers.length === 0, activeLegacyMappingCount: coverage.length, verifiedReplacementCount: coverage.length - blockers.length, blockers };
   }
 }
 

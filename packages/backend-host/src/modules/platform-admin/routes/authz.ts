@@ -2510,6 +2510,10 @@ router.get('/api/authz/legacy-mapping-coverage', apiLimiter, requireAuth, requir
   res.json(await legacyMappingCoverageService.getCoverage(req.tenant?.tenantId || null));
 }));
 
+router.get('/api/authz/legacy-mapping-retirement-readiness', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.read'), asyncHandler(async (req: Request, res: Response) => {
+  res.json(await legacyMappingCoverageService.getRetirementReadiness(req.tenant?.tenantId || null));
+}));
+
 router.post('/api/authz/legacy-mapping-coverage/:id/verify', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateParams(idParamSchema), validateBody(legacyMappingCoverageVerificationSchema), asyncHandler(async (req: Request, res: Response) => {
   await legacyMappingCoverageService.verifyReplacement({ tenantId: req.tenant?.tenantId || null, legacyMappingId: String(req.params.id), actorId: req.user!.userId, ...req.body });
   res.status(204).send();
