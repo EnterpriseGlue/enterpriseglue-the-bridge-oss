@@ -30,7 +30,7 @@ describe('configBundleSecretPreflightService', () => {
       },
     });
 
-    expect(result).toMatchObject({ valid: true, available: true, errors: [] });
+    expect(result).toMatchObject({ valid: true, availabilityHash: expect.any(String), available: true, errors: [] });
     expect(result.references).toEqual([
       { reference: 'OIDC_CLIENT_SECRET', locations: ['./identity-providers.json.identityProviders.0.oidc.clientSecretRef'], available: true },
       { reference: 'PAYMENTS_ENGINE_PASSWORD', locations: ['./engines.json.engines.0.auth.passwordRef'], available: true },
@@ -46,7 +46,7 @@ describe('configBundleSecretPreflightService', () => {
       },
     });
 
-    expect(result).toMatchObject({ valid: true, available: false, errors: [] });
+    expect(result).toMatchObject({ valid: true, availabilityHash: expect.any(String), available: false, errors: [] });
     expect(result.references).toEqual([{
       reference: 'MISSING_ENGINE_TOKEN',
       locations: ['./engines.json.engines.0.auth.tokenRef'],

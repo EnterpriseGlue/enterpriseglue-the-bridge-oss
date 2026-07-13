@@ -88,6 +88,7 @@ const configBundlePreviewSchema = z.object({
 });
 const configBundleApplySchema = configBundlePreviewSchema.extend({
   expectedPreviewHash: z.string().min(1),
+  expectedSecretPreflightHash: z.string().min(1).max(255).optional(),
   acknowledgements: z.array(z.string().min(1).max(500)).max(100).optional(),
   idempotencyKey: z.string().min(8).max(160).optional(),
   expectedTenantScope: z.string().min(1).max(255).optional(),

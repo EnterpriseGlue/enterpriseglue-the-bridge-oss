@@ -27,6 +27,7 @@ const configBundleSecretPreflightMock = vi.hoisted(() => ({
   check: vi.fn().mockReturnValue({
     valid: true,
     canonicalHash: 'preview-hash',
+    availabilityHash: 'secret-preflight-hash',
     available: false,
     errors: [],
     references: [{ reference: 'MISSING_ENGINE_TOKEN', locations: ['./engines.json.engines.0.auth.tokenRef'], available: false, reason: 'environment_variable_missing' }],
@@ -1998,6 +1999,7 @@ describe('platform-admin authz routes', () => {
     expect(response.body).toMatchObject({
       valid: true,
       available: false,
+      availabilityHash: 'secret-preflight-hash',
       references: [expect.objectContaining({ reference: 'MISSING_ENGINE_TOKEN', available: false })],
     });
     expect(JSON.stringify(response.body)).not.toContain('secret-value');

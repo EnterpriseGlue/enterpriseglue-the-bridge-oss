@@ -18,6 +18,7 @@ import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructur
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
+import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 
 const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSetsForEngine } = vi.hoisted(() => ({
   materializeRuntimeResourceSet: vi.fn().mockResolvedValue({ matched: 0, created: 0, updated: 0, removed: 0 }),
@@ -177,6 +178,30 @@ describe('configBundleApplyService', () => {
       tenantId: 'tenant-a',
       actorId: 'admin-1',
     })).rejects.toMatchObject({ statusCode: 409 });
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects an apply when a checked secret reference is no longer available', async () => {
+    const { dataSource } = setupDataSource();
+    const engineBundle = { ...bundle, imports: ['./engines.json'] };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{ key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest', auth: { type: 'bearer', tokenRef: 'PAYMENTS_ENGINE_TOKEN' } }],
+      },
+    };
+    vi.stubEnv('PAYMENTS_ENGINE_TOKEN', 'available-only-for-preflight');
+    const preview = configBundlePreviewService.preview({ bundle: engineBundle, files: engineFiles });
+    const secretPreflight = configBundleSecretPreflightService.check({ bundle: engineBundle, files: engineFiles });
+    vi.unstubAllEnvs();
+
+    await expect(configBundleApplyService.apply({
+      bundle: engineBundle,
+      files: engineFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      expectedSecretPreflightHash: secretPreflight.availabilityHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('Secret reference availability changed') });
     expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 

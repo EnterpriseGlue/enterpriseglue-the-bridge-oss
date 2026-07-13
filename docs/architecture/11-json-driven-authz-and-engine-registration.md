@@ -2063,7 +2063,7 @@ Fixtures should include at least:
 - [ ] ⬜ Reject missing provider/group/role/engine references, duplicate keys, wrong-scope permissions, plaintext secrets, and test fixture imports.
 - [ ] ⬜ Prove UI-created manual objects survive authoritative config apply unless ownership is explicitly transferred.
 - [ ] ⬜ Prove a config-managed mapping change can request asynchronous reconciliation without holding the apply transaction open.
-- [ ] ⬜ Prove stale preview hashes, changed secret-ref availability, and conflicting concurrent applies fail safely.
+- [x] ✅ Prove stale preview hashes and changed secret-ref availability fail safely. Applies may bind an optional availability-only preflight hash; conflicting concurrent applies remain covered by idempotency and ownership checks.
 
 ### Test Harness Files And Commands
 

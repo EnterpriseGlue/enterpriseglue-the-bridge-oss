@@ -1,5 +1,6 @@
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { secretResolver, type SecretReferenceAvailability } from './SecretResolver.js';
+import { hashCanonicalConfig } from './config-bundle-hash.js';
 
 export interface ConfigBundleSecretReferenceStatus extends SecretReferenceAvailability {
   reference: string;
@@ -9,6 +10,7 @@ export interface ConfigBundleSecretReferenceStatus extends SecretReferenceAvaila
 export interface ConfigBundleSecretPreflight {
   valid: boolean;
   canonicalHash?: string;
+  availabilityHash?: string;
   available: boolean;
   errors: Array<{ path: string; message: string }>;
   references: ConfigBundleSecretReferenceStatus[];
@@ -62,6 +64,10 @@ class ConfigBundleSecretPreflightService {
     return {
       valid: true,
       canonicalHash: compilation.preview.canonicalHash,
+      availabilityHash: hashCanonicalConfig({
+        canonicalHash: compilation.preview.canonicalHash,
+        references: references.map(({ reference, available, reason }) => ({ reference, available, reason: reason || null })),
+      }),
       available: references.every((reference) => reference.available),
       errors: [],
       references,

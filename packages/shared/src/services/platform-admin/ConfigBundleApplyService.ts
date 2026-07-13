@@ -24,9 +24,11 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { createHash } from 'node:crypto';
 import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBundleDiffService.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
+import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
 
 export interface ConfigBundleApplyInput extends ConfigBundlePreviewInput {
   expectedPreviewHash: string;
+  expectedSecretPreflightHash?: string | null;
   acknowledgements?: string[];
   idempotencyKey?: string | null;
   expectedTenantScope?: string | null;
@@ -204,6 +206,12 @@ class ConfigBundleApplyService {
     }
     if (input.expectedPreviewHash !== compilation.preview.canonicalHash) {
       return fail('Preview hash does not match the submitted configuration bundle', 409);
+    }
+    if (input.expectedSecretPreflightHash) {
+      const secretPreflight = configBundleSecretPreflightService.check({ bundle: input.bundle, files: input.files });
+      if (!secretPreflight.valid || !secretPreflight.available || secretPreflight.availabilityHash !== input.expectedSecretPreflightHash) {
+        return fail('Secret reference availability changed or is no longer available since preflight', 409);
+      }
     }
     const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-sets.json', './runtime-resource-sets.json', './assignments.json', './project-engine-targets.json', './identity-providers.json', './identity-mappings.json'].includes(path));
     if (unsupported.length > 0) {

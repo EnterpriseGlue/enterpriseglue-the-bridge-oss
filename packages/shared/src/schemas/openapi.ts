@@ -3501,6 +3501,7 @@ const ConfigBundlePreviewResponseOpenApiSchema = z.object({
 const ConfigBundleSecretPreflightResponseOpenApiSchema = z.object({
   valid: z.boolean(),
   canonicalHash: z.string().optional(),
+  availabilityHash: z.string().optional(),
   available: z.boolean(),
   errors: z.array(z.object({ path: z.string(), message: z.string() })),
   references: z.array(z.object({
@@ -3545,6 +3546,7 @@ const ConfigBundleDiffResponseOpenApiSchema = ConfigBundlePreviewResponseOpenApi
 
 const ConfigBundleApplyRequestOpenApiSchema = ConfigBundleRequestOpenApiSchema.extend({
   expectedPreviewHash: z.string().min(1),
+  expectedSecretPreflightHash: z.string().min(1).max(255).optional(),
   acknowledgements: z.array(z.string()).max(100).optional(),
   idempotencyKey: z.string().min(8).max(160).optional(),
   expectedTenantScope: z.string().min(1).max(255).optional(),
