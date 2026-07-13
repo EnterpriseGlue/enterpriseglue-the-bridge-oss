@@ -12,6 +12,7 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { engineSetService } from './EngineSetService.js';
 import { runtimeResourceInventoryService } from './RuntimeResourceInventoryService.js';
@@ -269,6 +270,7 @@ class ConfigBundleApplyService {
       const targetRepo = manager.getRepository(ProjectEngineTarget);
       const providerRepo = manager.getRepository(IdentityProvider);
       const identityMappingRepo = manager.getRepository(IdentityEntitlementMapping);
+      const groupMembershipRepo = manager.getRepository(AuthzGroupMembership);
       const rolePermissionRepo = manager.getRepository(RbacRolePermission);
 
       for (const change of diff.changes) {
@@ -589,17 +591,28 @@ class ConfigBundleApplyService {
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.create', resourceType: 'identity_entitlement_mapping', resourceId: mappingId, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, providerKey: mapping.providerKey, groupKey: mapping.targetGroupKey, canonicalHash: diff.canonicalHash } });
           created += 1;
         } else {
-          await identityMappingRepo.update({ id: existing.id }, values);
-          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.update', resourceType: 'identity_entitlement_mapping', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, canonicalHash: diff.canonicalHash } });
-          updated += 1;
+          const mappingChanged = existing.providerId !== values.providerId
+            || existing.targetGroupId !== values.targetGroupId
+            || existing.entitlementType !== values.entitlementType
+            || existing.externalId !== values.externalId
+            || existing.matchOperator !== values.matchOperator
+            || existing.syncMode !== values.syncMode
+            || !existing.isActive;
+          if (mappingChanged) {
+            await groupMembershipRepo.delete({ source: 'identity_provider', sourceRef: `identity_mapping:${existing.id}` });
+            await identityMappingRepo.update({ id: existing.id }, values);
+            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.update', resourceType: 'identity_entitlement_mapping', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, canonicalHash: diff.canonicalHash, membershipCleanup: 'source_scoped' } });
+            updated += 1;
+          }
         }
       }
       if (manifest.mode === 'authoritative') {
         const existing = await identityMappingRepo.find({ where: { tenantId, sourceRef } as any });
         for (const mapping of existing) {
           if (mapping.configKey && mappingKeys.has(mapping.configKey)) continue;
+          await groupMembershipRepo.delete({ source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` });
           await identityMappingRepo.update({ id: mapping.id }, { isActive: false, updatedAt: now });
-          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.disable', resourceType: 'identity_entitlement_mapping', resourceId: mapping.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash } });
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.disable', resourceType: 'identity_entitlement_mapping', resourceId: mapping.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash, membershipCleanup: 'source_scoped' } });
           archived += 1;
         }
       }

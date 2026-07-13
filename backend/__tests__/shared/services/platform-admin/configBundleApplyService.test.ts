@@ -14,6 +14,7 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 
@@ -82,6 +83,7 @@ function setupDataSource() {
   const targetRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
   const providerRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const identityMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
+  const groupMembershipRepo = { delete: vi.fn().mockResolvedValue(undefined) };
   const auditRepo = { insert: auditInsert };
   const repositories = (entity: unknown) => {
     if (entity === RbacRole) return roleRepo;
@@ -95,6 +97,7 @@ function setupDataSource() {
     if (entity === ProjectEngineTarget) return targetRepo;
     if (entity === IdentityProvider) return providerRepo;
     if (entity === IdentityEntitlementMapping) return identityMappingRepo;
+    if (entity === AuthzGroupMembership) return groupMembershipRepo;
     if (entity === RbacRolePermission) return permissionRepo;
     if (entity === AuditLog) return auditRepo;
     if (entity === ConfigBundleApplyRun) return configRunRepo;
@@ -105,7 +108,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, engineRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, engineRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -259,6 +262,21 @@ describe('configBundleApplyService', () => {
     const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
     await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
     expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-1', configKey: 'mapping.operators', targetGroupId: 'group-1', sourceRef: 'config_bundle:acme.authz' }));
+  });
+
+  it('cleans only the source-owned memberships when an authoritative bundle disables an identity mapping', async () => {
+    const { identityMappingRepo, groupMembershipRepo } = setupDataSource();
+    identityMappingRepo.find.mockResolvedValue([{
+      id: 'mapping-1', tenantId: 'tenant-a', configKey: 'mapping.removed', sourceRef: 'config_bundle:acme.authz', isActive: true,
+    }]);
+    const mappingBundle = { ...bundle, imports: ['./identity-mappings.json'] };
+    const mappingFiles = { './identity-mappings.json': { identityMappings: [] } };
+    const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+
+    await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+
+    expect(groupMembershipRepo.delete).toHaveBeenCalledWith({ source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
+    expect(identityMappingRepo.update).toHaveBeenCalledWith({ id: 'mapping-1' }, expect.objectContaining({ isActive: false }));
   });
 
   it('applies config-owned provider-neutral identity definitions before their mappings', async () => {
