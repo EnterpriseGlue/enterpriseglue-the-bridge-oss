@@ -770,6 +770,22 @@ r.get('/engines-api/engines/:engineId/deployment-receipts', apiLimiter, requireA
   res.json(await deploymentReceiptService.listForEngine(String(req.params.engineId), req.tenant?.tenantId || null, limit));
 }))
 
+r.get('/engines-api/engines/:engineId/deployment-history', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const rawLimit = Number(req.query.limit || 100)
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 100
+  const rows = await (await getDataSource()).getRepository(EngineDeployment).find({
+    where: { engineId: String(req.params.engineId) },
+    order: { deployedAt: 'DESC', id: 'DESC' },
+    take: limit,
+  })
+  res.json(rows.map((row) => ({
+    id: row.id, engineId: row.engineId, engineDeploymentId: row.camundaDeploymentId, deploymentName: row.camundaDeploymentName,
+    deploymentTime: row.camundaDeploymentTime, projectId: row.projectId, ingestionSource: row.ingestionSource,
+    lineageQuality: row.lineageQuality, reportingPrincipalId: row.reportingPrincipalId, deployedAt: row.deployedAt,
+    reconciledAt: row.reconciledAt, resourceCount: row.resourceCount, status: row.status,
+  })))
+}))
+
 // Passthroughs to engine for listing/reading/deleting deployments
 r.get('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
 const engineId = String(req.params.engineId)

@@ -178,6 +178,7 @@ describe('engines deployments routes', () => {
         }
         if (entityName === 'EngineDeployment') {
           return {
+            find: vi.fn().mockResolvedValue([]),
             findOne: vi.fn().mockResolvedValue(null),
             insert: vi.fn().mockImplementation((row) => {
               engineDeploymentInserts.push(row);
@@ -231,6 +232,18 @@ describe('engines deployments routes', () => {
     );
 
     const response = await request(app).get('/engines-api/engines/e1/deployment-receipts');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:deploy:view', expect.objectContaining({
+      userId: 'user-1', resourceType: 'engine', resourceId: 'e1',
+    }));
+  });
+
+  it('lists sanitized canonical deployment history through deployment-read permission', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'engine:deploy:view');
+
+    const response = await request(app).get('/engines-api/engines/e1/deployment-history');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([]);

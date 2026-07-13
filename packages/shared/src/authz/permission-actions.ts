@@ -1260,6 +1260,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'GET', route: '/engines-api/engines/{engineId}/deployments', resourceResolver: 'engine.byId' },
       { method: 'GET', route: '/engines-api/engines/{engineId}/deployments/{id}', resourceResolver: 'engine.byId' },
       { method: 'GET', route: '/engines-api/engines/{engineId}/deployment-receipts', resourceResolver: 'engine.byId' },
+      { method: 'GET', route: '/engines-api/engines/{engineId}/deployment-history', resourceResolver: 'engine.byId' },
     ],
   },
   {
