@@ -7,12 +7,13 @@ import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'role' | 'group' | 'engine' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping';
+  objectType: 'role' | 'group' | 'engine' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping' | 'project_engine_target';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
@@ -62,7 +63,7 @@ class ConfigBundleDiffService {
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders, identityMappings] = await Promise.all([
+    const [roles, groups, engines, engineSets, runtimeResourceSets, rolePermissions, identityProviders, identityMappings, projectEngineTargets] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
@@ -71,6 +72,7 @@ class ConfigBundleDiffService {
       dataSource.getRepository(RbacRolePermission).find(),
       dataSource.getRepository(IdentityProvider).find(),
       dataSource.getRepository(IdentityEntitlementMapping).find(),
+      dataSource.getRepository(ProjectEngineTarget).find(),
     ]);
     const rolePermissionsByRoleId = new Map<string, string[]>();
     for (const permission of rolePermissions) {
@@ -90,6 +92,8 @@ class ConfigBundleDiffService {
     const identityProvidersByKey = new Map(tenantIdentityProviders.map((provider) => [provider.key, provider]));
     const tenantIdentityMappings = identityMappings.filter((mapping) => (mapping.tenantId || null) === normalizedTenantId);
     const identityMappingsByKey = new Map(tenantIdentityMappings.filter((mapping) => mapping.configKey).map((mapping) => [mapping.configKey!, mapping]));
+    const tenantProjectEngineTargets = projectEngineTargets.filter((target) => (target.tenantId || null) === normalizedTenantId);
+    const projectEngineTargetsByPair = new Map(tenantProjectEngineTargets.map((target) => [`${target.projectId}:${target.engineId}`, target]));
     const changes: ConfigBundleDiffChange[] = [];
 
     const desiredRoles = values(compilation.files, './roles.json', 'roles');
@@ -225,6 +229,36 @@ class ConfigBundleDiffService {
       else changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned identity mapping already matches the desired state' });
     }
 
+    const desiredProjectEngineTargets = values(compilation.files, './project-engine-targets.json', 'projectEngineTargets');
+    const desiredProjectEngineTargetPairs = new Set<string>();
+    for (const target of desiredProjectEngineTargets) {
+      const projectId = target.projectRef.id;
+      const engine = enginesByConfigKey.get(target.engineRef.engineKey);
+      const key = target.key || `${projectId || 'unresolved-project'}:${target.engineRef.engineKey}`;
+      if (!projectId || !engine) {
+        changes.push({ objectType: 'project_engine_target', key, operation: 'conflict', reason: 'Project-engine target references an unresolved project id or configured engine' });
+        continue;
+      }
+      const pair = `${projectId}:${engine.id}`;
+      desiredProjectEngineTargetPairs.add(pair);
+      const existing = projectEngineTargetsByPair.get(pair);
+      if (!existing) {
+        changes.push({ objectType: 'project_engine_target', key, operation: 'create', reason: 'No persisted project-engine target uses this project and configured engine pair' });
+      } else if (existing.source !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
+        changes.push({ objectType: 'project_engine_target', key, operation: 'conflict', currentId: existing.id, reason: 'Existing project-engine target is not owned by this configuration bundle' });
+      } else if (
+        existing.status !== target.status ||
+        existing.allowManualDeploy !== target.allowManualDeploy ||
+        existing.allowCiDeploy !== target.allowCiDeploy ||
+        existing.allowApiDeploy !== target.allowApiDeploy ||
+        existing.allowImport !== target.allowImport
+      ) {
+        changes.push({ objectType: 'project_engine_target', key, operation: 'update', currentId: existing.id, reason: 'Config-owned project-engine target differs from desired status or deployment eligibility modes' });
+      } else {
+        changes.push({ objectType: 'project_engine_target', key, operation: 'noop', currentId: existing.id, reason: 'Config-owned project-engine target already matches the desired state' });
+      }
+    }
+
     if (manifest.mode === 'authoritative') {
       for (const role of tenantRoles) {
         if (role.source === CONFIG_SOURCE && role.sourceRef === sourceRef && !desiredRoleKeys.has(role.key) && !role.isArchived) {
@@ -257,6 +291,11 @@ class ConfigBundleDiffService {
       for (const mapping of tenantIdentityMappings) {
         if (mapping.sourceRef === sourceRef && mapping.configKey && !desiredIdentityMappingKeys.has(mapping.configKey) && mapping.isActive) {
           changes.push({ objectType: 'identity_mapping', key: mapping.configKey, operation: 'archive', currentId: mapping.id, reason: 'Config-owned identity mapping is absent from an authoritative bundle' });
+        }
+      }
+      for (const target of tenantProjectEngineTargets) {
+        if (target.source === CONFIG_SOURCE && target.sourceRef === sourceRef && !desiredProjectEngineTargetPairs.has(`${target.projectId}:${target.engineId}`) && target.status !== 'archived') {
+          changes.push({ objectType: 'project_engine_target', key: `${target.projectId}:${target.engineId}`, operation: 'archive', currentId: target.id, reason: 'Config-owned project-engine target is absent from an authoritative bundle' });
         }
       }
     }

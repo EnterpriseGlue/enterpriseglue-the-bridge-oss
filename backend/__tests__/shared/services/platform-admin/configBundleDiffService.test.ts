@@ -8,6 +8,7 @@ import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -29,6 +30,7 @@ function mockDataSource(
   engines: unknown[] = [],
   identityProviders: unknown[] = [],
   identityMappings: unknown[] = [],
+  projectEngineTargets: unknown[] = [],
 ) {
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository: (entity: unknown) => {
@@ -40,6 +42,7 @@ function mockDataSource(
       if (entity === RbacRolePermission) return { find: vi.fn().mockResolvedValue(permissions) };
       if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue(identityProviders) };
       if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue(identityMappings) };
+      if (entity === ProjectEngineTarget) return { find: vi.fn().mockResolvedValue(projectEngineTargets) };
       throw new Error('Unexpected repository');
     },
   });
@@ -223,6 +226,54 @@ describe('configBundleDiffService', () => {
 
     expect(result.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.removed', operation: 'archive', currentId: 'mapping-removed' }),
+    ]));
+  });
+
+  it('diffs config-owned project-engine targets by deployment eligibility and authoritative ownership', async () => {
+    const projectId = '00000000-0000-4000-8000-000000000001';
+    const engine = {
+      id: 'engine-central', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz',
+      name: 'Central', baseUrl: 'https://central.example.com/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}',
+      runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false,
+      connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active',
+    };
+    const target = {
+      id: 'target-1', tenantId: 'tenant-a', projectId, engineId: engine.id, source: 'config', sourceRef: 'config_bundle:acme.authz',
+      status: 'active', allowManualDeploy: false, allowCiDeploy: true, allowApiDeploy: false, allowImport: false,
+    };
+    const input = {
+      bundle: { ...bundle, imports: ['./engines.json', './project-engine-targets.json'] },
+      files: {
+        './engines.json': { engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' } }] },
+        './project-engine-targets.json': { projectEngineTargets: [{ projectRef: { id: projectId }, engineRef: { engineKey: 'engine.central' }, allowCiDeploy: true }] },
+      },
+    };
+
+    mockDataSource([], [], [], [engine], [], [], [target]);
+    const unchanged = await configBundleDiffService.diff(input, 'tenant-a');
+    expect(unchanged.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'project_engine_target', key: `${projectId}:engine.central`, operation: 'noop', currentId: 'target-1' }),
+    ]));
+
+    mockDataSource([], [], [], [engine], [], [], [{ ...target, allowManualDeploy: true }]);
+    const changed = await configBundleDiffService.diff(input, 'tenant-a');
+    expect(changed.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'project_engine_target', key: `${projectId}:engine.central`, operation: 'update', currentId: 'target-1' }),
+    ]));
+
+    mockDataSource([], [], [], [engine], [], [], []);
+    const created = await configBundleDiffService.diff(input, 'tenant-a');
+    expect(created.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'project_engine_target', key: `${projectId}:engine.central`, operation: 'create' }),
+    ]));
+
+    mockDataSource([], [], [], [engine], [], [], [target]);
+    const archived = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./project-engine-targets.json'] },
+      files: { './project-engine-targets.json': { projectEngineTargets: [] } },
+    }, 'tenant-a');
+    expect(archived.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'project_engine_target', key: `${projectId}:engine-central`, operation: 'archive', currentId: 'target-1' }),
     ]));
   });
 });
