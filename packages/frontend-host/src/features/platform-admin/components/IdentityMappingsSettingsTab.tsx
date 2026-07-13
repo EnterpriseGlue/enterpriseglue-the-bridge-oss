@@ -13,6 +13,7 @@ interface Provider { id: string; key: string; protocol: string; isEnabled: boole
 interface Group { id: string; key: string; name: string; isArchived: boolean; }
 interface Role { id: string; name: string; scope: string; isAssignable: boolean; isArchived: boolean; }
 interface Engine { id: string; name: string; lifecycleStatus?: string; }
+interface EngineSet { id: string; name: string; key: string; isArchived: boolean; }
 type FormState = { providerKey: string; targetGroupKey: string; entitlementType: EntitlementType; externalId: string; matchOperator: MatchOperator; syncMode: 'additive' | 'authoritative'; claims: string; };
 const emptyForm = (): FormState => ({ providerKey: '', targetGroupKey: '', entitlementType: 'group', externalId: '', matchOperator: 'exact', syncMode: 'authoritative', claims: '{\n  "sub": "preview-user",\n  "groups": ["engineering"]\n}' });
 
@@ -27,12 +28,14 @@ export default function IdentityMappingsSettingsTab() {
   const groupsQuery = useQuery({ queryKey: ['authz-groups'], queryFn: () => apiClient.get<Group[]>('/api/authz/groups'), enabled: manage.allowed });
   const rolesQuery = useQuery({ queryKey: ['authz-roles'], queryFn: () => apiClient.get<Role[]>('/api/authz/roles'), enabled: rolesManage.allowed });
   const enginesQuery = useQuery({ queryKey: ['identity-mapping-engines'], queryFn: () => apiClient.get<Engine[]>('/engines-api/engines'), enabled: rolesManage.allowed });
+  const engineSetsQuery = useQuery({ queryKey: ['identity-mapping-engine-sets'], queryFn: () => apiClient.get<EngineSet[]>('/api/authz/engine-sets'), enabled: rolesManage.allowed });
   const [editing, setEditing] = useState<Mapping | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [open, setOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<Mapping | null>(null);
   const [accessTarget, setAccessTarget] = useState<Mapping | null>(null);
   const [accessRoleId, setAccessRoleId] = useState('');
+  const [accessScopeType, setAccessScopeType] = useState<'engine' | 'engine_set'>('engine');
   const [accessEngineId, setAccessEngineId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
@@ -42,6 +45,7 @@ export default function IdentityMappingsSettingsTab() {
   const groups = (groupsQuery.data || []).filter((group) => !group.isArchived);
   const engineRoles = (rolesQuery.data || []).filter((role) => role.scope === 'engine' && role.isAssignable && !role.isArchived);
   const engines = (enginesQuery.data || []).filter((engine) => engine.lifecycleStatus !== 'decommissioned');
+  const engineSets = (engineSetsQuery.data || []).filter((set) => !set.isArchived);
 
   const save = useMutation({
     mutationFn: (value: FormState) => {
@@ -55,8 +59,8 @@ export default function IdentityMappingsSettingsTab() {
   const grantEngineAccess = useMutation({
     mutationFn: () => {
       const group = groups.find((item) => item.key === accessTarget?.targetGroupKey);
-      if (!group || !accessRoleId || !accessEngineId) throw new Error('Select an active group, engine role, and engine');
-      return apiClient.post('/api/authz/role-assignments', { principalType: 'group', principalId: group.id, roleId: accessRoleId, resourceType: 'engine', resourceId: accessEngineId });
+      if (!group || !accessRoleId || !accessEngineId) throw new Error('Select an active group, engine role, and access target');
+      return apiClient.post('/api/authz/role-assignments', { principalType: 'group', principalId: group.id, roleId: accessRoleId, resourceType: accessScopeType, resourceId: accessEngineId });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'role-assignments'] }); setAccessTarget(null); setAccessRoleId(''); setAccessEngineId(''); },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to grant engine access').message),
@@ -85,7 +89,7 @@ export default function IdentityMappingsSettingsTab() {
   return <>
     <Tile>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}><div><h3 style={{ margin: 0, fontSize: '1rem' }}>Identity Mappings</h3><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Map external groups, roles, scopes, or attributes to EnterpriseGlue authorization groups.</p></div><GuardedAction actionId="platform.sso.group-mappings.manage" resource={resource}><Button size="sm" kind="primary" renderIcon={Add} onClick={startCreate}>Add mapping</Button></GuardedAction></div>
-      <DataTable rows={rows} headers={[{ key: 'provider', header: 'Provider' }, { key: 'entitlement', header: 'External entitlement' }, { key: 'group', header: 'EnterpriseGlue group' }, { key: 'sync', header: 'Sync' }, { key: 'source', header: 'Source' }, { key: 'actions', header: '' }]}>{({ rows: tableRows, headers, getHeaderProps, getRowProps, getTableProps }) => <TableContainer><Table {...getTableProps()} size="md"><TableHead><TableRow>{headers.map((header) => { const { key, ...headerProps } = getHeaderProps({ header }); return <TableHeader key={key} {...headerProps}>{header.header}</TableHeader>; })}</TableRow></TableHead><TableBody>{tableRows.map((row) => { const mapping = rows.find((item) => item.id === row.id)!; const { key, ...rowProps } = getRowProps({ row }); return <TableRow key={key} {...rowProps}><TableCell>{mapping.providerKey}</TableCell><TableCell><Tag type="cool-gray">{mapping.entitlementType}</Tag> {mapping.matchOperator === 'exists' ? 'Any value' : mapping.externalId}</TableCell><TableCell>{mapping.targetGroupKey}</TableCell><TableCell>{mapping.syncMode === 'authoritative' ? 'Authoritative' : 'Additive'}</TableCell><TableCell>{mapping.sourceRef ? 'Managed by config' : 'Manual'}</TableCell><TableCell><GuardedOverflowMenu size="sm" iconDescription="Mapping actions"><GuardedOverflowMenuItem decision={rolesManage} itemText="Grant engine access" unavailableReason={rolesManage.allowed ? null : rolesManage.reason || 'Missing role assignment permission'} onClick={() => { setAccessTarget(mapping); setAccessRoleId(''); setAccessEngineId(''); }} /><GuardedOverflowMenuItem decision={manage} itemText="Edit" disabled={Boolean(mapping.sourceRef)} unavailableReason={mapping.sourceRef ? 'Managed by configuration' : null} onClick={() => startEdit(mapping)} /><GuardedOverflowMenuItem decision={manage} itemText="Delete" isDelete disabled={Boolean(mapping.sourceRef)} unavailableReason={mapping.sourceRef ? 'Managed by configuration' : null} onClick={() => setRemoveTarget(mapping)} /></GuardedOverflowMenu></TableCell></TableRow>; })}</TableBody></Table></TableContainer>}</DataTable>
+      <DataTable rows={rows} headers={[{ key: 'provider', header: 'Provider' }, { key: 'entitlement', header: 'External entitlement' }, { key: 'group', header: 'EnterpriseGlue group' }, { key: 'sync', header: 'Sync' }, { key: 'source', header: 'Source' }, { key: 'actions', header: '' }]}>{({ rows: tableRows, headers, getHeaderProps, getRowProps, getTableProps }) => <TableContainer><Table {...getTableProps()} size="md"><TableHead><TableRow>{headers.map((header) => { const { key, ...headerProps } = getHeaderProps({ header }); return <TableHeader key={key} {...headerProps}>{header.header}</TableHeader>; })}</TableRow></TableHead><TableBody>{tableRows.map((row) => { const mapping = rows.find((item) => item.id === row.id)!; const { key, ...rowProps } = getRowProps({ row }); return <TableRow key={key} {...rowProps}><TableCell>{mapping.providerKey}</TableCell><TableCell><Tag type="cool-gray">{mapping.entitlementType}</Tag> {mapping.matchOperator === 'exists' ? 'Any value' : mapping.externalId}</TableCell><TableCell>{mapping.targetGroupKey}</TableCell><TableCell>{mapping.syncMode === 'authoritative' ? 'Authoritative' : 'Additive'}</TableCell><TableCell>{mapping.sourceRef ? 'Managed by config' : 'Manual'}</TableCell><TableCell><GuardedOverflowMenu size="sm" iconDescription="Mapping actions"><GuardedOverflowMenuItem decision={rolesManage} itemText="Grant engine access" unavailableReason={rolesManage.allowed ? null : rolesManage.reason || 'Missing role assignment permission'} onClick={() => { setAccessTarget(mapping); setAccessRoleId(''); setAccessScopeType('engine'); setAccessEngineId(''); }} /><GuardedOverflowMenuItem decision={manage} itemText="Edit" disabled={Boolean(mapping.sourceRef)} unavailableReason={mapping.sourceRef ? 'Managed by configuration' : null} onClick={() => startEdit(mapping)} /><GuardedOverflowMenuItem decision={manage} itemText="Delete" isDelete disabled={Boolean(mapping.sourceRef)} unavailableReason={mapping.sourceRef ? 'Managed by configuration' : null} onClick={() => setRemoveTarget(mapping)} /></GuardedOverflowMenu></TableCell></TableRow>; })}</TableBody></Table></TableContainer>}</DataTable>
     </Tile>
     <Modal open={open} modalHeading={editing ? 'Edit identity mapping' : 'Add identity mapping'} primaryButtonText={editing ? 'Save' : 'Add'} secondaryButtonText="Cancel" primaryButtonDisabled={!manage.allowed || save.isPending} onRequestClose={() => setOpen(false)} onRequestSubmit={() => save.mutate(form)}>
       {error && <InlineNotification kind="error" title="Mapping not saved" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
@@ -104,7 +108,8 @@ export default function IdentityMappingsSettingsTab() {
     <Modal open={Boolean(accessTarget)} modalHeading="Grant engine access" primaryButtonText="Grant access" secondaryButtonText="Cancel" onRequestClose={() => setAccessTarget(null)} onRequestSubmit={() => grantEngineAccess.mutate()} primaryButtonDisabled={!rolesManage.allowed || !accessRoleId || !accessEngineId || grantEngineAccess.isPending}>
       <p style={{ marginTop: 0 }}>Members matched by <strong>{accessTarget?.providerKey}</strong> will receive the selected engine role through group <strong>{accessTarget?.targetGroupKey}</strong>.</p>
       <ComboBox id="identity-mapping-engine-role" titleText="Engine role" items={engineRoles} itemToString={(item) => item?.name || ''} selectedItem={engineRoles.find((role) => role.id === accessRoleId) || null} onChange={({ selectedItem }) => setAccessRoleId(selectedItem?.id || '')} />
-      <ComboBox id="identity-mapping-engine" titleText="Engine" items={engines} itemToString={(item) => item?.name || ''} selectedItem={engines.find((engine) => engine.id === accessEngineId) || null} onChange={({ selectedItem }) => setAccessEngineId(selectedItem?.id || '')} />
+      <Select id="identity-mapping-access-scope" labelText="Access target" value={accessScopeType} onChange={(event) => { setAccessScopeType(event.target.value as 'engine' | 'engine_set'); setAccessEngineId(''); }}><SelectItem value="engine" text="One engine" /><SelectItem value="engine_set" text="Engine Set" /></Select>
+      {accessScopeType === 'engine' ? <ComboBox id="identity-mapping-engine" titleText="Engine" items={engines} itemToString={(item) => item?.name || ''} selectedItem={engines.find((engine) => engine.id === accessEngineId) || null} onChange={({ selectedItem }) => setAccessEngineId(selectedItem?.id || '')} /> : <ComboBox id="identity-mapping-engine-set" titleText="Engine Set" items={engineSets} itemToString={(item) => item ? `${item.name} (${item.key})` : ''} selectedItem={engineSets.find((set) => set.id === accessEngineId) || null} onChange={({ selectedItem }) => setAccessEngineId(selectedItem?.id || '')} />}
     </Modal>
   </>;
 }
