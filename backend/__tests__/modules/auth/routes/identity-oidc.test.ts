@@ -9,14 +9,15 @@ const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn
 const genericSamlService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), validatePostResponse: vi.fn(), extractUserClaims: vi.fn() }));
 const identityProviderProvisioningService = vi.hoisted(() => ({ provisionOidcUser: vi.fn(), provisionLdapUser: vi.fn(), provisionSamlUser: vi.fn() }));
 const directLdapIdentityService = vi.hoisted(() => ({ authenticate: vi.fn() }));
+const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericSamlService.js', () => ({ genericSamlService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js', () => ({ identityProviderProvisioningService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService }));
+vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ AuditActions: { LOGIN_SUCCESS: 'auth.login.success' }, auditFromRequest: vi.fn(() => ({})), logAudit: vi.fn() }));
-vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({ generateAccessToken: vi.fn(() => 'access'), generateRefreshToken: vi.fn(() => 'refresh') }));
 
 const provider = {
   id: 'provider-1', tenantId: null, key: 'identity.oidc.main', protocol: 'oidc', isEnabled: true,
@@ -39,6 +40,7 @@ describe('provider-neutral OIDC routes', () => {
     genericSamlService.createAuthorizationRequest.mockResolvedValue({ url: 'https://idp.example.test/sso?SAMLRequest=request', entryPoint: 'https://idp.example.test/sso' });
     genericSamlService.validatePostResponse.mockResolvedValue({ nameID: 'person@example.test', groups: ['ops'] });
     genericSamlService.extractUserClaims.mockReturnValue({ subjectId: 'subject-1', email: 'person@example.test', displayName: 'Person', firstName: 'Person', lastName: 'Example', directoryTenantId: null, claims: { sub: 'subject-1', email: 'person@example.test', groups: ['ops'] } });
+    authSessionService.issue.mockResolvedValue({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 900 });
     app = express();
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
@@ -87,6 +89,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.status).toBe(302);
     expect(identityProviderService.getByKey).toHaveBeenLastCalledWith('identity.oidc.main', null);
     expect(genericOidcService.exchangeCode).toHaveBeenCalledWith(expect.any(Object), { code: 'code-1', codeVerifier: 'verifier', nonce: 'nonce' });
+    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
   });
 
   it('authenticates a direct LDAP provider without returning directory credentials', async () => {
@@ -96,6 +99,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(directLdapIdentityService.authenticate).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'ldap' }), 'person@example.test', 'directory-password');
     expect(response.body.user.email).toBe('person@example.test');
     expect(response.headers['set-cookie']).toEqual(expect.arrayContaining([expect.stringContaining('accessToken='), expect.stringContaining('refreshToken=')]));
+    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
   });
 
   it('authenticates direct LDAP through the exact provider id', async () => {
@@ -130,6 +134,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(callback.status).toBe(302);
     expect(genericSamlService.validatePostResponse).toHaveBeenCalledWith(expect.any(Object), 'signed-response');
     expect(identityProviderProvisioningService.provisionSamlUser).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'saml' }), expect.objectContaining({ subjectId: 'subject-1', claims: expect.objectContaining({ groups: ['ops'] }) }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
   });
 
   it('fails closed when a provider-neutral SAML RelayState is unsigned or expired', async () => {

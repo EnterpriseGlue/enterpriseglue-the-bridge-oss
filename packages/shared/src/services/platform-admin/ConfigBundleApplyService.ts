@@ -1,4 +1,4 @@
-import { type EntityManager } from 'typeorm';
+import { IsNull, type EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
@@ -646,7 +646,7 @@ class ConfigBundleApplyService {
             || existing.syncMode !== values.syncMode
             || !existing.isActive;
           if (mappingChanged) {
-            await groupMembershipRepo.delete({ tenantId, source: 'identity_provider', sourceRef: `identity_mapping:${existing.id}` });
+            await groupMembershipRepo.delete({ tenantId: tenantId || IsNull(), source: 'identity_provider', sourceRef: `identity_mapping:${existing.id}` });
             await identityMappingRepo.update({ id: existing.id }, values);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.update', resourceType: 'identity_entitlement_mapping', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, canonicalHash: diff.canonicalHash, membershipCleanup: 'source_scoped' } });
             updated += 1;
@@ -658,7 +658,7 @@ class ConfigBundleApplyService {
         const existing = await identityMappingRepo.find({ where: { tenantId, sourceRef } as any });
         for (const mapping of existing) {
           if (mapping.configKey && mappingKeys.has(mapping.configKey)) continue;
-          await groupMembershipRepo.delete({ tenantId, source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` });
+          await groupMembershipRepo.delete({ tenantId: tenantId || IsNull(), source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` });
           await identityMappingRepo.update({ id: mapping.id }, { isActive: false, updatedAt: now });
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.disable', resourceType: 'identity_entitlement_mapping', resourceId: mapping.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash, membershipCleanup: 'source_scoped' } });
           archived += 1;

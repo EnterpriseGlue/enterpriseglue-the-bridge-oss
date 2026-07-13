@@ -3,6 +3,7 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
@@ -31,6 +32,7 @@ export interface IdentityProviderArchiveResult {
   providerManagedMembershipsRemoved: number;
   normalizedIdentitiesMarked: number;
   externalIdentitiesMarked: number;
+  providerRefreshSessionsRevoked: number;
 }
 
 function normalized(value?: string | null): string | null { return value?.trim() || null; }
@@ -95,6 +97,10 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
     { ...tenantScope, providerId: provider.id } as any,
     { status: 'provider_disabled', updatedAt: now },
   );
+  const refreshSessions = await manager.getRepository(RefreshToken).update(
+    { identityProviderId: provider.id, revokedAt: IsNull() },
+    { revokedAt: now },
+  );
   await manager.getRepository(IdentityProvider).update({ id: provider.id }, { isEnabled: false, updatedAt: now });
 
   return {
@@ -102,6 +108,7 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
     providerManagedMembershipsRemoved: memberships.affected || 0,
     normalizedIdentitiesMarked: normalizedIdentities.affected || 0,
     externalIdentitiesMarked: externalIdentities.affected || 0,
+    providerRefreshSessionsRevoked: refreshSessions.affected || 0,
   };
 }
 

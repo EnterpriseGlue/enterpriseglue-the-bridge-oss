@@ -1200,7 +1200,8 @@ ExternalIdentity
 - [ ] ⬜ Link by verified email only when the provider and platform policy permit it; ambiguous or conflicting email matches fail closed and require admin resolution. Provider-scoped opt-in and conflict rejection are implemented; admin resolution workflow remains pending.
 - [ ] ⬜ Keep local credentials independent so an approved break-glass account remains usable when external providers fail.
 - [x] ✅ Provider deactivation removes provider-managed memberships and marks provider identity records as disabled without deleting manual, API, automation, or other-provider access.
-- [ ] ⬜ Add active session revocation for a deactivated or unlinked provider. Until then, an already-issued session remains valid only until its normal expiry.
+- [x] ✅ Add provider-scoped refresh-session lineage and revocation for provider-neutral OIDC, SAML, and LDAP sessions. Provider archival revokes only refresh sessions issued by that provider; existing access JWTs remain valid only until their short normal expiry.
+- [ ] ⬜ Add immediate access-JWT revocation for a deactivated or unlinked provider when the normal short access-token expiry is insufficient.
 - [x] ✅ Persist only allowlisted normalized identity attributes and entitlement ids; raw JWTs, SAML assertions, LDAP responses, unrestricted claims, and unrelated profile attributes are not stored in identity snapshots. Groups, roles, and scopes are normalized deterministically for reconciliation.
 
 ## Project-Engine Targets

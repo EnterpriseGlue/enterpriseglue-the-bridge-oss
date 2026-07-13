@@ -4,6 +4,7 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 
@@ -41,12 +42,14 @@ describe('identityProviderService', () => {
     const membershipDelete = vi.fn().mockResolvedValue({ affected: 2 });
     const normalizedUpdate = vi.fn().mockResolvedValue({ affected: 1 });
     const externalUpdate = vi.fn().mockResolvedValue({ affected: 1 });
+    const refreshUpdate = vi.fn().mockResolvedValue({ affected: 3 });
     const providerUpdate = vi.fn().mockResolvedValue({ affected: 1 });
     const manager = { getRepository: (entity: unknown) => {
       if (entity === IdentityEntitlementMapping) return { find: mappingFind };
       if (entity === AuthzGroupMembership) return { delete: membershipDelete };
       if (entity === SsoNormalizedIdentity) return { update: normalizedUpdate };
       if (entity === ExternalIdentity) return { update: externalUpdate };
+      if (entity === RefreshToken) return { update: refreshUpdate };
       if (entity === IdentityProvider) return { update: providerUpdate };
       throw new Error('Unexpected archive repository');
     }};
@@ -58,12 +61,13 @@ describe('identityProviderService', () => {
     }, transaction });
 
     await expect(identityProviderService.archive('entra', 'tenant-1')).resolves.toEqual({
-      providerId: 'provider-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, externalIdentitiesMarked: 1,
+      providerId: 'provider-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, externalIdentitiesMarked: 1, providerRefreshSessionsRevoked: 3,
     });
 
     expect(membershipDelete).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-1', source: 'identity_provider' }));
     expect(normalizedUpdate).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-1', providerId: 'provider-1' }), expect.objectContaining({ providerStatus: 'provider_disabled' }));
     expect(externalUpdate).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-1', providerId: 'provider-1' }), expect.objectContaining({ status: 'provider_disabled' }));
+    expect(refreshUpdate).toHaveBeenCalledWith(expect.objectContaining({ identityProviderId: 'provider-1' }), expect.objectContaining({ revokedAt: expect.any(Number) }));
     expect(providerUpdate).toHaveBeenCalledWith({ id: 'provider-1' }, expect.objectContaining({ isEnabled: false }));
   });
 });

@@ -53,7 +53,7 @@ describe('identity provider routes', () => {
     service.list.mockResolvedValue([provider]);
     service.getByKey.mockResolvedValue(provider);
     service.upsert.mockResolvedValue(provider);
-    service.archive.mockResolvedValue({ providerId: 'provider-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, externalIdentitiesMarked: 1 });
+    service.archive.mockResolvedValue({ providerId: 'provider-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, externalIdentitiesMarked: 1, providerRefreshSessionsRevoked: 1 });
     service.reconcile.mockResolvedValue({ processed: 3 });
     service.previewMemberships.mockResolvedValue({ scanned: 3, additions: 1, removals: 1, unchanged: 1, failed: 0, truncated: false, nextCursor: null, latestSnapshotAt: 10, warnings: ['stored_snapshots_only'], mappings: [] });
     service.replayMemberships.mockResolvedValue({ scanned: 3, created: 1, removed: 1, failed: 0, truncated: false, nextCursor: null });

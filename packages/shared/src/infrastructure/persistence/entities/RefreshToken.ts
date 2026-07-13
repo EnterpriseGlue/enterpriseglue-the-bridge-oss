@@ -3,9 +3,13 @@ import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'refresh_tokens', schema: 'main' })
 @Index('idx_refresh_tokens_user', ['userId'])
+@Index('idx_refresh_tokens_identity_provider', ['identityProviderId', 'revokedAt'])
 export class RefreshToken extends AppBaseEntity {
   @Column({ name: 'user_id', type: 'text' })
   userId!: string;
+
+  @Column({ name: 'identity_provider_id', type: 'text', nullable: true })
+  identityProviderId!: string | null;
 
   @Column({ name: 'token_hash', type: 'text', unique: true })
   tokenHash!: string;
