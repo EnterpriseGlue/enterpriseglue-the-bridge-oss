@@ -17,6 +17,7 @@ import {
   ApiClient,
   AuthzGroup,
   AuthzGroupMembership,
+  ConfigRoleAssignmentOverride,
   Engine,
   EngineSet,
   EngineSetMaterialization,
@@ -2280,6 +2281,28 @@ describe('permissionService', () => {
       resourceType: 'role_assignment',
       resourceId: 'assignment-1',
     }));
+  });
+
+  it('tombstones config-warning assignments before removing them', async () => {
+    const assignmentRepo = { findOne: vi.fn().mockResolvedValue({
+      id: 'assignment-warning', tenantId: 'tenant-a', assignmentKey: 'tenant-a:group-1:role-1:engine:engine-1:config',
+      source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', principalType: 'group', principalId: 'group-1', roleId: 'role-1', scopeType: 'engine', scopeId: 'engine-1',
+    }), delete: vi.fn() };
+    const overrideRepo = { upsert: vi.fn() };
+    const auditRepo = { insert: vi.fn() };
+    const repositories = (entity: unknown) => {
+      if (entity === RbacRoleAssignment) return assignmentRepo;
+      if (entity === ConfigRoleAssignmentOverride) return overrideRepo;
+      if (entity === AuditLog) return auditRepo;
+      throw new Error('Unexpected repository');
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: repositories, transaction: async (callback: any) => callback({ getRepository: repositories }) });
+
+    await permissionService.removeRoleAssignment('assignment-warning', 'admin-1');
+
+    expect(overrideRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({ assignmentKey: 'tenant-a:group-1:role-1:engine:engine-1:config', sourceRef: 'config_bundle:acme.authz', removedAssignmentId: 'assignment-warning' }), { conflictPaths: ['assignmentKey', 'sourceRef'] });
+    expect(assignmentRepo.delete).toHaveBeenCalledWith({ id: 'assignment-warning' });
+    expect(auditRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ details: expect.stringContaining('configOverride') }));
   });
 
   it('syncs legacy project and engine memberships into source=legacy role assignments', async () => {

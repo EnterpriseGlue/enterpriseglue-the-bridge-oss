@@ -2273,7 +2273,7 @@ class PermissionServiceClass {
         await manager.getRepository(ConfigRoleAssignmentOverride).upsert({
           tenantId: assignment.tenantId, assignmentKey: assignment.assignmentKey, sourceRef: assignment.sourceRef || '',
           removedAssignmentId: assignment.id, removedById: removedById || null, createdAt: Date.now(), updatedAt: Date.now(),
-        }, { conflictPaths: ['tenantId', 'assignmentKey', 'sourceRef'] });
+        }, { conflictPaths: ['assignmentKey', 'sourceRef'] });
         await manager.getRepository(RbacRoleAssignment).delete({ id });
       });
     } else await assignmentRepo.delete({ id });
