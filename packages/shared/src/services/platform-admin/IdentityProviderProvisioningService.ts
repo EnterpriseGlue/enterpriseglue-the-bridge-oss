@@ -6,8 +6,7 @@ import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import type { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import type { OidcIdentityClaims } from './GenericOidcService.js';
-import { getIdentityProviderAdapter, type IdentityProviderType } from './IdentityProviderAdapter.js';
-import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
+import type { IdentityProviderType } from './IdentityProviderAdapter.js';
 
 export interface ProvisionedIdentityUser { id: string; email: string; firstName: string | null; lastName: string | null; platformRole: string; isActive: boolean; }
 export interface ProvisionIdentityInput {
@@ -19,6 +18,15 @@ function requiredEmail(claims: OidcIdentityClaims): string {
   const email = typeof claims.email === 'string' ? claims.email.trim().toLowerCase() : typeof claims.preferred_username === 'string' ? claims.preferred_username.trim().toLowerCase() : '';
   if (!email.includes('@')) throw new Error('OIDC ID token must contain an email address');
   return email;
+}
+
+function allowsVerifiedEmailLinking(provider: IdentityProvider): boolean {
+  try {
+    const configuration = JSON.parse(provider.configurationJson) as Record<string, unknown>;
+    return configuration.allowVerifiedEmailLinking === true;
+  } catch {
+    return false;
+  }
 }
 
 class IdentityProviderProvisioningService {
@@ -47,27 +55,30 @@ class IdentityProviderProvisioningService {
       const identityKey = externalIdentityKey({ tenantId: provider.tenantId, providerId: provider.id, subjectId: input.subjectId });
       const externalIdentity = await externalIdentityRepo.findOne({ where: { identityKey } });
       let user = externalIdentity ? await userRepo.findOneBy({ id: externalIdentity.userId }) : null;
-      if (!user && emailVerified) user = await userRepo.findOneBy({ email });
-      if (!user && !emailVerified) throw new Error('Identity provider email must be verified before a new identity can be linked');
+      if (externalIdentity && !user) throw new Error('External identity references a missing user account');
+      if (!externalIdentity) {
+        if (!emailVerified) throw new Error('Identity provider email must be verified before a new identity can be linked');
+        const matchingEmailUser = await userRepo.findOneBy({ email });
+        if (matchingEmailUser && !allowsVerifiedEmailLinking(provider)) {
+          throw new Error('Verified email account linking is disabled for this identity provider');
+        }
+        user = matchingEmailUser;
+      }
       if (!user) {
         const id = generateId();
         await userRepo.insert({ id, email, authProvider: input.providerType, passwordHash: null, entraId: null, entraEmail: null, googleId: null, firstName: input.firstName || null, lastName: input.lastName || null, platformRole: 'user', isActive: true, mustResetPassword: false, failedLoginAttempts: 0, lockedUntil: null, isEmailVerified: emailVerified, emailVerificationToken: null, emailVerificationTokenExpiry: null, createdAt: now, updatedAt: now, lastLoginAt: now, createdByUserId: null });
         user = { id, email, firstName: input.firstName || null, lastName: input.lastName || null, platformRole: 'user', isActive: true } as User;
       } else {
-        await userRepo.update({ id: user.id }, { authProvider: input.providerType, firstName: input.firstName || user.firstName, lastName: input.lastName || user.lastName, isEmailVerified: Boolean(user.isEmailVerified || emailVerified), lastLoginAt: now, updatedAt: now });
+        if (emailVerified && user.email !== email) {
+          const matchingEmailUser = await userRepo.findOneBy({ email });
+          if (matchingEmailUser && matchingEmailUser.id !== user.id) throw new Error('Identity provider email is already linked to another user account');
+        }
+        await userRepo.update({ id: user.id }, { email: emailVerified ? email : user.email, authProvider: input.providerType, firstName: input.firstName || user.firstName, lastName: input.lastName || user.lastName, isEmailVerified: Boolean(user.isEmailVerified || emailVerified), lastLoginAt: now, updatedAt: now });
+        user = { ...user, email: emailVerified ? email : user.email } as User;
       }
       await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
         tenantId: provider.tenantId, providerId: provider.id, providerType: input.providerType, providerSubject: input.subjectId, subjectClaim: input.providerType === 'ldap' ? 'directory_id' : 'sub', providerTenantId: input.directoryTenantId || provider.directoryTenantId, userId: user.id, email, displayName: input.displayName || null, firstName: input.firstName || null, lastName: input.lastName || null, claims: input.claims, now,
       });
-      const normalizedIdentity = getIdentityProviderAdapter(input.providerType).normalizeIdentity({
-        providerKey: provider.id,
-        subjectId: input.subjectId,
-        claims: input.claims,
-        email,
-        directoryTenantId: input.directoryTenantId || provider.directoryTenantId,
-        observedAt: now,
-      });
-      await identityEntitlementMappingService.syncMembershipsInStore(manager, user.id, provider.tenantId, normalizedIdentity);
       return { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, platformRole: user.platformRole, isActive: user.isActive };
     });
   }

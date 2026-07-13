@@ -69,5 +69,6 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.getByLabelText('Subject attribute')).toHaveValue('nameID');
     expect(screen.getByLabelText('Email attribute')).toHaveValue('email');
     expect(screen.getByLabelText('Group attribute')).toHaveValue('groups');
+    expect(screen.getByLabelText('Allow verified email account linking')).not.toBeChecked();
   });
 });

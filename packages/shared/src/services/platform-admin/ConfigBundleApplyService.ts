@@ -90,7 +90,7 @@ function engineCredentialFields(auth: any): Record<string, string | null> {
 }
 
 function providerConfiguration(provider: any): Record<string, unknown> {
-  return provider[provider.type] || {};
+  return { ...(provider[provider.type] || {}), allowVerifiedEmailLinking: provider.allowVerifiedEmailLinking === true };
 }
 
 function fail(message: string, statusCode: number): never {

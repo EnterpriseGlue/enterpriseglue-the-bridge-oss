@@ -87,16 +87,20 @@ class ConfigBundleExportService {
     }) };
 
     const providerKeyById = new Map([...referenceProviders, ...identityProviders].map((provider) => [provider.id, provider.key]));
-    if (identityProviders.length) files['./identity-providers.json'] = { identityProviders: sortedByKey(identityProviders).map((provider) => ({
-      key: provider.key,
-      type: provider.protocol,
-      enabled: provider.isEnabled,
-      authenticationMode: provider.authenticationMode,
-      directoryTenantId: provider.directoryTenantId || undefined,
-      sync: json(provider.syncJson),
-      [provider.protocol]: json(provider.configurationJson),
-      ownershipMode: provider.ownershipMode,
-    })) };
+    if (identityProviders.length) files['./identity-providers.json'] = { identityProviders: sortedByKey(identityProviders).map((provider) => {
+      const { allowVerifiedEmailLinking, ...protocolConfiguration } = json(provider.configurationJson);
+      return {
+        key: provider.key,
+        type: provider.protocol,
+        enabled: provider.isEnabled,
+        authenticationMode: provider.authenticationMode,
+        allowVerifiedEmailLinking: allowVerifiedEmailLinking === true,
+        directoryTenantId: provider.directoryTenantId || undefined,
+        sync: json(provider.syncJson),
+        [provider.protocol]: protocolConfiguration,
+        ownershipMode: provider.ownershipMode,
+      };
+    }) };
 
     const groupKeyById = new Map(groups.map((group) => [group.id, group.key]));
     if (identityMappings.length) files['./identity-mappings.json'] = { identityMappings: sortedByKey(identityMappings.filter((mapping) => Boolean(mapping.configKey)).map((mapping) => ({ ...mapping, key: mapping.configKey! }))).map((mapping) => {

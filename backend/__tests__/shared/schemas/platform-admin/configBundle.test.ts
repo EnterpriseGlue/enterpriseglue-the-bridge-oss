@@ -160,6 +160,7 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     };
     expect(ConfigIdentityProvidersFileSchema.safeParse({ identityProviders: [provider] }).success).toBe(true);
     expect(ConfigIdentityProvidersFileSchema.safeParse({ identityProviders: [{ ...provider, saml: { ...provider.saml, signingCertificateRef: undefined } }] }).success).toBe(false);
+    expect(ConfigIdentityProvidersFileSchema.parse({ identityProviders: [{ ...provider, allowVerifiedEmailLinking: true }] }).identityProviders[0].allowVerifiedEmailLinking).toBe(true);
   });
 
   it('canonicalizes object key order but preserves array order for exact preview hashes', () => {

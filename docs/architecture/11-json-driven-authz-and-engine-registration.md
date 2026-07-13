@@ -1104,6 +1104,7 @@ Common provider fields:
 | --- | --- |
 | `key`, `type`, `enabled` | Stable reference, adapter selection, and lifecycle. |
 | `authenticationMode` | `direct` when EnterpriseGlue authenticates against the provider, or `claims_only` when another login layer supplies verified identity facts. |
+| `allowVerifiedEmailLinking` | Defaults to `false`. When enabled for one provider, a newly observed, verified external subject may link to one existing local account with the same email. Disable it after a standalone-to-SSO transition or when account links are pre-provisioned. |
 | `sync.triggers` | Any supported combination of `login`, `scheduled`, and `manual`. |
 | `sync.intervalSeconds` | Scheduled reconciliation interval with platform minimum/maximum validation. |
 | `sync.requiredForLogin` | When true, login fails closed if authoritative normalization/reconciliation cannot complete. |
@@ -1135,6 +1136,7 @@ LDAP may be used in either of two ways:
 - [ ] ⬜ Preserve manual, API, automation, and other-provider memberships during identity reconciliation.
 - [x] ✅ Run direct LDAP synchronization at login, through an audited manual provider action, and through the bounded scheduled reconciliation poller. The provider interval is enforced by checkpoint leases; OIDC/SAML provider-API synchronization remains pending.
 - [x] ✅ Invoke provider-neutral entitlement-to-group reconciliation from the normalized identity provisioning path, so direct OIDC, SAML, and LDAP logins synchronize mapped memberships immediately. LDAP transport and scheduled reconciliation remain in progress.
+- [x] ✅ Make verified-email account linking an explicit, provider-scoped setting that defaults to disabled. A new external subject cannot claim an existing local account unless its provider enables the setting; missing linked users and conflicting verified-email changes fail closed.
 - [x] ✅ Add a bounded replay of sanitized normalized identity snapshots for selected providers, exposed as audited `POST /api/identity/providers/:key/replay-memberships` and invoked after config-managed mapping changes. It never contacts the provider, reports truncation/failures in the config-apply receipt, and lets mapping changes repair known provider-managed memberships without waiting for another login.
 - [ ] ⬜ Fail login closed when the configured provider requires authoritative entitlement synchronization and normalization or persistence fails.
 - [ ] ⬜ Keep additive and authoritative modes per mapping.
@@ -1194,7 +1196,7 @@ ExternalIdentity
 ```
 
 - [ ] ⬜ Enforce unique `(tenantId, providerId, subjectId)` and allow one user to link multiple providers.
-- [ ] ⬜ Link by verified email only when the provider and platform policy permit it; ambiguous or conflicting email matches fail closed and require admin resolution.
+- [ ] ⬜ Link by verified email only when the provider and platform policy permit it; ambiguous or conflicting email matches fail closed and require admin resolution. Provider-scoped opt-in and conflict rejection are implemented; admin resolution workflow remains pending.
 - [ ] ⬜ Keep local credentials independent so an approved break-glass account remains usable when external providers fail.
 - [ ] ⬜ Deactivation/unlink revokes sessions and provider-managed memberships without deleting manual access unless an explicit cleanup operation requests it.
 - [x] ✅ Persist only allowlisted normalized identity attributes and entitlement ids; raw JWTs, SAML assertions, LDAP responses, unrestricted claims, and unrelated profile attributes are not stored in identity snapshots. Groups, roles, and scopes are normalized deterministically for reconciliation.

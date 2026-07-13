@@ -267,6 +267,7 @@ const CommonIdentityProviderSchema = z.object({
   key: ConfigKeySchema,
   enabled: z.boolean().default(true),
   authenticationMode: z.enum(['direct', 'claims_only']).default('claims_only'),
+  allowVerifiedEmailLinking: z.boolean().default(false),
   directoryTenantId: z.string().min(1).max(255).optional(),
   sync: IdentityProviderSyncSchema,
   ownershipMode: ConfigOwnershipModeSchema.optional(),
