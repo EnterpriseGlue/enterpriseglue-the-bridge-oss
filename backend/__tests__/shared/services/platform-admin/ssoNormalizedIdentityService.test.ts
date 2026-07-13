@@ -109,7 +109,7 @@ describe('ssoNormalizedIdentityService', () => {
       insert,
       update,
     };
-    const externalRepo = { findOne: vi.fn().mockResolvedValue({ id: 'external-identity-1' }), insert: vi.fn(), update: vi.fn().mockResolvedValue(undefined) };
+    const externalRepo = { findOne: vi.fn().mockResolvedValue({ id: 'external-identity-1', userId: 'user-1' }), insert: vi.fn(), update: vi.fn().mockResolvedValue(undefined) };
     const dataSource = {
       getRepository: vi.fn((entity: unknown) => {
         if (entity === SsoNormalizedIdentity) return repo;

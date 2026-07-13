@@ -62,6 +62,9 @@ class ExternalIdentityService {
       updatedAt: now,
     };
     if (existing) {
+      if (existing.userId !== update.userId) {
+        throw new Error('External identity is already linked to a different user account');
+      }
       await repo.update({ id: existing.id }, update);
       return { id: existing.id, created: false };
     }
