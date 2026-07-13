@@ -44,7 +44,7 @@ describe('auth middleware', () => {
 
       await requireAuth(req as Request, res as Response, next);
 
-      expect(req.user).toEqual({ userId: 'user-1', type: 'access', platformRole: 'user', email: 'user@example.com' });
+      expect(req.user).toEqual({ userId: 'user-1', type: 'access', platformRole: 'user', email: 'user@example.com', principalType: 'user', principalId: 'user-1' });
       expect(next).toHaveBeenCalled();
     });
 
@@ -85,7 +85,10 @@ describe('auth middleware', () => {
 
       await requireAuth(req as Request, res as Response, next);
 
-      expect(resolver).toHaveBeenCalledWith(req, { tokenPayload, user });
+      expect(resolver).toHaveBeenCalledWith(req, {
+        tokenPayload: { ...tokenPayload, principalType: 'user', principalId: 'user-1' },
+        user,
+      });
       expect(req.tenantRole).toBe('tenant_admin');
       expect(next).toHaveBeenCalled();
     });
@@ -121,6 +124,18 @@ describe('auth middleware', () => {
       const error = (next as any).mock.calls[0][0];
       expect(error).toBeInstanceOf(AppError);
       expect(error?.message).toContain('Invalid token type');
+    });
+
+    it('rejects a token whose explicit principal does not match its user', async () => {
+      req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
+      (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', principalType: 'user', principalId: 'user-2', type: 'access', platformRole: 'user', email: 'user@example.com' });
+
+      await requireAuth(req as Request, res as Response, next);
+
+      const error = (next as any).mock.calls[0][0];
+      expect(error).toBeInstanceOf(AppError);
+      expect(error?.message).toContain('Invalid user principal');
+      expect(getDataSource).not.toHaveBeenCalled();
     });
 
     it('blocks unverified users from protected paths', async () => {

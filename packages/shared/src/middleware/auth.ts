@@ -71,6 +71,19 @@ function readOptionalAuthPayload(req: Request): JwtPayload | null {
   return verifyToken(tokenCandidate);
 }
 
+/**
+ * Old sessions did not carry principal fields. Normalize them to the only
+ * supported browser-session principal while rejecting a mismatched identity.
+ */
+function normalizeUserPrincipal(payload: JwtPayload): JwtPayload {
+  const principalType = payload.principalType ?? 'user';
+  const principalId = payload.principalId ?? payload.userId;
+  if (principalType !== 'user' || principalId !== payload.userId) {
+    throw Errors.unauthorized('Invalid user principal');
+  }
+  return { ...payload, principalType, principalId };
+}
+
 async function runEnterprisePostAuthResolver(
   req: Request,
   context: EnterprisePostAuthContext
@@ -88,7 +101,7 @@ async function runEnterprisePostAuthResolver(
  */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    const payload = readRequiredAuthPayload(req);
+    const payload = normalizeUserPrincipal(readRequiredAuthPayload(req));
 
     if (payload.type !== 'access') {
       throw Errors.unauthorized('Invalid token type. Use access token.');
@@ -181,7 +194,8 @@ export function requireOnboarding(req: Request, res: Response, next: NextFunctio
  */
 export function optionalAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    const payload = readOptionalAuthPayload(req);
+    const tokenPayload = readOptionalAuthPayload(req);
+    const payload = tokenPayload ? normalizeUserPrincipal(tokenPayload) : null;
     if (payload?.type === 'access') {
       req.user = payload;
     }

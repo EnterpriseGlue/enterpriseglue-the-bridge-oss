@@ -12,6 +12,9 @@ export interface JwtPayload {
   userId: string;
   email: string;
   platformRole: PlatformRole;
+  /** Explicit canonical principal fields. Omitted only by pre-refactor tokens. */
+  principalType?: 'user';
+  principalId?: string;
   type: 'access' | 'refresh' | 'onboarding';
   invitationId?: string;
   tenantSlug?: string;
@@ -25,6 +28,8 @@ export function generateAccessToken(user: User | any): string {
     userId: user.id,
     email: user.email,
     platformRole: user.platformRole || 'user',
+    principalType: 'user',
+    principalId: user.id,
     type: 'access',
   };
 
@@ -41,6 +46,8 @@ export function generateRefreshToken(user: User | any): string {
     userId: user.id,
     email: user.email,
     platformRole: user.platformRole || 'user',
+    principalType: 'user',
+    principalId: user.id,
     type: 'refresh',
   };
 
@@ -54,6 +61,8 @@ export function generateOnboardingToken(payload: { userId: string; email: string
     userId: payload.userId,
     email: payload.email,
     platformRole: payload.platformRole || 'user',
+    principalType: 'user',
+    principalId: payload.userId,
     type: 'onboarding',
     invitationId: payload.invitationId,
     tenantSlug: payload.tenantSlug,

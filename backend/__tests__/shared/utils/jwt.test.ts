@@ -10,6 +10,8 @@ describe('jwt utils', () => {
     expect(payload.userId).toBe(user.id);
     expect(payload.email).toBe(user.email);
     expect(payload.platformRole).toBe('admin');
+    expect(payload.principalType).toBe('user');
+    expect(payload.principalId).toBe(user.id);
     expect(payload.type).toBe('access');
   });
 
