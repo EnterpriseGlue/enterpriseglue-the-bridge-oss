@@ -1,4 +1,4 @@
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
@@ -23,6 +23,20 @@ export interface UpsertSsoNormalizedIdentityInput {
   lastName?: string | null;
   claims: SsoClaims;
   now?: number;
+}
+
+export interface ReplayNormalizedIdentityMembershipsInput {
+  tenantId?: string | null;
+  providerIds: string[];
+  limit?: number;
+}
+
+export interface ReplayNormalizedIdentityMembershipsResult {
+  scanned: number;
+  created: number;
+  removed: number;
+  failed: number;
+  truncated: boolean;
 }
 
 function normalizeNullableText(value?: string | null): string | null {
@@ -52,6 +66,15 @@ function stringifyJson(value: unknown, fallback: string): string {
     return JSON.stringify(value);
   } catch {
     return fallback;
+  }
+}
+
+function parseStoredClaims(value: string): SsoClaims {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as SsoClaims : {};
+  } catch {
+    return {};
   }
 }
 
@@ -92,6 +115,56 @@ class SsoNormalizedIdentityServiceClass {
     input: UpsertSsoNormalizedIdentityInput
   ): Promise<{ id: string; created: boolean }> {
     return this.upsertIdentityInStore(manager, input);
+  }
+
+  /**
+   * Replays sanitized snapshots only. It intentionally does not call an
+   * external provider, so configuration changes can repair known memberships
+   * without coupling an apply request to a directory scan.
+   */
+  async replayMemberships(input: ReplayNormalizedIdentityMembershipsInput): Promise<ReplayNormalizedIdentityMembershipsResult> {
+    const providerIds = Array.from(new Set(input.providerIds.map((id) => id.trim()).filter(Boolean)));
+    if (providerIds.length === 0) return { scanned: 0, created: 0, removed: 0, failed: 0, truncated: false };
+
+    const limit = Math.min(Math.max(input.limit ?? 500, 1), 5000);
+    const dataSource = await getDataSource();
+    const identities = await dataSource.getRepository(SsoNormalizedIdentity).find({
+      where: {
+        tenantId: input.tenantId ? input.tenantId : IsNull(),
+        providerId: In(providerIds),
+        providerStatus: 'active',
+      } as any,
+      order: { lastSeenAt: 'ASC' },
+      take: limit + 1,
+    });
+    const selected = identities.slice(0, limit);
+    const result: ReplayNormalizedIdentityMembershipsResult = {
+      scanned: selected.length,
+      created: 0,
+      removed: 0,
+      failed: 0,
+      truncated: identities.length > limit,
+    };
+
+    for (const identity of selected) {
+      try {
+        const normalized = getIdentityProviderAdapter(adapterType(identity.providerType)).normalizeIdentity({
+          providerKey: identity.providerId,
+          subjectId: identity.providerSubject,
+          claims: parseStoredClaims(identity.claimsJson) as Record<string, unknown>,
+          username: identity.email,
+          email: identity.email,
+          directoryTenantId: identity.providerTenantId,
+          observedAt: identity.lastSeenAt,
+        });
+        const change = await identityEntitlementMappingService.syncMembershipsInStore(dataSource, identity.userId, identity.tenantId, normalized);
+        result.created += change.created;
+        result.removed += change.removed;
+      } catch {
+        result.failed += 1;
+      }
+    }
+    return result;
   }
 
   private async upsertIdentityInStore(

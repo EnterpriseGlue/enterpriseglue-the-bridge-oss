@@ -147,4 +147,22 @@ describe('ssoNormalizedIdentityService', () => {
     }));
     expect(syncMembershipsInStore).toHaveBeenCalledWith(dataSource, 'user-1', null, expect.objectContaining({ providerKey: 'microsoft', providerType: 'oidc' }));
   });
+
+  it('replays stored normalized identities without contacting the external provider', async () => {
+    const find = vi.fn().mockResolvedValue([
+      { id: 'identity-1', tenantId: 'tenant-a', providerId: 'provider-1', providerType: 'oidc', providerSubject: 'subject-1', providerTenantId: null, userId: 'user-1', email: 'user@example.com', claimsJson: JSON.stringify({ groups: ['ops'] }), providerStatus: 'active', lastSeenAt: 1234 },
+      { id: 'identity-2', tenantId: 'tenant-a', providerId: 'provider-1', providerType: 'oidc', providerSubject: 'subject-2', providerTenantId: null, userId: 'user-2', email: 'user2@example.com', claimsJson: '{invalid', providerStatus: 'active', lastSeenAt: 1235 },
+    ]);
+    const dataSource = { getRepository: vi.fn(() => ({ find })) };
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+    syncMembershipsInStore
+      .mockResolvedValueOnce({ created: 1, removed: 0 })
+      .mockResolvedValueOnce({ created: 0, removed: 1 });
+
+    const result = await ssoNormalizedIdentityService.replayMemberships({ tenantId: 'tenant-a', providerIds: ['provider-1'], limit: 1 });
+
+    expect(result).toEqual({ scanned: 1, created: 1, removed: 0, failed: 0, truncated: true });
+    expect(find).toHaveBeenCalledWith(expect.objectContaining({ take: 2, order: { lastSeenAt: 'ASC' } }));
+    expect(syncMembershipsInStore).toHaveBeenCalledWith(dataSource, 'user-1', 'tenant-a', expect.objectContaining({ providerKey: 'provider-1', entitlements: expect.any(Array) }));
+  });
 });
