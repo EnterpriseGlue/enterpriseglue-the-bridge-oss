@@ -18,7 +18,7 @@ import type { File as StarbaseFile } from '../../../shared/api/types'
 import { buildEditorBreadcrumbBackState, buildEditorNavigationState, getEditorBreadcrumbTrail } from '../utils/editorBreadcrumbs'
 import { buildProjectFileIndex, resolveLinkedFile, type ProjectFileMeta } from '../utils/linkResolution'
 import { resolveEditorModeTabIndex } from '../utils/editorAuthz'
-import type { FolderSummary, ProjectMember } from '../components/project-detail/project-detail-utils'
+import type { FolderSummary } from '../components/project-detail/project-detail-utils'
 import { FolderLoader, CurrentPath, TreePicker } from '../components/project-detail/FolderTreeHelpers'
 import { useElementLinkOverlay } from '../hooks/useElementLinkOverlay'
 import { getElementLinkInfo, updateElementLink, clearElementLink } from '../utils/bpmnLinking'
@@ -31,7 +31,6 @@ import DeployButton from '../../git/components/DeployButton'
 import GitVersionsPanel from '../../git/components/GitVersionsPanel'
 import { gitApi } from '../../git/api/gitApi'
 import { useGitRepository } from '../../git/hooks/useGitRepository'
-import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { ProjectAccessError, isProjectAccessError } from '../components/ProjectAccessError'
 import { useSelectedEngine } from '../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../stores/engineSelectorStore'
@@ -41,7 +40,7 @@ import { ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { toSafeInternalPath } from '../../../utils/safeNavigation'
 import { redirectTo, replaceAndReloadToInternalPath } from '../../../utils/redirect'
-import { canDeployProject, type ProjectEngineAccessData } from '../utils/deployEligibility'
+import type { ProjectEngineAccessData } from '../utils/deployEligibility'
 import { LoadingState } from '../../shared/components/LoadingState'
 import type { LockHolder, LockResponse } from '../../git/types/git'
 
@@ -130,83 +129,12 @@ type RestoreFromCommitResponse = {
 type CollaborationLock = LockResponse
 type CollaborationHolder = LockHolder
 
-function getProjectMemberRoles(membership: ProjectMember | null | undefined): string[] {
-  if (!membership) return []
-  if (Array.isArray((membership as any).roles) && (membership as any).roles.length > 0) {
-    return (membership as any).roles.map((role: unknown) => String(role))
-  }
-  return membership.role ? [membership.role] : []
-}
-
-function legacyProjectRoleHasPermission(roles: string[], permission: string): boolean {
-  const normalized = new Set(roles)
-  if (normalized.has('owner')) return true
-
-  if (normalized.has('delegate')) {
-    return [
-      ProjectPermission.PROJECT_SETTINGS,
-      ProjectPermission.MEMBERS_MANAGE,
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.MEMBERS_SEARCH,
-      ProjectPermission.MEMBERS_INVITE,
-      ProjectPermission.MEMBERS_ADD,
-      ProjectPermission.MEMBERS_UPDATE_ROLE,
-      ProjectPermission.MEMBERS_REMOVE,
-      ProjectPermission.MEMBERS_MANAGE_DEPLOY_GRANT,
-      ProjectPermission.FILES_CREATE,
-      ProjectPermission.FILES_EDIT,
-      ProjectPermission.FILES_DELETE,
-      ProjectPermission.FILES_VIEW,
-      ProjectPermission.VERSIONS_CREATE,
-      ProjectPermission.VERSIONS_RESTORE,
-      ProjectPermission.GIT_PUSH,
-      ProjectPermission.GIT_PULL,
-      ProjectPermission.GIT_CONNECT,
-      ProjectPermission.DEPLOY,
-    ].includes(permission as any)
-  }
-
-  if (normalized.has('developer')) {
-    return [
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.FILES_CREATE,
-      ProjectPermission.FILES_EDIT,
-      ProjectPermission.FILES_DELETE,
-      ProjectPermission.FILES_VIEW,
-      ProjectPermission.VERSIONS_CREATE,
-      ProjectPermission.VERSIONS_RESTORE,
-      ProjectPermission.GIT_PUSH,
-      ProjectPermission.GIT_PULL,
-      ProjectPermission.DEPLOY,
-    ].includes(permission as any)
-  }
-
-  if (normalized.has('editor')) {
-    return [
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.FILES_CREATE,
-      ProjectPermission.FILES_EDIT,
-      ProjectPermission.FILES_VIEW,
-      ProjectPermission.VERSIONS_CREATE,
-    ].includes(permission as any)
-  }
-
-  if (normalized.has('viewer')) {
-    return [
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.FILES_VIEW,
-    ].includes(permission as any)
-  }
-
-  return false
-}
-
 export default function Editor() {
   const { fileId } = useParams()
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as { state?: any; search: string }
   const { notify } = useToast()
-  const { user, hasProjectPermission, permissions } = useAuth()
+  const { user, hasProjectPermission, isLoading: authIsLoading, permissions } = useAuth()
   const queryClient = useQueryClient()
   const currentUserId = String(user?.id || '')
   const phase2Params = React.useMemo(() => new URLSearchParams(location.search || ''), [location.search])
@@ -279,38 +207,31 @@ export default function Editor() {
   const currentProjectId = fileQ.data?.projectId ?? null
   const currentFolderId = fileQ.data?.folderId ?? null
 
-  const projectMembershipQ = useQuery({
-    queryKey: ['project-members', currentProjectId, 'me'],
-    queryFn: () => apiClient.get<ProjectMember | null>(`/starbase-api/projects/${currentProjectId}/members/me`),
-    enabled: !!currentProjectId,
-    staleTime: 60 * 1000,
-  })
-
-  const projectMemberRoles = React.useMemo(() => getProjectMemberRoles(projectMembershipQ.data), [projectMembershipQ.data])
-  const hasProjectPermissionOrLegacy = React.useCallback((permission: string) => (
-    hasProjectPermission(currentProjectId, permission) || legacyProjectRoleHasPermission(projectMemberRoles, permission)
-  ), [currentProjectId, hasProjectPermission, projectMemberRoles])
-  const projectWriteAuthorizationPending = Boolean(currentProjectId && projectMembershipQ.isLoading)
-  const canEditCurrentFile = hasProjectPermissionOrLegacy(ProjectPermission.FILES_EDIT)
-  const canCreateProjectFiles = hasProjectPermissionOrLegacy(ProjectPermission.FILES_CREATE)
-  const canCreateVersions = hasProjectPermissionOrLegacy(ProjectPermission.VERSIONS_CREATE)
-  const canRestoreVersions = hasProjectPermissionOrLegacy(ProjectPermission.VERSIONS_RESTORE)
   const currentProjectResource = React.useMemo(
     () => ({ type: 'project' as const, id: currentProjectId }),
     [currentProjectId]
   )
+  const hasProjectActionOrPermission = React.useCallback((actionId: string, permission: string) => (
+    evaluateActionSnapshot(permissions, actionId, currentProjectResource).allowed ||
+    hasProjectPermission(currentProjectId, permission)
+  ), [currentProjectId, currentProjectResource, hasProjectPermission, permissions])
+  const projectWriteAuthorizationPending = Boolean(currentProjectId && authIsLoading)
+  const canEditCurrentFile = hasProjectActionOrPermission('project.files.update', ProjectPermission.FILES_EDIT)
+  const canCreateProjectFiles = hasProjectActionOrPermission('project.files.create', ProjectPermission.FILES_CREATE)
+  const canCreateVersions = hasProjectActionOrPermission('project.versions.create', ProjectPermission.VERSIONS_CREATE)
+  const canRestoreVersions = hasProjectActionOrPermission('project.versions.restore', ProjectPermission.VERSIONS_RESTORE)
   const vcsStatusReadDecision = evaluateActionSnapshot(permissions, 'project.vcs.status.read', currentProjectResource)
   const vcsCommitsReadDecision = evaluateActionSnapshot(permissions, 'project.vcs.commits.read', currentProjectResource)
   const gitLocksReadDecision = evaluateActionSnapshot(permissions, 'project.git.locks.read', currentProjectResource)
   const gitLocksAcquireDecision = evaluateActionSnapshot(permissions, 'project.git.locks.acquire', currentProjectResource)
   const gitLocksReleaseDecision = evaluateActionSnapshot(permissions, 'project.git.locks.release', currentProjectResource)
   const gitLocksHeartbeatDecision = evaluateActionSnapshot(permissions, 'project.git.locks.heartbeat', currentProjectResource)
-  const canReadVcsStatus = vcsStatusReadDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_VIEW)
-  const canReadVcsCommits = vcsCommitsReadDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_VIEW)
-  const canReadProjectGitLocks = gitLocksReadDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_VIEW)
-  const canAcquireProjectGitLock = gitLocksAcquireDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_EDIT)
-  const canReleaseProjectGitLock = gitLocksReleaseDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_EDIT)
-  const canHeartbeatProjectGitLock = gitLocksHeartbeatDecision.allowed || hasProjectPermissionOrLegacy(ProjectPermission.FILES_EDIT)
+  const canReadVcsStatus = vcsStatusReadDecision.allowed || hasProjectPermission(currentProjectId, ProjectPermission.FILES_VIEW)
+  const canReadVcsCommits = vcsCommitsReadDecision.allowed || hasProjectPermission(currentProjectId, ProjectPermission.FILES_VIEW)
+  const canReadProjectGitLocks = gitLocksReadDecision.allowed || hasProjectPermission(currentProjectId, ProjectPermission.FILES_VIEW)
+  const canAcquireProjectGitLock = gitLocksAcquireDecision.allowed || hasProjectPermission(currentProjectId, ProjectPermission.FILES_EDIT)
+  const canReleaseProjectGitLock = gitLocksReleaseDecision.allowed || hasProjectPermission(currentProjectId, ProjectPermission.FILES_EDIT)
+  const canHeartbeatProjectGitLock = gitLocksHeartbeatDecision.allowed || hasProjectPermission(currentProjectId, ProjectPermission.FILES_EDIT)
   const editorPermissionReadOnly = Boolean(currentProjectId) && !projectWriteAuthorizationPending && !canEditCurrentFile
   const editorWriteUnavailableReason = editorPermissionReadOnly
     ? `Missing permission ${ProjectPermission.FILES_EDIT}`
@@ -1660,7 +1581,6 @@ export default function Editor() {
   const decisionEvaluateUnavailableReason = selectedEngineId
     ? (decisionEvaluateDecision.allowed ? null : decisionEvaluateDecision.reason || 'Decision evaluation unavailable')
     : 'Select an engine before evaluating decisions'
-  const { data: platformSettings } = usePlatformSyncSettings()
   const projectDeploymentsReadDecision = evaluateActionSnapshot(
     permissions,
     'project.deployments.read',
@@ -1677,12 +1597,12 @@ export default function Editor() {
   })
 
   const canDeployCurrentFile = React.useMemo(() => {
-    return canDeployProject(
-      projectMembershipQ.data,
-      deployEngineAccessQ.data,
-      platformSettings?.defaultDeployRoles
-    )
-  }, [deployEngineAccessQ.data, projectMembershipQ.data, platformSettings?.defaultDeployRoles])
+    const canDeployProject = hasProjectActionOrPermission('project.deploy.create', ProjectPermission.DEPLOY)
+    const accessedEngines = deployEngineAccessQ.data?.accessedEngines ?? []
+    return canDeployProject && accessedEngines.some((engine) => (
+      engine.deploymentEligibility?.manual?.allowed ?? engine.manualDeployAllowed === true
+    ))
+  }, [deployEngineAccessQ.data?.accessedEngines, hasProjectActionOrPermission])
 
   const engineDeploymentsLatestQ = useQuery({
     queryKey: ['engine-deployments', fileQ.data?.projectId, 'latest'],
