@@ -7,6 +7,7 @@ import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { ldapReconciliationService } from '@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js';
 import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
+import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
@@ -60,9 +61,17 @@ router.post('/api/identity/providers/:key/replay-memberships', requireAuth, requ
   const input = replayMembershipsSchema.parse(req.body || {});
   const provider = await identityProviderService.getByKey(key, req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
-  const result = await ssoNormalizedIdentityService.replayMemberships({ tenantId: req.tenant?.tenantId || null, providerIds: [provider.id], limit: input.limit });
-  await logAudit({ action: 'identity.provider.memberships.replay', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, protocol: provider.protocol, ...result } });
-  res.json(result);
+  const tenantId = req.tenant?.tenantId || null;
+  const runId = await ssoSyncDiagnosticsService.startRun({ tenantId, providerId: provider.id, trigger: 'manual', details: { source: 'identity_provider_membership_replay' } });
+  try {
+    const result = await ssoNormalizedIdentityService.replayMemberships({ tenantId, providerIds: [provider.id], limit: input.limit });
+    await ssoSyncDiagnosticsService.completeRun(runId, { tenantId, providerId: provider.id, groupMembershipsCreated: result.created, groupMembershipsRemoved: result.removed, details: { source: 'identity_provider_membership_replay', ...result } });
+    await logAudit({ action: 'identity.provider.memberships.replay', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, protocol: provider.protocol, runId, ...result } });
+    res.json({ ...result, runId });
+  } catch (error) {
+    await ssoSyncDiagnosticsService.failRun(runId, error, { tenantId, providerId: provider.id, details: { source: 'identity_provider_membership_replay' } });
+    throw error;
+  }
 }));
 router.delete('/api/identity/providers/:key', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
   const key = providerKeySchema.parse(req.params.key);

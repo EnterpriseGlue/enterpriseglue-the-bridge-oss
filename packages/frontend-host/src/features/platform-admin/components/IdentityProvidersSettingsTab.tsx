@@ -23,7 +23,7 @@ interface IdentityProvider {
   ownershipMode: string;
   sourceRef: string | null;
 }
-type MembershipReplayResult = { scanned: number; created: number; removed: number; failed: number; truncated: boolean };
+type MembershipReplayResult = { runId: string | null; scanned: number; created: number; removed: number; failed: number; truncated: boolean };
 
 type FormState = {
   key: string; protocol: Protocol; isEnabled: boolean; authenticationMode: AuthenticationMode; directoryTenantId: string;

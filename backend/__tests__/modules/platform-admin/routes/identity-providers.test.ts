@@ -11,6 +11,9 @@ const service = vi.hoisted(() => ({
   archive: vi.fn(),
   reconcile: vi.fn(),
   replayMemberships: vi.fn(),
+  startRun: vi.fn(),
+  completeRun: vi.fn(),
+  failRun: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -26,6 +29,7 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService: service }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { replayMemberships: service.replayMemberships } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun } }));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }));
 
 const provider = {
@@ -45,6 +49,9 @@ describe('identity provider routes', () => {
     service.archive.mockResolvedValue(undefined);
     service.reconcile.mockResolvedValue({ processed: 3 });
     service.replayMemberships.mockResolvedValue({ scanned: 3, created: 1, removed: 1, failed: 0, truncated: false });
+    service.startRun.mockResolvedValue('sync-run-1');
+    service.completeRun.mockResolvedValue(undefined);
+    service.failRun.mockResolvedValue(undefined);
     app = express();
     app.use(express.json());
     app.use(identityProvidersRouter);
@@ -88,8 +95,10 @@ describe('identity provider routes', () => {
     const response = await request(app).post('/api/identity/providers/entra/replay-memberships').send({ limit: 25 });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ scanned: 3, created: 1, removed: 1, failed: 0, truncated: false });
+    expect(response.body).toEqual({ runId: 'sync-run-1', scanned: 3, created: 1, removed: 1, failed: 0, truncated: false });
     expect(service.replayMemberships).toHaveBeenCalledWith({ tenantId: 'tenant-1', providerIds: ['provider-1'], limit: 25 });
+    expect(service.startRun).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-1', providerId: 'provider-1', trigger: 'manual' }));
+    expect(service.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({ groupMembershipsCreated: 1, groupMembershipsRemoved: 1 }));
     expect(service.reconcile).not.toHaveBeenCalled();
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.memberships.replay', resourceId: 'provider-1' }));
   });
