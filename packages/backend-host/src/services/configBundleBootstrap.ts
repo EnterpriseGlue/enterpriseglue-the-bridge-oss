@@ -9,9 +9,10 @@ export type ConfigBootstrapStatus = {
   status: 'disabled' | 'validated' | 'applied' | 'failed';
   hash: string | null;
   message: string | null;
+  reconciliation: 'not_run' | 'completed';
 };
 
-let status: ConfigBootstrapStatus = { mode: 'disabled', status: 'disabled', hash: null, message: null };
+let status: ConfigBootstrapStatus = { mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run' };
 
 export function getConfigBootstrapStatus(): ConfigBootstrapStatus {
   return { ...status };
@@ -19,7 +20,7 @@ export function getConfigBootstrapStatus(): ConfigBootstrapStatus {
 
 export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus> {
   const mode = config.configBootstrapMode;
-  status = { mode, status: mode === 'disabled' ? 'disabled' : 'failed', hash: null, message: null };
+  status = { mode, status: mode === 'disabled' ? 'disabled' : 'failed', hash: null, message: null, reconciliation: 'not_run' };
   if (mode === 'disabled') return getConfigBootstrapStatus();
   if (!config.configBundlePath) throw new Error('EG_CONFIG_BUNDLE_PATH is required when configuration bootstrap is enabled');
 
@@ -42,9 +43,9 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
         actorId: 'system:config-bootstrap',
       });
     }
-    status = { mode, status: mode === 'apply' ? 'applied' : 'validated', hash, message: null };
+    status = { mode, status: mode === 'apply' ? 'applied' : 'validated', hash, message: null, reconciliation: mode === 'apply' ? 'completed' : 'not_run' };
   } catch (error) {
-    status = { mode, status: 'failed', hash: status.hash, message: error instanceof Error ? error.message : String(error) };
+    status = { mode, status: 'failed', hash: status.hash, message: error instanceof Error ? error.message : String(error), reconciliation: 'not_run' };
     throw error;
   }
   return getConfigBootstrapStatus();

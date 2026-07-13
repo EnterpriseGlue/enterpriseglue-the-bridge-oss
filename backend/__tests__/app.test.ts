@@ -34,7 +34,7 @@ describe('app', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       status: 'ok',
-      configBootstrap: { mode: 'disabled', status: 'disabled', hash: null, message: null },
+      configBootstrap: { mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run' },
     });
   });
 
@@ -45,7 +45,7 @@ describe('app', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       status: 'ready',
-      configBootstrap: { mode: 'disabled', status: 'disabled', hash: null, message: null },
+      configBootstrap: { mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run' },
     });
   });
 });

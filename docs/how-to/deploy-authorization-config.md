@@ -4,7 +4,7 @@ Summary: Target deployment and CI/CD contract for EnterpriseGlue authorization, 
 
 Audience: Platform engineers, security engineers, and CI/CD maintainers.
 
-Status: **Partially implemented runbook.** API-driven configuration-bundle preview, hash-bound apply, export, apply history, and the `pnpm authz:config` CLI are available. File-based bootstrap validation/apply is available behind disabled-by-default `EG_CONFIG_*` settings. Docker/OpenShift bundle mounts and post-apply reconciliation/readiness integration remain planned. Existing deployments continue to start without a bundle.
+Status: **Partially implemented runbook.** API-driven configuration-bundle preview, hash-bound apply, export, apply history, and the `pnpm authz:config` CLI are available. File-based bootstrap validation/apply, optional Docker/OpenShift mounts, and Engine Set/runtime-resource materialization receipts are available behind disabled-by-default `EG_CONFIG_*` settings. Provider identity reconciliation and full deployment-path coverage remain planned. Existing deployments continue to start without a bundle.
 
 Related guides:
 
@@ -18,7 +18,7 @@ Related guides:
 
 Support two apply paths that use the same validation and apply services:
 
-1. **Bootstrap file (implemented):** optional JSON payload path read by the backend after migrations and catalog seeding. Docker/OpenShift read-only mounts remain planned.
+1. **Bootstrap file (implemented):** optional JSON payload path read by the backend after migrations and catalog seeding. The optional Docker/OpenShift read-only mounts are available.
 2. **CI/CD API apply (implemented):** recommended for later updates because preview, approval, apply, export, and run status are explicit deployment stages.
 
 Do not make automatic startup apply the default. Existing standalone installations must still start without a bundle.
@@ -38,7 +38,7 @@ Do not make automatic startup apply the default. Existing standalone installatio
 
 Names are target contracts and must be added to shared configuration validation, backend `.env.example`, Docker/OpenShift templates, configuration reference, and configuration matrix together.
 
-Implemented now: shared configuration validation, backend `.env.example`, file-size/hash validation, `validate`/`apply` startup modes, production fail-closed default, and sanitized `/health` bootstrap status. Docker/OpenShift templates and startup reconciliation remain pending.
+Implemented now: shared configuration validation, backend `.env.example`, file-size/hash validation, `validate`/`apply` startup modes, production fail-closed default, optional Docker/OpenShift mounts, and sanitized health/readiness bootstrap status. Each successful apply receipt reports completed Engine Set/runtime-resource materialization counts. Provider identity reconciliation remains pending.
 
 ## Startup Ordering
 
@@ -51,7 +51,9 @@ load process environment
 -> seed immutable permission/action/system-role catalog
 -> validate optional mounted bundle
 -> preview and apply only when bootstrap mode is apply
--> run required identity/Engine Set/runtime-resource/target reconciliation
+-> materialize affected Engine Sets and runtime resources
+-> record reconciliation counts in the apply receipt
+-> defer provider identity reconciliation to its dedicated sync workflow
 -> publish config status
 -> become ready
 ```
@@ -97,7 +99,7 @@ Required changes:
 - [ ] ⬜ Add target variables to every Docker env example without enabling bootstrap apply by default.
 - [ ] ⬜ Ensure backend production images can read `/etc/enterpriseglue/config` as a non-root user.
 - [ ] ⬜ Keep secret files in a separate read-only mount with stricter permissions; never put them in the config bundle volume.
-- [ ] ⬜ Add health/readiness output for bundle status, hash, last run, and reconciliation state without exposing configuration contents.
+- [x] ✅ Add health/readiness output for bundle status, hash, and local materialization state without exposing configuration contents. Historical last-run details and provider identity reconciliation state remain pending.
 - [ ] ⬜ Test paths containing spaces, missing mounts, read-only mounts, invalid JSON, wrong hash, unresolved secret refs, and restart idempotency.
 
 ## OpenShift And Kubernetes Changes
@@ -110,13 +112,13 @@ Use separate resources:
 
 Required changes:
 
-- [ ] ⬜ Add an optional config-bundle ConfigMap/projected-volume component to the Kustomize base.
+- [x] ✅ Add an optional config-bundle ConfigMap/projected-volume component to the Kustomize base.
 - [ ] ⬜ Add dev/staging/prod patches that can enable or omit the bundle mount independently.
 - [ ] ⬜ Extend `runtime-secret.example.yaml` only with secret values and secret-provider configuration, never bundle JSON containing secrets.
 - [ ] ⬜ Extend `configmap.yaml` with non-secret bootstrap settings.
-- [ ] ⬜ Update the OpenShift deployment script to create/apply the bundle ConfigMap before backend rollout when enabled.
-- [ ] ⬜ Include bundle hash annotations in the backend pod template so an intended bundle change triggers rollout.
-- [ ] ⬜ Complete readiness gating for migrations, catalog seed, config apply, and required reconciliation. `/ready` now fails after bootstrap configuration failure and OpenShift/production Compose use it; reconciliation status remains pending.
+- [x] ✅ Update the OpenShift deployment script to create/apply the bundle ConfigMap before backend rollout when enabled.
+- [x] ✅ Include bundle hash annotations in the backend pod template so an intended bundle change triggers rollout.
+- [ ] ⬜ Complete readiness gating for migrations, catalog seed, config apply, and all required reconciliation. `/ready` fails after bootstrap configuration failure and successful apply receipts report Engine Set/runtime-resource materialization; provider identity reconciliation remains pending.
 - [ ] ⬜ Define failed-rollout behavior that leaves the previous ReplicaSet available when the new bundle fails closed.
 
 ## CI/CD Apply Flow

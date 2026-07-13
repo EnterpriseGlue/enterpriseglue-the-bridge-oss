@@ -3481,6 +3481,12 @@ const ConfigBundleApplyResponseOpenApiSchema = z.object({
   updated: z.number().int().nonnegative(),
   archived: z.number().int().nonnegative(),
   changes: z.array(ConfigBundleDiffChangeOpenApiSchema),
+  reconciliation: z.object({
+    status: z.literal('completed'),
+    engineSetCount: z.number().int().nonnegative(),
+    runtimeResourceSetCount: z.number().int().nonnegative(),
+    engineCount: z.number().int().nonnegative(),
+  }),
   idempotent: z.boolean().optional(),
   applyRunId: z.string().optional(),
 });

@@ -123,7 +123,13 @@ describe('configBundleApplyService', () => {
       actorId: 'admin-1',
     });
 
-    expect(result).toMatchObject({ canonicalHash: preview.canonicalHash, created: 2, updated: 0, archived: 0 });
+    expect(result).toMatchObject({
+      canonicalHash: preview.canonicalHash,
+      created: 2,
+      updated: 0,
+      archived: 0,
+      reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 },
+    });
     expect(roleInsert).toHaveBeenCalledWith(expect.objectContaining({
       key: 'custom.engine.deployer',
       roleKeyIdentity: 'tenant-a:custom.engine.deployer',
@@ -180,6 +186,7 @@ describe('configBundleApplyService', () => {
 
     expect(first.applyRunId).toEqual(expect.any(String));
     expect(replay).toMatchObject({ idempotent: true, applyRunId: first.applyRunId, canonicalHash: preview.canonicalHash });
+    expect(replay.reconciliation).toEqual(first.reconciliation);
     expect(roleInsert).toHaveBeenCalledTimes(1);
     expect(configRunRepo.insert).toHaveBeenCalledTimes(1);
 
@@ -206,7 +213,12 @@ describe('configBundleApplyService', () => {
       bundle: engineBundle, files: engineFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1',
     });
 
-    expect(result).toMatchObject({ created: 1, updated: 0, archived: 0 });
+    expect(result).toMatchObject({
+      created: 1,
+      updated: 0,
+      archived: 0,
+      reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 1 },
+    });
     expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
       configKey: 'engine.prod-payments', configKeyIdentity: 'tenant-a:engine.prod-payments', registrationSource: 'config',
       sourceRef: 'config_bundle:acme.authz', passwordEnc: 'ref:PAYMENTS_ENGINE_PASSWORD', runtimeAccessScope: 'engine_wide',

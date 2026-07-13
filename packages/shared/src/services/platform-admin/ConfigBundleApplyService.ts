@@ -37,6 +37,12 @@ export interface ConfigBundleApplyResult {
   updated: number;
   archived: number;
   changes: ConfigBundleDiffChange[];
+  reconciliation: {
+    status: 'completed';
+    engineSetCount: number;
+    runtimeResourceSetCount: number;
+    engineCount: number;
+  };
   idempotent?: boolean;
   applyRunId?: string;
 }
@@ -79,6 +85,32 @@ function tenantScopeKey(tenantId?: string | null): string {
   return tenantId?.trim() || 'platform';
 }
 
+function parseStoredReconciliation(value: unknown): ConfigBundleApplyResult['reconciliation'] {
+  if (!value || typeof value !== 'object') {
+    return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 };
+  }
+
+  const reconciliation = value as Record<string, unknown>;
+  if (
+    reconciliation.status !== 'completed'
+    || !Number.isInteger(reconciliation.engineSetCount)
+    || !Number.isInteger(reconciliation.runtimeResourceSetCount)
+    || !Number.isInteger(reconciliation.engineCount)
+    || (reconciliation.engineSetCount as number) < 0
+    || (reconciliation.runtimeResourceSetCount as number) < 0
+    || (reconciliation.engineCount as number) < 0
+  ) {
+    return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 };
+  }
+
+  return {
+    status: 'completed',
+    engineSetCount: reconciliation.engineSetCount as number,
+    runtimeResourceSetCount: reconciliation.runtimeResourceSetCount as number,
+    engineCount: reconciliation.engineCount as number,
+  };
+}
+
 function parseStoredResult(value: string | null): ConfigBundleApplyResult | null {
   if (!value) return null;
   try {
@@ -90,6 +122,7 @@ function parseStoredResult(value: string | null): ConfigBundleApplyResult | null
       updated: Number(parsed.updated || 0),
       archived: Number(parsed.archived || 0),
       changes: parsed.changes,
+      reconciliation: parseStoredReconciliation(parsed.reconciliation),
     };
   } catch {
     return null;
@@ -578,7 +611,20 @@ class ConfigBundleApplyService {
         await runtimeResourceInventoryService.materializeForEngine(id, tenantId);
       }
 
-      const result = { canonicalHash: diff.canonicalHash, created, updated, archived, changes: diff.changes, ...(applyRunId ? { applyRunId } : {}) };
+      const result = {
+        canonicalHash: diff.canonicalHash,
+        created,
+        updated,
+        archived,
+        changes: diff.changes,
+        reconciliation: {
+          status: 'completed' as const,
+          engineSetCount: materializeIds.length,
+          runtimeResourceSetCount: materializeRuntimeResourceSetIds.length,
+          engineCount: new Set(changedEngineIds).size,
+        },
+        ...(applyRunId ? { applyRunId } : {}),
+      };
       if (applyRunId) {
         await dataSource.getRepository(ConfigBundleApplyRun).update({ id: applyRunId }, {
           status: 'succeeded',

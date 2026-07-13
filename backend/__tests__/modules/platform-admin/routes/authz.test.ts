@@ -18,7 +18,10 @@ const sharedPermissionServiceMock = vi.hoisted(() => ({
   hasPermission: vi.fn().mockResolvedValue(true),
 }));
 const configBundleApplyMock = vi.hoisted(() => ({
-  apply: vi.fn().mockResolvedValue({ canonicalHash: 'preview-hash', created: 2, updated: 0, archived: 0, changes: [] }),
+  apply: vi.fn().mockResolvedValue({
+    canonicalHash: 'preview-hash', created: 2, updated: 0, archived: 0, changes: [],
+    reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 },
+  }),
 }));
 const apiClientAuthMock = vi.hoisted(() => ({
   requireApiClientAction: vi.fn(() => (req: any, _res: any, next: any) => {
@@ -872,6 +875,20 @@ describe('platform-admin authz routes', () => {
       permissions: ['engine:instance:view'] as any,
       createdAt: 1,
       updatedAt: 1,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity.name !== 'RbacRoleAssignment') return { find: vi.fn().mockResolvedValue([]) };
+        return {
+          findOne: vi.fn().mockResolvedValue({
+            id: '00000000-0000-4000-8000-000000000020',
+            roleId: 'system.engine.operator',
+            resourceType: 'engine',
+            resourceId: 'engine-1',
+            source: 'manual',
+          }),
+        };
+      },
     });
 
     const rolesResponse = await request(app)
@@ -1988,7 +2005,11 @@ describe('platform-admin authz routes', () => {
       });
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ canonicalHash: 'preview-hash', created: 2 });
+    expect(response.body).toMatchObject({
+      canonicalHash: 'preview-hash',
+      created: 2,
+      reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 },
+    });
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       expectedPreviewHash: 'preview-hash',
       idempotencyKey: 'config-apply-2026-07-13',
