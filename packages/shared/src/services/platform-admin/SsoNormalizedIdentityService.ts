@@ -284,7 +284,7 @@ class SsoNormalizedIdentityServiceClass {
           const membershipKey = `${identity.userId}:${mapping.targetGroupId}:${sourceRef}`;
           const existing = membershipKeys.has(membershipKey);
           const matches = matchesIdentityEntitlement({
-            entitlementType: mapping.entitlementType as 'group' | 'role' | 'scope' | 'attribute',
+            entitlementType: mapping.entitlementType as 'group' | 'role' | 'scope' | 'attribute' | 'authenticated',
             externalId: mapping.externalId,
             matchOperator: mapping.matchOperator as IdentityEntitlementMatchOperator,
           }, normalized);

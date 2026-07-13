@@ -63,7 +63,7 @@ function normalized(value: string, field: string): string {
 function validateInput(input: IdentityEntitlementMappingInput): void {
   normalized(input.providerKey, 'providerKey');
   normalized(input.targetGroupKey, 'targetGroupKey');
-  if (!['group', 'role', 'scope', 'attribute'].includes(input.entitlementType)) throw Errors.validation('Unsupported entitlement type');
+  if (!['group', 'role', 'scope', 'attribute', 'authenticated'].includes(input.entitlementType)) throw Errors.validation('Unsupported entitlement type');
   if (!['exact', 'contains', 'exists'].includes(input.matchOperator)) throw Errors.validation('Unsupported entitlement match operator');
   if (input.matchOperator === 'exists' && input.externalId) throw Errors.validation('externalId is not allowed for exists mappings');
   if (input.matchOperator !== 'exists' && !input.externalId?.trim()) throw Errors.validation('externalId is required for exact and contains mappings');

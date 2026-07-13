@@ -1,5 +1,5 @@
 export type IdentityProviderType = 'oidc' | 'saml' | 'ldap';
-export type ExternalEntitlementType = 'group' | 'role' | 'scope' | 'attribute';
+export type ExternalEntitlementType = 'group' | 'role' | 'scope' | 'attribute' | 'authenticated';
 
 export interface ExternalEntitlement {
   type: ExternalEntitlementType;
@@ -78,6 +78,9 @@ class ClaimsIdentityAdapter implements IdentityProviderAdapter {
       throw new Error('OIDC group claims are incomplete; resolve group overage before synchronizing authorization');
     }
     const entitlements = [
+      // This synthetic entitlement exists only after the provider has validated
+      // the subject. It supports explicit provider-default group mappings.
+      entitlement('authenticated', 'authenticated'),
       ...values(claims.groups ?? claims.group ?? claims.memberOf).map((value) => entitlement('group', value)),
       ...values(claims.roles ?? claims.role ?? claims.appRoles).map((value) => entitlement('role', value)),
       ...scopeValues(claims.scp ?? claims.scope).map((value) => entitlement('scope', value)),

@@ -326,7 +326,7 @@ export const ConfigIdentityProvidersFileSchema = z.object({
   identityProviders: z.array(ConfigIdentityProviderSchema),
 }).strict().superRefine((file, ctx) => uniqueKeys(file.identityProviders, ctx, 'identityProviders'));
 
-export const ExternalEntitlementTypeSchema = z.enum(['group', 'role', 'scope', 'attribute']);
+export const ExternalEntitlementTypeSchema = z.enum(['group', 'role', 'scope', 'attribute', 'authenticated']);
 export const ConfigIdentityMappingSchema = z.object({
   key: ConfigKeySchema,
   providerKey: ReferenceKeySchema,

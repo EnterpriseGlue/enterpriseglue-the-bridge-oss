@@ -16,6 +16,7 @@ describe('identity provider adapters', () => {
     })).toEqual(expect.objectContaining({
       providerType: 'oidc', email: 'user@example.com', observedAt: 10,
       entitlements: [
+        { type: 'authenticated', externalId: 'authenticated' },
         { type: 'group', externalId: 'g1' }, { type: 'group', externalId: 'g2' },
         { type: 'role', externalId: 'operator' },
         { type: 'scope', externalId: 'engines.read' }, { type: 'scope', externalId: 'files.read' },
@@ -25,9 +26,9 @@ describe('identity provider adapters', () => {
 
   it('normalizes SAML and LDAP membership aliases without protocol-specific mapping logic', () => {
     expect(samlIdentityProviderAdapter.normalizeIdentity({ providerKey: 'saml', subjectId: 'name-id', claims: { group: 'payments' }, observedAt: 1 }).entitlements)
-      .toEqual([{ type: 'group', externalId: 'payments' }]);
+      .toEqual([{ type: 'authenticated', externalId: 'authenticated' }, { type: 'group', externalId: 'payments' }]);
     expect(ldapIdentityProviderAdapter.normalizeIdentity({ providerKey: 'ldap', subjectId: 'uuid-1', claims: { memberOf: ['CN=Ops,DC=example', 'CN=Ops,DC=example'] }, observedAt: 1 }).entitlements)
-      .toEqual([{ type: 'group', externalId: 'CN=Ops,DC=example' }]);
+      .toEqual([{ type: 'authenticated', externalId: 'authenticated' }, { type: 'group', externalId: 'CN=Ops,DC=example' }]);
   });
 
   it.each([
@@ -67,6 +68,7 @@ function identityAdapterContract(name: string, adapter: IdentityProviderAdapter)
         directoryTenantId: 'directory-1',
         observedAt: 42,
         entitlements: [
+          { type: 'authenticated', externalId: 'authenticated' },
           { type: 'group', externalId: 'group-a' },
           { type: 'group', externalId: 'group-b' },
           { type: 'role', externalId: 'operator' },
@@ -83,6 +85,7 @@ function identityAdapterContract(name: string, adapter: IdentityProviderAdapter)
         claims: { group: 'ops', role: 'reader', scope: 'engine.read' },
         observedAt: 1,
       }).entitlements).toEqual([
+        { type: 'authenticated', externalId: 'authenticated' },
         { type: 'group', externalId: 'ops' },
         { type: 'role', externalId: 'reader' },
         { type: 'scope', externalId: 'engine.read' },

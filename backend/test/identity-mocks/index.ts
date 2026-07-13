@@ -151,6 +151,7 @@ export const inMemoryIdentityProviderAdapter: IdentityProviderAdapter = {
       .map((entry) => String(entry).trim()).filter(Boolean))].sort();
     const scopes = values(input.claims.scp ?? input.claims.scope).flatMap((value) => value.split(/\s+/)).filter(Boolean).sort();
     const entitlements = [
+      { type: 'authenticated' as const, externalId: 'authenticated' },
       ...values(input.claims.groups ?? input.claims.group ?? input.claims.memberOf).map((externalId) => ({ type: 'group' as const, externalId })),
       ...values(input.claims.roles ?? input.claims.role ?? input.claims.appRoles).map((externalId) => ({ type: 'role' as const, externalId })),
       ...scopes.map((externalId) => ({ type: 'scope' as const, externalId })),

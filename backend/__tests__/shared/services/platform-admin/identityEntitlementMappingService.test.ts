@@ -6,12 +6,13 @@ import { vi, type Mock } from 'vitest';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
-const identity = { providerKey: 'entra', providerType: 'oidc' as const, subjectId: 'u1', observedAt: 1, entitlements: [{ type: 'group' as const, externalId: 'group-prod' }, { type: 'role' as const, externalId: 'operator' }] };
+const identity = { providerKey: 'entra', providerType: 'oidc' as const, subjectId: 'u1', observedAt: 1, entitlements: [{ type: 'authenticated' as const, externalId: 'authenticated' }, { type: 'group' as const, externalId: 'group-prod' }, { type: 'role' as const, externalId: 'operator' }] };
 describe('identity entitlement mapping', () => {
   it('matches exact, contains, and exists mappings only within the declared entitlement type', () => {
     expect(matchesIdentityEntitlement({ entitlementType: 'group', externalId: 'group-prod', matchOperator: 'exact' }, identity)).toBe(true);
     expect(matchesIdentityEntitlement({ entitlementType: 'group', externalId: 'prod', matchOperator: 'contains' }, identity)).toBe(true);
     expect(matchesIdentityEntitlement({ entitlementType: 'scope', matchOperator: 'exists' }, identity)).toBe(false);
+    expect(matchesIdentityEntitlement({ entitlementType: 'authenticated', externalId: 'authenticated', matchOperator: 'exact' }, identity)).toBe(true);
   });
 
   it('previews aggregate proposed mapping matches from stored snapshots only', async () => {
