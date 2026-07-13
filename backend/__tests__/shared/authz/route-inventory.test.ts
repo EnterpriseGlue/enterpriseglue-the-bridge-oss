@@ -462,6 +462,7 @@ describe('authorization route inventory validation', () => {
           ['GET', '/api/identity/providers/environment-migration-drafts', 'platform.self'],
           ['GET', '/api/identity/providers/legacy-migration-draft/{legacyProviderId}', 'platform.self'],
           ['GET', '/api/identity/providers/migration-readiness', 'platform.self'],
+          ['POST', '/api/identity/providers/legacy-cutover', 'platform.self'],
           ['PUT', '/api/identity/providers/{key}', 'platform.self'],
           ['DELETE', '/api/identity/providers/{key}', 'platform.self'],
           ['POST', '/api/identity/providers/{key}/reconcile', 'platform.self'],

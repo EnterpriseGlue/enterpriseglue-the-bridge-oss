@@ -6,9 +6,11 @@ import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructur
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { secretResolver } from './SecretResolver.js';
 import { IsNull } from 'typeorm';
+import type { EntityManager } from 'typeorm';
 
 type LegacyMigratableProviderType = 'microsoft' | 'google' | 'oidc';
 type EnvironmentMigratableProviderType = 'microsoft' | 'google';
+type RepositoryManager = Pick<EntityManager, 'getRepository'>;
 
 export interface LegacyIdentityProviderMigrationDraft {
   legacyProvider: {
@@ -49,6 +51,17 @@ export interface LegacyIdentityProviderMigrationReadiness {
     activeMappingsConfigured: boolean;
   };
   blockers: Array<'target_not_found' | 'target_not_direct_oidc' | 'target_disabled' | 'secret_reference_missing' | 'secret_reference_unavailable' | 'identity_mappings_missing'>;
+}
+
+export interface LegacyIdentityProviderCutoverResult {
+  legacyProvider: {
+    id: string;
+    name: string;
+    type: LegacyMigratableProviderType;
+  };
+  targetProviderKey: string;
+  legacyProviderDisabled: boolean;
+  alreadyDisabled: boolean;
 }
 
 function parseScopes(rawScopes: string | null | undefined): string[] {
@@ -183,11 +196,10 @@ class LegacyIdentityProviderMigrationServiceClass {
     };
   }
 
-  async getReadiness(input: { targetProviderKey: string; tenantId?: string | null }): Promise<LegacyIdentityProviderMigrationReadiness> {
+  private async getReadinessInStore(manager: RepositoryManager, input: { targetProviderKey: string; tenantId?: string | null }): Promise<LegacyIdentityProviderMigrationReadiness> {
     const key = input.targetProviderKey.trim();
     const tenantId = input.tenantId?.trim() || null;
-    const dataSource = await getDataSource();
-    const provider = await dataSource.getRepository(IdentityProvider).findOne({ where: tenantId ? { key, tenantId } : { key, tenantId: IsNull() } });
+    const provider = await manager.getRepository(IdentityProvider).findOne({ where: tenantId ? { key, tenantId } : { key, tenantId: IsNull() } });
     if (!provider) {
       return { ready: false, targetProviderKey: key, activeMappingCount: 0, checks: { targetExists: false, directOidc: false, enabled: false, secretReferenceConfigured: false, secretReferenceAvailable: false, activeMappingsConfigured: false }, blockers: ['target_not_found'] };
     }
@@ -195,7 +207,7 @@ class LegacyIdentityProviderMigrationServiceClass {
     try { rawConfiguration = JSON.parse(provider.configurationJson); } catch { rawConfiguration = {}; }
     const secretReference = typeof rawConfiguration.clientSecretRef === 'string' ? rawConfiguration.clientSecretRef.trim() : '';
     const secretAvailability = secretReference ? secretResolver.checkExternalReference(secretReference.startsWith('ref:') ? secretReference.slice(4) : secretReference) : { available: false };
-    const activeMappingCount = await dataSource.getRepository(IdentityEntitlementMapping).count({ where: { tenantId: tenantId || IsNull(), providerId: provider.id, isActive: true } as any });
+    const activeMappingCount = await manager.getRepository(IdentityEntitlementMapping).count({ where: { tenantId: tenantId || IsNull(), providerId: provider.id, isActive: true } as any });
     const blockers: LegacyIdentityProviderMigrationReadiness['blockers'] = [];
     if (provider.protocol !== 'oidc' || provider.authenticationMode !== 'direct') blockers.push('target_not_direct_oidc');
     if (!provider.isEnabled) blockers.push('target_disabled');
@@ -209,6 +221,55 @@ class LegacyIdentityProviderMigrationServiceClass {
       checks: { targetExists: true, directOidc: provider.protocol === 'oidc' && provider.authenticationMode === 'direct', enabled: provider.isEnabled, secretReferenceConfigured: Boolean(secretReference), secretReferenceAvailable: Boolean(secretAvailability.available), activeMappingsConfigured: activeMappingCount > 0 },
       blockers,
     };
+  }
+
+  async getReadiness(input: { targetProviderKey: string; tenantId?: string | null }): Promise<LegacyIdentityProviderMigrationReadiness> {
+    return this.getReadinessInStore(await getDataSource(), input);
+  }
+
+  /**
+   * Disables one persisted legacy provider only after its provider-neutral
+   * replacement passes the same readiness checks shown to administrators.
+   * Environment-backed legacy providers deliberately remain deployment-owned.
+   */
+  async cutover(input: { legacyProviderId: string; targetProviderKey: string; tenantId?: string | null }): Promise<LegacyIdentityProviderCutoverResult> {
+    const legacyProviderId = input.legacyProviderId.trim();
+    if (legacyProviderId.startsWith('environment:')) {
+      throw Errors.validation('Environment-based legacy authentication must be disabled through deployment configuration after the provider-neutral replacement is validated');
+    }
+
+    const targetProviderKey = input.targetProviderKey.trim();
+    const dataSource = await getDataSource();
+    return dataSource.transaction(async (manager) => {
+      const legacyProvider = await manager.getRepository(SsoProvider).findOneBy({ id: legacyProviderId });
+      if (!legacyProvider) throw Errors.notFound('Legacy SSO provider not found');
+      if (!['microsoft', 'google', 'oidc'].includes(legacyProvider.type)) {
+        throw Errors.validation('Only legacy Microsoft, Google, and OIDC providers can be cut over to provider-neutral OIDC');
+      }
+
+      const readiness = await this.getReadinessInStore(manager, { targetProviderKey, tenantId: input.tenantId });
+      if (!readiness.ready) {
+        throw Errors.validation(`The provider-neutral replacement is not ready for cutover: ${readiness.blockers.join(', ')}`);
+      }
+
+      const alreadyDisabled = !legacyProvider.enabled;
+      if (!alreadyDisabled) {
+        legacyProvider.enabled = false;
+        legacyProvider.updatedAt = Date.now();
+        await manager.getRepository(SsoProvider).save(legacyProvider);
+      }
+
+      return {
+        legacyProvider: {
+          id: legacyProvider.id,
+          name: legacyProvider.name,
+          type: legacyProvider.type as LegacyMigratableProviderType,
+        },
+        targetProviderKey,
+        legacyProviderDisabled: !alreadyDisabled,
+        alreadyDisabled,
+      };
+    });
   }
 }
 

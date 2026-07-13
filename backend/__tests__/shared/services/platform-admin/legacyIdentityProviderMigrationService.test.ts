@@ -3,6 +3,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { legacyIdentityProviderMigrationService } from '@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
 
 const testConfig = vi.hoisted(() => ({
   frontendUrl: 'https://app.example.test',
@@ -108,5 +109,44 @@ describe('legacyIdentityProviderMigrationService', () => {
     expect(readiness.checks.secretReferenceConfigured).toBe(true);
     expect(readiness.checks.secretReferenceAvailable).toBe(false);
     expect(mappingCount).toHaveBeenCalledOnce();
+  });
+
+  it('disables a persisted legacy provider only after the replacement passes readiness checks', async () => {
+    process.env.READY_MIGRATION_SECRET = 'test-secret';
+    const legacyProvider = { id: 'legacy-google', name: 'Google Workspace', type: 'google', enabled: true, updatedAt: 1 };
+    const targetProvider = { id: 'target-1', key: 'migrated-google', tenantId: 'tenant-1', protocol: 'oidc', authenticationMode: 'direct', isEnabled: true, configurationJson: JSON.stringify({ clientSecretRef: 'env://READY_MIGRATION_SECRET' }) };
+    const save = vi.fn().mockResolvedValue(undefined);
+    const getRepository = (entity: unknown) => {
+      if (entity === SsoProvider) return { findOneBy: vi.fn().mockResolvedValue(legacyProvider), save };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(targetProvider) };
+      if (entity === IdentityEntitlementMapping) return { count: vi.fn().mockResolvedValue(1) };
+      throw new Error('Unexpected repository');
+    };
+    (getDataSource as any).mockResolvedValue({ transaction: (callback: any) => callback({ getRepository }) });
+
+    try {
+      const result = await legacyIdentityProviderMigrationService.cutover({ legacyProviderId: 'legacy-google', targetProviderKey: 'migrated-google', tenantId: 'tenant-1' });
+
+      expect(result).toEqual(expect.objectContaining({ targetProviderKey: 'migrated-google', legacyProviderDisabled: true, alreadyDisabled: false }));
+      expect(legacyProvider.enabled).toBe(false);
+      expect(save).toHaveBeenCalledWith(legacyProvider);
+    } finally {
+      delete process.env.READY_MIGRATION_SECRET;
+    }
+  });
+
+  it('refuses to cut over an environment-managed provider or an unready replacement', async () => {
+    await expect(legacyIdentityProviderMigrationService.cutover({ legacyProviderId: 'environment:microsoft', targetProviderKey: 'migrated-entra' })).rejects.toThrow('Environment-based legacy authentication');
+
+    const legacyProvider = { id: 'legacy-google', name: 'Google Workspace', type: 'google', enabled: true };
+    const getRepository = (entity: unknown) => {
+      if (entity === SsoProvider) return { findOneBy: vi.fn().mockResolvedValue(legacyProvider) };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(null) };
+      if (entity === IdentityEntitlementMapping) return { count: vi.fn() };
+      throw new Error('Unexpected repository');
+    };
+    (getDataSource as any).mockResolvedValue({ transaction: (callback: any) => callback({ getRepository }) });
+
+    await expect(legacyIdentityProviderMigrationService.cutover({ legacyProviderId: 'legacy-google', targetProviderKey: 'missing-provider', tenantId: 'tenant-1' })).rejects.toThrow('target_not_found');
   });
 });
