@@ -547,21 +547,21 @@ describe('platform-admin authz routes', () => {
           };
         }
         if (entity.name === 'ConfigBundleApplyRun') {
+          const run = {
+            id: 'config-run-1',
+            bundleKey: 'acme.authz',
+            canonicalHash: 'preview-hash',
+            idempotencyKey: 'config-apply-2026-07-13',
+            actorId: 'user-1',
+            status: 'succeeded',
+            resultJson: JSON.stringify({ created: 2, updated: 1, archived: 0, changes: [{ objectType: 'group', key: 'group.ops', operation: 'create', reason: 'New config group' }], reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: { status: 'completed', providerCount: 1, scanned: 2, created: 1, removed: 0, failed: 0 } } }),
+            errorMessage: null,
+            completedAt: 1100,
+            createdAt: 1000,
+          };
           return {
-            find: vi.fn().mockResolvedValue([
-              {
-                id: 'config-run-1',
-                bundleKey: 'acme.authz',
-                canonicalHash: 'preview-hash',
-                idempotencyKey: 'config-apply-2026-07-13',
-                actorId: 'user-1',
-                status: 'succeeded',
-                resultJson: JSON.stringify({ created: 2, updated: 1, archived: 0, reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: { status: 'completed', providerCount: 1, scanned: 2, created: 1, removed: 0, failed: 0 } } }),
-                errorMessage: null,
-                completedAt: 1100,
-                createdAt: 1000,
-              },
-            ]),
+            find: vi.fn().mockResolvedValue([run]),
+            findOne: vi.fn().mockResolvedValue(run),
           };
         }
         if (entity.name === 'RbacRoleAssignment') {
@@ -2040,6 +2040,18 @@ describe('platform-admin authz routes', () => {
         reconciliation: expect.objectContaining({ identitySnapshot: expect.objectContaining({ status: 'completed', scanned: 2 }) }),
       }),
     ]);
+  });
+
+  it('returns one persisted configuration apply receipt with its planned changes', async () => {
+    const response = await request(app).get('/api/authz/config-bundles/runs/config-run-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: 'config-run-1',
+      bundleKey: 'acme.authz',
+      changes: [expect.objectContaining({ objectType: 'group', key: 'group.ops', operation: 'create' })],
+      reconciliation: expect.objectContaining({ identitySnapshot: expect.objectContaining({ scanned: 2 }) }),
+    });
   });
 
   it('allows configuration-scoped API clients to apply bundles and preserves machine audit lineage', async () => {

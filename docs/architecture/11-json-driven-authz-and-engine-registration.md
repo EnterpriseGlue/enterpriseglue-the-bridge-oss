@@ -1822,8 +1822,8 @@ The implementation should extend existing packages rather than introduce an auth
   - Applies an exact previewed bundle hash for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, identity providers, and identity mappings. Unsupported object families still fail closed.
 - [x] ✅ `GET /api/authz/config-bundles/runs`
   - Lists recent apply runs, including persisted reconciliation receipts.
-- [ ] ⬜ `GET /api/config-bundles/runs/:id`
-  - Returns one run with diagnostics.
+- [x] ✅ `GET /api/authz/config-bundles/runs/:id`
+  - Returns one tenant-scoped apply receipt with planned changes, reconciliation details, and sanitized error diagnostics.
 - [x] ✅ `GET /api/authz/config-bundles/export`
   - Exports all apply-supported config-owned roles, groups, engines, Engine Sets, runtime resource sets, identity providers/mappings, scoped group assignments, and project-engine targets as JSON. It retains secret references only and fails instead of omitting an unresolved config reference.
 - [ ] ⬜ `POST /api/config-bundles/validate-secret-refs`
@@ -2261,7 +2261,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add paste and JSON file import/export controls using Carbon components. ZIP and multi-file folder import remain pending.
 - [x] ✅ Add diff viewer with search, operation/object-type/priority filters, and attention-first risk grouping.
 - [x] ✅ Bind apply to the exact canonical preview hash.
-- [x] ✅ Add recent config apply-run history.
+- [x] ✅ Add recent config apply-run history and selected-run diagnostics for planned changes, reconciliation, and sanitized failures.
 - [x] ✅ Add JSON export of the current editor payload.
 - [x] ✅ Complete managed-by-config badges across Access Control and Engine UI surfaces. Engine inventory and registration detail show configuration ownership/provenance; config-locked engines are read-only and config-warn edits are marked as drift. Access Control roles, identity mappings, groups, memberships, role assignments, Engine Sets, and Engine Set assignment usage show `Managed by config`. Config-sourced groups/memberships, custom roles, project targets, and all non-manual Engine Sets reject manual mutation at the shared service boundary.
 - [x] ✅ Add the Role Library and single-role editor; it avoids page-level horizontal scrolling for normal role management. Legacy Access Control matrix removal remains pending.

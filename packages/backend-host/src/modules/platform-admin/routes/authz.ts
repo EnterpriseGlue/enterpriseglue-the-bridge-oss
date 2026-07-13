@@ -91,6 +91,23 @@ const configBundleApplySchema = configBundlePreviewSchema.extend({
   expectedTenantScope: z.string().min(1).max(255).optional(),
 });
 
+function configBundleRunResponse(row: ConfigBundleApplyRun): Record<string, unknown> {
+  let result: Record<string, unknown> = {};
+  try { result = row.resultJson ? JSON.parse(row.resultJson) as Record<string, unknown> : {}; } catch { /* preserve run-history availability */ }
+  return {
+    id: row.id,
+    bundleKey: row.bundleKey,
+    canonicalHash: row.canonicalHash,
+    idempotencyKey: row.idempotencyKey,
+    actorId: row.actorId,
+    status: row.status,
+    errorMessage: row.errorMessage,
+    completedAt: row.completedAt,
+    createdAt: row.createdAt,
+    ...result,
+  };
+}
+
 const idParamSchema = z.object({ id: z.string().uuid() });
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
 const runtimeResourceQuerySchema = z.object({ engineId: z.string().min(1), resourceKind: z.enum(['process_definition', 'decision_definition']).optional(), includeInactive: z.enum(['true', 'false']).optional() });
@@ -1390,22 +1407,18 @@ router.get('/api/authz/config-bundles/runs', apiLimiter, requireConfigBundleAcce
     order: { createdAt: 'DESC' },
     take: Number(req.query.limit || 25),
   });
-  res.json(rows.map((row) => {
-    let result: Record<string, unknown> = {};
-    try { result = row.resultJson ? JSON.parse(row.resultJson) as Record<string, unknown> : {}; } catch { /* preserve run-history availability */ }
-    return {
-      id: row.id,
-      bundleKey: row.bundleKey,
-      canonicalHash: row.canonicalHash,
-      idempotencyKey: row.idempotencyKey,
-      actorId: row.actorId,
-      status: row.status,
-      errorMessage: row.errorMessage,
-      completedAt: row.completedAt,
-      createdAt: row.createdAt,
-      ...result,
-    };
-  }));
+  res.json(rows.map(configBundleRunResponse));
+}));
+
+/** One persisted apply receipt for UI and CI failure/reconciliation diagnostics. */
+router.get('/api/authz/config-bundles/runs/:id', apiLimiter, requireConfigBundleAccess, validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenant?.tenantId || null;
+  const runId = String(req.params.id);
+  const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
+    where: tenantId ? { id: runId, tenantId } : { id: runId, tenantId: IsNull() },
+  });
+  if (!row) throw Errors.notFound('Configuration bundle apply run');
+  res.json(configBundleRunResponse(row));
 }));
 
 router.get('/api/authz/config-bundles/export', apiLimiter, requireConfigBundleAccess, validateQuery(z.object({ bundleKey: z.string().min(3).max(160), tenantKey: z.string().min(1).max(160).optional() })), asyncHandler(async (req: Request, res: Response) => {

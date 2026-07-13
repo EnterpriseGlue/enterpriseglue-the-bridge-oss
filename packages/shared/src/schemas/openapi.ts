@@ -3551,6 +3551,7 @@ const ConfigBundleApplyRunOpenApiSchema = z.object({
     }),
   }).optional(),
   mode: z.enum(['additive', 'authoritative', 'preview_only']).nullable().optional(),
+  changes: z.array(ConfigBundleDiffChangeOpenApiSchema).optional(),
 });
 
 // POST /api/authz/check
@@ -3584,6 +3585,7 @@ registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/preview
 registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/diff', ...authzExtension('platform.authz.roles.manage', 'POST', '/api/authz/config-bundles/diff'), request: { body: { content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } }, responses: { 200: { description: 'Persisted config bundle diff', content: { 'application/json': { schema: ConfigBundleDiffResponseOpenApiSchema } } }, 422: { description: 'Invalid config bundle input', content: { 'application/json': { schema: ConfigBundleDiffResponseOpenApiSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/apply', ...authzExtension('platform.authz.roles.manage', 'POST', '/api/authz/config-bundles/apply'), request: { body: { content: { 'application/json': { schema: ConfigBundleApplyRequestOpenApiSchema } } } }, responses: { 200: { description: 'Applied config bundle', content: { 'application/json': { schema: ConfigBundleApplyResponseOpenApiSchema } } }, 409: { description: 'Preview hash or ownership conflict' }, 422: { description: 'Invalid or unsupported config bundle' } } });
 registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/runs', ...authzExtension('platform.authz.roles.manage', 'GET', '/api/authz/config-bundles/runs'), request: { query: z.object({ limit: z.coerce.number().int().min(1).max(100).optional() }) }, responses: { 200: { description: 'Recent hash-bound configuration bundle applies', content: { 'application/json': { schema: z.array(ConfigBundleApplyRunOpenApiSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/runs/{id}', ...authzExtension('platform.authz.roles.manage', 'GET', '/api/authz/config-bundles/runs/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'One hash-bound configuration bundle apply receipt', content: { 'application/json': { schema: ConfigBundleApplyRunOpenApiSchema } } }, 404: { description: 'Configuration bundle apply run not found' } } });
 registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/export', ...authzExtension('platform.authz.roles.manage', 'GET', '/api/authz/config-bundles/export'), request: { query: z.object({ bundleKey: z.string(), tenantKey: z.string().optional() }) }, responses: { 200: { description: 'Export all apply-supported config-owned authorization, identity, engine, and deployment-target records for a bundle key', content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } } });
 registry.registerPath({
   method: 'get',

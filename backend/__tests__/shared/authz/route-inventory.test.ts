@@ -28,6 +28,7 @@ describe('authorization route inventory validation', () => {
     const diff = openApi.paths['/api/authz/config-bundles/diff'].post;
     const apply = openApi.paths['/api/authz/config-bundles/apply'].post;
     const runs = openApi.paths['/api/authz/config-bundles/runs'].get;
+    const run = openApi.paths['/api/authz/config-bundles/runs/{id}'].get;
     const exportBundle = openApi.paths['/api/authz/config-bundles/export'].get;
     const document = JSON.stringify(openApi);
 
@@ -37,6 +38,7 @@ describe('authorization route inventory validation', () => {
     expect(apply.requestBody.content['application/json'].schema).toBeDefined();
     expect(apply.responses['200'].content['application/json'].schema).toBeDefined();
     expect(runs.responses['200'].content['application/json'].schema).toBeDefined();
+    expect(run.responses['200'].content['application/json'].schema).toBeDefined();
     expect(exportBundle.responses['200'].content['application/json'].schema).toBeDefined();
     expect(document).toContain('expectedPreviewHash');
     expect(document).toContain('expandedRolePermissions');
@@ -121,6 +123,7 @@ describe('authorization route inventory validation', () => {
           ['POST', '/api/authz/config-bundles/diff'],
           ['POST', '/api/authz/config-bundles/apply'],
           ['GET', '/api/authz/config-bundles/runs'],
+          ['GET', '/api/authz/config-bundles/runs/{id}'],
           ['GET', '/api/authz/config-bundles/export'],
         ],
       },
