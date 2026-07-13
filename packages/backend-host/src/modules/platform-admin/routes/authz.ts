@@ -50,6 +50,7 @@ import { registerRoleRoutes } from './authz/roles.js';
 import { registerAssignmentRoutes } from './authz/assignments.js';
 import { registerProjectEngineTargetRoutes } from './authz/project-engine-targets.js';
 import { registerAuditRoutes } from './authz/audit.js';
+import { isExternalEngineTenantVisible } from './authz/external-engine-tenant.js';
 
 // Validation schemas
 const authzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
@@ -403,11 +404,6 @@ function parseExternalEngineCapabilities(value: string | null | undefined): Reco
     ...parsed,
     operations,
   };
-}
-
-function tenantVisible(rowTenantId: string | null | undefined, tenantId?: string | null): boolean {
-  const normalizedTenantId = tenantId?.trim() || null;
-  return !normalizedTenantId || !rowTenantId || rowTenantId === normalizedTenantId;
 }
 
 function getCapabilityDiagnostics(type: unknown, capabilities: Record<string, unknown> | null) {
@@ -820,7 +816,7 @@ router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatfo
       });
       const enginesById = new Map(
         engines
-          .filter((engine) => tenantVisible(engine.tenantId, tenantId))
+          .filter((engine) => isExternalEngineTenantVisible(engine.tenantId, tenantId))
           .map((engine) => [engine.id, engine])
       );
       res.json(registrations
@@ -864,7 +860,7 @@ router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatfo
         { registrationSource: 'external_api' },
       ],
       order: { updatedAt: 'DESC' },
-    })).filter((engine) => tenantVisible(engine.tenantId, tenantId));
+    })).filter((engine) => isExternalEngineTenantVisible(engine.tenantId, tenantId));
     const systemIds = Array.from(new Set(engines.map((engine) => engine.externalSystemId).filter((id): id is string => Boolean(id))));
     const systems = systemIds.length > 0 ? await systemRepo.find({ where: { id: In(systemIds) } }) : [];
     const systemsById = new Map(systems.map((system) => [system.id, system]));
@@ -944,7 +940,7 @@ router.post('/api/authz/external-engines/:id/decommission', apiLimiter, requireA
     const registrationRepo = dataSource.getRepository(ExternalEngineRegistration);
     const materializationRepo = dataSource.getRepository(EngineSetMaterialization);
     const engine = await engineRepo.findOneBy({ id: String(req.params.id) });
-    if (!engine || !tenantVisible(engine.tenantId, req.tenant?.tenantId || null)) throw Errors.notFound('Engine');
+    if (!engine || !isExternalEngineTenantVisible(engine.tenantId, req.tenant?.tenantId || null)) throw Errors.notFound('Engine');
     if (engine.registrationSource !== 'external_api' && !engine.externalId) {
       throw Errors.validation('Only externally registered engines can be decommissioned');
     }
@@ -1000,7 +996,7 @@ router.post('/api/authz/external-engines/:id/reactivate', apiLimiter, requireAut
     const engineRepo = dataSource.getRepository(Engine);
     const registrationRepo = dataSource.getRepository(ExternalEngineRegistration);
     const engine = await engineRepo.findOneBy({ id: String(req.params.id) });
-    if (!engine || !tenantVisible(engine.tenantId, req.tenant?.tenantId || null)) throw Errors.notFound('Engine');
+    if (!engine || !isExternalEngineTenantVisible(engine.tenantId, req.tenant?.tenantId || null)) throw Errors.notFound('Engine');
     if (engine.registrationSource !== 'external_api' && !engine.externalId) {
       throw Errors.validation('Only externally registered engines can be reactivated');
     }
@@ -1066,7 +1062,7 @@ router.post('/api/authz/external-engines/:id/reconcile', apiLimiter, requireAuth
     const engineRepo = dataSource.getRepository(Engine);
     const registrationRepo = dataSource.getRepository(ExternalEngineRegistration);
     const engine = await engineRepo.findOneBy({ id: String(req.params.id) });
-    if (!engine || !tenantVisible(engine.tenantId, req.tenant?.tenantId || null)) throw Errors.notFound('Engine');
+    if (!engine || !isExternalEngineTenantVisible(engine.tenantId, req.tenant?.tenantId || null)) throw Errors.notFound('Engine');
     if (engine.registrationSource !== 'external_api' && !engine.externalId) {
       throw Errors.validation('Only externally registered engines can be reconciled');
     }
