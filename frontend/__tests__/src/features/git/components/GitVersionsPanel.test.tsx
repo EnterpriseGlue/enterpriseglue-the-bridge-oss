@@ -486,11 +486,15 @@ describe('GitVersionsPanel', () => {
     expect(screen.getByText(/Mission Control unavailable Missing engine runtime read permission\./i)).toBeInTheDocument();
   });
 
-  it('keeps legacy engine roles as a deployment history fallback', () => {
+  it('requires a scoped deployment history permission or action', () => {
     const noScopedPermission = vi.fn().mockReturnValue(false);
 
-    expect(canViewDeploymentHistoryForEngine({ id: 'engine-1', myRole: 'operator' }, noScopedPermission)).toBe(true);
-    expect(canViewDeploymentHistoryForEngine({ id: 'engine-1', myRole: null as any }, noScopedPermission)).toBe(false);
+    expect(canViewDeploymentHistoryForEngine({ id: 'engine-1', myRole: 'operator' }, noScopedPermission)).toBe(false);
+    expect(canViewDeploymentHistoryForEngine(
+      { id: 'engine-1' },
+      noScopedPermission,
+      (_engineId, actionId) => actionId === 'engine.deployments.read'
+    )).toBe(true);
   });
 
   it('disables restore with the supplied project permission reason', async () => {

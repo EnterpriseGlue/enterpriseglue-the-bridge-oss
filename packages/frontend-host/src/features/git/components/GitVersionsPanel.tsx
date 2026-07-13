@@ -63,7 +63,6 @@ interface LocalVersionDetail extends LocalVersion {
 }
 
 const MANUAL_SOURCES = new Set(['manual', 'restore', 'file-save']);
-const ENGINE_ACCESS_ROLES = new Set(['owner', 'delegate', 'operator', 'deployer']);
 const AUTO_SAVE_BEFORE_RESTORE_MESSAGE = 'Auto-saved before restore';
 
 function isManualCommit(commit: VcsCommit): boolean {
@@ -305,9 +304,7 @@ export function canViewDeploymentHistoryForEngine(
   hasPermission: EnginePermissionCheck,
   hasAction?: EngineActionCheck
 ): boolean {
-  const role = String(engine?.myRole || '').toLowerCase();
-  return ENGINE_ACCESS_ROLES.has(role) ||
-    hasPermission(engine?.id, EnginePermission.DEPLOY_VIEW) ||
+  return hasPermission(engine?.id, EnginePermission.DEPLOY_VIEW) ||
     Boolean(hasAction?.(engine?.id, 'engine.deployments.read'));
 }
 
