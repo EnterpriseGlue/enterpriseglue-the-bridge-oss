@@ -166,6 +166,28 @@ describe('ssoAssignmentMappingService', () => {
     }), null, expect.anything());
   });
 
+  it('does not bypass disabled owner-role SSO settings during conversion', async () => {
+    const legacy = {
+      id: 'legacy-engine-owner', tenantId: null, isActive: true, claimType: 'group', claimKey: 'groups', claimOperator: 'equals', claimValue: 'owners',
+      targetSelectorType: 'engine_id', targetEngineId: 'engine-1', targetRoleId: 'system.engine.owner', syncMode: 'authoritative',
+    };
+    const getRepository = vi.fn((entity) => {
+      if (entity === SsoAssignmentMapping) return { findOneBy: vi.fn().mockResolvedValue(legacy) };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue({ id: 'provider-1', key: 'entra', configurationJson: '{}' }) };
+      if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }) };
+      if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue({ id: 'group-1', key: 'owners', tenantId: null, isArchived: false }) };
+      if (entity === PlatformSettings) return { findOneBy: vi.fn().mockResolvedValue({ ssoEngineOwnerAssignmentMappingsEnabled: false }) };
+      throw new Error(`Unexpected repository: ${(entity as any).name}`);
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: async (callback: any) => callback({ getRepository }) });
+
+    await expect(ssoAssignmentMappingService.migrateToProviderNeutral(legacy.id, {
+      providerKey: 'entra', targetGroupKey: 'owners', createdById: 'admin-1',
+    })).rejects.toThrow('engine_owner_role');
+    expect(createIdentityMapping).not.toHaveBeenCalled();
+    expect(assignRole).not.toHaveBeenCalled();
+  });
+
   it('reuses an equivalent provider-neutral mapping when an exact-engine conversion is retried', async () => {
     const legacy = {
       id: 'legacy-engine-deployer', tenantId: null, isActive: true, claimType: 'role', claimOperator: 'contains', claimValue: 'release',
