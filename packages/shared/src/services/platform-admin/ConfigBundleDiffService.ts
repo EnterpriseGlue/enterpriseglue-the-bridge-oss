@@ -325,7 +325,7 @@ class ConfigBundleDiffService {
       const existing = engineSetsByKey.get(set.key);
       if (!existing) changes.push({ objectType: 'engine_set', key: set.key, operation: 'create', reason: 'No persisted Engine Set uses this tenant-scoped key' });
       else if (existing.source !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) changes.push({ objectType: 'engine_set', key: set.key, operation: 'conflict', currentId: existing.id, reason: 'Existing Engine Set is not owned by this configuration bundle' });
-      else if (existing.name !== set.name || (existing.description || null) !== (set.description || null) || existing.isArchived) changes.push({ objectType: 'engine_set', key: set.key, operation: 'update', currentId: existing.id, reason: 'Config-owned Engine Set differs from desired metadata or archive state' });
+      else if (existing.name !== set.name || (existing.description || null) !== (set.description || null) || existing.isArchived || (existing.ownershipMode || 'config_locked') !== (set.ownershipMode || 'config_locked')) changes.push({ objectType: 'engine_set', key: set.key, operation: 'update', currentId: existing.id, reason: 'Config-owned Engine Set differs from desired metadata, ownership mode, or archive state' });
       else changes.push({ objectType: 'engine_set', key: set.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned Engine Set metadata already matches the desired state' });
     }
 

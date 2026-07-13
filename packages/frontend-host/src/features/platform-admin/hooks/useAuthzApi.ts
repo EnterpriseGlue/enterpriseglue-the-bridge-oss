@@ -373,6 +373,10 @@ export interface EngineSetSummary {
   selectorFingerprint: string;
   source: 'manual' | 'sso' | 'api' | 'external' | 'system' | 'automation' | 'config';
   sourceRef: string | null;
+  ownershipMode: AuthzOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
   isArchived: boolean;
   createdById: string | null;
   lastMaterializedAt: number | null;

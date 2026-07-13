@@ -489,13 +489,13 @@ class ConfigBundleApplyService {
           if (change.operation === 'create' && desired) {
             const id = generateId();
             const selector = resolveConfigEngineSetSelector(desired.selector, keyToId);
-            await engineSetRepo.insert({ id, tenantId, key: desired.key, name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), selectorFingerprint: '', source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, isArchived: false, createdById: input.actorId, lastMaterializedAt: null, materializationStatus: 'pending', materializationError: null, createdAt: now, updatedAt: now });
+            await engineSetRepo.insert({ id, tenantId, key: desired.key, name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), selectorFingerprint: '', source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', isArchived: false, createdById: input.actorId, lastMaterializedAt: null, materializationStatus: 'pending', materializationError: null, createdAt: now, updatedAt: now });
             materializeIds.push(id); created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
             const selector = resolveConfigEngineSetSelector(desired.selector, keyToId);
-            await engineSetRepo.update({ id: change.currentId }, { name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), isArchived: false, materializationStatus: 'pending', updatedAt: now });
+            await engineSetRepo.update({ id: change.currentId }, { name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), isArchived: false, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', materializationStatus: 'pending', updatedAt: now });
             materializeIds.push(change.currentId); updated += 1;
-          } else if (change.operation === 'archive' && change.currentId) { await engineSetRepo.update({ id: change.currentId }, { isArchived: true, materializationStatus: 'archived', updatedAt: now }); archived += 1; }
+          } else if (change.operation === 'archive' && change.currentId) { await engineSetRepo.update({ id: change.currentId }, { isArchived: true, sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', materializationStatus: 'archived', updatedAt: now }); archived += 1; }
         }
         if (change.objectType === 'runtime_resource_set') {
           const desired = desiredRuntimeResourceSets.get(change.key);

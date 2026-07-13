@@ -1186,7 +1186,7 @@ function isSourceOwnedProjectTarget(target: ProjectEngineTarget) {
 }
 
 function isSourceOwnedEngineSet(engineSet: EngineSetSummary) {
-  return engineSet.source !== 'manual';
+  return engineSet.source !== 'manual' && !(engineSet.source === 'config' && engineSet.ownershipMode === 'config_warn');
 }
 
 function engineSetSourceOwnershipReason(engineSet: EngineSetSummary) {
@@ -4944,7 +4944,7 @@ function EngineSetsPanel({
                       <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                         {row.cells.map((cell) => {
                           if (cell.info.header === 'source') {
-                            return <TableCell key={cell.id}><Tag type={engineSet?.source === 'config' ? 'purple' : sourceOwned ? 'cyan' : 'gray'}>{engineSet?.source === 'config' ? 'Managed by config' : cell.value}</Tag></TableCell>;
+                            return <TableCell key={cell.id}><div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={engineSet?.source === 'config' && engineSet.ownershipMode === 'config_warn' ? 'warm-gray' : engineSet?.source === 'config' ? 'purple' : sourceOwned ? 'cyan' : 'gray'}>{engineSet?.source === 'config' && engineSet.ownershipMode === 'config_warn' ? 'Config warning' : engineSet?.source === 'config' ? 'Managed by config' : cell.value}</Tag>{engineSet?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</div></TableCell>;
                           }
                           if (cell.info.header === 'status') {
                             const status = String(cell.value);

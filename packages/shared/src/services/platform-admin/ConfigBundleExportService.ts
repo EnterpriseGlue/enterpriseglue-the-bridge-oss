@@ -77,7 +77,7 @@ class ConfigBundleExportService {
               : { type: 'none' };
         return { key: engine.configKey, name: engine.name, baseUrl: engine.baseUrl, type: engine.type, externalId: engine.externalId || undefined, labels: json(engine.labelsJson), auth, version: engine.version || undefined, runtimeAccessScope: engine.runtimeAccessScope, deploymentIntegration: engine.deploymentIntegration, metadataDiscoveryEnabled: engine.metadataDiscoveryEnabled !== false, pipelineReceiptEnabled: engine.pipelineReceiptEnabled !== false, connectionMode: engine.connectionMode, ownershipMode: engine.ownershipMode };
       }) };
-    if (engineSets.length) files['./engine-sets.json'] = { engineSets: sortedByKey(engineSets).map((set) => ({ key: set.key, name: set.name, description: set.description || undefined, selector: json(set.selectorJson), ownershipMode: 'config_locked' })) };
+    if (engineSets.length) files['./engine-sets.json'] = { engineSets: sortedByKey(engineSets).map((set) => ({ key: set.key, name: set.name, description: set.description || undefined, selector: json(set.selectorJson), ownershipMode: set.ownershipMode || 'config_locked' })) };
 
     const engineKeyById = new Map(engines.filter((engine) => engine.configKey).map((engine) => [engine.id, engine.configKey!]));
     if (runtimeResourceSets.length) files['./runtime-resource-sets.json'] = { runtimeResourceSets: sortedByKey(runtimeResourceSets).map((set) => {

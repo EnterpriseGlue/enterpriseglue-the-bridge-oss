@@ -121,6 +121,32 @@ describe('engineSetService', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('allows config-warning Engine Set edits and marks drift', async () => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    const materializationRepo = { delete: vi.fn() };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === EngineSet) return {
+          findOneBy: vi.fn().mockResolvedValue({
+            id: 'set-warning', tenantId: null, key: 'engines.warning', name: 'Warning', description: null,
+            selectorJson: JSON.stringify({ mode: 'engine_ids', engineIds: ['engine-1'] }), selectorFingerprint: 'old',
+            source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', isArchived: false,
+          }),
+          update,
+        };
+        if (entity === EngineSetMaterialization) return materializationRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+    vi.spyOn(engineSetService, 'materializeEngineSet').mockResolvedValueOnce({
+      engineSetId: 'set-warning', selectorFingerprint: 'new', matched: 0, created: 0, updated: 0, removed: 0, materializations: [],
+    });
+
+    await engineSetService.updateEngineSet('set-warning', { name: 'Locally changed' });
+
+    expect(update).toHaveBeenCalledWith({ id: 'set-warning' }, expect.objectContaining({ name: 'Locally changed', driftStatus: 'drifted' }));
+  });
+
   it('previews label selectors using external registration labels', async () => {
     const engineFind = vi.fn().mockResolvedValue([
       { id: 'engine-prod', name: 'Prod Engine', labelsJson: null, externalId: 'cluster/prod', tenantId: null },

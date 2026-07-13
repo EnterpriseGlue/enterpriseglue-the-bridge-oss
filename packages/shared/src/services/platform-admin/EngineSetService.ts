@@ -9,6 +9,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, type DataSource, type Repository } from 'typeorm';
 
 export type EngineSetSource = 'manual' | 'sso' | 'api' | 'external' | 'system' | 'automation' | 'config';
+export type EngineSetOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
 export type EngineSetSelectorMode = 'all' | 'engine_ids' | 'labels';
 export type EngineSetLabelMatch = 'all' | 'any';
 export type EngineSetSelectorRiskReason = 'all_engines_selector' | 'any_label_match';
@@ -61,6 +62,10 @@ export interface EngineSetSummary {
   selectorFingerprint: string;
   source: EngineSetSource;
   sourceRef: string | null;
+  ownershipMode: EngineSetOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
   isArchived: boolean;
   createdById: string | null;
   lastMaterializedAt: number | null;
@@ -220,6 +225,10 @@ function toSummary(set: EngineSet, materializedEngineCount: number): EngineSetSu
     selectorFingerprint: set.selectorFingerprint,
     source: set.source as EngineSetSource,
     sourceRef: set.sourceRef,
+    ownershipMode: (set.ownershipMode || (set.source === 'config' ? 'config_locked' : 'manual')) as EngineSetOwnershipMode,
+    sourceHash: set.sourceHash || null,
+    lastAppliedAt: set.lastAppliedAt === null ? null : Number(set.lastAppliedAt),
+    driftStatus: set.driftStatus || null,
     isArchived: Boolean(set.isArchived),
     createdById: set.createdById,
     lastMaterializedAt: set.lastMaterializedAt === null ? null : Number(set.lastMaterializedAt),
@@ -350,6 +359,10 @@ class EngineSetServiceClass {
       selectorFingerprint: selectorFingerprint(selector),
       source: input.source || 'manual',
       sourceRef: input.sourceRef || null,
+      ownershipMode: input.source === 'config' ? 'config_locked' : 'manual',
+      sourceHash: null,
+      lastAppliedAt: null,
+      driftStatus: null,
       isArchived: false,
       createdById: input.createdById || null,
       lastMaterializedAt: null,
@@ -370,7 +383,8 @@ class EngineSetServiceClass {
     if (!existing || !this.isTenantVisible(existing.tenantId, input.tenantId)) {
       throw Errors.notFound('Engine Set');
     }
-    if (isSourceOwnedEngineSet(existing.source)) {
+    const isConfigWarn = existing.source === 'config' && existing.ownershipMode === 'config_warn';
+    if (isSourceOwnedEngineSet(existing.source) && !isConfigWarn) {
       throw Errors.conflict(engineSetOwnershipReason(existing.source, existing.sourceRef));
     }
 
@@ -387,6 +401,7 @@ class EngineSetServiceClass {
       isArchived,
       materializationStatus: isArchived ? 'archived' : 'pending',
       materializationError: null,
+      ...(isConfigWarn ? { driftStatus: 'drifted' } : {}),
       updatedAt: Date.now(),
     });
 
