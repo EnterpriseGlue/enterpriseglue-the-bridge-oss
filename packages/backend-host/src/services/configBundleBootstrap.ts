@@ -35,6 +35,7 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
     const preview = configBundlePreviewService.preview(payload);
     if (!preview.valid || !preview.canonicalHash) throw new Error(`Configuration bundle validation failed: ${preview.errors.map((item) => item.message).join('; ')}`);
     if (mode === 'apply') {
+      if (!config.configExpectedTenantScope) throw new Error('EG_CONFIG_EXPECTED_TENANT_SCOPE is required when configuration bootstrap applies a bundle');
       await configBundleApplyService.apply({
         ...payload,
         expectedPreviewHash: preview.canonicalHash,

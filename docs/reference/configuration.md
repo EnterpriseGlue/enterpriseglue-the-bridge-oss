@@ -4,7 +4,7 @@ Summary: Environment variables for backend and frontend configuration.
 
 Audience: Developers and architects.
 
-Planned `EG_CONFIG_*` bundle, drift, fail-closed, and secret-provider settings are intentionally excluded from the current executable reference until implemented. Their target contract is documented in [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md).
+Configuration-bundle bootstrap is optional and disabled by default. Its operational contract is documented in [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md).
 
 ## Backend Configuration
 Primary sources:
@@ -80,6 +80,27 @@ authorization.
 The scheduler isolates individual engine failures and never revokes resources
 when an engine listing fails. Operators can use the Access Control runtime
 resource reconciliation action for immediate, one-engine repair.
+
+### Authorization Configuration Bundle Bootstrap
+
+These settings are optional. Leave `EG_CONFIG_BOOTSTRAP_MODE` unset or set it
+to `disabled` for ordinary standalone deployments. A configured production
+bootstrap fails closed by default; use the optional Compose overlay or the
+OpenShift ConfigMap projection to mount the non-secret JSON payload.
+
+- `EG_CONFIG_BUNDLE_PATH`: Absolute path to one JSON payload with `bundle` and `files` properties.
+- `EG_CONFIG_BOOTSTRAP_MODE`: `disabled`, `validate`, or `apply`; default `disabled`.
+- `EG_CONFIG_EXPECTED_SHA256`: Optional SHA-256 of the mounted payload; rejects unexpected content.
+- `EG_CONFIG_EXPECTED_TENANT_SCOPE`: Required expected target scope for an `apply` bootstrap, such as `platform` or a tenant id.
+- `EG_CONFIG_FAIL_CLOSED`: `true` or `false`; defaults to `true` in production and controls whether a configured bootstrap failure stops startup.
+- `EG_CONFIG_MAX_BYTES`: Maximum payload size; defaults to `1048576`.
+- `EG_CONFIG_SECRET_PROVIDER`: `env` or `file`; defaults to `env`.
+- `EG_CONFIG_SECRET_FILE_ROOT`: Required root directory for `file://` secret references when the provider is `file`.
+
+`/health` exposes sanitized bootstrap state for diagnostics. `/ready` returns
+`503` after a non-fail-closed bootstrap error. Successful apply receipts report
+Engine Set and runtime-resource materialization counts; identity-provider
+directory reconciliation remains a separate operation.
 
 ### Database Compatibility (TypeORM Adapters)
 Database support is provided via TypeORM adapters and driver packages:

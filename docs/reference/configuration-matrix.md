@@ -4,7 +4,7 @@ Summary: Required and optional environment variables for the platform.
 
 Audience: Developers and architects.
 
-This matrix lists current executable settings. Planned authorization bundle settings must be added here, shared config validation, and every env template in the same implementation change; see [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md).
+This matrix lists current executable settings; see [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md) for the configuration-bundle operating procedure.
 
 ## Backend (Common Required)
 | Variable | Required | Default (Docker) | Notes |
@@ -99,6 +99,14 @@ This matrix lists current executable settings. Planned authorization bundle sett
 | RUNTIME_INVENTORY_RECONCILIATION_INTERVAL_MS | No | disabled | Positive milliseconds for scheduled runtime inventory refresh of active resource-aware engines |
 | RUNTIME_INVENTORY_RECONCILIATION_TENANT_IDS | No | global | Comma-separated tenant ids; use `global`/`null` for the OSS/default tenant |
 | RUNTIME_INVENTORY_RECONCILIATION_RUN_ON_START | No | false | Run a reconciliation pass after backend startup |
+| EG_CONFIG_BUNDLE_PATH | No | unset | Absolute path to a mounted JSON configuration payload |
+| EG_CONFIG_BOOTSTRAP_MODE | No | disabled | `disabled`, `validate`, or `apply`; no bundle is read when disabled |
+| EG_CONFIG_EXPECTED_SHA256 | No | unset | Optional SHA-256 of the mounted payload |
+| EG_CONFIG_EXPECTED_TENANT_SCOPE | No | unset | Expected `platform` or tenant scope; required for bootstrap apply |
+| EG_CONFIG_FAIL_CLOSED | No | true in production | Stop startup after a configured bootstrap failure |
+| EG_CONFIG_MAX_BYTES | No | 1048576 | Maximum mounted payload size in bytes |
+| EG_CONFIG_SECRET_PROVIDER | No | env | `env` or `file` secret-reference provider |
+| EG_CONFIG_SECRET_FILE_ROOT | No | unset | Required allowed root for `file://` secret references |
 
 SAML 2.0 (including Microsoft Entra as IdP) is configured via **Platform Settings → SSO**
 using provider fields (`entityId`, `ssoUrl`, `certificate`, `signatureAlgorithm`), not

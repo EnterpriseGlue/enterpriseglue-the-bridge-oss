@@ -27,11 +27,10 @@ Do not make automatic startup apply the default. Existing standalone installatio
 
 | Variable | Values | Purpose |
 | --- | --- | --- |
-| `EG_CONFIG_BUNDLE_PATH` | Absolute file or folder path | Read-only bootstrap bundle location |
+| `EG_CONFIG_BUNDLE_PATH` | Absolute JSON file path | Read-only bootstrap bundle location |
 | `EG_CONFIG_BOOTSTRAP_MODE` | `disabled`, `validate`, `apply` | Startup behavior; default `disabled` |
 | `EG_CONFIG_EXPECTED_SHA256` | SHA-256 or empty | Reject an unexpected mounted bundle |
 | `EG_CONFIG_FAIL_CLOSED` | `true`, `false` | Keep readiness false when configured bootstrap validation/apply fails; production default `true` |
-| `EG_CONFIG_DRIFT_MODE` | `report`, `fail`, `reconcile` | Behavior for config-owned drift |
 | `EG_CONFIG_SECRET_PROVIDER` | `env`, `file`, provider extension id | Resolve secret references without placing secret values in bundles |
 | `EG_CONFIG_SECRET_FILE_ROOT` | Absolute directory | Allowed root for file-based secret references |
 | `EG_CONFIG_MAX_BYTES` | Positive integer | Bundle upload/read size limit |
@@ -96,7 +95,7 @@ docker compose --project-directory . \
 Required changes:
 
 - [ ] ⬜ Update `dev.sh`, production/image startup scripts to include the override only when a host bundle path is configured. The opt-in Compose overlay and documentation are complete.
-- [ ] ⬜ Add target variables to every Docker env example without enabling bootstrap apply by default.
+- [x] ✅ Add disabled-by-default bootstrap variables to every Docker/OpenShift environment example and the configuration reference/matrix.
 - [ ] ⬜ Ensure backend production images can read `/etc/enterpriseglue/config` as a non-root user.
 - [ ] ⬜ Keep secret files in a separate read-only mount with stricter permissions; never put them in the config bundle volume.
 - [x] ✅ Add health/readiness output for bundle status, hash, and local materialization state without exposing configuration contents. Historical last-run details and provider identity reconciliation state remain pending.
