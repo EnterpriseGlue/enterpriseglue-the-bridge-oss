@@ -116,6 +116,15 @@ function requireDeploymentIntegration(expected: 'enterpriseglue_proxy' | 'direct
   }
 }
 
+function requirePipelineReceiptsEnabled(req: Request, _res: Response, next: NextFunction) {
+  void (async () => {
+    const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: String(req.params.engineId) }, select: ['id', 'pipelineReceiptEnabled'] })
+    if (!engine) throw Errors.notFound('Engine')
+    if (engine.pipelineReceiptEnabled === false) throw Errors.conflict('Pipeline deployment receipts are disabled for this engine')
+    next()
+  })().catch(next)
+}
+
 function authHeaders(e: { authType?: string | null; username?: string | null; passwordEnc?: string | null }): Record<string, string> {
   return buildEngineCredentialHeaders(e)
 }
@@ -732,6 +741,7 @@ r.post(
   validateBody(DeploymentReceiptCreateSchema),
   requireApiDeploymentEligibility({ engineIdFrom: 'params', projectIdFrom: 'body' }),
   requireDeploymentIntegration('direct_engine'),
+  requirePipelineReceiptsEnabled,
   asyncHandler(async (req: Request, res: Response) => {
     const principal = req.apiClient
       ? { source: 'api_client' as const, id: req.apiClient.id }

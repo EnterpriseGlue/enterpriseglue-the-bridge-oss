@@ -1085,6 +1085,7 @@ function EngineRegistrationSection({ engine }: { engine: any }) {
         <EngineRegistrationDetail label="Runtime access" value={engine.runtimeAccessScope === 'resource_aware' ? 'Resource-aware (central)' : 'Engine-wide (distributed)'} />
         <EngineRegistrationDetail label="Deployment integration" value={engine.deploymentIntegration === 'direct_engine' ? 'Direct engine deployment' : 'EnterpriseGlue proxy'} />
         <EngineRegistrationDetail label="Metadata discovery" value={engine.metadataDiscoveryEnabled === false ? 'Disabled' : 'Enabled'} />
+        <EngineRegistrationDetail label="Pipeline receipts" value={engine.pipelineReceiptEnabled === false ? 'Disabled' : 'Enabled'} />
         <EngineRegistrationDetail label="Lifecycle" value={formatEngineRegistrationStatus(engine.lifecycleStatus || 'active')} tagValue={engine.lifecycleStatus || 'active'} />
         <EngineRegistrationDetail label="Drift" value={formatEngineRegistrationStatus(engine.driftStatus)} tagValue={engine.driftStatus || undefined} />
         <EngineRegistrationDetail label="Capability status" value={formatEngineRegistrationStatus(engine.capabilityStatus)} tagValue={engine.capabilityStatus || undefined} />
@@ -1182,6 +1183,7 @@ export default function Engines() {
     runtimeAccessScope: 'engine_wide' as RuntimeAccessScope,
     deploymentIntegration: 'enterpriseglue_proxy' as DeploymentIntegration,
     metadataDiscoveryEnabled: true,
+    pipelineReceiptEnabled: true,
   })
   const [searchQuery, setSearchQuery] = React.useState('')
   const [metadataFilterId, setMetadataFilterId] = React.useState('')
@@ -1295,6 +1297,7 @@ export default function Engines() {
       runtimeAccessScope: 'engine_wide',
       deploymentIntegration: 'enterpriseglue_proxy',
       metadataDiscoveryEnabled: true,
+      pipelineReceiptEnabled: true,
     })
     engineModal.openModal()
   }, [canCreateEngine, hasSingleTag, envTags, engineModal])
@@ -1418,6 +1421,7 @@ export default function Engines() {
       runtimeAccessScope: row.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide',
       deploymentIntegration: row.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy',
       metadataDiscoveryEnabled: row.metadataDiscoveryEnabled !== false,
+      pipelineReceiptEnabled: row.pipelineReceiptEnabled !== false,
     })
     engineModal.openModal()
   }
@@ -2022,6 +2026,7 @@ export default function Engines() {
           onToggle={(checked) => setForm((f: any) => ({ ...f, metadataDiscoveryEnabled: checked }))}
           disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
+        <Toggle id="eng-pipeline-receipts" labelText="Pipeline receipts" labelA="Disabled" labelB="Enabled" toggled={form.pipelineReceiptEnabled} onToggle={(checked) => setForm((f: any) => ({ ...f, pipelineReceiptEnabled: checked }))} disabled={form.deploymentIntegration !== 'direct_engine' || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable} />
         <Dropdown
           id="eng-auth"
           titleText="Auth"

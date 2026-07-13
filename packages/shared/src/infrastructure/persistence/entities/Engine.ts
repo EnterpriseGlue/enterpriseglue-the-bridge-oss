@@ -108,6 +108,9 @@ export class Engine extends AppBaseEntity {
   @Column({ name: 'metadata_discovery_enabled', type: 'boolean', default: true })
   metadataDiscoveryEnabled!: boolean;
 
+  @Column({ name: 'pipeline_receipt_enabled', type: 'boolean', default: true })
+  pipelineReceiptEnabled!: boolean;
+
   /** Direct connection or a customer-managed sidecar/gateway endpoint. */
   @Column({ name: 'connection_mode', type: 'text', default: 'direct' })
   connectionMode!: string;
