@@ -402,7 +402,10 @@ build_frontend() {
 
 start_backend() {
   log "Starting backend on :$BACKEND_PORT"
-  (cd "$BACKEND_DIR" && nohup pnpm run start > server.log 2>&1 &)
+  # check_env has already sourced the preferred .env.selfhost file. Do not run the
+  # backend's dotenv wrapper here: it reloads backend/.env and can override that
+  # worktree-local configuration.
+  (cd "$BACKEND_DIR" && nohup pnpm run start:compiled > server.log 2>&1 &)
 }
 
 start_frontend() {

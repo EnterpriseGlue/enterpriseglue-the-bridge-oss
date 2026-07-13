@@ -6,7 +6,7 @@ export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_
 
 interface SigningMaterial {
   privateKey: string;
-  publicJwk: JsonWebKey;
+  publicJwk: JsonWebKey & { kid: string };
 }
 
 function createSigningMaterial(kid: string): SigningMaterial {
@@ -53,13 +53,19 @@ export class MockOidcProvider {
     this.tokenClaims = { sub: 'user-1', email: 'person@example.test', email_verified: true, groups: ['ops'], nonce: 'nonce-1' };
   }
 
-  issueIdToken(claims: Record<string, unknown> = this.tokenClaims, expiresIn: string | number = '5m'): string {
+  issueIdToken(
+    claims: Record<string, unknown> = this.tokenClaims,
+    expiresIn: Exclude<jwt.SignOptions['expiresIn'], undefined> = '5m',
+  ): string {
     return jwt.sign({ ...claims, iss: this.issuer, aud: this.clientId }, this.signingMaterial.privateKey, {
       algorithm: 'RS256', keyid: String(this.signingMaterial.publicJwk.kid), expiresIn,
     });
   }
 
-  issueIdTokenWithNotBefore(claims: Record<string, unknown>, notBefore: string | number): string {
+  issueIdTokenWithNotBefore(
+    claims: Record<string, unknown>,
+    notBefore: Exclude<jwt.SignOptions['notBefore'], undefined>,
+  ): string {
     return jwt.sign({ ...claims, iss: this.issuer, aud: this.clientId }, this.signingMaterial.privateKey, {
       algorithm: 'RS256', keyid: String(this.signingMaterial.publicJwk.kid), expiresIn: '5m', notBefore,
     });

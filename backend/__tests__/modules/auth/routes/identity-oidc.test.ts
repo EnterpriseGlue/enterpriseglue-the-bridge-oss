@@ -59,8 +59,10 @@ describe('provider-neutral OIDC routes', () => {
     expect(genericOidcService.createAuthorizationRequest).toHaveBeenCalledWith(
       expect.any(Object), expect.any(String), expect.any(String),
     );
-    expect(response.headers['set-cookie'].join(';')).toContain('identity_oidc_state=');
-    expect(response.headers['set-cookie'].join(';')).toContain('identity_oidc_verifier=verifier');
+    const setCookie = response.headers['set-cookie'];
+    const cookies = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
+    expect(cookies.join(';')).toContain('identity_oidc_state=');
+    expect(cookies.join(';')).toContain('identity_oidc_verifier=verifier');
   });
 
   it('rejects claims-only providers from direct browser login', async () => {

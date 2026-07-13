@@ -64,11 +64,11 @@ export class EngineDeployment extends AppBaseEntity {
   rawResponse!: string | null;
 
   /** How this deployment record entered EnterpriseGlue's inventory. */
-  @Column({ name: 'ingestion_source', type: 'text', default: "'enterpriseglue_proxy'" })
+  @Column({ name: 'ingestion_source', type: 'text', default: 'enterpriseglue_proxy' })
   ingestionSource!: string;
 
   /** complete, reported, discovered, or inferred; controls lineage-dependent UX. */
-  @Column({ name: 'lineage_quality', type: 'text', default: "'complete'" })
+  @Column({ name: 'lineage_quality', type: 'text', default: 'complete' })
   lineageQuality!: string;
 
   @Column({ name: 'reporting_principal_id', type: 'text', nullable: true })
@@ -77,7 +77,7 @@ export class EngineDeployment extends AppBaseEntity {
   @Column({ name: 'reconciled_at', type: 'bigint', nullable: true })
   reconciledAt!: number | null;
 
-  @Column({ name: 'lineage_json', type: 'text', default: "'{}'" })
+  @Column({ name: 'lineage_json', type: 'text', default: '{}' })
   lineageJson!: string;
 
   @Column({ name: 'created_at', type: 'bigint' })

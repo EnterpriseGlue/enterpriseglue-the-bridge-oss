@@ -1,7 +1,6 @@
 import { TableColumn, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner, Table } from 'typeorm';
 import { canonicalRoleAssignmentKey } from '../../authz/role-assignment-identity.js';
-import { RbacRoleAssignment } from '../../infrastructure/persistence/entities/RbacRoleAssignment.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -23,31 +22,55 @@ export class AddCanonicalRoleAssignmentKey1700000000045 implements MigrationInte
       await queryRunner.addColumn(tableName, new TableColumn({ name: 'assignment_key', type: 'text', isNullable: true }));
     }
 
-    const repository = queryRunner.manager.getRepository(RbacRoleAssignment);
-    const rows = await repository.find();
+    const rows = await queryRunner.query(`SELECT id, tenant_id, user_id, principal_type, principal_id, role_id, resource_type, resource_id, scope_type, scope_id, source, source_mapping_id, source_ref, assignment_key FROM ${tableName}`) as Array<{
+      id: string;
+      tenant_id: string | null;
+      user_id: string | null;
+      principal_type: string | null;
+      principal_id: string | null;
+      role_id: string;
+      resource_type: string | null;
+      resource_id: string | null;
+      scope_type: string | null;
+      scope_id: string | null;
+      source: string;
+      source_mapping_id: string | null;
+      source_ref: string | null;
+      assignment_key: string | null;
+    }>;
     const seenKeys = new Set<string>();
     const duplicateIds: string[] = [];
     for (const row of rows) {
       const key = canonicalRoleAssignmentKey({
-        tenantId: row.tenantId,
-        principalType: row.principalType || 'user',
-        principalId: row.principalId || row.userId || '',
-        roleId: row.roleId,
-        scopeType: row.scopeType || row.resourceType || '',
-        scopeId: row.scopeId ?? row.resourceId,
+        tenantId: row.tenant_id,
+        principalType: row.principal_type || 'user',
+        principalId: row.principal_id || row.user_id || '',
+        roleId: row.role_id,
+        scopeType: row.scope_type || row.resource_type || '',
+        scopeId: row.scope_id ?? row.resource_id,
         source: row.source,
-        sourceRef: row.sourceRef ?? row.sourceMappingId,
+        sourceRef: row.source_ref ?? row.source_mapping_id,
       });
       if (seenKeys.has(key)) {
         duplicateIds.push(row.id);
         continue;
       }
       seenKeys.add(key);
-      if (row.assignmentKey !== key) await repository.update({ id: row.id }, { assignmentKey: key });
+      if (row.assignment_key !== key) {
+        const keyParameter = queryRunner.connection.driver.createParameter('assignmentKey', 0);
+        const idParameter = queryRunner.connection.driver.createParameter('assignmentId', 1);
+        await queryRunner.query(
+          `UPDATE ${tableName} SET assignment_key = ${keyParameter} WHERE id = ${idParameter}`,
+          [key, row.id],
+        );
+      }
     }
     // Retain one row for duplicate historical assignments before the canonical
     // unique guard. This is intentionally source-lineage aware through key.
-    if (duplicateIds.length > 0) await repository.delete(duplicateIds);
+    for (const id of duplicateIds) {
+      const idParameter = queryRunner.connection.driver.createParameter('assignmentId', 0);
+      await queryRunner.query(`DELETE FROM ${tableName} WHERE id = ${idParameter}`, [id]);
+    }
 
     const refreshed = await queryRunner.getTable(tableName);
     if (!refreshed) return;
@@ -63,7 +86,9 @@ export class AddCanonicalRoleAssignmentKey1700000000045 implements MigrationInte
     if (!tableWithRequiredKey) return;
     const legacyUnique = tableWithRequiredKey.uniques.find((unique) => unique.name === 'uq_role_assignments_identity');
     if (legacyUnique) await queryRunner.dropUniqueConstraint(tableName, legacyUnique);
-    if (!tableWithRequiredKey.uniques.some((unique) => unique.name === 'uq_role_assignments_canonical_identity')) {
+    const hasCanonicalUnique = tableWithRequiredKey.uniques.some((unique) => unique.name === 'uq_role_assignments_canonical_identity')
+      || tableWithRequiredKey.indices.some((index) => index.name === 'uq_role_assignments_canonical_identity');
+    if (!hasCanonicalUnique) {
       await queryRunner.createUniqueConstraint(tableName, new TableUnique({
         name: 'uq_role_assignments_canonical_identity',
         columnNames: ['assignment_key'],

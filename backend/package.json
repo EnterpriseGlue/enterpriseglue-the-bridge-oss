@@ -41,6 +41,7 @@
     "google-auth-library": "^10.6.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "ldapts": "^9.0.0",
     "morgan": "^1.10.0",
     "nodemailer": "^9.0.1",
     "octokit": "^5.0.5",

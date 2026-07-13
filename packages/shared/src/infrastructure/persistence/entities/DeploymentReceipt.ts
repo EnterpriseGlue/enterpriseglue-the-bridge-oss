@@ -11,6 +11,6 @@ export class DeploymentReceipt extends AppBaseEntity {
   @Column({ name: 'engine_id', type: 'text' }) engineId!: string;
   @Column({ name: 'engine_deployment_id', type: 'text' }) engineDeploymentId!: string;
   @Column({ name: 'source', type: 'text' }) source!: string;
-  @Column({ name: 'lineage_json', type: 'text', default: "'{}'" }) lineageJson!: string;
+  @Column({ name: 'lineage_json', type: 'text', default: '{}' }) lineageJson!: string;
   @Column({ name: 'received_at', type: 'bigint' }) receivedAt!: number;
 }

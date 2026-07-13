@@ -1,12 +1,20 @@
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
+function tablePath(queryRunner: QueryRunner): string {
+  try {
+    return queryRunner.connection.getMetadata('RbacRoleAssignment').tablePath;
+  } catch {
+    return 'role_assignments';
+  }
+}
+
 /** Adds config ownership and provenance to scoped role assignments. */
 export class AddRoleAssignmentConfigOwnership1700000000069 implements MigrationInterface {
   name = 'AddRoleAssignmentConfigOwnership1700000000069';
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    const tableName = queryRunner.connection.getMetadata('RbacRoleAssignment').tablePath;
+    const tableName = tablePath(queryRunner);
     if (!(await queryRunner.hasTable(tableName))) return;
     for (const [name, column] of [
       ['ownership_mode', new TableColumn({ name: 'ownership_mode', type: 'text', default: "'manual'" })],
@@ -17,7 +25,7 @@ export class AddRoleAssignmentConfigOwnership1700000000069 implements MigrationI
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    const tableName = queryRunner.connection.getMetadata('RbacRoleAssignment').tablePath;
+    const tableName = tablePath(queryRunner);
     if (!(await queryRunner.hasTable(tableName))) return;
     for (const name of ['drift_status', 'last_applied_at', 'source_hash', 'ownership_mode']) if (await queryRunner.hasColumn(tableName, name)) await queryRunner.dropColumn(tableName, name);
   }

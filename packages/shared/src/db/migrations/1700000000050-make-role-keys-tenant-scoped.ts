@@ -1,6 +1,5 @@
 import { TableColumn, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { RbacRole } from '../../infrastructure/persistence/entities/RbacRole.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -30,10 +29,22 @@ export class MakeRoleKeysTenantScoped1700000000050 implements MigrationInterface
       await queryRunner.addColumn(tableName, new TableColumn({ name: 'role_key_identity', type: 'text', isNullable: true }));
     }
 
-    const repo = queryRunner.manager.getRepository(RbacRole);
-    for (const role of await repo.find()) {
-      const identity = roleKeyIdentity(role.tenantId, role.key);
-      if (role.roleKeyIdentity !== identity) await repo.update({ id: role.id }, { roleKeyIdentity: identity });
+    const roles = await queryRunner.query(`SELECT id, tenant_id, key, role_key_identity FROM ${tableName}`) as Array<{
+      id: string;
+      tenant_id: string | null;
+      key: string;
+      role_key_identity: string | null;
+    }>;
+    for (const role of roles) {
+      const identity = roleKeyIdentity(role.tenant_id, role.key);
+      if (role.role_key_identity !== identity) {
+        const identityParameter = queryRunner.connection.driver.createParameter('roleKeyIdentity', 0);
+        const idParameter = queryRunner.connection.driver.createParameter('roleId', 1);
+        await queryRunner.query(
+          `UPDATE ${tableName} SET role_key_identity = ${identityParameter} WHERE id = ${idParameter}`,
+          [identity, role.id],
+        );
+      }
     }
 
     const refreshed = await queryRunner.getTable(tableName);
@@ -47,7 +58,9 @@ export class MakeRoleKeysTenantScoped1700000000050 implements MigrationInterface
     for (const unique of current.uniques.filter((candidate) => candidate.columnNames.length === 1 && candidate.columnNames[0] === 'key')) {
       await queryRunner.dropUniqueConstraint(tableName, unique);
     }
-    if (!current.uniques.some((candidate) => candidate.name === 'uq_roles_key_identity')) {
+    const hasScopedUnique = current.uniques.some((candidate) => candidate.name === 'uq_roles_key_identity')
+      || current.indices.some((candidate) => candidate.name === 'uq_roles_key_identity');
+    if (!hasScopedUnique) {
       await queryRunner.createUniqueConstraint(tableName, new TableUnique({ name: 'uq_roles_key_identity', columnNames: ['role_key_identity'] }));
     }
   }
