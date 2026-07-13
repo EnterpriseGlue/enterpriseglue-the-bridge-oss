@@ -6,6 +6,7 @@ import { hashPassword } from '@enterpriseglue/shared/utils/password.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { encrypt } from '@enterpriseglue/shared/utils/crypto.js';
 import { addCaseInsensitiveEquals } from '../infrastructure/persistence/adapters/QueryHelpers.js';
+import { authzGroupService } from '../services/platform-admin/AuthzGroupService.js';
 
 /**
  * Bootstrap admin account on first run
@@ -51,7 +52,13 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
       createdByUserId: null,
     });
 
-    await userRepo.save(admin);
+    await dataSource.transaction(async (manager) => {
+      await manager.getRepository(User).save(admin);
+      await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, adminId);
+      if (allowPlatformAdmin) {
+        await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, adminId);
+      }
+    });
 
     console.log(`✅ Admin account created: ${config.adminEmail}`);
     console.log(`   Password: [REDACTED - check ADMIN_PASSWORD environment variable]`);

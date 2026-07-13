@@ -89,6 +89,7 @@ export const DEFAULT_PLATFORM_GROUP_IDS = {
 } as const;
 
 const AUTHENTICATED_USER_BASELINE_SOURCE_REF = 'authenticated-user-baseline';
+const BOOTSTRAP_PLATFORM_ADMIN_SOURCE_REF = 'bootstrap-platform-administrator';
 
 export const DEFAULT_PLATFORM_GROUPS = [
   {
@@ -507,10 +508,36 @@ export class AuthzGroupService {
     manager: EntityManager,
     userId: string
   ): Promise<{ id: string; created: boolean }> {
+    return this.ensureSystemGroupMembershipWithManager(
+      manager,
+      DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS,
+      userId,
+      AUTHENTICATED_USER_BASELINE_SOURCE_REF
+    );
+  }
+
+  async ensureBootstrapPlatformAdministratorMembershipWithManager(
+    manager: EntityManager,
+    userId: string
+  ): Promise<{ id: string; created: boolean }> {
+    return this.ensureSystemGroupMembershipWithManager(
+      manager,
+      DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
+      userId,
+      BOOTSTRAP_PLATFORM_ADMIN_SOURCE_REF
+    );
+  }
+
+  private async ensureSystemGroupMembershipWithManager(
+    manager: EntityManager,
+    groupId: string,
+    userId: string,
+    sourceRef: string
+  ): Promise<{ id: string; created: boolean }> {
     const groupRepo = manager.getRepository(AuthzGroup);
-    const group = await groupRepo.findOneBy({ id: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS });
+    const group = await groupRepo.findOneBy({ id: groupId });
     if (!group || group.isArchived || group.source !== 'system' || group.tenantId !== null) {
-      throw new Error('Authenticated users system group is unavailable');
+      throw new Error('Required system authorization group is unavailable');
     }
 
     const membershipRepo = manager.getRepository(AuthzGroupMembership);
@@ -518,7 +545,7 @@ export class AuthzGroupService {
       groupId: group.id,
       userId,
       source: 'system',
-      sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+      sourceRef,
     });
     if (existing) return { id: existing.id, created: false };
 
@@ -530,7 +557,7 @@ export class AuthzGroupService {
       groupId: group.id,
       userId,
       source: 'system',
-      sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+      sourceRef,
       expiresAt: null,
       createdById: null,
       createdAt: now,
@@ -547,7 +574,7 @@ export class AuthzGroupService {
         groupId: group.id,
         userId,
         source: 'system',
-        sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+        sourceRef,
       },
     });
     return { id, created: true };

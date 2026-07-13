@@ -21,6 +21,7 @@ import { addCaseInsensitiveEquals } from '@enterpriseglue/shared/infrastructure/
 import { hashPassword, generatePassword } from '@enterpriseglue/shared/utils/password.js';
 import { randomBytes } from 'crypto';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
+import { authzGroupService } from './AuthzGroupService.js';
 import { IsNull } from 'typeorm';
 
 export interface CreateUserInput {
@@ -173,35 +174,36 @@ export class UserService {
     const now = Date.now();
 
     const dataSource = await getDataSource();
-    const userRepo = dataSource.getRepository(User);
+    const user = await dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+      let existingQb = userRepo.createQueryBuilder('u');
+      existingQb = addCaseInsensitiveEquals(existingQb, 'u', 'email', 'email', email);
+      const existing = await existingQb.getOne();
+      if (existing) throw Errors.conflict('User with this email already exists');
 
-    // Check if user already exists (case-insensitive)
-    let existingQb = userRepo.createQueryBuilder('u');
-    existingQb = addCaseInsensitiveEquals(existingQb, 'u', 'email', 'email', email);
-    const existing = await existingQb.getOne();
-    if (existing) {
-      throw Errors.conflict('User with this email already exists');
-    }
-
-    await userRepo.insert({
-      id: userId,
-      email,
-      passwordHash,
-      firstName: firstName || null,
-      lastName: lastName || null,
-      platformRole: normalizedPlatformRole,
-      isActive: true,
-      mustResetPassword: true,
-      failedLoginAttempts: 0,
-      createdAt: now,
-      updatedAt: now,
-      createdByUserId,
-      isEmailVerified: false,
-      emailVerificationToken: verificationToken,
-      emailVerificationTokenExpiry: tokenExpiry,
+      await userRepo.insert({
+        id: userId,
+        email,
+        passwordHash,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        platformRole: normalizedPlatformRole,
+        isActive: true,
+        mustResetPassword: true,
+        failedLoginAttempts: 0,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId,
+        isEmailVerified: false,
+        emailVerificationToken: verificationToken,
+        emailVerificationTokenExpiry: tokenExpiry,
+      });
+      await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
+      if (normalizedPlatformRole === 'admin') {
+        await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, userId);
+      }
+      return userRepo.findOneBy({ id: userId });
     });
-
-    const user = await userRepo.findOneBy({ id: userId });
 
     return {
       user: toUserDTO(user!),
@@ -218,37 +220,39 @@ export class UserService {
     const now = Date.now();
 
     const dataSource = await getDataSource();
-    const userRepo = dataSource.getRepository(User);
+    const user = await dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+      let existingQb = userRepo.createQueryBuilder('u');
+      existingQb = addCaseInsensitiveEquals(existingQb, 'u', 'email', 'email', normalizedEmail);
+      const existing = await existingQb.getOne();
+      if (existing) throw Errors.conflict('User with this email already exists');
 
-    let existingQb = userRepo.createQueryBuilder('u');
-    existingQb = addCaseInsensitiveEquals(existingQb, 'u', 'email', 'email', normalizedEmail);
-    const existing = await existingQb.getOne();
-    if (existing) {
-      throw Errors.conflict('User with this email already exists');
-    }
-
-    await userRepo.insert({
-      id: userId,
-      email: normalizedEmail,
-      authProvider: 'local',
-      passwordHash: null,
-      firstName: firstName || null,
-      lastName: lastName || null,
-      platformRole: normalizedPlatformRole,
-      isActive: true,
-      mustResetPassword: false,
-      failedLoginAttempts: 0,
-      lockedUntil: null,
-      createdAt: now,
-      updatedAt: now,
-      createdByUserId,
-      isEmailVerified: false,
-      emailVerificationToken: null,
-      emailVerificationTokenExpiry: null,
-      lastLoginAt: null,
+      await userRepo.insert({
+        id: userId,
+        email: normalizedEmail,
+        authProvider: 'local',
+        passwordHash: null,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        platformRole: normalizedPlatformRole,
+        isActive: true,
+        mustResetPassword: false,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId,
+        isEmailVerified: false,
+        emailVerificationToken: null,
+        emailVerificationTokenExpiry: null,
+        lastLoginAt: null,
+      });
+      await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
+      if (normalizedPlatformRole === 'admin') {
+        await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, userId);
+      }
+      return userRepo.findOneBy({ id: userId });
     });
-
-    const user = await userRepo.findOneBy({ id: userId });
     return toUserDTO(user!);
   }
 
