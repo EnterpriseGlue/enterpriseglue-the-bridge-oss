@@ -1458,12 +1458,12 @@ The central-engine roadmap should avoid duplicate permission controls. Enterpris
 
 V1 implementation boundary:
 
-- [ ] ⬜ Implement `enterpriseglue_authoritative` only.
-- [ ] ⬜ Persist `engineRuntimeAuthorizationMode` so the product contract is clear, but reject or mark `mirrored_engine_backstop` and `engine_native_authority` as unsupported until their milestones exist.
-- [ ] ⬜ Do not build duplicate Camunda permission editors in Access Control.
-- [ ] ⬜ Do not synchronize EnterpriseGlue permissions into Camunda in v1.
-- [ ] ⬜ If the engine rejects a call despite EnterpriseGlue allowing it, surface an operational `engine_backstop_denied` or `engine_access_rejected` error with diagnostics rather than granting by fallback.
-- [ ] ⬜ If EnterpriseGlue denies a request, never call the engine even if engine-native permissions might allow it.
+- [x] ✅ Implement `enterpriseglue_authoritative` only. It is the persisted default and the only accepted runtime authorization mode in v1.
+- [x] ✅ Persist `engineRuntimeAuthorizationMode` so the product contract is clear, while rejecting `mirrored_engine_backstop` and `engine_native_authority` until their milestones exist. Platform settings and session-contract tests cover the accepted mode.
+- [x] ✅ Do not build duplicate Camunda permission editors in Access Control. The Role Library manages EnterpriseGlue roles and runtime-resource assignments only.
+- [x] ✅ Do not synchronize EnterpriseGlue permissions into Camunda in v1. EnterpriseGlue evaluates access before the integration identity invokes the engine.
+- [x] ✅ If the engine rejects a call despite EnterpriseGlue allowing it, surface an operational `ENGINE_OPERATION_REJECTED` error with sanitized diagnostics rather than granting by fallback.
+- [x] ✅ If EnterpriseGlue denies a request, never call the engine even if engine-native permissions might allow it. Runtime route tests cover denial before engine service invocation.
 
 ### EnterpriseGlue Target Model
 
