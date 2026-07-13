@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import type { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
-import type { PlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
 
 /**
  * JWT utility functions
@@ -11,7 +10,8 @@ import type { PlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
 export interface JwtPayload {
   userId: string;
   email: string;
-  platformRole: PlatformRole;
+  /** Legacy claim accepted on older tokens but never emitted or authorized. */
+  platformRole?: string;
   /** Explicit canonical principal fields. Omitted only by pre-refactor tokens. */
   principalType?: 'user';
   principalId?: string;
@@ -27,7 +27,6 @@ export function generateAccessToken(user: User | any): string {
   const payload: JwtPayload = {
     userId: user.id,
     email: user.email,
-    platformRole: user.platformRole || 'user',
     principalType: 'user',
     principalId: user.id,
     type: 'access',
@@ -45,7 +44,6 @@ export function generateRefreshToken(user: User | any): string {
   const payload: JwtPayload = {
     userId: user.id,
     email: user.email,
-    platformRole: user.platformRole || 'user',
     principalType: 'user',
     principalId: user.id,
     type: 'refresh',
@@ -56,11 +54,10 @@ export function generateRefreshToken(user: User | any): string {
   });
 }
 
-export function generateOnboardingToken(payload: { userId: string; email: string; platformRole?: PlatformRole; invitationId: string; tenantSlug: string }): string {
+export function generateOnboardingToken(payload: { userId: string; email: string; invitationId: string; tenantSlug: string }): string {
   const tokenPayload: JwtPayload = {
     userId: payload.userId,
     email: payload.email,
-    platformRole: payload.platformRole || 'user',
     principalType: 'user',
     principalId: payload.userId,
     type: 'onboarding',

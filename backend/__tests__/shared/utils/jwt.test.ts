@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateAccessToken, generateRefreshToken, verifyToken, decodeToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { generateAccessToken, generateOnboardingToken, generateRefreshToken, verifyToken, decodeToken } from '@enterpriseglue/shared/utils/jwt.js';
 
 const user = { id: 'user-1', email: 'user@example.com', platformRole: 'admin' };
 
@@ -9,7 +9,7 @@ describe('jwt utils', () => {
     const payload = verifyToken(token);
     expect(payload.userId).toBe(user.id);
     expect(payload.email).toBe(user.email);
-    expect(payload.platformRole).toBe('admin');
+    expect(payload.platformRole).toBeUndefined();
     expect(payload.principalType).toBe('user');
     expect(payload.principalId).toBe(user.id);
     expect(payload.type).toBe('access');
@@ -19,6 +19,18 @@ describe('jwt utils', () => {
     const token = generateRefreshToken(user);
     const payload = verifyToken(token);
     expect(payload.type).toBe('refresh');
+  });
+
+  it('does not emit legacy platform roles in onboarding tokens', () => {
+    const payload = verifyToken(generateOnboardingToken({
+      userId: user.id,
+      email: user.email,
+      invitationId: 'invite-1',
+      tenantSlug: 'default',
+    }));
+
+    expect(payload.type).toBe('onboarding');
+    expect(payload.platformRole).toBeUndefined();
   });
 
   it('decodeToken returns payload without verification', () => {

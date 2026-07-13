@@ -8,7 +8,6 @@ import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { RefreshToken } from '@enterpriseglue/shared/db/entities/RefreshToken.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
-import { resolveEffectiveSessionUser } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import bcrypt from 'bcryptjs';
 
 // Test fixture tokens — not real secrets (CWE-547)
@@ -21,9 +20,6 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/utils/jwt.js');
-vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({
-  resolveEffectiveSessionUser: vi.fn(async (user: any) => ({ ...user, platformRole: 'admin' })),
-}));
 
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
@@ -106,8 +102,7 @@ describe('POST /api/auth/refresh', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.expiresIn).toBe(3600);
-    expect(resolveEffectiveSessionUser).toHaveBeenCalledWith(mockUser);
-    expect(jwt.generateAccessToken).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1', platformRole: 'admin' }));
+    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser);
   });
 
   it('rejects missing refresh token', async () => {

@@ -190,9 +190,7 @@ describe('invitation and onboarding routes', () => {
 
     (projectMemberService.getMembership as unknown as Mock).mockResolvedValue({ role: 'owner', roles: ['owner'] });
     (engineService.hasEngineAccess as unknown as Mock).mockResolvedValue(true);
-    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (_permission: string, context: any) =>
-      context?.platformRole === 'admin'
-    );
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
     (getEmailConfigForTenant as unknown as Mock).mockResolvedValue(null);
     (userService.createPendingUser as unknown as Mock).mockResolvedValue({ id: 'user-1', email: 'invitee@example.com' });
     (invitationService.createInvitation as unknown as Mock).mockResolvedValue({
@@ -292,7 +290,6 @@ describe('invitation and onboarding routes', () => {
     expect(response.status).toBe(201);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('platform:users:create', expect.objectContaining({
       userId: 'user-manager-1',
-      platformRole: 'user',
     }));
     expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
       resourceType: 'tenant',
