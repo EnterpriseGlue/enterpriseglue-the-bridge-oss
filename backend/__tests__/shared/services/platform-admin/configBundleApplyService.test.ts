@@ -131,7 +131,7 @@ describe('configBundleApplyService', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('applies a hash-bound role and group bundle through one transaction with audit records', async () => {
-    const { roleInsert, groupInsert, permissionInsert, auditInsert } = setupDataSource();
+    const { roleInsert, groupInsert, permissionInsert, auditInsert, configRunRepo } = setupDataSource();
     const preview = configBundlePreviewService.preview({ bundle, files });
 
     const result = await configBundleApplyService.apply({
@@ -168,6 +168,9 @@ describe('configBundleApplyService', () => {
     }));
     expect(permissionInsert).toHaveBeenCalledWith([expect.objectContaining({ permissionId: 'engine:deploy' })]);
     expect(auditInsert).toHaveBeenCalledTimes(2);
+    expect(configRunRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      bundleApiVersion: 'enterpriseglue.ai/v1alpha1',
+    }));
   });
 
   it('persists config-warning ownership for roles and groups', async () => {
