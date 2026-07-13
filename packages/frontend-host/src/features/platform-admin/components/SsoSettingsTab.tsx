@@ -61,6 +61,7 @@ interface SsoClaimsMapping {
   claimType: string;
   claimKey: string;
   claimValue: string;
+  claimOperator?: string | null;
   targetRole: string;
   priority: number;
   isActive: boolean;
@@ -166,6 +167,10 @@ export default function SsoSettingsTab() {
   // Delete confirmation state
   const [deleteProviderConfirm, setDeleteProviderConfirm] = useState<SsoProvider | null>(null);
   const [deleteMappingConfirm, setDeleteMappingConfirm] = useState<SsoClaimsMapping | null>(null);
+  const [migrationMapping, setMigrationMapping] = useState<SsoClaimsMapping | null>(null);
+  const [migrationProviderKey, setMigrationProviderKey] = useState('');
+  const [migrationGroupKey, setMigrationGroupKey] = useState('');
+  const [migrationError, setMigrationError] = useState<string | null>(null);
   const [toggleProviderConfirm, setToggleProviderConfirm] = useState<SsoProvider | null>(null);
 
   // Documentation modal state
@@ -190,6 +195,32 @@ export default function SsoSettingsTab() {
   const samlMetadataUrl = appOrigin
     ? `${appOrigin}/api/auth/saml/metadata`
     : '/api/auth/saml/metadata';
+
+  const migrateLegacyPlatformMapping = useMutation({
+    mutationFn: (input: { id: string; providerKey: string; targetGroupKey: string }) =>
+      apiClient.post(`/api/authz/sso-mappings/${encodeURIComponent(input.id)}/migrate-provider-neutral`, {
+        providerKey: input.providerKey.trim(),
+        targetGroupKey: input.targetGroupKey.trim(),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sso-mappings'] });
+      queryClient.invalidateQueries({ queryKey: ['identity-mappings'] });
+      queryClient.invalidateQueries({ queryKey: ['authz-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'role-assignments'] });
+      setMigrationMapping(null);
+      setMigrationProviderKey('');
+      setMigrationGroupKey('');
+      setMigrationError(null);
+    },
+    onError: (error: unknown) => setMigrationError(parseApiError(error, 'Unable to create the provider-neutral replacement').message),
+  });
+
+  const startLegacyPlatformMigration = (mapping: SsoClaimsMapping) => {
+    setMigrationMapping(mapping);
+    setMigrationProviderKey('');
+    setMigrationGroupKey('');
+    setMigrationError(null);
+  };
 
   const samlAcsOriginMismatch = (() => {
     if (!appOrigin) return false;
@@ -1095,6 +1126,11 @@ export default function SsoSettingsTab() {
                                   />
                                   <GuardedOverflowMenuItem
                                     decision={mappingsManageDecision}
+                                    itemText="Create group-first replacement"
+                                    onClick={() => startLegacyPlatformMigration(mapping)}
+                                  />
+                                  <GuardedOverflowMenuItem
+                                    decision={mappingsManageDecision}
                                     itemText="Delete"
                                     isDelete
                                     onClick={() => setDeleteMappingConfirm(mapping)}
@@ -1114,6 +1150,42 @@ export default function SsoSettingsTab() {
         </PlatformCol>
       </PlatformRow>
       )}
+
+      <Modal
+        open={Boolean(migrationMapping)}
+        modalHeading="Create group-first replacement"
+        primaryButtonText={migrateLegacyPlatformMapping.isPending ? 'Creating...' : 'Create replacement'}
+        secondaryButtonText="Cancel"
+        onRequestClose={() => {
+          setMigrationMapping(null);
+          setMigrationError(null);
+        }}
+        onRequestSubmit={() => migrationMapping && migrateLegacyPlatformMapping.mutate({
+          id: migrationMapping.id,
+          providerKey: migrationProviderKey,
+          targetGroupKey: migrationGroupKey,
+        })}
+        primaryButtonDisabled={!canManageMappings || !migrationProviderKey.trim() || !migrationGroupKey.trim() || migrateLegacyPlatformMapping.isPending}
+      >
+        <p style={{ marginTop: 0, color: 'var(--cds-text-secondary)' }}>
+          This retains the legacy mapping while creating an identity mapping and a platform role assignment for an EnterpriseGlue group. Verify sign-in behavior before disabling the legacy mapping.
+        </p>
+        {migrationError && <InlineNotification kind="error" title="Replacement not created" subtitle={migrationError} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+        <TextInput
+          id="legacy-platform-migration-provider-key"
+          labelText="Provider-neutral provider key"
+          helperText="Use the stable key configured in Identity Providers."
+          value={migrationProviderKey}
+          onChange={(event) => setMigrationProviderKey(event.target.value)}
+        />
+        <TextInput
+          id="legacy-platform-migration-group-key"
+          labelText="Existing EnterpriseGlue group key"
+          helperText="The group receives the mapped Platform Admin or Standard User role. Create a group first in Access Control if needed."
+          value={migrationGroupKey}
+          onChange={(event) => setMigrationGroupKey(event.target.value)}
+        />
+      </Modal>
 
       {/* Provider Modal */}
       <Modal
