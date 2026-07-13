@@ -28,6 +28,7 @@ import { configBundlePreviewService, type ConfigBundlePreviewInput } from './Con
 import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
 import { archiveIdentityProviderInStore } from './IdentityProviderService.js';
+import { hashCanonicalConfig } from './config-bundle-hash.js';
 
 export type ConfigBundleIdentityReconciliationMode = 'none' | 'preview' | 'apply';
 
@@ -82,6 +83,10 @@ function canonicalEngineKeyIdentity(tenantId: string | null, key: string): strin
 
 function selectorFingerprint(selector: unknown): string {
   return createHash('sha256').update(JSON.stringify(selector)).digest('hex');
+}
+
+function objectFingerprint(kind: string, key: string, value: unknown): string {
+  return hashCanonicalConfig({ kind, key, value });
 }
 
 function engineCredentialFields(auth: any): Record<string, string | null> {
@@ -328,6 +333,7 @@ class ConfigBundleApplyService {
         if (change.operation === 'noop' || change.operation === 'conflict') continue;
         if (change.objectType === 'role') {
           const desired = desiredRoles.get(change.key);
+          const sourceHash = desired ? objectFingerprint('role', desired.key, desired) : objectFingerprint('role', change.key, { archived: true });
           if (change.operation === 'create' && desired) {
             const roleId = generateId();
             await roleRepo.insert({
@@ -345,7 +351,7 @@ class ConfigBundleApplyService {
               source: 'config',
               sourceRef: `config_bundle:${manifest.metadata.key}`,
               ownershipMode: desired.ownershipMode || 'config_locked',
-              sourceHash: diff.canonicalHash,
+              sourceHash,
               lastAppliedAt: now,
               driftStatus: 'in_sync',
               createdById: input.actorId,
@@ -371,7 +377,7 @@ class ConfigBundleApplyService {
               isArchived: false,
               isAssignable: true,
               ownershipMode: desired.ownershipMode || 'config_locked',
-              sourceHash: diff.canonicalHash,
+              sourceHash,
               lastAppliedAt: now,
               driftStatus: 'in_sync',
               updatedAt: now,
@@ -392,7 +398,7 @@ class ConfigBundleApplyService {
             await roleRepo.update({ id: change.currentId }, {
               isArchived: true,
               isAssignable: false,
-              sourceHash: diff.canonicalHash,
+              sourceHash,
               lastAppliedAt: now,
               driftStatus: 'in_sync',
               updatedAt: now,
@@ -404,6 +410,7 @@ class ConfigBundleApplyService {
 
         if (change.objectType === 'group') {
           const desired = desiredGroups.get(change.key);
+          const sourceHash = desired ? objectFingerprint('group', desired.key, desired) : objectFingerprint('group', change.key, { archived: true });
           if (change.operation === 'create' && desired) {
             const groupId = generateId();
             await groupRepo.insert({
@@ -415,7 +422,7 @@ class ConfigBundleApplyService {
               source: 'config',
               sourceRef: `config_bundle:${manifest.metadata.key}`,
               ownershipMode: desired.ownershipMode || 'config_locked',
-              sourceHash: diff.canonicalHash,
+              sourceHash,
               lastAppliedAt: now,
               driftStatus: 'in_sync',
               isSystem: false,
@@ -432,7 +439,7 @@ class ConfigBundleApplyService {
               description: desired.description || null,
               isArchived: false,
               ownershipMode: desired.ownershipMode || 'config_locked',
-              sourceHash: diff.canonicalHash,
+              sourceHash,
               lastAppliedAt: now,
               driftStatus: 'in_sync',
               updatedAt: now,
@@ -442,7 +449,7 @@ class ConfigBundleApplyService {
           } else if (change.operation === 'archive' && change.currentId) {
             await groupRepo.update({ id: change.currentId }, {
               isArchived: true,
-              sourceHash: diff.canonicalHash,
+              sourceHash,
               lastAppliedAt: now,
               driftStatus: 'in_sync',
               updatedAt: now,

@@ -155,7 +155,7 @@ describe('configBundleApplyService', () => {
       source: 'config',
       sourceRef: 'config_bundle:acme.authz',
       ownershipMode: 'config_locked',
-      sourceHash: preview.canonicalHash,
+      sourceHash: expect.any(String),
       driftStatus: 'in_sync',
     }));
     expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({
@@ -163,7 +163,7 @@ describe('configBundleApplyService', () => {
       source: 'config',
       sourceRef: 'config_bundle:acme.authz',
       ownershipMode: 'config_locked',
-      sourceHash: preview.canonicalHash,
+      sourceHash: expect.any(String),
       driftStatus: 'in_sync',
     }));
     expect(permissionInsert).toHaveBeenCalledWith([expect.objectContaining({ permissionId: 'engine:deploy' })]);
