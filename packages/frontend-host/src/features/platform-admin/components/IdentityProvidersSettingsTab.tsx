@@ -24,6 +24,7 @@ interface IdentityProvider {
   sourceRef: string | null;
 }
 type MembershipReplayResult = { runId: string | null; scanned: number; created: number; removed: number; failed: number; truncated: boolean };
+type SyncRun = { id: string; status: 'running' | 'success' | 'failed'; trigger: string; startedAt: number; completedAt: number | null; groupMembershipsCreated: number; groupMembershipsRemoved: number; errorMessage: string | null };
 
 type FormState = {
   key: string; protocol: Protocol; isEnabled: boolean; authenticationMode: AuthenticationMode; directoryTenantId: string;
@@ -70,6 +71,8 @@ export default function IdentityProvidersSettingsTab() {
   const [error, setError] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<IdentityProvider | null>(null);
   const [replayResult, setReplayResult] = useState<{ providerKey: string; result: MembershipReplayResult } | null>(null);
+  const [historyProvider, setHistoryProvider] = useState<IdentityProvider | null>(null);
+  const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', historyProvider?.key], queryFn: () => apiClient.get<SyncRun[]>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
 
   const save = useMutation({
     mutationFn: (payload: FormState) => {
@@ -123,6 +126,7 @@ export default function IdentityProvidersSettingsTab() {
                   <TableCell>{provider.sourceRef ? 'Managed by config' : 'Manual'}</TableCell>
                   <TableCell><GuardedOverflowMenu size="sm" iconDescription="Provider actions">
                     <GuardedOverflowMenuItem decision={manage} itemText="Edit" onClick={() => startEdit(provider)} />
+                    <GuardedOverflowMenuItem decision={read} itemText="View sync history" onClick={() => setHistoryProvider(provider)} />
                     {provider.protocol === 'ldap' && <GuardedOverflowMenuItem decision={manage} itemText="Reconcile directory" disabled={!provider.isEnabled || reconcile.isPending} onClick={() => reconcile.mutate(provider.key)} />}
                     <GuardedOverflowMenuItem decision={manage} itemText="Replay stored memberships" disabled={!provider.isEnabled || replayMemberships.isPending} onClick={() => replayMemberships.mutate(provider.key)} />
                     <GuardedOverflowMenuItem decision={manage} itemText="Archive" isDelete onClick={() => setArchiveTarget(provider)} />
@@ -133,6 +137,13 @@ export default function IdentityProvidersSettingsTab() {
           </TableContainer>
         )}
       </DataTable>
+      {historyProvider && <div style={{ marginTop: 'var(--spacing-6)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-3)' }}>
+          <div><h4 style={{ margin: 0 }}>Synchronization history: {historyProvider.key}</h4><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Recent login, scheduled, directory, and stored-membership replay runs.</p></div>
+          <Button kind="ghost" size="sm" onClick={() => setHistoryProvider(null)}>Close</Button>
+        </div>
+        {syncRunsQuery.isLoading ? <SkeletonText paragraph lineCount={3} /> : syncRunsQuery.error ? <InlineNotification kind="error" title="Synchronization history could not be loaded" subtitle={parseApiError(syncRunsQuery.error, 'Request failed').message} hideCloseButton /> : (syncRunsQuery.data || []).length === 0 ? <InlineNotification kind="info" title="No synchronization runs yet" subtitle="Runs appear after sign-in, directory reconciliation, or stored-membership replay." hideCloseButton lowContrast /> : <div>{(syncRunsQuery.data || []).map((run) => <div key={run.id} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-3)', borderBottom: '1px solid var(--cds-border-subtle)' }}><Tag type={run.status === 'failed' ? 'red' : run.status === 'running' ? 'blue' : 'green'}>{run.status}</Tag><Tag type="cool-gray">{run.trigger}</Tag><span style={{ color: 'var(--cds-text-secondary)' }}>{new Date(run.startedAt).toLocaleString()}</span><span style={{ color: 'var(--cds-text-secondary)' }}>{run.groupMembershipsCreated} added, {run.groupMembershipsRemoved} removed</span>{run.errorMessage && <span style={{ color: 'var(--cds-support-error)' }}>{run.errorMessage}</span>}</div>)}</div>}
+      </div>}
     </Tile>
     <Modal open={open} modalHeading={editing ? 'Edit identity provider' : 'Add identity provider'} primaryButtonText={editing ? 'Save' : 'Add'} secondaryButtonText="Cancel" primaryButtonDisabled={!manage.allowed || save.isPending} onRequestClose={() => setOpen(false)} onRequestSubmit={() => save.mutate(form)}>
       {error && <InlineNotification kind="error" title="Provider not saved" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
