@@ -18,6 +18,9 @@ vi.mock('@enterpriseglue/shared/utils/password.js', () => ({
 }));
 
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
+import { Invitation } from '@enterpriseglue/shared/infrastructure/persistence/entities/Invitation.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 
 describe('UserService authorization baseline', () => {
   beforeEach(() => {
@@ -100,5 +103,40 @@ describe('UserService authorization baseline', () => {
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
     expect(authzGroupService.removeManualPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
     expect(authzGroupService.ensureManualPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
+  });
+
+  it('derives displayed platform administration from active canonical memberships', async () => {
+    const now = Date.now();
+    const users = [
+      { id: 'manual-admin', email: 'manual@example.test', platformRole: 'user', authProvider: 'local', isActive: true, isEmailVerified: true, mustResetPassword: false, createdAt: 1, updatedAt: 1, lastLoginAt: null, createdByUserId: null },
+      { id: 'sso-admin', email: 'sso@example.test', platformRole: 'user', authProvider: 'saml', isActive: true, isEmailVerified: true, mustResetPassword: false, createdAt: 1, updatedAt: 1, lastLoginAt: null, createdByUserId: null },
+      { id: 'expired-admin', email: 'expired@example.test', platformRole: 'admin', authProvider: 'local', isActive: true, isEmailVerified: true, mustResetPassword: false, createdAt: 1, updatedAt: 1, lastLoginAt: null, createdByUserId: null },
+    ];
+    const invitationRepo = { find: vi.fn().mockResolvedValue([]) };
+    const userRepo = { find: vi.fn().mockResolvedValue(users) };
+    const membershipRepo = {
+      find: vi.fn().mockResolvedValue([
+        { userId: 'manual-admin', expiresAt: null, source: 'manual' },
+        { userId: 'sso-admin', expiresAt: null, source: 'sso' },
+        { userId: 'expired-admin', expiresAt: now - 1, source: 'manual' },
+      ]),
+    };
+    (dataSource as any).getRepository = vi.fn((entity: unknown) => {
+      if (entity === Invitation) return invitationRepo;
+      if (entity === User) return userRepo;
+      if (entity === AuthzGroupMembership) return membershipRepo;
+      throw new Error('Unexpected repository');
+    });
+
+    const result = await userService.listUsers();
+
+    expect(result.map((user) => [user.id, user.platformRole])).toEqual([
+      ['manual-admin', 'admin'],
+      ['sso-admin', 'admin'],
+      ['expired-admin', 'user'],
+    ]);
+    expect(membershipRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ groupId: 'system.group.platform_administrators' }),
+    }));
   });
 });

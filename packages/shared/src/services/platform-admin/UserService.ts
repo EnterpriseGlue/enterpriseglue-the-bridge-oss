@@ -15,6 +15,7 @@ import { ProjectMemberRole } from '@enterpriseglue/shared/infrastructure/persist
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineMember.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { addCaseInsensitiveEquals } from '@enterpriseglue/shared/infrastructure/persistence/adapters/QueryHelpers.js';
@@ -22,7 +23,9 @@ import { hashPassword, generatePassword } from '@enterpriseglue/shared/utils/pas
 import { randomBytes } from 'crypto';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
 import { authzGroupService } from './AuthzGroupService.js';
-import { IsNull } from 'typeorm';
+import { In, IsNull } from 'typeorm';
+
+const PLATFORM_ADMINISTRATORS_GROUP_ID = 'system.group.platform_administrators';
 
 export interface CreateUserInput {
   email: string;
@@ -87,14 +90,18 @@ function resolveAdminUserStatus(user: User, pendingInvitationUserIds: Set<string
   return 'active';
 }
 
-function toUserDTO(user: User, options: { includeAdmin?: boolean; pendingInvitationUserIds?: Set<string> } = {}): UserDTO {
+function toUserDTO(
+  user: User,
+  options: { includeAdmin?: boolean; pendingInvitationUserIds?: Set<string>; platformAdministratorUserIds?: Set<string> } = {}
+): UserDTO {
   const pendingInvitationUserIds = options.pendingInvitationUserIds || new Set<string>();
   const dto: UserDTO = {
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
-    platformRole: normalizeRoleValue(user.platformRole),
+    // Kept for API compatibility; effective access is group-derived.
+    platformRole: options.platformAdministratorUserIds?.has(user.id) ? 'admin' : 'user',
     authProvider: user.authProvider || 'local',
     isActive: Boolean(user.isActive),
     isEmailVerified: Boolean(user.isEmailVerified),
@@ -112,6 +119,26 @@ function toUserDTO(user: User, options: { includeAdmin?: boolean; pendingInvitat
   }
 
   return dto;
+}
+
+async function getActivePlatformAdministratorUserIds(
+  dataSource: Awaited<ReturnType<typeof getDataSource>>,
+  userIds: string[]
+): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const memberships = await dataSource.getRepository(AuthzGroupMembership).find({
+    where: {
+      groupId: PLATFORM_ADMINISTRATORS_GROUP_ID,
+      userId: In(userIds),
+    },
+    select: ['userId', 'expiresAt'],
+  });
+  const now = Date.now();
+  return new Set(
+    memberships
+      .filter((membership) => membership.expiresAt === null || Number(membership.expiresAt) > now)
+      .map((membership) => String(membership.userId))
+  );
 }
 
 export class UserService {
@@ -132,7 +159,11 @@ export class UserService {
     });
     const pendingInvitationUserIds = new Set(pendingInvitations.map((invitation) => String(invitation.userId)));
     const result = await userRepo.find({ order: { createdAt: 'DESC' } });
-    return result.map((u) => toUserDTO(u, { includeAdmin: true, pendingInvitationUserIds }));
+    const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds(
+      dataSource,
+      result.map((user) => user.id)
+    );
+    return result.map((u) => toUserDTO(u, { includeAdmin: true, pendingInvitationUserIds, platformAdministratorUserIds }));
   }
 
   /**
@@ -152,9 +183,11 @@ export class UserService {
         completedAt: IsNull(),
       },
     });
+    const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds(dataSource, [id]);
     return toUserDTO(user, {
       includeAdmin: true,
       pendingInvitationUserIds: pendingInvitationCount > 0 ? new Set([id]) : new Set<string>(),
+      platformAdministratorUserIds,
     });
   }
 
