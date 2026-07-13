@@ -46,6 +46,34 @@ describe('LegacyMappingCoverageService', () => {
     })]);
   });
 
+  it('prefers an explicit conversion lineage record over another shape-equivalent mapping', async () => {
+    const auditFind = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        action: 'authz.legacy_mapping_conversion.create',
+        details: JSON.stringify({ family: 'group', legacyMappingId: 'legacy-group', identityMappingId: 'recorded-replacement' }),
+      }]);
+    const getRepository = vi.fn((entity) => {
+      if (entity === SsoClaimsMapping || entity === SsoAssignmentMapping) return { find: vi.fn().mockResolvedValue([]) };
+      if (entity === SsoGroupMapping) return { find: vi.fn().mockResolvedValue([{ id: 'legacy-group', tenantId: null, providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'ops', claimOperator: 'equals', targetGroupId: 'group-1', isActive: true }]) };
+      if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue([
+        { id: 'recorded-replacement', tenantId: null, providerId: 'provider-1', targetGroupId: 'group-1', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', isActive: true },
+        { id: 'unrelated-replacement', tenantId: null, providerId: 'provider-2', targetGroupId: 'group-1', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', isActive: true },
+      ]) };
+      if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue([{ id: 'provider-1', configurationJson: '{}' }, { id: 'provider-2', configurationJson: '{}' }]) };
+      if (entity === RbacRoleAssignment) return { find: vi.fn().mockResolvedValue([]) };
+      if (entity === AuditLog) return { find: auditFind };
+      throw new Error(`Unexpected repository: ${(entity as any).name}`);
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository });
+
+    await expect(legacyMappingCoverageService.getCoverage()).resolves.toEqual([expect.objectContaining({
+      id: 'legacy-group',
+      status: 'replacement_candidate',
+      candidateIdentityMappingIds: ['recorded-replacement'],
+    })]);
+  });
+
   it('recognizes an exact custom mapping only when the replacement provider allowlists that attribute', async () => {
     const legacy = { id: 'legacy-clearance', providerId: null, claimType: 'custom', claimKey: 'clearance', claimValue: 'secret', claimOperator: 'equals', targetRole: 'admin', isActive: true };
     const baseRepositories = (providerConfigurationJson: string) => (entity: unknown) => {

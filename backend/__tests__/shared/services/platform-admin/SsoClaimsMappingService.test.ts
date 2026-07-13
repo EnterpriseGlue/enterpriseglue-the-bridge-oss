@@ -9,10 +9,11 @@ import {
   ssoClaimsMappingService,
 } from '@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.js';
 
-const { createGroup, createIdentityMapping, assignRole } = vi.hoisted(() => ({
+const { createGroup, createIdentityMapping, assignRole, recordLegacyMappingConversion } = vi.hoisted(() => ({
   createGroup: vi.fn(),
   createIdentityMapping: vi.fn(),
   assignRole: vi.fn(),
+  recordLegacyMappingConversion: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -30,6 +31,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappi
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
   SYSTEM_ROLE_IDS: { PLATFORM_ADMIN: 'system.platform.admin', PLATFORM_USER: 'system.platform.user' },
   permissionService: { assignRole },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyMappingConversionAudit.js', () => ({
+  recordLegacyMappingConversion,
 }));
 
 describe('SsoClaimsMappingService', () => {

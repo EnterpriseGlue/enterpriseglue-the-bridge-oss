@@ -18,10 +18,11 @@ import {
 import { ssoAssignmentMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoAssignmentMappingService.js';
 import { EnginePermissions, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
-const { createGroup, createIdentityMapping, assignRole } = vi.hoisted(() => ({
+const { createGroup, createIdentityMapping, assignRole, recordLegacyMappingConversion } = vi.hoisted(() => ({
   createGroup: vi.fn(),
   createIdentityMapping: vi.fn(),
   assignRole: vi.fn(),
+  recordLegacyMappingConversion: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -42,6 +43,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', (
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js', () => ({
   identityEntitlementMappingService: { create: createIdentityMapping },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyMappingConversionAudit.js', () => ({
+  recordLegacyMappingConversion,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', async (importOriginal) => ({

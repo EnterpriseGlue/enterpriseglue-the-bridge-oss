@@ -26,6 +26,7 @@ import {
 import { authzGroupService } from './AuthzGroupService.js';
 import { identityEntitlementMappingService, type ManagedIdentityEntitlementMapping } from './IdentityEntitlementMappingService.js';
 import { ssoEngineAccessSnapshotService } from './SsoEngineAccessSnapshotService.js';
+import { recordLegacyMappingConversion } from './LegacyMappingConversionAudit.js';
 import {
   authorizationAttributeKeysFromConfiguration,
   providerNeutralLegacyEntitlement,
@@ -415,7 +416,18 @@ class SsoAssignmentMappingServiceClass {
         tenantId, createdById, principalType: 'group', principalId: group.id, roleId: legacyMapping.targetRoleId,
         resourceType: 'engine', resourceId: engine.id, source: 'legacy', sourceRef: `sso_assignment_mapping:${legacyMapping.id}`,
       }, manager);
-      return { legacyMappingId: legacyMapping.id, providerKey: provider.key, identityMapping, assignment, created: !existing, createdGroup };
+      const created = !existing;
+      await recordLegacyMappingConversion(manager, {
+        tenantId,
+        actorId: createdById,
+        family: 'engine_assignment',
+        legacyMappingId: legacyMapping.id,
+        identityMappingId: identityMapping.id,
+        providerId: provider.id,
+        providerKey: provider.key,
+        created,
+      });
+      return { legacyMappingId: legacyMapping.id, providerKey: provider.key, identityMapping, assignment, created, createdGroup };
     });
   }
 

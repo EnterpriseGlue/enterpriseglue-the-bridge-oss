@@ -21,6 +21,7 @@ import {
   ssoClaimOperatorRequiresValue,
 } from './SsoClaimsMappingService.js';
 import { identityEntitlementMappingService, type ManagedIdentityEntitlementMapping } from './IdentityEntitlementMappingService.js';
+import { recordLegacyMappingConversion } from './LegacyMappingConversionAudit.js';
 
 export type SsoGroupMappingSyncMode = 'authoritative' | 'additive';
 
@@ -224,6 +225,15 @@ class SsoGroupMappingServiceClass {
         } as any,
       });
       if (existing) {
+        await recordLegacyMappingConversion(manager, {
+          tenantId: normalizedTenantId,
+          family: 'group',
+          legacyMappingId: legacyMapping.id,
+          identityMappingId: existing.id,
+          providerId: provider.id,
+          providerKey: provider.key,
+          created: false,
+        });
         return {
           legacyMappingId: legacyMapping.id,
           providerKey: provider.key,
@@ -244,6 +254,15 @@ class SsoGroupMappingServiceClass {
         matchOperator,
         syncMode: legacyMapping.syncMode as 'additive' | 'authoritative',
       }, normalizedTenantId, manager);
+      await recordLegacyMappingConversion(manager, {
+        tenantId: normalizedTenantId,
+        family: 'group',
+        legacyMappingId: legacyMapping.id,
+        identityMappingId: identityMapping.id,
+        providerId: provider.id,
+        providerKey: provider.key,
+        created: true,
+      });
       return { legacyMappingId: legacyMapping.id, providerKey: provider.key, identityMapping, created: true };
     });
   }

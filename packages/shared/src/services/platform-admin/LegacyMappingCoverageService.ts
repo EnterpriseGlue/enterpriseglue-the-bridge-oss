@@ -11,6 +11,7 @@ import { authorizationAttributeEntitlementId } from './IdentityProviderAdapter.j
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { IsNull } from 'typeorm';
+import { LEGACY_MAPPING_CONVERSION_AUDIT_ACTION, type LegacyMappingConversionFamily } from './LegacyMappingConversionAudit.js';
 
 export type LegacyMappingCoverageStatus = 'replacement_candidate' | 'manual_redesign_required' | 'no_replacement_candidate';
 export interface LegacyMappingCoverageItem {
@@ -131,7 +132,7 @@ class LegacyMappingCoverageService {
   async getCoverage(tenantId?: string | null): Promise<LegacyMappingCoverageItem[]> {
     const dataSource = await getDataSource();
     const normalizedTenantId = tenantId?.trim() || null;
-    const [platformMappings, groupMappings, assignmentMappings, identityMappings, providers, assignments, verificationEvents] = await Promise.all([
+    const [platformMappings, groupMappings, assignmentMappings, identityMappings, providers, assignments, verificationEvents, conversionEvents] = await Promise.all([
       dataSource.getRepository(SsoClaimsMapping).find({ where: { isActive: true } }),
       dataSource.getRepository(SsoGroupMapping).find({ where: normalizedTenantId ? [{ tenantId: normalizedTenantId, isActive: true }, { tenantId: IsNull(), isActive: true }] : { tenantId: IsNull(), isActive: true } as any }),
       dataSource.getRepository(SsoAssignmentMapping).find({ where: normalizedTenantId ? [{ tenantId: normalizedTenantId, isActive: true }, { tenantId: IsNull(), isActive: true }] : { tenantId: IsNull(), isActive: true } as any }),
@@ -139,6 +140,7 @@ class LegacyMappingCoverageService {
       dataSource.getRepository(IdentityProvider).find({ where: normalizedTenantId ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }] : { tenantId: IsNull() } as any }),
       dataSource.getRepository(RbacRoleAssignment).find({ where: normalizedTenantId ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }] : { tenantId: IsNull() } as any }),
       dataSource.getRepository(AuditLog).find({ where: normalizedTenantId ? { tenantId: normalizedTenantId, action: 'authz.legacy_mapping_coverage.verify' } : { tenantId: IsNull(), action: 'authz.legacy_mapping_coverage.verify' }, order: { createdAt: 'DESC' } }),
+      dataSource.getRepository(AuditLog).find({ where: normalizedTenantId ? { tenantId: normalizedTenantId, action: LEGACY_MAPPING_CONVERSION_AUDIT_ACTION } : { tenantId: IsNull(), action: LEGACY_MAPPING_CONVERSION_AUDIT_ACTION }, order: { createdAt: 'DESC' } }),
     ]);
     const providersById = new Map(providers.map((provider) => [provider.id, provider]));
 
@@ -151,26 +153,42 @@ class LegacyMappingCoverageService {
         if (!verificationByKey.has(key)) verificationByKey.set(key, { candidateIdentityMappingId: details.candidateIdentityMappingId, verifiedById: event.userId, verifiedAt: event.createdAt, note: details.note || '' });
       } catch { /* A malformed historic audit row must not block diagnostics. */ }
     }
+    const conversionIdentityMappingIdsByKey = new Map<string, Set<string>>();
+    for (const event of conversionEvents) {
+      try {
+        const details = JSON.parse(event.details || '{}') as { legacyMappingId?: string; family?: LegacyMappingConversionFamily; identityMappingId?: string };
+        if (!details.legacyMappingId || !details.family || !details.identityMappingId) continue;
+        const key = `${details.family}:${details.legacyMappingId}`;
+        const mappingIds = conversionIdentityMappingIdsByKey.get(key) || new Set<string>();
+        mappingIds.add(details.identityMappingId);
+        conversionIdentityMappingIdsByKey.set(key, mappingIds);
+      } catch { /* A malformed historic audit row must not block diagnostics. */ }
+    }
+
+    const convertedCandidates = (family: LegacyMappingConversionFamily, legacyMappingId: string, candidates: IdentityEntitlementMapping[]): IdentityEntitlementMapping[] => {
+      const recordedIds = conversionIdentityMappingIdsByKey.get(`${family}:${legacyMappingId}`);
+      return recordedIds ? candidates.filter((candidate) => recordedIds.has(candidate.id)) : candidates;
+    };
 
     const items: LegacyMappingCoverageItem[] = [];
     for (const mapping of platformMappings) {
       const unsupported = unsupportedReason(mapping, providersById, 'platform_role');
       if (unsupported) { items.push({ id: mapping.id, family: 'platform_role', status: 'manual_redesign_required', reason: unsupported, candidateIdentityMappingIds: [], verification: null }); continue; }
       const roleId = mapping.targetRole === 'admin' ? SYSTEM_ROLE_IDS.PLATFORM_ADMIN : SYSTEM_ROLE_IDS.PLATFORM_USER;
-      const candidates = identityMappings.filter((candidate) => candidate.tenantId === null && matchShape(mapping, candidate, providersById.get(candidate.providerId)) && assignments.some((assignment) => assignment.principalType === 'group' && assignment.principalId === candidate.targetGroupId && assignment.roleId === roleId && assignment.scopeType === 'platform'));
+      const candidates = convertedCandidates('platform_role', mapping.id, identityMappings.filter((candidate) => candidate.tenantId === null && matchShape(mapping, candidate, providersById.get(candidate.providerId)) && assignments.some((assignment) => assignment.principalType === 'group' && assignment.principalId === candidate.targetGroupId && assignment.roleId === roleId && assignment.scopeType === 'platform')));
       items.push({ id: mapping.id, family: 'platform_role', status: candidates.length ? 'replacement_candidate' : 'no_replacement_candidate', reason: candidates.length ? 'A matching provider-neutral group grant exists; verify representative sign-in before retirement.' : 'No matching provider-neutral group grant was found.', candidateIdentityMappingIds: candidates.map((candidate) => candidate.id), verification: verificationByKey.get(`platform_role:${mapping.id}`) || null });
     }
     for (const mapping of groupMappings) {
       const unsupported = unsupportedReason(mapping, providersById, 'group');
       if (unsupported) { items.push({ id: mapping.id, family: 'group', status: 'manual_redesign_required', reason: unsupported, candidateIdentityMappingIds: [], verification: null }); continue; }
-      const candidates = identityMappings.filter((candidate) => candidate.targetGroupId === mapping.targetGroupId && matchShape(mapping, candidate, providersById.get(candidate.providerId)));
+      const candidates = convertedCandidates('group', mapping.id, identityMappings.filter((candidate) => candidate.targetGroupId === mapping.targetGroupId && matchShape(mapping, candidate, providersById.get(candidate.providerId))));
       items.push({ id: mapping.id, family: 'group', status: candidates.length ? 'replacement_candidate' : 'no_replacement_candidate', reason: candidates.length ? 'A matching provider-neutral group mapping exists; verify representative sign-in before retirement.' : 'No matching provider-neutral group mapping was found.', candidateIdentityMappingIds: candidates.map((candidate) => candidate.id), verification: verificationByKey.get(`group:${mapping.id}`) || null });
     }
     for (const mapping of assignmentMappings) {
       if (mapping.targetSelectorType !== 'engine_id' || !mapping.targetEngineId) { items.push({ id: mapping.id, family: 'engine_assignment', status: 'manual_redesign_required', reason: 'Dynamic engine selectors require an explicit Engine Set and group assignment.', candidateIdentityMappingIds: [], verification: null }); continue; }
       const unsupported = unsupportedReason(mapping, providersById, 'engine_assignment');
       if (unsupported) { items.push({ id: mapping.id, family: 'engine_assignment', status: 'manual_redesign_required', reason: unsupported, candidateIdentityMappingIds: [], verification: null }); continue; }
-      const candidates = identityMappings.filter((candidate) => matchShape(mapping, candidate, providersById.get(candidate.providerId)) && assignments.some((assignment) => assignment.principalType === 'group' && assignment.principalId === candidate.targetGroupId && assignment.roleId === mapping.targetRoleId && assignment.scopeType === 'engine' && assignment.scopeId === mapping.targetEngineId));
+      const candidates = convertedCandidates('engine_assignment', mapping.id, identityMappings.filter((candidate) => matchShape(mapping, candidate, providersById.get(candidate.providerId)) && assignments.some((assignment) => assignment.principalType === 'group' && assignment.principalId === candidate.targetGroupId && assignment.roleId === mapping.targetRoleId && assignment.scopeType === 'engine' && assignment.scopeId === mapping.targetEngineId)));
       items.push({ id: mapping.id, family: 'engine_assignment', status: candidates.length ? 'replacement_candidate' : 'no_replacement_candidate', reason: candidates.length ? 'A matching provider-neutral exact-engine group grant exists; verify engine access before retirement.' : 'No matching provider-neutral exact-engine group grant was found.', candidateIdentityMappingIds: candidates.map((candidate) => candidate.id), verification: verificationByKey.get(`engine_assignment:${mapping.id}`) || null });
     }
     return items;

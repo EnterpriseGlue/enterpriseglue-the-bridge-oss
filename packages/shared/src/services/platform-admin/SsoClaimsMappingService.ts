@@ -20,6 +20,7 @@ import { authzGroupService } from './AuthzGroupService.js';
 import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
 import { authorizationAttributeEntitlementId } from './IdentityProviderAdapter.js';
 import { permissionService, SYSTEM_ROLE_IDS } from './permissions.js';
+import { recordLegacyMappingConversion } from './LegacyMappingConversionAudit.js';
 
 export type ClaimType = 'group' | 'role' | 'email_domain' | 'custom';
 export type PlatformRole = SharedPlatformRole;
@@ -393,7 +394,18 @@ class SsoClaimsMappingServiceClass {
         : await identityEntitlementMappingService.create({ providerKey, targetGroupKey, entitlementType, externalId, matchOperator, syncMode: 'authoritative' }, null, manager);
       const roleId = normalizeRoleValue(legacy.targetRole) === 'admin' ? SYSTEM_ROLE_IDS.PLATFORM_ADMIN : SYSTEM_ROLE_IDS.PLATFORM_USER;
       const assignment = await permissionService.assignRole({ tenantId: null, createdById, principalType: 'group', principalId: group.id, roleId, resourceType: 'platform', resourceId: null }, manager);
-      return { legacyMappingId: legacy.id, mapping, assignment, created: !existingMapping, createdGroup };
+      const created = !existingMapping;
+      await recordLegacyMappingConversion(manager, {
+        tenantId: null,
+        actorId: createdById,
+        family: 'platform_role',
+        legacyMappingId: legacy.id,
+        identityMappingId: mapping.id,
+        providerId: provider.id,
+        providerKey: provider.key,
+        created,
+      });
+      return { legacyMappingId: legacy.id, mapping, assignment, created, createdGroup };
     });
   }
   /**

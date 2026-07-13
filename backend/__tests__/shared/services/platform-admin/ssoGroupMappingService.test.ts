@@ -3,9 +3,13 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog, AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, PlatformSettings, SsoGroupMapping } from '@enterpriseglue/shared/db/entities/index.js';
 import { ssoGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.js';
 
-const identityEntitlementMappingService = vi.hoisted(() => ({ create: vi.fn() }));
+const { identityEntitlementMappingService, recordLegacyMappingConversion } = vi.hoisted(() => ({
+  identityEntitlementMappingService: { create: vi.fn() },
+  recordLegacyMappingConversion: vi.fn(),
+}));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js', () => ({ identityEntitlementMappingService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyMappingConversionAudit.js', () => ({ recordLegacyMappingConversion }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
