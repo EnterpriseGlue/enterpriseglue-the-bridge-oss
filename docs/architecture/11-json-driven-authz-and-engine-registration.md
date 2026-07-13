@@ -2055,7 +2055,7 @@ Fixtures should include at least:
 - [ ] ⬜ Exact group, role, scope, and attribute mapping; multiple mappings matching one identity; duplicate external entitlements; and no-match behavior.
 - [ ] ⬜ Group rename with stable immutable id keeps membership; reused display name with different id does not inherit access.
 - [ ] ⬜ Additive synchronization preserves previous provider-managed membership; authoritative synchronization removes stale rows owned by that mapping only.
-- [ ] ⬜ Mapping disable/delete removes only its owned memberships and assignments.
+- [x] ✅ Mapping disable, delete, and meaningful manual mapping updates remove only memberships derived from that mapping. Manual, API, automation, and other-provider memberships remain untouched.
 - [ ] ⬜ Manual, API, automation, bootstrap, and other-provider assignments survive reconciliation.
 - [ ] ⬜ Concurrent login and scheduled reconciliation remain idempotent under the uniqueness constraints.
 - [ ] ⬜ Provider partial group result or group-overage state fails closed when authoritative completeness is required.

@@ -153,7 +153,24 @@ class IdentityEntitlementMappingService {
     if (!provider) throw Errors.notFound('Identity provider not found');
     if (!group) throw Errors.notFound('Authorization group not found');
     const isActive = input.isActive ?? existing.isActive;
-    await repo.update({ id }, { providerId: provider.id, targetGroupId: group.id, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, updatedAt: Date.now() });
+    const values = { providerId: provider.id, targetGroupId: group.id, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, updatedAt: Date.now() };
+    const membershipDefinitionChanged = existing.providerId !== values.providerId
+      || existing.targetGroupId !== values.targetGroupId
+      || existing.entitlementType !== values.entitlementType
+      || existing.externalId !== values.externalId
+      || existing.matchOperator !== values.matchOperator
+      || existing.syncMode !== values.syncMode
+      || existing.isActive !== values.isActive;
+    await dataSource.transaction(async (manager) => {
+      if (membershipDefinitionChanged) {
+        await manager.getRepository(AuthzGroupMembership).delete({
+          ...tenantWhere(tenantId),
+          source: 'identity_provider',
+          sourceRef: `identity_mapping:${existing.id}`,
+        } as any);
+      }
+      await manager.getRepository(IdentityEntitlementMapping).update({ id }, values);
+    });
     return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, configKey: null, sourceRef: null };
   }
 

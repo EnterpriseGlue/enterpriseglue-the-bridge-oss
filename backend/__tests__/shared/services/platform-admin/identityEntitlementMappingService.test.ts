@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { matchesIdentityEntitlement, identityEntitlementMappingService } from '@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
+import { AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
 import { vi, type Mock } from 'vitest';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -44,5 +44,40 @@ describe('identity entitlement mapping', () => {
     await identityEntitlementMappingService.remove('mapping-1', 'tenant-a');
     expect(membershipRepo.delete).toHaveBeenCalledWith({ tenantId: 'tenant-a', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
     expect(mappingRepo.delete).toHaveBeenCalledWith({ id: 'mapping-1' });
+  });
+
+  it('cleans only its derived memberships when a manual mapping is disabled', async () => {
+    const existing = {
+      id: 'mapping-1', tenantId: 'tenant-a', providerId: 'provider-1', targetGroupId: 'group-1', entitlementType: 'group',
+      externalId: 'ops', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, sourceRef: null,
+    };
+    const mappingRepo = {
+      findOne: vi.fn().mockResolvedValue(existing),
+      find: vi.fn().mockResolvedValue([existing]),
+      update: vi.fn().mockResolvedValue(undefined),
+    };
+    const providerRepo = {
+      find: vi.fn().mockResolvedValue([{ id: 'provider-1', key: 'identity.oidc.main' }]),
+      findOne: vi.fn().mockResolvedValue({ id: 'provider-1', key: 'identity.oidc.main' }),
+    };
+    const groupRepo = {
+      find: vi.fn().mockResolvedValue([{ id: 'group-1', key: 'group.operators' }]),
+      findOne: vi.fn().mockResolvedValue({ id: 'group-1', key: 'group.operators' }),
+    };
+    const membershipRepo = { delete: vi.fn().mockResolvedValue(undefined) };
+    const repositories = (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo
+      : entity === IdentityProvider ? providerRepo
+        : entity === AuthzGroupMembership ? membershipRepo
+          : entity === AuthzGroup ? groupRepo
+            : {};
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: repositories,
+      transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
+    });
+
+    await identityEntitlementMappingService.update('mapping-1', { isActive: false }, 'tenant-a');
+
+    expect(membershipRepo.delete).toHaveBeenCalledWith({ tenantId: 'tenant-a', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
+    expect(mappingRepo.update).toHaveBeenCalledWith({ id: 'mapping-1' }, expect.objectContaining({ isActive: false }));
   });
 });
