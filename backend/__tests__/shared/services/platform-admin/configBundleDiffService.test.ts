@@ -7,6 +7,7 @@ import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persis
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -21,7 +22,14 @@ const bundle = {
   imports: ['./roles.json', './groups.json'],
 };
 
-function mockDataSource(roles: unknown[] = [], groups: unknown[] = [], permissions: unknown[] = [], engines: unknown[] = [], identityProviders: unknown[] = []) {
+function mockDataSource(
+  roles: unknown[] = [],
+  groups: unknown[] = [],
+  permissions: unknown[] = [],
+  engines: unknown[] = [],
+  identityProviders: unknown[] = [],
+  identityMappings: unknown[] = [],
+) {
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository: (entity: unknown) => {
       if (entity === RbacRole) return { find: vi.fn().mockResolvedValue(roles) };
@@ -31,6 +39,7 @@ function mockDataSource(roles: unknown[] = [], groups: unknown[] = [], permissio
       if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue([]) };
       if (entity === RbacRolePermission) return { find: vi.fn().mockResolvedValue(permissions) };
       if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue(identityProviders) };
+      if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue(identityMappings) };
       throw new Error('Unexpected repository');
     },
   });
@@ -140,6 +149,80 @@ describe('configBundleDiffService', () => {
     }, 'tenant-a');
     expect(result.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({ objectType: 'identity_provider', key: 'identity.oidc.main', operation: 'create' }),
+    ]));
+  });
+
+  it('identifies creation for a provider-neutral identity mapping', async () => {
+    mockDataSource([], [{
+      id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,
+    }], [], [], [{
+      id: 'provider-main', tenantId: 'tenant-a', key: 'identity.oidc.main', sourceRef: 'config_bundle:acme.authz',
+    }]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./groups.json', './identity-mappings.json'] },
+      files: {
+        './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+        './identity-mappings.json': { identityMappings: [{
+          key: 'mapping.operators', providerKey: 'identity.oidc.main',
+          source: { type: 'group', externalId: 'operations' }, targetGroupKey: 'group.operators',
+        }] },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.operators', operation: 'create' }),
+    ]));
+  });
+
+  it('identifies no-op and update states for config-owned identity mappings', async () => {
+    const group = {
+      id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,
+    };
+    const provider = { id: 'provider-main', tenantId: 'tenant-a', key: 'identity.oidc.main', sourceRef: 'config_bundle:acme.authz' };
+    const matchingMapping = {
+      id: 'mapping-operators', tenantId: 'tenant-a', configKey: 'mapping.operators', sourceRef: 'config_bundle:acme.authz',
+      providerId: provider.id, targetGroupId: group.id, entitlementType: 'group', externalId: 'operations',
+      matchOperator: 'exact', syncMode: 'authoritative', isActive: true,
+    };
+    const input = {
+      bundle: { ...bundle, imports: ['./groups.json', './identity-mappings.json'] },
+      files: {
+        './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+        './identity-mappings.json': { identityMappings: [{
+          key: 'mapping.operators', providerKey: 'identity.oidc.main',
+          source: { type: 'group', externalId: 'operations' }, targetGroupKey: 'group.operators',
+        }] },
+      },
+    };
+
+    mockDataSource([], [group], [], [], [provider], [matchingMapping]);
+    const unchanged = await configBundleDiffService.diff(input, 'tenant-a');
+    expect(unchanged.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.operators', operation: 'noop', currentId: 'mapping-operators' }),
+    ]));
+
+    mockDataSource([], [group], [], [], [provider], [{ ...matchingMapping, externalId: 'different-group' }]);
+    const changed = await configBundleDiffService.diff(input, 'tenant-a');
+    expect(changed.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.operators', operation: 'update', currentId: 'mapping-operators' }),
+    ]));
+  });
+
+  it('identifies authoritative archival for omitted config-owned identity mappings', async () => {
+    mockDataSource([], [], [], [], [], [{
+      id: 'mapping-removed', tenantId: 'tenant-a', configKey: 'mapping.removed', sourceRef: 'config_bundle:acme.authz', isActive: true,
+    }]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./identity-mappings.json'] },
+      files: { './identity-mappings.json': { identityMappings: [] } },
+    }, 'tenant-a');
+
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.removed', operation: 'archive', currentId: 'mapping-removed' }),
     ]));
   });
 });

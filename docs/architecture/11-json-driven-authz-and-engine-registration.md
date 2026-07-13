@@ -49,7 +49,7 @@ Current config-as-code status:
 - [x] ✅ Persist custom-role source ownership (`system`, `manual`, `config`, `api`, or `automation`) and stable source references for the future bundle compiler.
 - [x] ✅ Validate cross-file bundle references for roles, permissions, groups, identity providers, engines, Engine Sets, runtime resource sets, assignments, and project-engine targets before future persisted-reference resolution.
 - [x] ✅ Expand copied custom-role templates during preview, including same-scope validation and cycle detection; apply persists the expanded permission list.
-- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine/Engine Set/Runtime Resource Set/identity-provider create, update, no-op, conflict, and authoritative-archive previews. Assignment, mapping, and target detail remains outside the diff response.
+- [x] ✅ Add `POST /api/authz/config-bundles/diff` for side-effect-free persisted role/group/engine/Engine Set/Runtime Resource Set/identity-provider/identity-mapping create, update, no-op, conflict, and authoritative-archive previews. Assignment and target detail remains outside the diff response; focused tests cover the identity-mapping lifecycle states.
 - [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for roles, groups, engines, Engine Sets, Runtime Resource Sets, scoped group assignments, provider-neutral identity providers/mappings, and project-engine targets. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, refuses unsupported object families rather than ignoring them, and source-cleans derived memberships when an authoritative config mapping is changed or disabled.
 - [x] ✅ Persist engine config provenance (`configKey`, source reference/hash, ownership mode, last applied time) plus `runtimeAccessScope`, `deploymentIntegration`, and `connectionMode` with backward-compatible defaults.
 - [x] ✅ Persist provider-neutral identity-provider keys and source references so entitlement mappings resolve configured providers safely; config-bundle creation/update/archive is supported.
@@ -1817,7 +1817,7 @@ The implementation should extend existing packages rather than introduce an auth
 ## Proposed APIs
 
 - [x] ✅ `POST /api/authz/config-bundles/preview` and `POST /api/authz/config-bundles/diff`
-  - Preview validates the bundle; diff covers persisted roles, groups, engines, Engine Sets, runtime resource sets, and identity providers, and reports source-ownership conflicts and authoritative archives. Assignment/mapping/target detail, warnings, acknowledgements, and affected-object analysis remain pending.
+  - Preview validates the bundle; diff covers persisted roles, groups, engines, Engine Sets, runtime resource sets, identity providers, and identity mappings, and reports source-ownership conflicts and authoritative archives. Assignment/target detail, warnings, acknowledgements, and affected-object analysis remain pending.
 - [x] ✅ `POST /api/authz/config-bundles/apply`
   - Applies an exact previewed bundle hash for config-owned roles, groups, engines, Engine Sets, runtime resource sets, group assignments, project-engine targets, identity providers, and identity mappings. Unsupported object families still fail closed.
 - [ ] ⬜ `GET /api/config-bundles/runs`
