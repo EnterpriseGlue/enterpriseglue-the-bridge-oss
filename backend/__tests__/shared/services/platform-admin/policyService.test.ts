@@ -48,7 +48,6 @@ describe('policyService', () => {
 
     const result = await policyService.evaluate(PlatformPermissions.USER_VIEW, {
       userId: 'user-1',
-      platformRole: 'user',
     });
 
     expect(result.decision).toBe('deny');
@@ -88,7 +87,6 @@ describe('policyService', () => {
 
     const result = await policyService.evaluate(PlatformPermissions.USER_VIEW, {
       userId: 'user-1',
-      platformRole: 'user',
     });
 
     expect(result.decision).toBe('allow');
@@ -206,13 +204,18 @@ describe('policyService', () => {
     });
 
     vi.spyOn(permissionService, 'hasPermission').mockResolvedValue(true);
+    vi.spyOn(permissionService, 'evaluatePermission').mockResolvedValue({
+      allowed: true,
+      reason: 'canonical-assignment',
+    } as any);
 
     await policyService.evaluateAndLog(PlatformPermissions.USER_VIEW, {
       userId: 'user-1',
-      platformRole: 'admin',
     });
 
     expect(auditRepo.insert).toHaveBeenCalled();
+    const auditContext = JSON.parse(auditRepo.insert.mock.calls[0][0].context);
+    expect(auditContext).not.toHaveProperty('platformRole');
   });
 
   it('records policy mutation audit events', async () => {

@@ -513,7 +513,6 @@ class PolicyServiceClass {
       reason: result.reason,
       policyId: result.policyId || null,
       context: JSON.stringify({
-        platformRole: context.platformRole,
         tenantId: this.normalizeTenantId(context.tenantId),
         projectRole: context.projectRole,
         engineRole: context.engineRole,

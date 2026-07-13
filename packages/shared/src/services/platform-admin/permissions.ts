@@ -1353,7 +1353,6 @@ export interface PermissionContext {
   principalType?: PrincipalType;
   principalId?: string;
   tenantId?: string | null;
-  platformRole?: string;
   projectRole?: string;
   engineRole?: string;
   resourceType?: ResourceType;
