@@ -209,4 +209,32 @@ describe('bpmn-engine-client', () => {
       }),
     });
   });
+
+  it('reports an engine rejection as an operational failure rather than local authorization denial', async () => {
+    (fetch as unknown as Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: { get: vi.fn().mockReturnValue('application/json') },
+      text: vi.fn().mockResolvedValue('{"message":"engine-only detail"}'),
+    });
+
+    await camundaPost('engine-1', '/job/job-1/execute').then(
+      () => { throw new Error('Expected engine rejection'); },
+      (error: { code: string; statusCode: number; toJSON: () => unknown }) => {
+        expect(error.code).toBe('ENGINE_OPERATION_REJECTED');
+        expect(error.statusCode).toBe(502);
+        expect(error.toJSON()).toEqual({
+          error: 'The engine rejected the requested operation',
+          code: 'ENGINE_OPERATION_REJECTED',
+          details: {
+            engineStatus: 403,
+            operationClass: 'engine.job.mutate',
+          },
+        });
+        expect(JSON.stringify(error.toJSON())).not.toContain('engine-only detail');
+        expect(JSON.stringify(error.toJSON())).not.toContain('localhost:8080');
+      },
+    );
+  });
 });

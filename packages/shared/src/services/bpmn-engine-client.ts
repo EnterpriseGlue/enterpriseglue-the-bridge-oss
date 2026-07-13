@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { fetch } from 'undici'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
-import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js'
+import { AppError, Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js'
 import { secretResolver } from './platform-admin/SecretResolver.js'
 import { getBpmnEngineRequestContext } from './bpmn-engine-request-context.js'
 import type {
@@ -172,6 +172,25 @@ function inferOperationClass(method: string, path: string): string {
   return 'engine.admin'
 }
 
+/**
+ * EnterpriseGlue authorization has already succeeded when this error is
+ * produced. Keep the upstream response distinct from a local authorization
+ * denial and avoid exposing engine URLs or response bodies to callers.
+ */
+export class BpmnEngineOperationError extends AppError {
+  constructor(input: { method: string; path: string; status: number }) {
+    super(
+      'ENGINE_OPERATION_REJECTED',
+      'The engine rejected the requested operation',
+      502,
+      {
+        engineStatus: input.status,
+        operationClass: inferOperationClass(input.method, input.path),
+      },
+    )
+  }
+}
+
 async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<string> {
   if (!cfg.oauthTokenUrl) throw Errors.validation('OAuth2 token URL is required for engine client credentials auth')
   if (!cfg.username) throw Errors.validation('OAuth2 client id is required for engine client credentials auth')
@@ -248,8 +267,8 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
     headers: await buildHeaders(cfg, { engineId, method: 'GET', path }),
   })
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Camunda GET ${url} failed: ${res.status} ${res.statusText} ${text}`)
+    await res.text().catch(() => '')
+    throw new BpmnEngineOperationError({ method: 'GET', path, status: res.status })
   }
   const ct = res.headers.get('content-type') || ''
   if (ct.includes('application/json')) return (await res.json()) as T
@@ -265,8 +284,8 @@ async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT'
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Camunda ${method} ${url} failed: ${res.status} ${res.statusText} ${text}`)
+    await res.text().catch(() => '')
+    throw new BpmnEngineOperationError({ method, path, status: res.status })
   }
   const ct = res.headers.get('content-type') || ''
   if (ct.includes('application/json')) return (await res.json()) as T

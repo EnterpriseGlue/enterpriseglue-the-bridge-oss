@@ -2254,7 +2254,7 @@ Phase 0 exit criteria:
 - [x] ✅ Keep `engine_wide` distributed-engine behavior on the fast path and invoke resource filtering only for `resource_aware` engines.
 - [x] ✅ Ensure process instance, job, incident, batch, and migration mutations resolve inherited process definition or decision scopes before authorization.
 - [x] ✅ Ensure EnterpriseGlue denial prevents engine calls even when the engine might allow the request.
-- [ ] ⬜ Ensure engine-side rejection after EnterpriseGlue allow is reported as an operational engine rejection, not as an authorization fallback.
+- [x] ✅ Ensure engine-side rejection after EnterpriseGlue allow is reported as an operational engine rejection, not as an authorization fallback. The shared engine client returns a sanitized `ENGINE_OPERATION_REJECTED` 502 response with the upstream status and operation class; it never exposes upstream URLs or bodies.
 - [ ] ⬜ Route direct and customer-sidecar engines through one connection resolver so authorization, redaction, retries, timeouts, and audit behavior cannot drift by transport.
 - [ ] ⬜ Ensure effective-access explanations include config bundle lineage.
 - [ ] ⬜ Ensure `auth.type = "none"` engines still require normal EnterpriseGlue project, engine, target, mode, and policy authorization before calls are sent to the sidecar.
