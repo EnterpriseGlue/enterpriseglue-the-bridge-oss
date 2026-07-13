@@ -61,6 +61,12 @@ class IdentityProviderServiceClass {
   async getByKey(key: string, tenantId?: string | null): Promise<IdentityProvider | null> {
     return (await getDataSource()).getRepository(IdentityProvider).findOne({ where: normalized(tenantId) ? { key: key.trim(), tenantId: normalized(tenantId)! } : { key: key.trim(), tenantId: IsNull() } });
   }
+  async getById(id: string, tenantId?: string | null): Promise<IdentityProvider | null> {
+    return (await getDataSource()).getRepository(IdentityProvider).findOne({ where: normalized(tenantId) ? { id: id.trim(), tenantId: normalized(tenantId)! } : { id: id.trim(), tenantId: IsNull() } });
+  }
+  async listEnabledDirectLoginProviders(tenantId?: string | null): Promise<IdentityProvider[]> {
+    return (await this.list(tenantId)).filter((provider) => provider.isEnabled && provider.authenticationMode === 'direct' && (provider.protocol === 'oidc' || provider.protocol === 'ldap'));
+  }
   async upsert(input: IdentityProviderInput): Promise<IdentityProvider> {
     const tenantId = normalized(input.tenantId); const key = input.key.trim();
     if (!key) throw Errors.validation('Identity provider key is required');

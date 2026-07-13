@@ -4,7 +4,7 @@ import express from 'express';
 import request from 'supertest';
 import identityOidcRoute from '../../../../../packages/backend-host/src/modules/auth/routes/identity-oidc.js';
 
-const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn() }));
+const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: vi.fn(), listEnabledDirectLoginProviders: vi.fn() }));
 const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn() }));
 const identityProviderProvisioningService = vi.hoisted(() => ({ provisionOidcUser: vi.fn(), provisionLdapUser: vi.fn() }));
 const directLdapIdentityService = vi.hoisted(() => ({ authenticate: vi.fn() }));
@@ -26,6 +26,8 @@ describe('provider-neutral OIDC routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     identityProviderService.getByKey.mockResolvedValue(provider);
+    identityProviderService.getById.mockResolvedValue(provider);
+    identityProviderService.listEnabledDirectLoginProviders.mockResolvedValue([provider]);
     genericOidcService.createAuthorizationRequest.mockResolvedValue({ url: 'https://issuer.example.test/authorize', codeVerifier: 'verifier' });
     genericOidcService.exchangeCode.mockResolvedValue({ sub: 'subject-1', email: 'person@example.test', nonce: 'nonce' });
     identityProviderProvisioningService.provisionOidcUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', platformRole: 'user', isActive: true });
@@ -56,6 +58,19 @@ describe('provider-neutral OIDC routes', () => {
     expect(genericOidcService.createAuthorizationRequest).not.toHaveBeenCalled();
   });
 
+  it('lists minimal provider-neutral direct-login options without provider configuration', async () => {
+    const response = await request(app).get('/api/auth/providers/enabled');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'provider-1', key: 'identity.oidc.main', protocol: 'oidc', loginMethod: 'redirect' }]);
+  });
+
+  it('starts OIDC login through the exact provider id', async () => {
+    const response = await request(app).get('/api/auth/providers/provider-1/start').redirects(0);
+    expect(response.status).toBe(302);
+    expect(identityProviderService.getById).toHaveBeenCalledWith('provider-1', null);
+    expect(response.headers.location).toBe('https://issuer.example.test/authorize');
+  });
+
   it('completes only when callback state is bound to the exact provider', async () => {
     const state = Buffer.from(JSON.stringify({ timestamp: Date.now(), nonce: 'nonce', providerId: 'provider-1', identityProviderKey: 'identity.oidc.main' })).toString('base64');
     const response = await request(app)
@@ -74,5 +89,13 @@ describe('provider-neutral OIDC routes', () => {
     expect(directLdapIdentityService.authenticate).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'ldap' }), 'person@example.test', 'directory-password');
     expect(response.body.user.email).toBe('person@example.test');
     expect(response.headers['set-cookie']).toEqual(expect.arrayContaining([expect.stringContaining('accessToken='), expect.stringContaining('refreshToken=')]));
+  });
+
+  it('authenticates direct LDAP through the exact provider id', async () => {
+    identityProviderService.getById.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
+    const response = await request(app).post('/api/auth/providers/provider-1/login').send({ username: 'person@example.test', password: 'directory-password' });
+    expect(response.status).toBe(200);
+    expect(identityProviderService.getById).toHaveBeenCalledWith('provider-1', null);
+    expect(directLdapIdentityService.authenticate).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'ldap' }), 'person@example.test', 'directory-password');
   });
 });

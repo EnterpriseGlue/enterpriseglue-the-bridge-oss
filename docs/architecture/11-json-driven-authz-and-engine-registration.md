@@ -1842,11 +1842,11 @@ The implementation should extend existing packages rather than introduce an auth
   - Starts an asynchronous provider reconciliation run and returns its run id.
 - [ ] ⬜ `GET /api/identity/sync-runs` and `GET /api/identity/sync-runs/:id/events`
   - Exposes provider-neutral login/scheduled reconciliation diagnostics.
-- [ ] ⬜ `GET /api/auth/providers/enabled`
-  - Returns minimal provider-id-bound login options without secrets or mapping details.
-- [ ] ⬜ `GET /api/auth/providers/:providerId/start` and protocol-appropriate callback route
-  - Starts OIDC/SAML login for the exact provider id and binds provider, tenant, redirect, nonce, and anti-replay state.
-- [ ] ⬜ `POST /api/auth/providers/:providerId/login`
+- [x] ✅ `GET /api/auth/providers/enabled`
+  - Returns minimal provider-id-bound OIDC/LDAP direct-login options without secrets or mapping details.
+- [x] ✅ `GET /api/auth/providers/:providerId/start` for direct OIDC providers
+  - Starts OIDC login for the exact provider id and binds provider, tenant, redirect, nonce, and anti-replay state. Provider-neutral SAML start/callback remains pending.
+- [x] ✅ `POST /api/auth/providers/:providerId/login`
   - Performs direct LDAP authentication only for providers configured with `authenticationMode = direct`; rate limits and generic credential errors are mandatory.
 - [ ] ⬜ `GET /engines-api/engines/:engineId/runtime-resources`
   - Lists authorized inventory or admin diagnostics by runtime kind, key, tenant, lineage, and status.
@@ -2106,7 +2106,7 @@ This phase is required because the current implementation still carries compatib
 
 - [ ] ⬜ Add `IdentityProvider`, `ExternalIdentity`, `ExternalIdentitySnapshot`, `IdentityEntitlementMapping`, `IdentitySyncRun`, and `IdentitySyncEvent` contracts with unambiguous EnterpriseGlue tenant and external directory fields.
 - [x] ✅ Add the provider-neutral `ExternalIdentity` account-link entity and service with unique tenant/provider/subject identity, user linkage, directory-tenant metadata, and active/last-seen lifecycle fields. Existing normalized SSO snapshots now maintain the link; provider and entitlement contract replacement remains in progress.
-- [ ] ⬜ Complete provider-id-bound OIDC/SAML start/callback flows and LDAP direct/claims-only modes. Generic OIDC support and exact provider state validation are implemented; SAML compatibility remains and LDAP is pending.
+- [ ] ⬜ Complete provider-id-bound OIDC/SAML start/callback flows and LDAP direct/claims-only modes. Generic OIDC and direct LDAP now support exact provider-id discovery/login; SAML compatibility remains and LDAP claims-only reconciliation remains pending.
 - [x] ✅ Bind SAML start/callback state and metadata generation to an optional exact provider id. Explicit-provider login resolves the same configured SAML provider for authorization redirect, assertion validation, and metadata; legacy no-provider SAML login remains compatible. Generic OIDC, Microsoft configuration migration, and LDAP modes remain pending.
 - [ ] ⬜ Replace provider `defaultRole` with an explicit default/internal-group mapping and converge all external access through groups plus scoped assignments.
 - [ ] ⬜ Define verified-email account-linking policy, collision handling, unlink/deactivate behavior, and break-glass local account behavior.

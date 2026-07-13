@@ -8,6 +8,7 @@ import { identityProviderService } from '@enterpriseglue/shared/services/platfor
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
 import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
+import type { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { auditFromRequest, logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
@@ -34,11 +35,7 @@ function requireDirectOidc(provider: { protocol: string; isEnabled: boolean; aut
   if (provider.authenticationMode !== 'direct') throw Errors.forbidden('This identity provider accepts upstream claims and cannot initiate login');
 }
 
-router.get('/api/auth/identity/:key/start', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const providerKey = typeof req.params.key === 'string' ? req.params.key : '';
-  if (!providerKey) throw Errors.validation('Identity provider key is required');
-  const provider = await identityProviderService.getByKey(providerKey, req.tenant?.tenantId || null);
-  if (!provider) throw Errors.notFound('Identity provider not found');
+async function startOidcLogin(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
   requireDirectOidc(provider);
   const state = buildSsoState(req, provider.id, { key: provider.key, tenantId: provider.tenantId });
   const parsed = parseSsoState(state);
@@ -48,6 +45,43 @@ router.get('/api/auth/identity/:key/start', apiLimiter, asyncHandler(async (req:
   res.cookie(stateCookie, state, cookieOptions);
   res.cookie(verifierCookie, request.codeVerifier, cookieOptions);
   res.redirect(request.url);
+}
+
+async function authenticateDirectLdap(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
+  if (provider.protocol !== 'ldap' || !provider.isEnabled || provider.authenticationMode !== 'direct') throw Errors.unauthorized('Invalid directory credentials');
+  try {
+    const identity = await directLdapIdentityService.authenticate(provider, req.body.username, req.body.password);
+    const user = await identityProviderProvisioningService.provisionLdapUser(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
+    if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
+    await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap' } }));
+    const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: config.jwtAccessTokenExpires * 1000, path: '/' };
+    res.cookie('accessToken', generateAccessToken(user as any), cookieOptions);
+    res.cookie('refreshToken', generateRefreshToken(user as any), { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, platformRole: user.platformRole }, expiresIn: config.jwtAccessTokenExpires });
+  } catch (error) {
+    if ((error as any)?.statusCode === 403) throw error;
+    await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_FAILED, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap', reason: 'invalid_directory_credentials' } }));
+    throw Errors.unauthorized('Invalid directory credentials');
+  }
+}
+
+router.get('/api/auth/providers/enabled', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const providers = await identityProviderService.listEnabledDirectLoginProviders(req.tenant?.tenantId || null);
+  res.json(providers.map((provider) => ({ id: provider.id, key: provider.key, protocol: provider.protocol, loginMethod: provider.protocol === 'oidc' ? 'redirect' : 'password' })));
+}));
+
+router.get('/api/auth/providers/:providerId/start', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const provider = await identityProviderService.getById(String(req.params.providerId || ''), req.tenant?.tenantId || null);
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  await startOidcLogin(req, res, provider);
+}));
+
+router.get('/api/auth/identity/:key/start', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const providerKey = typeof req.params.key === 'string' ? req.params.key : '';
+  if (!providerKey) throw Errors.validation('Identity provider key is required');
+  const provider = await identityProviderService.getByKey(providerKey, req.tenant?.tenantId || null);
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  await startOidcLogin(req, res, provider);
 }));
 
 router.get('/api/auth/identity/callback', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
@@ -78,21 +112,14 @@ router.post('/api/auth/identity/:key/ldap/login', apiLimiter, authLimiter, valid
   const providerKey = typeof req.params.key === 'string' ? req.params.key : '';
   if (!providerKey) throw Errors.validation('Identity provider key is required');
   const provider = await identityProviderService.getByKey(providerKey, req.tenant?.tenantId || null);
-  if (!provider || provider.protocol !== 'ldap' || !provider.isEnabled || provider.authenticationMode !== 'direct') throw Errors.unauthorized('Invalid directory credentials');
-  try {
-    const identity = await directLdapIdentityService.authenticate(provider, req.body.username, req.body.password);
-    const user = await identityProviderProvisioningService.provisionLdapUser(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
-    if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
-    await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap' } }));
-    const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: config.jwtAccessTokenExpires * 1000, path: '/' };
-    res.cookie('accessToken', generateAccessToken(user as any), cookieOptions);
-    res.cookie('refreshToken', generateRefreshToken(user as any), { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
-    res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, platformRole: user.platformRole }, expiresIn: config.jwtAccessTokenExpires });
-  } catch (error) {
-    if ((error as any)?.statusCode === 403) throw error;
-    await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_FAILED, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap', reason: 'invalid_directory_credentials' } }));
-    throw Errors.unauthorized('Invalid directory credentials');
-  }
+  if (!provider) throw Errors.unauthorized('Invalid directory credentials');
+  await authenticateDirectLdap(req, res, provider);
+}));
+
+router.post('/api/auth/providers/:providerId/login', apiLimiter, authLimiter, validateBody(ldapLoginSchema), asyncHandler(async (req: Request, res: Response) => {
+  const provider = await identityProviderService.getById(String(req.params.providerId || ''), req.tenant?.tenantId || null);
+  if (!provider) throw Errors.unauthorized('Invalid directory credentials');
+  await authenticateDirectLdap(req, res, provider);
 }));
 
 export default router;
