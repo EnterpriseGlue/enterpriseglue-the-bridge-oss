@@ -514,8 +514,6 @@ class PolicyServiceClass {
       policyId: result.policyId || null,
       context: JSON.stringify({
         tenantId: this.normalizeTenantId(context.tenantId),
-        projectRole: context.projectRole,
-        engineRole: context.engineRole,
         userAttributes: context.userAttributes,
         resourceAttributes: context.resourceAttributes,
       }),

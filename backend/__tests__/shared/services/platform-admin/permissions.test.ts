@@ -136,7 +136,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.hasPermission(PlatformPermissions.USER_VIEW, {
       userId: 'user-1',
-      platformRole: 'user',
     });
 
     expect(result).toBe(true);
@@ -176,7 +175,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(PlatformPermissions.USERS_UPDATE, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'platform',
     });
 
@@ -220,22 +218,18 @@ describe('permissionService', () => {
 
     await expect(permissionService.hasPermission(PlatformPermissions.AUTHZ_ROLES_VIEW, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'platform',
     })).resolves.toBe(true);
     await expect(permissionService.hasPermission(PlatformPermissions.ENGINE_SETS_VIEW, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'platform',
     })).resolves.toBe(true);
     await expect(permissionService.hasPermission(PlatformPermissions.PROJECT_ENGINE_TARGETS_VIEW, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'platform',
     })).resolves.toBe(true);
     await expect(permissionService.hasPermission(PlatformPermissions.SSO_ASSIGNMENTS_VIEW, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'platform',
     })).resolves.toBe(true);
   });
@@ -274,17 +268,14 @@ describe('permissionService', () => {
 
     await expect(permissionService.hasPermission(PlatformPermissions.SSO_PROVIDERS_MANAGE, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'platform',
     })).resolves.toBe(true);
     await expect(permissionService.hasPermission(PlatformPermissions.API_CLIENTS_MANAGE, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'platform',
     })).resolves.toBe(true);
     await expect(permissionService.hasPermission(PlatformPermissions.SERVICE_ACCOUNTS_VIEW, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'platform',
     })).resolves.toBe(true);
   });
@@ -321,7 +312,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(ProjectPermissions.MEMBERS_UPDATE_ROLE, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'project',
       resourceId: 'project-1',
     });
@@ -375,7 +365,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(EnginePermissions.MEMBERS_UPDATE_ROLE, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
@@ -416,7 +405,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(EnginePermissions.SECRETS_VIEW, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
@@ -459,7 +447,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(EnginePermissions.MEMBERS_VIEW, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
@@ -534,7 +521,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(EnginePermissions.PROJECT_ACCESS_APPROVE, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
@@ -575,7 +561,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(EnginePermissions.ENVIRONMENT_SET, {
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
@@ -615,8 +600,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(EnginePermissions.DEPLOY, {
       userId: 'user-1',
-      platformRole: 'user',
-      engineRole: 'none',
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
@@ -663,8 +646,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(EnginePermissions.DEPLOY, {
       userId: 'user-1',
-      platformRole: 'user',
-      engineRole: 'none',
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
@@ -739,8 +720,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(EnginePermissions.DEPLOY, {
       userId: 'user-1',
-      platformRole: 'user',
-      engineRole: 'none',
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
@@ -788,7 +767,7 @@ describe('permissionService', () => {
       throw new Error('Unexpected repository');
     } });
 
-    const result = await permissionService.evaluatePermission(EnginePermissions.DEPLOY, { userId: 'user-1', platformRole: 'user', engineRole: 'none', resourceType: 'engine', resourceId: 'engine-1' });
+    const result = await permissionService.evaluatePermission(EnginePermissions.DEPLOY, { userId: 'user-1', resourceType: 'engine', resourceId: 'engine-1' });
 
     expect(result.allowed).toBe(true);
     expect(result.sources[0]).toMatchObject({
@@ -900,8 +879,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(EnginePermissions.DEPLOY, {
       userId: 'user-1',
-      platformRole: 'user',
-      engineRole: 'none',
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
@@ -976,8 +953,6 @@ describe('permissionService', () => {
     const result = await permissionService.evaluatePermission(EnginePermissions.DEPLOY, {
       userId: 'user-1',
       tenantId: 'tenant-a',
-      platformRole: 'user',
-      engineRole: 'none',
       resourceType: 'engine',
       resourceId: 'engine-1',
     });
@@ -1507,7 +1482,6 @@ describe('permissionService', () => {
 
     const result = await permissionService.evaluatePermission(PlatformPermissions.USER_MANAGE, {
       userId: 'user-1',
-      platformRole: 'user',
     });
 
     expect(result).toEqual({ allowed: false, reason: 'no-permission', sources: [] });

@@ -216,6 +216,8 @@ describe('policyService', () => {
     expect(auditRepo.insert).toHaveBeenCalled();
     const auditContext = JSON.parse(auditRepo.insert.mock.calls[0][0].context);
     expect(auditContext).not.toHaveProperty('platformRole');
+    expect(auditContext).not.toHaveProperty('projectRole');
+    expect(auditContext).not.toHaveProperty('engineRole');
   });
 
   it('records policy mutation audit events', async () => {
