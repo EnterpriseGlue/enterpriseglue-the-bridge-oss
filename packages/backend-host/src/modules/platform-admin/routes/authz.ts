@@ -800,8 +800,9 @@ router.delete('/api/authz/external-engine-systems/:id', apiLimiter, requireAuth,
   }
 }));
 
-router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatformAction('platform.external-engines.read'), asyncHandler(async (_req: Request, res: Response) => {
+router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatformAction('platform.external-engines.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
+    const tenantId = req.tenant?.tenantId || null;
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
     const registrationRepo = dataSource.getRepository(ExternalEngineRegistration);
@@ -817,7 +818,11 @@ router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatfo
       const engines = await engineRepo.find({
         where: { id: In(registrations.map((registration) => registration.engineId)) },
       });
-      const enginesById = new Map(engines.map((engine) => [engine.id, engine]));
+      const enginesById = new Map(
+        engines
+          .filter((engine) => tenantVisible(engine.tenantId, tenantId))
+          .map((engine) => [engine.id, engine])
+      );
       res.json(registrations
         .map((registration) => {
           const engine = enginesById.get(registration.engineId);
@@ -853,13 +858,13 @@ router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatfo
       return;
     }
 
-    const engines = await engineRepo.find({
+    const engines = (await engineRepo.find({
       where: [
         { externalId: Not(IsNull()) },
         { registrationSource: 'external_api' },
       ],
       order: { updatedAt: 'DESC' },
-    });
+    })).filter((engine) => tenantVisible(engine.tenantId, tenantId));
     const systemIds = Array.from(new Set(engines.map((engine) => engine.externalSystemId).filter((id): id is string => Boolean(id))));
     const systems = systemIds.length > 0 ? await systemRepo.find({ where: { id: In(systemIds) } }) : [];
     const systemsById = new Map(systems.map((system) => [system.id, system]));
