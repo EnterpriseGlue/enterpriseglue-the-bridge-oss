@@ -48,6 +48,7 @@ export * from './ConfigBundlePreviewService.js';
 export * from './ConfigBundleDiffService.js';
 export * from './ConfigBundleApplyService.js';
 export * from './ConfigBundleExportService.js';
+export * from './ConfigBundleArchiveService.js';
 export * from './RuntimeResourceInventoryService.js';
 export * from './DeploymentReceiptService.js';
 export * from './DeploymentDiscoveryService.js';

@@ -30,7 +30,19 @@ if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument |
       if (!response.ok) throw new Error(result.message || result.error || `Export failed: ${response.status}`);
       console.log(JSON.stringify(result, null, 2));
     } else if (needsFile) {
-      const payload = JSON.parse(await readFile(argument, 'utf8'));
+      const isZip = argument.toLowerCase().endsWith('.zip');
+      const payload = isZip
+        ? await (async () => {
+          const response = await fetch(`${apiUrl}/api/authz/config-bundles/import-zip`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${token}`, 'content-type': 'application/zip' },
+            body: await readFile(argument),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.message || result.error || `ZIP import failed: ${response.status}`);
+          return result;
+        })()
+        : JSON.parse(await readFile(argument, 'utf8'));
       const previewRequest = await request('/api/authz/config-bundles/preview', { method: 'POST', body: JSON.stringify(payload) });
       console.log(JSON.stringify(previewRequest.result, null, 2));
       if (!previewRequest.response.ok || !previewRequest.result.valid || !previewRequest.result.canonicalHash) {

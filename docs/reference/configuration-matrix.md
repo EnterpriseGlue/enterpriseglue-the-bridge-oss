@@ -99,7 +99,7 @@ This matrix lists current executable settings; see [Deploy Authorization Configu
 | RUNTIME_INVENTORY_RECONCILIATION_INTERVAL_MS | No | disabled | Positive milliseconds for scheduled runtime inventory refresh of active resource-aware engines |
 | RUNTIME_INVENTORY_RECONCILIATION_TENANT_IDS | No | global | Comma-separated tenant ids; use `global`/`null` for the OSS/default tenant |
 | RUNTIME_INVENTORY_RECONCILIATION_RUN_ON_START | No | false | Run a reconciliation pass after backend startup |
-| EG_CONFIG_BUNDLE_PATH | No | unset | Absolute path to a mounted JSON configuration payload |
+| EG_CONFIG_BUNDLE_PATH | No | unset | Absolute path to a mounted JSON configuration envelope or folder-style ZIP archive |
 | EG_CONFIG_BOOTSTRAP_MODE | No | disabled | `disabled`, `validate`, or `apply`; no bundle is read when disabled |
 | EG_CONFIG_EXPECTED_SHA256 | No | unset | Optional SHA-256 of the mounted payload |
 | EG_CONFIG_EXPECTED_TENANT_SCOPE | No | unset | Expected `platform` or tenant scope; required for bootstrap apply |

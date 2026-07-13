@@ -76,7 +76,7 @@ Current config-as-code status:
 - [x] ✅ Make `enterpriseglue_authoritative` the v1 runtime authorization mode and keep engine-native mirroring/import as later explicit modes.
 - [x] ✅ Keep engine registration separate from engine authorization, then combine them in dropdown and deployment eligibility APIs.
 - [x] ✅ Keep runtime authorization based on database records and evaluator decisions, not direct JSON reads.
-- [x] ✅ Add API-only JSON config-bundle preview, diff, hash-bound apply, server-side export, and apply-run history endpoints. Folder/ZIP import remains pending.
+- [x] ✅ Add config-bundle preview, diff, hash-bound apply, server-side export, apply-run history, and ZIP-to-envelope import endpoints. The same ZIP adapter is available to the UI, CI CLI, and bootstrap path.
 - [ ] ⬜ Add UI and CI/CD workflows for managing config bundles.
 - [ ] ⬜ Add config-managed source ownership and drift diagnostics for imported objects.
 - [x] ✅ Add a Role Library with a fixed-width role list and focused single-role grouped permission editor. The legacy matrix remains available in Access Control for compatibility until it can be removed.
@@ -389,7 +389,7 @@ validate and canonicalize all files
 
 Interface requirements:
 
-- [ ] ⬜ Accept a single JSON document or a ZIP containing the declared imported JSON files.
+- [x] ✅ Accept a single JSON envelope or a folder-style ZIP containing `bundle.json` plus declared imported JSON files. ZIP content is converted to the same envelope before normal validation, diff, or apply.
 - [ ] ⬜ Reject undeclared files, path traversal, duplicate object keys, unknown schema versions, plaintext secrets, and test-only fixture files.
 - [ ] ⬜ Extend current file-and-path validation errors with object keys, severity, and remediation guidance.
 - [x] ✅ Make the current schema preview side-effect free; provider connectivity checks are explicit optional operations, never implicit network calls during schema validation.
@@ -1868,7 +1868,7 @@ Authorization:
 
 Config transport and response rules:
 
-- [ ] ⬜ Accept `application/json` for a single-file bundle and `application/zip` or multipart upload for a folder bundle.
+- [x] ✅ Accept `application/json` for a single-file envelope and `application/zip` for a folder-style bundle through `POST /api/authz/config-bundles/import-zip`. Multipart upload remains unnecessary while the UI and CI use this bounded ZIP adapter.
 - [x] ✅ Return a canonical bundle hash, source key, object-level diff, warnings, required acknowledgement ids, and non-PII current-membership impact counts. Acknowledgements are enforced by hash-bound apply. Provider reconciliation preview is available separately from the identity provider UI and is limited to current normalized snapshots.
 - [x] ✅ Add deterministic config-bundle preview validation for declared JSON imports with strict schema validation, object counts, undeclared/missing file rejection, and canonical SHA-256 hash. The current diff covers every object family that apply mutates, enforces required acknowledgements, and reports aggregate current-membership impact; exact external-identity reconciliation preview remains pending.
 - [x] ✅ Require idempotency keys for every apply caller. The API/CLI supports persisted tenant-scoped idempotency keys and replays completed matching receipts; the Platform Settings UI generates one per successful preview and reuses it for the corresponding apply attempt.
@@ -2242,7 +2242,7 @@ Phase 0 exit criteria:
 
 ### Phase 5: APIs And OpenAPI
 
-- [x] ✅ Add config bundle preview/diff/apply APIs, hash-bound apply audit events, recent apply-run history API, server-side export of all apply-supported config-owned object families, and `pnpm authz:config` CI preview/apply command. Multi-file folder/ZIP import remains pending.
+- [x] ✅ Add config bundle preview/diff/apply APIs, hash-bound apply audit events, recent apply-run history API, server-side export of all apply-supported config-owned object families, ZIP-to-envelope import, and `pnpm authz:config` CI preview/apply command for JSON or ZIP input.
 - [x] ✅ Add runtime resource inventory and runtime resource set read/preview/reconcile APIs. On-demand reconciliation preserves richer lineage and deactivates only definitions absent from a confirmed engine response.
 - [ ] ⬜ Add provider-neutral identity provider, identity mapping, mapping test, sync-run, and sync-event APIs.
 - [x] ✅ Add direct deployment receipt and deployment lineage APIs with machine-principal authorization and idempotency keys. Receipts are merged into the canonical deployment history, so proxy and externally reported deployment lineage use one model.
@@ -2257,8 +2257,8 @@ Phase 0 exit criteria:
 
 ### Phase 6: UI
 
-- [x] ✅ Add Platform Settings Configuration tab with pasted JSON preview/diff and exact-hash apply, server-side export, recent apply-run history, and a compact materialization/identity-replay receipt. Upload/ZIP import remains pending; the API-driven CI CLI is documented and available separately.
-- [x] ✅ Add paste and JSON file import/export controls using Carbon components. ZIP and multi-file folder import remain pending.
+- [x] ✅ Add Platform Settings Configuration tab with pasted JSON preview/diff and exact-hash apply, server-side export, recent apply-run history, and a compact materialization/identity-replay receipt. The Carbon import control accepts JSON envelopes and folder-style ZIP bundles.
+- [x] ✅ Add paste, JSON file, and ZIP import/export controls using Carbon components. ZIP import is converted server-side into the same reviewed JSON envelope.
 - [x] ✅ Add diff viewer with search, operation/object-type/priority filters, and attention-first risk grouping.
 - [x] ✅ Bind apply to the exact canonical preview hash.
 - [x] ✅ Add recent config apply-run history and selected-run diagnostics for planned changes, reconciliation, and sanitized failures.

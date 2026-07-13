@@ -120,6 +120,7 @@ describe('authorization route inventory validation', () => {
           ['PUT', '/api/authz/roles/{id}'],
           ['DELETE', '/api/authz/roles/{id}'],
           ['POST', '/api/authz/config-bundles/preview'],
+          ['POST', '/api/authz/config-bundles/import-zip'],
           ['POST', '/api/authz/config-bundles/diff'],
           ['POST', '/api/authz/config-bundles/apply'],
           ['GET', '/api/authz/config-bundles/runs'],

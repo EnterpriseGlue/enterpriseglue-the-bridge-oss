@@ -88,7 +88,7 @@ to `disabled` for ordinary standalone deployments. A configured production
 bootstrap fails closed by default; use the optional Compose overlay or the
 OpenShift ConfigMap projection to mount the non-secret JSON payload.
 
-- `EG_CONFIG_BUNDLE_PATH`: Absolute path to one JSON payload with `bundle` and `files` properties.
+- `EG_CONFIG_BUNDLE_PATH`: Absolute path to one JSON payload with `bundle` and `files` properties, or a folder-style ZIP archive containing `bundle.json` and its declared imported JSON files.
 - `EG_CONFIG_BOOTSTRAP_MODE`: `disabled`, `validate`, or `apply`; default `disabled`.
 - `EG_CONFIG_EXPECTED_SHA256`: Optional SHA-256 of the mounted payload; rejects unexpected content.
 - `EG_CONFIG_EXPECTED_TENANT_SCOPE`: Required expected target scope for an `apply` bootstrap, such as `platform` or a tenant id.

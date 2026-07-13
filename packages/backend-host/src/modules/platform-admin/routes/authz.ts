@@ -4,7 +4,7 @@
  * Provides authorization check endpoint and policy management for admins.
  */
 
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response, NextFunction, raw } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { z } from 'zod';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
@@ -58,6 +58,7 @@ import { configBundlePreviewService } from '@enterpriseglue/shared/services/plat
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundleExportService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleExportService.js';
+import { configBundleArchiveService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleArchiveService.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
 import {
@@ -1356,6 +1357,18 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
 }));
 
 /** Validate a config bundle for CI/CD without resolving secrets or mutating state. */
+router.post('/api/authz/config-bundles/import-zip', apiLimiter, requireConfigBundleAccess, raw({ type: ['application/zip', 'application/octet-stream'], limit: '1mb' }), asyncHandler(async (req: Request, res: Response) => {
+  const payload = configBundleArchiveService.readZip(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
+  await logAudit({
+    tenantId: req.tenant?.tenantId || undefined,
+    userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
+    action: 'authz.config_bundle.import_zip',
+    resourceType: 'config_bundle',
+    resourceId: String((payload.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
+    details: { fileCount: Object.keys(payload.files).length, actorType: req.apiClient ? 'api_client' : 'user' },
+  });
+  res.json(payload);
+}));
 router.post('/api/authz/config-bundles/preview', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
   const preview = configBundlePreviewService.preview(req.body);
   res.status(preview.valid ? 200 : 422).json(preview);

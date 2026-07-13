@@ -324,6 +324,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'PUT', route: '/api/authz/roles/{id}', resourceResolver: 'platform.self' },
       { method: 'DELETE', route: '/api/authz/roles/{id}', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/authz/config-bundles/preview', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/authz/config-bundles/import-zip', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/authz/config-bundles/diff', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/authz/config-bundles/apply', resourceResolver: 'platform.self' },
       { method: 'GET', route: '/api/authz/config-bundles/runs', resourceResolver: 'platform.self' },

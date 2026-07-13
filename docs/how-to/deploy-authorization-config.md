@@ -27,7 +27,7 @@ Do not make automatic startup apply the default. Existing standalone installatio
 
 | Variable | Values | Purpose |
 | --- | --- | --- |
-| `EG_CONFIG_BUNDLE_PATH` | Absolute JSON file path | Read-only bootstrap bundle location |
+| `EG_CONFIG_BUNDLE_PATH` | Absolute JSON or ZIP file path | Read-only bootstrap bundle location; ZIP archives contain `bundle.json` and declared imported JSON files |
 | `EG_CONFIG_BOOTSTRAP_MODE` | `disabled`, `validate`, `apply` | Startup behavior; default `disabled` |
 | `EG_CONFIG_EXPECTED_SHA256` | SHA-256 or empty | Reject an unexpected mounted bundle |
 | `EG_CONFIG_FAIL_CLOSED` | `true`, `false` | Keep readiness false when configured bootstrap validation/apply fails; production default `true` |
