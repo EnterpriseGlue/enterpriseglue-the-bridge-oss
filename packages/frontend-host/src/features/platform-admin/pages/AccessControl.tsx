@@ -4752,6 +4752,7 @@ function RuntimeResourcesPanel({
   canManage,
   reconcilePending,
   reconcileError,
+  reconcileResult,
   onSelectEngine,
   onReconcile,
 }: {
@@ -4763,6 +4764,7 @@ function RuntimeResourcesPanel({
   canManage: boolean;
   reconcilePending: boolean;
   reconcileError: unknown;
+  reconcileResult: { created: number; updated: number; deactivated: number; materializedSets: number; deployments: { created: number; updated: number; artifactsCreated: number } } | undefined;
   onSelectEngine: (id: string) => void;
   onReconcile: () => void;
 }) {
@@ -4796,6 +4798,7 @@ function RuntimeResourcesPanel({
         {selectedEngine && <Tag type="cool-gray">{decisionCount} decisions</Tag>}
       </div>
       {Boolean(reconcileError) && <InlineNotification kind="error" lowContrast title="Runtime inventory could not be reconciled" subtitle={parseApiError(reconcileError, 'Request failed').message} hideCloseButton />}
+      {reconcileResult && !reconcileError && <InlineNotification kind="success" lowContrast title="Inventory reconciled" subtitle={`${reconcileResult.created + reconcileResult.updated} runtime resources refreshed, ${reconcileResult.deactivated} deactivated; ${reconcileResult.deployments.created + reconcileResult.deployments.updated} deployment records and ${reconcileResult.deployments.artifactsCreated} artifacts reconciled.`} hideCloseButton />}
       {loading ? <DataTableSkeleton headers={[{ key: 'key', header: 'Resource' }]} rowCount={6} /> : error ? (
         <InlineNotification kind="error" lowContrast title="Runtime resources could not be loaded" subtitle={parseApiError(error, 'Request failed').message} hideCloseButton />
       ) : !selectedEngine ? (
@@ -6449,7 +6452,7 @@ export default function AccessControl() {
     queryFn: () => apiClient.get<RuntimeResourceInventoryRow[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(selectedRuntimeEngineId)}`),
   });
   const reconcileRuntimeResourcesM = useMutation({
-    mutationFn: () => apiClient.post(`/api/authz/runtime-resources/${encodeURIComponent(selectedRuntimeEngineId)}/reconcile`, {}),
+    mutationFn: () => apiClient.post<{ created: number; updated: number; deactivated: number; materializedSets: number; deployments: { created: number; updated: number; artifactsCreated: number } }>(`/api/authz/runtime-resources/${encodeURIComponent(selectedRuntimeEngineId)}/reconcile`, {}),
     onSuccess: () => { void runtimeResourcesQ.refetch(); },
   });
   const assignmentsReadUnavailableReason = unavailableReason(assignmentsReadDecision, 'Missing permission platform:authz:roles:view');
@@ -8002,6 +8005,7 @@ export default function AccessControl() {
               canManage={engineSetsManageDecision.allowed}
               reconcilePending={reconcileRuntimeResourcesM.isPending}
               reconcileError={reconcileRuntimeResourcesM.error}
+              reconcileResult={reconcileRuntimeResourcesM.data}
               onSelectEngine={setSelectedRuntimeEngineId}
               onReconcile={() => reconcileRuntimeResourcesM.mutate()}
             />
