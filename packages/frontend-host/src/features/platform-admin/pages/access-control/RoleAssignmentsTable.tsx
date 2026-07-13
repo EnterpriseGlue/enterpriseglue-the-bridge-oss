@@ -37,13 +37,17 @@ function formatResource(assignment: RoleAssignment, externalSystems: ExternalEng
 
 function sourceTagType(source: unknown): 'blue' | 'purple' | 'gray' {
   if (source === 'manual') return 'blue';
-  if (source === 'config' || source === 'sso') return 'purple';
+  if (source === 'config' || source === 'sso' || source === 'identity_provider') return 'purple';
   return 'gray';
 }
 
 function sourceLabel(source: unknown) {
+  if (source === 'manual') return 'Manual';
   if (source === 'config') return 'Managed by config';
   if (source === 'sso') return 'Managed by SSO';
+  if (source === 'identity_provider') return 'Managed by identity provider';
+  if (source === 'api') return 'API managed';
+  if (source === 'system') return 'System managed';
   return String(source || '-');
 }
 
