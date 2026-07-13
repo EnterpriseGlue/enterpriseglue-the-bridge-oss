@@ -20,6 +20,7 @@ const schema = z.object({ key: z.string().min(1).max(128), protocol: z.enum(['oi
 
 const providerKeySchema = z.string().min(1).max(128);
 const legacyProviderIdSchema = z.string().min(1).max(128);
+const migrationReadinessQuerySchema = z.object({ targetProviderKey: z.string().min(1).max(128) });
 const replayMembershipsSchema = z.object({ limit: z.number().int().min(1).max(5000).optional(), cursor: z.string().min(1).max(512).optional() });
 const syncRunsQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(10) });
 
@@ -51,6 +52,11 @@ router.get('/api/identity/providers/legacy-migration-draft/:legacyProviderId', r
     },
   });
   res.json(draft);
+}));
+router.get('/api/identity/providers/migration-readiness', requireAuth, requireAction('platform.sso.providers.manage'), validateQuery(migrationReadinessQuerySchema), asyncHandler(async (req, res) => {
+  const readiness = await legacyIdentityProviderMigrationService.getReadiness({ targetProviderKey: String(req.query.targetProviderKey), tenantId: req.tenant?.tenantId || null });
+  await logAudit({ action: 'identity.provider.migration_readiness.read', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: readiness.targetProviderKey, details: { ready: readiness.ready, activeMappingCount: readiness.activeMappingCount, blockers: readiness.blockers } });
+  res.json(readiness);
 }));
 router.get('/api/identity/providers/:key', requireAuth, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
   const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);

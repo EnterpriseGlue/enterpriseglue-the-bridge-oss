@@ -2116,6 +2116,13 @@ registry.registerPath({
 });
 registry.registerPath({
   method: 'get',
+  path: '/api/identity/providers/migration-readiness',
+  ...authzExtension('platform.sso.providers.manage', 'GET', '/api/identity/providers/migration-readiness'),
+  request: { query: z.object({ targetProviderKey: z.string().min(1).max(128) }) },
+  responses: { 200: { description: 'Non-mutating provider-neutral migration readiness and blockers', content: { 'application/json': { schema: z.object({ ready: z.boolean(), targetProviderKey: z.string(), activeMappingCount: z.number().int().nonnegative(), checks: z.object({ targetExists: z.boolean(), directOidc: z.boolean(), enabled: z.boolean(), secretReferenceConfigured: z.boolean(), secretReferenceAvailable: z.boolean(), activeMappingsConfigured: z.boolean() }), blockers: z.array(z.enum(['target_not_found', 'target_not_direct_oidc', 'target_disabled', 'secret_reference_missing', 'secret_reference_unavailable', 'identity_mappings_missing'])) }) } } } },
+});
+registry.registerPath({
+  method: 'get',
   path: '/api/identity/providers/{key}',
   ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers/{key}'),
   request: { params: z.object({ key: z.string() }) },

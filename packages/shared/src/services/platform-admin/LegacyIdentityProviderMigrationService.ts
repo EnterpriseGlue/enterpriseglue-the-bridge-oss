@@ -1,7 +1,11 @@
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { secretResolver } from './SecretResolver.js';
+import { IsNull } from 'typeorm';
 
 type LegacyMigratableProviderType = 'microsoft' | 'google' | 'oidc';
 type EnvironmentMigratableProviderType = 'microsoft' | 'google';
@@ -30,6 +34,21 @@ export interface LegacyIdentityProviderMigrationDraft {
   };
   requirements: Array<'client_secret_reference' | 'identity_provider_redirect_uri' | 'identity_mappings' | 'legacy_provider_cutover'>;
   warnings: string[];
+}
+
+export interface LegacyIdentityProviderMigrationReadiness {
+  ready: boolean;
+  targetProviderKey: string;
+  activeMappingCount: number;
+  checks: {
+    targetExists: boolean;
+    directOidc: boolean;
+    enabled: boolean;
+    secretReferenceConfigured: boolean;
+    secretReferenceAvailable: boolean;
+    activeMappingsConfigured: boolean;
+  };
+  blockers: Array<'target_not_found' | 'target_not_direct_oidc' | 'target_disabled' | 'secret_reference_missing' | 'secret_reference_unavailable' | 'identity_mappings_missing'>;
 }
 
 function parseScopes(rawScopes: string | null | undefined): string[] {
@@ -161,6 +180,34 @@ class LegacyIdentityProviderMigrationServiceClass {
         'Update the identity provider application redirect URI to the generated callback URL before cutover.',
         'Configure provider-neutral identity mappings before disabling the legacy provider.',
       ],
+    };
+  }
+
+  async getReadiness(input: { targetProviderKey: string; tenantId?: string | null }): Promise<LegacyIdentityProviderMigrationReadiness> {
+    const key = input.targetProviderKey.trim();
+    const tenantId = input.tenantId?.trim() || null;
+    const dataSource = await getDataSource();
+    const provider = await dataSource.getRepository(IdentityProvider).findOne({ where: tenantId ? { key, tenantId } : { key, tenantId: IsNull() } });
+    if (!provider) {
+      return { ready: false, targetProviderKey: key, activeMappingCount: 0, checks: { targetExists: false, directOidc: false, enabled: false, secretReferenceConfigured: false, secretReferenceAvailable: false, activeMappingsConfigured: false }, blockers: ['target_not_found'] };
+    }
+    let rawConfiguration: Record<string, unknown> = {};
+    try { rawConfiguration = JSON.parse(provider.configurationJson); } catch { rawConfiguration = {}; }
+    const secretReference = typeof rawConfiguration.clientSecretRef === 'string' ? rawConfiguration.clientSecretRef.trim() : '';
+    const secretAvailability = secretReference ? secretResolver.checkExternalReference(secretReference.startsWith('ref:') ? secretReference.slice(4) : secretReference) : { available: false };
+    const activeMappingCount = await dataSource.getRepository(IdentityEntitlementMapping).count({ where: { tenantId: tenantId || IsNull(), providerId: provider.id, isActive: true } as any });
+    const blockers: LegacyIdentityProviderMigrationReadiness['blockers'] = [];
+    if (provider.protocol !== 'oidc' || provider.authenticationMode !== 'direct') blockers.push('target_not_direct_oidc');
+    if (!provider.isEnabled) blockers.push('target_disabled');
+    if (!secretReference) blockers.push('secret_reference_missing');
+    else if (!secretAvailability.available) blockers.push('secret_reference_unavailable');
+    if (!activeMappingCount) blockers.push('identity_mappings_missing');
+    return {
+      ready: blockers.length === 0,
+      targetProviderKey: key,
+      activeMappingCount,
+      checks: { targetExists: true, directOidc: provider.protocol === 'oidc' && provider.authenticationMode === 'direct', enabled: provider.isEnabled, secretReferenceConfigured: Boolean(secretReference), secretReferenceAvailable: Boolean(secretAvailability.available), activeMappingsConfigured: activeMappingCount > 0 },
+      blockers,
     };
   }
 }

@@ -20,6 +20,7 @@ const service = vi.hoisted(() => ({
   testSamlMetadata: vi.fn(),
   createLegacyMigrationDraft: vi.fn(),
   listEnvironmentMigrationDrafts: vi.fn(),
+  getMigrationReadiness: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -33,7 +34,7 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
   requireAction: () => (_req: any, _res: any, next: any) => next(),
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService: service }));
-vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js', () => ({ legacyIdentityProviderMigrationService: { createDraft: service.createLegacyMigrationDraft, listEnvironmentDrafts: service.listEnvironmentMigrationDrafts } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js', () => ({ legacyIdentityProviderMigrationService: { createDraft: service.createLegacyMigrationDraft, listEnvironmentDrafts: service.listEnvironmentMigrationDrafts, getReadiness: service.getMigrationReadiness } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { previewMemberships: service.previewMemberships, replayMemberships: service.replayMemberships } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun, listRuns: service.listRuns } }));
@@ -75,6 +76,7 @@ describe('identity provider routes', () => {
     service.listEnvironmentMigrationDrafts.mockReturnValue([
       { legacyProvider: { id: 'environment:microsoft', name: 'Microsoft Entra ID environment configuration', type: 'microsoft', enabled: true, clientSecretConfigured: true }, provider: { key: 'legacy-environment-microsoft', protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: 'directory-tenant', configuration: { issuerUrl: 'https://login.microsoftonline.com/directory-tenant/v2.0', clientId: 'client-1', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid'], clientSecretRef: 'env://MICROSOFT_CLIENT_SECRET' } }, requirements: ['identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'], warnings: ['Environment-backed secret reference.'] },
     ]);
+    service.getMigrationReadiness.mockResolvedValue({ ready: false, targetProviderKey: 'migrated-entra', activeMappingCount: 0, checks: { targetExists: true, directOidc: true, enabled: true, secretReferenceConfigured: true, secretReferenceAvailable: true, activeMappingsConfigured: false }, blockers: ['identity_mappings_missing'] });
     app = express();
     app.use(express.json());
     app.use(identityProvidersRouter);
@@ -114,6 +116,15 @@ describe('identity provider routes', () => {
     })]);
     expect(service.listEnvironmentMigrationDrafts).toHaveBeenCalledOnce();
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.environment_migration_drafts.read', details: { providerTypes: ['microsoft'] } }));
+  });
+
+  it('reports non-mutating migration readiness blockers for a provider-neutral target', async () => {
+    const response = await request(app).get('/api/identity/providers/migration-readiness?targetProviderKey=migrated-entra');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({ ready: false, blockers: ['identity_mappings_missing'] }));
+    expect(service.getMigrationReadiness).toHaveBeenCalledWith({ targetProviderKey: 'migrated-entra', tenantId: 'tenant-1' });
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.migration_readiness.read', details: expect.objectContaining({ blockers: ['identity_mappings_missing'] }) }));
   });
 
   it('lists bounded synchronization history for one provider', async () => {
