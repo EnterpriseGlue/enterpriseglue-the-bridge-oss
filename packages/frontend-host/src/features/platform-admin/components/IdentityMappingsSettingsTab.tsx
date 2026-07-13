@@ -28,6 +28,7 @@ export default function IdentityMappingsSettingsTab() {
   const [removeTarget, setRemoveTarget] = useState<Mapping | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [snapshotResult, setSnapshotResult] = useState<string | null>(null);
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((current) => ({ ...current, [key]: value }));
   const providers = (providersQuery.data || []).filter((provider) => provider.isEnabled);
   const groups = (groupsQuery.data || []).filter((group) => !group.isArchived);
@@ -50,8 +51,13 @@ export default function IdentityMappingsSettingsTab() {
     onSuccess: (result) => setTestResult(result.matches ? `Matched: ${result.entitlements.map((item) => `${item.type}:${item.externalId}`).join(', ') || 'no normalized entitlements'}` : 'No match for the supplied claims.'),
     onError: (value: unknown) => setTestResult(parseApiError(value, 'Mapping preview failed').message),
   });
-  const startCreate = () => { setEditing(null); setForm(emptyForm()); setError(null); setTestResult(null); setOpen(true); };
-  const startEdit = (mapping: Mapping) => { setEditing(mapping); setForm({ ...emptyForm(), providerKey: mapping.providerKey, targetGroupKey: mapping.targetGroupKey, entitlementType: mapping.entitlementType, externalId: mapping.externalId || '', matchOperator: mapping.matchOperator, syncMode: mapping.syncMode }); setError(null); setTestResult(null); setOpen(true); };
+  const previewSnapshots = useMutation({
+    mutationFn: (value: FormState) => apiClient.post<{ scanned: number; matches: number; nonMatches: number; failed: number; truncated: boolean; warnings: string[] }>('/api/identity/mappings/stored-snapshot-preview', { providerKey: value.providerKey, entitlementType: value.entitlementType, externalId: value.matchOperator === 'exists' ? null : value.externalId.trim(), matchOperator: value.matchOperator }),
+    onSuccess: (result) => setSnapshotResult(`${result.matches} of ${result.scanned} stored identities match; ${result.nonMatches} do not${result.failed ? `; ${result.failed} could not be evaluated` : ''}${result.truncated ? '; result is truncated' : ''}.`),
+    onError: (value: unknown) => setSnapshotResult(parseApiError(value, 'Stored identity preview failed').message),
+  });
+  const startCreate = () => { setEditing(null); setForm(emptyForm()); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
+  const startEdit = (mapping: Mapping) => { setEditing(mapping); setForm({ ...emptyForm(), providerKey: mapping.providerKey, targetGroupKey: mapping.targetGroupKey, entitlementType: mapping.entitlementType, externalId: mapping.externalId || '', matchOperator: mapping.matchOperator, syncMode: mapping.syncMode }); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
 
   if (!read.allowed) return <UnauthorizedEmptyState title="Identity mappings unavailable" reason={read.reason || 'Missing identity mapping read permission.'} />;
   if (mappingsQuery.isLoading) return <SkeletonText paragraph lineCount={5} />;
@@ -71,8 +77,9 @@ export default function IdentityMappingsSettingsTab() {
       {form.matchOperator !== 'exists' && <TextArea id="identity-mapping-external-id" labelText="External ID" value={form.externalId} onChange={(event) => set('externalId', event.target.value)} helperText="Use stable group IDs, role IDs, scopes, or attribute values rather than display names." />}
       <Select id="identity-mapping-sync" labelText="Membership sync mode" value={form.syncMode} onChange={(event) => set('syncMode', event.target.value as 'additive' | 'authoritative')}><SelectItem value="authoritative" text="Authoritative" /><SelectItem value="additive" text="Additive" /></Select>
       <TextArea id="identity-mapping-claims" labelText="Preview claims" value={form.claims} onChange={(event) => set('claims', event.target.value)} helperText="Preview only. No user, group membership, or assignment is changed." />
-      <Button kind="tertiary" size="sm" renderIcon={Checkmark} disabled={!form.providerKey || test.isPending} onClick={() => test.mutate(form)}>Test mapping</Button>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}><Button kind="tertiary" size="sm" renderIcon={Checkmark} disabled={!form.providerKey || test.isPending} onClick={() => test.mutate(form)}>Test mapping</Button><Button kind="tertiary" size="sm" disabled={!form.providerKey || previewSnapshots.isPending} onClick={() => previewSnapshots.mutate(form)}>Preview stored identities</Button></div>
       {testResult && <InlineNotification kind={testResult.startsWith('Matched:') ? 'success' : 'info'} title="Mapping preview" subtitle={testResult} hideCloseButton style={{ marginTop: 'var(--spacing-4)' }} />}
+      {snapshotResult && <InlineNotification kind="info" title="Stored identity coverage" subtitle={snapshotResult} hideCloseButton style={{ marginTop: 'var(--spacing-3)' }} />}
     </Modal>
     <Modal open={Boolean(removeTarget)} danger modalHeading="Delete identity mapping" primaryButtonText="Delete" secondaryButtonText="Cancel" onRequestClose={() => setRemoveTarget(null)} onRequestSubmit={() => removeTarget && remove.mutate(removeTarget.id)} primaryButtonDisabled={remove.isPending}>Delete this manual mapping and the memberships it created through this mapping?</Modal>
   </>;
