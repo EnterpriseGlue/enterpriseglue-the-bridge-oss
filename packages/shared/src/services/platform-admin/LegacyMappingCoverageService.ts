@@ -126,7 +126,9 @@ class LegacyMappingCoverageService {
     const dataSource = await getDataSource();
     return dataSource.transaction(async (manager) => {
       const now = Date.now();
-      const platform = await manager.getRepository(SsoClaimsMapping).update({ isActive: true }, { isActive: false, updatedAt: now });
+      const platform = normalizedTenantId === null
+        ? await manager.getRepository(SsoClaimsMapping).update({ isActive: true }, { isActive: false, updatedAt: now })
+        : { affected: 0 };
       const tenantWhere = normalizedTenantId ? [{ tenantId: normalizedTenantId, isActive: true }, { tenantId: IsNull(), isActive: true }] : { tenantId: IsNull(), isActive: true };
       const groups = await manager.getRepository(SsoGroupMapping).update(tenantWhere as any, { isActive: false, updatedAt: now });
       const engines = await manager.getRepository(SsoAssignmentMapping).update(tenantWhere as any, { isActive: false, updatedAt: now });
