@@ -7,6 +7,7 @@ import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
+import { samlAssertionReplayService } from '@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js';
 import { identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
@@ -148,6 +149,7 @@ router.post('/api/auth/providers/saml/callback', apiLimiter, asyncHandler(async 
   if (parsed.providerId && parsed.providerId !== provider.id) throw Errors.unauthorized('Identity provider state does not match the selected provider');
   const rawConfiguration = configuration(provider);
   const profile = await genericSamlService.validatePostResponse(rawConfiguration, samlResponse);
+  await samlAssertionReplayService.consume({ providerId: provider.id, tenantId: provider.tenantId, samlResponse });
   const identity = genericSamlService.extractUserClaims(rawConfiguration, profile);
   const user = await identityProviderProvisioningService.provisionSamlUser(provider, {
     subjectId: identity.subjectId,

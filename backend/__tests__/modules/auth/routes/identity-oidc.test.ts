@@ -7,6 +7,7 @@ import identityOidcRoute from '../../../../../packages/backend-host/src/modules/
 const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: vi.fn(), listEnabledDirectLoginProviders: vi.fn() }));
 const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn() }));
 const genericSamlService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), validatePostResponse: vi.fn(), extractUserClaims: vi.fn() }));
+const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
 const identityProviderProvisioningService = vi.hoisted(() => ({ provisionOidcUser: vi.fn(), provisionLdapUser: vi.fn(), provisionSamlUser: vi.fn() }));
 const directLdapIdentityService = vi.hoisted(() => ({ authenticate: vi.fn() }));
 const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
@@ -14,6 +15,7 @@ const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericSamlService.js', () => ({ genericSamlService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js', () => ({ samlAssertionReplayService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js', () => ({ identityProviderProvisioningService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService }));
 vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
@@ -40,6 +42,7 @@ describe('provider-neutral OIDC routes', () => {
     genericSamlService.createAuthorizationRequest.mockResolvedValue({ url: 'https://idp.example.test/sso?SAMLRequest=request', entryPoint: 'https://idp.example.test/sso' });
     genericSamlService.validatePostResponse.mockResolvedValue({ nameID: 'person@example.test', groups: ['ops'] });
     genericSamlService.extractUserClaims.mockReturnValue({ subjectId: 'subject-1', email: 'person@example.test', displayName: 'Person', firstName: 'Person', lastName: 'Example', directoryTenantId: null, claims: { sub: 'subject-1', email: 'person@example.test', groups: ['ops'] } });
+    samlAssertionReplayService.consume.mockResolvedValue(undefined);
     authSessionService.issue.mockResolvedValue({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 900 });
     app = express();
     app.use(express.json());
@@ -133,6 +136,7 @@ describe('provider-neutral OIDC routes', () => {
       .redirects(0);
     expect(callback.status).toBe(302);
     expect(genericSamlService.validatePostResponse).toHaveBeenCalledWith(expect.any(Object), 'signed-response');
+    expect(samlAssertionReplayService.consume).toHaveBeenCalledWith({ providerId: 'provider-1', tenantId: null, samlResponse: 'signed-response' });
     expect(identityProviderProvisioningService.provisionSamlUser).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'saml' }), expect.objectContaining({ subjectId: 'subject-1', claims: expect.objectContaining({ groups: ['ops'] }) }));
     expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
   });
@@ -147,5 +151,19 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.status).toBe(401);
     expect(genericSamlService.validatePostResponse).not.toHaveBeenCalled();
     expect(identityProviderProvisioningService.provisionSamlUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects a replayed SAML assertion before provisioning a user session', async () => {
+    identityProviderService.getByKey.mockResolvedValue({ ...provider, protocol: 'saml' });
+    samlAssertionReplayService.consume.mockRejectedValue({ statusCode: 401, message: 'SAML assertion has already been used' });
+    const relayState = Buffer.from(JSON.stringify({ timestamp: Date.now(), providerId: 'provider-1', identityProviderKey: 'identity.oidc.main' })).toString('base64');
+    const response = await request(app)
+      .post('/api/auth/providers/saml/callback')
+      .type('form')
+      .send({ SAMLResponse: 'replayed-response', RelayState: relayState });
+
+    expect(response.status).toBe(401);
+    expect(identityProviderProvisioningService.provisionSamlUser).not.toHaveBeenCalled();
+    expect(authSessionService.issue).not.toHaveBeenCalled();
   });
 });
