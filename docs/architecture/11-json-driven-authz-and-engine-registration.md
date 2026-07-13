@@ -396,7 +396,7 @@ validate and canonicalize all files
 Interface requirements:
 
 - [x] ✅ Accept a single JSON envelope or a folder-style ZIP containing `bundle.json` plus declared imported JSON files. ZIP content is converted to the same envelope before normal validation, diff, or apply.
-- [ ] ⬜ Reject undeclared files, path traversal, duplicate object keys, unknown schema versions, plaintext secrets, and test-only fixture files.
+- [x] ✅ Reject undeclared files, path traversal, duplicate object keys, unknown schema versions, plaintext secrets, and test-only fixture files. ZIP ingestion accepts only declared production JSON files and detects duplicate object keys before parsing; schemas reject unknown API versions/imports, fixture paths, and plaintext secret fields.
 - [x] ✅ Extend config-bundle preview, diff, and secret-preflight validation errors with object keys when derivable, error severity, and deterministic remediation guidance for UI and CI/CD consumers.
 - [x] ✅ Make the current schema preview side-effect free; provider connectivity checks are explicit optional operations, never implicit network calls during schema validation.
 - [x] ✅ Bind apply to the exact canonical preview hash and reject stale previews.

@@ -5,6 +5,18 @@ import type { ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 const DEFAULT_MAX_ARCHIVE_BYTES = 1024 * 1024;
 const MAX_ARCHIVE_ENTRIES = 64;
 const MANIFEST_PATH = 'bundle.json';
+const ALLOWED_ARCHIVE_PATHS = new Set([
+  MANIFEST_PATH,
+  'engines.json',
+  'engine-sets.json',
+  'runtime-resource-sets.json',
+  'roles.json',
+  'groups.json',
+  'assignments.json',
+  'identity-providers.json',
+  'identity-mappings.json',
+  'project-engine-targets.json',
+]);
 
 function archivePath(entryName: string): string {
   const normalized = entryName.replace(/\\/g, '/').replace(/^\.\//, '');
@@ -15,9 +27,76 @@ function archivePath(entryName: string): string {
   return normalized;
 }
 
+function assertNoDuplicateJsonObjectKeys(path: string, source: string): void {
+  let index = 0;
+  const invalid = (): never => { throw Errors.validation(`Configuration archive entry is not valid JSON: ${path}`); };
+  const whitespace = (): void => { while (/\s/.test(source[index] || '')) index += 1; };
+  const expect = (value: string): void => { if (source[index] !== value) invalid(); index += 1; };
+  const string = (): string => {
+    const start = index;
+    expect('"');
+    while (index < source.length) {
+      const character = source[index++];
+      if (character === '"') {
+        try { return JSON.parse(source.slice(start, index)) as string; } catch { invalid(); }
+      }
+      if (character === '\\') {
+        if (index >= source.length) invalid();
+        index += 1;
+      } else if (character.charCodeAt(0) < 0x20) {
+        invalid();
+      }
+    }
+    return invalid();
+  };
+  const scalar = (): void => {
+    const start = index;
+    while (index < source.length && !/[\s,}\]]/.test(source[index])) index += 1;
+    if (index === start) invalid();
+  };
+  const value = (): void => {
+    whitespace();
+    if (source[index] === '{') {
+      index += 1;
+      whitespace();
+      const keys = new Set<string>();
+      if (source[index] === '}') { index += 1; return; }
+      while (true) {
+        whitespace();
+        if (source[index] !== '"') invalid();
+        const key = string();
+        if (keys.has(key)) throw Errors.validation(`Configuration archive entry contains duplicate JSON key "${key}": ${path}`);
+        keys.add(key);
+        whitespace(); expect(':'); value(); whitespace();
+        if (source[index] === '}') { index += 1; return; }
+        expect(',');
+      }
+    }
+    if (source[index] === '[') {
+      index += 1;
+      whitespace();
+      if (source[index] === ']') { index += 1; return; }
+      while (true) {
+        value(); whitespace();
+        if (source[index] === ']') { index += 1; return; }
+        expect(',');
+      }
+    }
+    if (source[index] === '"') { string(); return; }
+    scalar();
+  };
+
+  whitespace();
+  value();
+  whitespace();
+  if (index !== source.length) invalid();
+}
+
 function parseJson(path: string, value: Buffer): unknown {
+  const source = value.toString('utf8');
+  assertNoDuplicateJsonObjectKeys(path, source);
   try {
-    return JSON.parse(value.toString('utf8'));
+    return JSON.parse(source);
   } catch {
     throw Errors.validation(`Configuration archive entry is not valid JSON: ${path}`);
   }
@@ -49,6 +128,9 @@ class ConfigBundleArchiveService {
     const seen = new Set<string>();
     for (const entry of entries) {
       const path = archivePath(String(entry.entryName));
+      if (!ALLOWED_ARCHIVE_PATHS.has(path)) {
+        throw Errors.validation(`Configuration archive entry is not declared by the production bundle contract: ${path}`);
+      }
       if (seen.has(path)) throw Errors.validation(`Configuration ZIP archive contains duplicate path: ${path}`);
       seen.add(path);
       const declaredSize = Number(entry.header?.size || 0);

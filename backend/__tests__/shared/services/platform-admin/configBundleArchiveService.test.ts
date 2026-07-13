@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import AdmZip from 'adm-zip';
 import { configBundleArchiveService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleArchiveService.js';
 
-function archive(entries: Record<string, unknown>): Buffer {
+function archive(entries: Record<string, unknown | Buffer>): Buffer {
   const zip = new AdmZip();
-  for (const [path, value] of Object.entries(entries)) zip.addFile(path, Buffer.from(JSON.stringify(value)));
+  for (const [path, value] of Object.entries(entries)) zip.addFile(path, Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(value)));
   return zip.toBuffer();
 }
 
@@ -40,5 +40,19 @@ describe('configBundleArchiveService', () => {
     expect(() => configBundleArchiveService.readZip(archive({
       'groups.json': { groups: [] },
     }))).toThrow('must contain bundle.json');
+  });
+
+  it('rejects undeclared production files before the configuration compiler receives them', () => {
+    expect(() => configBundleArchiveService.readZip(archive({
+      'bundle.json': bundle,
+      'identity-mocks.json': { subjects: [] },
+    }))).toThrow('not declared by the production bundle contract');
+  });
+
+  it('rejects duplicate JSON object keys instead of allowing JSON.parse to overwrite one', () => {
+    expect(() => configBundleArchiveService.readZip(archive({
+      'bundle.json': bundle,
+      'groups.json': Buffer.from('{"groups":[],"groups":[]}'),
+    }))).toThrow('duplicate JSON key "groups"');
   });
 });
