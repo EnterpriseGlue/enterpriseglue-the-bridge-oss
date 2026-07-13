@@ -27,6 +27,7 @@ const {
   getSsoAssignmentTargetSummary,
   getSsoTargetRoleOptions,
 } = await import('@src/features/platform-admin/pages/AccessControl');
+const { RoleAssignmentsTable } = await import('@src/features/platform-admin/pages/access-control/RoleAssignmentsTable');
 import {
   resetAccessControlMocks,
   ssoAssignmentTestState,
@@ -277,6 +278,21 @@ describe('AccessControl roles and permissions', () => {
     expect(assignmentRow).toBeTruthy();
     expect(within(assignmentRow!).getByText('Managed by SSO')).toBeInTheDocument();
     expect(within(assignmentRow!).queryByLabelText('Remove assignment')).not.toBeInTheDocument();
+  });
+
+  it('labels provider-managed assignments without exposing manual removal', () => {
+    const assignment = {
+      id: 'provider-assignment', userId: 'provider-user', principalType: 'user', principalId: 'provider-user',
+      roleId: 'system.engine.operator', roleName: 'Engine Operator', roleScope: 'engine', resourceType: 'engine', resourceId: 'engine-1',
+      scopeType: 'engine', scopeId: 'engine-1', source: 'identity_provider', sourceMappingId: 'identity-mapping-1', sourceRef: 'identity_mapping:identity-mapping-1',
+      expiresAt: null, lastSeenAt: 1, createdById: null, createdAt: 1, updatedAt: 1,
+    } as RoleAssignment;
+    render(<RoleAssignmentsTable assignments={[assignment]} apiClients={[]} groups={[]} serviceAccounts={[]} externalSystems={[]} loading={false} canDelete onRemove={() => undefined} />);
+
+    const row = screen.getByText('provider-user').closest('tr');
+    expect(row).toBeTruthy();
+    expect(within(row!).getByText('Managed by identity provider')).toBeInTheDocument();
+    expect(within(row!).queryByLabelText('Remove assignment')).not.toBeInTheDocument();
   });
 
   it('identifies locally overridable config assignments without hiding their removal affordance', () => {
