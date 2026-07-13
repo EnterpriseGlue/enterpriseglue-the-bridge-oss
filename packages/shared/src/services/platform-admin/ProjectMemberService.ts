@@ -110,7 +110,6 @@ export class ProjectMemberService {
     const dataSource = await getDataSource();
     const memberRepo = dataSource.getRepository(ProjectMember);
     const roleRepo = dataSource.getRepository(ProjectMemberRole);
-    const projectRepo = dataSource.getRepository(Project);
 
     const membership = await memberRepo.findOne({ where: { projectId, userId } });
 
@@ -128,23 +127,7 @@ export class ProjectMemberService {
       };
     }
 
-    // Fallback: implicit owner access
-    const ownerResult = await projectRepo.findOne({
-      where: { id: projectId, ownerId: userId },
-      select: ['id']
-    });
-    if (!ownerResult) return null;
-    return {
-      id: '',
-      projectId,
-      userId,
-      role: 'owner' as ProjectRole,
-      roles: ['owner'] as ProjectRole[],
-      invitedById: null,
-      joinedAt: 0,
-      createdAt: 0,
-      updatedAt: 0,
-    };
+    return null;
   }
 
   /**
