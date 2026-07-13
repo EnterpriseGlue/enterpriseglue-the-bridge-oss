@@ -678,12 +678,6 @@ export default function ProjectOverview() {
     enabled: engineAccessOpen && !!engineAccessProject?.id,
   })
 
-  const myMembershipQ = useQuery({
-    queryKey: ['project-members', engineAccessProject?.id, 'me'],
-    queryFn: () => apiClient.get<ProjectMember | null>(`/starbase-api/projects/${engineAccessProject?.id}/members/me`),
-    enabled: engineAccessOpen && !!engineAccessProject?.id,
-  })
-
   const canRequestEngineAccess = React.useMemo(() => {
     if (!engineAccessProject?.id) return false
     const requestAccessDecision = evaluateActionSnapshot(
@@ -692,10 +686,8 @@ export default function ProjectOverview() {
       { type: 'project', id: engineAccessProject.id }
     )
     if (requestAccessDecision.allowed) return true
-    const roles = getProjectMemberRoles(myMembershipQ.data)
-    return hasProjectPermission(engineAccessProject.id, ProjectPermission.PROJECT_SETTINGS) ||
-      legacyProjectRoleHasPermission(roles, ProjectPermission.PROJECT_SETTINGS)
-  }, [engineAccessProject?.id, hasProjectPermission, myMembershipQ.data, permissions])
+    return hasProjectPermission(engineAccessProject.id, ProjectPermission.PROJECT_SETTINGS)
+  }, [engineAccessProject?.id, hasProjectPermission, permissions])
   const requestEngineAccessUnavailableReason = canRequestEngineAccess
     ? null
     : evaluateActionSnapshot(
@@ -875,7 +867,7 @@ export default function ProjectOverview() {
         engineAccessQ={engineAccessQ}
         canRequestEngineAccess={canRequestEngineAccess}
         requestEngineAccessUnavailableReason={requestEngineAccessUnavailableReason}
-        myMembershipLoading={myMembershipQ.isLoading}
+        myMembershipLoading={engineAccessQ.isLoading}
         selectedEngineForRequest={selectedEngineForRequest}
         setSelectedEngineForRequest={setSelectedEngineForRequest}
         requestEngineAccessM={requestEngineAccessM}
