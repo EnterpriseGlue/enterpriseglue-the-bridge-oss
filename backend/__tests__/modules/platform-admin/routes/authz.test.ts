@@ -1959,6 +1959,35 @@ describe('platform-admin authz routes', () => {
     expect(engineSetService.materializeEngineSetsForEngine).toHaveBeenCalledWith('engine-1', null);
   });
 
+  it('does not decommission an externally registered engine from another tenant', async () => {
+    const engineUpdate = vi.fn();
+    const foreignEngine = {
+      id: 'engine-foreign',
+      tenantId: 'tenant-b',
+      registrationSource: 'external_api',
+      externalId: 'foreign',
+    };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity.name === 'Engine'
+        ? { findOne: vi.fn().mockResolvedValue(foreignEngine), findOneBy: vi.fn().mockResolvedValue(foreignEngine), update: engineUpdate }
+        : { findOne: vi.fn().mockResolvedValue(null), update: vi.fn(), delete: vi.fn() },
+    });
+    const tenantApp = express();
+    tenantApp.use(express.json());
+    tenantApp.use((req, _res, next) => {
+      req.tenant = { tenantId: 'tenant-a' } as any;
+      next();
+    });
+    tenantApp.use(authzRouter);
+
+    const response = await request(tenantApp)
+      .post('/api/authz/external-engines/engine-foreign/decommission')
+      .send({ reason: 'Cross-tenant request' });
+
+    expect(response.status).toBe(403);
+    expect(engineUpdate).not.toHaveBeenCalled();
+  });
+
   it('manages project-engine targets and evaluates deployment eligibility', async () => {
     const listResponse = await request(app).get('/api/authz/project-engine-targets?projectId=project-1');
     expect(listResponse.status).toBe(200);
