@@ -54,6 +54,7 @@ import { registerConfigBundleRoutes } from './authz/config-bundles.js';
 import { registerEngineSetRoutes } from './authz/engine-sets.js';
 import { registerMachineRoutes } from './authz/machines.js';
 import { registerPolicyRoutes } from './authz/policies.js';
+import { registerRoleRoutes } from './authz/roles.js';
 import {
   evaluateMissionControlStarbaseBridge,
   evaluateStarbaseMissionControlBridge,
@@ -145,62 +146,6 @@ const authzEvaluateSchema = z.object({
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['runtimeResource'], message: 'Runtime resource ID or selector is required' });
   }
 });
-
-const customPermissionCreateSchema = z.object({
-  key: z.string().min(1).max(255),
-  scope: authzResourceTypeSchema,
-  category: z.string().min(1).max(128),
-  label: z.string().min(1).max(128),
-  description: z.string().max(2000).nullable().optional(),
-});
-
-const roleIdParamSchema = z.object({ id: z.string().min(1) });
-const rolesQuerySchema = z.object({
-  scope: authzResourceTypeSchema.optional(),
-  kind: z.enum(['system', 'custom']).optional(),
-  assignable: z.enum(['true', 'false']).optional(),
-  resourceType: z.enum(['project', 'engine']).optional(),
-  resourceId: z.string().optional(),
-});
-
-const customRoleCreateSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().max(2000).nullable().optional(),
-  scope: authzResourceTypeSchema,
-  permissionIds: z.array(z.string().min(1)).min(1),
-});
-
-const customRoleUpdateSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().max(2000).nullable().optional(),
-  permissionIds: z.array(z.string().min(1)).min(1).optional(),
-  isArchived: z.boolean().optional(),
-});
-
-const customRoleDenyFieldNames = [
-  'denyPermissionIds',
-  'deniedPermissionIds',
-  'denyPermissions',
-  'deniedPermissions',
-  'permissionDenies',
-] as const;
-
-const customRoleAllowOnlyMessage = 'Custom roles are allow-only; use authorization policies for deny rules';
-
-const customRoleAllowOnlyGuard = z.object({}).passthrough().superRefine((input, ctx) => {
-  for (const field of customRoleDenyFieldNames) {
-    if (Object.prototype.hasOwnProperty.call(input, field)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [field],
-        message: customRoleAllowOnlyMessage,
-      });
-    }
-  }
-});
-
-const customRoleCreateRequestSchema = customRoleAllowOnlyGuard.pipe(customRoleCreateSchema);
-const customRoleUpdateRequestSchema = customRoleAllowOnlyGuard.pipe(customRoleUpdateSchema);
 
 const roleAssignmentQuerySchema = z.object({
   principalType: authzPrincipalTypeSchema.optional(),
@@ -930,140 +875,6 @@ router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(as
 }));
 
 /**
- * GET /api/platform-admin/authz/permissions
- * List the seeded permission catalog.
- */
-router.get('/api/authz/permissions', apiLimiter, requireAuth, requirePlatformAction('platform.authz.permissions.read'), asyncHandler(async (_req: Request, res: Response) => {
-  res.json(await permissionService.getPermissionCatalog());
-}));
-
-/**
- * POST /api/platform-admin/authz/permissions
- * Create a custom permission catalog entry.
- */
-router.post('/api/authz/permissions', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(customPermissionCreateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const result = await permissionService.createCustomPermission({
-      ...req.body,
-      tenantId: req.tenant?.tenantId || null,
-      createdById: req.user!.userId,
-    });
-    res.status(201).json(result);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Create custom permission error:', error);
-    throw Errors.badRequest(error.message || 'Failed to create custom permission');
-  }
-}));
-
-/**
- * GET /api/platform-admin/authz/roles
- * List seeded and custom roles with permission counts.
- */
-router.get('/api/authz/roles', apiLimiter, requireAuth, validateQuery(rolesQuerySchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const resource = toScopedAssignmentResource(req.query.resourceType, req.query.resourceId);
-    const canListPlatformRoles = await hasAnyPlatformPermission(req, AUTHZ_ROLE_READ_PERMISSIONS);
-    if (!canListPlatformRoles) {
-      if (!resource || !await canManageScopedAssignments(req, resource)) {
-        throw Errors.adminRequired();
-      }
-      if (req.query.scope !== resource.resourceType || req.query.assignable !== 'true') {
-        throw Errors.forbidden('Resource managers can list only assignable roles for their managed resource scope');
-      }
-    }
-
-    const roles = await permissionService.getRoles(req.tenant?.tenantId || null);
-    let filtered = roles.filter((role) => {
-      if (req.query.scope && role.scope !== req.query.scope) return false;
-      if (req.query.kind && role.kind !== req.query.kind) return false;
-      if (req.query.assignable === 'true' && (!role.isAssignable || role.isArchived)) return false;
-      if (req.query.assignable === 'false' && role.isAssignable) return false;
-      return true;
-    });
-    if (!canListPlatformRoles && resource) {
-      filtered = filtered.filter((role) => isScopedManagerAssignableRole(role, resource));
-    }
-    res.json(filtered);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Get roles error:', error);
-    throw Errors.internal('Failed to get roles');
-  }
-}));
-
-/**
- * GET /api/platform-admin/authz/roles/:id
- * Get a role with its assigned permissions.
- */
-router.get('/api/authz/roles/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.read'), validateParams(roleIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const role = await permissionService.getRole(String(req.params.id), req.tenant?.tenantId || null);
-    if (!role) {
-      throw Errors.notFound('Role');
-    }
-    res.json(role);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Get role error:', error);
-    throw Errors.internal('Failed to get role');
-  }
-}));
-
-/**
- * POST /api/platform-admin/authz/roles
- * Create a custom role.
- */
-router.post('/api/authz/roles', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(customRoleCreateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const result = await permissionService.createCustomRole({
-      ...req.body,
-      tenantId: req.tenant?.tenantId || null,
-      createdById: req.user!.userId,
-    });
-    res.status(201).json(result);
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Create custom role error:', error);
-    throw Errors.badRequest(error.message || 'Failed to create custom role');
-  }
-}));
-
-/**
- * PUT /api/platform-admin/authz/roles/:id
- * Update a custom role.
- */
-router.put('/api/authz/roles/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateParams(roleIdParamSchema), validateBody(customRoleUpdateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    await permissionService.updateCustomRole(String(req.params.id), {
-      ...req.body,
-      tenantId: req.tenant?.tenantId || null,
-      updatedById: req.user!.userId,
-    });
-    res.json({ success: true });
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Update custom role error:', error);
-    throw Errors.badRequest(error.message || 'Failed to update custom role');
-  }
-}));
-
-/**
- * DELETE /api/platform-admin/authz/roles/:id
- * Archive a custom role.
- */
-router.delete('/api/authz/roles/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateParams(roleIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    await permissionService.archiveCustomRole(String(req.params.id), req.user!.userId);
-    res.status(204).send();
-  } catch (error: any) {
-    if (error.statusCode) throw error;
-    logger.error('Archive custom role error:', error);
-    throw Errors.badRequest(error.message || 'Failed to archive custom role');
-  }
-}));
-
-/**
  * GET /api/platform-admin/authz/role-assignments
  * List role assignments.
  */
@@ -1327,6 +1138,8 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
 registerConfigBundleRoutes(router, { requireConfigBundleAccess, requireTargetTransferAccess });
 
 registerMachineRoutes(router, { requirePlatformAction });
+
+registerRoleRoutes(router, { requirePlatformAction });
 
 // ============================================================================
 // External Engine Registration Inventory (Admin Only)
