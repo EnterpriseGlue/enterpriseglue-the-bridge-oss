@@ -6,6 +6,7 @@ import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { ldapReconciliationService } from '@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js';
+import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
@@ -13,6 +14,7 @@ const router = Router();
 const schema = z.object({ key: z.string().min(1).max(128), protocol: z.enum(['oidc', 'saml', 'ldap']), isEnabled: z.boolean().optional(), authenticationMode: z.enum(['direct', 'claims_only']).optional(), directoryTenantId: z.string().optional().nullable(), configuration: z.record(z.string(), z.unknown()), sync: z.record(z.string(), z.unknown()).optional(), ownershipMode: z.string().max(64).optional(), sourceRef: z.string().optional().nullable() });
 
 const providerKeySchema = z.string().min(1).max(128);
+const replayMembershipsSchema = z.object({ limit: z.number().int().min(1).max(5000).optional() });
 
 router.get('/api/identity/providers', requireAuth, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
   res.json(await identityProviderService.list(req.tenant?.tenantId || null));
@@ -51,6 +53,15 @@ router.post('/api/identity/providers/:key/reconcile', requireAuth, requireAction
   if (provider.protocol !== 'ldap') throw Errors.validation('Manual reconciliation is currently available only for LDAP directory providers');
   const result = await ldapReconciliationService.reconcileProvider(key, req.tenant?.tenantId || null, 'manual');
   await logAudit({ action: 'identity.provider.reconcile', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, protocol: provider.protocol, ...result } });
+  res.json(result);
+}));
+router.post('/api/identity/providers/:key/replay-memberships', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
+  const key = providerKeySchema.parse(req.params.key);
+  const input = replayMembershipsSchema.parse(req.body || {});
+  const provider = await identityProviderService.getByKey(key, req.tenant?.tenantId || null);
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  const result = await ssoNormalizedIdentityService.replayMemberships({ tenantId: req.tenant?.tenantId || null, providerIds: [provider.id], limit: input.limit });
+  await logAudit({ action: 'identity.provider.memberships.replay', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, protocol: provider.protocol, ...result } });
   res.json(result);
 }));
 router.delete('/api/identity/providers/:key', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {

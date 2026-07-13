@@ -1135,7 +1135,7 @@ LDAP may be used in either of two ways:
 - [ ] ⬜ Preserve manual, API, automation, and other-provider memberships during identity reconciliation.
 - [x] ✅ Run direct LDAP synchronization at login, through an audited manual provider action, and through the bounded scheduled reconciliation poller. The provider interval is enforced by checkpoint leases; OIDC/SAML provider-API synchronization remains pending.
 - [x] ✅ Invoke provider-neutral entitlement-to-group reconciliation from the existing normalized identity provisioning path, so current OIDC-family and SAML login flows synchronize mapped memberships at login. LDAP transport and scheduled reconciliation remain in progress.
-- [x] ✅ Add a bounded replay of sanitized normalized identity snapshots for selected providers. It never contacts the provider, reports truncation/failures, and lets mapping changes repair known provider-managed memberships without waiting for another login.
+- [x] ✅ Add a bounded replay of sanitized normalized identity snapshots for selected providers, exposed as audited `POST /api/identity/providers/:key/replay-memberships`. It never contacts the provider, reports truncation/failures, and lets mapping changes repair known provider-managed memberships without waiting for another login.
 - [ ] ⬜ Fail login closed when the configured provider requires authoritative entitlement synchronization and normalization or persistence fails.
 - [ ] ⬜ Keep additive and authoritative modes per mapping.
 - [ ] ⬜ Keep `scope` entitlements restricted to API/machine use unless a product use case explicitly approves human mapping.
