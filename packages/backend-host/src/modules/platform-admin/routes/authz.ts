@@ -84,6 +84,7 @@ const authzCheckSchema = z.object({
 const authzCheckBatchSchema = z.object({
   checks: z.array(authzCheckSchema).min(1),
 });
+const legacyMappingCoverageVerificationSchema = z.object({ family: z.enum(['platform_role', 'group', 'engine_assignment']), candidateIdentityMappingId: z.string().min(1), note: z.string().min(3).max(2000) });
 const configBundlePreviewSchema = z.object({
   bundle: z.unknown(),
   files: z.record(z.string(), z.unknown()),
@@ -2507,6 +2508,11 @@ router.get('/api/authz/sso-assignment-mappings', apiLimiter, requireAuth, requir
 
 router.get('/api/authz/legacy-mapping-coverage', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.read'), asyncHandler(async (req: Request, res: Response) => {
   res.json(await legacyMappingCoverageService.getCoverage(req.tenant?.tenantId || null));
+}));
+
+router.post('/api/authz/legacy-mapping-coverage/:id/verify', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateParams(idParamSchema), validateBody(legacyMappingCoverageVerificationSchema), asyncHandler(async (req: Request, res: Response) => {
+  await legacyMappingCoverageService.verifyReplacement({ tenantId: req.tenant?.tenantId || null, legacyMappingId: String(req.params.id), actorId: req.user!.userId, ...req.body });
+  res.status(204).send();
 }));
 
 router.post('/api/authz/sso-assignment-mappings', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateBody(ssoAssignmentMappingCreateSchema), asyncHandler(async (req: Request, res: Response) => {

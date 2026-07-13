@@ -520,6 +520,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'DELETE', route: '/api/identity/mappings/{id}', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/identity/mappings/test', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/identity/mappings/stored-snapshot-preview', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/authz/legacy-mapping-coverage/{id}/verify', resourceResolver: 'ssoMapping.byId' },
     ],
   },
   {

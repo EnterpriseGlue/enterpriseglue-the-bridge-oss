@@ -435,6 +435,7 @@ describe('authorization route inventory validation', () => {
           ['DELETE', '/api/identity/mappings/{id}', 'platform.self'],
           ['POST', '/api/identity/mappings/test', 'platform.self'],
           ['POST', '/api/identity/mappings/stored-snapshot-preview', 'platform.self'],
+          ['POST', '/api/authz/legacy-mapping-coverage/{id}/verify', 'ssoMapping.byId'],
         ],
       },
       {
