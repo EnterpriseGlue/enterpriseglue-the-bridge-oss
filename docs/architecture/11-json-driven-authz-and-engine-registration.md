@@ -2149,7 +2149,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add validation that system roles are reference-only and not mutable.
 - [x] ✅ Add custom-role config validation for explicit `permissions`.
 - [x] ✅ Add custom-role `copyFromRoleKey` expansion with same-scope `addPermissions` and `removePermissions`.
-- [ ] ⬜ Add role baseline fingerprinting so previews show when a system-role template changed.
+- [x] ✅ Add system-role baseline fingerprinting to copied-role previews and the canonical preview hash, so a changed template invalidates a stale apply.
 - [x] ✅ Add settings schema for `engineRuntimeAuthorizationMode` with `enterpriseglue_authoritative` enabled in v1 and the other modes rejected as unsupported.
 - [x] ✅ Add and persist per-engine `runtimeAccessScope` and `deploymentIntegration` schemas with distributed-engine defaults.
 - [ ] ⬜ Add first-class engine `connectionMode = direct | customer_sidecar` and platform policy for credentialless private-sidecar endpoints; reject `auth.type = "none"` for direct engines.

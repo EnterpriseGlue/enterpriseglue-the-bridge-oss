@@ -27,6 +27,8 @@ export interface ConfigBundlePreview {
   counts: Record<string, number>;
   /** Explicit effective permissions for copied config roles; never a runtime authorization source. */
   expandedRolePermissions?: Record<string, string[]>;
+  /** Immutable system-role baseline used by each copied custom role. */
+  roleTemplateBaselines?: Record<string, { copyFromRoleKey: string; fingerprint: string; permissions: string[] }>;
 }
 
 export interface ConfigBundleCompilation {
@@ -144,6 +146,7 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
 function expandRoleTemplates(normalizedFiles: Record<string, unknown>): {
   errors: Array<{ path: string; message: string }>;
   expandedRolePermissions: Record<string, string[]>;
+  roleTemplateBaselines: Record<string, { copyFromRoleKey: string; fingerprint: string; permissions: string[] }>;
 } {
   const roles = fileEntries(normalizedFiles, './roles.json', 'roles');
   const systemRoles = new Map(SystemRoleDefinitions.map((role) => [role.key, {
@@ -152,6 +155,7 @@ function expandRoleTemplates(normalizedFiles: Record<string, unknown>): {
   }]));
   const customRoles = new Map(roles.map((role, index) => [role.key, { role, index }]));
   const resolved = new Map<string, string[]>();
+  const roleTemplateBaselines: Record<string, { copyFromRoleKey: string; fingerprint: string; permissions: string[] }> = {};
   const resolving = new Set<string>();
   const errors: Array<{ path: string; message: string }> = [];
 
@@ -194,8 +198,18 @@ function expandRoleTemplates(normalizedFiles: Record<string, unknown>): {
     return normalized;
   };
 
-  for (const role of roles) resolve(role.key);
-  return { errors, expandedRolePermissions: Object.fromEntries(resolved.entries()) };
+  for (const role of roles) {
+    const permissions = resolve(role.key);
+    if ('copyFromRoleKey' in role && systemRoles.has(role.copyFromRoleKey) && permissions) {
+      const baselinePermissions = resolve(role.copyFromRoleKey) || [];
+      roleTemplateBaselines[role.key] = {
+        copyFromRoleKey: role.copyFromRoleKey,
+        fingerprint: hashCanonicalConfig({ roleKey: role.copyFromRoleKey, scope: role.scope, permissions: baselinePermissions }),
+        permissions: baselinePermissions,
+      };
+    }
+  }
+  return { errors, expandedRolePermissions: Object.fromEntries(resolved.entries()), roleTemplateBaselines };
 }
 
 class ConfigBundlePreviewService {
@@ -215,22 +229,25 @@ class ConfigBundlePreviewService {
     }
     for (const path of Object.keys(input.files)) if (!parsedBundle.data.imports.includes(path as never)) errors.push({ path, message: 'File is not declared in bundle imports' });
     let expandedRolePermissions: Record<string, string[]> | undefined;
+    let roleTemplateBaselines: ConfigBundlePreview['roleTemplateBaselines'];
     if (errors.length === 0) {
       errors.push(...validateCrossFileReferences(normalizedFiles));
       if (errors.length === 0) {
         const expanded = expandRoleTemplates(normalizedFiles);
         errors.push(...expanded.errors);
         expandedRolePermissions = expanded.expandedRolePermissions;
+        roleTemplateBaselines = expanded.roleTemplateBaselines;
       }
     }
     if (errors.length > 0) return { preview: { valid: false, errors, counts } };
     return {
       preview: {
         valid: true,
-        canonicalHash: hashCanonicalConfig({ bundle: parsedBundle.data, files: normalizedFiles }),
+        canonicalHash: hashCanonicalConfig({ bundle: parsedBundle.data, files: normalizedFiles, expandedRolePermissions, roleTemplateBaselines }),
         errors: [],
         counts,
         expandedRolePermissions,
+        roleTemplateBaselines,
       },
       manifest: parsedBundle.data,
       files: normalizedFiles,

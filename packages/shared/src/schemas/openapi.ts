@@ -3495,6 +3495,7 @@ const ConfigBundlePreviewResponseOpenApiSchema = z.object({
   errors: z.array(z.object({ path: z.string(), message: z.string() })),
   counts: z.record(z.string(), z.number().int().nonnegative()),
   expandedRolePermissions: z.record(z.string(), z.array(z.string())).optional(),
+  roleTemplateBaselines: z.record(z.string(), z.object({ copyFromRoleKey: z.string(), fingerprint: z.string(), permissions: z.array(z.string()) })).optional(),
 });
 
 const ConfigBundleSecretPreflightResponseOpenApiSchema = z.object({

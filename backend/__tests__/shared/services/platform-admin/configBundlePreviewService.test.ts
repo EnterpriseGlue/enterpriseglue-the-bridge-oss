@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
+import { SystemRoleDefinitions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const bundle = { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle', metadata: { key: 'acme.authz', owner: 'platform' }, tenantKey: 'acme', mode: 'preview_only', settings: {}, imports: ['./groups.json'] };
 describe('configBundlePreviewService', () => {
@@ -71,6 +72,13 @@ describe('configBundlePreviewService', () => {
       expandedRolePermissions: {
         'custom.engine.deployer-plus': expect.arrayContaining(['engine:deploy', 'engine:process:start']),
       },
+      roleTemplateBaselines: {
+        'custom.engine.deployer-plus': {
+          copyFromRoleKey: 'system.engine.deployer',
+          fingerprint: expect.any(String),
+          permissions: expect.arrayContaining(['engine:deploy']),
+        },
+      },
     });
 
     const cycle = configBundlePreviewService.preview({
@@ -89,5 +97,27 @@ describe('configBundlePreviewService', () => {
     expect(cycle.errors).toEqual(expect.arrayContaining([
       expect.objectContaining({ message: expect.stringContaining('Role template cycle detected') }),
     ]));
+  });
+
+  it('binds copied-role preview hashes to the current system-role baseline', () => {
+    const input = {
+      bundle: { ...bundle, imports: ['./roles.json'] },
+      files: { './roles.json': { roles: [{
+        key: 'custom.engine.deployer-plus', name: 'Deployer Plus', scope: 'engine',
+        copyFromRoleKey: 'system.engine.deployer', addPermissions: ['engine:process:start'], removePermissions: [],
+      }] } },
+    };
+    const systemRole = SystemRoleDefinitions.find((role) => role.key === 'system.engine.deployer')!;
+    const originalPermissions = [...systemRole.permissions];
+    const first = configBundlePreviewService.preview(input);
+    try {
+      systemRole.permissions = [...originalPermissions, 'engine:variables:edit'];
+      const changed = configBundlePreviewService.preview(input);
+      expect(changed.canonicalHash).not.toBe(first.canonicalHash);
+      expect(changed.roleTemplateBaselines?.['custom.engine.deployer-plus'].fingerprint)
+        .not.toBe(first.roleTemplateBaselines?.['custom.engine.deployer-plus'].fingerprint);
+    } finally {
+      systemRole.permissions = originalPermissions;
+    }
   });
 });
