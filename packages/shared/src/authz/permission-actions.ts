@@ -1063,6 +1063,7 @@ export const AUTHZ_ACTIONS = [
       { method: 'DELETE', route: '/api/identity/providers/{key}', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/identity/providers/{key}/reconcile', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/identity/providers/{key}/replay-memberships', resourceResolver: 'platform.self' },
+      { method: 'POST', route: '/api/identity/providers/{key}/test-connection', resourceResolver: 'platform.self' },
       { method: 'PUT', route: '/api/sso/providers/{id}', resourceResolver: 'platform.self' },
       { method: 'DELETE', route: '/api/sso/providers/{id}', resourceResolver: 'platform.self' },
       { method: 'POST', route: '/api/sso/providers/{id}/toggle', resourceResolver: 'platform.self' },

@@ -8,6 +8,8 @@ import { identityProviderService } from '@enterpriseglue/shared/services/platfor
 import { ldapReconciliationService } from '@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js';
 import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
+import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
+import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
@@ -30,6 +32,22 @@ router.get('/api/identity/providers/:key/sync-runs', requireAuth, requireAction(
   const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
   res.json(await ssoSyncDiagnosticsService.listRuns({ tenantId: req.tenant?.tenantId || null, providerId: provider.id, limit: Number(req.query.limit || 10) }));
+}));
+router.post('/api/identity/providers/:key/test-connection', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
+  const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  let result: Record<string, unknown>;
+  if (provider.protocol === 'ldap') {
+    const page = await directLdapIdentityService.listDirectoryPage(provider);
+    result = { status: 'connected', protocol: 'ldap', sampledIdentities: page.identities.length };
+  } else if (provider.protocol === 'oidc') {
+    const metadata = await genericOidcService.testConnection(JSON.parse(provider.configurationJson));
+    result = { status: 'connected', protocol: 'oidc', issuer: metadata.issuer };
+  } else {
+    result = { status: 'not_supported', protocol: 'saml', reason: 'SAML metadata connection validation is not implemented yet' };
+  }
+  await logAudit({ action: 'identity.provider.connection_test', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, ...result } });
+  res.json(result);
 }));
 router.post('/api/identity/providers', requireAuth, requireAction('platform.sso.providers.manage'), validateBody(schema), asyncHandler(async (req, res) => {
   const provider = await identityProviderService.upsert({ ...req.body, tenantId: req.tenant?.tenantId || null });

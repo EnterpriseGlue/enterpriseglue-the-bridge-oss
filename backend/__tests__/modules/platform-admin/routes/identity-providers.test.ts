@@ -15,6 +15,7 @@ const service = vi.hoisted(() => ({
   completeRun: vi.fn(),
   failRun: vi.fn(),
   listRuns: vi.fn(),
+  testConnection: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -31,6 +32,8 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { replayMemberships: service.replayMemberships } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun, listRuns: service.listRuns } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService: { testConnection: service.testConnection } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService: { listDirectoryPage: vi.fn() } }));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }));
 
 const provider = {
@@ -54,6 +57,7 @@ describe('identity provider routes', () => {
     service.completeRun.mockResolvedValue(undefined);
     service.failRun.mockResolvedValue(undefined);
     service.listRuns.mockResolvedValue([{ id: 'sync-run-1', status: 'success', trigger: 'manual', startedAt: 10, completedAt: 11, groupMembershipsCreated: 1, groupMembershipsRemoved: 0, errorMessage: null }]);
+    service.testConnection.mockResolvedValue({ issuer: 'https://login.example.test', authorizationEndpoint: 'https://login.example.test/auth', tokenEndpoint: 'https://login.example.test/token', jwksUri: 'https://login.example.test/jwks' });
     app = express();
     app.use(express.json());
     app.use(identityProvidersRouter);
@@ -72,6 +76,15 @@ describe('identity provider routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual([expect.objectContaining({ id: 'sync-run-1', trigger: 'manual' })]);
     expect(service.listRuns).toHaveBeenCalledWith({ tenantId: 'tenant-1', providerId: 'provider-1', limit: 5 });
+  });
+
+  it('tests OIDC discovery and audits the connection result', async () => {
+    const response = await request(app).post('/api/identity/providers/entra/test-connection');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'connected', protocol: 'oidc', issuer: 'https://login.example.test' });
+    expect(service.testConnection).toHaveBeenCalledWith(JSON.parse(provider.configurationJson));
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.connection_test', resourceId: 'provider-1' }));
   });
 
   it('creates a provider and audits sanitized definition metadata', async () => {

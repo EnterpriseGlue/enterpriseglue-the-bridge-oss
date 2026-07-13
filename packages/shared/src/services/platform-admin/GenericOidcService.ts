@@ -93,6 +93,12 @@ function resolveSecretReference(reference?: string): string | null {
 }
 
 export class GenericOidcService {
+  async testConnection(rawConfiguration: Record<string, unknown>): Promise<{ issuer: string; authorizationEndpoint: string; tokenEndpoint: string; jwksUri: string }> {
+    const provider = config(rawConfiguration);
+    const metadata = await discover(provider.issuerUrl);
+    return { issuer: metadata.issuer, authorizationEndpoint: metadata.authorization_endpoint, tokenEndpoint: metadata.token_endpoint, jwksUri: metadata.jwks_uri };
+  }
+
   async createAuthorizationRequest(rawConfiguration: Record<string, unknown>, state: string, nonce: string): Promise<OidcAuthorizationRequest> {
     const provider = config(rawConfiguration);
     const metadata = await discover(provider.issuerUrl);
