@@ -137,6 +137,8 @@ Use the repository CLI:
 # non-human bearer token. JSON output is suitable for CI artifacts.
 export ENTERPRISEGLUE_API_URL="https://enterpriseglue.example"
 export ENTERPRISEGLUE_API_TOKEN="$EG_CONFIG_TOKEN"
+# Set a stable key for one CI run. Reusing it with different bundle input is rejected.
+export ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY="release-2026-07-13-001"
 
 # Validates the local JSON and performs the server-side preview. Exit code 2
 # means the bundle was rejected by preview validation.
@@ -153,7 +155,7 @@ pnpm authz:config apply ./enterpriseglue-config.json
 pnpm authz:config export acme-platform-authz
 ```
 
-The CLI calls the same backend APIs used by the UI. It never connects directly to the database. `apply` sends the server-produced canonical hash as `expectedPreviewHash`, so stale or altered bundles fail closed. The CLI returns `64` for invalid invocation, `2` for preview validation failure, and `1` for API, I/O, or transport failures.
+The CLI calls the same backend APIs used by the UI. It never connects directly to the database. `apply` sends the server-produced canonical hash as `expectedPreviewHash`, so stale or altered bundles fail closed. Set `ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY` for CI retries: a completed matching apply returns its original receipt, while reusing the key with different bundle input is rejected. The CLI returns `64` for invalid invocation, `2` for preview validation failure, and `1` for API, I/O, or transport failures.
 
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
 
@@ -175,7 +177,8 @@ GET  /api/authz/config-bundles/export?bundleKey=<key>
 
 Required behavior:
 
-- [ ] ⬜ Add an explicit expected environment/tenant id and caller-supplied idempotency key to the CLI/API contract.
+- [ ] ⬜ Add an explicit expected environment/tenant id to the CLI/API contract.
+- [x] ✅ Add persisted tenant-scoped idempotency keys. A matching completed apply replays its receipt; a key reused for other bundle input or an unfinished/failed run is rejected.
 - [x] ✅ Require the server-generated canonical preview hash on apply; the apply service rejects an altered or stale bundle.
 - [x] ✅ Print sanitized machine-readable preview, apply, and export responses suitable for CI artifacts.
 - [ ] ⬜ Return distinct exit codes for validation, authorization, conflict, reconciliation, and transport failures.

@@ -541,6 +541,24 @@ describe('platform-admin authz routes', () => {
             ]),
           };
         }
+        if (entity.name === 'ConfigBundleApplyRun') {
+          return {
+            find: vi.fn().mockResolvedValue([
+              {
+                id: 'config-run-1',
+                bundleKey: 'acme.authz',
+                canonicalHash: 'preview-hash',
+                idempotencyKey: 'config-apply-2026-07-13',
+                actorId: 'user-1',
+                status: 'succeeded',
+                resultJson: JSON.stringify({ created: 2, updated: 1, archived: 0 }),
+                errorMessage: null,
+                completedAt: 1100,
+                createdAt: 1000,
+              },
+            ]),
+          };
+        }
         if (entity.name === 'RbacRoleAssignment') {
           return {
             findOne: vi.fn().mockResolvedValue({
@@ -1965,14 +1983,32 @@ describe('platform-admin authz routes', () => {
         bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle' },
         files: {},
         expectedPreviewHash: 'preview-hash',
+        idempotencyKey: 'config-apply-2026-07-13',
       });
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ canonicalHash: 'preview-hash', created: 2 });
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       expectedPreviewHash: 'preview-hash',
+      idempotencyKey: 'config-apply-2026-07-13',
       actorId: 'user-1',
     }));
+  });
+
+  it('lists persisted configuration apply runs with retry lineage', async () => {
+    const response = await request(app).get('/api/authz/config-bundles/runs');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      expect.objectContaining({
+        id: 'config-run-1',
+        bundleKey: 'acme.authz',
+        idempotencyKey: 'config-apply-2026-07-13',
+        status: 'succeeded',
+        created: 2,
+        updated: 1,
+      }),
+    ]);
   });
 
   it('allows configuration-scoped API clients to apply bundles and preserves machine audit lineage', async () => {

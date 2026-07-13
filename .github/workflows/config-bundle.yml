@@ -45,6 +45,7 @@ jobs:
     env:
       ENTERPRISEGLUE_API_URL: ${{ vars.ENTERPRISEGLUE_API_URL }}
       ENTERPRISEGLUE_API_TOKEN: ${{ secrets.ENTERPRISEGLUE_CONFIG_TOKEN }}
+      ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY: config-bundle-${{ github.run_id }}
       BUNDLE_PATH: ${{ inputs.bundle_path }}
       GIT_REF: ${{ inputs.git_ref }}
       OPERATION: ${{ inputs.operation }}

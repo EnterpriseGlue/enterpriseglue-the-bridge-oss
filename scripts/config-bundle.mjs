@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 const [command, argument] = process.argv.slice(2);
 const apiUrl = (process.env.ENTERPRISEGLUE_API_URL || '').replace(/\/$/, '');
 const token = process.env.ENTERPRISEGLUE_API_TOKEN;
+const idempotencyKey = process.env.ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY;
 const needsFile = command === 'validate' || command === 'preview' || command === 'apply';
 const needsBundleKey = command === 'export';
 
@@ -33,7 +34,11 @@ if (!['validate', 'preview', 'apply', 'export'].includes(command) || !argument |
       if (!previewRequest.response.ok || !previewRequest.result.valid || !previewRequest.result.canonicalHash) {
         process.exitCode = 2;
       } else if (command === 'apply') {
-        const applyRequest = await request('/api/authz/config-bundles/apply', { method: 'POST', body: JSON.stringify({ ...payload, expectedPreviewHash: previewRequest.result.canonicalHash }) });
+        const applyRequest = await request('/api/authz/config-bundles/apply', { method: 'POST', body: JSON.stringify({
+          ...payload,
+          expectedPreviewHash: previewRequest.result.canonicalHash,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        }) });
         if (!applyRequest.response.ok) throw new Error(applyRequest.result.message || applyRequest.result.error || `Apply failed: ${applyRequest.response.status}`);
         console.log(JSON.stringify(applyRequest.result, null, 2));
       }

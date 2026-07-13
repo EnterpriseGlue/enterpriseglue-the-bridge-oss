@@ -1,6 +1,7 @@
 import { type EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
+import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
@@ -24,6 +25,7 @@ import { configBundlePreviewService, type ConfigBundlePreviewInput } from './Con
 
 export interface ConfigBundleApplyInput extends ConfigBundlePreviewInput {
   expectedPreviewHash: string;
+  idempotencyKey?: string | null;
   tenantId?: string | null;
   actorId: string;
 }
@@ -34,6 +36,8 @@ export interface ConfigBundleApplyResult {
   updated: number;
   archived: number;
   changes: ConfigBundleDiffChange[];
+  idempotent?: boolean;
+  applyRunId?: string;
 }
 
 function entries(files: Record<string, unknown>, path: string, property: string): any[] {
@@ -68,6 +72,43 @@ function fail(message: string, statusCode: number): never {
   const error = new Error(message) as Error & { statusCode: number };
   error.statusCode = statusCode;
   throw error;
+}
+
+function tenantScopeKey(tenantId?: string | null): string {
+  return tenantId?.trim() || 'platform';
+}
+
+function parseStoredResult(value: string | null): ConfigBundleApplyResult | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<ConfigBundleApplyResult>;
+    if (!parsed || typeof parsed.canonicalHash !== 'string' || !Array.isArray(parsed.changes)) return null;
+    return {
+      canonicalHash: parsed.canonicalHash,
+      created: Number(parsed.created || 0),
+      updated: Number(parsed.updated || 0),
+      archived: Number(parsed.archived || 0),
+      changes: parsed.changes,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function errorSummary(error: unknown): string {
+  return error instanceof Error ? error.message.slice(0, 2000) : String(error).slice(0, 2000);
+}
+
+function replayExistingApplyRun(run: ConfigBundleApplyRun, canonicalHash: string, bundleKey: string): ConfigBundleApplyResult {
+  if (run.canonicalHash !== canonicalHash || run.bundleKey !== bundleKey) {
+    return fail('Idempotency key is already associated with a different configuration bundle', 409);
+  }
+  if (run.status === 'succeeded') {
+    const result = parseStoredResult(run.resultJson);
+    if (!result) return fail('Configuration apply receipt is unavailable for this idempotency key', 409);
+    return { ...result, idempotent: true, applyRunId: run.id };
+  }
+  return fail(`Configuration apply for this idempotency key is ${run.status}`, 409);
 }
 
 async function writeAudit(manager: EntityManager, input: {
@@ -116,11 +157,47 @@ class ConfigBundleApplyService {
     }
 
     const tenantId = input.tenantId || null;
+    const dataSource = await getDataSource();
+    const idempotencyKey = input.idempotencyKey?.trim() || null;
+    let applyRunId: string | null = null;
+    if (idempotencyKey) {
+      const existing = await dataSource.getRepository(ConfigBundleApplyRun).findOne({
+        where: { tenantScopeKey: tenantScopeKey(tenantId), idempotencyKey },
+      });
+      if (existing) return replayExistingApplyRun(existing, compilation.preview.canonicalHash, manifest.metadata.key);
+    }
     const diff = await configBundleDiffService.diff(input, tenantId);
     if (!diff.valid || !diff.canonicalHash) return fail('Configuration bundle diff is invalid', 422);
     const conflicts = diff.changes.filter((change) => change.operation === 'conflict');
     if (conflicts.length > 0) {
       return fail(`Config apply conflicts with manually owned objects: ${conflicts.map((change) => `${change.objectType}:${change.key}`).join(', ')}`, 409);
+    }
+
+    if (idempotencyKey) {
+      const runRepo = dataSource.getRepository(ConfigBundleApplyRun);
+      const scopeKey = tenantScopeKey(tenantId);
+      applyRunId = generateId();
+      try {
+        await runRepo.insert({
+          id: applyRunId,
+          tenantId,
+          tenantScopeKey: scopeKey,
+          bundleKey: manifest.metadata.key,
+          canonicalHash: diff.canonicalHash,
+          idempotencyKey,
+          actorId: input.actorId,
+          status: 'pending',
+          resultJson: null,
+          errorMessage: null,
+          completedAt: null,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      } catch (error) {
+        const concurrent = await runRepo.findOne({ where: { tenantScopeKey: scopeKey, idempotencyKey } });
+        if (concurrent) return replayExistingApplyRun(concurrent, diff.canonicalHash, manifest.metadata.key);
+        throw error;
+      }
     }
 
     const desiredRoles = new Map(entries(compilation.files, './roles.json', 'roles').map((role) => [role.key, role]));
@@ -140,7 +217,7 @@ class ConfigBundleApplyService {
     let updated = 0;
     let archived = 0;
 
-    const dataSource = await getDataSource();
+    try {
     await dataSource.transaction(async (manager) => {
       const roleRepo = manager.getRepository(RbacRole);
       const groupRepo = manager.getRepository(AuthzGroup);
@@ -488,14 +565,35 @@ class ConfigBundleApplyService {
         }
       }
     });
-    for (const id of materializeIds) await engineSetService.materializeEngineSet(id, tenantId);
-    for (const id of materializeRuntimeResourceSetIds) await runtimeResourceInventoryService.materialize(id, tenantId);
-    for (const id of [...new Set(changedEngineIds)]) {
-      await engineSetService.materializeEngineSetsForEngine(id, tenantId);
-      await runtimeResourceInventoryService.materializeForEngine(id, tenantId);
-    }
+      for (const id of materializeIds) await engineSetService.materializeEngineSet(id, tenantId);
+      for (const id of materializeRuntimeResourceSetIds) await runtimeResourceInventoryService.materialize(id, tenantId);
+      for (const id of [...new Set(changedEngineIds)]) {
+        await engineSetService.materializeEngineSetsForEngine(id, tenantId);
+        await runtimeResourceInventoryService.materializeForEngine(id, tenantId);
+      }
 
-    return { canonicalHash: diff.canonicalHash, created, updated, archived, changes: diff.changes };
+      const result = { canonicalHash: diff.canonicalHash, created, updated, archived, changes: diff.changes, ...(applyRunId ? { applyRunId } : {}) };
+      if (applyRunId) {
+        await dataSource.getRepository(ConfigBundleApplyRun).update({ id: applyRunId }, {
+          status: 'succeeded',
+          resultJson: JSON.stringify(result),
+          errorMessage: null,
+          completedAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      }
+      return result;
+    } catch (error) {
+      if (applyRunId) {
+        await dataSource.getRepository(ConfigBundleApplyRun).update({ id: applyRunId }, {
+          status: 'failed',
+          errorMessage: errorSummary(error),
+          completedAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      }
+      throw error;
+    }
   }
 }
 

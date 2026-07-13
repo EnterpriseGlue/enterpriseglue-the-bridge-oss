@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
+import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
@@ -49,6 +50,21 @@ const files = {
 };
 
 function setupDataSource() {
+  const configRunRows: any[] = [];
+  const configRunRepo = {
+    findOne: vi.fn().mockImplementation(({ where }: any) => Promise.resolve(configRunRows.find((row) =>
+      Object.entries(where).every(([key, value]) => row[key] === value)
+    ) || null)),
+    insert: vi.fn().mockImplementation((row) => {
+      configRunRows.push({ ...row });
+      return Promise.resolve({});
+    }),
+    update: vi.fn().mockImplementation((where, updates) => {
+      const row = configRunRows.find((candidate) => candidate.id === where.id);
+      if (row) Object.assign(row, updates);
+      return Promise.resolve({});
+    }),
+  };
   const roleInsert = vi.fn().mockResolvedValue(undefined);
   const groupInsert = vi.fn().mockResolvedValue(undefined);
   const permissionInsert = vi.fn().mockResolvedValue(undefined);
@@ -81,6 +97,7 @@ function setupDataSource() {
     if (entity === IdentityEntitlementMapping) return identityMappingRepo;
     if (entity === RbacRolePermission) return permissionRepo;
     if (entity === AuditLog) return auditRepo;
+    if (entity === ConfigBundleApplyRun) return configRunRepo;
     throw new Error('Unexpected repository');
   };
   const dataSource = {
@@ -88,7 +105,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, roleRepo, groupRepo, engineRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, engineRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -128,6 +145,32 @@ describe('configBundleApplyService', () => {
       actorId: 'admin-1',
     })).rejects.toMatchObject({ statusCode: 409 });
     expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('replays a completed idempotent apply and rejects the key for different bundle input', async () => {
+    const { roleInsert, configRunRepo } = setupDataSource();
+    const preview = configBundlePreviewService.preview({ bundle, files });
+    const input = {
+      bundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      idempotencyKey: 'config-apply-2026-07-13',
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    };
+
+    const first = await configBundleApplyService.apply(input);
+    const replay = await configBundleApplyService.apply(input);
+
+    expect(first.applyRunId).toEqual(expect.any(String));
+    expect(replay).toMatchObject({ idempotent: true, applyRunId: first.applyRunId, canonicalHash: preview.canonicalHash });
+    expect(roleInsert).toHaveBeenCalledTimes(1);
+    expect(configRunRepo.insert).toHaveBeenCalledTimes(1);
+
+    await expect(configBundleApplyService.apply({
+      ...input,
+      bundle: { ...bundle, metadata: { ...bundle.metadata, key: 'acme.other' } },
+    })).rejects.toMatchObject({ statusCode: 409 });
   });
 
   it('applies a config-managed engine with opaque secret references and runtime defaults', async () => {

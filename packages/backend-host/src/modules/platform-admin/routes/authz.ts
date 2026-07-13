@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
+import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
@@ -85,6 +86,7 @@ const configBundlePreviewSchema = z.object({
 });
 const configBundleApplySchema = configBundlePreviewSchema.extend({
   expectedPreviewHash: z.string().min(1),
+  idempotencyKey: z.string().min(8).max(160).optional(),
 });
 
 const idParamSchema = z.object({ id: z.string().uuid() });
@@ -1366,6 +1368,9 @@ router.post('/api/authz/config-bundles/apply', apiLimiter, requireConfigBundleAc
       updated: result.updated,
       archived: result.archived,
       mode: (req.body.bundle as { mode?: string })?.mode || null,
+      idempotencyKey: req.body.idempotencyKey || null,
+      applyRunId: result.applyRunId || null,
+      idempotent: result.idempotent === true,
       actorType: req.apiClient ? 'api_client' : 'user',
       apiClientId: req.apiClient?.id || null,
     },
@@ -1376,15 +1381,26 @@ router.post('/api/authz/config-bundles/apply', apiLimiter, requireConfigBundleAc
 /** Recent hash-bound applies are the operational history for UI and CI diagnostics. */
 router.get('/api/authz/config-bundles/runs', apiLimiter, requireConfigBundleAccess, validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenant?.tenantId || null;
-  const rows = await (await getDataSource()).getRepository(AuditLog).find({
-    where: { action: 'authz.config_bundle.apply', ...(tenantId ? { tenantId } : { tenantId: IsNull() }) },
+  const rows = await (await getDataSource()).getRepository(ConfigBundleApplyRun).find({
+    where: tenantId ? { tenantId } : { tenantId: IsNull() },
     order: { createdAt: 'DESC' },
     take: Number(req.query.limit || 25),
   });
   res.json(rows.map((row) => {
-    let details: Record<string, unknown> = {};
-    try { details = row.details ? JSON.parse(row.details) as Record<string, unknown> : {}; } catch { /* preserve audit availability */ }
-    return { id: row.id, bundleKey: row.resourceId, actorId: row.userId, createdAt: row.createdAt, ...details };
+    let result: Record<string, unknown> = {};
+    try { result = row.resultJson ? JSON.parse(row.resultJson) as Record<string, unknown> : {}; } catch { /* preserve run-history availability */ }
+    return {
+      id: row.id,
+      bundleKey: row.bundleKey,
+      canonicalHash: row.canonicalHash,
+      idempotencyKey: row.idempotencyKey,
+      actorId: row.actorId,
+      status: row.status,
+      errorMessage: row.errorMessage,
+      completedAt: row.completedAt,
+      createdAt: row.createdAt,
+      ...result,
+    };
   }));
 }));
 

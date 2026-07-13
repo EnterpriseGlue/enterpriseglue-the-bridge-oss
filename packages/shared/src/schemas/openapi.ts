@@ -3471,6 +3471,7 @@ const ConfigBundleDiffResponseOpenApiSchema = ConfigBundlePreviewResponseOpenApi
 
 const ConfigBundleApplyRequestOpenApiSchema = ConfigBundleRequestOpenApiSchema.extend({
   expectedPreviewHash: z.string().min(1),
+  idempotencyKey: z.string().min(8).max(160).optional(),
 });
 
 const ConfigBundleApplyResponseOpenApiSchema = z.object({
@@ -3479,12 +3480,18 @@ const ConfigBundleApplyResponseOpenApiSchema = z.object({
   updated: z.number().int().nonnegative(),
   archived: z.number().int().nonnegative(),
   changes: z.array(ConfigBundleDiffChangeOpenApiSchema),
+  idempotent: z.boolean().optional(),
+  applyRunId: z.string().optional(),
 });
 
 const ConfigBundleApplyRunOpenApiSchema = z.object({
   id: z.string(),
   bundleKey: z.string(),
+  idempotencyKey: z.string().nullable(),
   actorId: z.string().nullable(),
+  status: z.enum(['pending', 'succeeded', 'failed']),
+  errorMessage: z.string().nullable(),
+  completedAt: z.number().nullable(),
   createdAt: z.number(),
   canonicalHash: z.string().optional(),
   created: z.number().int().nonnegative().optional(),
