@@ -3064,7 +3064,10 @@ function RoleAssignmentsPanel({
                     return (
                       <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                         {row.cells.map((cell) => {
-                          if (cell.info.header === 'source') return <TableCell key={cell.id}><Tag type={authzSourceTagType(cell.value)}>{formatAuthzSource(cell.value)}</Tag></TableCell>;
+                          if (cell.info.header === 'source') {
+                            const configWarning = assignment?.source === 'config' && assignment.ownershipMode === 'config_warn';
+                            return <TableCell key={cell.id}><Tag type={configWarning ? 'warm-gray' : authzSourceTagType(cell.value)}>{configWarning ? 'Config warning' : formatAuthzSource(cell.value)}</Tag></TableCell>;
+                          }
                           if (cell.info.header === 'actions') {
                             return (
                               <TableCell key={cell.id}>

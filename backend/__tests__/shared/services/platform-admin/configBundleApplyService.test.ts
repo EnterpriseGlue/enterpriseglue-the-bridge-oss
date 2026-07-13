@@ -194,6 +194,50 @@ describe('configBundleApplyService', () => {
     expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync' }));
   });
 
+  it('restores a config-warning assignment by clearing its matching local override', async () => {
+    const { roleRepo, groupRepo, assignmentRepo, assignmentOverrideRepo } = setupDataSource();
+    roleRepo.find.mockResolvedValue([{
+      id: 'role-operators', tenantId: 'tenant-a', key: 'custom.platform.operators', name: 'Operators', description: null,
+      scope: 'platform', source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', isArchived: false,
+    }]);
+    groupRepo.find.mockResolvedValue([{
+      id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', isArchived: false,
+    }]);
+    const assignmentBundle = { ...bundle, imports: ['./roles.json', './groups.json', './assignments.json'] };
+    const assignmentFiles = {
+      './roles.json': {
+        roles: [{ key: 'custom.platform.operators', name: 'Operators', scope: 'platform', permissions: ['platform:users:view'], ownershipMode: 'config_warn' }],
+      },
+      './groups.json': {
+        groups: [{ key: 'group.operators', name: 'Operators', ownershipMode: 'config_warn' }],
+      },
+      './assignments.json': {
+        assignments: [{ principal: { type: 'group', key: 'group.operators' }, roleKey: 'custom.platform.operators', scope: { type: 'platform' }, ownershipMode: 'config_warn' }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: assignmentBundle, files: assignmentFiles });
+
+    await configBundleApplyService.apply({
+      bundle: assignmentBundle,
+      files: assignmentFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      principalId: 'group-operators',
+      roleId: 'role-operators',
+      source: 'config',
+      ownershipMode: 'config_warn',
+    }));
+    expect(assignmentOverrideRepo.delete).toHaveBeenCalledWith({
+      assignmentKey: expect.any(String),
+      sourceRef: 'config_bundle:acme.authz',
+    });
+  });
+
   it('requires acknowledgement before an authoritative apply archives a config-owned object', async () => {
     const { groupRepo } = setupDataSource();
     groupRepo.find.mockResolvedValue([{

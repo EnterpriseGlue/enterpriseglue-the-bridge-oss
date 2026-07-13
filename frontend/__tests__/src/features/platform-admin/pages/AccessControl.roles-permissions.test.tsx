@@ -266,6 +266,18 @@ describe('AccessControl roles and permissions', () => {
     expect(within(assignmentRow!).getByLabelText('Remove assignment')).toBeInTheDocument();
   });
 
+  it('identifies locally overridable config assignments without hiding their removal affordance', () => {
+    render(<AccessControl />);
+
+    fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
+
+    const principal = screen.getByText('00000000-0000-4000-8000-000000000099');
+    const assignmentRow = principal.closest('tr');
+    expect(assignmentRow).toBeTruthy();
+    expect(within(assignmentRow!).getByText('Config warning')).toBeInTheDocument();
+    expect(within(assignmentRow!).getByLabelText('Remove assignment')).toBeInTheDocument();
+  });
+
   it('renders external engine registration audit drilldown', () => {
     render(<AccessControl />);
 
