@@ -1374,6 +1374,7 @@ vi.mock('@src/features/platform-admin/hooks/useAuthzApi', () => ({
     isPending: false,
     error: null,
   }),
+  useIdentityEntitlementMappings: () => ({ data: [], isLoading: false, isError: false }),
   useEvaluateAccess: () => ({ mutateAsync: evaluateAccess, isPending: false, isError: false, data: evaluateAccessState.data }),
 }));
 
