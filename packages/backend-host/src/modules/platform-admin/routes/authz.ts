@@ -17,7 +17,6 @@ import { validateBody, validateParams, validateQuery } from '@enterpriseglue/sha
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import {
   policyService,
-  ssoClaimsMappingService,
   ssoAssignmentMappingService,
   ssoEngineAccessSnapshotService,
   ssoGroupMappingService,
@@ -42,6 +41,7 @@ import { registerAuditRoutes } from './authz/audit.js';
 import { registerExternalEngineRoutes } from './authz/external-engines.js';
 import { registerExternalEngineSystemRoutes } from './authz/external-engine-systems.js';
 import { registerSsoSyncDiagnosticsRoutes } from './authz/sso-sync-diagnostics.js';
+import { registerSsoPlatformMappingRoutes } from './authz/sso-platform-mappings.js';
 
 // Validation schemas
 const authzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
@@ -61,37 +61,6 @@ const legacyMappingCoverageVerificationSchema = z.object({ family: z.enum(['plat
 const legacyMappingRetirementSchema = z.object({ confirmation: z.literal('RETIRE_LEGACY_MAPPINGS') });
 const globalLegacyMappingRetirementSchema = z.object({ confirmation: z.literal('RETIRE_GLOBAL_LEGACY_MAPPINGS') });
 const idParamSchema = z.object({ id: z.string().uuid() });
-const ssoMappingCreateSchema = z.object({
-  providerId: z.string().min(1).optional(),
-  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string().min(1),
-  claimValue: z.string().optional().default(''),
-  claimOperator: z.enum([
-    'equals',
-    'not_equals',
-    'contains',
-    'not_contains',
-    'contains_any',
-    'not_contains_any',
-    'contains_all',
-    'not_contains_all',
-    'matches_regex',
-    'not_matches_regex',
-    'exists',
-    'not_exists',
-  ]).nullable().optional(),
-  targetRole: z.enum(['admin', 'user']),
-  priority: z.number().int().optional(),
-  isActive: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-});
-
-const ssoMappingUpdateSchema = ssoMappingCreateSchema.partial();
-
-const ssoMappingTestSchema = z.object({
-  claims: z.record(z.string(), z.unknown()),
-  providerId: z.string().min(1).optional(),
-});
 
 const authzEvaluateSchema = z.object({
   userId: z.string().uuid(),
@@ -189,8 +158,6 @@ const ssoGroupMappingTestSchema = z.object({
   providerId: z.string().min(1).optional(),
 });
 const ssoGroupMappingProviderNeutralMigrationSchema = z.object({ providerKey: z.string().min(1).max(128) });
-const ssoPlatformMappingProviderNeutralMigrationSchema = z.object({ providerKey: z.string().min(1).max(128), targetGroupKey: z.string().min(1).max(160).optional(), newGroup: z.object({ key: z.string().min(1).max(255), name: z.string().min(1).max(255), description: z.string().max(2000).nullable().optional() }).optional() }).refine((value) => Boolean(value.targetGroupKey) !== Boolean(value.newGroup), { message: 'Provide exactly one of targetGroupKey or newGroup' });
-
 
 const ssoEngineAccessSnapshotQuerySchema = z.object({
   providerId: z.string().min(1).optional(),
@@ -458,93 +425,7 @@ registerPolicyRoutes(router, { requirePlatformAction });
  * GET /api/platform-admin/authz/sso-mappings
  * List all SSO claims mappings.
  */
-router.get('/api/authz/sso-mappings', apiLimiter, requireAuth, requirePlatformAction('platform.sso.platform-role-mappings.read'), asyncHandler(async (_req: Request, res: Response) => {
-  try {
-    const mappings = await ssoClaimsMappingService.getAllMappings();
-    res.json(mappings);
-  } catch (error: any) {
-    logger.error('Get SSO mappings error:', error);
-    throw Errors.internal('Failed to get SSO mappings');
-  }
-}));
-
-/**
- * POST /api/platform-admin/authz/sso-mappings
- * Create a new SSO claims mapping.
- */
-router.post('/api/authz/sso-mappings', apiLimiter, requireAuth, requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateBody(ssoMappingCreateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const { providerId, claimType, claimKey, claimValue, claimOperator, targetRole, priority, isActive, riskAcknowledged } = req.body;
-
-    const result = await ssoClaimsMappingService.createMapping({
-      providerId,
-      claimType,
-      claimKey,
-      claimValue,
-      claimOperator,
-      targetRole,
-      priority,
-      isActive,
-      riskAcknowledged,
-    });
-
-    res.status(201).json(result);
-  } catch (error: any) {
-    logger.error('Create SSO mapping error:', error);
-    throw Errors.internal('Failed to create SSO mapping');
-  }
-}));
-router.post('/api/authz/sso-mappings/:id/migrate-provider-neutral', apiLimiter, requireAuth, requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateParams(idParamSchema), validateBody(ssoPlatformMappingProviderNeutralMigrationSchema), asyncHandler(async (req: Request, res: Response) => {
-  const result = await ssoClaimsMappingService.migrateToProviderNeutral(String(req.params.id), { ...req.body, createdById: req.user!.userId });
-  await logAudit({ action: 'authz.sso_platform_mapping.provider_neutral_migration', userId: req.user!.userId, resourceType: 'sso_mapping', resourceId: result.legacyMappingId, details: { providerKey: req.body.providerKey, identityMappingId: result.mapping.id, assignmentId: result.assignment.id, created: result.created } });
-  res.status(result.created ? 201 : 200).json(result);
-}));
-
-/**
- * PUT /api/platform-admin/authz/sso-mappings/:id
- * Update an SSO claims mapping.
- */
-router.put('/api/authz/sso-mappings/:id', apiLimiter, requireAuth, requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateParams(idParamSchema), validateBody(ssoMappingUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const mappingId = String(req.params.id);
-    await ssoClaimsMappingService.updateMapping(mappingId, req.body);
-    res.json({ success: true });
-  } catch (error: any) {
-    logger.error('Update SSO mapping error:', error);
-    throw Errors.internal('Failed to update SSO mapping');
-  }
-}));
-
-/**
- * DELETE /api/platform-admin/authz/sso-mappings/:id
- * Delete an SSO claims mapping.
- */
-router.delete('/api/authz/sso-mappings/:id', apiLimiter, requireAuth, requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const mappingId = String(req.params.id);
-    await ssoClaimsMappingService.deleteMapping(mappingId);
-    res.status(204).send();
-  } catch (error: any) {
-    logger.error('Delete SSO mapping error:', error);
-    throw Errors.internal('Failed to delete SSO mapping');
-  }
-}));
-
-/**
- * POST /api/platform-admin/authz/sso-mappings/test
- * Test SSO claims against mappings (admin preview).
- */
-router.post('/api/authz/sso-mappings/test', apiLimiter, requireAuth, requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateBody(ssoMappingTestSchema), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const { claims, providerId } = req.body;
-
-    const result = await ssoClaimsMappingService.testClaims(claims, providerId);
-    res.json(result);
-  } catch (error: any) {
-    logger.error('Test SSO mapping error:', error);
-    throw Errors.internal('Failed to test SSO mapping');
-  }
-}));
+registerSsoPlatformMappingRoutes(router, { requirePlatformAction });
 
 // ============================================================================
 // SSO Engine Assignment Mapping Management (Admin Only)
