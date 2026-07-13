@@ -37,4 +37,15 @@ describe('app', () => {
       configBootstrap: { mode: 'disabled', status: 'disabled', hash: null, message: null },
     });
   });
+
+  it('responds to readiness endpoint when configuration bootstrap is healthy', async () => {
+    const app = createApp({ registerRoutes: false, includeDocs: false, includeRateLimiting: false });
+    const response = await request(app).get('/ready');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      status: 'ready',
+      configBootstrap: { mode: 'disabled', status: 'disabled', hash: null, message: null },
+    });
+  });
 });

@@ -198,8 +198,13 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
 
   app.get('/health', (_req, res) => {
     const configBootstrap = getConfigBootstrapStatus();
-    res.status(configBootstrap.status === 'failed' && config.configFailClosed ? 503 : 200)
-      .json({ status: configBootstrap.status === 'failed' ? 'degraded' : 'ok', configBootstrap });
+    res.json({ status: configBootstrap.status === 'failed' ? 'degraded' : 'ok', configBootstrap });
+  });
+
+  app.get('/ready', (_req, res) => {
+    const configBootstrap = getConfigBootstrapStatus();
+    const ready = configBootstrap.status !== 'failed';
+    res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', configBootstrap });
   });
 
   // Register all application routes

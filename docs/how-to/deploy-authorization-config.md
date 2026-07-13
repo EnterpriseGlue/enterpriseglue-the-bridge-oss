@@ -56,7 +56,7 @@ load process environment
 -> become ready
 ```
 
-Liveness can remain healthy while configuration apply is in progress. Readiness must remain false when production fail-closed mode is enabled and validation, apply, secret resolution, or required reconciliation fails.
+`/health` is the liveness/diagnostic endpoint. `/ready` is the readiness endpoint and returns `503` when bootstrap configuration has failed. Production fail-closed mode stops startup before the server listens; non-fail-closed mode preserves `/health` diagnostics while keeping `/ready` false.
 
 Runtime authorization never reads the mounted JSON files directly.
 
@@ -116,7 +116,7 @@ Required changes:
 - [ ] ⬜ Extend `configmap.yaml` with non-secret bootstrap settings.
 - [ ] ⬜ Update the OpenShift deployment script to create/apply the bundle ConfigMap before backend rollout when enabled.
 - [ ] ⬜ Include bundle hash annotations in the backend pod template so an intended bundle change triggers rollout.
-- [ ] ⬜ Add readiness probes that wait for migration, catalog seed, config apply, and required reconciliation.
+- [ ] ⬜ Complete readiness gating for migrations, catalog seed, config apply, and required reconciliation. `/ready` now fails after bootstrap configuration failure and OpenShift/production Compose use it; reconciliation status remains pending.
 - [ ] ⬜ Define failed-rollout behavior that leaves the previous ReplicaSet available when the new bundle fails closed.
 
 ## CI/CD Apply Flow
