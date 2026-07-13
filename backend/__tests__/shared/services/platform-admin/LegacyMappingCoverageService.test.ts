@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { SsoAssignmentMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoAssignmentMapping.js';
 import { SsoClaimsMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoClaimsMapping.js';
 import { SsoGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoGroupMapping.js';
@@ -22,6 +25,48 @@ describe('LegacyMappingCoverageService', () => {
       verifiedReplacementCount: 0,
       blockers: [{ id: 'legacy-1', family: 'engine_assignment', reason: 'A current replacement candidate exists but has not been verified.' }],
     });
+  });
+
+  it('recognizes an exact legacy email-domain mapping with an equivalent provider-neutral attribute grant', async () => {
+    const getRepository = vi.fn((entity) => {
+      if (entity === SsoClaimsMapping) return { find: vi.fn().mockResolvedValue([{ id: 'legacy-domain', providerId: null, claimType: 'email_domain', claimKey: 'email', claimValue: '*@enterpriseglue.ai', claimOperator: 'equals', targetRole: 'admin', isActive: true }]) };
+      if (entity === SsoGroupMapping || entity === SsoAssignmentMapping) return { find: vi.fn().mockResolvedValue([]) };
+      if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue([{ id: 'replacement-domain', tenantId: null, providerId: 'provider-1', targetGroupId: 'group-1', entitlementType: 'attribute', externalId: 'email_domain:enterpriseglue.ai', matchOperator: 'exact', isActive: true }]) };
+      if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue([{ id: 'provider-1', configurationJson: '{}' }]) };
+      if (entity === RbacRoleAssignment) return { find: vi.fn().mockResolvedValue([{ principalType: 'group', principalId: 'group-1', roleId: 'system.platform.admin', scopeType: 'platform' }]) };
+      if (entity === AuditLog) return { find: vi.fn().mockResolvedValue([]) };
+      throw new Error(`Unexpected repository: ${(entity as any).name}`);
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository });
+
+    await expect(legacyMappingCoverageService.getCoverage()).resolves.toEqual([expect.objectContaining({
+      id: 'legacy-domain',
+      status: 'replacement_candidate',
+      candidateIdentityMappingIds: ['replacement-domain'],
+    })]);
+  });
+
+  it('recognizes an exact custom mapping only when the replacement provider allowlists that attribute', async () => {
+    const legacy = { id: 'legacy-clearance', providerId: null, claimType: 'custom', claimKey: 'clearance', claimValue: 'secret', claimOperator: 'equals', targetRole: 'admin', isActive: true };
+    const baseRepositories = (providerConfigurationJson: string) => (entity: unknown) => {
+      if (entity === SsoClaimsMapping) return { find: vi.fn().mockResolvedValue([legacy]) };
+      if (entity === SsoGroupMapping || entity === SsoAssignmentMapping) return { find: vi.fn().mockResolvedValue([]) };
+      if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue([{ id: 'replacement-custom', tenantId: null, providerId: 'provider-1', targetGroupId: 'group-1', entitlementType: 'attribute', externalId: 'attribute:clearance:secret', matchOperator: 'exact', isActive: true }]) };
+      if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue([{ id: 'provider-1', configurationJson: providerConfigurationJson }]) };
+      if (entity === RbacRoleAssignment) return { find: vi.fn().mockResolvedValue([{ principalType: 'group', principalId: 'group-1', roleId: 'system.platform.admin', scopeType: 'platform' }]) };
+      if (entity === AuditLog) return { find: vi.fn().mockResolvedValue([]) };
+      throw new Error(`Unexpected repository: ${(entity as any).name}`);
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: vi.fn(baseRepositories(JSON.stringify({ authorizationAttributeKeys: ['clearance'] }))) });
+    await expect(legacyMappingCoverageService.getCoverage()).resolves.toEqual([expect.objectContaining({ status: 'replacement_candidate', candidateIdentityMappingIds: ['replacement-custom'] })]);
+
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: vi.fn(baseRepositories('{}')) });
+    await expect(legacyMappingCoverageService.getCoverage()).resolves.toEqual([expect.objectContaining({
+      status: 'manual_redesign_required',
+      reason: expect.stringContaining('allowlist'),
+      candidateIdentityMappingIds: [],
+    })]);
   });
 
   it('does not disable global platform mappings during tenant-scoped retirement', async () => {
