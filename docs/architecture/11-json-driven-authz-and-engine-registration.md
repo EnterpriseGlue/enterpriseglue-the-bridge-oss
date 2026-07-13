@@ -1180,10 +1180,11 @@ external entitlement
 -> permission
 ```
 
-- [ ] ⬜ Make `IdentityEntitlementMapping.targetGroupId` the persisted target for normal mappings.
+- [x] ✅ Make `IdentityEntitlementMapping.targetGroupId` the persisted target for normal mappings.
 - [x] ✅ Add provider-neutral `IdentityEntitlementMapping` persistence with entitlement type, exact/contains/exists operator, target group, sync mode, provider, tenant, and deterministic matcher contract. Group membership reconciliation remains in progress.
 - [ ] ⬜ Represent “all authenticated users” as an `exists` mapping to a configured internal group; remove provider `defaultRole` authorization mutation.
 - [ ] ⬜ Implement the SSO/Identity Engine Assignment UI as a wizard that selects or creates a managed internal group and creates a normal group role assignment at engine/Engine Set/runtime scope.
+- [x] ✅ Add the first engine-scope bridge from Identity Mappings: an administrator can grant an engine role to the mapping's internal group through the standard role-assignment API. Engine Set/runtime-resource scopes and in-flow managed-group creation remain part of the broader wizard milestone.
 - [ ] ⬜ Migrate or remove `SsoClaimsMapping` and `SsoAssignmentMapping`; do not retain three runtime mapping evaluators.
 - [ ] ⬜ Preserve the high-risk all-engine, regex, owner/delegate, and sensitive-permission guardrails on the resulting mapping plus group assignment workflow.
 - [ ] ⬜ Store mapping, group membership, assignment, and materialization ids in explanation lineage so the extra indirection remains understandable.
