@@ -197,7 +197,9 @@ describe('ProjectDetail', () => {
     projectFileName = 'Alpha.bpmn'
     projectMemberRoles = ['owner']
     authMocks.hasPlatformPermission.mockReturnValue(false)
-    authMocks.hasProjectPermission.mockReturnValue(false)
+    authMocks.hasProjectPermission.mockImplementation((_projectId: string, permission: string) => (
+      ['project:files:view', 'project:files:edit', 'project:files:delete'].includes(permission)
+    ))
 
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
       if (url === '/starbase-api/projects') {

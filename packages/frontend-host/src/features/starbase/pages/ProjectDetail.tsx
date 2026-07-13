@@ -81,71 +81,6 @@ import { EngineAccessModal } from '../components/project-detail/EngineAccessModa
 import { ProjectDeploymentTargetsModal } from '../components/project-detail/ProjectDeploymentTargetsModal'
 import { FolderLoader, CurrentPath, TreePicker } from '../components/project-detail/FolderTreeHelpers'
 
-function legacyProjectRoleHasPermission(roles: ProjectRole[], permission: string): boolean {
-  const normalized = new Set(roles)
-  if (normalized.has('owner')) return true
-
-  if (normalized.has('delegate')) {
-    return [
-      ProjectPermission.PROJECT_SETTINGS,
-      ProjectPermission.MEMBERS_MANAGE,
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.MEMBERS_SEARCH,
-      ProjectPermission.MEMBERS_INVITE,
-      ProjectPermission.MEMBERS_ADD,
-      ProjectPermission.MEMBERS_UPDATE_ROLE,
-      ProjectPermission.MEMBERS_REMOVE,
-      ProjectPermission.MEMBERS_MANAGE_DEPLOY_GRANT,
-      ProjectPermission.DEPLOYMENT_TARGETS_VIEW,
-      ProjectPermission.DEPLOYMENT_TARGETS_MANAGE,
-      ProjectPermission.FILES_CREATE,
-      ProjectPermission.FILES_EDIT,
-      ProjectPermission.FILES_DELETE,
-      ProjectPermission.FILES_VIEW,
-      ProjectPermission.VERSIONS_CREATE,
-      ProjectPermission.VERSIONS_RESTORE,
-      ProjectPermission.GIT_PUSH,
-      ProjectPermission.GIT_PULL,
-      ProjectPermission.GIT_CONNECT,
-      ProjectPermission.DEPLOY,
-    ].includes(permission as any)
-  }
-
-  if (normalized.has('developer')) {
-    return [
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.FILES_CREATE,
-      ProjectPermission.FILES_EDIT,
-      ProjectPermission.FILES_DELETE,
-      ProjectPermission.FILES_VIEW,
-      ProjectPermission.VERSIONS_CREATE,
-      ProjectPermission.VERSIONS_RESTORE,
-      ProjectPermission.GIT_PUSH,
-      ProjectPermission.GIT_PULL,
-      ProjectPermission.DEPLOY,
-    ].includes(permission as any)
-  }
-
-  if (normalized.has('editor')) {
-    return [
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.FILES_CREATE,
-      ProjectPermission.FILES_EDIT,
-      ProjectPermission.FILES_VIEW,
-      ProjectPermission.VERSIONS_CREATE,
-    ].includes(permission as any)
-  }
-
-  if (normalized.has('viewer')) {
-    return [
-      ProjectPermission.MEMBERS_VIEW,
-      ProjectPermission.FILES_VIEW,
-    ].includes(permission as any)
-  }
-
-  return false
-}
-
 function getProjectDetailBulkActionId(action: ProjectDetailBulkAction): string {
   if (action === 'download') return 'project.files.read'
   if (action === 'delete') return 'project.files.delete'
@@ -849,45 +784,37 @@ export default function ProjectDetail() {
     },
   })
 
-  const myRoles = React.useMemo(() => {
-    const m = myMembershipQ.data
-    if (!m) return [] as ProjectRole[]
-    const roles = (Array.isArray(m.roles) && m.roles.length > 0 ? m.roles : [m.role]) as ProjectRole[]
-    return roles
-  }, [myMembershipQ.data])
-
   const hasProjectAction = React.useCallback((actionId: string) => (
     evaluateActionSnapshot(permissions, actionId, { type: 'project', id: projectId || null }).allowed
   ), [permissions, projectId])
 
-  const hasProjectPermissionOrLegacy = React.useCallback((permission: string) => (
-    hasProjectPermission(projectId, permission) || legacyProjectRoleHasPermission(myRoles, permission)
-  ), [hasProjectPermission, myRoles, projectId])
+  const hasProjectPermissionForCurrentUser = React.useCallback((permission: string) => (
+    hasProjectPermission(projectId, permission)
+  ), [hasProjectPermission, projectId])
 
-  const hasProjectPermissionOrActionOrLegacy = React.useCallback((permission: string, actionId: string) => (
+  const hasProjectPermissionOrAction = React.useCallback((permission: string, actionId: string) => (
     hasProjectPermission(projectId, permission) ||
-    hasProjectAction(actionId) ||
-    legacyProjectRoleHasPermission(myRoles, permission)
-  ), [hasProjectAction, hasProjectPermission, myRoles, projectId])
+    hasProjectAction(actionId)
+  ), [hasProjectAction, hasProjectPermission, projectId])
 
-  const canViewFiles = hasProjectPermissionOrLegacy(ProjectPermission.FILES_VIEW)
-  const canCreateFiles = hasProjectPermissionOrLegacy(ProjectPermission.FILES_CREATE)
-  const canEditFiles = hasProjectPermissionOrLegacy(ProjectPermission.FILES_EDIT)
-  const canDeleteFiles = hasProjectPermissionOrLegacy(ProjectPermission.FILES_DELETE)
-  const canViewMembers = hasProjectPermissionOrLegacy(ProjectPermission.MEMBERS_VIEW) ||
-    hasProjectPermissionOrLegacy(ProjectPermission.MEMBERS_MANAGE)
-  const canManageMembers = hasProjectPermissionOrLegacy(ProjectPermission.MEMBERS_MANAGE)
-  const canSearchMembers = canManageMembers || hasProjectPermissionOrActionOrLegacy(ProjectPermission.MEMBERS_SEARCH, 'project.members.search')
-  const canInviteMembers = canManageMembers || hasProjectPermissionOrActionOrLegacy(ProjectPermission.MEMBERS_INVITE, 'project.members.invite')
-  const canAddMembers = canManageMembers || hasProjectPermissionOrActionOrLegacy(ProjectPermission.MEMBERS_ADD, 'project.members.add')
-  const canUpdateMemberRoles = canManageMembers || hasProjectPermissionOrActionOrLegacy(ProjectPermission.MEMBERS_UPDATE_ROLE, 'project.members.update-role')
-  const canRemoveMembers = canManageMembers || hasProjectPermissionOrActionOrLegacy(ProjectPermission.MEMBERS_REMOVE, 'project.members.remove')
-  const canManageMemberDeployGrant = canManageMembers || hasProjectPermissionOrActionOrLegacy(ProjectPermission.MEMBERS_MANAGE_DEPLOY_GRANT, 'project.members.deploy-grant.manage')
-  const canTransferOwnership = hasProjectPermissionOrActionOrLegacy(ProjectPermission.OWNERSHIP_TRANSFER, 'project.ownership.transfer')
+  const canViewFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_VIEW)
+  const canCreateFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_CREATE)
+  const canEditFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_EDIT)
+  const canDeleteFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_DELETE)
+  const canViewMembers = hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_VIEW) ||
+    hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_MANAGE)
+  const canManageMembers = hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_MANAGE)
+  const canSearchMembers = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_SEARCH, 'project.members.search')
+  const canInviteMembers = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_INVITE, 'project.members.invite')
+  const canAddMembers = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_ADD, 'project.members.add')
+  const canUpdateMemberRoles = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_UPDATE_ROLE, 'project.members.update-role')
+  const canRemoveMembers = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_REMOVE, 'project.members.remove')
+  const canManageMemberDeployGrant = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_MANAGE_DEPLOY_GRANT, 'project.members.deploy-grant.manage')
+  const canTransferOwnership = hasProjectPermissionOrAction(ProjectPermission.OWNERSHIP_TRANSFER, 'project.ownership.transfer')
   const canOpenAddMember = manualProjectAccessEnabled && canSearchMembers && (canAddMembers || canInviteMembers)
   const canAssignScopedProjectAccess = manualProjectAccessEnabled && (canAddMembers || canUpdateMemberRoles)
-  const canAssignDelegate = hasProjectPermissionOrLegacy(ProjectPermission.DELEGATE_MANAGE)
-  const canManageProjectSettings = hasProjectPermissionOrLegacy(ProjectPermission.PROJECT_SETTINGS)
+  const canAssignDelegate = hasProjectPermissionForCurrentUser(ProjectPermission.DELEGATE_MANAGE)
+  const canManageProjectSettings = hasProjectPermissionForCurrentUser(ProjectPermission.PROJECT_SETTINGS)
   const requestEngineAccessDecision = evaluateActionSnapshot(
     permissions,
     'project-engine-target.access.request',
@@ -897,8 +824,8 @@ export default function ProjectDetail() {
   const requestEngineAccessUnavailableReason = canRequestEngineAccess
     ? null
     : requestEngineAccessDecision.reason || `Missing permission ${ProjectPermission.PROJECT_SETTINGS}`
-  const canManageGitConnection = hasProjectPermissionOrLegacy(ProjectPermission.GIT_CONNECT)
-  const hasDeployPermission = hasProjectPermissionOrLegacy(ProjectPermission.DEPLOY)
+  const canManageGitConnection = hasProjectPermissionForCurrentUser(ProjectPermission.GIT_CONNECT)
+  const hasDeployPermission = hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOY)
   const canViewDeploymentOptions = canViewFiles
   const canReadPlatformProjectEngineTargets = hasPlatformPermission(PlatformPermission.PROJECT_ENGINE_TARGETS_VIEW) ||
     hasPlatformPermission(PlatformPermission.PROJECT_ENGINE_TARGETS_MANAGE)
@@ -907,9 +834,9 @@ export default function ProjectDetail() {
     hasPlatformPermission(PlatformPermission.AUTHZ_ROLES_VIEW) ||
     hasPlatformPermission(PlatformPermission.AUTHZ_ROLES_MANAGE)
   )
-  const canReadScopedProjectEngineTargets = hasProjectPermissionOrLegacy(ProjectPermission.DEPLOYMENT_TARGETS_VIEW) ||
-    hasProjectPermissionOrLegacy(ProjectPermission.DEPLOYMENT_TARGETS_MANAGE)
-  const canManageScopedProjectEngineTargets = hasProjectPermissionOrLegacy(ProjectPermission.DEPLOYMENT_TARGETS_MANAGE)
+  const canReadScopedProjectEngineTargets = hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOYMENT_TARGETS_VIEW) ||
+    hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOYMENT_TARGETS_MANAGE)
+  const canManageScopedProjectEngineTargets = hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOYMENT_TARGETS_MANAGE)
   const canReadProjectEngineTargets = canReadScopedProjectEngineTargets || canReadPlatformProjectEngineTargets
   const canManageProjectEngineTargets = canManageScopedProjectEngineTargets || canManagePlatformProjectEngineTargets
   const deploymentTargetsApiScope = canManageScopedProjectEngineTargets || (canReadScopedProjectEngineTargets && !canReadPlatformProjectEngineTargets)
@@ -917,8 +844,8 @@ export default function ProjectDetail() {
     : 'platform'
 
   const getProjectPermissionUnavailableReason = React.useCallback((permission: string): string | null => (
-    hasProjectPermissionOrLegacy(permission) ? null : `Missing permission ${permission}`
-  ), [hasProjectPermissionOrLegacy])
+    hasProjectPermissionForCurrentUser(permission) ? null : `Missing permission ${permission}`
+  ), [hasProjectPermissionForCurrentUser])
 
   const getProjectDetailRowActionUnavailableReason = React.useCallback((_item: FileItem, action: ProjectDetailRowAction): string | null => {
     switch (action) {
@@ -944,10 +871,10 @@ export default function ProjectDetail() {
     if (!anySyncEnabled) return 'Sync is disabled by platform settings'
     if (!hasGitConnection) return 'Project is not connected to Git'
     if (syncPermissions.length === 0) return null
-    if (syncPermissions.some((permission) => hasProjectPermissionOrLegacy(permission))) return null
+    if (syncPermissions.some((permission) => hasProjectPermissionForCurrentUser(permission))) return null
     const permissionText = syncPermissions.length === 1 ? syncPermissions[0] : syncPermissions.join(' or ')
     return `Missing permission ${permissionText}`
-  }, [anySyncEnabled, hasGitConnection, hasProjectPermissionOrLegacy, syncPermissions])
+  }, [anySyncEnabled, hasGitConnection, hasProjectPermissionForCurrentUser, syncPermissions])
 
   const getProjectDetailToolbarActionUnavailableReason = React.useCallback((action: ProjectDetailToolbarAction): string | null => {
     switch (action) {
