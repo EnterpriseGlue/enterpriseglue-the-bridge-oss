@@ -553,6 +553,7 @@ class ConfigBundleApplyService {
         }
         if (change.objectType === 'identity_provider') {
           const desired = desiredIdentityProviders.get(change.key);
+          const sourceHash = desired ? objectFingerprint('identity_provider', desired.key, desired) : objectFingerprint('identity_provider', change.key, { archived: true });
           const values = desired ? {
             protocol: desired.type,
             isEnabled: desired.enabled,
@@ -562,6 +563,9 @@ class ConfigBundleApplyService {
             syncJson: JSON.stringify(desired.sync),
             ownershipMode: desired.ownershipMode || 'config_locked',
             sourceRef: `config_bundle:${manifest.metadata.key}`,
+            sourceHash,
+            lastAppliedAt: now,
+            driftStatus: 'in_sync',
             updatedAt: now,
           } : null;
           if (change.operation === 'create' && desired && values) {
@@ -684,12 +688,13 @@ class ConfigBundleApplyService {
       const providerByKey = new Map(providers.map((provider) => [provider.key, provider]));
       const mappingKeys = new Set<string>();
       for (const mapping of desiredIdentityMappings) {
+        const sourceHash = objectFingerprint('identity_mapping', mapping.key, mapping);
         const provider = providerByKey.get(mapping.providerKey);
         const group = groupByKey.get(mapping.targetGroupKey);
         if (!provider || !group) fail(`Identity mapping references an unresolved provider or group: ${mapping.key}`, 422);
         mappingKeys.add(mapping.key);
         const existing = await identityMappingRepo.findOne({ where: { tenantId, configKey: mapping.key } as any });
-        const values = { providerId: provider.id, configKey: mapping.key, sourceRef, entitlementType: mapping.source.type, externalId: mapping.source.externalId || null, matchOperator: mapping.source.operator, targetGroupId: group.id, syncMode: mapping.syncMode, isActive: true, updatedAt: now };
+        const values = { providerId: provider.id, configKey: mapping.key, sourceRef, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', entitlementType: mapping.source.type, externalId: mapping.source.externalId || null, matchOperator: mapping.source.operator, targetGroupId: group.id, syncMode: mapping.syncMode, isActive: true, updatedAt: now };
         if (!existing) {
           const mappingId = generateId();
           await identityMappingRepo.insert({ id: mappingId, tenantId, ...values, createdAt: now });

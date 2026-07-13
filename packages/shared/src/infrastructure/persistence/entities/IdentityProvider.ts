@@ -21,6 +21,9 @@ export class IdentityProvider extends AppBaseEntity {
   @Column({ name: 'sync_json', type: 'text', default: '{}' }) syncJson!: string;
   @Column({ name: 'ownership_mode', type: 'text', default: 'manual' }) ownershipMode!: string;
   @Column({ name: 'source_ref', type: 'text', nullable: true }) sourceRef!: string | null;
+  @Column({ name: 'source_hash', type: 'text', nullable: true }) sourceHash!: string | null;
+  @Column({ name: 'last_applied_at', type: 'bigint', nullable: true }) lastAppliedAt!: number | null;
+  @Column({ name: 'drift_status', type: 'text', nullable: true }) driftStatus!: string | null;
   @Column({ name: 'created_at', type: 'bigint' }) createdAt!: number;
   @Column({ name: 'updated_at', type: 'bigint' }) updatedAt!: number;
 }

@@ -11,6 +11,9 @@ export class IdentityEntitlementMapping extends AppBaseEntity {
   @Column({ name: 'provider_id', type: 'text' }) providerId!: string;
   @Column({ name: 'config_key', type: 'text', nullable: true }) configKey!: string | null;
   @Column({ name: 'source_ref', type: 'text', nullable: true }) sourceRef!: string | null;
+  @Column({ name: 'source_hash', type: 'text', nullable: true }) sourceHash!: string | null;
+  @Column({ name: 'last_applied_at', type: 'bigint', nullable: true }) lastAppliedAt!: number | null;
+  @Column({ name: 'drift_status', type: 'text', nullable: true }) driftStatus!: string | null;
   @Column({ name: 'entitlement_type', type: 'text' }) entitlementType!: string;
   @Column({ name: 'external_id', type: 'text', nullable: true }) externalId!: string | null;
   @Column({ name: 'match_operator', type: 'text', default: 'exact' }) matchOperator!: string;
