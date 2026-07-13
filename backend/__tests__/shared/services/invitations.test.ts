@@ -4,6 +4,7 @@ import { InvitationService } from '@enterpriseglue/shared/services/invitations.j
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Invitation } from '@enterpriseglue/shared/db/entities/Invitation.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/db/entities/AuthzGroupMembership.js';
 import { SsoProvider } from '@enterpriseglue/shared/db/entities/SsoProvider.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { engineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
@@ -122,12 +123,14 @@ describe('InvitationService', () => {
         execute: vi.fn().mockResolvedValue({ affected: 1 }),
       }),
     };
+    const membershipRepo = { find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Invitation) return invitationRepo;
         if (entity === User) return userRepo;
         if (entity === SsoProvider) return ssoProviderRepo;
+        if (entity === AuthzGroupMembership) return membershipRepo;
         throw new Error('Unexpected repository');
       },
       transaction: async (callback: (manager: { getRepository: (entity: unknown) => unknown }) => Promise<void>) => callback({

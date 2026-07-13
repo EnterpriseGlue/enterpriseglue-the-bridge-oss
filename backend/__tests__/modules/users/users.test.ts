@@ -184,7 +184,7 @@ describe('users routes', () => {
       email: 'admin@example.com',
       platformRole: 'admin',
     }));
-    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'admin' }));
+    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.not.objectContaining({ platformRole: expect.anything() }));
   });
 
   it('lists users with granular users:view permission', async () => {

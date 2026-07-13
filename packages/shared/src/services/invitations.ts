@@ -10,7 +10,8 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { sendInvitationEmail } from './email/index.js';
 import { projectMemberService } from './platform-admin/ProjectMemberService.js';
 import { engineService } from './platform-admin/EngineService.js';
-import type { PlatformRole, User as UserContract } from '@enterpriseglue/shared/contracts/auth.js';
+import type { User as UserContract } from '@enterpriseglue/shared/contracts/auth.js';
+import { getActivePlatformAdministratorUserIds } from './platform-admin/PlatformAdministratorMembershipService.js';
 import type { Repository } from 'typeorm';
 
 const INVITATION_EXPIRY_MS = 24 * 60 * 60 * 1000;
@@ -26,7 +27,6 @@ export interface CreateInvitationInput {
   resourceType: InvitationResourceType;
   resourceId?: string;
   resourceName?: string;
-  platformRole?: PlatformRole;
   resourceRole?: string;
   resourceRoles?: string[];
   createdByUserId: string;
@@ -220,7 +220,9 @@ export class InvitationService {
       resourceType: input.resourceType,
       resourceId: input.resourceId || null,
       resourceName: input.resourceName || null,
-      platformRole: input.platformRole || null,
+      // The retained database column is migration compatibility only. New
+      // invitations grant platform access through canonical group membership.
+      platformRole: null,
       resourceRole: input.resourceRole || null,
       resourceRolesJson: serializeRoles(input.resourceRoles),
       inviteTokenHash,
@@ -470,6 +472,7 @@ export class InvitationService {
     });
 
     const updatedUser = await userRepo.findOneByOrFail({ id: user.id });
+    const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([updatedUser.id], dataSource);
 
     return {
       user: {
@@ -477,7 +480,7 @@ export class InvitationService {
         email: updatedUser.email,
         firstName: updatedUser.firstName || undefined,
         lastName: updatedUser.lastName || undefined,
-        platformRole: updatedUser.platformRole as PlatformRole,
+        platformRole: platformAdministratorUserIds.has(updatedUser.id) ? 'admin' : 'user',
         isActive: Boolean(updatedUser.isActive),
         isEmailVerified: Boolean(updatedUser.isEmailVerified),
         mustResetPassword: Boolean(updatedUser.mustResetPassword),

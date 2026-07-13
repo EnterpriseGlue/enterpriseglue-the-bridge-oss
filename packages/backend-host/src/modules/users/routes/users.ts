@@ -62,7 +62,6 @@ router.post('/api/users', requireAuth, requireAction('platform.users.create'), c
     tenantSlug: 'default',
     resourceType: 'platform_user',
     resourceName: 'Platform access',
-    platformRole: requestedPlatformRole,
     createdByUserId: req.user!.userId,
     invitedByName: req.user!.email,
     deliveryMethod: sendEmail ? 'email' : 'manual',
