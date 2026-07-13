@@ -2,7 +2,7 @@
 
 Canonical Docker Compose files live in this directory to keep repository root clean and make environment layering explicit.
 
-The planned optional authorization config-bundle override is not implemented yet. Its mount, secret separation, startup, readiness, and test requirements are tracked in [Deploy Authorization Configuration](../../../docs/how-to/deploy-authorization-config.md).
+The optional authorization config-bundle override is `docker-compose.config-bundle.yml`. It mounts a JSON payload read-only for the backend bootstrap service and keeps the secret directory separate. Startup readiness/reconciliation behavior remains tracked in [Deploy Authorization Configuration](../../../docs/how-to/deploy-authorization-config.md).
 
 ## Files
 
@@ -15,6 +15,7 @@ The planned optional authorization config-bundle override is not implemented yet
 - `docker-compose.ci.yml` - CI-specific overrides
 - `docker-compose.prod.yml` - production base stack
 - `docker-compose.images.yml` - published-image deployment overlay
+- `docker-compose.config-bundle.yml` - optional read-only configuration-bundle and separate secret-directory mount
 
 ## Invocation convention
 

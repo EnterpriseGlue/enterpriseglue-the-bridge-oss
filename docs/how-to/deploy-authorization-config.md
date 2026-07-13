@@ -68,20 +68,32 @@ Add an optional Compose override instead of forcing config mounts into every dep
 infra/docker/compose/docker-compose.config-bundle.yml
 ```
 
-Target mount:
+Implemented Compose override mount:
 
 ```yaml
 services:
   backend:
     volumes:
-      - ${EG_CONFIG_BUNDLE_HOST_PATH:-./enterpriseglue-config}:/etc/enterpriseglue/config:ro
+      - ${EG_CONFIG_BUNDLE_HOST_PATH}:/etc/enterpriseglue/config/bundle.json:ro
+      - ${EG_CONFIG_SECRETS_HOST_PATH:-./.local/enterpriseglue-config-secrets}:/var/run/secrets/enterpriseglue:ro
     environment:
-      EG_CONFIG_BUNDLE_PATH: /etc/enterpriseglue/config
+      EG_CONFIG_BUNDLE_PATH: /etc/enterpriseglue/config/bundle.json
+```
+
+Enable it only for an explicit bootstrap deployment:
+
+```bash
+EG_CONFIG_BUNDLE_HOST_PATH=./config/enterpriseglue.json \
+EG_BACKEND_ENV_FILE=./.local/docker/env/production.env \
+docker compose --project-directory . \
+  --env-file ./.local/docker/env/production.env \
+  -f infra/docker/compose/docker-compose.prod.yml \
+  -f infra/docker/compose/docker-compose.config-bundle.yml up -d
 ```
 
 Required changes:
 
-- [ ] ⬜ Update `dev.sh`, production/image startup scripts, and Compose documentation to include the override only when a host bundle path is configured.
+- [ ] ⬜ Update `dev.sh`, production/image startup scripts to include the override only when a host bundle path is configured. The opt-in Compose overlay and documentation are complete.
 - [ ] ⬜ Add target variables to every Docker env example without enabling bootstrap apply by default.
 - [ ] ⬜ Ensure backend production images can read `/etc/enterpriseglue/config` as a non-root user.
 - [ ] ⬜ Keep secret files in a separate read-only mount with stricter permissions; never put them in the config bundle volume.

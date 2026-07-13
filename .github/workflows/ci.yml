@@ -175,6 +175,7 @@ jobs:
           ENV_EXAMPLES_DIR="infra/docker/env/examples"
           cp "$ENV_EXAMPLES_DIR/docker.postgres.env.example" .env.docker
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.yml" config >/dev/null
+          EG_CONFIG_BUNDLE_HOST_PATH=./backend/.env.example EG_CONFIG_SECRETS_HOST_PATH=./backend EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.config-bundle.yml" config >/dev/null
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.mysql.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.mysql.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mysql.yml" config >/dev/null
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.mssql.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.mssql.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mssql.yml" config >/dev/null
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.oracle.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.oracle.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" config >/dev/null

@@ -2289,7 +2289,7 @@ Phase 0 exit criteria:
 - [x] ✅ Document least-privilege configuration API-client creation, scoped role assignment, Environment-secret storage, and rotation/revocation.
 - [x] ✅ Add machine-readable CLI output and distinct usage, preview-validation, and request/runtime exit codes for CI. Finer-grained authorization, conflict, and reconciliation exit codes remain pending.
 - [ ] ⬜ Add disabled-by-default `EG_CONFIG_*` settings to every deployment template and configuration reference. Shared validation, backend `.env.example`, startup file bootstrap, fail-closed behavior, and sanitized health status are complete; Docker/OpenShift env examples and reference matrices remain pending.
-- [ ] ⬜ Add optional `infra/docker/compose/docker-compose.config-bundle.yml` with read-only bundle and separate secret mounts; update dev, production, image, and self-host startup paths to include it only when configured.
+- [ ] ⬜ Add optional config-bundle mounting to every deployment path. `infra/docker/compose/docker-compose.config-bundle.yml` now provides a read-only payload and separate secret mount; dev, production image, self-host, and OpenShift script integration remain pending.
 - [ ] ⬜ Ensure production backend images expose a non-root-readable config mount path without baking customer bundles into images.
 - [ ] ⬜ Add optional OpenShift ConfigMap/projected bundle volume, separate secret references, bundle-hash rollout annotation, and readiness behavior to Kustomize base/overlays and deployment scripts.
 - [ ] ⬜ Enforce complete startup order including required reconciliation and readiness. Migrations, catalog seeding, and optional file bundle validation/apply now run before the backend listens; reconciliation/readiness gating remains pending.
