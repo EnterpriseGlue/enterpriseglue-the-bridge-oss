@@ -1933,7 +1933,7 @@ The separate `Permissions` tab remains the catalog administration and inspection
 | Mission Control engine selector | Include distributed engines with engine runtime access and central engines with at least one visible runtime resource. | Do not require project membership for general Mission Control visibility. |
 | Mission Control lists and details | Filter processes, decisions, instances, variables, history, jobs, incidents, batches, and migrations by inherited runtime scope. | Known unavailable mutations are disabled with a concise reason; unknown resources are hidden. |
 | Dashboard | Compute runtime counts from the same authorized subset as Mission Control. | Never show whole-engine central counts to a resource-scoped user. |
-| Starbase deploy dialog | Keep manual target eligibility; show only targets with manual mode and human deploy permission. | Pipeline-only targets do not appear as manually deployable. |
+| Starbase deploy dialog | Keep manual target eligibility; show only targets with manual mode and human deploy permission. | Pipeline-managed direct-engine targets are denied during eligibility evaluation and displayed as `Pipeline-managed` instead of appearing manually deployable. |
 | Project deployment targets | Show manual/CI/API/import flags plus proxy/direct integration status. | Target mode controls eligibility; engine integration controls transport and metadata ingestion. |
 | Deployment history and bridge links | Show lineage quality and missing-origin diagnostics. | `complete` or validated `reported` lineage enables project/file bridge navigation. |
 
