@@ -50,10 +50,15 @@ import {
   formatReconcileSummary,
   formatStatusLabel,
 } from './accessControlPresentation';
-import { AuthzAuditPanel, DEFAULT_AUTHZ_AUDIT_FILTER, type AuthzAuditFilterState } from './access-control/AuthzAuditPanel';
-import { SsoSyncDiagnosticsPanel } from './access-control/SsoSyncDiagnosticsPanel';
-import { SsoEngineAccessSnapshotsPanel } from './access-control/SsoEngineAccessSnapshotsPanel';
-import { SsoAssignmentDiagnosticsPanel, type SsoAssignmentDiagnostics } from './access-control/SsoAssignmentDiagnosticsPanel';
+import {
+  AuthzAuditPanel,
+  DEFAULT_AUTHZ_AUDIT_FILTER,
+  SsoAssignmentDiagnosticsPanel,
+  SsoEngineAccessSnapshotsPanel,
+  SsoSyncDiagnosticsPanel,
+  type AuthzAuditFilterState,
+  type SsoAssignmentDiagnostics,
+} from './access-control';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
   formatSsoSyncCounts as presentSsoSyncCounts,
