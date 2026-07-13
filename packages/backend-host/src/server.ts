@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { createApp, registerBaseRoutes, registerFinalMiddleware } from './app.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { ensureSchemaExists, initializeDatabase } from '@enterpriseglue/shared/db/run-migrations.js';
-import { bootstrapAdmin, bootstrapDefaultEmailConfig, backfillKnownUserProfiles, backfillMissingPlatformRoles } from '@enterpriseglue/shared/db/bootstrap.js';
+import { bootstrapAdmin, bootstrapDefaultEmailConfig } from '@enterpriseglue/shared/db/bootstrap.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requirePlatformAdmin } from '@enterpriseglue/shared/middleware/platformAuth.js';
 import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/middleware/requireAction.js';
@@ -91,9 +91,6 @@ export async function startServer() {
   // Bootstrap admin account on first run
   await bootstrapAdmin({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded });
   await bootstrapDefaultEmailConfig();
-  await backfillMissingPlatformRoles();
-
-  await backfillKnownUserProfiles({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded });
 
   try {
     await runConfigBundleBootstrap();

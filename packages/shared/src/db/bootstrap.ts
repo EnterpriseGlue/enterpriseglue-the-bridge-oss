@@ -5,7 +5,6 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { hashPassword } from '@enterpriseglue/shared/utils/password.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { encrypt } from '@enterpriseglue/shared/utils/crypto.js';
-import { addCaseInsensitiveEquals } from '../infrastructure/persistence/adapters/QueryHelpers.js';
 import { authzGroupService } from '../services/platform-admin/AuthzGroupService.js';
 
 /**
@@ -145,53 +144,4 @@ export async function bootstrapDefaultEmailConfig() {
   });
 
   console.log(`✅ Default email configuration seeded from environment (${provider})`);
-}
-
-/**
- * @deprecated No longer needed - platformRole is now the only role field
- */
-export async function backfillMissingPlatformRoles() {
-  // No-op: legacy role field has been removed
-  // This function is kept for backward compatibility but does nothing
-}
-
-export async function backfillKnownUserProfiles(options: { allowPlatformAdmin?: boolean } = {}) {
-  const { allowPlatformAdmin = true } = options;
-  const dataSource = await getDataSource();
-  const userRepo = dataSource.getRepository(User);
-
-  const email = 'hary@enterpriseglue.ai';
-  const firstName = 'Hary';
-  const lastName = 'Selman';
-
-  try {
-    let qb = userRepo.createQueryBuilder('user');
-    qb = addCaseInsensitiveEquals(qb, 'user', 'email', 'email', email);
-    const user = await qb.getOne();
-
-    if (!user) return;
-
-    const currentFirstName = String(user.firstName || '').trim();
-    const currentLastName = String(user.lastName || '').trim();
-
-    const isPlaceholderAdminUser = currentFirstName === 'Admin' && currentLastName === 'User';
-    const shouldSetFirstName = !currentFirstName || isPlaceholderAdminUser;
-    const shouldSetLastName = !currentLastName || isPlaceholderAdminUser;
-    const shouldSetAdmin = allowPlatformAdmin && user.platformRole !== 'admin';
-    if (!shouldSetFirstName && !shouldSetLastName && !shouldSetAdmin) return;
-
-    const now = Date.now();
-    await userRepo.update(user.id, {
-      firstName: shouldSetFirstName ? firstName : user.firstName,
-      lastName: shouldSetLastName ? lastName : user.lastName,
-      platformRole: shouldSetAdmin ? 'admin' : user.platformRole,
-      updatedAt: now,
-    });
-
-    if (shouldSetAdmin) {
-      console.log(`✅ Granted platform admin role to ${email}`);
-    }
-  } catch (error) {
-    console.error('❌ Failed to backfill known user profiles:', error);
-  }
 }
