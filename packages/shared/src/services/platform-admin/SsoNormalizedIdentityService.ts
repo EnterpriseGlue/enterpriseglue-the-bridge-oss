@@ -24,6 +24,7 @@ export interface UpsertSsoNormalizedIdentityInput {
   firstName?: string | null;
   lastName?: string | null;
   claims: SsoClaims;
+  authorizationAttributeKeys?: string[];
   now?: number;
 }
 
@@ -91,6 +92,15 @@ function normalizeStringArray(value: unknown): string[] {
   ));
 }
 
+function normalizeAuthorizationAttributeValues(value: unknown): string[] {
+  const source = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  return Array.from(new Set(
+    source
+      .map((item) => typeof item === 'string' ? item.trim() : String(item ?? '').trim())
+      .filter(Boolean)
+  ));
+}
+
 function stringifyJson(value: unknown, fallback: string): string {
   try {
     return JSON.stringify(value);
@@ -126,7 +136,7 @@ function encodeReplayCursor(identity: SsoNormalizedIdentity): string {
  * raw protocol payload: it can contain JWT assertions, SAML attributes, LDAP
  * directory data, or unrelated PII.
  */
-export function allowlistedIdentityClaims(claims: SsoClaims): SsoClaims {
+export function allowlistedIdentityClaims(claims: SsoClaims, authorizationAttributeKeys: string[] = []): SsoClaims {
   const source = claims as Record<string, unknown>;
   const groups = normalizeStringArray(source.groups ?? source.group ?? source.memberOf).sort();
   const roles = normalizeStringArray(source.roles ?? source.role ?? source.appRoles).sort();
@@ -134,10 +144,16 @@ export function allowlistedIdentityClaims(claims: SsoClaims): SsoClaims {
     .flatMap((scope) => scope.split(/\s+/))
     .filter(Boolean)
     .sort();
+  const attributeKeys = Array.from(new Set(authorizationAttributeKeys.map((key) => key.trim()).filter(Boolean))).sort();
+  const attributes = Object.fromEntries(attributeKeys.flatMap((key) => {
+    const values = normalizeAuthorizationAttributeValues(source[key]);
+    return values.length > 0 ? [[key, values] as const] : [];
+  }));
   return {
     ...(groups.length > 0 ? { groups } : {}),
     ...(roles.length > 0 ? { roles } : {}),
     ...(scopes.length > 0 ? { scp: Array.from(new Set(scopes)) } : {}),
+    ...(Object.keys(attributes).length > 0 ? { __enterpriseglue_authz_attributes: attributes } : {}),
   } as SsoClaims;
 }
 
@@ -326,7 +342,7 @@ class SsoNormalizedIdentityServiceClass {
       qb.andWhere('identity.tenantId IS NULL');
     }
 
-    const persistedClaims = allowlistedIdentityClaims(input.claims);
+    const persistedClaims = allowlistedIdentityClaims(input.claims, input.authorizationAttributeKeys);
     const groups = normalizeStringArray(persistedClaims.groups);
     const roles = normalizeStringArray(persistedClaims.roles);
     const update = {
@@ -353,7 +369,7 @@ class SsoNormalizedIdentityServiceClass {
     const normalized = getIdentityProviderAdapter(adapterType(update.providerType)).normalizeIdentity({
       providerKey: providerId,
       subjectId: providerSubject,
-      claims: input.claims as Record<string, unknown>,
+      claims: { ...input.claims, ...persistedClaims } as Record<string, unknown>,
       username: update.email,
       email: update.email,
       directoryTenantId: update.providerTenantId,

@@ -18,6 +18,7 @@ import { IsNull } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { authzGroupService } from './AuthzGroupService.js';
 import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
+import { authorizationAttributeEntitlementId } from './IdentityProviderAdapter.js';
 import { permissionService, SYSTEM_ROLE_IDS } from './permissions.js';
 
 export type ClaimType = 'group' | 'role' | 'email_domain' | 'custom';
@@ -170,7 +171,7 @@ function normalizeEmailDomainValue(value: string): string {
   return atIndex >= 0 ? normalized.slice(atIndex + 1) : normalized;
 }
 
-function migrationEntitlement(legacy: SsoClaimsMapping): {
+function migrationEntitlement(legacy: SsoClaimsMapping, authorizationAttributeKeys: string[]): {
   entitlementType: 'group' | 'role' | 'attribute';
   externalId: string | null;
   matchOperator: 'exact' | 'contains' | 'exists';
@@ -191,9 +192,24 @@ function migrationEntitlement(legacy: SsoClaimsMapping): {
     };
   }
 
+  if (
+    legacy.claimType === 'custom'
+    && legacy.claimOperator === 'equals'
+    && legacy.claimKey.trim()
+    && legacy.claimValue.trim()
+    && authorizationAttributeKeys.includes(legacy.claimKey.trim())
+  ) {
+    return {
+      entitlementType: 'attribute',
+      externalId: authorizationAttributeEntitlementId(legacy.claimKey.trim(), legacy.claimValue.trim()),
+      matchOperator: 'exact',
+    };
+  }
+
   // The legacy domain matcher and explicit equality both normalize to the
   // domain portion. Only these exact forms preserve semantics without adding
   // wildcard or arbitrary-claim support to provider-neutral mappings.
+  if (legacy.claimType !== 'email_domain') return null;
   const exactDomain = legacy.claimOperator === 'equals'
     ? normalizeEmailDomainValue(legacy.claimValue)
     : legacy.claimOperator === null && legacy.claimValue.trim().startsWith('*@')
@@ -335,10 +351,17 @@ class SsoClaimsMappingServiceClass {
       const legacy = await manager.getRepository(SsoClaimsMapping).findOneBy({ id });
       if (!legacy) throw Errors.notFound('SSO mapping');
       if (!legacy.isActive) throw Errors.validation('Only active SSO mappings can be migrated');
-      const entitlement = migrationEntitlement(legacy);
-      if (!entitlement) throw Errors.validation('Only exact group, role, and email-domain mappings plus group or role contains/exists mappings can be migrated automatically');
       const provider = await manager.getRepository(IdentityProvider).findOne({ where: { key: providerKey, tenantId: IsNull() } });
       if (!provider) throw Errors.notFound('Global provider-neutral identity provider');
+      let authorizationAttributeKeys: string[] = [];
+      try {
+        const configured = JSON.parse(provider.configurationJson).authorizationAttributeKeys;
+        authorizationAttributeKeys = Array.isArray(configured) ? configured.filter((key): key is string => typeof key === 'string') : [];
+      } catch {
+        // A malformed stored configuration cannot authorize a custom-claim conversion.
+      }
+      const entitlement = migrationEntitlement(legacy, authorizationAttributeKeys);
+      if (!entitlement) throw Errors.validation('Only exact group, role, email-domain, and allowlisted custom-claim mappings plus group or role contains/exists mappings can be migrated automatically');
       const targetGroupKey = input.newGroup?.key || input.targetGroupKey!.trim();
       const groupRepo = manager.getRepository(AuthzGroup);
       let group = await groupRepo.findOne({ where: { key: targetGroupKey, tenantId: IsNull(), isArchived: false } });

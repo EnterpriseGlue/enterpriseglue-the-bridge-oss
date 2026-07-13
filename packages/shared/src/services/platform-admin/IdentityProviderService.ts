@@ -37,8 +37,19 @@ export interface IdentityProviderArchiveResult {
 
 function normalized(value?: string | null): string | null { return value?.trim() || null; }
 function json(value: Record<string, unknown> | undefined): string { return JSON.stringify(value || {}); }
+function ensureAuthorizationAttributeKeys(configuration: Record<string, unknown>): void {
+  const keys = configuration.authorizationAttributeKeys;
+  if (keys === undefined) return;
+  if (!Array.isArray(keys) || keys.some((key) => typeof key !== 'string' || !/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/.test(key))) {
+    throw Errors.validation('authorizationAttributeKeys must contain valid claim names');
+  }
+  if (keys.length > 20 || new Set(keys).size !== keys.length) {
+    throw Errors.validation('authorizationAttributeKeys must contain at most 20 unique claim names');
+  }
+}
 function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<string, unknown>): void {
   if (!configuration || Array.isArray(configuration)) throw Errors.validation('Provider configuration is required');
+  ensureAuthorizationAttributeKeys(configuration);
   const rawSecrets = Object.keys(configuration).filter((key) => /(?:secret|password|private.?key)$/i.test(key) && !/ref$/i.test(key));
   if (rawSecrets.length) throw Errors.validation(`Provider configuration must use secret references: ${rawSecrets.join(', ')}`);
   if (protocol === 'oidc' && (typeof configuration.issuerUrl !== 'string' || typeof configuration.clientId !== 'string')) throw Errors.validation('OIDC providers require issuerUrl and clientId');

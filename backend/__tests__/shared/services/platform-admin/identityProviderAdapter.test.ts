@@ -6,6 +6,7 @@ import {
   samlIdentityProviderAdapter,
   type IdentityProviderAdapter,
 } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
+import { allowlistedIdentityClaims } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
 import { inMemoryIdentityProviderAdapter } from '../../../../test/identity-mocks/index.js';
 
 describe('identity provider adapters', () => {
@@ -30,6 +31,28 @@ describe('identity provider adapters', () => {
       .toEqual([{ type: 'authenticated', externalId: 'authenticated' }, { type: 'group', externalId: 'payments' }]);
     expect(ldapIdentityProviderAdapter.normalizeIdentity({ providerKey: 'ldap', subjectId: 'uuid-1', claims: { memberOf: ['CN=Ops,DC=example', 'CN=Ops,DC=example'] }, observedAt: 1 }).entitlements)
       .toEqual([{ type: 'authenticated', externalId: 'authenticated' }, { type: 'group', externalId: 'CN=Ops,DC=example' }]);
+  });
+
+  it('emits attributes only from the sanitized authorization attribute block', () => {
+    const identity = oidcIdentityProviderAdapter.normalizeIdentity({
+      providerKey: 'entra-prod', subjectId: 'oid-1',
+      claims: {
+        clearance: 'secret',
+        __enterpriseglue_authz_attributes: { clearance: ['secret', 'secret'], region: 'eu' },
+      },
+      observedAt: 10,
+    });
+
+    expect(identity.entitlements).toContainEqual({ type: 'attribute', externalId: 'attribute:clearance:secret' });
+    expect(identity.entitlements).toContainEqual({ type: 'attribute', externalId: 'attribute:region:eu' });
+    expect(identity.entitlements).not.toContainEqual({ type: 'attribute', externalId: 'attribute:clearance:top-secret' });
+  });
+
+  it('persists only configured authorization attributes in normalized identity snapshots', () => {
+    expect(allowlistedIdentityClaims({ groups: ['ops'], clearance: 'secret', department: 'payments' }, ['clearance'])).toEqual({
+      groups: ['ops'],
+      __enterpriseglue_authz_attributes: { clearance: ['secret'] },
+    });
   });
 
   it.each([

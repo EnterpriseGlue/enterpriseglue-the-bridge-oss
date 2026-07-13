@@ -328,4 +328,28 @@ describe('SsoClaimsMappingService', () => {
       externalId: 'email_domain:enterpriseglue.ai', matchOperator: 'exact', syncMode: 'authoritative',
     }, null, expect.anything());
   });
+
+  it('converts an exact custom claim only when the provider allowlists that attribute', async () => {
+    const legacy = { id: 'legacy-clearance', isActive: true, claimType: 'custom', claimKey: 'clearance', claimOperator: 'equals', claimValue: 'secret', targetRole: 'admin' };
+    const provider = { id: 'provider-1', key: 'entra', configurationJson: JSON.stringify({ authorizationAttributeKeys: ['clearance'] }) };
+    const group = { id: 'group-1', key: 'secret-admins', isArchived: false };
+    const getRepository = vi.fn((entity) => {
+      if (entity === SsoClaimsMapping) return { findOneBy: vi.fn().mockResolvedValue(legacy) };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(provider) };
+      if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue(group) };
+      if (entity === IdentityEntitlementMapping) return { findOne: vi.fn().mockResolvedValue(null) };
+      throw new Error(`Unexpected repository: ${entity.name}`);
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: async (callback: any) => callback({ getRepository }) });
+    createIdentityMapping.mockResolvedValue({ id: 'identity-custom-1', providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: 'attribute', externalId: 'attribute:clearance:secret', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, configKey: null, sourceRef: null });
+    assignRole.mockResolvedValue({ id: 'assignment-1' });
+
+    await ssoClaimsMappingService.migrateToProviderNeutral('legacy-clearance', {
+      providerKey: 'entra', targetGroupKey: group.key, createdById: 'admin-1',
+    });
+
+    expect(createIdentityMapping).toHaveBeenCalledWith(expect.objectContaining({
+      entitlementType: 'attribute', externalId: 'attribute:clearance:secret', matchOperator: 'exact',
+    }), null, expect.anything());
+  });
 });

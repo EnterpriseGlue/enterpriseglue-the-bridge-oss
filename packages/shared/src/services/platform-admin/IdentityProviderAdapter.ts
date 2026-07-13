@@ -29,6 +29,12 @@ export interface ProviderIdentityInput {
   observedAt?: number;
 }
 
+const AUTHZ_ATTRIBUTES_CLAIM = '__enterpriseglue_authz_attributes';
+
+export function authorizationAttributeEntitlementId(key: string, value: string): string {
+  return `attribute:${encodeURIComponent(key)}:${encodeURIComponent(value)}`;
+}
+
 export interface IdentityProviderAdapter {
   readonly type: IdentityProviderType;
   normalizeIdentity(input: ProviderIdentityInput): NormalizedExternalIdentity;
@@ -58,6 +64,14 @@ function emailDomainValue(email?: string | null): string | null {
 
 function entitlement(type: ExternalEntitlementType, value: string): ExternalEntitlement {
   return { type, externalId: value };
+}
+
+function authorizationAttributeEntitlements(claims: Record<string, unknown>): ExternalEntitlement[] {
+  const attributes = claims[AUTHZ_ATTRIBUTES_CLAIM];
+  if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) return [];
+  return Object.entries(attributes as Record<string, unknown>).flatMap(([key, value]) =>
+    values(value).map((entry) => entitlement('attribute', authorizationAttributeEntitlementId(key, entry)))
+  );
 }
 
 /**
@@ -91,6 +105,7 @@ class ClaimsIdentityAdapter implements IdentityProviderAdapter {
       ...values(claims.groups ?? claims.group ?? claims.memberOf).map((value) => entitlement('group', value)),
       ...values(claims.roles ?? claims.role ?? claims.appRoles).map((value) => entitlement('role', value)),
       ...scopeValues(claims.scp ?? claims.scope).map((value) => entitlement('scope', value)),
+      ...authorizationAttributeEntitlements(claims),
       // Store only the domain, never the email address, as an authorization
       // attribute. This supports exact provider-neutral email-domain mapping.
       ...(emailDomainValue(input.email) ? [entitlement('attribute', `email_domain:${emailDomainValue(input.email)}`)] : []),

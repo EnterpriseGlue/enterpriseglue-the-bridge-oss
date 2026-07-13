@@ -88,13 +88,14 @@ class ConfigBundleExportService {
 
     const providerKeyById = new Map([...referenceProviders, ...identityProviders].map((provider) => [provider.id, provider.key]));
     if (identityProviders.length) files['./identity-providers.json'] = { identityProviders: sortedByKey(identityProviders).map((provider) => {
-      const { allowVerifiedEmailLinking, ...protocolConfiguration } = json(provider.configurationJson);
+      const { allowVerifiedEmailLinking, authorizationAttributeKeys, ...protocolConfiguration } = json(provider.configurationJson);
       return {
         key: provider.key,
         type: provider.protocol,
         enabled: provider.isEnabled,
         authenticationMode: provider.authenticationMode,
         allowVerifiedEmailLinking: allowVerifiedEmailLinking === true,
+        ...(Array.isArray(authorizationAttributeKeys) && authorizationAttributeKeys.length > 0 ? { authorizationAttributeKeys } : {}),
         directoryTenantId: provider.directoryTenantId || undefined,
         sync: json(provider.syncJson),
         [provider.protocol]: protocolConfiguration,

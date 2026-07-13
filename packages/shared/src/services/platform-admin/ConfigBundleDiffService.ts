@@ -135,7 +135,11 @@ function runtimeResourceChangeSummary(
 }
 
 function providerConfiguration(provider: any): Record<string, unknown> {
-  return { ...(provider[provider.type] || {}), allowVerifiedEmailLinking: provider.allowVerifiedEmailLinking === true };
+  return {
+    ...(provider[provider.type] || {}),
+    allowVerifiedEmailLinking: provider.allowVerifiedEmailLinking === true,
+    ...(provider.authorizationAttributeKeys?.length ? { authorizationAttributeKeys: provider.authorizationAttributeKeys } : {}),
+  };
 }
 
 function assignmentDisplayKey(assignment: any): string {

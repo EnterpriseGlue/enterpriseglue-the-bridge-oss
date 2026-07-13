@@ -30,6 +30,15 @@ function allowsVerifiedEmailLinking(provider: IdentityProvider): boolean {
   }
 }
 
+function authorizationAttributeKeys(provider: IdentityProvider): string[] {
+  try {
+    const keys = JSON.parse(provider.configurationJson).authorizationAttributeKeys;
+    return Array.isArray(keys) ? keys.filter((key): key is string => typeof key === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 class IdentityProviderProvisioningService {
   async provisionOidcUser(provider: IdentityProvider, claims: OidcIdentityClaims): Promise<ProvisionedIdentityUser> {
     const email = requiredEmail(claims);
@@ -78,7 +87,7 @@ class IdentityProviderProvisioningService {
         user = { ...user, email: emailVerified ? email : user.email } as User;
       }
       await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
-        tenantId: provider.tenantId, providerId: provider.id, providerType: input.providerType, providerSubject: input.subjectId, subjectClaim: input.providerType === 'ldap' ? 'directory_id' : 'sub', providerTenantId: input.directoryTenantId || provider.directoryTenantId, userId: user.id, email, displayName: input.displayName || null, firstName: input.firstName || null, lastName: input.lastName || null, claims: input.claims, now,
+        tenantId: provider.tenantId, providerId: provider.id, providerType: input.providerType, providerSubject: input.subjectId, subjectClaim: input.providerType === 'ldap' ? 'directory_id' : 'sub', providerTenantId: input.directoryTenantId || provider.directoryTenantId, userId: user.id, email, displayName: input.displayName || null, firstName: input.firstName || null, lastName: input.lastName || null, claims: input.claims, authorizationAttributeKeys: authorizationAttributeKeys(provider), now,
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, user.id);
       return { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, platformRole: user.platformRole, isActive: user.isActive };

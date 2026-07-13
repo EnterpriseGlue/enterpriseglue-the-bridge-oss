@@ -101,7 +101,10 @@ function legacyMappingMigrationSupport(mapping: SsoClaimsMapping | null): { supp
       ? { supported: true }
       : { supported: false, reason: 'Only exact email-domain rules can be converted automatically.' };
   }
-  return { supported: false, reason: 'Custom claims require an explicitly allowlisted provider-neutral attribute mapping.' };
+  if (mapping.claimType === 'custom' && mapping.claimOperator === 'equals') {
+    return { supported: true };
+  }
+  return { supported: false, reason: 'Custom claims must use exact equality and be allowlisted on the selected identity provider.' };
 }
 
 export default function SsoSettingsTab() {
