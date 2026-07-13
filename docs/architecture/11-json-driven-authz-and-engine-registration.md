@@ -1189,7 +1189,7 @@ external entitlement
 - [x] ✅ Run provider-neutral identity mappings once during normalized-identity upsert, inside the same user/identity/group/assignment transaction. Upsert returns the provider-managed membership counts so Microsoft and SAML login diagnostics include them without a duplicate synchronization pass. Legacy SSO group and direct assignment synchronizers still run for their existing contracts; Google legacy-login convergence remains pending.
 - [ ] ⬜ Migrate or remove `SsoClaimsMapping` and `SsoAssignmentMapping`; do not retain three runtime mapping evaluators.
 - [ ] ⬜ Preserve the high-risk all-engine, regex, owner/delegate, and sensitive-permission guardrails on the resulting mapping plus group assignment workflow.
-- [x] ✅ Store provider-neutral mapping, legacy SSO-group mapping, group membership, assignment, and materialization ids in Effective Access explanation lineage so the extra indirection remains understandable. The Effective Access UI renders provider-neutral mapping details and correlates their audit entries. Legacy direct SSO assignment migration remains separate.
+- [x] ✅ Store provider-neutral mapping, legacy SSO-group mapping, group membership, assignment, and materialization ids in Effective Access explanation lineage so the extra indirection remains understandable. Effective Access and By Principal render provider-neutral mapping details and correlate their audit entries. Legacy direct SSO assignment migration remains separate.
 
 ### External Identity Linking
 

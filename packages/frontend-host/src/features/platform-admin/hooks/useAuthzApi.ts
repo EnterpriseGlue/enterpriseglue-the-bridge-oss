@@ -144,7 +144,7 @@ export interface RoleAssignment {
   updatedAt: number;
 }
 
-export type AuthzGroupSource = 'manual' | 'sso' | 'api' | 'automation' | 'system' | 'config';
+export type AuthzGroupSource = 'manual' | 'sso' | 'identity_provider' | 'api' | 'automation' | 'system' | 'config';
 export type AuthzOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
 
 export interface AuthzGroup {
@@ -535,6 +535,21 @@ export interface SsoGroupMapping {
   riskAcknowledged?: boolean;
 }
 
+export interface IdentityEntitlementMapping {
+  id: string;
+  providerId: string;
+  providerKey: string;
+  targetGroupId: string;
+  targetGroupKey: string;
+  entitlementType: 'group' | 'role' | 'scope' | 'attribute';
+  externalId: string | null;
+  matchOperator: 'exact' | 'contains' | 'exists';
+  syncMode: 'authoritative' | 'additive';
+  isActive: boolean;
+  configKey: string | null;
+  sourceRef: string | null;
+}
+
 export interface EffectiveAccessResult {
   allowed: boolean;
   decision: 'allow' | 'deny';
@@ -845,6 +860,7 @@ export const authzQueryKeys = {
   ssoEngineAccessSnapshots: (params?: SsoEngineAccessSnapshotParams) => ['platform-admin', 'authz', 'sso-engine-access-snapshots', params] as const,
   ssoEngineAccessSnapshotsForEngine: (engineId?: string) => ['platform-admin', 'authz', 'sso-engine-access-snapshots', 'engine', engineId] as const,
   ssoGroupMappings: ['platform-admin', 'authz', 'sso-group-mappings'] as const,
+  identityEntitlementMappings: ['platform-admin', 'authz', 'identity-entitlement-mappings'] as const,
   ssoSyncRuns: (params?: SsoSyncRunParams) => ['platform-admin', 'authz', 'sso-sync-runs', params] as const,
   ssoSyncEvents: (runId?: string, params?: SsoSyncEventParams) => ['platform-admin', 'authz', 'sso-sync-runs', runId, 'events', params] as const,
   myPermissions: ['platform-admin', 'authz', 'me', 'permissions'] as const,
@@ -1555,6 +1571,13 @@ export function useSsoGroupMappings() {
   return useQuery({
     queryKey: authzQueryKeys.ssoGroupMappings,
     queryFn: () => apiClient.get<SsoGroupMapping[]>('/api/authz/sso-group-mappings'),
+  });
+}
+
+export function useIdentityEntitlementMappings() {
+  return useQuery({
+    queryKey: authzQueryKeys.identityEntitlementMappings,
+    queryFn: () => apiClient.get<IdentityEntitlementMapping[]>('/api/identity/mappings'),
   });
 }
 

@@ -73,6 +73,7 @@ import {
   useExternalEngineSystems,
   useExternalEngineAudit,
   useExternalEngines,
+  useIdentityEntitlementMappings,
   useArchiveEngineSet,
   usePermissionCatalog,
   useMaterializeEngineSet,
@@ -133,6 +134,7 @@ import {
   type EngineSetSummary,
   type EngineFieldOwnership,
   type EngineManagementMode,
+  type IdentityEntitlementMapping,
   type ProjectEngineTarget,
   type ProjectEngineTargetMode,
   type ProjectEngineTargetSource,
@@ -1800,12 +1802,23 @@ function findSsoGroupMappingForMembership(membership: AuthzGroupMembership, mapp
   return mappings.find((mapping) => mapping.isActive && mapping.targetGroupId === membership.groupId) || null;
 }
 
+function findIdentityEntitlementMappingForMembership(membership: AuthzGroupMembership, mappings: IdentityEntitlementMapping[]) {
+  if (membership.source !== 'identity_provider') return null;
+  const mappingId = membership.sourceRef?.startsWith('identity_mapping:') ? membership.sourceRef.slice('identity_mapping:'.length) : null;
+  return mappingId ? mappings.find((mapping) => mapping.id === mappingId) || null : null;
+}
+
 function formatSsoAssignmentMappingForInspection(mapping: SsoAssignmentMapping, roles: RoleSummary[]) {
   return `SSO engine mapping: ${ssoClaimLabel(mapping)} -> ${selectorLabel(mapping) || 'target'} as ${roleLabel(mapping.targetRoleId, roles)} (${mapping.syncMode})`;
 }
 
 function formatSsoGroupMappingForInspection(mapping: SsoGroupMapping) {
   return `SSO group mapping: ${ssoClaimLabel(mapping)} -> ${mapping.targetGroupName || mapping.targetGroupKey || mapping.targetGroupId} (${mapping.syncMode})`;
+}
+
+function formatIdentityEntitlementMappingForInspection(mapping: IdentityEntitlementMapping) {
+  const value = mapping.matchOperator === 'exists' ? 'any value' : mapping.externalId || '-';
+  return `Identity mapping: ${mapping.providerKey} ${mapping.entitlementType} ${mapping.matchOperator} ${value} -> ${mapping.targetGroupKey} (${mapping.syncMode})`;
 }
 
 function joinLineageParts(parts: Array<string | null | undefined>) {
@@ -1859,13 +1872,13 @@ function findAssignmentAuditEntries(
 function findMembershipAuditEntries(
   membership: AuthzGroupMembership,
   entries: AuthzAuditEntry[],
-  mapping?: SsoGroupMapping | null,
+  mapping?: SsoGroupMapping | IdentityEntitlementMapping | null,
 ) {
   const ids = [membership.id, membership.sourceRef, mapping?.id, membership.groupId, membership.userId].filter(Boolean);
   return entries.filter((entry) => {
     if (!auditActionLooksMutating(entry.action)) return false;
     if (entry.resourceType === 'authz_group_membership' && auditEntryReferences(entry, [membership.id])) return true;
-    if (mapping && entry.resourceType === 'sso_group_mapping' && auditEntryReferences(entry, [mapping.id])) return true;
+    if (mapping && entry.resourceType === (membership.source === 'identity_provider' ? 'identity_entitlement_mapping' : 'sso_group_mapping') && auditEntryReferences(entry, [mapping.id])) return true;
     return auditEntryReferences(entry, ids);
   });
 }
@@ -1993,10 +2006,12 @@ function formatAssignmentLineage(
   return parts.length ? parts.join('; ') : '-';
 }
 
-function formatMembershipLineage(membership: AuthzGroupMembership, ssoGroupMappings: SsoGroupMapping[] = []) {
+function formatMembershipLineage(membership: AuthzGroupMembership, ssoGroupMappings: SsoGroupMapping[] = [], identityEntitlementMappings: IdentityEntitlementMapping[] = []) {
   const mapping = findSsoGroupMappingForMembership(membership, ssoGroupMappings);
+  const identityMapping = findIdentityEntitlementMappingForMembership(membership, identityEntitlementMappings);
   const parts = [
     mapping ? formatSsoGroupMappingForInspection(mapping) : '',
+    identityMapping ? formatIdentityEntitlementMappingForInspection(identityMapping) : '',
     membership.sourceRef ? `ref=${membership.sourceRef}` : '',
     membership.createdById ? `createdBy=${membership.createdById}` : '',
   ].filter(Boolean);
@@ -3157,6 +3172,7 @@ function ByPrincipalPanel({
   serviceAccounts,
   externalSystems,
   ssoGroupMappings,
+  identityEntitlementMappings,
   ssoAssignmentMappings,
   auditEntries,
   onOpenAuditReference,
@@ -3174,6 +3190,7 @@ function ByPrincipalPanel({
   serviceAccounts: ServiceAccount[];
   externalSystems: ExternalEngineSystem[];
   ssoGroupMappings: SsoGroupMapping[];
+  identityEntitlementMappings: IdentityEntitlementMapping[];
   ssoAssignmentMappings: SsoAssignmentMapping[];
   auditEntries: AuthzAuditEntry[];
   onOpenAuditReference?: (entry: AuthzAuditEntry) => void;
@@ -3249,8 +3266,9 @@ function ByPrincipalPanel({
     ...selectedInheritedAssignments.map(({ assignment, membership }) => {
       const assignmentMapping = findSsoAssignmentMappingForAssignment(assignment, ssoAssignmentMappings);
       const membershipMapping = findSsoGroupMappingForMembership(membership, ssoGroupMappings);
+      const identityMembershipMapping = findIdentityEntitlementMappingForMembership(membership, identityEntitlementMappings);
       const auditReferenceEntries = [
-        ...findMembershipAuditEntries(membership, auditEntries, membershipMapping),
+        ...findMembershipAuditEntries(membership, auditEntries, membershipMapping || identityMembershipMapping),
         ...findAssignmentAuditEntries(assignment, auditEntries, assignmentMapping),
       ];
       return {
@@ -3261,7 +3279,7 @@ function ByPrincipalPanel({
       source: `${assignment.source} via ${membership.source}`,
       lineage: joinLineageParts([
         `via group ${membership.groupName || groups.find((group) => group.id === membership.groupId)?.name || membership.groupId} (${membership.source} membership)`,
-        formatMembershipLineage(membership, ssoGroupMappings),
+        formatMembershipLineage(membership, ssoGroupMappings, identityEntitlementMappings),
         formatAssignmentLineage(assignment, roles, ssoAssignmentMappings),
       ]),
       audit: formatAuditReferences(auditReferenceEntries),
@@ -3280,13 +3298,14 @@ function ByPrincipalPanel({
   const relationshipRows = selectedPrincipal?.type === 'user'
     ? selectedUserMemberships.map((membership) => {
       const mapping = findSsoGroupMappingForMembership(membership, ssoGroupMappings);
-      const auditReferenceEntries = findMembershipAuditEntries(membership, auditEntries, mapping);
+      const identityMapping = findIdentityEntitlementMappingForMembership(membership, identityEntitlementMappings);
+      const auditReferenceEntries = findMembershipAuditEntries(membership, auditEntries, mapping || identityMapping);
       return {
       id: membership.id,
       name: membership.groupName || groups.find((group) => group.id === membership.groupId)?.name || membership.groupId,
       type: 'Group membership',
       source: membership.source,
-      lineage: formatMembershipLineage(membership, ssoGroupMappings),
+      lineage: formatMembershipLineage(membership, ssoGroupMappings, identityEntitlementMappings),
       audit: formatAuditReferences(auditReferenceEntries),
       auditEntries: auditReferenceEntries,
       expires: membership.expiresAt ? formatTimestamp(membership.expiresAt) : 'Never',
@@ -3295,13 +3314,14 @@ function ByPrincipalPanel({
     : selectedPrincipal?.type === 'group'
       ? selectedGroupMembers.map((membership) => {
         const mapping = findSsoGroupMappingForMembership(membership, ssoGroupMappings);
-        const auditReferenceEntries = findMembershipAuditEntries(membership, auditEntries, mapping);
+        const identityMapping = findIdentityEntitlementMappingForMembership(membership, identityEntitlementMappings);
+        const auditReferenceEntries = findMembershipAuditEntries(membership, auditEntries, mapping || identityMapping);
         return {
         id: membership.id,
         name: membership.userId,
         type: 'User member',
         source: membership.source,
-        lineage: formatMembershipLineage(membership, ssoGroupMappings),
+        lineage: formatMembershipLineage(membership, ssoGroupMappings, identityEntitlementMappings),
         audit: formatAuditReferences(auditReferenceEntries),
         auditEntries: auditReferenceEntries,
         expires: membership.expiresAt ? formatTimestamp(membership.expiresAt) : 'Never',
@@ -6318,6 +6338,7 @@ export default function AccessControl() {
   const policiesQ = useAuthzPolicies();
   const ssoPlatformMappingsQ = useSsoClaimsMappings();
   const ssoGroupMappingsQ = useSsoGroupMappings();
+  const identityEntitlementMappingsQ = useIdentityEntitlementMappings();
   const mappingsQ = useSsoAssignmentMappings();
   const createRoleM = useCreateCustomRole();
   const updateRoleM = useUpdateCustomRole();
@@ -6623,6 +6644,7 @@ export default function AccessControl() {
   const externalEngineAudit = externalEngineAuditQ.data || [];
   const ssoPlatformMappings = ssoPlatformMappingsQ.data || [];
   const ssoGroupMappings = ssoGroupMappingsQ.data || [];
+  const identityEntitlementMappings = identityEntitlementMappingsQ.data || [];
   const mappings = mappingsQ.data || [];
   const ssoSyncRuns = ssoSyncRunsQ.data || [];
   const ssoSyncEvents = ssoSyncEventsQ.data || [];
@@ -7727,6 +7749,7 @@ export default function AccessControl() {
                 serviceAccounts={serviceAccountsReadDecision.allowed ? serviceAccounts : []}
                 externalSystems={externalSystemsReadDecision.allowed ? externalSystems : []}
                 ssoGroupMappings={ssoGroupMappingsReadDecision.allowed ? ssoGroupMappings : []}
+                identityEntitlementMappings={ssoGroupMappingsReadDecision.allowed ? identityEntitlementMappings : []}
                 ssoAssignmentMappings={ssoAssignmentsReadDecision.allowed ? mappings : []}
                 auditEntries={auditReadDecision.allowed ? inspectionAuditEntries : []}
                 onOpenAuditReference={auditReadDecision.allowed ? openAuthzAuditReference : undefined}
@@ -7737,6 +7760,7 @@ export default function AccessControl() {
                   (serviceAccountsReadDecision.allowed && serviceAccountsQ.isLoading) ||
                   (externalSystemsReadDecision.allowed && externalSystemsQ.isLoading) ||
                   (ssoGroupMappingsReadDecision.allowed && ssoGroupMappingsQ.isLoading) ||
+                  (ssoGroupMappingsReadDecision.allowed && identityEntitlementMappingsQ.isLoading) ||
                   (ssoAssignmentsReadDecision.allowed && mappingsQ.isLoading) ||
                   (policiesReadDecision.allowed && policiesQ.isLoading) ||
                   (auditReadDecision.allowed && inspectionAuditQ.isLoading)

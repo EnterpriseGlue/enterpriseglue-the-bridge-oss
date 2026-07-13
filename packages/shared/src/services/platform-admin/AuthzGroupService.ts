@@ -11,7 +11,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, type DataSource, type EntityManager } from 'typeorm';
 
-export type AuthzGroupSource = 'manual' | 'sso' | 'api' | 'automation' | 'system' | 'config';
+export type AuthzGroupSource = 'manual' | 'sso' | 'identity_provider' | 'api' | 'automation' | 'system' | 'config';
 export type AuthzGroupOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
 
 export interface AuthzGroupView {
