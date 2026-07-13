@@ -367,6 +367,7 @@ describe('EnginesPage', () => {
     expect(screen.getByText('Payments release')).toBeInTheDocument();
     expect(screen.getByText('reported')).toBeInTheDocument();
     expect(screen.getByText('pipeline_receipt')).toBeInTheDocument();
+    expect(screen.getByText('Reported by release-bot')).toBeInTheDocument();
     expect(await screen.findByText('Payments App')).toBeInTheDocument();
     expect(screen.getByText('Manual, API, Import')).toBeInTheDocument();
     expect(screen.getByText('Legacy')).toBeInTheDocument();

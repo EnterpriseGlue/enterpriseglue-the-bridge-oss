@@ -790,6 +790,8 @@ function EngineDeploymentSection({
                   <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
                     {deployment.projectId ? `Project ${deployment.projectId}` : 'No project lineage'} | {deployment.resourceCount} resources
                   </div>
+                  {deployment.reportingPrincipalId ? <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>Reported by {deployment.reportingPrincipalId}</div> : null}
+                  {deployment.lineageQuality === 'discovered' && !deployment.projectId ? <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Engine-discovered metadata only; project navigation is unavailable.</div> : null}
                   <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
                     {deployment.reconciledAt ? `Reconciled ${formatEngineTimestamp(deployment.reconciledAt)}` : `Recorded ${formatEngineTimestamp(deployment.deployedAt)}`}
                   </div>
