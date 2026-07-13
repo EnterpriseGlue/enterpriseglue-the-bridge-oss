@@ -2257,7 +2257,7 @@ Phase 0 exit criteria:
 
 ### Phase 6: UI
 
-- [x] ✅ Add Platform Settings Configuration tab with pasted JSON preview/diff and exact-hash apply, server-side export, and recent apply-run history. Upload/ZIP import remains pending; the API-driven CI CLI is documented and available separately.
+- [x] ✅ Add Platform Settings Configuration tab with pasted JSON preview/diff and exact-hash apply, server-side export, recent apply-run history, and a compact materialization/identity-replay receipt. Upload/ZIP import remains pending; the API-driven CI CLI is documented and available separately.
 - [x] ✅ Add paste and JSON file import/export controls using Carbon components. ZIP and multi-file folder import remain pending.
 - [x] ✅ Add diff viewer with search, operation/object-type/priority filters, and attention-first risk grouping.
 - [x] ✅ Bind apply to the exact canonical preview hash.
