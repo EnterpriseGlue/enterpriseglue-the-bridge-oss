@@ -57,7 +57,7 @@ import { ProjectMembersManagementModals, type ProjectScopedCustomRole } from './
 import { ProjectDetailHeader } from './components/ProjectDetailHeader'
 import { downloadBlob, toSafeDownloadFilename, toSafeDownloadFilenameWithExtension } from '../../../utils/safeDom'
 import { renderDiagramToPdf } from '../utils/renderDiagramToPdf'
-import { canDeployProject, hasConnectedEngine, type ProjectEngineAccessData } from '../utils/deployEligibility'
+import type { ProjectEngineAccessData } from '../utils/deployEligibility'
 
 // Import extracted utilities and components
 import {
@@ -825,7 +825,7 @@ export default function ProjectDetail() {
     ? null
     : requestEngineAccessDecision.reason || `Missing permission ${ProjectPermission.PROJECT_SETTINGS}`
   const canManageGitConnection = hasProjectPermissionForCurrentUser(ProjectPermission.GIT_CONNECT)
-  const hasDeployPermission = hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOY)
+  const hasDeployPermission = hasProjectPermissionOrAction(ProjectPermission.DEPLOY, 'project.deploy.create')
   const canViewDeploymentOptions = canViewFiles
   const canReadPlatformProjectEngineTargets = hasPlatformPermission(PlatformPermission.PROJECT_ENGINE_TARGETS_VIEW) ||
     hasPlatformPermission(PlatformPermission.PROJECT_ENGINE_TARGETS_MANAGE)
@@ -1146,12 +1146,12 @@ export default function ProjectDetail() {
     await queryClient.invalidateQueries({ queryKey: ['project-members', projectId, 'custom-role-assignments'] })
   }
 
-  // Check if user can deploy based on their role and defaultDeployRoles setting
-  const canDeployByRole = React.useMemo(() => {
-    return canDeployProject(myMembershipQ.data, engineAccessQ.data, platformSettings?.defaultDeployRoles)
-  }, [engineAccessQ.data, myMembershipQ.data, platformSettings?.defaultDeployRoles])
-  const canDeployByPermission = hasDeployPermission && hasConnectedEngine(engineAccessQ.data)
-  const canDeployProjectActions = canDeployByRole || canDeployByPermission
+  const canDeployProjectActions = React.useMemo(() => {
+    if (!hasDeployPermission) return false
+    return (engineAccessQ.data?.accessedEngines ?? []).some((engine) => (
+      engine.deploymentEligibility?.manual?.allowed ?? engine.manualDeployAllowed === true
+    ))
+  }, [engineAccessQ.data?.accessedEngines, hasDeployPermission])
 
   const getProjectDetailBulkActionUnavailableReason = React.useCallback((_items: FileItem[], action: ProjectDetailBulkAction): string | null => {
     switch (action) {
@@ -1165,12 +1165,12 @@ export default function ProjectDetail() {
         return syncUnavailableReason
       case 'deploy':
         if (canDeployProjectActions) return null
-        if (!hasDeployPermission && !canDeployByRole) return getProjectPermissionUnavailableReason(ProjectPermission.DEPLOY)
+        if (!hasDeployPermission) return getProjectPermissionUnavailableReason(ProjectPermission.DEPLOY)
         return 'No eligible deployment target'
       default:
         return null
     }
-  }, [canDeployByRole, canDeployProjectActions, getProjectPermissionUnavailableReason, hasDeployPermission, syncUnavailableReason])
+  }, [canDeployProjectActions, getProjectPermissionUnavailableReason, hasDeployPermission, syncUnavailableReason])
 
   const getProjectDetailBulkActionDiagnosticDecision = React.useCallback((
   _items: FileItem[],
