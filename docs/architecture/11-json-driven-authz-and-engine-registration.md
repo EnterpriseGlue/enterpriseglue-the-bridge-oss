@@ -2374,6 +2374,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Engine import tests for current UI-supported auth modes and labels.
 - [ ] ⬜ Identity adapter and mapping tests for OIDC groups/roles/scopes, SAML group attributes, LDAP immutable group ids/DNs, additive sync, authoritative sync, and cross-provider membership preservation.
 - [x] ✅ Run the shared adapter contract suite against the in-memory fake, OIDC, SAML, and LDAP adapters.
+- [x] ✅ Run the `test:authz-refactor` aggregate: identity contracts, identity API integration, serialized legacy authentication flows, configuration-bundle services, and CLI artifact sanitization all pass on the refactor branch.
 - [ ] ⬜ Run protocol-level mock service tests for signing, issuer/audience, assertion validation, LDAP bind/search/TLS, timeouts, key/certificate rotation, and malformed responses.
 - [ ] ⬜ Run full configure/apply/login/reconcile browser scenarios against the local mock identity stack.
 - [ ] ⬜ Test provider and mapping UI connection-test, mapping-preview, reconciliation-preview, run-history, and sanitized failure states through MSW and browser flows.
