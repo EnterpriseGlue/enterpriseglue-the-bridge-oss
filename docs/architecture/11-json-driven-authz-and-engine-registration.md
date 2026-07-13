@@ -91,6 +91,7 @@ This document describes the next implementation phase after the RBAC foundation.
 - [x] ✅ Custom roles, custom permissions, allow-only role semantics, role assignment APIs, and Effective Access explanations.
 - [x] ✅ SSO group mappings, SSO engine assignment mappings, SSO access snapshots, access-authority transition controls, and high-risk mapping guardrails.
 - [x] ✅ Engine Sets, project-engine targets, deployment eligibility, external engine systems, external engine registration, lifecycle/decommission behavior, capability drift diagnostics, and source-owned field enforcement.
+- [x] ✅ Scope external-engine inventory, audit reads, lifecycle operations, and reconciliation to the associated engine tenant; negative route coverage proves a foreign engine is neither visible nor decommissioned.
 - [x] ✅ Shared action registry, OpenAPI `x-enterpriseglue-authz`, strict backend route inventory guard, strict frontend action inventory guard, and mounted frontend action gating.
 
 The remaining work in this document is not to rebuild those foundations. It is to add:
