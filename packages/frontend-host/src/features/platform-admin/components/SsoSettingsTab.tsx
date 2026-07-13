@@ -172,6 +172,8 @@ export default function SsoSettingsTab() {
   const [migrationGroupKey, setMigrationGroupKey] = useState('');
   const [migrationError, setMigrationError] = useState<string | null>(null);
   const [toggleProviderConfirm, setToggleProviderConfirm] = useState<SsoProvider | null>(null);
+  const [defaultRoleMigration, setDefaultRoleMigration] = useState<SsoProvider | null>(null);
+  const [defaultRoleMigrationProviderKey, setDefaultRoleMigrationProviderKey] = useState('');
 
   // Documentation modal state
   const [docsModalOpen, setDocsModalOpen] = useState(false);
@@ -275,6 +277,11 @@ export default function SsoSettingsTab() {
       queryClient.invalidateQueries({ queryKey: ['sso-providers'] });
       setToggleProviderConfirm(null);
     },
+  });
+  const migrateDefaultRole = useMutation({
+    mutationFn: ({ id, providerKey, riskAcknowledged }: { id: string; providerKey: string; riskAcknowledged: boolean }) => apiClient.post(`/api/sso/providers/${id}/migrate-default-role`, { providerKey, ...(riskAcknowledged ? { riskAcknowledged: true } : {}) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['sso-providers'] }); setDefaultRoleMigration(null); setDefaultRoleMigrationProviderKey(''); },
+    onError: (error: unknown) => setProviderFormError(parseApiError(error, 'Unable to convert the provider default role').message),
   });
 
   const updateSsoLoginBehavior = useMutation({
@@ -1013,6 +1020,7 @@ export default function SsoSettingsTab() {
                           itemText="Edit"
                           onClick={() => openEditProvider(provider)}
                         />
+                        <GuardedOverflowMenuItem decision={providersManageDecision} itemText="Convert default role" onClick={() => { setDefaultRoleMigration(provider); setDefaultRoleMigrationProviderKey(''); }} />
                         <GuardedOverflowMenuItem
                           decision={providersManageDecision}
                           itemText="Delete"
@@ -1540,6 +1548,14 @@ export default function SsoSettingsTab() {
       </Modal>
 
       {/* Toggle Provider Confirmation */}
+      <Modal open={!!defaultRoleMigration} onRequestClose={() => setDefaultRoleMigration(null)} modalHeading="Convert default role" primaryButtonText={migrateDefaultRole.isPending ? 'Converting...' : 'Create explicit mapping'} secondaryButtonText="Cancel" onRequestSubmit={() => defaultRoleMigration && migrateDefaultRole.mutate({ id: defaultRoleMigration.id, providerKey: defaultRoleMigrationProviderKey.trim(), riskAcknowledged: defaultRoleMigration.defaultRole === 'admin' })} primaryButtonDisabled={!canManageProviders || !defaultRoleMigrationProviderKey.trim() || migrateDefaultRole.isPending}>
+        <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
+          <p style={{ margin: 0 }}>Create an explicit authenticated-identity mapping for <strong>{defaultRoleMigration?.name}</strong>. The legacy default remains active until it is verified and retired.</p>
+          <TextInput id="default-role-provider-key" labelText="Provider-neutral provider key" value={defaultRoleMigrationProviderKey} onChange={(event) => setDefaultRoleMigrationProviderKey(event.target.value)} />
+          {defaultRoleMigration?.defaultRole === 'admin' && <InlineNotification kind="warning" title="Administrator default" subtitle="This creates a provider-wide platform-administrator mapping." lowContrast />}
+        </div>
+      </Modal>
+
       <Modal
         open={!!toggleProviderConfirm}
         onRequestClose={() => setToggleProviderConfirm(null)}
