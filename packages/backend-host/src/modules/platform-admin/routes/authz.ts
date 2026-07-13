@@ -41,7 +41,6 @@ import { AUTHZ_RESOURCE_TYPES } from '@enterpriseglue/shared/authz/permission-ac
 import { In, IsNull, Not } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
-import { getEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js';
 import { registerConfigBundleRoutes } from './authz/config-bundles.js';
 import { registerEngineSetRoutes } from './authz/engine-sets.js';
 import { registerMachineRoutes } from './authz/machines.js';
@@ -52,6 +51,11 @@ import { registerProjectEngineTargetRoutes } from './authz/project-engine-target
 import { registerAuditRoutes } from './authz/audit.js';
 import { isExternalEngineTenantVisible } from './authz/external-engine-tenant.js';
 import { parseExternalEngineJson, parseExternalEngineLabels } from './authz/external-engine-serialization.js';
+import {
+  getExternalEngineCapabilityDiagnostics,
+  getExternalEngineMaterializationDiagnostics,
+  parseExternalEngineCapabilities,
+} from './authz/external-engine-diagnostics.js';
 
 // Validation schemas
 const authzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
@@ -374,81 +378,6 @@ function parseFieldOwnership(value: string | null | undefined): EngineFieldOwner
   return normalizeFieldOwnership(Object.fromEntries(
     Object.entries(parsed).filter((entry): entry is [string, 'manual' | 'external'] => entry[1] === 'manual' || entry[1] === 'external')
   ));
-}
-
-function parseExternalEngineCapabilities(value: string | null | undefined): Record<string, unknown> | null {
-  const parsed = parseExternalEngineJson(value);
-  if (!parsed) return null;
-  const operations = Array.isArray(parsed.operations)
-    ? Array.from(new Set(parsed.operations.filter((operation): operation is string => typeof operation === 'string'))).sort()
-    : [];
-  return {
-    ...parsed,
-    operations,
-  };
-}
-
-function getCapabilityDiagnostics(type: unknown, capabilities: Record<string, unknown> | null) {
-  const expected = getEngineCapabilities(type);
-  const expectedOperations: string[] = [...expected.operations].sort();
-  const reportedOperations = Array.isArray(capabilities?.operations)
-    ? Array.from(new Set(capabilities.operations.filter((operation): operation is string => typeof operation === 'string'))).sort()
-    : [];
-  const reported = new Set(reportedOperations);
-  const expectedSet = new Set(expectedOperations);
-  const missingOperations = expectedOperations.filter((operation) => !reported.has(operation));
-  const extraOperations = reportedOperations.filter((operation) => !expectedSet.has(operation));
-  const status: 'unknown' | 'in_sync' | 'mismatch' = reportedOperations.length === 0 ? 'unknown' : missingOperations.length > 0 ? 'mismatch' : 'in_sync';
-  const issues = [
-    reportedOperations.length === 0 ? 'No operation capabilities were reported by the external system.' : '',
-    missingOperations.length > 0 ? `Missing expected operations: ${missingOperations.join(', ')}.` : '',
-    extraOperations.length > 0 ? `Reported unsupported operations: ${extraOperations.join(', ')}.` : '',
-  ].filter(Boolean);
-
-  return {
-    status,
-    expectedOperations,
-    reportedOperations,
-    missingOperations,
-    extraOperations,
-    expectedSupportLevel: expected.supportLevel,
-    reportedSupportLevel: typeof capabilities?.supportLevel === 'string' ? capabilities.supportLevel : null,
-    expectedCompatibilityProfile: expected.compatibilityProfile,
-    reportedCompatibilityProfile: typeof capabilities?.compatibilityProfile === 'string' ? capabilities.compatibilityProfile : null,
-    issues,
-    recommendation: status === 'in_sync'
-      ? 'No capability action required.'
-      : 'Update the external registration payload to report the missing operations, then run reconcile again.',
-  };
-}
-
-function getCapabilityStatus(type: unknown, capabilities: Record<string, unknown> | null): 'unknown' | 'in_sync' | 'mismatch' {
-  return getCapabilityDiagnostics(type, capabilities).status;
-}
-
-function getMaterializationDiagnostics(results: Array<Record<string, unknown>>) {
-  const errors = results
-    .filter((result) => typeof result.error === 'string')
-    .map((result) => ({
-      engineSetId: typeof result.engineSetId === 'string' ? result.engineSetId : '',
-      error: String(result.error),
-    }));
-  const totals = results.reduce<{ matched: number; created: number; updated: number; removed: number }>((acc, result) => ({
-    matched: acc.matched + (typeof result.matched === 'number' ? result.matched : 0),
-    created: acc.created + (typeof result.created === 'number' ? result.created : 0),
-    updated: acc.updated + (typeof result.updated === 'number' ? result.updated : 0),
-    removed: acc.removed + (typeof result.removed === 'number' ? result.removed : 0),
-  }), { matched: 0, created: 0, updated: 0, removed: 0 });
-
-  return {
-    engineSetCount: results.length,
-    ...totals,
-    errors,
-    status: errors.length > 0 ? 'failed' : 'ok',
-    summary: errors.length > 0
-      ? `${errors.length} Engine Set materialization error${errors.length === 1 ? '' : 's'}`
-      : `${results.length} Engine Set${results.length === 1 ? '' : 's'} checked; ${totals.created} created, ${totals.updated} updated, ${totals.removed} removed`,
-  };
 }
 
 function serializeExternalEngineSystem(system: ExternalEngineSystem) {
@@ -806,7 +735,7 @@ router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatfo
           const engine = enginesById.get(registration.engineId);
           if (!engine) return null;
           const capabilities = parseExternalEngineCapabilities(registration.capabilitiesJson || engine.capabilitiesJson);
-          const capabilityDiagnostics = getCapabilityDiagnostics(engine.type, capabilities);
+          const capabilityDiagnostics = getExternalEngineCapabilityDiagnostics(engine.type, capabilities);
           return {
             id: engine.id,
             registrationId: registration.id,
@@ -849,7 +778,7 @@ router.get('/api/authz/external-engines', apiLimiter, requireAuth, requirePlatfo
 
     res.json(engines.map((engine) => {
       const capabilities = parseExternalEngineCapabilities(engine.capabilitiesJson);
-      const capabilityDiagnostics = getCapabilityDiagnostics(engine.type, capabilities);
+      const capabilityDiagnostics = getExternalEngineCapabilityDiagnostics(engine.type, capabilities);
       return {
         id: engine.id,
         name: engine.name,
@@ -1002,7 +931,7 @@ router.post('/api/authz/external-engines/:id/reactivate', apiLimiter, requireAut
       });
     }
     const materializationResults = await engineSetService.materializeEngineSetsForEngine(engine.id, req.tenant?.tenantId || engine.tenantId || null);
-    const materializationDiagnostics = getMaterializationDiagnostics(materializationResults as Array<Record<string, unknown>>);
+    const materializationDiagnostics = getExternalEngineMaterializationDiagnostics(materializationResults as Array<Record<string, unknown>>);
     await logAudit({
       tenantId: req.tenant?.tenantId || undefined,
       userId: req.user!.userId,
@@ -1051,7 +980,7 @@ router.post('/api/authz/external-engines/:id/reconcile', apiLimiter, requireAuth
 
     const registration = await registrationRepo.findOne({ where: { engineId: engine.id } });
     const capabilities = parseExternalEngineCapabilities(registration?.capabilitiesJson || engine.capabilitiesJson);
-    const capabilityDiagnostics = getCapabilityDiagnostics(engine.type, capabilities);
+    const capabilityDiagnostics = getExternalEngineCapabilityDiagnostics(engine.type, capabilities);
     const capabilityStatus = capabilityDiagnostics.status;
     const now = Date.now();
     await engineRepo.update({ id: engine.id }, {
@@ -1065,7 +994,7 @@ router.post('/api/authz/external-engines/:id/reconcile', apiLimiter, requireAuth
       });
     }
     const materializationResults = await engineSetService.materializeEngineSetsForEngine(engine.id, req.tenant?.tenantId || engine.tenantId || null);
-    const materializationDiagnostics = getMaterializationDiagnostics(materializationResults as Array<Record<string, unknown>>);
+    const materializationDiagnostics = getExternalEngineMaterializationDiagnostics(materializationResults as Array<Record<string, unknown>>);
     await logAudit({
       tenantId: req.tenant?.tenantId || undefined,
       userId: req.user!.userId,
