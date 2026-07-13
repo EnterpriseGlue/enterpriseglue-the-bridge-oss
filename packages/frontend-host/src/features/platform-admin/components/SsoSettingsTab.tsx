@@ -1550,7 +1550,7 @@ export default function SsoSettingsTab() {
       {/* Toggle Provider Confirmation */}
       <Modal open={!!defaultRoleMigration} onRequestClose={() => setDefaultRoleMigration(null)} modalHeading="Convert default role" primaryButtonText={migrateDefaultRole.isPending ? 'Converting...' : 'Create explicit mapping'} secondaryButtonText="Cancel" onRequestSubmit={() => defaultRoleMigration && migrateDefaultRole.mutate({ id: defaultRoleMigration.id, providerKey: defaultRoleMigrationProviderKey.trim(), riskAcknowledged: defaultRoleMigration.defaultRole === 'admin' })} primaryButtonDisabled={!canManageProviders || !defaultRoleMigrationProviderKey.trim() || migrateDefaultRole.isPending}>
         <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
-          <p style={{ margin: 0 }}>Create an explicit authenticated-identity mapping for <strong>{defaultRoleMigration?.name}</strong>. The legacy default remains active until it is verified and retired.</p>
+          <p style={{ margin: 0 }}>Create an explicit authenticated-identity mapping for <strong>{defaultRoleMigration?.name}</strong>. It takes effect after the selected provider-neutral login path is tested and cut over; the legacy default remains active until then.</p>
           <TextInput id="default-role-provider-key" labelText="Provider-neutral provider key" value={defaultRoleMigrationProviderKey} onChange={(event) => setDefaultRoleMigrationProviderKey(event.target.value)} />
           {defaultRoleMigration?.defaultRole === 'admin' && <InlineNotification kind="warning" title="Administrator default" subtitle="This creates a provider-wide platform-administrator mapping." lowContrast />}
         </div>
