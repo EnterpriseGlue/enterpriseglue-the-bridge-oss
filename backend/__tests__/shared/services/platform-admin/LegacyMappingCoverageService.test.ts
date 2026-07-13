@@ -26,6 +26,7 @@ describe('LegacyMappingCoverageService', () => {
 
   it('does not disable global platform mappings during tenant-scoped retirement', async () => {
     vi.spyOn(legacyMappingCoverageService, 'getRetirementReadiness').mockResolvedValue({ ready: true, activeLegacyMappingCount: 0, verifiedReplacementCount: 0, blockers: [] });
+    vi.spyOn(legacyMappingCoverageService, 'getCoverage').mockResolvedValue([]);
     const platformUpdate = vi.fn();
     const groupUpdate = vi.fn().mockResolvedValue({ affected: 2 });
     const engineUpdate = vi.fn().mockResolvedValue({ affected: 3 });
@@ -44,5 +45,12 @@ describe('LegacyMappingCoverageService', () => {
     expect(groupUpdate).toHaveBeenCalledOnce();
     expect(engineUpdate).toHaveBeenCalledOnce();
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-a', userId: 'admin-1', action: 'authz.legacy_mapping_retirement.disable' }));
+  });
+
+  it('rejects tenant-scoped retirement when global platform mappings remain in scope', async () => {
+    vi.spyOn(legacyMappingCoverageService, 'getRetirementReadiness').mockResolvedValue({ ready: true, activeLegacyMappingCount: 1, verifiedReplacementCount: 1, blockers: [] });
+    vi.spyOn(legacyMappingCoverageService, 'getCoverage').mockResolvedValue([{ id: 'platform-legacy', family: 'platform_role', status: 'replacement_candidate', reason: 'verified', candidateIdentityMappingIds: ['replacement-1'], verification: { candidateIdentityMappingId: 'replacement-1', verifiedById: 'admin-1', verifiedAt: 1, note: 'verified' } }]);
+
+    await expect(legacyMappingCoverageService.retireLegacyMappings('tenant-a', 'admin-1')).rejects.toThrow('Globally scoped platform-role mappings must be retired from global platform scope');
   });
 });

@@ -123,6 +123,12 @@ class LegacyMappingCoverageService {
     const normalizedTenantId = tenantId?.trim() || null;
     const readiness = await this.getRetirementReadiness(normalizedTenantId);
     if (!readiness.ready) throw Errors.forbidden('Legacy mapping retirement is blocked until every active mapping has a current verified replacement');
+    if (normalizedTenantId && readiness.activeLegacyMappingCount > 0) {
+      const coverage = await this.getCoverage(normalizedTenantId);
+      if (coverage.some((item) => item.family === 'platform_role')) {
+        throw Errors.forbidden('Globally scoped platform-role mappings must be retired from global platform scope');
+      }
+    }
     const dataSource = await getDataSource();
     return dataSource.transaction(async (manager) => {
       const now = Date.now();
