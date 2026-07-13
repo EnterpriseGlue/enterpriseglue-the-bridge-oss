@@ -883,17 +883,17 @@ Runtime resource-scoped roles are separate from broad engine roles. Use them whe
 
 Rules:
 
-- [ ] ⬜ Config may create and update only `custom.*` roles.
-- [ ] ⬜ Config may reference immutable system roles such as `system.platform.admin` or `system.engine.operator`.
-- [ ] ⬜ Config may not mutate system role permissions.
-- [ ] ⬜ Role permissions must match role scope.
-- [ ] ⬜ Custom roles remain allow-only. Denies and context restrictions stay in policies.
-- [ ] ⬜ A role must use either explicit `permissions` or `copyFromRoleKey`; using both is rejected unless the schema explicitly allows `copyFromRoleKey` plus `addPermissions` and `removePermissions`.
-- [ ] ⬜ `copyFromRoleKey` must reference an existing same-scope role.
-- [ ] ⬜ `addPermissions` and `removePermissions` must reference same-scope permissions.
-- [ ] ⬜ Import preview must display the final expanded permission list and baseline role fingerprint for `copyFromRoleKey`.
-- [ ] ⬜ Apply must store expanded permissions, not runtime role inheritance.
-- [ ] ⬜ Export should prefer explicit `permissions` by default and may include `copyFromRoleKey` lineage as metadata.
+- [x] ✅ Config may create and update only `custom.*` roles.
+- [x] ✅ Config may reference immutable system roles such as `system.platform.admin` or `system.engine.operator`.
+- [x] ✅ Config may not mutate system role permissions.
+- [x] ✅ Role permissions must match role scope.
+- [x] ✅ Custom roles remain allow-only. Denies and context restrictions stay in policies.
+- [x] ✅ A role must use either explicit `permissions` or `copyFromRoleKey`; using both is rejected unless the schema explicitly allows `copyFromRoleKey` plus `addPermissions` and `removePermissions`.
+- [x] ✅ `copyFromRoleKey` must reference an existing same-scope role.
+- [x] ✅ `addPermissions` and `removePermissions` must reference same-scope permissions.
+- [x] ✅ Import preview displays the final expanded permission list and baseline role fingerprint for `copyFromRoleKey`.
+- [x] ✅ Apply stores expanded permissions, not runtime role inheritance.
+- [x] ✅ Export prefers explicit `permissions`; copied-template lineage remains preview metadata rather than a runtime authorization dependency.
 
 ### Role Lifecycle And UI Behavior
 
