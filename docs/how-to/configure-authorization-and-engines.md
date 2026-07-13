@@ -139,6 +139,22 @@ Required sequence:
 
 An `exists` mapping to a normal internal group represents default access for every authenticated user. Do not configure a provider-level default role.
 
+### Legacy Provider Transition
+
+The Identity Providers UI can prepare a disabled direct-OIDC draft from a
+legacy persisted Microsoft, Google, or OIDC provider, or from the legacy
+Microsoft/Google environment settings. The draft preserves non-secret metadata
+only and requires an external secret reference, identity mappings, callback
+registration, a controlled sign-in test, and a manual legacy-provider cutover.
+
+Before disabling a compatibility provider, use its **Check migration readiness**
+row action. Readiness is non-mutating and fails until the provider exists, uses
+direct OIDC, is enabled, has an available secret reference, and has at least one
+active identity mapping. Automatic archival is deliberately unavailable because
+the legacy provider may be platform-global while the replacement is tenant
+scoped. See [Auth and SSO Setup](./auth-sso.md#migrate-a-legacy-microsoft-google-or-oidc-provider)
+for the controlled runbook and rollback sequence.
+
 ### LDAP
 
 LDAP changes the authentication adapter, not RBAC:

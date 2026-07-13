@@ -90,6 +90,51 @@ Set the following when enabling Google OAuth:
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_REDIRECT_URI`
 
+## Migrate A Legacy Microsoft, Google, Or OIDC Provider
+
+Use this procedure to move from the legacy Microsoft/Google/OIDC flows above to
+an exact-provider-bound, provider-neutral OIDC provider. The migration assistant
+creates a disabled draft only. It never decrypts, copies, or displays a legacy
+client secret.
+
+1. In **Platform Settings -> Identity Providers**, choose **Migrate legacy
+   provider** or **Migrate environment configuration** and prepare the draft.
+2. Register the draft's callback URL with the identity provider. For OIDC this
+   is normally `https://<your-app-domain>/api/auth/identity/callback`.
+3. Add a secret reference to the draft instead of entering a client secret in
+   EnterpriseGlue. A persisted legacy provider requires a newly managed secret
+   reference. An environment migration may temporarily reference
+   `env://MICROSOFT_CLIENT_SECRET` or `env://GOOGLE_CLIENT_SECRET` while those
+   variables remain available to the backend.
+4. Create active **Identity Mappings** from the provider's stable claims to
+   internal groups. Roles remain assigned to those groups at platform, project,
+   engine, or runtime-resource scope. Do not use a provider-level default role;
+   an `exists` mapping to a normal internal group is the supported default-access
+   mechanism.
+5. Save the new direct OIDC provider disabled, test its connection, then enable
+   it only for a controlled sign-in test. Provider-neutral login begins at
+   `/api/auth/identity/<provider-key>/start`.
+6. From the provider row menu, run **Check migration readiness**. Cut over only
+   when it reports no blockers: the target must be a direct, enabled OIDC
+   provider with an available secret reference and at least one active identity
+   mapping.
+7. Validate a representative user end to end: sign-in, tenant redirect, group
+   membership, engine visibility, project access, and an authorization decision
+   in Effective Access. Keep a local break-glass platform administrator usable
+   throughout the transition.
+8. Disable the old provider only after the controlled test passes. This is a
+   manual administrative action today. EnterpriseGlue does not automatically
+   archive a legacy provider because legacy records are platform-global whereas
+   provider-neutral definitions may be tenant-scoped.
+
+Rollback is intentionally simple: disable the new provider, re-enable the
+previous legacy provider, and investigate the new provider's mapping or secret
+reference. Do not remove environment variables or legacy provider records until
+the new login path has been validated in the intended environment.
+
+For the broader provider-neutral identity and group-mapping model, see
+[Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md).
+
 ## Email (Optional)
 - Seed the default email configuration with `EMAIL_*` variables on first deploy so verification/reset flows work out of the box.
 
