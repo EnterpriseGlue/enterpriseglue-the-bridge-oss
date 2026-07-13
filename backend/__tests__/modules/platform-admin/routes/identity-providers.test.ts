@@ -125,8 +125,15 @@ describe('identity provider routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual(expect.objectContaining({ ready: false, blockers: ['identity_mappings_missing'] }));
-    expect(service.getMigrationReadiness).toHaveBeenCalledWith({ targetProviderKey: 'migrated-entra', tenantId: 'tenant-1' });
+    expect(service.getMigrationReadiness).toHaveBeenCalledWith({ targetProviderKey: 'migrated-entra', legacyProviderId: null, tenantId: 'tenant-1' });
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.migration_readiness.read', details: expect.objectContaining({ blockers: ['identity_mappings_missing'] }) }));
+  });
+
+  it('includes the selected legacy provider in migration readiness preflight', async () => {
+    const response = await request(app).get('/api/identity/providers/migration-readiness?targetProviderKey=migrated-entra&legacyProviderId=legacy-entra-1');
+
+    expect(response.status).toBe(200);
+    expect(service.getMigrationReadiness).toHaveBeenCalledWith({ targetProviderKey: 'migrated-entra', legacyProviderId: 'legacy-entra-1', tenantId: 'tenant-1' });
   });
 
   it('cuts over a persisted legacy provider only through the guarded migration service', async () => {

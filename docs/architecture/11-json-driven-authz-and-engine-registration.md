@@ -1215,7 +1215,7 @@ The platform now has a group-backed baseline for new and existing active users, 
 
 Implement the remaining work in this order:
 
-- [ ] ⬜ Replace legacy provider `defaultRole` with an explicit provider-neutral default internal-group mapping. A default user grant should use the existing `authenticated-users` group; a default administrator grant must be an explicit, auditable provider mapping to `platform-administrators` with the existing high-risk safeguards.
+- [x] ✅ Replace legacy provider `defaultRole` with an explicit provider-neutral default internal-group mapping. A default user grant uses the existing `authenticated-users` group; a default administrator grant uses an explicit, auditable provider mapping to `platform-administrators` with the existing high-risk safeguards. Migration readiness now accepts the selected legacy provider and requires its exact authenticated default mapping before enabling cutover.
 - [ ] ⬜ Complete provider-neutral conversion coverage for remaining legacy SSO mapping shapes. Keep unsupported dynamic, negated, custom-claim, email-domain, and broad-selector mappings blocked from automatic conversion and provide a deliberate redesign path using groups, Engine Sets, and normal assignments.
 - [ ] ⬜ Run representative mapping conversion, Effective Access verification, and scoped/global retirement in a deployed environment. Record verification evidence before disabling any legacy mapping evaluator.
 - [ ] ⬜ Change session and middleware contracts to use authenticated principal and tenant identity with evaluator decisions. Retain `platformRole` as display/migration data only until all protected route families have parity tests.

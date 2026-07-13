@@ -42,6 +42,8 @@ export interface LegacyIdentityProviderMigrationDraft {
 export interface LegacyIdentityProviderMigrationReadiness {
   ready: boolean;
   targetProviderKey: string;
+  legacyProviderId: string | null;
+  requiredDefaultGroupId: string | null;
   activeMappingCount: number;
   checks: {
     targetExists: boolean;
@@ -50,8 +52,9 @@ export interface LegacyIdentityProviderMigrationReadiness {
     secretReferenceConfigured: boolean;
     secretReferenceAvailable: boolean;
     activeMappingsConfigured: boolean;
+    defaultRoleMappingConfigured: boolean | null;
   };
-  blockers: Array<'target_not_found' | 'target_not_direct_oidc' | 'target_disabled' | 'secret_reference_missing' | 'secret_reference_unavailable' | 'identity_mappings_missing'>;
+  blockers: Array<'target_not_found' | 'target_not_direct_oidc' | 'target_disabled' | 'secret_reference_missing' | 'secret_reference_unavailable' | 'identity_mappings_missing' | 'legacy_provider_not_found' | 'default_role_mapping_missing'>;
 }
 
 export interface LegacyIdentityProviderCutoverResult {
@@ -197,12 +200,13 @@ class LegacyIdentityProviderMigrationServiceClass {
     };
   }
 
-  private async getReadinessInStore(manager: RepositoryManager, input: { targetProviderKey: string; tenantId?: string | null }): Promise<LegacyIdentityProviderMigrationReadiness> {
+  private async getReadinessInStore(manager: RepositoryManager, input: { targetProviderKey: string; legacyProviderId?: string | null; tenantId?: string | null }): Promise<LegacyIdentityProviderMigrationReadiness> {
     const key = input.targetProviderKey.trim();
     const tenantId = input.tenantId?.trim() || null;
+    const legacyProviderId = input.legacyProviderId?.trim() || null;
     const provider = await manager.getRepository(IdentityProvider).findOne({ where: tenantId ? { key, tenantId } : { key, tenantId: IsNull() } });
     if (!provider) {
-      return { ready: false, targetProviderKey: key, activeMappingCount: 0, checks: { targetExists: false, directOidc: false, enabled: false, secretReferenceConfigured: false, secretReferenceAvailable: false, activeMappingsConfigured: false }, blockers: ['target_not_found'] };
+      return { ready: false, targetProviderKey: key, legacyProviderId, requiredDefaultGroupId: null, activeMappingCount: 0, checks: { targetExists: false, directOidc: false, enabled: false, secretReferenceConfigured: false, secretReferenceAvailable: false, activeMappingsConfigured: false, defaultRoleMappingConfigured: null }, blockers: ['target_not_found'] };
     }
     let rawConfiguration: Record<string, unknown> = {};
     try { rawConfiguration = JSON.parse(provider.configurationJson); } catch { rawConfiguration = {}; }
@@ -215,16 +219,35 @@ class LegacyIdentityProviderMigrationServiceClass {
     if (!secretReference) blockers.push('secret_reference_missing');
     else if (!secretAvailability.available) blockers.push('secret_reference_unavailable');
     if (!activeMappingCount) blockers.push('identity_mappings_missing');
+    let requiredDefaultGroupId: string | null = null;
+    let defaultRoleMappingConfigured: boolean | null = null;
+    if (legacyProviderId) {
+      const legacyProvider = await manager.getRepository(SsoProvider).findOneBy({ id: legacyProviderId });
+      if (!legacyProvider) {
+        blockers.push('legacy_provider_not_found');
+      } else {
+        requiredDefaultGroupId = legacyProvider.defaultRole === 'admin'
+          ? DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS
+          : DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS;
+        const defaultMappingCount = await manager.getRepository(IdentityEntitlementMapping).count({
+          where: { tenantId: tenantId || IsNull(), providerId: provider.id, targetGroupId: requiredDefaultGroupId, entitlementType: 'authenticated', externalId: 'authenticated', matchOperator: 'exact', syncMode: 'authoritative', isActive: true } as any,
+        });
+        defaultRoleMappingConfigured = defaultMappingCount > 0;
+        if (!defaultRoleMappingConfigured) blockers.push('default_role_mapping_missing');
+      }
+    }
     return {
       ready: blockers.length === 0,
       targetProviderKey: key,
+      legacyProviderId,
+      requiredDefaultGroupId,
       activeMappingCount,
-      checks: { targetExists: true, directOidc: provider.protocol === 'oidc' && provider.authenticationMode === 'direct', enabled: provider.isEnabled, secretReferenceConfigured: Boolean(secretReference), secretReferenceAvailable: Boolean(secretAvailability.available), activeMappingsConfigured: activeMappingCount > 0 },
+      checks: { targetExists: true, directOidc: provider.protocol === 'oidc' && provider.authenticationMode === 'direct', enabled: provider.isEnabled, secretReferenceConfigured: Boolean(secretReference), secretReferenceAvailable: Boolean(secretAvailability.available), activeMappingsConfigured: activeMappingCount > 0, defaultRoleMappingConfigured },
       blockers,
     };
   }
 
-  async getReadiness(input: { targetProviderKey: string; tenantId?: string | null }): Promise<LegacyIdentityProviderMigrationReadiness> {
+  async getReadiness(input: { targetProviderKey: string; legacyProviderId?: string | null; tenantId?: string | null }): Promise<LegacyIdentityProviderMigrationReadiness> {
     return this.getReadinessInStore(await getDataSource(), input);
   }
 
@@ -248,21 +271,10 @@ class LegacyIdentityProviderMigrationServiceClass {
         throw Errors.validation('Only legacy Microsoft, Google, and OIDC providers can be cut over to provider-neutral OIDC');
       }
 
-      const readiness = await this.getReadinessInStore(manager, { targetProviderKey, tenantId: input.tenantId });
+      const readiness = await this.getReadinessInStore(manager, { legacyProviderId, targetProviderKey, tenantId: input.tenantId });
       if (!readiness.ready) {
         throw Errors.validation(`The provider-neutral replacement is not ready for cutover: ${readiness.blockers.join(', ')}`);
       }
-      const targetProvider = await manager.getRepository(IdentityProvider).findOne({ where: input.tenantId ? { key: targetProviderKey, tenantId: input.tenantId } : { key: targetProviderKey, tenantId: IsNull() } });
-      const defaultGroupId = legacyProvider.defaultRole === 'admin'
-        ? DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS
-        : DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS;
-      const defaultMappingCount = targetProvider ? await manager.getRepository(IdentityEntitlementMapping).count({
-        where: { tenantId: input.tenantId ? input.tenantId : IsNull(), providerId: targetProvider.id, targetGroupId: defaultGroupId, entitlementType: 'authenticated', externalId: 'authenticated', matchOperator: 'exact', syncMode: 'authoritative', isActive: true } as any,
-      }) : 0;
-      if (!defaultMappingCount) {
-        throw Errors.validation('The provider-neutral replacement is missing the explicit authenticated identity default-role mapping');
-      }
-
       const alreadyDisabled = !legacyProvider.enabled;
       if (!alreadyDisabled) {
         legacyProvider.enabled = false;
