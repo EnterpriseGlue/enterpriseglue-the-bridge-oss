@@ -13,7 +13,6 @@ import {
   ResourceType,
   PermissionContext 
 } from '../services/platform-admin/permissions.js';
-import { projectMemberService, engineService } from '../services/platform-admin/index.js';
 
 type ResourceExtractor = (req: Request) => { type: ResourceType; id: string } | null;
 
@@ -30,8 +29,8 @@ interface RequirePermissionOptions {
   extractResource?: ResourceExtractor;
   
   /**
-   * If true, also fetch the user's role for this resource and include it in context.
-   * Required for permissions that might be granted via role.
+   * Deprecated compatibility option. Canonical role assignments are resolved
+   * by PermissionService and callers must not populate legacy role fields.
    */
   fetchRole?: boolean;
 }
@@ -92,7 +91,7 @@ export const ResourceExtractors = {
  * }), handler);
  */
 export function requirePermission(options: RequirePermissionOptions) {
-  const { permission, extractResource, fetchRole = false } = options;
+  const { permission, extractResource } = options;
 
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -102,13 +101,10 @@ export function requirePermission(options: RequirePermissionOptions) {
       }
 
       const userId = user.userId;
-      const platformRole = user.platformRole || (user as any).role;
-
       // Build permission context
       const context: PermissionContext = {
         userId,
         tenantId: req.tenant?.tenantId || null,
-        platformRole,
       };
 
       // Extract resource if applicable
@@ -117,20 +113,6 @@ export function requirePermission(options: RequirePermissionOptions) {
         context.resourceType = resource.type;
         context.resourceId = resource.id;
 
-        // Fetch role if requested
-        if (fetchRole) {
-          if (resource.type === 'project') {
-            const membership = await projectMemberService.getMembership(resource.id, userId);
-            if (membership) {
-              context.projectRole = membership.role;
-            }
-          } else if (resource.type === 'engine') {
-            const role = await engineService.getEngineRole(userId, resource.id, req.tenant?.tenantId || null);
-            if (role) {
-              context.engineRole = role;
-            }
-          }
-        }
       }
 
       // Check permission
@@ -160,7 +142,7 @@ export function requirePermission(options: RequirePermissionOptions) {
 export function requireAllPermissions(
   permissions: Permission[],
   extractResource?: ResourceExtractor,
-  fetchRole = false
+  _fetchRole = false
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -170,12 +152,9 @@ export function requireAllPermissions(
       }
 
       const userId = user.userId;
-      const platformRole = user.platformRole || (user as any).role;
-
       const context: PermissionContext = {
         userId,
         tenantId: req.tenant?.tenantId || null,
-        platformRole,
       };
 
       const resource = extractResource ? extractResource(req) : null;
@@ -183,15 +162,6 @@ export function requireAllPermissions(
         context.resourceType = resource.type;
         context.resourceId = resource.id;
 
-        if (fetchRole) {
-          if (resource.type === 'project') {
-            const membership = await projectMemberService.getMembership(resource.id, userId);
-            if (membership) context.projectRole = membership.role;
-          } else if (resource.type === 'engine') {
-            const role = await engineService.getEngineRole(userId, resource.id, req.tenant?.tenantId || null);
-            if (role) context.engineRole = role;
-          }
-        }
       }
 
       // Check all permissions
@@ -220,7 +190,7 @@ export function requireAllPermissions(
 export function requireAnyPermission(
   permissions: Permission[],
   extractResource?: ResourceExtractor,
-  fetchRole = false
+  _fetchRole = false
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -230,12 +200,9 @@ export function requireAnyPermission(
       }
 
       const userId = user.userId;
-      const platformRole = user.platformRole || (user as any).role;
-
       const context: PermissionContext = {
         userId,
         tenantId: req.tenant?.tenantId || null,
-        platformRole,
       };
 
       const resource = extractResource ? extractResource(req) : null;
@@ -243,15 +210,6 @@ export function requireAnyPermission(
         context.resourceType = resource.type;
         context.resourceId = resource.id;
 
-        if (fetchRole) {
-          if (resource.type === 'project') {
-            const membership = await projectMemberService.getMembership(resource.id, userId);
-            if (membership) context.projectRole = membership.role;
-          } else if (resource.type === 'engine') {
-            const role = await engineService.getEngineRole(userId, resource.id, req.tenant?.tenantId || null);
-            if (role) context.engineRole = role;
-          }
-        }
       }
 
       // Check if user has any of the permissions
