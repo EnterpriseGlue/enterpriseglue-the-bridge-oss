@@ -2067,7 +2067,7 @@ Fixtures should include at least:
 
 ### Test Harness Files And Commands
 
-- [ ] ⬜ Add reusable adapter contract helpers and fixtures under a dedicated testkit package or `backend/test/identity-mocks/` boundary.
+- [x] ✅ Add reusable adapter contract helpers and fixtures under a dedicated `backend/test/identity-mocks/` boundary. The testkit exposes deterministic OIDC discovery/token/JWKS controls, SAML assertion attributes, LDAP bind fixtures, and an in-memory provider-neutral adapter without production-runtime imports.
 - [ ] ⬜ Add backend protocol-integration suites under `backend/test/integration/identity/` and keep existing service unit tests focused.
 - [ ] ⬜ Extend frontend MSW handlers in `frontend/test/mocks/handlers.ts` for identity/config APIs and failure variants.
 - [ ] ⬜ Add a local identity mock compose/profile only if LDAP protocol fidelity requires a container; OIDC/SAML mocks should prefer ephemeral test processes.
@@ -2310,7 +2310,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Service tests for bundle validation, preview, apply, authoritative cleanup, and drift handling.
 - [ ] ⬜ Engine import tests for current UI-supported auth modes and labels.
 - [ ] ⬜ Identity adapter and mapping tests for OIDC groups/roles/scopes, SAML group attributes, LDAP immutable group ids/DNs, additive sync, authoritative sync, and cross-provider membership preservation.
-- [ ] ⬜ Run the shared adapter contract suite against the in-memory fake, OIDC, SAML, and LDAP adapters.
+- [x] ✅ Run the shared adapter contract suite against the in-memory fake, OIDC, SAML, and LDAP adapters.
 - [ ] ⬜ Run protocol-level mock service tests for signing, issuer/audience, assertion validation, LDAP bind/search/TLS, timeouts, key/certificate rotation, and malformed responses.
 - [ ] ⬜ Run full configure/apply/login/reconcile browser scenarios against the local mock identity stack.
 - [ ] ⬜ Test provider and mapping UI connection-test, mapping-preview, reconciliation-preview, run-history, and sanitized failure states through MSW and browser flows.

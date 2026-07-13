@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { ldapIdentityProviderAdapter, samlIdentityProviderAdapter } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
-import { MockLdapDirectory, MockOidcProvider, MockSamlIdentityProvider } from '../../../support/identity-mocks.js';
+import { MockLdapDirectory, MockOidcProvider, MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
 
 describe('identity mock provider contracts', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -27,5 +27,34 @@ describe('identity mock provider contracts', () => {
     const entry = directory.bind('person@example.test', 'directory-password');
     const identity = ldapIdentityProviderAdapter.normalizeIdentity({ providerKey: 'ldap-mock', subjectId: entry.subjectId, claims: { memberOf: entry.memberOf } });
     expect(identity.entitlements).toEqual([{ type: 'group', externalId: 'cn=operations,ou=groups,dc=example,dc=test' }]);
+  });
+
+  it('accepts a token signed with rotated provider key material', async () => {
+    const provider = new MockOidcProvider();
+    provider.rotateSigningMaterial();
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+    await expect(genericOidcService.exchangeCode(provider.configuration(), {
+      code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
+    })).resolves.toMatchObject({ sub: 'user-1' });
+  });
+
+  it.each([
+    ['unavailable', 'OIDC discovery request failed (503)'],
+    ['malformed', 'OIDC authorization endpoint must be a valid URL'],
+    ['wrong_issuer', 'OIDC discovery issuer does not match the configured issuer'],
+  ] as const)('fails closed for %s discovery responses', async (failureMode, message) => {
+    const provider = new MockOidcProvider();
+    provider.setFailureMode(failureMode);
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+    await expect(genericOidcService.createAuthorizationRequest(provider.configuration(), 'state-1', 'nonce-1')).rejects.toThrow(message);
+  });
+
+  it('fails closed for an invalid ID token returned by the provider', async () => {
+    const provider = new MockOidcProvider();
+    provider.setFailureMode('invalid_token');
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+    await expect(genericOidcService.exchangeCode(provider.configuration(), {
+      code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
+    })).rejects.toThrow('OIDC ID token header is invalid');
   });
 });

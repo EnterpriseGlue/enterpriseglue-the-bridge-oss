@@ -6,6 +6,7 @@ import {
   samlIdentityProviderAdapter,
   type IdentityProviderAdapter,
 } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
+import { inMemoryIdentityProviderAdapter } from '../../../../test/identity-mocks/index.js';
 
 describe('identity provider adapters', () => {
   it('normalizes OIDC groups, roles, and delegated scopes deterministically', () => {
@@ -86,3 +87,4 @@ identityAdapterContract('oidc', oidcIdentityProviderAdapter);
 identityAdapterContract('saml', samlIdentityProviderAdapter);
 identityAdapterContract('ldap', ldapIdentityProviderAdapter);
 identityAdapterContract('lookup', getIdentityProviderAdapter('oidc'));
+identityAdapterContract('in-memory-fake', inMemoryIdentityProviderAdapter);
