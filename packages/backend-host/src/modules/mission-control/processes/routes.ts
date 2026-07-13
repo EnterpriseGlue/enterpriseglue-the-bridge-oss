@@ -29,7 +29,6 @@ const editTargetQuerySchema = z.object({
 function projectPermissionContext(req: Request, projectId: string) {
   return {
     userId: req.user!.userId,
-    platformRole: req.user!.platformRole || (req.user as any).role,
     resourceType: 'project' as const,
     resourceId: projectId,
   }

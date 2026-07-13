@@ -24,7 +24,6 @@ const router = Router();
 async function hasProjectPermission(req: Request, projectId: string, permission: Permission): Promise<boolean> {
   return permissionService.hasPermission(permission, {
     userId: req.user!.userId,
-    platformRole: req.user!.platformRole || (req.user as any).role,
     resourceType: 'project',
     resourceId: projectId,
   });

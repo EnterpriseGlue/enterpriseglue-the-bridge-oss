@@ -364,7 +364,6 @@ async function canViewEngine(req: Request, engineId: string): Promise<boolean> {
   return permissionService.hasPermission(EnginePermissions.INSTANCE_VIEW, {
     userId: req.user!.userId,
     tenantId: req.tenant?.tenantId || null,
-    platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
     resourceType: 'engine',
     resourceId: engineId,
   })
@@ -374,7 +373,6 @@ async function canEditEngine(req: Request, engineId: string): Promise<boolean> {
   return permissionService.hasPermission(EnginePermissions.ENGINE_EDIT, {
     userId: req.user!.userId,
     tenantId: req.tenant?.tenantId || null,
-    platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
     resourceType: 'engine',
     resourceId: engineId,
   })
@@ -384,7 +382,6 @@ async function canViewEngineSecrets(req: Request, engineId: string): Promise<boo
   return permissionService.hasPermission(EnginePermissions.SECRETS_VIEW, {
     userId: req.user!.userId,
     tenantId: req.tenant?.tenantId || null,
-    platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
     resourceType: 'engine',
     resourceId: engineId,
   })
@@ -394,7 +391,6 @@ async function canManageEngineSecrets(req: Request, engineId: string): Promise<b
   return permissionService.hasPermission(EnginePermissions.SECRETS_MANAGE, {
     userId: req.user!.userId,
     tenantId: req.tenant?.tenantId || null,
-    platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
     resourceType: 'engine',
     resourceId: engineId,
   })

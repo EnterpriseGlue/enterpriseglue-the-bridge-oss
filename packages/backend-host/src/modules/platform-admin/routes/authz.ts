@@ -338,7 +338,6 @@ async function hasPlatformPermission(req: Request, permission: Permission): Prom
   return permissionService.hasPermission(permission, {
     userId: req.user!.userId,
     tenantId: req.tenant?.tenantId || null,
-    platformRole: req.user!.platformRole || (req.user as any).role,
     resourceType: 'platform',
   });
 }
@@ -383,7 +382,6 @@ async function hasScopedAssignmentPermission(req: Request, resource: ScopedAssig
   return permissionService.hasPermission(permission, {
     userId: req.user!.userId,
     tenantId: req.tenant?.tenantId || null,
-    platformRole: req.user!.platformRole || (req.user as any).role,
     resourceType: resource.resourceType,
     resourceId: resource.resourceId,
   });
@@ -923,7 +921,6 @@ router.post('/api/authz/check', apiLimiter, requireAuth, validateBody(authzCheck
     const context: EvaluationContext = {
       userId: req.user!.userId,
       tenantId: req.tenant?.tenantId || null,
-      platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
       resourceType,
       resourceId,
       userAttributes,
@@ -961,7 +958,6 @@ router.post('/api/authz/check-batch', apiLimiter, requireAuth, validateBody(auth
         const context: EvaluationContext = {
           userId: req.user!.userId,
           tenantId: req.tenant?.tenantId || null,
-          platformRole: req.user!.platformRole || (req.user as { role?: string }).role,
           resourceType: check.resourceType,
           resourceId: check.resourceId,
           ipAddress: req.ip,

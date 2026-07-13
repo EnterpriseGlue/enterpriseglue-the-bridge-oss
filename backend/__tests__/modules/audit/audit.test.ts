@@ -96,10 +96,10 @@ describe('GET /api/audit/logs', () => {
       PlatformPermissions.AUDIT_VIEW,
       expect.objectContaining({
         userId: 'user-1',
-        platformRole: 'admin',
         resourceType: 'platform',
       })
     );
+    expect((permissionService.hasPermission as unknown as Mock).mock.calls[0][1]).not.toHaveProperty('platformRole');
   });
 
   it('requires audit read permission through the action middleware', async () => {
@@ -114,7 +114,6 @@ describe('GET /api/audit/logs', () => {
       PlatformPermissions.AUDIT_VIEW,
       expect.objectContaining({
         userId: 'user-1',
-        platformRole: 'admin',
         resourceType: 'platform',
       })
     );
@@ -152,9 +151,11 @@ describe('GET /api/audit/logs', () => {
       PlatformPermissions.AUDIT_UNREDACTED_VIEW,
       expect.objectContaining({
         userId: 'user-1',
-        platformRole: 'admin',
       })
     );
+    const unredactedContext = (permissionService.hasPermission as unknown as Mock).mock.calls
+      .find(([permission]) => permission === PlatformPermissions.AUDIT_UNREDACTED_VIEW)?.[1];
+    expect(unredactedContext).not.toHaveProperty('platformRole');
     expect(getDataSource).not.toHaveBeenCalled();
     expect(piiRedactionService.redactPayload).not.toHaveBeenCalled();
   });
