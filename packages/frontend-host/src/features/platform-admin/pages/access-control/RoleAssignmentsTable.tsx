@@ -10,10 +10,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
 } from '@carbon/react';
 import { TrashCan } from '@carbon/icons-react';
 import type { ApiClient, AuthzGroup, ExternalEngineSystem, RoleAssignment, ServiceAccount } from '../../hooks/useAuthzApi';
+import { AssignmentSourceTag } from './AssignmentSourceTag';
 
 const headers = [
   { key: 'principal', header: 'Principal' }, { key: 'role', header: 'Role' },
@@ -33,31 +33,6 @@ function formatResource(assignment: RoleAssignment, externalSystems: ExternalEng
   if (assignment.resourceType === 'platform') return 'Platform';
   if (assignment.resourceType === 'external_engine_system') return `External system: ${externalSystems.find((item) => item.id === assignment.resourceId)?.name || assignment.resourceId || ''}`;
   return `${assignment.resourceType || ''}:${assignment.resourceId || ''}`;
-}
-
-function sourceTagType(source: unknown): 'blue' | 'purple' | 'gray' {
-  if (source === 'manual') return 'blue';
-  if (source === 'config' || source === 'sso' || source === 'identity_provider') return 'purple';
-  return 'gray';
-}
-
-function sourceLabel(source: unknown) {
-  if (source === 'manual') return 'Manual';
-  if (source === 'config') return 'Managed by config';
-  if (source === 'sso') return 'Managed by SSO';
-  if (source === 'identity_provider') return 'Managed by identity provider';
-  if (source === 'api') return 'API managed';
-  if (source === 'system') return 'System managed';
-  return String(source || '-');
-}
-
-function sourceDescription(source: unknown) {
-  if (source === 'sso') return 'Managed by an SSO assignment mapping. Change the mapping or the upstream entitlement.';
-  if (source === 'identity_provider') return 'Managed by an identity-provider mapping. Change the mapping or the upstream entitlement.';
-  if (source === 'config') return 'Managed by an authorization configuration bundle.';
-  if (source === 'api') return 'Created through the EnterpriseGlue API.';
-  if (source === 'system') return 'Created by an EnterpriseGlue system workflow.';
-  return undefined;
 }
 
 export function RoleAssignmentsTable({ assignments, apiClients, groups, serviceAccounts, externalSystems, loading, canDelete, onRemove }: {
@@ -80,8 +55,7 @@ export function RoleAssignmentsTable({ assignments, apiClients, groups, serviceA
         return <TableRow {...getRowProps({ row })} key={row.id}>{row.cells.map((cell) => {
           if (cell.info.header === 'source') {
             const configWarning = assignment?.source === 'config' && assignment.ownershipMode === 'config_warn';
-            const description = configWarning ? 'A local configuration override permits removal until the next authoritative apply.' : sourceDescription(cell.value);
-            return <TableCell key={cell.id}><span title={description}><Tag type={configWarning ? 'warm-gray' : sourceTagType(cell.value)}>{configWarning ? 'Config warning' : sourceLabel(cell.value)}</Tag></span></TableCell>;
+            return <TableCell key={cell.id}><AssignmentSourceTag source={cell.value} configWarning={configWarning} /></TableCell>;
           }
           if (cell.info.header === 'actions') return <TableCell key={cell.id}>{(assignment?.source === 'manual' || (assignment?.source === 'config' && assignment.ownershipMode === 'config_warn')) && <Button kind="ghost" size="sm" renderIcon={TrashCan} hasIconOnly iconDescription="Remove assignment" disabled={!canDelete} title={canDelete ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onRemove(assignment.id)} />}</TableCell>;
           return <TableCell key={cell.id}>{cell.value}</TableCell>;
