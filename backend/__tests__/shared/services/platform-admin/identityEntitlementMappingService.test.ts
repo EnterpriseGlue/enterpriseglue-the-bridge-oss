@@ -42,7 +42,7 @@ describe('identity entitlement mapping', () => {
     const repositories = (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo : entity === AuthzGroupMembership ? membershipRepo : {};
     (getDataSource as unknown as Mock).mockResolvedValue({ transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })) });
     await identityEntitlementMappingService.remove('mapping-1', 'tenant-a');
-    expect(membershipRepo.delete).toHaveBeenCalledWith({ source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
+    expect(membershipRepo.delete).toHaveBeenCalledWith({ tenantId: 'tenant-a', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
     expect(mappingRepo.delete).toHaveBeenCalledWith({ id: 'mapping-1' });
   });
 });

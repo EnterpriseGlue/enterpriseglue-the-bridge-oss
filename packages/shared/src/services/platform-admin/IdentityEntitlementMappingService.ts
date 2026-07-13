@@ -164,7 +164,7 @@ class IdentityEntitlementMappingService {
       const mapping = await repo.findOne({ where: { ...tenantWhere(tenantId), id } as any });
       if (!mapping) throw Errors.notFound('Identity mapping not found');
       if (mapping.sourceRef) throw Errors.forbidden('This identity mapping is managed by configuration');
-      await manager.getRepository(AuthzGroupMembership).delete({ source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` });
+      await manager.getRepository(AuthzGroupMembership).delete({ ...tenantWhere(tenantId), source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` } as any);
       await repo.delete({ id: mapping.id });
     });
   }

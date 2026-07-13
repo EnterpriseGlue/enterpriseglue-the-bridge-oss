@@ -1133,7 +1133,7 @@ LDAP may be used in either of two ways:
 - [ ] ⬜ Persist external subject, entitlement, provider, mapping, sync-run, and last-seen lineage without exposing raw token or directory payloads to normal users.
 - [ ] ⬜ Create group memberships with provider-managed source lineage and remove only rows owned by the same provider and mapping during authoritative sync.
 - [x] ✅ Add provider-neutral entitlement reconciliation that creates `identity_provider` group memberships with mapping lineage and removes only the exact mapping-owned row in authoritative mode.
-- [ ] ⬜ Preserve manual, API, automation, and other-provider memberships during identity reconciliation.
+- [x] ✅ Preserve manual, API, automation, and other-provider memberships during identity reconciliation and provider archival. Provider archival removes only rows with `source = "identity_provider"` and lineage for that provider's mappings.
 - [x] ✅ Run direct LDAP synchronization at login, through an audited manual provider action, and through the bounded scheduled reconciliation poller. The provider interval is enforced by checkpoint leases; OIDC/SAML provider-API synchronization remains pending.
 - [x] ✅ Invoke provider-neutral entitlement-to-group reconciliation from the normalized identity provisioning path, so direct OIDC, SAML, and LDAP logins synchronize mapped memberships immediately. LDAP transport and scheduled reconciliation remain in progress.
 - [x] ✅ Make verified-email account linking an explicit, provider-scoped setting that defaults to disabled. A new external subject cannot claim an existing local account unless its provider enables the setting; missing linked users and conflicting verified-email changes fail closed.
@@ -1199,7 +1199,8 @@ ExternalIdentity
 - [ ] ⬜ Enforce unique `(tenantId, providerId, subjectId)` and allow one user to link multiple providers.
 - [ ] ⬜ Link by verified email only when the provider and platform policy permit it; ambiguous or conflicting email matches fail closed and require admin resolution. Provider-scoped opt-in and conflict rejection are implemented; admin resolution workflow remains pending.
 - [ ] ⬜ Keep local credentials independent so an approved break-glass account remains usable when external providers fail.
-- [ ] ⬜ Deactivation/unlink revokes sessions and provider-managed memberships without deleting manual access unless an explicit cleanup operation requests it.
+- [x] ✅ Provider deactivation removes provider-managed memberships and marks provider identity records as disabled without deleting manual, API, automation, or other-provider access.
+- [ ] ⬜ Add active session revocation for a deactivated or unlinked provider. Until then, an already-issued session remains valid only until its normal expiry.
 - [x] ✅ Persist only allowlisted normalized identity attributes and entitlement ids; raw JWTs, SAML assertions, LDAP responses, unrestricted claims, and unrelated profile attributes are not stored in identity snapshots. Groups, roles, and scopes are normalized deterministically for reconciliation.
 
 ## Project-Engine Targets

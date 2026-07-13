@@ -1,8 +1,12 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { IsNull } from 'typeorm';
+import { In, IsNull, type EntityManager } from 'typeorm';
 
 export type IdentityProviderProtocol = 'oidc' | 'saml' | 'ldap';
 export type IdentityProviderAuthenticationMode = 'direct' | 'claims_only';
@@ -21,6 +25,13 @@ export interface IdentityProviderInput {
 }
 
 export type IdentityConnectorCapability = 'claim_only' | 'ldap_directory' | 'scim' | 'graph';
+
+export interface IdentityProviderArchiveResult {
+  providerId: string;
+  providerManagedMembershipsRemoved: number;
+  normalizedIdentitiesMarked: number;
+  externalIdentitiesMarked: number;
+}
 
 function normalized(value?: string | null): string | null { return value?.trim() || null; }
 function json(value: Record<string, unknown> | undefined): string { return JSON.stringify(value || {}); }
@@ -57,6 +68,43 @@ function ensureSync(sync: Record<string, unknown> | undefined): void {
   }
 }
 
+/**
+ * Archives a provider without deleting its configuration or any manual access.
+ * Provider mappings stay available for an intentional re-enable, while only
+ * memberships derived from those mappings are removed.
+ */
+export async function archiveIdentityProviderInStore(manager: EntityManager, provider: IdentityProvider): Promise<IdentityProviderArchiveResult> {
+  const now = Date.now();
+  const tenantScope = provider.tenantId ? { tenantId: provider.tenantId } : { tenantId: IsNull() };
+  const mappingRepo = manager.getRepository(IdentityEntitlementMapping);
+  const mappings = await mappingRepo.find({ where: { ...tenantScope, providerId: provider.id } as any });
+  const mappingRefs = mappings.map((mapping) => `identity_mapping:${mapping.id}`);
+
+  const memberships = mappingRefs.length
+    ? await manager.getRepository(AuthzGroupMembership).delete({
+      ...tenantScope,
+      source: 'identity_provider',
+      sourceRef: In(mappingRefs),
+    } as any)
+    : { affected: 0 };
+  const normalizedIdentities = await manager.getRepository(SsoNormalizedIdentity).update(
+    { ...tenantScope, providerId: provider.id } as any,
+    { providerStatus: 'provider_disabled', lastProviderCheckAt: now, updatedAt: now },
+  );
+  const externalIdentities = await manager.getRepository(ExternalIdentity).update(
+    { ...tenantScope, providerId: provider.id } as any,
+    { status: 'provider_disabled', updatedAt: now },
+  );
+  await manager.getRepository(IdentityProvider).update({ id: provider.id }, { isEnabled: false, updatedAt: now });
+
+  return {
+    providerId: provider.id,
+    providerManagedMembershipsRemoved: memberships.affected || 0,
+    normalizedIdentitiesMarked: normalizedIdentities.affected || 0,
+    externalIdentitiesMarked: externalIdentities.affected || 0,
+  };
+}
+
 class IdentityProviderServiceClass {
   async list(tenantId?: string | null): Promise<IdentityProvider[]> {
     const repo = (await getDataSource()).getRepository(IdentityProvider);
@@ -83,9 +131,9 @@ class IdentityProviderServiceClass {
     const provider = { id: generateId(), tenantId, key, ...values, createdAt: now } as unknown as IdentityProvider;
     await repo.insert(provider); return provider;
   }
-  async archive(key: string, tenantId?: string | null): Promise<void> {
+  async archive(key: string, tenantId?: string | null): Promise<IdentityProviderArchiveResult> {
     const provider = await this.getByKey(key, tenantId); if (!provider) throw Errors.notFound('Identity provider not found');
-    await (await getDataSource()).getRepository(IdentityProvider).update({ id: provider.id }, { isEnabled: false, updatedAt: Date.now() });
+    return (await getDataSource()).transaction((manager) => archiveIdentityProviderInStore(manager, provider));
   }
 }
 export const identityProviderService = new IdentityProviderServiceClass();

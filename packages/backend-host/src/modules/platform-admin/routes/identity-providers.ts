@@ -112,10 +112,10 @@ router.delete('/api/identity/providers/:key', requireAuth, requireAction('platfo
   const key = providerKeySchema.parse(req.params.key);
   const existing = await identityProviderService.getByKey(key, req.tenant?.tenantId || null);
   if (!existing) throw Errors.notFound('Identity provider not found');
-  await identityProviderService.archive(key, req.tenant?.tenantId || null);
+  const cleanup = await identityProviderService.archive(key, req.tenant?.tenantId || null);
   await logAudit({
     action: 'identity.provider.archive', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: existing.id,
-    details: { key: existing.key, protocol: existing.protocol },
+    details: { key: existing.key, protocol: existing.protocol, cleanup },
   });
   res.status(204).send();
 }));

@@ -26,6 +26,7 @@ import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBu
 import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
+import { archiveIdentityProviderInStore } from './IdentityProviderService.js';
 
 export type ConfigBundleIdentityReconciliationMode = 'none' | 'preview' | 'apply';
 
@@ -519,8 +520,10 @@ class ConfigBundleApplyService {
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.update', resourceType: 'identity_provider', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, providerKey: desired!.key, canonicalHash: diff.canonicalHash } });
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
-            await providerRepo.update({ id: change.currentId }, { isEnabled: false, updatedAt: now });
-            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.archive', resourceType: 'identity_provider', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, providerKey: change.key, canonicalHash: diff.canonicalHash } });
+            const provider = await providerRepo.findOne({ where: { id: change.currentId } });
+            if (!provider) fail(`Identity provider ${change.key} disappeared during apply`, 409);
+            const cleanup = await archiveIdentityProviderInStore(manager, provider);
+            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.archive', resourceType: 'identity_provider', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, providerKey: change.key, canonicalHash: diff.canonicalHash, cleanup } });
             archived += 1;
           }
         }
@@ -643,7 +646,7 @@ class ConfigBundleApplyService {
             || existing.syncMode !== values.syncMode
             || !existing.isActive;
           if (mappingChanged) {
-            await groupMembershipRepo.delete({ source: 'identity_provider', sourceRef: `identity_mapping:${existing.id}` });
+            await groupMembershipRepo.delete({ tenantId, source: 'identity_provider', sourceRef: `identity_mapping:${existing.id}` });
             await identityMappingRepo.update({ id: existing.id }, values);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.update', resourceType: 'identity_entitlement_mapping', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, canonicalHash: diff.canonicalHash, membershipCleanup: 'source_scoped' } });
             updated += 1;
@@ -655,7 +658,7 @@ class ConfigBundleApplyService {
         const existing = await identityMappingRepo.find({ where: { tenantId, sourceRef } as any });
         for (const mapping of existing) {
           if (mapping.configKey && mappingKeys.has(mapping.configKey)) continue;
-          await groupMembershipRepo.delete({ source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` });
+          await groupMembershipRepo.delete({ tenantId, source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` });
           await identityMappingRepo.update({ id: mapping.id }, { isActive: false, updatedAt: now });
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.disable', resourceType: 'identity_entitlement_mapping', resourceId: mapping.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash, membershipCleanup: 'source_scoped' } });
           archived += 1;

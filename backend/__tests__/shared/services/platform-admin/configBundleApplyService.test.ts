@@ -397,7 +397,7 @@ describe('configBundleApplyService', () => {
       actorId: 'admin-1',
     });
 
-    expect(groupMembershipRepo.delete).toHaveBeenCalledWith({ source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
+    expect(groupMembershipRepo.delete).toHaveBeenCalledWith({ tenantId: 'tenant-a', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
     expect(identityMappingRepo.update).toHaveBeenCalledWith({ id: 'mapping-1' }, expect.objectContaining({ isActive: false }));
   });
 

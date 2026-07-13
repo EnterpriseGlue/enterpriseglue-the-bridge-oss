@@ -53,7 +53,7 @@ describe('identity provider routes', () => {
     service.list.mockResolvedValue([provider]);
     service.getByKey.mockResolvedValue(provider);
     service.upsert.mockResolvedValue(provider);
-    service.archive.mockResolvedValue(undefined);
+    service.archive.mockResolvedValue({ providerId: 'provider-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, externalIdentitiesMarked: 1 });
     service.reconcile.mockResolvedValue({ processed: 3 });
     service.previewMemberships.mockResolvedValue({ scanned: 3, additions: 1, removals: 1, unchanged: 1, failed: 0, truncated: false, nextCursor: null, latestSnapshotAt: 10, warnings: ['stored_snapshots_only'], mappings: [] });
     service.replayMemberships.mockResolvedValue({ scanned: 3, created: 1, removed: 1, failed: 0, truncated: false, nextCursor: null });
@@ -115,7 +115,7 @@ describe('identity provider routes', () => {
     const response = await request(app).delete('/api/identity/providers/entra');
     expect(response.status).toBe(204);
     expect(service.archive).toHaveBeenCalledWith('entra', 'tenant-1');
-    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.archive' }));
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.archive', details: expect.objectContaining({ cleanup: expect.objectContaining({ providerManagedMembershipsRemoved: 2 }) }) }));
   });
 
   it('runs one bounded LDAP reconciliation page and audits the action', async () => {
