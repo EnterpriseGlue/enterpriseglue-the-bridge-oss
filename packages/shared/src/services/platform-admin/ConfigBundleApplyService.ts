@@ -515,6 +515,7 @@ class ConfigBundleApplyService {
         }
         if (change.objectType === 'runtime_resource_set') {
           const desired = desiredRuntimeResourceSets.get(change.key);
+          const sourceHash = desired ? objectFingerprint('runtime_resource_set', desired.key, desired) : objectFingerprint('runtime_resource_set', change.key, { archived: true });
           const engineRows = await engineRepo.find();
           const engineByConfigKey = new Map(engineRows.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine]));
           const engine = desired ? engineByConfigKey.get(desired.engineRef.engineKey) : null;
@@ -527,6 +528,9 @@ class ConfigBundleApplyService {
             selectorJson: JSON.stringify(desired.selector),
             selectorFingerprint: selectorFingerprint(desired.selector),
             runtimeTenantId: desired.runtimeTenantId || null,
+            sourceHash,
+            lastAppliedAt: now,
+            driftStatus: 'in_sync',
             isArchived: false,
             updatedAt: now,
           } : null;
@@ -542,7 +546,7 @@ class ConfigBundleApplyService {
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.runtime_resource_set.update', resourceType: 'runtime_resource_set', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, runtimeResourceSetKey: desired!.key, canonicalHash: diff.canonicalHash } });
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
-            await runtimeResourceSetRepo.update({ id: change.currentId }, { isArchived: true, updatedAt: now });
+            await runtimeResourceSetRepo.update({ id: change.currentId }, { isArchived: true, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', updatedAt: now });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.runtime_resource_set.archive', resourceType: 'runtime_resource_set', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, runtimeResourceSetKey: change.key, canonicalHash: diff.canonicalHash } });
             archived += 1;
           }
