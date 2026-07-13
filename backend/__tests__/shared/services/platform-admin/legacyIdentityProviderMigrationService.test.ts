@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { legacyIdentityProviderMigrationService } from '@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 
 const testConfig = vi.hoisted(() => ({
   frontendUrl: 'https://app.example.test',
@@ -85,5 +87,26 @@ describe('legacyIdentityProviderMigrationService', () => {
       expect.objectContaining({ provider: expect.objectContaining({ key: 'legacy-environment-google', isEnabled: false, configuration: expect.objectContaining({ clientSecretRef: 'env://GOOGLE_CLIENT_SECRET' }) }) }),
     ]));
     expect(JSON.stringify(drafts)).not.toContain('not-exported');
+  });
+
+  it('reports missing mappings as a cutover blocker without resolving the secret value', async () => {
+    const providerFindOne = vi.fn().mockResolvedValue({
+      id: 'target-1', key: 'migrated-entra', tenantId: 'tenant-1', protocol: 'oidc', authenticationMode: 'direct', isEnabled: true,
+      configurationJson: JSON.stringify({ clientSecretRef: 'env://MISSING_MIGRATION_SECRET' }),
+    });
+    const mappingCount = vi.fn().mockResolvedValue(0);
+    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === IdentityProvider) return { findOne: providerFindOne };
+      if (entity === IdentityEntitlementMapping) return { count: mappingCount };
+      throw new Error('Unexpected repository');
+    }});
+
+    const readiness = await legacyIdentityProviderMigrationService.getReadiness({ targetProviderKey: 'migrated-entra', tenantId: 'tenant-1' });
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockers).toEqual(expect.arrayContaining(['secret_reference_unavailable', 'identity_mappings_missing']));
+    expect(readiness.checks.secretReferenceConfigured).toBe(true);
+    expect(readiness.checks.secretReferenceAvailable).toBe(false);
+    expect(mappingCount).toHaveBeenCalledOnce();
   });
 });
