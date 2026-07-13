@@ -53,10 +53,10 @@ Current config-as-code status:
 - [x] ✅ Add hash-bound `POST /api/authz/config-bundles/apply` for roles, groups, engines, Engine Sets, Runtime Resource Sets, scoped group assignments, provider-neutral identity providers/mappings, and project-engine targets. It runs one transaction, writes audit rows, rejects stale previews and ownership conflicts, refuses unsupported object families rather than ignoring them, and source-cleans derived memberships when an authoritative config mapping is changed or disabled.
 - [x] ✅ Persist engine config provenance (`configKey`, source reference/hash, ownership mode, last applied time) plus `runtimeAccessScope`, `deploymentIntegration`, and `connectionMode` with backward-compatible defaults.
 - [x] ✅ Persist provider-neutral identity-provider keys and source references so entitlement mappings resolve configured providers safely; config-bundle creation/update/archive is supported.
-- [ ] ⬜ Implement config preview, diff, apply, export, run history, audit, and rollback-safe source ownership semantics.
-- [ ] ⬜ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics.
-- [ ] ⬜ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs when the config runtime is implemented.
-- [ ] ⬜ Implement central-engine runtime resource inventory, runtime resource sets, materialization, and authorization filtering for Mission Control/dashboard reads.
+- [x] ✅ Implement config preview, diff, hash-bound apply, source-owned export, run history, audit, and rollback-safe ownership semantics. Apply runs are idempotent, source-scoped, and preserve manual/API/identity-provider/system-owned records.
+- [x] ✅ Implement UI and CI/CD workflows for config bundle upload/import/export/apply and managed-by-config drift diagnostics. Platform Settings provides preview, secret preflight, diff acknowledgements, apply, export, and run details; `scripts/config-bundle.mjs` and the protected `config-bundle` GitHub workflow use the same APIs.
+- [x] ✅ Update deployment scripts, Compose/OpenShift manifests, environment templates, readiness, rollback, security, troubleshooting, and operator docs for the config runtime. The bundle and secret mounts remain separate and read-only.
+- [x] ✅ Implement central-engine runtime resource inventory, runtime resource sets, materialization, and authorization filtering for Mission Control/dashboard reads. The remaining route-family audit is tracked separately below.
 - [x] ✅ Persist and expose the v1 `engineRuntimeAuthorizationMode`; all settings and bundle schemas reject unsupported modes and normalize missing legacy values to `enterpriseglue_authoritative`. Runtime-resource route filtering remains a later phase.
 - [ ] ⬜ Implement first-class `customer_sidecar` engine connection mode, endpoint-auth policy, shared connection resolution, UI/config/OpenAPI fields, and mock-sidecar transport tests. Keep the downstream peer token outside EnterpriseGlue.
 - [ ] ⏸ Defer EnterpriseGlue-issued sidecar action-token integration, sidecar principals/heartbeats/inventory, mirrored engine backstop, and engine-native authority/import modes.
@@ -77,8 +77,8 @@ Current config-as-code status:
 - [x] ✅ Keep engine registration separate from engine authorization, then combine them in dropdown and deployment eligibility APIs.
 - [x] ✅ Keep runtime authorization based on database records and evaluator decisions, not direct JSON reads.
 - [x] ✅ Add config-bundle preview, diff, hash-bound apply, server-side export, apply-run history, and ZIP-to-envelope import endpoints. The same ZIP adapter is available to the UI, CI CLI, and bootstrap path.
-- [ ] ⬜ Add UI and CI/CD workflows for managing config bundles.
-- [ ] ⬜ Add config-managed source ownership and drift diagnostics for imported objects.
+- [x] ✅ Add UI and CI/CD workflows for managing config bundles.
+- [x] ✅ Add config-managed source ownership and drift diagnostics for imported objects. Config-locked and config-warn states are surfaced in the relevant access-control and role-management views.
 - [x] ✅ Add a Role Library with a fixed-width role list and focused single-role grouped permission editor. The legacy matrix remains available in Access Control for compatibility until it can be removed.
 - [ ] ⬜ Add customer-managed sidecar transport to the existing engine configuration and runtime connection paths without creating a parallel authorization model.
 - [x] ✅ Close the frontend action inventory gap: bridge evaluation actions are referenced by the shared authoritative bridge client, while the aggregate `engine.instances.mutate` action is explicitly API-only because concrete runtime mutation actions own mounted UI controls.
@@ -96,10 +96,10 @@ This document describes the next implementation phase after the RBAC foundation.
 The remaining work in this document is not to rebuild those foundations. It is to add:
 
 - [ ] ⬜ A Phase 0 contract normalization pass where the implemented compatibility model conflicts with the clean target model.
-- [ ] ⬜ Configuration-as-code import/export/preview/apply flows on top of the existing RBAC and engine registry services.
-- [ ] ⬜ Config source ownership and drift handling for objects already represented in the database.
-- [ ] ⬜ Central-engine runtime resource scopes below an engine, with Mission Control/dashboard filtering by process and decision resource subsets.
-- [ ] ⬜ `engineRuntimeAuthorizationMode` v1 enforcement with `enterpriseglue_authoritative` as the only active mode.
+- [x] ✅ Configuration-as-code import/export/preview/apply flows on top of the existing RBAC and engine registry services.
+- [x] ✅ Config source ownership and drift handling for the supported imported objects. Remaining ownership extensions are kept explicitly scoped in the source-ownership checklist.
+- [x] ✅ Central-engine runtime resource scopes below an engine, with Mission Control/dashboard filtering by process and decision resource subsets.
+- [x] ✅ `engineRuntimeAuthorizationMode` v1 enforcement with `enterpriseglue_authoritative` as the only active mode.
 
 ## Current Platform Capabilities To Reuse
 
@@ -368,15 +368,15 @@ The production bundle now needs these object families:
 
 | File/object family | Existing domain foundation | Required bundle extension |
 | --- | --- | --- |
-| `roles.json` and permissions | Custom role/permission CRUD and role source lineage exist | Add template expansion, source-ownership enforcement, permission diff, and sensitive-risk validation. |
-| `groups.json` | Internal group CRUD exists | Add config ownership and stable references from identity mappings and assignments. |
+| `roles.json` and permissions | Custom role/permission CRUD and role source lineage exist | Implemented: template expansion, source-ownership enforcement, permission diff, and sensitive-risk validation. |
+| `groups.json` | Internal group CRUD exists | Implemented: config ownership and stable references from identity mappings and assignments. |
 | `identity-providers.json` | Provider-neutral OIDC/SAML/LDAP persistence, config apply, direct-login adapters, secret resolution, and connection testing exist | Add provider-API reconciliation beyond LDAP and migrate legacy Microsoft/Google login. |
 | `identity-mappings.json` | SSO group mappings exist | Compile normalized external entitlements to internal groups independent of protocol. |
-| `engines.json` | Manual/external engine APIs exist | Add `runtimeAccessScope`, deployment integration, first-class `connectionMode`, endpoint-auth policy validation, source ownership, and config-safe secret refs. |
-| `engine-sets.json` | Engine Set CRUD/materialization exists | Add deterministic config keys and previewed selector materialization. |
-| `runtime-resource-sets.json` | Not implemented | Add tenant/process/decision selectors, materialization, lineage, and broad-grant warnings. |
-| `assignments.json` | Principal-scoped role assignment CRUD exists | Add stable references to groups, roles, engines, Engine Sets, and runtime resource sets. |
-| `project-engine-targets.json` | Target CRUD/eligibility exists | Add config ownership and deployment-mode validation against engine integration settings. |
+| `engines.json` | Manual/external engine APIs exist | Implemented: `runtimeAccessScope`, deployment integration, `connectionMode`, source ownership, and config-safe secret references. Customer-sidecar endpoint policy remains deferred. |
+| `engine-sets.json` | Engine Set CRUD/materialization exists | Implemented: deterministic config keys and previewed selector materialization. |
+| `runtime-resource-sets.json` | Runtime inventory, sets, and materialization exist | Implemented: tenant/process/decision selectors, lineage, and broad-grant warnings. |
+| `assignments.json` | Principal-scoped role assignment CRUD exists | Implemented: stable references to groups, roles, engines, Engine Sets, and runtime resource sets. |
+| `project-engine-targets.json` | Target CRUD/eligibility exists | Implemented: config ownership and deployment-mode validation; explicit ownership transfer behavior remains tracked below. |
 
 Apply order is deterministic:
 
@@ -399,10 +399,10 @@ Interface requirements:
 - [ ] ⬜ Reject undeclared files, path traversal, duplicate object keys, unknown schema versions, plaintext secrets, and test-only fixture files.
 - [x] ✅ Extend config-bundle preview, diff, and secret-preflight validation errors with object keys when derivable, error severity, and deterministic remediation guidance for UI and CI/CD consumers.
 - [x] ✅ Make the current schema preview side-effect free; provider connectivity checks are explicit optional operations, never implicit network calls during schema validation.
-- [ ] ⬜ Bind apply to the exact canonical preview hash and reject stale previews.
+- [x] ✅ Bind apply to the exact canonical preview hash and reject stale previews.
 - [ ] ⬜ Execute domain writes through existing role/group/engine/assignment/mapping/target services or shared lower-level commands used by both UI and bundle apply.
 - [x] ✅ Let apply select reconciliation behavior: `none`, `preview`, or asynchronous `apply`; never block a large config transaction on a full directory scan. `none`, read-only stored-snapshot `preview`, and bounded post-transaction `apply` are implemented. Required source-scoped cleanup for changed mappings remains transactional. Truncated apply pages persist provider/cursor tasks and an explicitly enabled leased worker resumes them with retry backoff; run details expose the task lifecycle.
-- [ ] ⬜ Export source-owned production objects without secret values and without test fixture data.
+- [x] ✅ Export source-owned production objects without secret values and without test fixture data.
 - [x] ✅ Roles and groups now persist ownership/provenance (`ownershipMode`, source hash, last applied time, drift status). `config_locked` remains read-only; `config_warn` permits local role/group edits and marks them drifted; config apply restores `in_sync` state. Assignment, Engine Set, and project-engine target ownership controls remain pending.
 - [ ] ⬜ Add config bundle version and normalized object fingerprints to every apply run and affected object lineage.
 
