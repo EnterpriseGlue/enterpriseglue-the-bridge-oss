@@ -404,7 +404,7 @@ Interface requirements:
 - [x] ✅ Let apply select reconciliation behavior: `none`, `preview`, or asynchronous `apply`; never block a large config transaction on a full directory scan. `none`, read-only stored-snapshot `preview`, and bounded post-transaction `apply` are implemented. Required source-scoped cleanup for changed mappings remains transactional. Truncated apply pages persist provider/cursor tasks and an explicitly enabled leased worker resumes them with retry backoff; run details expose the task lifecycle.
 - [x] ✅ Export source-owned production objects without secret values and without test fixture data.
 - [x] ✅ Roles and groups now persist ownership/provenance (`ownershipMode`, source hash, last applied time, drift status). `config_locked` remains read-only; `config_warn` permits local role/group edits and marks them drifted; config apply restores `in_sync` state. Assignment, Engine Set, and project-engine target ownership controls remain pending.
-- [ ] ⬜ Add config bundle version and normalized object fingerprints to every apply run and affected object lineage.
+- [x] ✅ Add config bundle API version and normalized object fingerprints to apply-run and affected-object lineage. Apply runs persist the manifest API version plus the full canonical bundle hash; config-owned roles, groups, engines, Engine Sets, runtime-resource sets, assignments, project-engine targets, identity providers, and entitlement mappings persist normalized per-object fingerprints in `sourceHash`.
 
 ## Engine JSON Design
 
