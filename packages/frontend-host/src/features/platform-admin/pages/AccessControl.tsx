@@ -4143,7 +4143,7 @@ function ProjectEngineTargetsPanel({
                             return <TableCell key={cell.id}><Tag type={type}>{formatStatusLabel(status)}</Tag></TableCell>;
                           }
                           if (cell.info.header === 'source') {
-                            return <TableCell key={cell.id}><div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={target?.source === 'config' && target.ownershipMode === 'config_warn' ? 'warm-gray' : sourceOwned ? 'cyan' : 'gray'}>{target?.source === 'config' && target.ownershipMode === 'config_warn' ? 'Config warning' : cell.value}</Tag>{target?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</div></TableCell>;
+                            return <TableCell key={cell.id}><div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={target?.source === 'config' && target.ownershipMode === 'config_warn' ? 'warm-gray' : target?.source === 'config' ? 'purple' : sourceOwned ? 'cyan' : 'gray'}>{target?.source === 'config' && target.ownershipMode === 'config_warn' ? 'Config warning' : target?.source === 'config' ? 'Managed by config' : cell.value}</Tag>{target?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</div></TableCell>;
                           }
                           if (cell.info.header === 'actions') {
                             return (

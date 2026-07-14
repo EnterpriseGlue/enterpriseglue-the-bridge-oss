@@ -1803,10 +1803,10 @@ lastAppliedBy
 
 Rules:
 
-- [ ] ⬜ UI must show a `Managed by config` badge for config-owned engines, roles, groups, mappings, targets, and Engine Sets.
-- [ ] ⬜ UI edits to config-owned fields should either be disabled or flagged as drift, depending on platform mode.
+- [x] ✅ UI must show a `Managed by config` badge for config-owned engines, roles, groups, mappings, targets, and Engine Sets.
+- [x] ✅ UI edits to config-owned fields are disabled for `config_locked` ownership or explicitly show the `config_warn` drift mode.
 - [ ] ⬜ CI/CD apply should reconcile drift according to bundle mode.
-- [ ] ⬜ Manual edits must never be silently deleted by config apply unless the object is config-owned and the preview clearly shows the removal.
+- [x] ✅ Manual edits are preserved by config apply unless ownership is explicitly transferred; authoritative removal is restricted to matching config-owned source lineage and is previewed before apply.
 - [ ] ⬜ Config apply must record audit entries with before/after summaries and redacted secrets.
 
 ## Schema, Persistence, And File Impact
@@ -2306,7 +2306,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Ensure login and scheduled synchronization share one identity reconciliation service and diagnostics model.
 - [x] ✅ Enforce `enterpriseglue_authoritative` as the only active runtime authorization mode in v1. Shared schema and settings-route tests reject later authority modes with a stable validation contract.
 - [x] ✅ Ensure provider-created group memberships use `source = "identity_provider"` plus provider/mapping lineage for direct OIDC, SAML, and LDAP provisioning.
-- [ ] ⬜ Ensure config-managed assignments use `source = "config"` and source lineage.
+- [x] ✅ Ensure config-managed assignments use `source = "config"` and source lineage. Apply persists the canonical assignment key, bundle source reference, object hash, ownership mode, and last-applied state, then removes only matching source-owned assignments in authoritative mode.
 - [x] ✅ Ensure Engine Set and Runtime Resource Set materialization refresh after config-managed engine creation or label changes.
 - [x] ✅ Add runtime resource inventory reconciliation after EnterpriseGlue deployments, engine registration/update synchronization, config-managed engine changes, and explicit admin reconciliation. Import/pipeline receipt ingestion remains pending.
 - [x] ✅ Add an explicit admin reconciliation path that discovers process and decision definitions through the configured engine client, upserts sanitized runtime inventory rows, and rematerializes Runtime Resource Sets. Deployment/import/engine-sync triggers remain pending.
