@@ -529,6 +529,47 @@ describe('bpmn-engine-client', () => {
     );
   });
 
+  it('fails closed with sanitized diagnostics when a sidecar returns malformed JSON', async () => {
+    const engineRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'engine-sidecar',
+        baseUrl: 'https://sidecar.example.test/engine-rest',
+        connectionMode: 'customer_sidecar',
+        authType: 'none',
+      }),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return engineRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+    (fetch as unknown as Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: vi.fn().mockReturnValue('application/json') },
+      json: vi.fn().mockRejectedValue(new SyntaxError('unexpected token from https://sidecar.example.test/private')),
+    });
+
+    await camundaGet('engine-sidecar', '/version').then(
+      () => { throw new Error('Expected malformed response failure'); },
+      (error: { code: string; statusCode: number; toJSON: () => unknown }) => {
+        expect(error.code).toBe('ENGINE_MALFORMED_RESPONSE');
+        expect(error.statusCode).toBe(502);
+        expect(error.toJSON()).toEqual({
+          error: 'The engine returned a malformed response',
+          code: 'ENGINE_MALFORMED_RESPONSE',
+          details: {
+            operationClass: 'engine.read',
+            connectionMode: 'customer_sidecar',
+          },
+        });
+        expect(JSON.stringify(error.toJSON())).not.toContain('sidecar.example.test');
+      },
+    );
+  });
+
   it('reports an engine rejection as an operational failure rather than local authorization denial', async () => {
     (fetch as unknown as Mock).mockResolvedValueOnce({
       ok: false,

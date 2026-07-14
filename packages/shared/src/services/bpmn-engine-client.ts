@@ -353,6 +353,21 @@ export class BpmnEngineOperationError extends AppError {
   }
 }
 
+/** A bounded upstream response could be read but was not valid for its declared format. */
+export class BpmnEngineMalformedResponseError extends AppError {
+  constructor(input: { method: string; path: string; connectionMode: 'direct' | 'customer_sidecar' }) {
+    super(
+      'ENGINE_MALFORMED_RESPONSE',
+      'The engine returned a malformed response',
+      502,
+      {
+        operationClass: inferOperationClass(input.method, input.path),
+        connectionMode: input.connectionMode,
+      },
+    )
+  }
+}
+
 async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<string> {
   if (!cfg.oauthTokenUrl) throw Errors.validation('OAuth2 token URL is required for engine client credentials auth')
   if (!cfg.username) throw Errors.validation('OAuth2 client id is required for engine client credentials auth')
@@ -541,6 +556,19 @@ export class BpmnEngineResponseTooLargeError extends AppError {
   }
 }
 
+async function decodeBpmnEngineResponse<T>(
+  response: Awaited<ReturnType<typeof fetch>>,
+  input: { method: string; path: string; connectionMode: 'direct' | 'customer_sidecar' },
+): Promise<T> {
+  try {
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) return await response.json() as T
+    return await response.text() as T
+  } catch {
+    throw new BpmnEngineMalformedResponseError(input)
+  }
+}
+
 export async function camundaGet<T = unknown>(engineId: string, path: string, params?: Record<string, any>): Promise<T> {
   const cfg = await getEngine(engineId)
   const url = new URL(resolveBpmnEngineRequestUrl(cfg.baseUrl, path))
@@ -551,28 +579,24 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
       else url.searchParams.set(k, String(v))
     }
   }
-  const { response: res } = await fetchBpmnEngineEndpoint(cfg, { engineId, method: 'GET', path: `${path}${url.search}` })
+  const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method: 'GET', path: `${path}${url.search}` })
   if (!res.ok) {
     await res.text().catch(() => '')
     throw new BpmnEngineOperationError({ method: 'GET', path, status: res.status })
   }
-  const ct = res.headers.get('content-type') || ''
-  if (ct.includes('application/json')) return (await res.json()) as T
-  return (await res.text()) as unknown as T
+  return decodeBpmnEngineResponse<T>(res, { method: 'GET', path, connectionMode: diagnostics.connectionMode })
 }
 
 async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
   const cfg = await getEngine(engineId)
-  const { response: res } = await fetchBpmnEngineEndpoint(cfg, { engineId, method, path }, {
+  const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method, path }, {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
     await res.text().catch(() => '')
     throw new BpmnEngineOperationError({ method, path, status: res.status })
   }
-  const ct = res.headers.get('content-type') || ''
-  if (ct.includes('application/json')) return (await res.json()) as T
-  return (await res.text()) as unknown as T
+  return decodeBpmnEngineResponse<T>(res, { method, path, connectionMode: diagnostics.connectionMode })
 }
 
 export const camundaPost = <T = unknown>(engineId: string, path: string, body?: any) => camundaSend<T>(engineId, 'POST', path, body)
