@@ -105,6 +105,12 @@ mapping changes must also finish their bounded stored-snapshot replay before
 readiness opens. Live identity-provider directory synchronization remains a
 separate scheduled operation.
 
+`/metrics` publishes `enterpriseglue_config_bootstrap_ready`,
+`enterpriseglue_config_bootstrap_applied`, and
+`enterpriseglue_config_bootstrap_info`. Metric labels contain bounded status
+enums and a stable issue code only; the bundle hash is retained in JSON health
+and apply-run receipts but omitted from metrics to avoid high-cardinality data.
+
 ### Database Compatibility (TypeORM Adapters)
 Database support is provided via TypeORM adapters and driver packages:
 - **Postgres**: `pg`

@@ -16,8 +16,15 @@ const apply = vi.hoisted(() => vi.fn());
 const secretPreflight = vi.hoisted(() => vi.fn());
 const getPlatformSettings = vi.hoisted(() => vi.fn());
 const drainApplyRun = vi.hoisted(() => vi.fn());
+const findApplyRun = vi.hoisted(() => vi.fn());
+const updateApplyRun = vi.hoisted(() => vi.fn());
+const bootstrapLogger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({ config }));
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
+  getDataSource: vi.fn().mockResolvedValue({ getRepository: () => ({ findOne: findApplyRun, update: updateApplyRun }) }),
+}));
+vi.mock('@enterpriseglue/shared/utils/logger.js', () => ({ logger: bootstrapLogger }));
 vi.mock('node:fs/promises', () => ({ stat, readFile }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js', () => ({
   configBundlePreviewService: { preview },
@@ -35,7 +42,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityRepl
   configBundleIdentityReplayTaskService: { drainApplyRun },
 }));
 
-import { getConfigBootstrapStatus, runConfigBundleBootstrap } from '../../../../packages/backend-host/src/services/configBundleBootstrap.js';
+import { getConfigBootstrapMetrics, getConfigBootstrapStatus, runConfigBundleBootstrap } from '../../../../packages/backend-host/src/services/configBundleBootstrap.js';
 
 describe('configBundleBootstrap', () => {
   beforeEach(() => {
@@ -52,16 +59,19 @@ describe('configBundleBootstrap', () => {
     secretPreflight.mockReturnValue({ valid: true, available: true, canonicalHash: 'preview-hash', availabilityHash: 'secret-preflight-hash', errors: [] });
     getPlatformSettings.mockResolvedValue({ credentiallessCustomerSidecarsEnabled: false });
     drainApplyRun.mockResolvedValue({ status: 'completed', pagesProcessed: 1, taskCount: 1, activeTaskCount: 0, failedTaskCount: 0 });
+    findApplyRun.mockResolvedValue({ id: 'apply-run-1', resultJson: JSON.stringify({ canonicalHash: 'preview-hash', changes: [] }) });
+    updateApplyRun.mockResolvedValue({ affected: 1 });
   });
 
   it('rejects a bootstrap apply without an explicit expected tenant scope', async () => {
-    await expect(runConfigBundleBootstrap()).rejects.toThrow('EG_CONFIG_EXPECTED_TENANT_SCOPE is required');
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle target scope is required');
 
     expect(apply).not.toHaveBeenCalled();
     expect(getConfigBootstrapStatus()).toMatchObject({
       mode: 'apply',
       status: 'failed',
       reconciliation: 'not_run',
+      issueCode: 'tenant_scope_missing',
     });
   });
 
@@ -124,6 +134,11 @@ describe('configBundleBootstrap', () => {
       reconciliation: 'completed',
     });
     expect(drainApplyRun).toHaveBeenCalledWith({ applyRunId: 'apply-run-1', maxPages: 100, pageLimit: 500 });
+    const receiptUpdate = updateApplyRun.mock.calls.at(-1)?.[1];
+    expect(JSON.parse(receiptUpdate.resultJson)).toMatchObject({
+      canonicalHash: 'preview-hash',
+      bootstrap: { mode: 'apply', status: 'applied', reconciliation: 'completed', issueCode: null },
+    });
   });
 
   it('fails readiness when durable identity replay remains pending after bounded startup work', async () => {
@@ -135,8 +150,13 @@ describe('configBundleBootstrap', () => {
     });
     drainApplyRun.mockResolvedValue({ status: 'pending', pagesProcessed: 100, taskCount: 1, activeTaskCount: 1, failedTaskCount: 0 });
 
-    await expect(runConfigBundleBootstrap()).rejects.toThrow('identity reconciliation remains pending');
-    expect(getConfigBootstrapStatus()).toMatchObject({ status: 'failed', reconciliation: 'pending' });
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle identity reconciliation failed');
+    expect(getConfigBootstrapStatus()).toMatchObject({ status: 'failed', reconciliation: 'pending', issueCode: 'identity_reconciliation_failed' });
+    const metrics = getConfigBootstrapMetrics();
+    expect(metrics).toContain('enterpriseglue_config_bootstrap_ready 0');
+    expect(metrics).toContain('issue_code="identity_reconciliation_failed"');
+    expect(metrics).not.toContain(getConfigBootstrapStatus().hash || 'preview-hash');
+    expect(bootstrapLogger.error).toHaveBeenCalledWith('Configuration bootstrap failed', expect.objectContaining({ issueCode: 'identity_reconciliation_failed' }));
   });
 
   it('fails bootstrap when the initial identity reconciliation page fails', async () => {

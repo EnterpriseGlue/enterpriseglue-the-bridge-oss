@@ -131,12 +131,27 @@ function authzExemption(method: string, path: string): Record<string, unknown> {
   return { [AUTHZ_OPENAPI_EXEMPTION_KEY]: toOpenApiAuthzExemption(exemption) };
 }
 
-const HealthSchema = z.object({ status: z.literal('ok') });
+const ConfigBootstrapStatusOpenApiSchema = z.object({
+  mode: z.enum(['disabled', 'validate', 'apply']),
+  status: z.enum(['disabled', 'validated', 'applied', 'failed']),
+  hash: z.string().nullable(),
+  message: z.string().nullable(),
+  reconciliation: z.enum(['not_run', 'completed', 'pending']),
+  secretPreflight: z.enum(['not_required', 'passed', 'failed']),
+  issueCode: z.enum([
+    'bundle_path_missing', 'bundle_read_failed', 'hash_mismatch', 'validation_failed',
+    'secret_preflight_failed', 'tenant_scope_missing', 'apply_failed', 'identity_reconciliation_failed',
+  ]).nullable(),
+});
+const HealthSchema = z.object({ status: z.enum(['ok', 'degraded']), configBootstrap: ConfigBootstrapStatusOpenApiSchema });
+const ReadinessSchema = z.object({ status: z.enum(['ready', 'not_ready']), configBootstrap: ConfigBootstrapStatusOpenApiSchema });
 const InvalidQueryParametersResponseSchema = z.object({
   error: z.literal('Invalid query parameters'),
   issues: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
 });
 registry.register('Health', HealthSchema);
+registry.register('Readiness', ReadinessSchema);
+registry.register('ConfigBootstrapStatus', ConfigBootstrapStatusOpenApiSchema);
 registry.register('InvalidQueryParametersResponse', InvalidQueryParametersResponseSchema);
 registry.registerPath({
   method: 'get',
@@ -145,6 +160,21 @@ registry.registerPath({
   responses: {
     200: { description: 'Health check', content: { 'application/json': { schema: HealthSchema } } },
   },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/ready',
+  ...authzExemption('GET', '/ready'),
+  responses: {
+    200: { description: 'Service is ready after required startup configuration work', content: { 'application/json': { schema: ReadinessSchema } } },
+    503: { description: 'Required startup configuration work failed', content: { 'application/json': { schema: ReadinessSchema } } },
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/metrics',
+  ...authzExemption('GET', '/metrics'),
+  responses: { 200: { description: 'Sanitized Prometheus configuration-bootstrap metrics', content: { 'text/plain': { schema: z.string() } } } },
 });
 
 registry.register('Project', ProjectSchema);
@@ -3742,6 +3772,7 @@ const ConfigBundleApplyRunOpenApiSchema = z.object({
   }).optional(),
   mode: z.enum(['additive', 'authoritative', 'preview_only']).nullable().optional(),
   changes: z.array(ConfigBundleDiffChangeOpenApiSchema).optional(),
+  bootstrap: ConfigBootstrapStatusOpenApiSchema.optional(),
 });
 
 // POST /api/authz/check

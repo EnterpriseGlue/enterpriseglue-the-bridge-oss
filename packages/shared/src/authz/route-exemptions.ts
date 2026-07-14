@@ -30,7 +30,9 @@ function tokenAuthenticatedRoute(method: string, route: string, risk: AuthzActio
 }
 
 export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
-  publicRoute('GET', '/health', 'low', 'platform-runtime', 'Unauthenticated health probes expose only a static service readiness status.'),
+  publicRoute('GET', '/health', 'low', 'platform-runtime', 'Unauthenticated health probes expose only sanitized configuration bootstrap state.'),
+  publicRoute('GET', '/ready', 'low', 'platform-runtime', 'Unauthenticated readiness probes expose only sanitized configuration bootstrap state.'),
+  publicRoute('GET', '/metrics', 'low', 'platform-runtime', 'Unauthenticated metrics expose only bounded enum-backed configuration bootstrap gauges.'),
   publicRoute('GET', '/api/sso/providers/enabled', 'low', 'platform-auth', 'The login page needs the sanitized enabled-provider catalog before a user session exists.'),
   publicRoute('POST', '/api/auth/login', 'high', 'platform-auth', 'Credential login must be reachable before a session exists and is protected by authentication rate limits.'),
   tokenAuthenticatedRoute('POST', '/api/auth/complete-onboarding', 'high', 'A one-time onboarding token authorizes completion before the normal user session is issued.'),

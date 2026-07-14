@@ -583,7 +583,7 @@ describe('platform-admin authz routes', () => {
             idempotencyKey: 'config-apply-2026-07-13',
             actorId: 'user-1',
             status: 'succeeded',
-            resultJson: JSON.stringify({ created: 2, updated: 1, archived: 0, changes: [{ objectType: 'group', key: 'group.ops', operation: 'create', reason: 'New config group' }], reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: { status: 'completed', providerCount: 1, scanned: 2, created: 1, removed: 0, failed: 0 } } }),
+            resultJson: JSON.stringify({ created: 2, updated: 1, archived: 0, changes: [{ objectType: 'group', key: 'group.ops', operation: 'create', reason: 'New config group' }], reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: { status: 'completed', providerCount: 1, scanned: 2, created: 1, removed: 0, failed: 0 } }, bootstrap: { mode: 'apply', status: 'applied', hash: 'preview-hash', message: null, reconciliation: 'completed', secretPreflight: 'passed', issueCode: null } }),
             errorMessage: null,
             completedAt: 1100,
             createdAt: 1000,
@@ -2268,6 +2268,7 @@ describe('platform-admin authz routes', () => {
         created: 2,
         updated: 1,
         reconciliation: expect.objectContaining({ identitySnapshot: expect.objectContaining({ status: 'completed', scanned: 2 }) }),
+        bootstrap: expect.objectContaining({ status: 'applied', reconciliation: 'completed', issueCode: null }),
       }),
     ]);
   });
@@ -2281,6 +2282,7 @@ describe('platform-admin authz routes', () => {
       bundleKey: 'acme.authz',
       changes: [expect.objectContaining({ objectType: 'group', key: 'group.ops', operation: 'create' })],
       reconciliation: expect.objectContaining({ identitySnapshot: expect.objectContaining({ scanned: 2 }) }),
+      bootstrap: expect.objectContaining({ status: 'applied', secretPreflight: 'passed' }),
     });
   });
 

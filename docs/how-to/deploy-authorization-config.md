@@ -65,6 +65,10 @@ load process environment
 
 `/health` is the liveness/diagnostic endpoint. `/ready` is the readiness endpoint and returns `503` when bootstrap configuration has failed. Production fail-closed mode stops startup before the server listens; non-fail-closed mode preserves `/health` diagnostics while keeping `/ready` false.
 
+Both JSON endpoints expose only the bounded bootstrap mode/status, full bundle hash for receipt correlation, reconciliation and secret-preflight enums, and a stable issue code with generic operator-safe text. They never return bundle contents, file paths, object keys, provider identifiers, secret references, or raw exceptions. `/metrics` exposes the same state as three dependency-free Prometheus metrics without the hash: `enterpriseglue_config_bootstrap_ready`, `enterpriseglue_config_bootstrap_applied`, and `enterpriseglue_config_bootstrap_info`. Startup logs use the identical sanitized status object.
+
+When bootstrap mode is `apply`, the persisted configuration apply-run receipt gains a `bootstrap` object after required startup reconciliation finishes or fails. This keeps the deployment receipt correlated to the canonical hash while preserving the same sanitized status contract; the Configuration Bundles UI displays that startup outcome in recent runs and run details.
+
 Runtime authorization never reads the mounted JSON files directly.
 
 ## Docker Compose Changes
@@ -104,7 +108,7 @@ Required changes:
 - [x] ✅ Add disabled-by-default bootstrap variables to every Docker/OpenShift environment example and the configuration reference/matrix.
 - [x] ✅ Ensure backend production images can read `/etc/enterpriseglue/config` as a non-root user. The production image creates and grants the projection directory to the Chainguard runtime user.
 - [x] ✅ Keep secret files in a separate read-only mount with stricter permissions; never put them in the config bundle volume. The optional Compose overlay mounts the bundle file and secret directory independently as read-only paths.
-- [x] ✅ Add health/readiness output for bundle status, hash, local materialization state, and required stored-identity replay state without exposing configuration contents. Historical last-run detail metrics remain pending.
+- [x] ✅ Add health/readiness output for bundle status, hash, local materialization state, and required stored-identity replay state without exposing configuration contents. Logs, bounded Prometheus gauges/info labels, OpenAPI, and persisted apply-run deployment receipts use the same sanitized status contract.
 - [ ] ⬜ Test paths containing spaces, missing mounts, read-only mounts, invalid JSON, wrong hash, unresolved secret refs, and restart idempotency.
 
 ## OpenShift And Kubernetes Changes

@@ -10,7 +10,7 @@ import { startBatchPollerIfActive } from './poller/batchPoller.js';
 import { startSsoDiagnosticsPollerIfEnabled } from './poller/ssoDiagnosticsPoller.js';
 import { startRuntimeInventoryPollerIfEnabled } from './poller/runtimeInventoryPoller.js';
 import { startConfigBundleIdentityReplayPollerIfEnabled } from './poller/configBundleIdentityReplayPoller.js';
-import { runConfigBundleBootstrap } from './services/configBundleBootstrap.js';
+import { getConfigBootstrapStatus, runConfigBundleBootstrap } from './services/configBundleBootstrap.js';
 import { getConnectionPool, ConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
 import {
   buildEnterpriseBackendRouteOpenApiAuthzMetadata,
@@ -94,9 +94,9 @@ export async function startServer() {
 
   try {
     await runConfigBundleBootstrap();
-  } catch (error) {
-    console.error('Configuration bundle bootstrap failed:', error);
-    if (config.configFailClosed) throw error;
+  } catch {
+    console.error('Configuration bundle bootstrap failed:', getConfigBootstrapStatus());
+    if (config.configFailClosed) throw new Error('Configuration bundle bootstrap failed');
   }
 
   // Seed Git providers on first run

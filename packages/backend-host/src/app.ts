@@ -12,7 +12,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { runWithBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import { registerRoutes } from './routes/index.js';
 import type { NotificationTenantResolver } from '@enterpriseglue/enterprise-plugin-api/backend';
-import { getConfigBootstrapStatus } from './services/configBundleBootstrap.js';
+import { getConfigBootstrapMetrics, getConfigBootstrapStatus } from './services/configBundleBootstrap.js';
 
 interface CreateAppOptions {
   registerBaseRoutes?: boolean;
@@ -205,6 +205,10 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     const configBootstrap = getConfigBootstrapStatus();
     const ready = configBootstrap.status !== 'failed';
     res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', configBootstrap });
+  });
+
+  app.get('/metrics', (_req, res) => {
+    res.type('text/plain; version=0.0.4').send(getConfigBootstrapMetrics());
   });
 
   // Register all application routes
