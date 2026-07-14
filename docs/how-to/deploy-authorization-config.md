@@ -276,7 +276,9 @@ Customer-sidecar downstream peer tokens are never EnterpriseGlue secret referenc
 
 ### Docker Compose Secret Reference Example
 
-The following is the intended optional override once bootstrap mounting is enabled. It is not a current Compose feature: current deployments must use the API/CLI apply path and their existing secret injection.
+The optional Compose overlay uses the following file-secret mount contract. The
+API/CLI path remains available when configuration should be applied separately
+from backend startup.
 
 ```yaml
 services:
@@ -290,12 +292,27 @@ services:
 
 The bundle would refer to a file without including its value:
 
+<!-- enterpriseglue-config-schema: ConfigIdentityProviderSchema -->
 ```json
 {
   "key": "identity.oidc.production",
   "type": "oidc",
+  "enabled": true,
+  "authenticationMode": "direct",
+  "sync": {
+    "triggers": ["login"],
+    "requiredForLogin": true,
+    "incompleteEntitlements": "fail_closed",
+    "connectorCapability": "claim_only",
+    "scheduled": false
+  },
   "oidc": {
-    "clientSecretRef": "file:///var/run/secrets/enterpriseglue/oidc-client-secret"
+    "issuerUrl": "https://identity.example.com",
+    "clientId": "enterpriseglue-production",
+    "clientSecretRef": "file:///var/run/secrets/enterpriseglue/oidc-client-secret",
+    "callbackUrl": "https://enterpriseglue.example/api/auth/identity/callback",
+    "scopes": ["openid", "profile", "email", "groups"],
+    "groupClaim": "groups"
   }
 }
 ```
@@ -304,7 +321,7 @@ Keep the host secret directory outside the source repository and outside the non
 
 ### OpenShift Secret Reference Example
 
-Keep secret bytes in an OpenShift `Secret`, then mount individual keys at the same read-only path used by the bundle reference. The ConfigMap/projected bundle mount remains planned; this example documents the required separation.
+Keep secret bytes in an OpenShift `Secret`, then mount individual keys at the same read-only path used by the bundle reference. The deployed ConfigMap bundle and Secret projection remain separate resources.
 
 ```yaml
 apiVersion: v1
@@ -335,24 +352,24 @@ spec:
         - name: config-secrets
           secret:
             secretName: enterpriseglue-config-secrets
-            defaultMode: 0400
+            defaultMode: 0444
 ```
 
 Use External Secrets, Sealed Secrets, or the organization's managed secret operator to create the `Secret`; do not commit the literal `stringData` value. CI bundle exports, previews, apply receipts, logs, audits, and OpenAPI responses must contain only the reference URI.
 
 ## Readiness And Observability
 
-Expose sanitized status fields:
+`/health` and `/ready` expose one sanitized bootstrap object containing mode,
+status, canonical file hash, reconciliation state, secret-preflight state, and a
+stable generic issue code. `/ready` returns `503` after a non-fail-closed failure
+or while required startup reconciliation has not completed.
 
-- configured bundle id and hash;
-- bootstrap mode;
-- last validation/apply run id and status;
-- drift status;
-- reconciliation status and counts;
-- unresolved-reference count;
-- last successful apply time.
-
-Metrics and logs must distinguish schema validation, authorization denial, ownership conflict, secret-resolution failure, reconciliation failure, and engine/sidecar transport failure.
+Startup logs use the same object without raw exceptions or configuration
+identifiers. Apply-run receipts persist the final object. `/metrics` publishes
+`enterpriseglue_config_bootstrap_ready`,
+`enterpriseglue_config_bootstrap_applied`, and
+`enterpriseglue_config_bootstrap_info`; labels are bounded enums and deliberately
+omit the hash.
 
 ## Rollback
 

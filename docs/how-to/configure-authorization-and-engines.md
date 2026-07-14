@@ -192,9 +192,10 @@ Mission Control and Dashboard engine lists include an engine only when the backe
 
 For a customer-owned sidecar or gateway:
 
+<!-- enterpriseglue-config-schema: ConfigEngineSchema -->
 ```json
 {
-  "key": "payments-prod",
+  "key": "engine.payments-prod",
   "name": "Payments Production",
   "type": "operaton",
   "baseUrl": "https://payments-sidecar.internal/engine-rest",
