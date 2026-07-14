@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { getMetadataArgsStorage } from 'typeorm';
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
+import { DeploymentReceipt } from '@enterpriseglue/shared/infrastructure/persistence/entities/DeploymentReceipt.js';
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
@@ -14,6 +15,7 @@ import { AddExternalIdentities1700000000047 } from '@enterpriseglue/shared/db/mi
 import { AddIdentityProviders1700000000056 } from '@enterpriseglue/shared/db/migrations/1700000000056-add-identity-providers.js';
 import { AddRuntimeResourceSets1700000000054 } from '@enterpriseglue/shared/db/migrations/1700000000054-add-runtime-resource-sets.js';
 import { AddRuntimeResourceInventory1700000000055 } from '@enterpriseglue/shared/db/migrations/1700000000055-add-runtime-resource-inventory.js';
+import { AddDeploymentHistoryLineage1700000000058 } from '@enterpriseglue/shared/db/migrations/1700000000058-add-deployment-history-lineage.js';
 import { externalIdentityKey } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
 
 function column(target: Function, propertyName: string) {
@@ -106,9 +108,42 @@ describe('canonical authorization persistence schema invariants', () => {
     expect(uniqueColumnSets(ProjectEngineTarget)).toContainEqual(['projectId', 'engineId']);
   });
 
-  it('allows discovered deployment and artifact lineage without a project', () => {
+  it('persists direct discovery and receipt lineage without requiring a project', async () => {
     expect(column(EngineDeployment, 'projectId')?.options.nullable).toBe(true);
     expect(column(EngineDeploymentArtifact, 'projectId')?.options.nullable).toBe(true);
+    expect(column(EngineDeployment, 'ingestionSource')?.options.default).toBe('enterpriseglue_proxy');
+    expect(column(EngineDeployment, 'lineageQuality')?.options.default).toBe('complete');
+    expect(uniqueColumnSets(DeploymentReceipt)).toContainEqual(['tenantId', 'idempotencyKey']);
+
+    const addColumn = vi.fn().mockResolvedValue(undefined);
+    const changeColumn = vi.fn().mockResolvedValue(undefined);
+    const createIndex = vi.fn().mockResolvedValue(undefined);
+    const table = {
+      indices: [],
+      findColumnByName: vi.fn().mockReturnValue({ type: 'text', isNullable: false }),
+    };
+    await new AddDeploymentHistoryLineage1700000000058().up({
+      hasTable: vi.fn().mockResolvedValue(true),
+      hasColumn: vi.fn().mockResolvedValue(false),
+      addColumn,
+      getTable: vi.fn().mockResolvedValue(table),
+      changeColumn,
+      createIndex,
+      connection: { getMetadata: () => { throw new Error('metadata unavailable'); } },
+    } as any);
+
+    expect(addColumn.mock.calls.map(([tableName, definition]) => [tableName, definition.name])).toEqual([
+      ['engine_deployments', 'ingestion_source'],
+      ['engine_deployments', 'lineage_quality'],
+      ['engine_deployments', 'reporting_principal_id'],
+      ['engine_deployments', 'reconciled_at'],
+      ['engine_deployments', 'lineage_json'],
+    ]);
+    expect(changeColumn).toHaveBeenCalledWith('engine_deployments', 'project_id', expect.objectContaining({ isNullable: true }));
+    expect(changeColumn).toHaveBeenCalledWith('engine_deployment_artifacts', 'project_id', expect.objectContaining({ isNullable: true }));
+    expect(createIndex).toHaveBeenCalledWith('engine_deployments', expect.objectContaining({
+      columnNames: ['engine_id', 'camunda_deployment_id'], isUnique: true,
+    }));
   });
 
   it('persists canonical runtime resources, sets, and materialization lineage', async () => {

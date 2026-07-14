@@ -1830,7 +1830,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Add `identity_provider` membership/assignment source semantics with explicit provider id and mapping id lineage; migrate current `sso` source handling in the same milestone.
 - [x] ✅ Add `RuntimeResource` and `RuntimeResourceSet` entities with set-materialization lineage. Portable canonical uniqueness covers engine, kind, key, and normalized runtime tenant; set membership is uniquely materialized per resource. Entity and migration contracts verify the complete persistence shape.
 - [x] ✅ Add `runtimeAccessScope`, deployment integration configuration, and first-class `connectionMode` to `Engine`; add platform policy persistence for credentialless private-sidecar endpoints.
-- [ ] ⬜ Extend `EngineDeployment` and `EngineDeploymentArtifact` for direct discovery, nullable project lineage, receipt provenance, and lineage quality.
+- [x] ✅ Extend `EngineDeployment` and `EngineDeploymentArtifact` for direct discovery, nullable project lineage, pipeline receipt provenance, and explicit lineage quality. Entity/migration contracts and discovery/receipt service tests cover the portable history model.
 - [ ] ⬜ Replace legacy role-assignment uniqueness with principal/scope/source uniqueness and make legacy `userId`, `resourceType`, `resourceId`, and `sourceMappingId` aliases removable.
 - [ ] ⬜ Make role keys tenant-scoped where roles are tenant-owned and add deterministic config keys/source metadata to roles, groups, providers, mappings, engines, Engine Sets, and targets.
 - [ ] ⬜ Keep one `ProjectEngineTarget` per project/engine pair and add explicit config ownership transfer/conflict metadata rather than source-duplicate target rows.
