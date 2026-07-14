@@ -31,6 +31,9 @@ export function withAssignmentPrincipalType(state: AssignmentFormState, principa
     roleId: '',
   };
 }
+export function withAssignmentResourceType(state: AssignmentFormState, resourceType: CoreAssignmentResourceType): AssignmentFormState {
+  return { ...state, resourceType, resourceId: resourceType === 'platform' ? '' : state.resourceId, runtimeEngineId: resourceType === 'engine_runtime_resource' || resourceType === 'engine_runtime_resource_set' ? state.runtimeEngineId : '', roleId: '' };
+}
 
 const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([
   'system.api.engine_registrar',

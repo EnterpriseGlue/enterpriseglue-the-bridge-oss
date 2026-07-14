@@ -60,7 +60,7 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
-import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, withAssignmentPrincipalType, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
+import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, withAssignmentPrincipalType, withAssignmentResourceType, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -2543,7 +2543,7 @@ function RoleAssignmentsPanel({
           selectedItem={resourceTypeItems.find((item) => item.id === form.resourceType) || { id: form.resourceType, label: form.resourceType }}
           onChange={({ selectedItem }) => {
             const resourceType = (selectedItem?.id || 'engine') as CoreAssignmentResourceType;
-            setForm((current) => ({ ...current, resourceType, resourceId: resourceType === 'platform' ? '' : current.resourceId, runtimeEngineId: resourceType === 'engine_runtime_resource' || resourceType === 'engine_runtime_resource_set' ? current.runtimeEngineId : '', roleId: '' }));
+            setForm((current) => withAssignmentResourceType(current, resourceType));
           }}
         />
         {form.resourceType === 'engine_runtime_resource' || form.resourceType === 'engine_runtime_resource_set' ? <>
