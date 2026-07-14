@@ -19,12 +19,14 @@ const r = Router()
 const requireProcessInstanceAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {
   resourceKind: 'process_definition',
   definitionPath: 'process-instance',
+  engineIdFrom: 'body',
   resourceKeyFields: ['definitionKey', 'processDefinitionKey'],
 })
 
 const requireProcessDefinitionAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {
   resourceKind: 'process_definition',
   definitionPath: 'process-definition',
+  engineIdFrom: 'body',
 })
 
 // Apply auth middleware only to /mission-control-api routes (not globally)
