@@ -21,7 +21,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
-    req.user = { userId: 'user-1' };
+    req.user = { userId: req.get('x-test-user') || 'user-1' };
     next();
   },
 }));
@@ -220,6 +220,41 @@ describe('mission-control decisions routes', () => {
       engineId: 'engine-1',
       resourceKind: 'decision_definition',
       permission: 'engine:instance:view',
+    }));
+  });
+
+  it('returns disjoint decision-definition subsets to users sharing a resource-aware central engine', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockImplementation(async ({ userId }: { userId: string }) => (
+      userId === 'payments-user'
+        ? [{ resourceKey: 'payments-risk' }]
+        : [{ resourceKey: 'hr-eligibility' }]
+    ));
+    (listDecisionDefinitions as unknown as Mock).mockResolvedValue([
+      { id: 'payments:1', key: 'payments-risk' },
+      { id: 'hr:1', key: 'hr-eligibility' },
+    ]);
+
+    const [paymentsResponse, hrResponse] = await Promise.all([
+      request(app).get('/mission-control-api/decision-definitions').set('x-test-user', 'payments-user').query({ engineId: 'central-engine' }),
+      request(app).get('/mission-control-api/decision-definitions').set('x-test-user', 'hr-user').query({ engineId: 'central-engine' }),
+    ]);
+
+    expect(paymentsResponse.status).toBe(200);
+    expect(paymentsResponse.body).toEqual([{ id: 'payments:1', key: 'payments-risk' }]);
+    expect(hrResponse.status).toBe(200);
+    expect(hrResponse.body).toEqual([{ id: 'hr:1', key: 'hr-eligibility' }]);
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'central-engine', resourceKind: 'decision_definition', permission: 'engine:instance:view', userId: 'payments-user',
+    }));
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'central-engine', resourceKind: 'decision_definition', permission: 'engine:instance:view', userId: 'hr-user',
     }));
   });
 

@@ -22,7 +22,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
-    req.user = { userId: 'user-1' };
+    req.user = { userId: req.get('x-test-user') || 'user-1' };
     next();
   },
 }));
@@ -65,6 +65,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(false),
+    getVisibleRuntimeResources: vi.fn().mockResolvedValue([]),
     getKnownProjectIdsForUser: vi.fn().mockResolvedValue([]),
     getKnownEngineIdsForUser: vi.fn().mockResolvedValue([]),
     syncLegacyRoleAssignments: vi.fn().mockResolvedValue(undefined),
@@ -206,6 +207,41 @@ describe('mission-control processes routes', () => {
 
     expect(response.status).toBe(403);
     expect(listProcessDefinitions).not.toHaveBeenCalled();
+  });
+
+  it('returns disjoint process-definition subsets to users sharing a resource-aware central engine', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockImplementation(async ({ userId }: { userId: string }) => (
+      userId === 'payments-user'
+        ? [{ resourceKey: 'payments-order' }]
+        : [{ resourceKey: 'hr-onboard' }]
+    ));
+    (listProcessDefinitions as unknown as Mock).mockResolvedValue([
+      { id: 'payments:1', key: 'payments-order' },
+      { id: 'hr:1', key: 'hr-onboard' },
+    ]);
+
+    const [paymentsResponse, hrResponse] = await Promise.all([
+      request(app).get('/mission-control-api/process-definitions').set('x-test-user', 'payments-user').query({ engineId: 'central-engine' }),
+      request(app).get('/mission-control-api/process-definitions').set('x-test-user', 'hr-user').query({ engineId: 'central-engine' }),
+    ]);
+
+    expect(paymentsResponse.status).toBe(200);
+    expect(paymentsResponse.body).toEqual([{ id: 'payments:1', key: 'payments-order' }]);
+    expect(hrResponse.status).toBe(200);
+    expect(hrResponse.body).toEqual([{ id: 'hr:1', key: 'hr-onboard' }]);
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'central-engine', resourceKind: 'process_definition', permission: 'engine:instance:view', userId: 'payments-user',
+    }));
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'central-engine', resourceKind: 'process_definition', permission: 'engine:instance:view', userId: 'hr-user',
+    }));
   });
 
   it('validates edit-target query params', async () => {
