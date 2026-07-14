@@ -18,6 +18,8 @@ const authMocks = vi.hoisted(() => ({
   },
 }));
 
+const engineSelectorMocks = vi.hoisted(() => ({ selectedEngineId: null as string | null }));
+
 vi.mock('@src/shared/hooks/useAuth', () => ({
   useAuth: () => ({
     permissions: authMocks.permissions,
@@ -28,7 +30,7 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
 
 vi.mock('@src/components/EngineSelector', () => ({
   EngineSelector: () => <div data-testid="engine-selector" />,
-  useSelectedEngine: () => null,
+  useSelectedEngine: () => engineSelectorMocks.selectedEngineId,
 }));
 
 vi.mock('@src/shared/api/client', () => ({
@@ -97,6 +99,7 @@ describe('Dashboard', () => {
     };
     authMocks.hasPlatformPermission.mockReturnValue(false);
     authMocks.hasAnyEnginePermission.mockReturnValue(false);
+    engineSelectorMocks.selectedEngineId = null;
   });
 
   it('does not fetch dashboard data when dashboard read permission is missing', async () => {
@@ -157,5 +160,44 @@ describe('Dashboard', () => {
     });
 
     expect(apiClient.get).toHaveBeenCalledWith('/api/users');
+  });
+
+  it('builds runtime counters from the authorized process-instance collection for the selected engine', async () => {
+    engineSelectorMocks.selectedEngineId = 'engine-central';
+    authMocks.hasAnyEnginePermission.mockReturnValue(true);
+    (apiClient.get as unknown as Mock).mockImplementation((url: string, query?: Record<string, unknown>) => {
+      if (url === '/api/dashboard/context') return Promise.resolve({
+        isPlatformAdmin: false,
+        runtimeScopedEngineIds: ['engine-central'],
+        canViewActiveUsers: false,
+        canViewEngines: true,
+        canViewProcessData: true,
+        canViewDeployments: false,
+        canViewMetrics: true,
+        projectMemberships: [],
+      });
+      if (url === '/api/dashboard/stats') return Promise.resolve({ totalProjects: 1, totalFiles: 0, fileTypes: { bpmn: 0, dmn: 0, form: 0 } });
+      if (url === '/engines-api/engines') return Promise.resolve([{ id: 'engine-central' }]);
+      if (url === '/mission-control-api/process-instances') {
+        expect(query).toMatchObject({ engineId: 'engine-central', active: true, completed: true, canceled: true });
+        return Promise.resolve([
+          { id: 'visible-active', state: 'ACTIVE' },
+          { id: 'visible-completed', state: 'COMPLETED', startTime: '2026-07-14T00:00:00.000Z', endTime: '2026-07-14T00:01:00.000Z' },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    renderDashboard();
+
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith(
+      '/mission-control-api/process-instances',
+      expect.objectContaining({ engineId: 'engine-central' }),
+    ));
+    await waitFor(() => {
+      expect(screen.getByText('Runtime access is scoped')).toBeInTheDocument();
+      expect(screen.getByText('Process States')).toBeInTheDocument();
+      expect(screen.getByText('Summary')).toBeInTheDocument();
+    });
   });
 });

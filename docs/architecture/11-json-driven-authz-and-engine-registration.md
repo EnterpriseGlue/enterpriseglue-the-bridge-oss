@@ -2356,7 +2356,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add per-engine v1 deployment integration controls to manual create/edit and engine detail. `enterpriseglue_proxy` permits EnterpriseGlue deployment; `direct_engine` rejects proxy deployment and accepts machine-authenticated pipeline receipts.
 - [ ] ⬜ Add independent deployment ingestion switches, discovery/reconciliation scheduling, and remaining lineage diagnostics. Per-engine `metadataDiscoveryEnabled` is complete across persistence, engine API, JSON bundle apply/export, Engine Detail UI, and the disabled-by-default scheduler. Per-engine `pipelineReceiptEnabled` is likewise complete and machine receipt ingestion rejects disabled engines. Separate deployment discovery ingestion controls and richer lineage diagnostics remain pending.
 - [ ] ⬜ Add Mission Control filters and empty states that explain when the user can see the engine but has no visible process or decision resources. Dashboard context and the selected-engine dashboard view now label resource-scoped runtime access, and Process definitions plus Decisions show authorized-subset empty states; remaining collection views remain pending.
-- [ ] ⬜ Ensure dashboard and Mission Control counters are based on authorized runtime subsets.
+- [x] ✅ Ensure dashboard and Mission Control counters are based on authorized runtime subsets. Resource-aware task and process-instance preview counts fan out only across authorized process-definition keys, and Dashboard KPIs derive from the filtered process-instance collection rather than whole-engine totals.
 - [ ] ⬜ Show `Customer-managed engine authentication` or `No EnterpriseGlue-managed credentials` for sidecar engines instead of implying missing security.
 - [x] ✅ Complete generic config ownership modes for currently configurable resources. Roles, groups, Engine Sets, project-engine targets, and scoped role assignments persist ownership/provenance through config diff/apply/export. Removing a `config_warn` assignment writes a durable source-scoped tombstone; a matching config apply restores the assignment and clears only that override. Memberships remain source-owned.
 - [ ] ⬜ Add duplicate-system-role-to-config-role flow in the UI export/import path.
@@ -2400,7 +2400,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Central-engine tests proving users see different process/decision resources on the same engine.
 - [ ] ⬜ Runtime authorization mode tests proving v1 accepts only `enterpriseglue_authoritative`.
 - [ ] ⬜ Mission Control collection filtering tests for process definitions, decisions, instances, jobs, incidents, batches, migrations, and dashboard summaries.
-- [ ] ⬜ Collection tests prove unsupported unbounded post-filtering fails closed and supported pushdown/bounded filtering returns no unauthorized rows or counts.
+- [x] ✅ Collection tests prove unsupported resource-aware access with no visible inventory fails closed, while supported bounded process/decision collection and count paths push authorized keys into runtime queries and return no whole-engine rows or totals.
 - [ ] ⬜ Detail/mutation tests prove client-supplied process/tenant lineage is ignored and live resolved lineage controls the decision.
 - [ ] ⬜ Engine selector and Dashboard tests prove custom-role and runtime-resource-only users see permitted engines without legacy role strings and never receive whole-central-engine counts.
 - [ ] ⬜ Permission snapshot tests prove runtime resource keys are not serialized into `GET /api/authz/me/permissions`.

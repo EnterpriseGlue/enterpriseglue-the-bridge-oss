@@ -9,6 +9,7 @@ import {
   getActiveActivityCounts,
   getProcessInstanceVariableHistory,
   getProcessInstanceExecutionDetails,
+  previewProcessInstanceCount,
   suspendProcessInstanceById,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
 
@@ -40,6 +41,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(false),
+    getVisibleRuntimeResources: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -127,6 +129,33 @@ describe('mission-control shared mission_control routes', () => {
       resourceId: 'engine-77',
     }));
     expect(getActiveActivityCounts).toHaveBeenCalledWith('engine-77', 'pd-1');
+  });
+
+  it('sums preview counts only across authorized process definitions on resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
+      { resourceKey: 'payments' },
+      { resourceKey: 'invoices' },
+    ]);
+    vi.mocked(previewProcessInstanceCount).mockImplementation(async (_engineId, body: any) => ({
+      count: body.processDefinitionKey === 'payments' ? 4 : 1,
+    }));
+
+    const response = await request(app)
+      .post('/mission-control-api/process-instances/preview-count')
+      .send({ engineId: 'engine-77', active: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ count: 5 });
+    expect(previewProcessInstanceCount).toHaveBeenCalledTimes(2);
+    expect(previewProcessInstanceCount).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'payments' }));
+    expect(previewProcessInstanceCount).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'invoices' }));
+    expect(previewProcessInstanceCount).not.toHaveBeenCalledWith('engine-77', expect.not.objectContaining({ processDefinitionKey: expect.any(String) }));
   });
 
   it('returns variable history for a process instance variable and allows engineId in query', async () => {

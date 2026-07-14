@@ -113,6 +113,33 @@ describe('mission-control tasks routes', () => {
     expect(getTaskCountByQuery).toHaveBeenCalledWith('engine-1', {});
   });
 
+  it('sums task counts only across authorized process definition keys on resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : {},
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
+      { resourceKey: 'payments' },
+      { resourceKey: 'invoices' },
+    ]);
+    (getTaskCountByQuery as unknown as Mock).mockImplementation(async (_engineId, query) => ({
+      count: query.processDefinitionKey === 'payments' ? 2 : 3,
+    }));
+
+    const response = await request(app)
+      .get('/mission-control-api/tasks/count')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ count: 5 });
+    expect(getTaskCountByQuery).toHaveBeenCalledTimes(2);
+    expect(getTaskCountByQuery).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments' });
+    expect(getTaskCountByQuery).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'invoices' });
+    expect(getTaskCountByQuery).not.toHaveBeenCalledWith('engine-1', {});
+  });
+
   it('queries only authorized process definition keys on resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
