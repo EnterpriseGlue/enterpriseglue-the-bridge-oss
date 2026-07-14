@@ -8,6 +8,8 @@ import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/pl
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
+const externalIdentityService = vi.hoisted(() => ({ getActiveLinkedUserIdWithManager: vi.fn(), upsertWithManager: vi.fn() }));
+
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   shouldUseSecureCookies: () => false,
   config: {
@@ -21,6 +23,8 @@ vi.mock('@enterpriseglue/shared/config/index.js', () => ({
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js', () => ({ externalIdentityService }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.js', () => ({
   ssoClaimsMappingService: {
@@ -68,6 +72,8 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsServic
 describe('microsoft service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    externalIdentityService.getActiveLinkedUserIdWithManager.mockResolvedValue(null);
+    externalIdentityService.upsertWithManager.mockResolvedValue({ id: 'external-identity-1', created: true });
   });
 
   it('returns false when Microsoft auth not configured', () => {
@@ -111,6 +117,11 @@ describe('microsoft service', () => {
     }));
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'user' }));
+    expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ entraId: null, entraEmail: null }));
+    expect(externalIdentityService.upsertWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
+      providerId: 'legacy:microsoft', providerType: 'microsoft', subjectId: 'oid-123',
+      directoryTenantId: 'microsoft-tenant', emailHint: 'sso-user@example.com',
+    }));
     expect(result).toEqual(expect.objectContaining({ id: 'user-1', platformRole: 'user' }));
     expect(authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(
       manager,
@@ -178,5 +189,22 @@ describe('microsoft service', () => {
       details: expect.objectContaining({ email: 'sso-user@example.com' }),
     }));
     expect(ssoSyncDiagnosticsService.failRun).not.toHaveBeenCalled();
+  });
+
+  it('prefers the provider-neutral link before consulting the retired Entra column', async () => {
+    const linkedUser = { id: 'user-linked', email: 'before@example.test', authProvider: 'microsoft', firstName: null, lastName: null, platformRole: 'user' };
+    const userRepo = { findOneBy: vi.fn().mockResolvedValue(linkedUser), update: vi.fn(), insert: vi.fn() };
+    const manager = { getRepository: vi.fn().mockReturnValue(userRepo) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: (callback: any) => callback(manager) });
+    (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('user');
+    externalIdentityService.getActiveLinkedUserIdWithManager.mockResolvedValue('user-linked');
+
+    await provisionMicrosoftUser({ oid: 'oid-linked', email: 'person@example.test', tid: 'directory-1' });
+
+    expect(userRepo.findOneBy).toHaveBeenCalledWith({ id: 'user-linked' });
+    expect(userRepo.findOneBy).not.toHaveBeenCalledWith({ entraId: 'oid-linked' });
+    expect(externalIdentityService.upsertWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
+      providerId: 'legacy:microsoft', subjectId: 'oid-linked', userId: 'user-linked',
+    }));
   });
 });

@@ -10,6 +10,17 @@ import { externalIdentityKey, externalIdentityService } from '@enterpriseglue/sh
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
 describe('externalIdentityService', () => {
+  it('returns an active linked user and blocks an explicitly unlinked identity', async () => {
+    const manager = { getRepository: vi.fn().mockReturnValue({ findOne: vi.fn().mockResolvedValue({ userId: 'user-1', status: 'active' }) }) };
+    await expect(externalIdentityService.getActiveLinkedUserIdWithManager(manager as any, {
+      tenantId: 'tenant-1', providerId: 'provider-1', subjectId: 'subject-1',
+    })).resolves.toBe('user-1');
+
+    manager.getRepository.mockReturnValue({ findOne: vi.fn().mockResolvedValue({ userId: 'user-1', status: 'unlinked' }) });
+    await expect(externalIdentityService.getActiveLinkedUserIdWithManager(manager as any, {
+      tenantId: 'tenant-1', providerId: 'provider-1', subjectId: 'subject-1',
+    })).rejects.toThrow('requires administrator relinking');
+  });
   it('links two providers to the same user through distinct canonical identity keys', async () => {
     const records = new Map<string, any>();
     const repo = {

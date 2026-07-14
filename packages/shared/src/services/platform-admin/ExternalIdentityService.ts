@@ -40,6 +40,12 @@ export interface UnlinkExternalIdentityResult {
   providerRefreshSessionsRevoked: number;
 }
 
+export interface FindExternalIdentityUserInput {
+  tenantId?: string | null;
+  providerId: string;
+  subjectId: string;
+}
+
 function required(value: string, field: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error(`${field} is required`);
@@ -57,6 +63,18 @@ export function externalIdentityKey(input: Pick<UpsertExternalIdentityInput, 'te
 }
 
 class ExternalIdentityService {
+  async getActiveLinkedUserIdWithManager(manager: EntityManager, input: FindExternalIdentityUserInput): Promise<string | null> {
+    const identityKey = externalIdentityKey({
+      tenantId: optional(input.tenantId),
+      providerId: required(input.providerId, 'providerId'),
+      subjectId: required(input.subjectId, 'subjectId'),
+    });
+    const identity = await manager.getRepository(ExternalIdentity).findOne({ where: { identityKey } });
+    if (!identity) return null;
+    if (identity.status === 'unlinked') throw new Error('External identity has been unlinked and requires administrator relinking');
+    return identity.userId;
+  }
+
   async upsert(input: UpsertExternalIdentityInput): Promise<{ id: string; created: boolean }> {
     return this.upsertInStore(await getDataSource(), input);
   }

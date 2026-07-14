@@ -15,6 +15,9 @@ import { ssoAssignmentMappingService } from './platform-admin/SsoAssignmentMappi
 import { ssoGroupMappingService } from './platform-admin/SsoGroupMappingService.js';
 import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIdentityService.js';
 import { ssoSyncDiagnosticsService, type SsoSyncCounts } from './platform-admin/SsoSyncDiagnosticsService.js';
+import { externalIdentityService } from './platform-admin/ExternalIdentityService.js';
+
+const LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID = 'legacy:microsoft';
 
 /**
  * Microsoft user info from ID token
@@ -219,14 +222,22 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
   try {
     const result = await dataSource.transaction(async (manager) => {
       const userRepo = manager.getRepository(User);
+      const linkedUserId = await externalIdentityService.getActiveLinkedUserIdWithManager(manager, {
+        providerId: LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID,
+        subjectId: userInfo.oid,
+      });
+      const existingByExternalIdentity = linkedUserId ? await userRepo.findOneBy({ id: linkedUserId }) : null;
+      if (linkedUserId && !existingByExternalIdentity) throw new Error('External identity references a missing user account');
 
-      // Check if user exists by entraId
-      const existingByEntraId = await userRepo.findOneBy({ entraId: userInfo.oid });
+      // The old column remains a one-release fallback for installations that
+      // have not yet run the ExternalIdentity backfill migration.
+      const existingByEntraId = existingByExternalIdentity ? null : await userRepo.findOneBy({ entraId: userInfo.oid });
+      const existingUser = existingByExternalIdentity || existingByEntraId;
 
-      if (existingByEntraId) {
+      if (existingUser) {
         // User exists - update profile and last login. The persisted platform
         // role remains compatibility data; SSO authorization is group-backed.
-        const user = existingByEntraId;
+        const user = existingUser;
         await userRepo.update({ id: user.id }, {
           email: userInfo.email,
           entraEmail: userInfo.email,
@@ -234,6 +245,16 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
           lastName: userInfo.family_name || user.lastName,
           lastLoginAt: now,
           updatedAt: now,
+        });
+
+        await externalIdentityService.upsertWithManager(manager, {
+          providerId: LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID,
+          providerType: 'microsoft',
+          subjectId: userInfo.oid,
+          directoryTenantId: userInfo.tid,
+          userId: user.id,
+          emailHint: userInfo.email,
+          now,
         });
 
         syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole);
@@ -254,7 +275,6 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
         const user = existingByEmail;
         await userRepo.update({ id: user.id }, {
           authProvider: 'microsoft',
-          entraId: userInfo.oid,
           entraEmail: userInfo.email,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
@@ -266,12 +286,21 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
           lockedUntil: null,
         });
 
+        await externalIdentityService.upsertWithManager(manager, {
+          providerId: LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID,
+          providerType: 'microsoft',
+          subjectId: userInfo.oid,
+          directoryTenantId: userInfo.tid,
+          userId: user.id,
+          emailHint: userInfo.email,
+          now,
+        });
+
         syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole);
 
         return {
           ...user,
           authProvider: 'microsoft',
-          entraId: userInfo.oid,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
         };
@@ -286,8 +315,8 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
         email: userInfo.email,
         authProvider: 'microsoft',
         passwordHash: null, // Microsoft users don't have passwords
-        entraId: userInfo.oid,
-        entraEmail: userInfo.email,
+        entraId: null,
+        entraEmail: null,
         firstName: userInfo.given_name || null,
         lastName: userInfo.family_name || null,
         platformRole: 'user',
@@ -300,6 +329,15 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
       });
 
       const newUser = await userRepo.findOneBy({ id: userId });
+      await externalIdentityService.upsertWithManager(manager, {
+        providerId: LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID,
+        providerType: 'microsoft',
+        subjectId: userInfo.oid,
+        directoryTenantId: userInfo.tid,
+        userId,
+        emailHint: userInfo.email,
+        now,
+      });
       syncCounts = await syncMicrosoftAuthorizationForUser(manager, userId, userInfo, ssoClaims, resolvedRole);
       return newUser;
     });
