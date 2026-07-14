@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express'
+import { z } from 'zod'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import {
   listProcessInstances,
   getProcessInstance,
@@ -10,8 +12,16 @@ import {
   deleteProcessInstance,
   modifyProcessInstanceVariables,
 } from './service.js'
+import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
 
 const r = Router()
+
+const processInstanceListQuerySchema = z.object({
+  processDefinitionKey: z.string().min(1).optional(),
+  active: z.enum(['true', 'false', '1', '0']).optional(),
+  suspended: z.enum(['true', 'false', '1', '0']).optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
+})
 
 r.use(requireAuth)
 
@@ -23,21 +33,24 @@ const requireProcessInstanceAction = (actionId: string) => requireRuntimeDefinit
 })
 
 // List process instances
-r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('engine.runtime.process-instances.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
-  const { processDefinitionKey, active, suspended } = req.query as { processDefinitionKey?: string; active?: string; suspended?: string }
+r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('engine.runtime.process-instances.read', { resourceKind: 'process_definition' }), validateQuery(processInstanceListQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  const { processDefinitionKey, active, suspended, maxResults } = req.query as { processDefinitionKey?: string; active?: string; suspended?: string; maxResults?: number }
   const engineId = (req as any).engineId as string
   const keys = req.authorizedRuntimeResourceKeys
   const visibleKeys = keys ? keys.filter((key) => !processDefinitionKey || key === processDefinitionKey) : null
+  const baseQuery = {
+    active: active === 'true' || active === '1',
+    suspended: suspended === 'true' || suspended === '1',
+    maxResults,
+  }
   const data = visibleKeys
     ? (await Promise.all(visibleKeys.map((key) => listProcessInstances(engineId, {
+      ...getBoundedRuntimeResourceQuery(baseQuery),
       processDefinitionKey: key,
-      active: active === 'true' || active === '1',
-      suspended: suspended === 'true' || suspended === '1',
     })))).flat()
     : await listProcessInstances(engineId, {
       processDefinitionKey,
-      active: active === 'true' || active === '1',
-      suspended: suspended === 'true' || suspended === '1',
+      ...baseQuery,
     })
   res.json(data)
 }))

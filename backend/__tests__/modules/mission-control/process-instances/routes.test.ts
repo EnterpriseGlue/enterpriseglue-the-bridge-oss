@@ -195,10 +195,29 @@ describe('mission-control process-instances routes', () => {
     expect(listProcessInstances).toHaveBeenCalledTimes(2);
     expect(listProcessInstances).toHaveBeenCalledWith('engine-1', expect.objectContaining({
       processDefinitionKey: 'invoice-process',
+      maxResults: 100,
     }));
     expect(listProcessInstances).toHaveBeenCalledWith('engine-1', expect.objectContaining({
       processDefinitionKey: 'payment-process',
+      maxResults: 100,
     }));
+  });
+
+  it('rejects oversized process-instance collection requests for resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'invoice-process' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances')
+      .query({ engineId: 'engine-1', maxResults: 101 });
+
+    expect(response.status).toBe(403);
+    expect(listProcessInstances).not.toHaveBeenCalled();
   });
 
   it('denies resource-aware collections with no visible process definitions', async () => {

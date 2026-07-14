@@ -14,6 +14,7 @@ export interface ProcessInstanceListParams {
   processDefinitionKey?: string
   active?: boolean
   suspended?: boolean
+  maxResults?: number
 }
 
 export async function listProcessInstances(engineId: string, params: ProcessInstanceListParams = {}): Promise<ProcessInstance[]> {
@@ -21,6 +22,7 @@ export async function listProcessInstances(engineId: string, params: ProcessInst
   if (params.processDefinitionKey) queryParams.processDefinitionKey = params.processDefinitionKey
   if (params.active !== undefined) queryParams.active = params.active
   if (params.suspended !== undefined) queryParams.suspended = params.suspended
+  if (params.maxResults !== undefined) queryParams.maxResults = params.maxResults
   return camundaGet<ProcessInstance[]>(engineId, '/process-instance', queryParams)
 }
 
