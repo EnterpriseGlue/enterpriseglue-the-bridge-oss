@@ -144,7 +144,11 @@ export default function ProcessInstanceDetailPage() {
 
   // 1. Data Fetching Hook
   const instanceData = useInstanceData(instanceId!, {
-    historyProcessInstanceEnabled: historyProcessInstanceReadDecision.allowed,
+    // The browser snapshot intentionally omits runtime-resource grants. The
+    // history read below is the bootstrap for the live-instance read, so let
+    // the authoritative route decide instead of suppressing a valid scoped
+    // request client-side.
+    historyProcessInstanceEnabled: true,
     variablesEnabled: variablesReadDecision.allowed,
     historicVariablesEnabled: historicVariablesReadDecision.allowed,
     activityTreeEnabled: activityTreeReadDecision.allowed,
