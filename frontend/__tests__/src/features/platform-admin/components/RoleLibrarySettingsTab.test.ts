@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import {
+  ConfigRolesFileSchema,
+  EnterpriseGlueConfigBundleSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import { filterRoleLibraryPermissions } from '@src/features/platform-admin/components/RoleLibrarySettingsTab';
+import {
+  buildSystemRoleConfigBundle,
+  configRoleKeyFromSystemRoleKey,
+  isStableConfigKey,
+} from '@src/features/platform-admin/components/configRoleTemplate';
 
 const permissions = [
   { key: 'engine:runtime:view', scope: 'engine' as const, category: 'Engine runtime', label: 'View runtime', description: 'Read instances' },
@@ -26,5 +35,64 @@ describe('RoleLibrarySettingsTab permission filters', () => {
     ];
 
     expect(filterRoleLibraryPermissions(withSensitivePermission, [], '', false, true)).toEqual([withSensitivePermission[3]]);
+  });
+});
+
+describe('system role configuration export', () => {
+  it('derives a custom role key from a system role key', () => {
+    expect(configRoleKeyFromSystemRoleKey('system.engine.operator')).toBe('custom.engine.operator');
+    expect(isStableConfigKey('custom.engine.operator')).toBe(true);
+    expect(isStableConfigKey('Custom Engine Operator')).toBe(false);
+  });
+
+  it('builds an importable explicit-permission configuration bundle', () => {
+    const exported = buildSystemRoleConfigBundle({
+      bundleKey: 'acme.authz',
+      tenantKey: 'acme',
+      roleKey: 'custom.engine.operator',
+      roleName: 'Production engine operator',
+      description: 'Managed in Git',
+      scope: 'engine',
+      permissionIds: ['engine:view', 'engine:deploy', 'engine:view'],
+      ownershipMode: 'config_locked',
+    });
+
+    expect(exported).toEqual({
+      bundle: {
+        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        kind: 'EnterpriseGlueConfigBundle',
+        metadata: { key: 'acme.authz', owner: 'platform' },
+        tenantKey: 'acme',
+        mode: 'preview_only',
+        settings: {},
+        imports: ['./roles.json'],
+      },
+      files: {
+        './roles.json': {
+          roles: [{
+            key: 'custom.engine.operator',
+            name: 'Production engine operator',
+            description: 'Managed in Git',
+            scope: 'engine',
+            permissions: ['engine:deploy', 'engine:view'],
+            ownershipMode: 'config_locked',
+          }],
+        },
+      },
+    });
+    expect(EnterpriseGlueConfigBundleSchema.safeParse(exported.bundle).success).toBe(true);
+    expect(ConfigRolesFileSchema.safeParse(exported.files['./roles.json']).success).toBe(true);
+  });
+
+  it('rejects invalid bundle and role keys', () => {
+    expect(() => buildSystemRoleConfigBundle({
+      bundleKey: 'Acme Authz',
+      tenantKey: 'acme',
+      roleKey: 'system.engine.operator',
+      roleName: 'Operator',
+      scope: 'engine',
+      permissionIds: ['engine:view'],
+      ownershipMode: 'config_warn',
+    })).toThrow('Bundle key');
   });
 });

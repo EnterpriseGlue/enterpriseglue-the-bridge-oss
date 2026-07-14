@@ -110,6 +110,8 @@ Recommended workflow:
 4. Assign roles to internal groups at platform, project, engine, Engine Set, runtime-resource, or runtime-resource-set scope.
 5. Map external entitlements to those groups.
 
+To move a default role into configuration management, open the system role in **Platform Settings > Role Library** and select **Export config role**. Set the owning bundle key, tenant key, stable `custom.*` role key, and ownership mode. The exported JSON contains an explicit permission snapshot; import it in **Platform Settings > Configuration Bundles**, preview the changes, and apply that exact preview.
+
 Users can have different roles on different engines because assignments are scoped:
 
 ```text

@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Add, Copy, Save } from '@carbon/icons-react';
+import { Add, Copy, Download, Save } from '@carbon/icons-react';
 import { Accordion, AccordionItem, Button, Checkbox, InlineNotification, Modal, Search, Select, SelectItem, SkeletonText, Tag, TextArea, TextInput, Tile } from '@carbon/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { getPermissionRiskForKey } from '../../../shared/auth/permissionRisk';
+import {
+  buildSystemRoleConfigBundle,
+  configRoleKeyFromSystemRoleKey,
+  isStableConfigKey,
+  type ConfigRoleTemplateOwnershipMode,
+} from './configRoleTemplate';
 
 type Scope = 'platform' | 'project' | 'engine' | 'engine_runtime_resource';
 interface Role { id: string; key: string; name: string; description: string | null; scope: Scope; kind: 'system' | 'custom'; isEditable: boolean; isArchived: boolean; source?: string; sourceRef?: string | null; ownershipMode?: 'manual' | 'config_locked' | 'config_warn'; driftStatus?: string | null; permissionCount: number; }
@@ -13,6 +19,12 @@ interface RoleDetail extends Role { permissions: string[]; }
 export interface RoleLibraryPermission { key: string; scope: Scope; category: string; label: string; description: string; }
 
 const blank = { name: '', description: '', scope: 'engine' as Scope };
+const blankConfig = {
+  bundleKey: 'example.authz',
+  tenantKey: 'default',
+  roleKey: 'custom.role',
+  ownershipMode: 'config_locked' as ConfigRoleTemplateOwnershipMode,
+};
 
 export function filterRoleLibraryPermissions(
   permissions: RoleLibraryPermission[],
@@ -102,7 +114,9 @@ export default function RoleLibrarySettingsTab() {
   const [roleSearch, setRoleSearch] = useState('');
   const [draft, setDraft] = useState<string[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createTarget, setCreateTarget] = useState<'manual' | 'config'>('manual');
   const [form, setForm] = useState(blank);
+  const [configForm, setConfigForm] = useState(blankConfig);
   const [error, setError] = useState<string | null>(null);
   const roles = rolesQuery.data || [];
   const selected = roles.find((role) => role.id === selectedId) || roles[0] || null;
@@ -138,11 +152,37 @@ export default function RoleLibrarySettingsTab() {
     },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to create role').message),
   });
-  const startCreate = (copy = false) => {
+  const startCreate = (copy = false, target: 'manual' | 'config' = 'manual') => {
     setError(null);
+    setCreateTarget(target);
     setForm(copy && selected ? { name: `${selected.name} copy`, description: selected.description || '', scope: selected.scope } : blank);
+    setConfigForm(copy && selected ? { ...blankConfig, roleKey: configRoleKeyFromSystemRoleKey(selected.key) } : blankConfig);
     setDraft(copy ? detail?.permissions || [] : []);
     setCreateOpen(true);
+  };
+  const exportConfigRole = () => {
+    try {
+      const output = buildSystemRoleConfigBundle({
+        bundleKey: configForm.bundleKey,
+        tenantKey: configForm.tenantKey,
+        roleKey: configForm.roleKey,
+        roleName: form.name,
+        description: form.description,
+        scope: form.scope,
+        permissionIds: draft,
+        ownershipMode: configForm.ownershipMode,
+      });
+      const blob = new Blob([JSON.stringify(output, null, 2)], { type: 'application/json' });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.download = `${configForm.roleKey.replace(/[^a-z0-9.-]+/g, '-')}.config-bundle.json`;
+      anchor.click();
+      URL.revokeObjectURL(href);
+      setCreateOpen(false);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : 'Unable to export configuration role.');
+    }
   };
 
   if (!read.allowed) return <UnauthorizedEmptyState title="Role library unavailable" reason={read.reason || 'Missing role read permission.'} />;
@@ -162,17 +202,24 @@ export default function RoleLibrarySettingsTab() {
         </div>
       </div>
       <div>{selected && detail ? <>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-4)', alignItems: 'start', flexWrap: 'wrap' }}><div><h4 style={{ margin: 0 }}>{selected.name}</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{selected.description || 'No description'} · {selected.permissionCount} permissions</p></div><div style={{ display: 'flex', gap: 'var(--spacing-3)' }}>{selected.kind === 'system' && <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={() => startCreate(true)}>Duplicate</Button></GuardedAction>}</div></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-4)', alignItems: 'start', flexWrap: 'wrap' }}><div><h4 style={{ margin: 0 }}>{selected.name}</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{selected.description || 'No description'} · {selected.permissionCount} permissions</p></div><div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>{selected.kind === 'system' && <><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={() => startCreate(true)}>Duplicate</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Download} onClick={() => startCreate(true, 'config')}>Export config role</Button></GuardedAction></>}</div></div>
         {selected.source === 'config' && <InlineNotification kind={configWarnEditable ? 'warning' : 'info'} title={configWarnEditable ? 'Configuration warning mode' : 'Managed by configuration'} subtitle={configWarnEditable ? 'Local edits are allowed and will be marked as drift until the configuration bundle is reconciled.' : 'Update this role in its configuration bundle.'} hideCloseButton lowContrast style={{ marginTop: 'var(--spacing-4)' }} />}
         {editable && <div style={{ position: 'sticky', top: 'var(--spacing-3)', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', marginTop: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => setDraft(detail.permissions)}>Reset</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => save.mutate()}>Save</Button></GuardedAction></div>}
         <div style={{ marginTop: 'var(--spacing-5)' }}><PermissionPicker permissions={selectedRolePermissions} draft={draft} editable={editable && manage.allowed} idPrefix="role-library" onToggle={toggle} /></div>
       </> : <InlineNotification kind="info" title="Select a role" subtitle="Choose a role from the library to inspect its permissions." hideCloseButton lowContrast />}</div>
     </div>
-    <Modal open={createOpen} size="lg" modalHeading="Create custom role" primaryButtonText="Create" secondaryButtonText="Cancel" onRequestClose={() => setCreateOpen(false)} onRequestSubmit={() => create.mutate()} primaryButtonDisabled={!form.name.trim() || !draft.length || create.isPending}>
+    <Modal open={createOpen} size="lg" modalHeading={createTarget === 'config' ? 'Export configuration role' : 'Create custom role'} primaryButtonText={createTarget === 'config' ? 'Export JSON' : 'Create'} secondaryButtonText="Cancel" onRequestClose={() => setCreateOpen(false)} onRequestSubmit={() => createTarget === 'config' ? exportConfigRole() : create.mutate()} primaryButtonDisabled={!form.name.trim() || !draft.length || create.isPending || (createTarget === 'config' && (!isStableConfigKey(configForm.bundleKey) || !isStableConfigKey(configForm.tenantKey) || !isStableConfigKey(configForm.roleKey) || !configForm.roleKey.startsWith('custom.')))}>
       <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
+        {createTarget === 'config' && <InlineNotification kind="info" title="Configuration-managed duplicate" subtitle="Exports an explicit, reproducible permission snapshot. Import the JSON in Platform Settings > Configuration Bundles, preview it, then apply the exact preview." hideCloseButton lowContrast />}
         <TextInput id="role-library-name" labelText="Role name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
         <TextArea id="role-library-description" labelText="Description" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
         <Select id="role-library-scope" labelText="Scope" value={form.scope} onChange={(event) => { setForm((current) => ({ ...current, scope: event.target.value as Scope })); setDraft([]); }}><SelectItem value="platform" text="Platform" /><SelectItem value="project" text="Project" /><SelectItem value="engine" text="Engine" /><SelectItem value="engine_runtime_resource" text="Engine runtime resource" /></Select>
+        {createTarget === 'config' && <>
+          <TextInput id="role-library-config-bundle-key" labelText="Bundle key" helperText="Use the key of the bundle that will own this role." value={configForm.bundleKey} invalid={Boolean(configForm.bundleKey) && !isStableConfigKey(configForm.bundleKey)} invalidText="Use a stable lowercase configuration key." onChange={(event) => setConfigForm((current) => ({ ...current, bundleKey: event.target.value }))} />
+          <TextInput id="role-library-config-tenant-key" labelText="Tenant key" value={configForm.tenantKey} invalid={Boolean(configForm.tenantKey) && !isStableConfigKey(configForm.tenantKey)} invalidText="Use a stable lowercase configuration key." onChange={(event) => setConfigForm((current) => ({ ...current, tenantKey: event.target.value }))} />
+          <TextInput id="role-library-config-role-key" labelText="Custom role key" helperText="Configuration-managed roles must use the custom.* namespace." value={configForm.roleKey} invalid={Boolean(configForm.roleKey) && (!isStableConfigKey(configForm.roleKey) || !configForm.roleKey.startsWith('custom.'))} invalidText="Use a stable lowercase custom.* key." onChange={(event) => setConfigForm((current) => ({ ...current, roleKey: event.target.value }))} />
+          <Select id="role-library-config-ownership" labelText="Configuration ownership" value={configForm.ownershipMode} onChange={(event) => setConfigForm((current) => ({ ...current, ownershipMode: event.target.value as ConfigRoleTemplateOwnershipMode }))}><SelectItem value="config_locked" text="Locked to configuration" /><SelectItem value="config_warn" text="Allow local edits with drift warning" /></Select>
+        </>}
         <PermissionPicker key={form.scope} permissions={createRolePermissions} draft={draft} editable={manage.allowed} idPrefix="create-role" onToggle={toggle} />
       </div>
     </Modal>
