@@ -5,12 +5,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
-import { useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
+import { authzQueryKeys, useIdentityEntitlementMappings, useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
+import type { HumanIdentityEntitlementType, IdentityEntitlementMapping } from '../hooks/useAuthzApi';
 
-type EntitlementType = 'group' | 'role' | 'attribute' | 'authenticated';
-type ListedEntitlementType = EntitlementType | 'scope';
+type EntitlementType = HumanIdentityEntitlementType;
 type MatchOperator = 'exact' | 'contains' | 'exists';
-interface Mapping { id: string; providerKey: string; targetGroupKey: string; entitlementType: ListedEntitlementType; externalId: string | null; matchOperator: MatchOperator; syncMode: 'additive' | 'authoritative'; isActive: boolean; sourceRef: string | null; }
+type Mapping = IdentityEntitlementMapping;
 interface Provider { id: string; key: string; protocol: string; isEnabled: boolean; }
 interface Group { id: string; key: string; name: string; isArchived: boolean; }
 interface Role { id: string; name: string; scope: string; isAssignable: boolean; isArchived: boolean; }
@@ -29,7 +29,7 @@ export default function IdentityMappingsSettingsTab() {
   const platformRoleManage = useActionDecision('platform.sso.platform-role-mappings.manage', resource);
   const rolesManage = useActionDecision('platform.authz.roles.manage', resource);
   const groupsManage = useActionDecision('platform.authz.groups.manage', resource);
-  const mappingsQuery = useQuery({ queryKey: ['identity-mappings'], queryFn: () => apiClient.get<Mapping[]>('/api/identity/mappings'), enabled: read.allowed });
+  const mappingsQuery = useIdentityEntitlementMappings({ enabled: read.allowed });
   const legacyCoverageQuery = useQuery({ queryKey: ['legacy-mapping-coverage'], queryFn: () => apiClient.get<LegacyMappingCoverageItem[]>('/api/authz/legacy-mapping-coverage'), enabled: read.allowed });
   const retirementReadinessQuery = useQuery({ queryKey: ['legacy-mapping-retirement-readiness'], queryFn: () => apiClient.get<LegacyMappingRetirementReadiness>('/api/authz/legacy-mapping-retirement-readiness'), enabled: read.allowed });
   const providersQuery = useQuery({ queryKey: ['identity-providers'], queryFn: () => apiClient.get<Provider[]>('/api/identity/providers'), enabled: manage.allowed });
@@ -100,10 +100,10 @@ export default function IdentityMappingsSettingsTab() {
         throw error;
       }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-mappings'] }); queryClient.invalidateQueries({ queryKey: ['authz-groups'] }); queryClient.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'role-assignments'] }); setOpen(false); setEditing(null); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setError(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityEntitlementMappings }); queryClient.invalidateQueries({ queryKey: ['authz-groups'] }); queryClient.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'role-assignments'] }); setOpen(false); setEditing(null); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setError(null); },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to save identity mapping').message),
   });
-  const remove = useMutation({ mutationFn: (id: string) => apiClient.delete(`/api/identity/mappings/${encodeURIComponent(id)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-mappings'] }); setRemoveTarget(null); } });
+  const remove = useMutation({ mutationFn: (id: string) => apiClient.delete(`/api/identity/mappings/${encodeURIComponent(id)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityEntitlementMappings }); setRemoveTarget(null); } });
   const grantEngineAccess = useMutation({
     mutationFn: () => {
       const group = groups.find((item) => item.key === accessTarget?.targetGroupKey);
@@ -134,7 +134,7 @@ export default function IdentityMappingsSettingsTab() {
   });
   const retireLegacyMappings = useMutation({
     mutationFn: (globalScope: boolean) => apiClient.post(globalScope ? '/api/authz/legacy-mapping-retirement/disable-global' : '/api/authz/legacy-mapping-retirement/disable', { confirmation: retirementConfirmation }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['legacy-mapping-coverage'] }); queryClient.invalidateQueries({ queryKey: ['legacy-mapping-retirement-readiness'] }); queryClient.invalidateQueries({ queryKey: ['identity-mappings'] }); setRetirementOpen(false); setRetirementConfirmation(''); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['legacy-mapping-coverage'] }); queryClient.invalidateQueries({ queryKey: ['legacy-mapping-retirement-readiness'] }); queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityEntitlementMappings }); setRetirementOpen(false); setRetirementConfirmation(''); },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to retire legacy mappings').message),
   });
   const startCreate = () => { setEditing(null); setForm(emptyForm()); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionScopeType('engine'); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };

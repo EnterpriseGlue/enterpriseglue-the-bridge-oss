@@ -535,13 +535,17 @@ export interface SsoGroupMapping {
   riskAcknowledged?: boolean;
 }
 
+export type HumanIdentityEntitlementType = 'group' | 'role' | 'attribute' | 'authenticated';
+/** `scope` is retained solely to render and retire pre-migration rows. */
+export type ListedIdentityEntitlementType = HumanIdentityEntitlementType | 'scope';
+
 export interface IdentityEntitlementMapping {
   id: string;
   providerId: string;
   providerKey: string;
   targetGroupId: string;
   targetGroupKey: string;
-  entitlementType: 'group' | 'role' | 'scope' | 'attribute';
+  entitlementType: ListedIdentityEntitlementType;
   externalId: string | null;
   matchOperator: 'exact' | 'contains' | 'exists';
   syncMode: 'authoritative' | 'additive';
@@ -1915,10 +1919,11 @@ export function useSsoGroupMappings() {
   });
 }
 
-export function useIdentityEntitlementMappings() {
+export function useIdentityEntitlementMappings(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.identityEntitlementMappings,
     queryFn: () => apiClient.get<IdentityEntitlementMapping[]>('/api/identity/mappings'),
+    enabled: options.enabled ?? true,
   });
 }
 
