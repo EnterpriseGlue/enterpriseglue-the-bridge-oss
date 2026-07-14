@@ -676,6 +676,7 @@ class SsoAssignmentMappingServiceClass {
               assignmentKey,
               scopeType: target.scopeType,
               scopeId: target.scopeId,
+              sourceMappingId: mapping.id,
               sourceRef: mapping.id,
               expiresAt: null,
               lastSeenAt: now,
@@ -718,7 +719,7 @@ class SsoAssignmentMappingServiceClass {
               scopeType: target.scopeType,
               scopeId: target.scopeId,
               source: 'sso',
-              sourceMappingId: null,
+              sourceMappingId: mapping.id,
               sourceRef: mapping.id,
               expiresAt: null,
               lastSeenAt: now,
@@ -1157,16 +1158,16 @@ class SsoAssignmentMappingServiceClass {
 
   private async deleteAssignmentsForMapping(dataSource: SsoAssignmentMappingStore, mappingId: string): Promise<void> {
     const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+    // `sourceRef` was the only lineage written by older releases. Keep that
+    // fallback until every deployed database has received the backfill below.
+    const mappingAssignments = [
+      { source: 'sso', sourceMappingId: mappingId },
+      { source: 'sso', sourceMappingId: IsNull(), sourceRef: mappingId },
+    ];
     const assignments = await assignmentRepo.find({
-      where: {
-        source: 'sso',
-        sourceMappingId: mappingId,
-      },
+      where: mappingAssignments,
     });
-    await assignmentRepo.delete({
-      source: 'sso',
-      sourceMappingId: mappingId,
-    });
+    await assignmentRepo.delete(mappingAssignments);
     for (const assignment of assignments) {
       await ssoEngineAccessSnapshotService.markAssignmentRemoved(dataSource, assignment, {
         status: 'mapping_disabled',

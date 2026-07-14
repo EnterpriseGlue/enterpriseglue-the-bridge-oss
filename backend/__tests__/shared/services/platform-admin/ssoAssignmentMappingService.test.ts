@@ -292,7 +292,7 @@ describe('ssoAssignmentMappingService', () => {
       scopeType: 'engine',
       scopeId: 'engine-1',
       source: 'sso',
-      sourceMappingId: null,
+      sourceMappingId: 'mapping-1',
       sourceRef: 'mapping-1',
     }));
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
@@ -934,7 +934,10 @@ describe('ssoAssignmentMappingService', () => {
       targetSelectorType: 'all_engines',
       isActive: false,
     }));
-    expect(deleteAssignments).toHaveBeenCalledWith({ source: 'sso', sourceMappingId: 'mapping-1' });
+    expect(deleteAssignments).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ source: 'sso', sourceMappingId: 'mapping-1' }),
+      expect.objectContaining({ source: 'sso', sourceRef: 'mapping-1' }),
+    ]));
   });
 
   it('allows SSO assignment mappings to target assignable custom engine roles', async () => {
@@ -1315,7 +1318,7 @@ describe('ssoAssignmentMappingService', () => {
       scopeType: 'engine_set',
       scopeId: engineSetId,
       source: 'sso',
-      sourceMappingId: null,
+      sourceMappingId: 'mapping-label',
       sourceRef: 'mapping-label',
     }));
   });
@@ -1404,7 +1407,7 @@ describe('ssoAssignmentMappingService', () => {
       scopeType: 'engine_set',
       scopeId: engineSetId,
       source: 'sso',
-      sourceMappingId: null,
+      sourceMappingId: 'mapping-scheduled-label',
       sourceRef: 'mapping-scheduled-label',
     }));
   });
@@ -1482,8 +1485,14 @@ describe('ssoAssignmentMappingService', () => {
 
     await ssoAssignmentMappingService.deleteMapping('mapping-1');
 
-    expect(findAssignments).toHaveBeenCalledWith({ where: { source: 'sso', sourceMappingId: 'mapping-1' } });
-    expect(deleteAssignment).toHaveBeenCalledWith({ source: 'sso', sourceMappingId: 'mapping-1' });
+    expect(findAssignments).toHaveBeenCalledWith({ where: expect.arrayContaining([
+      expect.objectContaining({ source: 'sso', sourceMappingId: 'mapping-1' }),
+      expect.objectContaining({ source: 'sso', sourceRef: 'mapping-1' }),
+    ]) });
+    expect(deleteAssignment).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ source: 'sso', sourceMappingId: 'mapping-1' }),
+      expect.objectContaining({ source: 'sso', sourceRef: 'mapping-1' }),
+    ]));
     expect(deleteMapping).toHaveBeenCalledWith({ id: 'mapping-1' });
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
