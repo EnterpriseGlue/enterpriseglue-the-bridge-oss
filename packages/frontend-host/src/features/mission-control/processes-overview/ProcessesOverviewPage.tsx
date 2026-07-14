@@ -124,7 +124,14 @@ function runtimeDecisionFor(
   fallback: UiAuthzDecision,
 ): UiAuthzDecision {
   const runtimeDecision = instance.runtimeActionDecisions?.[runtimeAction]
-  if (!runtimeDecision) return fallback
+  if (!runtimeDecision) {
+    return {
+      ...fallback,
+      allowed: false,
+      state: 'disabled',
+      reason: 'Action decision unavailable for this runtime resource',
+    }
+  }
   return {
     ...fallback,
     allowed: runtimeDecision.allowed,
