@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { requireOnboarding } from '@enterpriseglue/shared/middleware/auth.js';
@@ -7,16 +6,14 @@ import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validatePassword } from '@enterpriseglue/shared/utils/password.js';
 import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
-import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
+import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 
 const router = Router();
 
@@ -38,16 +35,13 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
     lastName,
   });
   const dataSource = await getDataSource();
-  const refreshTokenRepo = dataSource.getRepository(RefreshToken);
   const userRepo = dataSource.getRepository(User);
   const user = await userRepo.findOneByOrFail({ id: result.user.id });
   const capabilities = await buildUserCapabilities({
     userId: user.id,
+    tenantId: req.tenant?.tenantId || null,
   });
   const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
-  const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
-  const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
   const now = Date.now();
 
   await userRepo.update({ id: user.id }, {
@@ -55,16 +49,9 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
     updatedAt: now,
   });
 
-  await refreshTokenRepo.insert({
-    id: generateId(),
-    userId: user.id,
-    tokenHash: refreshTokenHash,
-    expiresAt: now + 7 * 24 * 60 * 60 * 1000,
-    createdAt: now,
-    deviceInfo: JSON.stringify({
-      userAgent: req.headers['user-agent'],
-      ip: req.ip,
-    }),
+  const session = await authSessionService.issue(user, {
+    userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+    ipAddress: req.ip,
   });
 
   await logAudit({
@@ -78,16 +65,16 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
   });
 
   res.clearCookie('onboardingToken', { path: '/' });
-  res.cookie('accessToken', accessToken, {
+  res.cookie('accessToken', session.accessToken, {
     httpOnly: true,
-    secure: config.nodeEnv === 'production',
+    secure: shouldUseSecureCookies(),
     sameSite: 'lax',
-    maxAge: config.jwtAccessTokenExpires * 1000,
+    maxAge: session.expiresIn * 1000,
     path: '/',
   });
-  res.cookie('refreshToken', refreshToken, {
+  res.cookie('refreshToken', session.refreshToken, {
     httpOnly: true,
-    secure: config.nodeEnv === 'production',
+    secure: shouldUseSecureCookies(),
     sameSite: 'lax',
     maxAge: config.jwtRefreshTokenExpires * 1000,
     path: '/',

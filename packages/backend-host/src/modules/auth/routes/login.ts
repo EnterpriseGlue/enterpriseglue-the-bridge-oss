@@ -1,18 +1,14 @@
 import { Router } from 'express';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
-import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { addCaseInsensitiveEquals, getDatabaseType } from '@enterpriseglue/shared/infrastructure/persistence/adapters/QueryHelpers.js';
 import { verifyPassword } from '@enterpriseglue/shared/utils/password.js';
-import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
-import bcrypt from 'bcryptjs';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { authLimiter , apiLimiter} from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
-import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
@@ -20,6 +16,7 @@ import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/in
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
+import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 
 const router = Router();
 
@@ -48,7 +45,6 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
 
   const ssoRequired = await isSsoRequiredForLogin(dataSource);
   const userRepo = dataSource.getRepository(User);
-  const refreshTokenRepo = dataSource.getRepository(RefreshToken);
 
   // Find user by email (case-insensitive)
   const activeValue = getDatabaseType() === 'oracle' ? 1 : true;
@@ -177,25 +173,9 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
     details: { email },
   });
 
-  // Generate tokens
-  const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
-
-  // Store refresh token (hashed)
-  const refreshTokenId = generateId();
-  const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
-
-  await refreshTokenRepo.insert({
-    id: refreshTokenId,
-    userId: user.id,
-    tokenHash: refreshTokenHash,
-    expiresAt,
-    createdAt: Date.now(),
-    deviceInfo: JSON.stringify({
-      userAgent: req.headers['user-agent'],
-      ip: req.ip,
-    })
+  const session = await authSessionService.issue(user, {
+    userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+    ipAddress: req.ip,
   });
 
   // Check email verification status
@@ -212,15 +192,15 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   const platformAdministratorUserIds = preloadedPlatformAdministratorUserIds || await getActivePlatformAdministratorUserIds([user.id], dataSource);
   
   // Set tokens in HTTP-only cookies (same pattern as Microsoft OAuth)
-  res.cookie('accessToken', accessToken, {
+  res.cookie('accessToken', session.accessToken, {
     httpOnly: true,
     secure: shouldUseSecureCookies(),
     sameSite: 'lax',
-    maxAge: config.jwtAccessTokenExpires * 1000,
+    maxAge: session.expiresIn * 1000,
     path: '/',
   });
 
-  res.cookie('refreshToken', refreshToken, {
+  res.cookie('refreshToken', session.refreshToken, {
     httpOnly: true,
     secure: shouldUseSecureCookies(),
     sameSite: 'lax',

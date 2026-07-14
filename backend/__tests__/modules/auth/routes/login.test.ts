@@ -13,6 +13,7 @@ import { getDatabaseType } from '@enterpriseglue/shared/db/adapters/QueryHelpers
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
 const getActivePlatformAdministratorUserIds = vi.hoisted(() => vi.fn().mockResolvedValue(new Set()));
+const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -41,10 +42,7 @@ vi.mock('@enterpriseglue/shared/db/adapters/QueryHelpers.js', () => ({
   getDatabaseType: vi.fn().mockReturnValue('postgres'),
 }));
 
-vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
-  generateAccessToken: vi.fn().mockReturnValue('access-token'),
-  generateRefreshToken: vi.fn().mockReturnValue('refresh-token'),
-}));
+vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
 
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
@@ -70,9 +68,6 @@ describe('auth login routes', () => {
   let ssoProviderRepo: {
     count: Mock;
   };
-  let refreshTokenRepo: {
-    insert: Mock;
-  };
   let identityProviderRepo: { count: Mock };
 
   beforeEach(() => {
@@ -83,6 +78,7 @@ describe('auth login routes', () => {
     app.use(errorHandler);
     vi.clearAllMocks();
     getActivePlatformAdministratorUserIds.mockResolvedValue(new Set());
+    authSessionService.issue.mockResolvedValue({ accessToken: 'access-token', refreshToken: 'refresh-token', expiresIn: 900 });
 
     userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
@@ -99,15 +95,11 @@ describe('auth login routes', () => {
     };
     identityProviderRepo = { count: vi.fn().mockResolvedValue(0) };
 
-    refreshTokenRepo = {
-      insert: vi.fn(),
-    };
-
     const getRepository = (entity: unknown) => {
       if (entity === User) return userRepo;
       if (entity === SsoProvider) return ssoProviderRepo;
       if (entity === IdentityProvider) return identityProviderRepo;
-      return refreshTokenRepo;
+      return {};
     };
     const manager = { getRepository };
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -269,7 +261,10 @@ describe('auth login routes', () => {
       expect.objectContaining({ getRepository: expect.any(Function) }),
       'user-1',
     );
-    expect(refreshTokenRepo.insert).toHaveBeenCalled();
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', email: 'user@example.com' }),
+      expect.any(Object),
+    );
     expect(buildUserCapabilities as unknown as Mock).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'user-1', tenantId: null })
     );

@@ -8,7 +8,6 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
-import { RefreshToken } from '@enterpriseglue/shared/db/entities/RefreshToken.js';
 import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
@@ -21,6 +20,7 @@ import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 const authState = vi.hoisted(() => ({
   user: { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' } as any,
 }));
+const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -102,9 +102,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 
 vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
   generateOnboardingToken: vi.fn().mockReturnValue('onboarding-token'),
-  generateAccessToken: vi.fn().mockReturnValue('access-token'),
-  generateRefreshToken: vi.fn().mockReturnValue('refresh-token'),
 }));
+
+vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
 
 vi.mock('@enterpriseglue/shared/utils/password.js', () => ({
   validatePassword: vi.fn().mockReturnValue({ valid: true, errors: [] }),
@@ -145,10 +145,6 @@ describe('invitation and onboarding routes', () => {
   let engineRepo: {
     findOne: ReturnType<typeof vi.fn>;
   };
-  let refreshTokenRepo: {
-    insert: ReturnType<typeof vi.fn>;
-  };
-
   beforeEach(() => {
     app = express();
     app.disable('x-powered-by');
@@ -157,6 +153,11 @@ describe('invitation and onboarding routes', () => {
     app.use(onboardingRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
+    authSessionService.issue.mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresIn: 900,
+    });
     authState.user = { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' };
 
     userRepo = {
@@ -178,16 +179,11 @@ describe('invitation and onboarding routes', () => {
       findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }),
     };
 
-    refreshTokenRepo = {
-      insert: vi.fn().mockResolvedValue(undefined),
-    };
-
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
         if (entity === Project) return projectRepo;
         if (entity === Engine) return engineRepo;
-        if (entity === RefreshToken) return refreshTokenRepo;
         throw new Error('Unexpected repository');
       },
     });
@@ -491,7 +487,10 @@ describe('invitation and onboarding routes', () => {
       firstName: 'Invitee',
       lastName: 'Example',
     });
-    expect(refreshTokenRepo.insert).toHaveBeenCalled();
-    expect(buildUserCapabilities).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', email: 'invitee@example.com' }),
+      expect.objectContaining({ userAgent: null, ipAddress: expect.any(String) }),
+    );
+    expect(buildUserCapabilities).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', tenantId: null }));
   });
 });
