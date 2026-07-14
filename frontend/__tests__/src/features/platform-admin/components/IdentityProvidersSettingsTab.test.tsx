@@ -155,6 +155,30 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.getByLabelText('Identity provider SSO URL')).toHaveValue('https://idp.example.test/sso');
   });
 
+  it('checks migration readiness for a direct SAML replacement', async () => {
+    server.use(
+      http.get('/api/identity/providers', () => HttpResponse.json([{
+        id: 'migrated-saml-1', key: 'migrated-saml', protocol: 'saml', isEnabled: true, authenticationMode: 'direct', directoryTenantId: null,
+        configurationJson: '{}', syncJson: '{}', ownershipMode: 'manual', sourceRef: null,
+      }])),
+      http.get('/api/sso/providers', () => HttpResponse.json([{
+        id: 'legacy-saml-1', name: 'Legacy SAML', type: 'saml', enabled: true,
+      }])),
+      http.get('/api/identity/providers/migration-readiness', () => HttpResponse.json({
+        ready: true, targetProviderKey: 'migrated-saml', legacyProviderId: 'legacy-saml-1', requiredDefaultGroupId: 'system.group.authenticated_users', activeMappingCount: 1,
+        checks: { targetExists: true, directOidc: false, directLoginProtocol: true, enabled: true, secretReferenceConfigured: true, secretReferenceAvailable: true, activeMappingsConfigured: true, defaultRoleMappingConfigured: true }, blockers: [],
+      })),
+    );
+    renderTab();
+    await screen.findByText('migrated-saml');
+    fireEvent.change(screen.getByLabelText('Legacy provider'), { target: { value: 'legacy-saml-1' } });
+    await openProviderActions();
+    fireEvent.click(providerMenuItem('Check migration readiness'));
+
+    expect(await screen.findByText('Migration readiness: migrated-saml')).toBeInTheDocument();
+    expect(screen.getByText(/Ready for an operator-managed legacy cutover/)).toBeInTheDocument();
+  });
+
   it('distinguishes config-locked and config-warning provider ownership', () => {
     expect(isConfigLockedIdentityProvider({ ownershipMode: 'config_locked' })).toBe(true);
     expect(isConfigLockedIdentityProvider({ ownershipMode: 'config_warn' })).toBe(false);
