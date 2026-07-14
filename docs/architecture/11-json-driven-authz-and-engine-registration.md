@@ -2235,7 +2235,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add settings schema for `engineRuntimeAuthorizationMode` with `enterpriseglue_authoritative` enabled in v1 and the other modes rejected as unsupported.
 - [x] ✅ Add and persist per-engine `runtimeAccessScope` and `deploymentIntegration` schemas with distributed-engine defaults.
 - [ ] ⬜ Add first-class engine `connectionMode = direct | customer_sidecar` and platform policy for credentialless private-sidecar endpoints; reject `auth.type = "none"` for direct engines.
-- [ ] ⬜ Add deployment receipt, ingestion source, lineage quality, runtime inventory observation, and reconciliation result schemas.
+- [x] ✅ Add shared deployment receipt, ingestion source, lineage quality/readiness/issue, sanitized deployment-history, runtime inventory observation, deployment discovery, and reconciliation result schemas. Backend services validate these boundaries, OpenAPI reuses the deployment-history response schema, and Engine Detail imports the inferred shared response type instead of maintaining a duplicate interface.
 - [x] ✅ Add config schemas for runtime resource sets with exact keys, prefix selectors, labels, project lineage, and optional runtime tenant id. Deployment-lineage selectors remain pending with the runtime inventory model.
 - [x] ✅ Add shared resource types for `engine_runtime_resource` and `engine_runtime_resource_set`, persisted `RuntimeResourceSet` selector/source metadata, a sanitized runtime resource inventory, and selector materialization with lineage. Evaluator resolution and runtime discovery routes remain pending.
 - [ ] ⬜ Add shared resource resolvers for process definition key, decision definition key, deployment id, and instance-inherited runtime resources.

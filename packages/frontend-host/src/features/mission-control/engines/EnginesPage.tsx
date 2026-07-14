@@ -36,6 +36,7 @@ import EngineMembersModal from './components/EngineMembersModal'
 import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
 import type { AccessAuthorityMode, EngineOnboardingMode } from '../../../api/platform-admin'
+import type { DeploymentHistoryView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -359,36 +360,6 @@ type ProjectEngineTargetView = {
   allowImport?: boolean
   lastSeenAt?: number | null
   updatedAt?: number | null
-}
-
-type DeploymentReceiptView = {
-  id: string
-  projectId: string
-  engineId: string
-  engineDeploymentId: string
-  source: string
-  lineage: { source?: string; sourcePrincipalId?: string; pipelineRunId?: string; commitSha?: string; deploymentName?: string }
-  receivedAt: number
-}
-
-type DeploymentHistoryView = {
-  id: string
-  engineDeploymentId: string | null
-  deploymentName: string | null
-  deploymentTime: string | null
-  projectId: string | null
-  ingestionSource: string
-  lineageQuality: 'complete' | 'reported' | 'discovered' | 'inferred'
-  reportingPrincipalId: string | null
-  deployedAt: number
-  reconciledAt: number | null
-  resourceCount: number
-  status: string
-  lineageReadiness: 'bridge_ready' | 'version_resolution_required' | 'validation_required' | 'inventory_only' | 'incomplete'
-  lineageIssues: string[]
-  artifactCount: number
-  linkedArtifactCount: number
-  versionedArtifactCount: number
 }
 
 type EngineAccessMember = {

@@ -1,16 +1,10 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
-import { deploymentDiscoveryService, type DeploymentDiscoveryResult } from './DeploymentDiscoveryService.js';
+import { deploymentDiscoveryService } from './DeploymentDiscoveryService.js';
 import { runtimeResourceInventoryService } from './RuntimeResourceInventoryService.js';
+import { EngineMetadataReconciliationResultSchema, type EngineMetadataReconciliationResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 
-export interface EngineMetadataReconciliationResult {
-  created: number;
-  updated: number;
-  deactivated: number;
-  materializedSets: number;
-  runtimeSkipped?: boolean;
-  deployments: DeploymentDiscoveryResult;
-}
+export type { EngineMetadataReconciliationResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 
 /** One reconciliation boundary for both scheduled and explicitly requested discovery. */
 class EngineMetadataReconciliationService {
@@ -31,7 +25,7 @@ class EngineMetadataReconciliationService {
         lastMetadataReconciledAt: attemptedAt,
         lastMetadataReconciliationStatus: 'succeeded',
       });
-      return { ...runtime, deployments };
+      return EngineMetadataReconciliationResultSchema.parse({ ...runtime, deployments });
     } catch (error) {
       try {
         await engineRepo.update({ id: engineId }, {

@@ -5,8 +5,9 @@ import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persisten
 import { getDeployments } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import type { Deployment } from '@enterpriseglue/shared/types/bpmn-engine-api.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { DeploymentDiscoveryResultSchema, type DeploymentDiscoveryResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 
-export interface DeploymentDiscoveryResult { created: number; updated: number; artifactsCreated: number; skipped?: boolean; }
+export type { DeploymentDiscoveryResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 
 /** Records engine-observed deployment metadata without ever guessing project/file lineage. */
 class DeploymentDiscoveryService {
@@ -62,7 +63,7 @@ class DeploymentDiscoveryService {
         }));
       if (additions.length) { await artifactRepo.insert(additions); artifactsCreated += additions.length; }
     }
-    return { created, updated, artifactsCreated };
+    return DeploymentDiscoveryResultSchema.parse({ created, updated, artifactsCreated });
   }
 }
 

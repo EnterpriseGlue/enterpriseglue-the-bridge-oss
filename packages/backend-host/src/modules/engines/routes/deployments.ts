@@ -21,7 +21,7 @@ import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
 import { deploymentReceiptService } from '@enterpriseglue/shared/services/platform-admin/DeploymentReceiptService.js'
-import { DeploymentReceiptCreateSchema } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import { DeploymentHistoryViewSchema, DeploymentReceiptCreateSchema, type DeploymentLineageIssue, type DeploymentLineageReadiness } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 import { auditLog } from '@enterpriseglue/shared/services/audit.js'
 import {
   sanitize,
@@ -74,12 +74,10 @@ interface DeploymentResponseData {
   [key: string]: unknown;
 }
 
-type DeploymentLineageReadiness = 'bridge_ready' | 'version_resolution_required' | 'validation_required' | 'inventory_only' | 'incomplete';
-
 function deploymentLineageDiagnostics(row: EngineDeployment, artifacts: EngineDeploymentArtifact[]) {
   const linkedArtifacts = artifacts.filter((artifact) => Boolean(artifact.projectId && artifact.fileId));
   const versionedArtifacts = linkedArtifacts.filter((artifact) => Boolean(artifact.fileGitCommitId || artifact.fileUpdatedAt));
-  const issues: string[] = [];
+  const issues: DeploymentLineageIssue[] = [];
   if (!row.projectId) issues.push('missing_project_lineage');
   if (!artifacts.length) issues.push('no_artifacts_recorded');
   else if (!linkedArtifacts.length) issues.push('artifacts_missing_file_lineage');
@@ -825,13 +823,14 @@ r.get('/engines-api/engines/:engineId/deployment-history', apiLimiter, requireAu
     grouped.push(artifact)
     artifactsByDeployment.set(artifact.engineDeploymentId, grouped)
   }
-  res.json(rows.map((row) => ({
+  const response = rows.map((row) => ({
     id: row.id, engineId: row.engineId, engineDeploymentId: row.camundaDeploymentId, deploymentName: row.camundaDeploymentName,
     deploymentTime: row.camundaDeploymentTime, projectId: row.projectId, ingestionSource: row.ingestionSource,
     lineageQuality: row.lineageQuality, reportingPrincipalId: row.reportingPrincipalId, deployedAt: row.deployedAt,
     reconciledAt: row.reconciledAt, resourceCount: row.resourceCount, status: row.status,
     ...deploymentLineageDiagnostics(row, artifactsByDeployment.get(row.id) || []),
-  })))
+  }))
+  res.json(DeploymentHistoryViewSchema.array().parse(response))
 }))
 
 // Passthroughs to engine for listing/reading/deleting deployments

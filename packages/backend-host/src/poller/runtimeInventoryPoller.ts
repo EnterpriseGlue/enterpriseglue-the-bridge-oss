@@ -1,6 +1,7 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
+import type { ScheduledRuntimeInventoryReconciliationResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -12,19 +13,7 @@ export interface RuntimeInventoryPollerOptions {
   runOnStart?: boolean;
 }
 
-export interface RuntimeInventoryReconciliationResult {
-  engineId: string;
-  tenantId: string | null;
-  status: 'reconciled' | 'failed';
-  created?: number;
-  updated?: number;
-  deactivated?: number;
-  materializedSets?: number;
-  runtimeSkipped?: boolean;
-  deploymentsCreated?: number;
-  deploymentsUpdated?: number;
-  deploymentArtifactsCreated?: number;
-}
+export type RuntimeInventoryReconciliationResult = ScheduledRuntimeInventoryReconciliationResult;
 
 function parsePositiveInterval(value: string | undefined): number {
   const parsed = Number(value || 0);

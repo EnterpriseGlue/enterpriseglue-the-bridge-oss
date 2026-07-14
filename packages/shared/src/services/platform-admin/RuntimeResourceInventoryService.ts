@@ -6,28 +6,14 @@ import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persis
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { camundaGet, getDecisionDefinitions } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
+import { RuntimeResourceObservationSchema, type RuntimeResourceKind, type RuntimeResourceObservation } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 
-export type RuntimeResourceKind = 'process_definition' | 'decision_definition';
+export type { RuntimeResourceKind, RuntimeResourceObservation } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 export type RuntimeResourceSetSelector =
   | { mode: 'keys'; keys: string[] }
   | { mode: 'prefix'; prefix: string }
   | { mode: 'labels'; labels: Record<string, string>; labelMatch?: 'all' | 'any' }
   | { mode: 'project_lineage'; projectRef: { id?: string; key?: string } };
-
-export interface RuntimeResourceObservation {
-  resourceKind: RuntimeResourceKind;
-  resourceKey: string;
-  runtimeTenantId?: string | null;
-  engineResourceId?: string | null;
-  deploymentId?: string | null;
-  projectId?: string | null;
-  fileId?: string | null;
-  version?: number | null;
-  labels?: Record<string, string>;
-  lineage?: Record<string, unknown>;
-  source?: string;
-  sourceRef?: string | null;
-}
 
 export interface RuntimeResourceMaterializationResult {
   runtimeResourceSetId: string;
@@ -91,12 +77,13 @@ class RuntimeResourceInventoryService {
     return { ...observed, deactivated, materializedSets: materializations.length };
   }
   async observe(engineId: string, tenantId: string | null | undefined, observations: RuntimeResourceObservation[]): Promise<{ created: number; updated: number }> {
+    const validatedObservations = RuntimeResourceObservationSchema.array().parse(observations);
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(RuntimeResource);
     const now = Date.now();
     let created = 0;
     let updated = 0;
-    for (const observation of observations) {
+    for (const observation of validatedObservations) {
       const resourceKey = observation.resourceKey.trim();
       if (!resourceKey) throw new Error('Runtime resource key is required');
       const runtimeTenantId = observation.runtimeTenantId?.trim() || '';

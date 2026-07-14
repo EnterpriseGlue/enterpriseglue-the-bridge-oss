@@ -1136,6 +1136,7 @@ const {
   DeploymentReceiptCreateSchema,
   DeploymentReceiptResponseSchema,
   DeploymentReceiptViewSchema,
+  DeploymentHistoryViewSchema,
 } = await import('./platform-admin/deployment-receipt.js');
 registry.registerPath({
   method: 'post',
@@ -1164,7 +1165,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/deployment-history',
   ...authzExtension('engine.deployments.read', 'GET', '/engines-api/engines/{engineId}/deployment-history'),
   request: { params: z.object({ engineId: z.string() }), query: z.object({ limit: z.coerce.number().int().min(1).max(200).optional() }) },
-  responses: { 200: { description: 'Sanitized canonical deployment history for an engine', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), engineId: z.string(), engineDeploymentId: z.string().nullable(), deploymentName: z.string().nullable(), deploymentTime: z.string().nullable(), projectId: z.string().nullable(), ingestionSource: z.string(), lineageQuality: z.enum(['complete', 'reported', 'discovered', 'inferred']), reportingPrincipalId: z.string().nullable(), deployedAt: z.number(), reconciledAt: z.number().nullable(), resourceCount: z.number(), status: z.string() })) } } } },
+  responses: { 200: { description: 'Sanitized canonical deployment history for an engine', content: { 'application/json': { schema: z.array(DeploymentHistoryViewSchema) } } } },
 })
 
 registry.registerPath({
