@@ -154,6 +154,38 @@ describe('ssoGroupMappingService', () => {
     }));
   });
 
+  it('deletes provider-bound mapping memberships with both legacy source references', async () => {
+    const mapping = { id: 'mapping-1', providerId: 'provider-1' };
+    const find = vi.fn().mockResolvedValue([
+      { id: 'membership-1', tenantId: null, userId: 'user-1', groupId: 'group-1' },
+    ]);
+    const deleteMembership = vi.fn().mockResolvedValue(undefined);
+    const deleteMapping = vi.fn().mockResolvedValue(undefined);
+    const auditInsert = vi.fn().mockResolvedValue(undefined);
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === SsoGroupMapping) return { findOneBy: vi.fn().mockResolvedValue(mapping), delete: deleteMapping };
+        if (entity === AuthzGroupMembership) return { find, delete: deleteMembership };
+        if (entity === AuditLog) return { insert: auditInsert };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await ssoGroupMappingService.deleteMapping('mapping-1');
+
+    const sourceRefs = (find.mock.calls[0][0].where.sourceRef as any)._value;
+    expect(sourceRefs).toEqual(expect.arrayContaining([
+      'mapping-1',
+      'legacy_sso:provider-1:mapping:mapping-1',
+    ]));
+    expect(deleteMapping).toHaveBeenCalledWith({ id: 'mapping-1' });
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.sso_group_membership.delete',
+      resourceId: 'membership-1',
+    }));
+  });
+
   it('does not remove stale group memberships in additive sync mode', async () => {
     const mapping = {
       id: 'mapping-additive',

@@ -232,7 +232,7 @@ describe('ssoAssignmentMappingService', () => {
     const mapping = {
       id: 'mapping-1',
       tenantId: 'tenant-a',
-      providerId: null,
+      providerId: 'provider-1',
       claimType: 'group',
       claimKey: 'groups',
       claimValue: 'Ops',
@@ -276,7 +276,7 @@ describe('ssoAssignmentMappingService', () => {
       },
     });
 
-    const result = await ssoAssignmentMappingService.syncAssignmentsForUser('user-1', { groups: ['Ops'] }, undefined, 'tenant-a');
+    const result = await ssoAssignmentMappingService.syncAssignmentsForUser('user-1', { groups: ['Ops'] }, 'provider-1', 'tenant-a');
 
     expect(result).toMatchObject({ created: 1, updated: 0, removed: 0 });
     expect(mappingQb.andWhere).toHaveBeenCalledWith(
@@ -293,13 +293,49 @@ describe('ssoAssignmentMappingService', () => {
       scopeId: 'engine-1',
       source: 'sso',
       sourceMappingId: 'mapping-1',
-      sourceRef: 'mapping-1',
+      sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
     }));
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       action: 'authz.sso_assignment.create',
       resourceType: 'role_assignment',
       details: expect.stringContaining('mapping-1'),
+    }));
+  });
+
+  it('upgrades a provider-bound assignment from the mapping-only canonical key', async () => {
+    const mapping = {
+      id: 'mapping-1', tenantId: 'tenant-a', providerId: 'provider-1', claimType: 'group', claimKey: 'groups', claimValue: 'Ops',
+      targetScope: 'engine', targetSelectorType: 'engine_id', targetEngineId: 'engine-1', targetExternalEngineId: null,
+      targetLabelKey: null, targetLabelValue: null, targetRoleId: 'system.engine.operator', syncMode: 'authoritative',
+      priority: 0, isActive: true, createdAt: 1, updatedAt: 1,
+    };
+    const update = vi.fn().mockResolvedValue(undefined);
+    const mappingQb = queryBuilder([mapping]);
+    const assignmentQb = queryBuilder(null);
+    assignmentQb.getOne = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'legacy-assignment-1' });
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === SsoAssignmentMapping) return { createQueryBuilder: vi.fn().mockReturnValue(mappingQb) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a' }) };
+        if (entity === RbacRoleAssignment) return {
+          createQueryBuilder: vi.fn().mockReturnValue(assignmentQb), insert: vi.fn(), update,
+          find: vi.fn().mockResolvedValue([]), delete: vi.fn(),
+        };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const result = await ssoAssignmentMappingService.syncAssignmentsForUser('user-1', { groups: ['Ops'] }, 'provider-1', 'tenant-a');
+
+    expect(result).toMatchObject({ created: 0, updated: 1, removed: 0 });
+    expect(update).toHaveBeenCalledWith({ id: 'legacy-assignment-1' }, expect.objectContaining({
+      sourceMappingId: 'mapping-1',
+      sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
+      assignmentKey: expect.stringContaining('legacy_sso:provider-1:mapping:mapping-1'),
     }));
   });
 
@@ -1408,7 +1444,7 @@ describe('ssoAssignmentMappingService', () => {
       scopeId: engineSetId,
       source: 'sso',
       sourceMappingId: 'mapping-scheduled-label',
-      sourceRef: 'mapping-scheduled-label',
+      sourceRef: 'legacy_sso:microsoft:mapping:mapping-scheduled-label',
     }));
   });
 

@@ -130,6 +130,14 @@ function normalizeTenantId(tenantId?: string | null): string | null {
   return normalized || null;
 }
 
+function legacyAssignmentSourceRef(mapping: Pick<SsoAssignmentMapping, 'id' | 'providerId'>): string {
+  return mapping.providerId ? `legacy_sso:${mapping.providerId}:mapping:${mapping.id}` : mapping.id;
+}
+
+function assignmentSourceRefCriteria(sourceRef: string, mappingId: string): string | ReturnType<typeof In> {
+  return sourceRef === mappingId ? mappingId : In([sourceRef, mappingId]);
+}
+
 function getStaticMappingRiskReasons(
   input: Pick<SsoAssignmentMappingInput, 'targetSelectorType' | 'targetRoleId' | 'claimOperator' | 'isActive'>
 ): SsoAssignmentMappingRiskReason[] {
@@ -647,6 +655,7 @@ class SsoAssignmentMappingServiceClass {
     const now = Date.now();
 
     for (const mapping of mappings) {
+      const sourceRef = legacyAssignmentSourceRef(mapping);
       const platformSettingsAllowGrant = await this.platformSettingsAllowMappingGrant(store, mapping);
       const matches = platformSettingsAllowGrant && ssoClaimMatches(claims, mapping);
       const desiredAssignmentIds = new Set<string>();
@@ -662,12 +671,27 @@ class SsoAssignmentMappingServiceClass {
             scopeType: target.scopeType,
             scopeId: target.scopeId,
             source: 'sso',
-            sourceRef: mapping.id,
+            sourceRef,
           });
-          const existingQb = assignmentRepo.createQueryBuilder('assignment')
-            .where('assignment.assignmentKey = :assignmentKey', { assignmentKey });
-
-          const existing = await existingQb.getOne();
+          const legacyAssignmentKey = sourceRef === mapping.id
+            ? assignmentKey
+            : canonicalRoleAssignmentKey({
+              tenantId: normalizeTenantId(tenantId ?? mapping.tenantId),
+              principalType: 'user',
+              principalId: userId,
+              roleId: mapping.targetRoleId,
+              scopeType: target.scopeType,
+              scopeId: target.scopeId,
+              source: 'sso',
+              sourceRef: mapping.id,
+            });
+          const findExistingAssignment = async (key: string): Promise<RbacRoleAssignment | null> => {
+            return assignmentRepo.createQueryBuilder('assignment')
+              .where('assignment.assignmentKey = :assignmentKey', { assignmentKey: key })
+              .getOne();
+          };
+          const existing = await findExistingAssignment(assignmentKey)
+            || (legacyAssignmentKey === assignmentKey ? null : await findExistingAssignment(legacyAssignmentKey));
 
           if (existing) {
             await assignmentRepo.update({ id: existing.id }, {
@@ -677,7 +701,7 @@ class SsoAssignmentMappingServiceClass {
               scopeType: target.scopeType,
               scopeId: target.scopeId,
               sourceMappingId: mapping.id,
-              sourceRef: mapping.id,
+              sourceRef,
               expiresAt: null,
               lastSeenAt: now,
               updatedAt: now,
@@ -720,7 +744,7 @@ class SsoAssignmentMappingServiceClass {
               scopeId: target.scopeId,
               source: 'sso',
               sourceMappingId: mapping.id,
-              sourceRef: mapping.id,
+              sourceRef,
               expiresAt: null,
               lastSeenAt: now,
               createdById: null,
@@ -765,14 +789,15 @@ class SsoAssignmentMappingServiceClass {
       }
 
       if (mapping.syncMode === 'authoritative' || !platformSettingsAllowGrant) {
+        const sourceRefCriteria = assignmentSourceRefCriteria(sourceRef, mapping.id);
         const normalizedAssignmentTenantId = normalizeTenantId(tenantId ?? mapping.tenantId);
         const staleAssignments = await assignmentRepo.find({
           where: normalizedAssignmentTenantId
             ? [
-              { tenantId: normalizedAssignmentTenantId, principalType: 'user', principalId: userId, source: 'sso', sourceRef: mapping.id },
-              { tenantId: IsNull(), principalType: 'user', principalId: userId, source: 'sso', sourceRef: mapping.id },
+              { tenantId: normalizedAssignmentTenantId, principalType: 'user', principalId: userId, source: 'sso', sourceRef: sourceRefCriteria },
+              { tenantId: IsNull(), principalType: 'user', principalId: userId, source: 'sso', sourceRef: sourceRefCriteria },
             ]
-            : { principalType: 'user', principalId: userId, source: 'sso', sourceRef: mapping.id },
+            : { principalType: 'user', principalId: userId, source: 'sso', sourceRef: sourceRefCriteria },
         });
         const staleIds = staleAssignments
           .map((assignment) => assignment.id)

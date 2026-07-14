@@ -317,13 +317,16 @@ class SsoGroupMappingServiceClass {
     });
 
     if (shouldRemoveExistingMemberships) {
-      await this.deleteMembershipsForMapping(dataSource, id);
+      await this.deleteMembershipsForMapping(dataSource, existing);
     }
   }
 
   async deleteMapping(id: string): Promise<void> {
     const dataSource = await getDataSource();
-    await this.deleteMembershipsForMapping(dataSource, id);
+    const mapping = await dataSource.getRepository(SsoGroupMapping).findOneBy({ id });
+    if (mapping) {
+      await this.deleteMembershipsForMapping(dataSource, mapping);
+    }
     await dataSource.getRepository(SsoGroupMapping).delete({ id });
   }
 
@@ -552,17 +555,22 @@ class SsoGroupMappingServiceClass {
     return group;
   }
 
-  private async deleteMembershipsForMapping(dataSource: SsoGroupMappingStore, mappingId: string): Promise<void> {
+  private async deleteMembershipsForMapping(
+    dataSource: SsoGroupMappingStore,
+    mapping: Pick<SsoGroupMapping, 'id' | 'providerId'>
+  ): Promise<void> {
     const membershipRepo = dataSource.getRepository(AuthzGroupMembership);
+    const sourceRef = legacyMembershipSourceRef(mapping);
+    const sourceRefCriteria = membershipSourceRefCriteria(sourceRef, mapping.id);
     const memberships = await membershipRepo.find({
       where: {
         source: 'sso',
-        sourceRef: mappingId,
+        sourceRef: sourceRefCriteria,
       },
     });
     await membershipRepo.delete({
       source: 'sso',
-      sourceRef: mappingId,
+      sourceRef: sourceRefCriteria,
     });
     for (const membership of memberships) {
       await recordSsoGroupMembershipAudit(dataSource, {
@@ -571,7 +579,7 @@ class SsoGroupMappingServiceClass {
         membershipId: membership.id,
         userId: membership.userId,
         groupId: membership.groupId,
-        mappingId,
+        mappingId: mapping.id,
       });
     }
   }
