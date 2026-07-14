@@ -388,6 +388,11 @@ describe('EngineService', () => {
       source: 'legacy',
       sourceRef: 'engine_member:engine-1:user-1:deployer',
     }), expect.objectContaining({ conflictPaths: ['id'] }));
+    const legacyAssignment = assignmentRepo.upsert.mock.calls[0][0];
+    expect(legacyAssignment).not.toHaveProperty('userId');
+    expect(legacyAssignment).not.toHaveProperty('resourceType');
+    expect(legacyAssignment).not.toHaveProperty('resourceId');
+    expect(legacyAssignment).not.toHaveProperty('sourceMappingId');
     expect(assignmentRepo.delete).toHaveBeenCalledWith({ id: expect.anything() });
     expect(legacySyncSpy).not.toHaveBeenCalled();
   });

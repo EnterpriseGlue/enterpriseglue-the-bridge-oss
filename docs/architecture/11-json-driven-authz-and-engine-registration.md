@@ -2176,7 +2176,7 @@ This phase is required because the current implementation still carries compatib
 - [x] ✅ Change active manual, SSO, bootstrap, and engine-governance assignment writes to canonical fields; legacy aliases are now nullable and retained only for migration/diagnostic reads.
 - [x] ✅ Keep permission scope (`engine`) separate from assignment target type (`engine`, `engine_set`, `engine_runtime_resource`, `engine_runtime_resource_set`).
 - [x] ✅ Extend assignment validation and evaluator lookup for exact runtime resources and runtime-resource-set materialization. Runtime resource evaluation includes additive direct engine and Engine Set grants, and fails closed for unknown/inactive inventory rows.
-- [ ] ⬜ Remove `userId`, `resourceType`, `resourceId`, and `sourceMappingId` aliases after local development data migration. All active canonical writers—generic manual, config-bundle, engine-governance, SSO-mapping, and bootstrap—now omit them and tests assert their absence. Explicit legacy project/member compatibility synchronizers retain their old columns until the legacy authorization-removal gate is complete.
+- [x] ✅ Stop all active role-assignment writers, including project/engine legacy-membership reconciliation, from populating the deprecated `userId`, `resourceType`, `resourceId`, and `sourceMappingId` aliases. Canonical principal, scope, and `sourceRef` fields now carry the complete identity. The nullable aliases remain read-compatible for historical rows until a separately planned schema/data migration removes them.
 - [x] ✅ Make tenant-owned custom role keys unique through the canonical `tenantId:key` identity while preserving globally stable system-role keys under the `platform` identity.
 
 #### Legacy Authorization Removal

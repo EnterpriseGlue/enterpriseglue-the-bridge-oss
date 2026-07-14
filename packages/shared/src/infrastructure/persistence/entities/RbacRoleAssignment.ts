@@ -30,9 +30,11 @@ export class RbacRoleAssignment extends AppBaseEntity {
   @Column({ name: 'role_id', type: 'text' })
   roleId!: string;
 
+  /** Deprecated compatibility alias. Canonical assignments leave this null. */
   @Column({ name: 'resource_type', type: 'text', nullable: true })
   resourceType!: string | null;
 
+  /** Deprecated compatibility alias. Canonical assignments leave this null. */
   @Column({ name: 'resource_id', type: 'text', nullable: true })
   resourceId!: string | null;
 
@@ -45,6 +47,7 @@ export class RbacRoleAssignment extends AppBaseEntity {
   @Column({ type: 'text' })
   source!: string;
 
+  /** Deprecated compatibility alias. Canonical assignments use sourceRef. */
   @Column({ name: 'source_mapping_id', type: 'text', nullable: true })
   sourceMappingId!: string | null;
 

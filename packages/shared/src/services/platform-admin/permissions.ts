@@ -1561,17 +1561,13 @@ class PermissionServiceClass {
       RbacRoleAssignment,
       | 'id'
       | 'tenantId'
-      | 'userId'
       | 'principalType'
       | 'principalId'
       | 'assignmentKey'
       | 'roleId'
-      | 'resourceType'
-      | 'resourceId'
       | 'scopeType'
       | 'scopeId'
       | 'source'
-      | 'sourceMappingId'
       | 'sourceRef'
       | 'expiresAt'
       | 'lastSeenAt'
@@ -1595,7 +1591,6 @@ class PermissionServiceClass {
       targets.set(id, {
         id,
         tenantId: input.tenantId ?? null,
-        userId: String(input.userId),
         principalType: 'user',
         principalId: String(input.userId),
         assignmentKey: canonicalRoleAssignmentKey({
@@ -1609,12 +1604,9 @@ class PermissionServiceClass {
           sourceRef: input.sourceKey,
         }),
         roleId: input.roleId,
-        resourceType: input.resourceType,
-        resourceId: input.resourceId,
         scopeType: input.resourceType,
         scopeId: input.resourceId,
         source: 'legacy',
-        sourceMappingId: input.sourceKey,
         sourceRef: input.sourceKey,
         expiresAt: null,
         lastSeenAt: now,
@@ -1744,10 +1736,10 @@ class PermissionServiceClass {
     const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
     const scopedExistingWhere = [
       ...(scanProjects && hasProjectScope && projectIds.length > 0
-        ? [{ source: 'legacy', resourceType: 'project', resourceId: In(projectIds) }]
+        ? [{ source: 'legacy', scopeType: 'project', scopeId: In(projectIds) }]
         : []),
       ...(scanEngines && hasEngineScope && engineIds.length > 0
-        ? [{ source: 'legacy', resourceType: 'engine', resourceId: In(engineIds) }]
+        ? [{ source: 'legacy', scopeType: 'engine', scopeId: In(engineIds) }]
         : []),
     ];
     const existing = globalSync

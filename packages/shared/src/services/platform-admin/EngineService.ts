@@ -429,7 +429,6 @@ export class EngineService {
     await dataSource.getRepository(RbacRoleAssignment).upsert({
       id: `legacy:engine:${input.engineId}:${input.userId}:${roleId}`,
       tenantId: engine.tenantId ?? null,
-      userId: input.userId,
       principalType: 'user',
       principalId: input.userId,
       assignmentKey: canonicalRoleAssignmentKey({
@@ -443,12 +442,9 @@ export class EngineService {
         sourceRef,
       }),
       roleId,
-      resourceType: 'engine',
-      resourceId: input.engineId,
       scopeType: 'engine',
       scopeId: input.engineId,
       source: 'legacy',
-      sourceMappingId: sourceRef,
       sourceRef,
       expiresAt: null,
       lastSeenAt: now,

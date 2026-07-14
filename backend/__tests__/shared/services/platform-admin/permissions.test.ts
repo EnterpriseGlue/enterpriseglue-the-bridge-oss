@@ -2502,7 +2502,7 @@ describe('permissionService', () => {
     })]);
   });
 
-  it('syncs legacy project and engine memberships into source=legacy role assignments', async () => {
+  it('syncs legacy project and engine memberships into canonical source=legacy role assignments', async () => {
     const assignmentFind = vi.fn().mockResolvedValue([
       { id: 'legacy:project:project-1:stale-user:system.project.viewer' },
     ]);
@@ -2560,11 +2560,13 @@ describe('permissionService', () => {
         expect.objectContaining({
           id: 'legacy:project:project-1:owner-1:system.project.owner',
           tenantId: 'tenant-1',
-          userId: 'owner-1',
+          principalType: 'user',
+          principalId: 'owner-1',
           roleId: SYSTEM_ROLE_IDS.PROJECT_OWNER,
-          resourceType: 'project',
-          resourceId: 'project-1',
+          scopeType: 'project',
+          scopeId: 'project-1',
           source: 'legacy',
+          sourceRef: 'project:project-1:owner',
           lastSeenAt: 123,
         }),
         expect.objectContaining({
@@ -2589,5 +2591,38 @@ describe('permissionService', () => {
         skipUpdateIfNoValuesChanged: true,
       }),
     );
+    const syncedRows = assignmentUpsert.mock.calls[0][0];
+    for (const row of syncedRows) {
+      expect(row).not.toHaveProperty('userId');
+      expect(row).not.toHaveProperty('resourceType');
+      expect(row).not.toHaveProperty('resourceId');
+      expect(row).not.toHaveProperty('sourceMappingId');
+    }
+  });
+
+  it('uses canonical scope fields when reconciling a scoped legacy synchronization', async () => {
+    const assignmentRepo = {
+      find: vi.fn().mockResolvedValue([]),
+      delete: vi.fn().mockResolvedValue(undefined),
+      upsert: vi.fn().mockResolvedValue(undefined),
+    };
+    const projectRepo = { find: vi.fn().mockResolvedValue([]) };
+    const dataSource = {
+      getRepository: (entity: unknown) => {
+        if (entity === Project) return projectRepo;
+        if (entity === ProjectMember || entity === ProjectMemberRole) return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === RbacRoleAssignment) return assignmentRepo;
+        throw new Error('Unexpected repository');
+      },
+    } as any;
+
+    await permissionService.syncLegacyRoleAssignments({ projectIds: ['project-1'] }, dataSource);
+
+    expect(assignmentRepo.find).toHaveBeenCalledWith({
+      where: [{ source: 'legacy', scopeType: 'project', scopeId: expect.anything() }],
+    });
+    const where = assignmentRepo.find.mock.calls[0][0].where[0];
+    expect(where).not.toHaveProperty('resourceType');
+    expect(where).not.toHaveProperty('resourceId');
   });
 });

@@ -17,9 +17,10 @@ const PROJECT_MEMBER_ROLE_TO_SYSTEM_ROLE_ID: Record<LegacyProjectRole, string> =
 type AssignmentStore = DataSource | EntityManager;
 
 /**
- * Preserve the canonical assignment shape emitted by the compatibility
- * synchronizer while allowing the originating project command to update only
- * the affected principal.
+ * Keep legacy project membership synchronized through canonical assignment
+ * identity while allowing the originating command to update only the affected
+ * principal. Deprecated alias columns remain readable for old rows, but new
+ * compatibility assignments must not repopulate them.
  */
 export async function writeLegacyProjectMemberRoleAssignments(
   store: AssignmentStore,
@@ -39,7 +40,6 @@ export async function writeLegacyProjectMemberRoleAssignments(
     return {
       id: `legacy:project:${input.projectId}:${input.userId}:${roleId}`,
       tenantId: input.tenantId ?? null,
-      userId: input.userId,
       principalType: 'user' as const,
       principalId: input.userId,
       assignmentKey: canonicalRoleAssignmentKey({
@@ -53,12 +53,9 @@ export async function writeLegacyProjectMemberRoleAssignments(
         sourceRef,
       }),
       roleId,
-      resourceType: 'project' as const,
-      resourceId: input.projectId,
       scopeType: 'project' as const,
       scopeId: input.projectId,
       source: 'legacy' as const,
-      sourceMappingId: sourceRef,
       sourceRef,
       expiresAt: null,
       lastSeenAt: now,
