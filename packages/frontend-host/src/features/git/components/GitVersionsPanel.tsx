@@ -105,7 +105,6 @@ interface EngineWithAccess {
   id: string;
   name?: string;
   baseUrl?: string;
-  myRole?: string;
 }
 
 type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean;

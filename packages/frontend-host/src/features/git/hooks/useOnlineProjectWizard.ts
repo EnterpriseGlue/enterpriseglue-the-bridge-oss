@@ -39,7 +39,6 @@ export type EngineForImport = {
   id: string
   name?: string | null
   baseUrl?: string | null
-  myRole?: string | null
 }
 
 export type EngineImportPreview = {
