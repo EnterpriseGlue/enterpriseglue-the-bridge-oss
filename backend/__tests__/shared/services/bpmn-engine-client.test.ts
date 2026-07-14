@@ -227,6 +227,15 @@ describe('bpmn-engine-client', () => {
       .toThrow('Engine endpoint URL must use HTTP or HTTPS');
   });
 
+  it('rejects endpoint credential URLs and absolute request paths before an outbound request', () => {
+    expect(() => resolveBpmnEngineRequestUrl('https://user:password@engine.example.test/engine-rest', '/version'))
+      .toThrow('Engine endpoint URL must not include embedded credentials');
+    expect(() => resolveBpmnEngineRequestUrl('https://engine.example.test/engine-rest', 'https://metadata.example.test/latest'))
+      .toThrow('Engine request path must be relative to the configured endpoint');
+    expect(() => resolveBpmnEngineRequestUrl('https://engine.example.test/engine-rest', '//metadata.example.test/latest'))
+      .toThrow('Engine request path must be relative to the configured endpoint');
+  });
+
   it('obtains OAuth2 client credentials tokens server-side before calling the engine', async () => {
     const engineRepo = {
       findOneBy: vi.fn().mockResolvedValue({
@@ -294,6 +303,29 @@ describe('bpmn-engine-client', () => {
         'X-EnterpriseGlue-Operation-Class': 'engine.read',
       }),
     });
+  });
+
+  it('rejects OAuth2 token endpoint URLs with embedded credentials before an outbound request', async () => {
+    const engineRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'engine-1',
+        baseUrl: 'https://engine.example.test/engine-rest',
+        authType: 'oauth2-client-credentials',
+        username: 'eg-client',
+        passwordEnc: 'eg-secret',
+        oauthTokenUrl: 'https://user:password@identity.example.test/token',
+      }),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return engineRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(camundaGet('engine-1', '/version')).rejects.toThrow('OAuth2 token URL must not include embedded credentials');
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('sanitizes OAuth token endpoint failures', async () => {

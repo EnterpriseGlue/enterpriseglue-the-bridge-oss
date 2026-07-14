@@ -179,17 +179,28 @@ function shouldRewriteDockerLoopbackEngineUrls(): boolean {
   return isDockerRuntime()
 }
 
-export function resolveBpmnEngineRequestUrl(baseUrl: string, path = ''): string {
-  const rawUrl = path.startsWith('http') ? path : baseUrl.replace(/\/$/, '') + path
+function parseBpmnEngineEndpointUrl(rawUrl: string, label: string): URL {
   let parsed: URL
   try {
     parsed = new URL(rawUrl)
   } catch {
-    throw Errors.validation('Engine endpoint URL is invalid')
+    throw Errors.validation(`${label} is invalid`)
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw Errors.validation('Engine endpoint URL must use HTTP or HTTPS')
+    throw Errors.validation(`${label} must use HTTP or HTTPS`)
   }
+  if (parsed.username || parsed.password) {
+    throw Errors.validation(`${label} must not include embedded credentials`)
+  }
+  return parsed
+}
+
+export function resolveBpmnEngineRequestUrl(baseUrl: string, path = ''): string {
+  if (/^[a-z][a-z\d+.-]*:/i.test(path) || path.startsWith('//')) {
+    throw Errors.validation('Engine request path must be relative to the configured endpoint')
+  }
+  const rawUrl = baseUrl.replace(/\/$/, '') + path
+  const parsed = parseBpmnEngineEndpointUrl(rawUrl, 'Engine endpoint URL')
   if (!shouldRewriteDockerLoopbackEngineUrls() || !isLoopbackEngineHost(rawUrl)) return rawUrl
 
   parsed.hostname = 'host.docker.internal'
@@ -279,10 +290,11 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
   body.set('client_secret', password)
   if (cfg.oauthScopes) body.set('scope', cfg.oauthScopes)
   if (cfg.oauthAudience) body.set('audience', cfg.oauthAudience)
+  const tokenUrl = parseBpmnEngineEndpointUrl(cfg.oauthTokenUrl, 'OAuth2 token URL').toString()
 
   let response: Awaited<ReturnType<typeof fetch>>
   try {
-    response = await fetch(cfg.oauthTokenUrl, {
+    response = await fetch(tokenUrl, {
       method: 'POST',
       redirect: 'error',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
