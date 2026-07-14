@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdmZip from 'adm-zip';
 
 const config = vi.hoisted(() => ({
-  configBundlePath: '/etc/enterpriseglue/config/bundle.json',
+  configBundlePath: '/etc/enterpriseglue/config/bundle.json' as string | undefined,
   configBootstrapMode: 'apply' as 'apply' | 'validate' | 'disabled',
   configExpectedSha256: undefined as string | undefined,
   configExpectedTenantScope: undefined as string | undefined,
@@ -179,7 +179,7 @@ describe('configBundleBootstrap', () => {
       reconciliation: 'completed',
     });
     expect(drainApplyRun).toHaveBeenCalledWith({ applyRunId: 'apply-run-1', maxPages: 100, pageLimit: 500 });
-    const receiptUpdate = updateApplyRun.mock.calls.at(-1)?.[1];
+    const receiptUpdate = updateApplyRun.mock.calls[updateApplyRun.mock.calls.length - 1]?.[1];
     expect(JSON.parse(receiptUpdate.resultJson)).toMatchObject({
       canonicalHash: 'preview-hash',
       bootstrap: { mode: 'apply', status: 'applied', reconciliation: 'completed', issueCode: null },

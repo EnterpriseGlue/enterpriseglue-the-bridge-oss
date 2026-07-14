@@ -33,7 +33,7 @@ interface TestAssignment {
 function queryBuilder(assignments: TestAssignment[]) {
   const parameters: Record<string, unknown> = {};
   const capture = (...args: unknown[]) => {
-    const candidate = args.at(-1);
+    const candidate = args[args.length - 1];
     if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
       Object.assign(parameters, candidate);
     }

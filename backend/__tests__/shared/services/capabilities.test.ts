@@ -38,14 +38,14 @@ describe('buildUserCapabilities', () => {
   it('derives Mission Control visibility from canonical engine discovery', async () => {
     (engineService.getUserEngines as any).mockResolvedValue([{ engine: { id: 'engine-1' } }]);
 
-    const capabilities = await buildUserCapabilities({ userId: 'user-1', platformRole: 'admin' });
+    const capabilities = await buildUserCapabilities({ userId: 'user-1' });
 
     expect(capabilities.canViewMissionControl).toBe(true);
     expect(engineService.getUserEngines).toHaveBeenCalledWith('user-1', undefined);
   });
 
   it('does not pass the legacy platform role into permission evaluation', async () => {
-    await buildUserCapabilities({ userId: 'user-1', tenantId: 'tenant-1', platformRole: 'admin' });
+    await buildUserCapabilities({ userId: 'user-1', tenantId: 'tenant-1' });
 
     expect(permissionService.hasPermission).toHaveBeenCalledTimes(7);
     for (const [, context] of (permissionService.hasPermission as any).mock.calls) {

@@ -6,7 +6,7 @@ const identityColumns = ['id', 'identity_key', 'tenant_id', 'provider_id', 'prov
 
 describe('BackfillLegacyExternalIdentities1700000000082', () => {
   it('mirrors provider-specific subjects and keeps their legacy provider domains distinct', async () => {
-    const query = vi.fn(async (sql: string) => {
+    const query = vi.fn(async (sql: string, _parameters?: unknown[]) => {
       if (sql.startsWith('SELECT id, email')) return [
         { id: 'user-microsoft', email: 'Microsoft@Example.test', auth_provider: 'microsoft', entra_id: 'entra-1', google_id: null, created_at: 10, updated_at: 20, last_login_at: 30 },
         { id: 'user-saml', email: 'saml@example.test', auth_provider: 'saml', entra_id: 'entra-1', google_id: null, created_at: 11, updated_at: 21, last_login_at: null },
@@ -38,7 +38,7 @@ describe('BackfillLegacyExternalIdentities1700000000082', () => {
   });
 
   it('fails closed rather than reassigning a subject linked to another user', async () => {
-    const query = vi.fn(async (sql: string) => {
+    const query = vi.fn(async (sql: string, _parameters?: unknown[]) => {
       if (sql.startsWith('SELECT id, email')) return [{ id: 'user-1', email: 'person@example.test', auth_provider: 'microsoft', entra_id: 'entra-1', google_id: null, created_at: 1, updated_at: 1, last_login_at: 1 }];
       if (sql.startsWith('SELECT id, user_id')) return [{ id: 'existing-link', user_id: 'user-2' }];
       return undefined;

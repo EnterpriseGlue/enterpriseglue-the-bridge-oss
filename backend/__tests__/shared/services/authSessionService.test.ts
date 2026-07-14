@@ -19,7 +19,7 @@ describe('authSessionService', () => {
   });
 
   it('persists provider lineage for a renewable provider-neutral session', async () => {
-    await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test', platformRole: 'user' }, {
+    await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test' }, {
       identityProviderId: 'provider-1', userAgent: 'test-agent', ipAddress: '127.0.0.1',
     })).resolves.toEqual(expect.objectContaining({ accessToken: 'access-token', refreshToken: 'refresh-token' }));
 

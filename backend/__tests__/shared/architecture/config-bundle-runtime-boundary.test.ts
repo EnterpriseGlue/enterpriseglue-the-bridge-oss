@@ -19,7 +19,7 @@ function collectTypeScriptFiles(directory: string): string[] {
 }
 
 function workspacePath(path: string): string {
-  return relative(workspaceRoot, path).replaceAll('\\', '/');
+  return relative(workspaceRoot, path).split('\\').join('/');
 }
 
 const productionFiles = productionRoots.flatMap(collectTypeScriptFiles);

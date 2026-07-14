@@ -2,7 +2,15 @@ import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../packages/backend-host/src/app.js';
 
-const getConfigBootstrapStatus = vi.hoisted(() => vi.fn(() => ({
+const getConfigBootstrapStatus = vi.hoisted(() => vi.fn<() => {
+  mode: string;
+  status: string;
+  hash: string | null;
+  message: string | null;
+  reconciliation: string;
+  secretPreflight: string;
+  issueCode: string | null;
+}>(() => ({
   mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run', secretPreflight: 'not_required', issueCode: null,
 })));
 const getConfigBootstrapMetrics = vi.hoisted(() => vi.fn(() => 'enterpriseglue_config_bootstrap_ready 1\n'));
