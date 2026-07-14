@@ -97,6 +97,7 @@ describe('jobs-service', () => {
       processDefinitionKey: 'payments',
       maxResults: MAX_RUNTIME_RESOURCE_PAGE_SIZE,
     });
+    expect(getBoundedRuntimeResourceQuery({ maxResults: '25' })).toEqual({ maxResults: 25 });
     expect(() => getBoundedRuntimeResourceQuery({ maxResults: MAX_RUNTIME_RESOURCE_PAGE_SIZE + 1 })).toThrow(
       'Resource-aware runtime queries require maxResults',
     );

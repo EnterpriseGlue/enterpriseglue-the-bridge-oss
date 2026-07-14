@@ -13,7 +13,9 @@ function runtimeFilterNotSupported(message: string): AppError {
  * the supported post-filtering page size.
  */
 export function getBoundedRuntimeResourceQuery<T extends Record<string, unknown>>(params: T): T & { maxResults: number } {
-  const maxResults = params.maxResults
+  const maxResults = typeof params.maxResults === 'string' && /^\d+$/.test(params.maxResults)
+    ? Number(params.maxResults)
+    : params.maxResults
   if (maxResults !== undefined && (
     typeof maxResults !== 'number'
     || !Number.isInteger(maxResults)
@@ -31,7 +33,9 @@ export function getBoundedRuntimeResourceQuery<T extends Record<string, unknown>
  * its resource-aware result set before resolving returned definition lineage.
  */
 export function getBoundedRuntimeFetchAndLockRequest<T extends Record<string, unknown>>(body: T): T & { maxTasks: number } {
-  const maxTasks = body.maxTasks
+  const maxTasks = typeof body.maxTasks === 'string' && /^\d+$/.test(body.maxTasks)
+    ? Number(body.maxTasks)
+    : body.maxTasks
   if (maxTasks !== undefined && (
     typeof maxTasks !== 'number'
     || !Number.isInteger(maxTasks)

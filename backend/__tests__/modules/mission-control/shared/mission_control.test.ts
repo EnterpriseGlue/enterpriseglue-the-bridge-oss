@@ -13,6 +13,7 @@ import {
   getProcessInstanceExecutionDetails,
   previewProcessInstanceCount,
   suspendProcessInstanceById,
+  listHistoricProcessInstances,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -266,6 +267,25 @@ describe('mission-control shared mission_control routes', () => {
       resourceId: 'engine-77',
     }));
     expect(suspendProcessInstanceById).toHaveBeenCalledWith('engine-77', 'pi-1');
+  });
+
+  it('bounds historic process-instance collections for resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/process-instances')
+      .query({ engineId: 'engine-77', maxResults: 25 });
+
+    expect(response.status).toBe(200);
+    expect(listHistoricProcessInstances).toHaveBeenCalledWith('engine-77', expect.objectContaining({
+      processDefinitionKey: 'payments', maxResults: 25,
+    }));
   });
 
   it('denies shared process instance reads when instance view permission is missing', async () => {
