@@ -74,10 +74,13 @@ r.get('/mission-control-api/external-tasks', requireRuntimeCollectionAction('eng
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
   const query = keys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
-  const data = visibleKeys
-    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listExternalTasks(engineId, { ...query, processDefinitionKey })))).flat()
-    : await listExternalTasks(engineId, query);
-  res.json(data);
+  if (!visibleKeys) return res.json(await listExternalTasks(engineId, query));
+
+  const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
+    const data = await listExternalTasks(engineId, { ...query, processDefinitionKey });
+    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey]);
+  }));
+  res.json(collections.flat());
 }));
 
 // Complete external task

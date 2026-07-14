@@ -5,6 +5,7 @@ import externalTasksRouter from '../../../../../packages/backend-host/src/module
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   completeTask,
   fetchAndLockTasks,
@@ -49,6 +50,10 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared
   bpmnErrorTask: vi.fn().mockResolvedValue(undefined),
   extendTaskLock: vi.fn().mockResolvedValue(undefined),
   unlockTask: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
+  camundaGet: vi.fn(),
 }));
 
 describe('mission-control external task routes', () => {
@@ -126,6 +131,32 @@ describe('mission-control external task routes', () => {
 
     expect(response.status).toBe(200);
     expect(listExternalTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100 });
+  });
+
+  it('drops external-task rows whose resolved definition lineage is outside the authorized key', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : {},
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+    (listExternalTasks as unknown as Mock).mockResolvedValueOnce([
+      { id: 'external-task-allowed', processDefinitionId: 'definition-payments' },
+      { id: 'external-task-forbidden', processDefinitionId: 'definition-benefits' },
+    ]);
+    (camundaGet as unknown as Mock).mockImplementation(async (_engineId: string, path: string) => (
+      path.endsWith('definition-payments') ? { key: 'payments' } : { key: 'benefits' }
+    ));
+
+    const response = await request(app)
+      .get('/mission-control-api/external-tasks')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'external-task-allowed', processDefinitionId: 'definition-payments' }]);
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition/definition-payments');
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition/definition-benefits');
   });
 
   it('completes external tasks through process modify permission', async () => {
