@@ -63,10 +63,38 @@ test.describe('Identity configuration browser lifecycle', () => {
 
     await page.goto('/admin/settings');
     await page.getByRole('tab', { name: 'Identity Providers' }).click();
-    await expect(page.getByText('identity.oidc.browser-mock', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Provider actions' }).click();
+    const providersPanel = page.getByLabel('Identity Providers', { exact: true });
+    await expect(providersPanel.getByText('identity.oidc.browser-mock', { exact: true })).toBeVisible();
+    await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
+    await page.getByRole('menuitem', { name: 'Test connection' }).click();
+    await expect(providersPanel.getByText('Connection test: identity.oidc.browser-mock')).toBeVisible();
+    await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
+    await page.getByRole('menuitem', { name: 'Preview membership changes' }).click();
+    await expect(providersPanel.getByText('3 snapshots checked: 1 additions and 1 removals would result.', { exact: false })).toBeVisible();
+    await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
+    await page.getByRole('menuitem', { name: 'View sync history' }).click();
+    await expect(providersPanel.getByText('Synchronization history: identity.oidc.browser-mock')).toBeVisible();
+    await expect(providersPanel.getByText('1 added, 1 removed')).toBeVisible();
+    await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
     await page.getByRole('menuitem', { name: 'Replay stored memberships' }).click();
-    await expect(page.getByText('Stored membership replay: identity.oidc.browser-mock')).toBeVisible();
-    expect(identityStack.events).toContain('membership_replayed');
+    await expect(providersPanel.getByText('Stored membership replay: identity.oidc.browser-mock')).toBeVisible();
+
+    identityStack.failNextConnectionTest();
+    await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
+    await page.getByRole('menuitem', { name: 'Test connection' }).click();
+    await expect(providersPanel.getByText('Provider connection could not be verified')).toBeVisible();
+    await expect(providersPanel.getByText(/browser-stack-secret/)).toHaveCount(0);
+
+    await page.getByRole('tab', { name: 'Identity Mappings' }).click();
+    const mappingsPanel = page.getByLabel('Identity Mappings', { exact: true });
+    await expect(mappingsPanel.getByText('group.browser-operators', { exact: true })).toBeVisible();
+    await mappingsPanel.getByRole('button', { name: 'Mapping actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
+    await page.getByRole('button', { name: 'Test mapping' }).click();
+    await expect(page.getByText('Matched: group:operators')).toBeVisible();
+    await page.getByRole('button', { name: 'Preview stored identities' }).click();
+    await expect(page.getByText('2 of 3 stored identities match; 1 do not.')).toBeVisible();
+
+    expect(identityStack.events).toEqual(expect.arrayContaining(['connection_tested', 'membership_previewed', 'membership_replayed', 'mapping_tested', 'mapping_previewed']));
   });
 });

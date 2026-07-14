@@ -6,7 +6,7 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({
   body: JSON.stringify(body),
 });
 
-export type MockIdentityStackEvent = 'provider_listed' | 'authorization_started' | 'token_issued' | 'session_created' | 'membership_replayed';
+export type MockIdentityStackEvent = 'provider_listed' | 'authorization_started' | 'token_issued' | 'session_created' | 'connection_tested' | 'membership_previewed' | 'membership_replayed' | 'mapping_tested' | 'mapping_previewed';
 
 /**
  * Browser-local identity stack for lifecycle tests. Protocol verification lives
@@ -35,6 +35,19 @@ export class MockBrowserIdentityStack {
   readonly events: MockIdentityStackEvent[] = [];
   private authenticated = true;
   private externalSession = false;
+  private connectionFailurePending = false;
+
+  readonly mapping = {
+    id: 'browser-identity-mapping',
+    providerKey: this.provider.key,
+    targetGroupKey: 'group.browser-operators',
+    entitlementType: 'group' as const,
+    externalId: 'operators',
+    matchOperator: 'exact' as const,
+    syncMode: 'authoritative' as const,
+    isActive: true,
+    sourceRef: null,
+  };
 
   async install(page: Page, appOrigin: string): Promise<void> {
     await page.route('**/*', async (route) => {
@@ -83,10 +96,37 @@ export class MockBrowserIdentityStack {
       if (path === '/api/admin/environments' || path === '/api/admin/projects' || path === '/api/admin/engines') return json(route, []);
       if (path === '/api/sso/providers' || path === '/api/identity/providers/environment-migration-drafts') return json(route, []);
       if (path === '/api/identity/providers') return json(route, [this.provider]);
+      if (path === `/api/identity/providers/${this.provider.key}/test-connection`) {
+        this.events.push('connection_tested');
+        if (this.connectionFailurePending) {
+          this.connectionFailurePending = false;
+          return json(route, { error: 'Provider connection could not be verified', internalDetail: 'client_secret=browser-stack-secret' }, 502);
+        }
+        return json(route, { status: 'connected', protocol: 'oidc', issuer: 'https://identity-browser-mock.test' });
+      }
+      if (path === `/api/identity/providers/${this.provider.key}/reconciliation-preview`) {
+        this.events.push('membership_previewed');
+        return json(route, { scanned: 3, additions: 1, removals: 1, unchanged: 1, failed: 0, truncated: false, nextCursor: null, latestSnapshotAt: Date.now(), warnings: [] });
+      }
+      if (path === `/api/identity/providers/${this.provider.key}/sync-runs`) {
+        return json(route, [{ id: 'browser-sync-run', providerKey: this.provider.key, trigger: 'login', status: 'completed', startedAt: Date.now() - 1_000, completedAt: Date.now(), identitiesScanned: 3, groupMembershipsCreated: 1, groupMembershipsRemoved: 1, errorMessage: null }]);
+      }
       if (path === `/api/identity/providers/${this.provider.key}/replay-memberships`) {
         this.events.push('membership_replayed');
         return json(route, { runId: 'browser-replay-run', scanned: 1, created: 1, removed: 0, failed: 0, truncated: false, nextCursor: null });
       }
+      if (path === '/api/identity/mappings') return json(route, [this.mapping]);
+      if (path === '/api/identity/mappings/test') {
+        this.events.push('mapping_tested');
+        return json(route, { matches: true, entitlements: [{ type: 'group', externalId: 'operators' }] });
+      }
+      if (path === '/api/identity/mappings/stored-snapshot-preview') {
+        this.events.push('mapping_previewed');
+        return json(route, { scanned: 3, matches: 2, nonMatches: 1, failed: 0, truncated: false, warnings: [] });
+      }
+      if (path === '/api/authz/groups') return json(route, [{ id: 'browser-group', key: 'group.browser-operators', name: 'Browser operators', isArchived: false }]);
+      if (path === '/api/authz/roles' || path === '/api/authz/engine-sets' || path === '/api/authz/legacy-mapping-coverage') return json(route, []);
+      if (path === '/api/authz/legacy-mapping-retirement-readiness') return json(route, { ready: true, activeLegacyMappingCount: 0, verifiedReplacementCount: 0, blockers: [] });
       if (/^\/(?:api|engines-api|mission-control-api|git-api)\//.test(path)) {
         return json(route, { error: 'Not implemented by browser identity stack' }, 404);
       }
@@ -98,5 +138,9 @@ export class MockBrowserIdentityStack {
   beginExternalLogin(): void {
     this.authenticated = false;
     this.externalSession = false;
+  }
+
+  failNextConnectionTest(): void {
+    this.connectionFailurePending = true;
   }
 }

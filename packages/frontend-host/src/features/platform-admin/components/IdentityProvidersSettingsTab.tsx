@@ -99,6 +99,7 @@ export default function IdentityProvidersSettingsTab() {
   const [editing, setEditing] = useState<IdentityProvider | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<IdentityProvider | null>(null);
   const [replayResult, setReplayResult] = useState<{ providerKey: string; result: MembershipReplayResult } | null>(null);
   const [replayCursors, setReplayCursors] = useState<Record<string, string | undefined>>({});
@@ -122,8 +123,8 @@ export default function IdentityProvidersSettingsTab() {
       const body = { ...(editing ? {} : { key: payload.key.trim() }), ...(editing ? {} : { protocol: payload.protocol }), isEnabled: payload.isEnabled, authenticationMode: payload.authenticationMode, directoryTenantId: payload.directoryTenantId.trim() || null, configuration: configuration(payload), sync: { triggers: scheduled ? ['login', 'scheduled'] : ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: payload.protocol === 'ldap' ? 'ldap_directory' : 'claim_only', scheduled, ...(scheduled ? { intervalSeconds: Number(payload.syncIntervalSeconds) } : {}) }, ownershipMode: isConfigWarnIdentityProvider(editing) ? 'config_warn' : 'manual' };
       return editing ? apiClient.put(`/api/identity/providers/${encodeURIComponent(editing.key)}`, body) : apiClient.post('/api/identity/providers', body);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-providers'] }); setOpen(false); setEditing(null); setError(null); },
-    onError: (value: unknown) => setError(parseApiError(value, 'Unable to save identity provider').message),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-providers'] }); setOpen(false); setEditing(null); setError(null); setSaveError(null); },
+    onError: (value: unknown) => setSaveError(parseApiError(value, 'Unable to save identity provider').message),
   });
   const archive = useMutation({ mutationFn: (key: string) => apiClient.delete(`/api/identity/providers/${encodeURIComponent(key)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-providers'] }); setArchiveTarget(null); } });
   const reconcile = useMutation({ mutationFn: (key: string) => apiClient.post(`/api/identity/providers/${encodeURIComponent(key)}/reconcile`, {}), onError: (value: unknown) => setError(parseApiError(value, 'Unable to reconcile LDAP directory').message) });
@@ -148,6 +149,7 @@ export default function IdentityProvidersSettingsTab() {
     setForm({ ...emptyForm(), key: draft.provider.key, protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: draft.provider.directoryTenantId || '', issuerUrl: draft.provider.configuration.issuerUrl, clientId: draft.provider.configuration.clientId, clientSecretRef: draft.provider.configuration.clientSecretRef || '', callbackUrl: draft.provider.configuration.callbackUrl, scopes: draft.provider.configuration.scopes.join(' ') });
     setMigrationDraft(draft);
     setError(null);
+    setSaveError(null);
     setOpen(true);
   };
   const prepareLegacyMigration = useMutation({
@@ -156,8 +158,8 @@ export default function IdentityProvidersSettingsTab() {
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to prepare the legacy provider migration').message),
   });
 
-  const startCreate = () => { setEditing(null); setMigrationDraft(null); setForm(emptyForm()); setError(null); setOpen(true); };
-  const startEdit = (provider: IdentityProvider) => { setEditing(provider); setMigrationDraft(null); setForm(formForProvider(provider)); setError(null); setOpen(true); };
+  const startCreate = () => { setEditing(null); setMigrationDraft(null); setForm(emptyForm()); setError(null); setSaveError(null); setOpen(true); };
+  const startEdit = (provider: IdentityProvider) => { setEditing(provider); setMigrationDraft(null); setForm(formForProvider(provider)); setError(null); setSaveError(null); setOpen(true); };
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((current) => ({ ...current, [key]: value }));
 
   if (!read.allowed) return <UnauthorizedEmptyState title="Identity providers unavailable" reason={read.reason || 'Missing identity provider read permission.'} />;
@@ -177,6 +179,7 @@ export default function IdentityProvidersSettingsTab() {
         </div>
         <GuardedAction actionId="platform.sso.providers.manage" resource={resource}><Button kind="primary" size="sm" renderIcon={Add} onClick={startCreate}>Add provider</Button></GuardedAction>
       </div>
+      {error && <InlineNotification kind="error" title="Provider action failed" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {previewResult && <InlineNotification kind={previewResult.result.failed > 0 || previewResult.result.warnings.includes('no_active_snapshots') ? 'warning' : 'info'} title={`Stored membership preview: ${previewResult.providerKey}`} subtitle={`${previewResult.result.scanned} snapshots checked: ${previewResult.result.additions} additions and ${previewResult.result.removals} removals would result. This preview uses stored snapshots and does not query the provider.${previewResult.result.truncated ? ' More snapshots remain; continue the preview for complete counts.' : ''}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {replayResult && <InlineNotification kind={replayResult.result.failed > 0 ? 'warning' : 'success'} title={`Stored membership replay: ${replayResult.providerKey}`} subtitle={`${replayResult.result.scanned} snapshots checked, ${replayResult.result.created} added, ${replayResult.result.removed} removed${replayResult.result.failed > 0 ? `, ${replayResult.result.failed} failed` : ''}${replayResult.result.truncated ? '. More snapshots remain; use Continue membership replay.' : '.'}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {connectionResult && <InlineNotification kind="success" title={`Connection test: ${connectionResult.providerKey}`} subtitle={`${connectionResult.result.protocol.toUpperCase()} connection verified${connectionResult.result.issuer ? ` for ${connectionResult.result.issuer}` : ''}${connectionResult.result.sampledIdentities !== undefined ? `; sampled ${connectionResult.result.sampledIdentities} directory identities` : ''}${connectionResult.result.entityDescriptorCount !== undefined ? `; validated ${connectionResult.result.entityDescriptorCount} SAML entity descriptors` : ''}.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
@@ -246,7 +249,7 @@ export default function IdentityProvidersSettingsTab() {
       </div>}
     </Tile>
     <Modal open={open} modalHeading={editing ? 'Edit identity provider' : 'Add identity provider'} primaryButtonText={editing ? 'Save' : 'Add'} secondaryButtonText="Cancel" primaryButtonDisabled={!manage.allowed || save.isPending} onRequestClose={() => setOpen(false)} onRequestSubmit={() => save.mutate(form)}>
-      {error && <InlineNotification kind="error" title="Provider not saved" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+      {saveError && <InlineNotification kind="error" title="Provider not saved" subtitle={saveError} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {migrationDraft && <InlineNotification kind="info" title={`Migration draft for ${migrationDraft.legacyProvider.name}`} subtitle={`This provider remains disabled. ${migrationDraft.requirements.includes('client_secret_reference') ? 'Add a client secret reference, ' : 'Confirm the environment-backed client secret reference, '}update the identity-provider redirect URI, configure identity mappings, test sign-in, then complete the legacy cutover. ${migrationDraft.warnings[0] || ''}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       <TextInput id="identity-provider-key" labelText="Provider key" value={form.key} disabled={Boolean(editing)} onChange={(event) => update('key', event.target.value)} helperText="Stable key used by JSON configuration and sign-in links." />
       <Select id="identity-provider-protocol" labelText="Protocol" value={form.protocol} disabled={Boolean(editing)} onChange={(event) => update('protocol', event.target.value as Protocol)}><SelectItem value="oidc" text="OpenID Connect" /><SelectItem value="saml" text="SAML 2.0" /><SelectItem value="ldap" text="LDAP" /></Select>

@@ -28,6 +28,15 @@ function menuItem(label: string): HTMLElement | null {
   return node?.closest('button') || node?.closest('[role="menuitem"]') || node || null;
 }
 
+async function editManualMapping() {
+  const overflow = screen.getAllByRole('button').find((button) => button.getAttribute('aria-label') === 'Mapping actions' || button.className.includes('cds--overflow-menu'));
+  if (!overflow) throw new Error('Mapping actions menu not found');
+  fireEvent.click(overflow);
+  await waitFor(() => expect(menuItem('Edit')).toBeTruthy());
+  fireEvent.click(menuItem('Edit')!);
+  await screen.findByText('Edit identity mapping');
+}
+
 describe('IdentityMappingsSettingsTab', () => {
   beforeEach(() => {
     authState.permissions = {
@@ -64,5 +73,33 @@ describe('IdentityMappingsSettingsTab', () => {
     authState.permissions = { userId: 'viewer-1', platform: [], projects: [], engines: [], generatedAt: 1 };
     renderTab();
     expect(screen.getByText('Identity mappings unavailable')).toBeInTheDocument();
+  });
+
+  it('previews supplied claims and stored identity coverage through MSW', async () => {
+    renderTab();
+    await screen.findByText('group.engine-operators');
+    await editManualMapping();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test mapping' }));
+    expect(await screen.findByText('Mapping preview')).toBeInTheDocument();
+    expect(screen.getByText('Matched: group:operations')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview stored identities' }));
+    expect(await screen.findByText('Stored identity coverage')).toBeInTheDocument();
+    expect(screen.getByText('1 of 1 stored identities match; 0 do not.')).toBeInTheDocument();
+  });
+
+  it('shows only sanitized mapping-preview failures', async () => {
+    server.use(http.post('/api/identity/mappings/test', () => HttpResponse.json({
+      error: 'Mapping preview is temporarily unavailable',
+      internalDetail: 'authorization=Bearer never-render-this',
+    }, { status: 503 })));
+    renderTab();
+    await screen.findByText('group.engine-operators');
+    await editManualMapping();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test mapping' }));
+    expect(await screen.findByText('Mapping preview is temporarily unavailable')).toBeInTheDocument();
+    expect(screen.queryByText(/never-render-this/)).not.toBeInTheDocument();
   });
 });
