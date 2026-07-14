@@ -5,6 +5,7 @@ import tasksRouter from '../../../../../packages/backend-host/src/modules/missio
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   claimTaskById,
   completeTaskById,
@@ -59,6 +60,10 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared
   getTaskVariablesById: vi.fn().mockResolvedValue({ var1: { value: 'test' } }),
   updateTaskVariablesById: vi.fn().mockResolvedValue({}),
   getTaskFormById: vi.fn().mockResolvedValue({ key: 'form1' }),
+}));
+
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
+  camundaGet: vi.fn(),
 }));
 
 describe('mission-control tasks routes', () => {
@@ -155,6 +160,30 @@ describe('mission-control tasks routes', () => {
 
     expect(response.status).toBe(200);
     expect(listTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100 });
+  });
+
+  it('drops task rows whose resolved definition lineage is outside the authorized key', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : {},
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+    (listTasks as unknown as Mock).mockResolvedValueOnce([
+      { id: 'task-allowed', processDefinitionId: 'definition-payments' },
+      { id: 'task-forbidden', processDefinitionId: 'definition-benefits' },
+    ]);
+    (camundaGet as unknown as Mock).mockImplementation(async (_engineId: string, path: string) => (
+      path.endsWith('definition-payments') ? { key: 'payments' } : { key: 'benefits' }
+    ));
+
+    const response = await request(app)
+      .get('/mission-control-api/tasks')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'task-allowed', processDefinitionId: 'definition-payments' }]);
   });
 
   it('rejects oversized task collection requests for resource-aware engines', async () => {

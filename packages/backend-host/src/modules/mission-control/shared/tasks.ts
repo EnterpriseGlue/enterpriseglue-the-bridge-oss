@@ -23,7 +23,7 @@ import {
   CompleteTaskRequest,
   TaskVariablesRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/task.js';
-import { getBoundedRuntimeResourceQuery } from './runtime-resource-filter.js';
+import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery } from './runtime-resource-filter.js';
 
 const r = Router();
 
@@ -46,10 +46,12 @@ r.get('/mission-control-api/tasks', requireRuntimeCollectionAction('engine.runti
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
   const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
-  const data = visibleKeys
-    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listTasks(engineId, { ...query, processDefinitionKey })))).flat()
-    : await listTasks(engineId, query);
-  res.json(data);
+  if (!visibleKeys) return res.json(await listTasks(engineId, query));
+  const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
+    const data = await listTasks(engineId, { ...query, processDefinitionKey });
+    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey]);
+  }));
+  res.json(collections.flat());
 }));
 
 // Get task count
