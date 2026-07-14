@@ -1119,6 +1119,49 @@ export const SsoSyncDiagnosticsScanResultSchema = z.object({
   cleanup: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const IdentityProviderSyncRunsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+});
+
+export const IdentityProviderSyncEventsQuerySchema = z.object({
+  severity: z.enum(['info', 'warning', 'error']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+export const IdentityProviderMembershipReplayRequestSchema = z.object({
+  limit: z.number().int().min(1).max(5000).optional(),
+  cursor: z.string().min(1).max(512).optional(),
+});
+
+export const IdentityProviderReconciliationPreviewSchema = z.object({
+  scanned: z.number().int().nonnegative(),
+  additions: z.number().int().nonnegative(),
+  removals: z.number().int().nonnegative(),
+  unchanged: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+  nextCursor: z.string().nullable(),
+  latestSnapshotAt: z.number().nullable(),
+  warnings: z.array(z.enum(['stored_snapshots_only', 'no_active_snapshots', 'truncated'])),
+  mappings: z.array(z.object({
+    mappingId: z.string(),
+    targetGroupId: z.string(),
+    additions: z.number().int().nonnegative(),
+    removals: z.number().int().nonnegative(),
+    unchanged: z.number().int().nonnegative(),
+  })),
+});
+
+export const IdentityProviderMembershipReplayResponseSchema = z.object({
+  runId: z.string().nullable(),
+  scanned: z.number().int().nonnegative(),
+  created: z.number().int().nonnegative(),
+  removed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+  nextCursor: z.string().nullable(),
+});
+
 export const SsoAssignmentMappingSchema = z.object({
   id: z.string(),
   tenantId: z.string().nullable().optional(),

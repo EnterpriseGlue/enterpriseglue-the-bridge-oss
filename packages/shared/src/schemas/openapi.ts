@@ -2191,25 +2191,20 @@ registry.registerPath({
   request: { params: z.object({ key: z.string() }) },
   responses: { 200: { description: 'Identity provider', content: { 'application/json': { schema: IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found' } },
 });
+const identityProviderDiagnosticSchemas = await import('./platform-admin/authz.js');
 registry.registerPath({
   method: 'get',
   path: '/api/identity/providers/{key}/sync-runs',
   ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers/{key}/sync-runs'),
-  request: { params: z.object({ key: z.string() }), query: z.object({ limit: z.coerce.number().int().min(1).max(100).optional() }) },
-  responses: { 200: { description: 'Recent identity provider synchronization runs', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), status: z.enum(['running', 'success', 'failed']), trigger: z.enum(['login', 'scheduled', 'manual', 'mapping_change', 'engine_change']), startedAt: z.number(), completedAt: z.number().nullable(), groupMembershipsCreated: z.number().int(), groupMembershipsRemoved: z.number().int(), errorMessage: z.string().nullable() })) } } }, 404: { description: 'Identity provider not found' } },
-});
-const IdentityProviderSyncEventResponseSchema = z.object({
-  id: z.string(), tenantId: z.string().nullable(), providerId: z.string().nullable(), runId: z.string(),
-  severity: z.enum(['info', 'warning', 'error']), type: z.string(), userId: z.string().nullable(),
-  mappingType: z.string().nullable(), mappingId: z.string().nullable(), resourceType: z.string().nullable(),
-  resourceId: z.string().nullable(), message: z.string(), details: z.string(), createdAt: z.number(),
+  request: { params: z.object({ key: z.string() }), query: identityProviderDiagnosticSchemas.IdentityProviderSyncRunsQuerySchema },
+  responses: { 200: { description: 'Recent identity provider synchronization runs', content: { 'application/json': { schema: z.array(identityProviderDiagnosticSchemas.SsoSyncRunSchema) } } }, 404: { description: 'Identity provider not found' } },
 });
 registry.registerPath({
   method: 'get',
   path: '/api/identity/providers/{key}/sync-runs/{runId}/events',
   ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers/{key}/sync-runs/{runId}/events'),
-  request: { params: z.object({ key: z.string(), runId: z.string().min(1).max(128) }), query: z.object({ severity: z.enum(['info', 'warning', 'error']).optional(), limit: z.coerce.number().int().min(1).max(200).optional() }) },
-  responses: { 200: { description: 'Provider-scoped synchronization events for one run', content: { 'application/json': { schema: z.array(IdentityProviderSyncEventResponseSchema) } } }, 404: { description: 'Identity provider not found' } },
+  request: { params: z.object({ key: z.string(), runId: z.string().min(1).max(128) }), query: identityProviderDiagnosticSchemas.IdentityProviderSyncEventsQuerySchema },
+  responses: { 200: { description: 'Provider-scoped synchronization events for one run', content: { 'application/json': { schema: z.array(identityProviderDiagnosticSchemas.SsoSyncEventSchema) } } }, 404: { description: 'Identity provider not found' } },
 });
 registry.registerPath({
   method: 'post',
@@ -2232,31 +2227,31 @@ registry.registerPath({
   request: { params: z.object({ key: z.string() }) },
   responses: { 200: { description: 'Run one bounded LDAP directory reconciliation page', content: { 'application/json': { schema: z.object({ skipped: z.string().optional(), processed: z.number().int().optional(), runId: z.string().nullable().optional() }) } } } },
 });
-const IdentityProviderReconciliationPreviewSchema = z.object({
-  scanned: z.number().int().nonnegative(),
-  additions: z.number().int().nonnegative(),
-  removals: z.number().int().nonnegative(),
-  unchanged: z.number().int().nonnegative(),
-  failed: z.number().int().nonnegative(),
-  truncated: z.boolean(),
-  nextCursor: z.string().nullable(),
-  latestSnapshotAt: z.number().nullable(),
-  warnings: z.array(z.enum(['stored_snapshots_only', 'no_active_snapshots', 'truncated'])),
-  mappings: z.array(z.object({ mappingId: z.string(), targetGroupId: z.string(), additions: z.number().int().nonnegative(), removals: z.number().int().nonnegative(), unchanged: z.number().int().nonnegative() })),
-});
 registry.registerPath({
   method: 'post',
   path: '/api/identity/providers/{key}/reconciliation-preview',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/reconciliation-preview'),
-  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ limit: z.number().int().min(1).max(5000).optional(), cursor: z.string().min(1).max(512).optional() }) } } } },
-  responses: { 200: { description: 'Preview stored identity snapshot membership changes without persistence', content: { 'application/json': { schema: IdentityProviderReconciliationPreviewSchema } } }, 404: { description: 'Identity provider not found' } },
+  request: {
+    params: z.object({ key: z.string() }),
+    body: { content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayRequestSchema } } },
+  },
+  responses: { 200: { description: 'Preview stored identity snapshot membership changes without persistence', content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderReconciliationPreviewSchema } } }, 404: { description: 'Identity provider not found' } },
 });
 registry.registerPath({
   method: 'post',
   path: '/api/identity/providers/{key}/replay-memberships',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/replay-memberships'),
-  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ limit: z.number().int().min(1).max(5000).optional(), cursor: z.string().min(1).max(512).optional() }) } } } },
-  responses: { 200: { description: 'Replay stored provider identity memberships', content: { 'application/json': { schema: z.object({ runId: z.string().nullable(), scanned: z.number().int().nonnegative(), created: z.number().int().nonnegative(), removed: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), truncated: z.boolean(), nextCursor: z.string().nullable() }) } } }, 404: { description: 'Identity provider not found' } },
+  request: {
+    params: z.object({ key: z.string() }),
+    body: { content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayRequestSchema } } },
+  },
+  responses: {
+    200: {
+      description: 'Replay stored provider identity memberships',
+      content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayResponseSchema } },
+    },
+    404: { description: 'Identity provider not found' },
+  },
 });
 registry.registerPath({
   method: 'post',

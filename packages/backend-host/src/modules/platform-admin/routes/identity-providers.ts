@@ -16,6 +16,11 @@ import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { identityAdminLimiter, reconciliationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { identityAdminJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
+import {
+  IdentityProviderMembershipReplayRequestSchema,
+  IdentityProviderSyncEventsQuerySchema,
+  IdentityProviderSyncRunsQuerySchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const router = Router();
 const schema = z.object({ key: z.string().min(1).max(128), protocol: z.enum(['oidc', 'saml', 'ldap']), isEnabled: z.boolean().optional(), authenticationMode: z.enum(['direct', 'claims_only']).optional(), directoryTenantId: z.string().optional().nullable(), configuration: z.record(z.string(), z.unknown()), sync: z.record(z.string(), z.unknown()).optional(), ownershipMode: z.string().max(64).optional(), sourceRef: z.string().optional().nullable() });
@@ -24,9 +29,6 @@ const providerKeySchema = z.string().min(1).max(128);
 const legacyProviderIdSchema = z.string().min(1).max(128);
 const migrationReadinessQuerySchema = z.object({ targetProviderKey: z.string().min(1).max(128), legacyProviderId: z.string().min(1).max(128).optional() });
 const legacyCutoverSchema = z.object({ legacyProviderId: z.string().min(1).max(128), targetProviderKey: z.string().min(1).max(128) });
-const replayMembershipsSchema = z.object({ limit: z.number().int().min(1).max(5000).optional(), cursor: z.string().min(1).max(512).optional() });
-const syncRunsQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(10) });
-const syncEventsQuerySchema = z.object({ severity: z.enum(['info', 'warning', 'error']).optional(), limit: z.coerce.number().int().min(1).max(200).default(50) });
 
 router.get('/api/identity/providers', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
   res.json(await identityProviderService.list(req.tenant?.tenantId || null));
@@ -83,12 +85,12 @@ router.get('/api/identity/providers/:key', requireAuth, identityAdminLimiter, re
   if (!provider) throw Errors.notFound('Identity provider not found');
   res.json(provider);
 }));
-router.get('/api/identity/providers/:key/sync-runs', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.read'), validateQuery(syncRunsQuerySchema), asyncHandler(async (req, res) => {
+router.get('/api/identity/providers/:key/sync-runs', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.read'), validateQuery(IdentityProviderSyncRunsQuerySchema), asyncHandler(async (req, res) => {
   const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
   res.json(await ssoSyncDiagnosticsService.listRuns({ tenantId: req.tenant?.tenantId || null, providerId: provider.id, limit: Number(req.query.limit || 10) }));
 }));
-router.get('/api/identity/providers/:key/sync-runs/:runId/events', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.read'), validateQuery(syncEventsQuerySchema), asyncHandler(async (req, res) => {
+router.get('/api/identity/providers/:key/sync-runs/:runId/events', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.read'), validateQuery(IdentityProviderSyncEventsQuerySchema), asyncHandler(async (req, res) => {
   const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
   res.json(await ssoSyncDiagnosticsService.listEvents({
@@ -149,7 +151,7 @@ router.post('/api/identity/providers/:key/reconcile', requireAuth, identityAdmin
 }));
 router.post('/api/identity/providers/:key/reconciliation-preview', requireAuth, identityAdminLimiter, reconciliationLimiter, requireAction('platform.sso.providers.manage'), identityAdminJsonPayloadLimit, asyncHandler(async (req, res) => {
   const key = providerKeySchema.parse(req.params.key);
-  const input = replayMembershipsSchema.parse(req.body || {});
+  const input = IdentityProviderMembershipReplayRequestSchema.parse(req.body || {});
   const provider = await identityProviderService.getByKey(key, req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
   const result = await ssoNormalizedIdentityService.previewMemberships({ tenantId: req.tenant?.tenantId || null, providerId: provider.id, limit: input.limit, cursor: input.cursor });
@@ -158,7 +160,7 @@ router.post('/api/identity/providers/:key/reconciliation-preview', requireAuth, 
 }));
 router.post('/api/identity/providers/:key/replay-memberships', requireAuth, identityAdminLimiter, reconciliationLimiter, requireAction('platform.sso.providers.manage'), identityAdminJsonPayloadLimit, asyncHandler(async (req, res) => {
   const key = providerKeySchema.parse(req.params.key);
-  const input = replayMembershipsSchema.parse(req.body || {});
+  const input = IdentityProviderMembershipReplayRequestSchema.parse(req.body || {});
   const provider = await identityProviderService.getByKey(key, req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
   const tenantId = req.tenant?.tenantId || null;
