@@ -68,6 +68,11 @@ type BulkProcessInstance = {
   hasIncident?: boolean
   processDefinitionKey?: string | null
   version?: number | string | null
+  runtimeActionDecisions?: {
+    suspension?: { allowed: boolean; reason?: string }
+    retry?: { allowed: boolean; reason?: string }
+    terminate?: { allowed: boolean; reason?: string }
+  }
 }
 
 type BulkProcessEligibility = {
@@ -113,10 +118,31 @@ function actionPastTense(action: BulkProcessAction): string {
   return 'migrated'
 }
 
+function runtimeDecisionFor(
+  instance: BulkProcessInstance,
+  runtimeAction: 'suspension' | 'retry' | 'terminate',
+  fallback: UiAuthzDecision,
+): UiAuthzDecision {
+  const runtimeDecision = instance.runtimeActionDecisions?.[runtimeAction]
+  if (!runtimeDecision) return fallback
+  return {
+    ...fallback,
+    allowed: runtimeDecision.allowed,
+    state: runtimeDecision.allowed ? 'allowed' : 'disabled',
+    reason: runtimeDecision.allowed
+      ? 'Allowed for this runtime resource'
+      : runtimeDecision.reason || 'Action unavailable for this runtime resource',
+  }
+}
+
 export function getBulkProcessActionEligibility(
   action: BulkProcessAction,
   selectedInstances: BulkProcessInstance[],
-  options: { currentKey?: string | null; diagnosticDecision?: UiAuthzDecision | null } = {}
+  options: {
+    currentKey?: string | null
+    diagnosticDecision?: UiAuthzDecision | null
+    getActionDecision?: (instance: BulkProcessInstance) => UiAuthzDecision | null
+  } = {}
 ): BulkProcessEligibility {
   if (selectedInstances.length === 0) {
     return { allowed: false, deniedCount: 0, firstDeniedDecision: null, firstDeniedReason: null, summary: null }
@@ -132,6 +158,8 @@ export function getBulkProcessActionEligibility(
   const summary = summarizeBulkActionUnavailableReasons(
     selectedInstances,
     (instance) => {
+      const actionDecision = options.getActionDecision?.(instance)
+      if (actionDecision && !actionDecision.allowed) return actionDecision.reason || 'Action unavailable'
       if ((action === 'delete' || action === 'migrate' || action === 'retry') && !isRunningInstance(instance)) {
         return stateReason(instance)
       }
@@ -163,11 +191,11 @@ export function getBulkProcessActionEligibility(
     },
     {
       actionPastTense: actionPastTense(action),
-      getDiagnosticDecision: (_instance, reason) => options.diagnosticDecision
+      getDiagnosticDecision: (instance, reason) => (options.getActionDecision?.(instance) || options.diagnosticDecision)
         ? {
-            ...options.diagnosticDecision,
+            ...(options.getActionDecision?.(instance) || options.diagnosticDecision)!,
             allowed: false,
-            diagnostics: options.diagnosticDecision.diagnostics ?? {
+            diagnostics: (options.getActionDecision?.(instance) || options.diagnosticDecision)?.diagnostics ?? {
               explainUrl: '/admin/access-control?tab=effective-access',
               remediation: ['Ask a platform administrator to review effective access.'],
             },
@@ -830,6 +858,10 @@ export default function ProcessesOverviewPage() {
 
   const selectedCount = selectedInstances.length
   const hasSelection = selectedCount > 0
+  const retryModalDecision = React.useMemo(() => {
+    const instance = (instQ.data || []).find((candidate) => candidate.id === retryModalInstanceId)
+    return instance ? runtimeDecisionFor(instance, 'retry', instanceRetryDecision) : instanceRetryDecision
+  }, [instQ.data, instanceRetryDecision, retryModalInstanceId])
 
   const migrateSameProcess = React.useMemo(() => {
     if (!hasSelection) return false
@@ -845,27 +877,35 @@ export default function ProcessesOverviewPage() {
     return new Set(vers).size <= 1
   }, [hasSelection, selectedInstances])
 
-  const retryPermissionReason = deniedReason(bulkRetryDecision)
-  const activatePermissionReason = deniedReason(bulkActivateDecision)
-  const suspendPermissionReason = deniedReason(bulkSuspendDecision)
-  const deletePermissionReason = deniedReason(bulkDeleteDecision)
   const migratePermissionReason = deniedReason(migrationExecuteDecision)
   const startPermissionReason = deniedReason(processStartDecision)
 
   const retryEligibility = React.useMemo(
-    () => getBulkProcessActionEligibility('retry', selectedInstances, { diagnosticDecision: bulkRetryDecision }),
+    () => getBulkProcessActionEligibility('retry', selectedInstances, {
+      diagnosticDecision: bulkRetryDecision,
+      getActionDecision: (instance) => runtimeDecisionFor(instance, 'retry', bulkRetryDecision),
+    }),
     [bulkRetryDecision, selectedInstances]
   )
   const activateEligibility = React.useMemo(
-    () => getBulkProcessActionEligibility('activate', selectedInstances, { diagnosticDecision: bulkActivateDecision }),
+    () => getBulkProcessActionEligibility('activate', selectedInstances, {
+      diagnosticDecision: bulkActivateDecision,
+      getActionDecision: (instance) => runtimeDecisionFor(instance, 'suspension', bulkActivateDecision),
+    }),
     [bulkActivateDecision, selectedInstances]
   )
   const suspendEligibility = React.useMemo(
-    () => getBulkProcessActionEligibility('suspend', selectedInstances, { diagnosticDecision: bulkSuspendDecision }),
+    () => getBulkProcessActionEligibility('suspend', selectedInstances, {
+      diagnosticDecision: bulkSuspendDecision,
+      getActionDecision: (instance) => runtimeDecisionFor(instance, 'suspension', bulkSuspendDecision),
+    }),
     [bulkSuspendDecision, selectedInstances]
   )
   const deleteEligibility = React.useMemo(
-    () => getBulkProcessActionEligibility('delete', selectedInstances, { diagnosticDecision: bulkDeleteDecision }),
+    () => getBulkProcessActionEligibility('delete', selectedInstances, {
+      diagnosticDecision: bulkDeleteDecision,
+      getActionDecision: (instance) => runtimeDecisionFor(instance, 'terminate', bulkDeleteDecision),
+    }),
     [bulkDeleteDecision, selectedInstances]
   )
   const migrateEligibility = React.useMemo(
@@ -873,22 +913,22 @@ export default function ProcessesOverviewPage() {
     [currentKey, migrationExecuteDecision, selectedInstances]
   )
 
-  const canRetry = hasSelection && retryEligibility.allowed && !bulkOps.bulkRetryBusy && bulkRetryDecision.allowed
-  const canActivate = hasSelection && activateEligibility.allowed && !bulkOps.bulkActivateBusy && bulkActivateDecision.allowed
-  const canSuspend = hasSelection && suspendEligibility.allowed && !bulkOps.bulkSuspendBusy && bulkSuspendDecision.allowed
-  const canDelete = hasSelection && deleteEligibility.allowed && !bulkOps.bulkDeleteBusy && bulkDeleteDecision.allowed
+  const canRetry = hasSelection && retryEligibility.allowed && !bulkOps.bulkRetryBusy
+  const canActivate = hasSelection && activateEligibility.allowed && !bulkOps.bulkActivateBusy
+  const canSuspend = hasSelection && suspendEligibility.allowed && !bulkOps.bulkSuspendBusy
+  const canDelete = hasSelection && deleteEligibility.allowed && !bulkOps.bulkDeleteBusy
   const canMigrate = hasSelection && migrateEligibility.allowed && migrateSameProcess && migrateSameVersion && migrationExecuteDecision.allowed
-  const retryTitle = retryPermissionReason || retryEligibility.summary || 'Retry failed jobs (Batch)'
-  const activateTitle = activatePermissionReason || activateEligibility.summary || 'Activate (Batch)'
-  const suspendTitle = suspendPermissionReason || suspendEligibility.summary || 'Suspend (Batch)'
-  const deleteTitle = deletePermissionReason || deleteEligibility.summary || 'Cancel (Batch)'
+  const retryTitle = retryEligibility.summary || 'Retry failed jobs (Batch)'
+  const activateTitle = activateEligibility.summary || 'Activate (Batch)'
+  const suspendTitle = suspendEligibility.summary || 'Suspend (Batch)'
+  const deleteTitle = deleteEligibility.summary || 'Cancel (Batch)'
   const migrateTitle = migratePermissionReason || migrateEligibility.summary || 'Migrate'
   const startTitle = startPermissionReason || 'Start process instance'
-  const bulkDeleteDiagnosticDecision = hasSelection && deletePermissionReason ? bulkDeleteDecision : deleteEligibility.firstDeniedDecision
-  const bulkSuspendDiagnosticDecision = hasSelection && suspendPermissionReason ? bulkSuspendDecision : suspendEligibility.firstDeniedDecision
+  const bulkDeleteDiagnosticDecision = deleteEligibility.firstDeniedDecision
+  const bulkSuspendDiagnosticDecision = suspendEligibility.firstDeniedDecision
   const bulkMigrateDiagnosticDecision = hasSelection && migratePermissionReason ? migrationExecuteDecision : migrateEligibility.firstDeniedDecision
-  const bulkActivateDiagnosticDecision = hasSelection && activatePermissionReason ? bulkActivateDecision : activateEligibility.firstDeniedDecision
-  const bulkRetryDiagnosticDecision = hasSelection && retryPermissionReason ? bulkRetryDecision : retryEligibility.firstDeniedDecision
+  const bulkActivateDiagnosticDecision = activateEligibility.firstDeniedDecision
+  const bulkRetryDiagnosticDecision = retryEligibility.firstDeniedDecision
   const firstBulkDiagnosticDecision = bulkDeleteDiagnosticDecision ||
     bulkSuspendDiagnosticDecision ||
     bulkMigrateDiagnosticDecision ||
@@ -1269,7 +1309,6 @@ export default function ProcessesOverviewPage() {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => {
-                  if (notifyDeniedAction(bulkDeleteDecision)) return
                   const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
                   if (ids.length === 0) return
                   bulkDeleteModal.openModal()
@@ -1290,7 +1329,6 @@ export default function ProcessesOverviewPage() {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => {
-                  if (notifyDeniedAction(bulkSuspendDecision)) return
                   const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
                   if (ids.length === 0) return
                   bulkSuspendModal.openModal()
@@ -1344,7 +1382,6 @@ export default function ProcessesOverviewPage() {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => {
-                  if (notifyDeniedAction(bulkActivateDecision)) return
                   const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
                   if (ids.length === 0) return
                   bulkActivateModal.openModal()
@@ -1365,7 +1402,6 @@ export default function ProcessesOverviewPage() {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => {
-                  if (notifyDeniedAction(bulkRetryDecision)) return
                   const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
                   if (ids.length === 0) return
                   bulkRetryModal.openModal()
@@ -1470,7 +1506,7 @@ export default function ProcessesOverviewPage() {
         retryExtTasksQRefetch={() => retryExtTasksQ.refetch()}
         instQRefetch={() => instQ.refetch()}
         engineId={selectedEngineId}
-        retryDecision={instanceRetryDecision}
+        retryDecision={retryModalDecision}
       />
 
       <BulkOperationModals
@@ -1478,7 +1514,6 @@ export default function ProcessesOverviewPage() {
         bulkRetryBusy={bulkOps.bulkRetryBusy}
         onBulkRetryClose={bulkRetryModal.closeModal}
         onBulkRetryConfirm={async (reason) => {
-          if (notifyDeniedAction(bulkRetryDecision)) return
           await bulkOps.bulkRetry(reason)
         }}
         selectedCount={selectedCount}
@@ -1486,28 +1521,24 @@ export default function ProcessesOverviewPage() {
         bulkDeleteBusy={bulkOps.bulkDeleteBusy}
         onBulkDeleteClose={bulkDeleteModal.closeModal}
         onBulkDeleteConfirm={async (reason) => {
-          if (notifyDeniedAction(bulkDeleteDecision)) return
           await bulkOps.bulkDelete(reason)
         }}
         bulkSuspendOpen={bulkSuspendModal.isOpen}
         bulkSuspendBusy={bulkOps.bulkSuspendBusy}
         onBulkSuspendClose={bulkSuspendModal.closeModal}
         onBulkSuspendConfirm={async (reason) => {
-          if (notifyDeniedAction(bulkSuspendDecision)) return
           await bulkOps.bulkSuspend(reason)
         }}
         bulkActivateOpen={bulkActivateModal.isOpen}
         bulkActivateBusy={bulkOps.bulkActivateBusy}
         onBulkActivateClose={bulkActivateModal.closeModal}
         onBulkActivateConfirm={async (reason) => {
-          if (notifyDeniedAction(bulkActivateDecision)) return
           await bulkOps.bulkActivate(reason)
         }}
         terminateOpen={terminateModal.isOpen}
         onTerminateClose={terminateModal.closeModal}
         onTerminateConfirm={async (reason) => {
           if (!terminateModal.data) return
-          if (notifyDeniedAction(instanceTerminateDecision)) return
           try {
             await bulkOps.callAction(
               'DELETE',
