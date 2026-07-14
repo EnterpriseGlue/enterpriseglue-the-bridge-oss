@@ -759,6 +759,41 @@ describe('mission-control engines routes', () => {
     expect(engineDelete).not.toHaveBeenCalled();
   });
 
+  it('prunes canonical legacy assignments when a manual engine is deleted', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delete');
+    const engineDelete = vi.fn().mockResolvedValue({ affected: 1 });
+    const registrationDelete = vi.fn().mockResolvedValue(undefined);
+    const materializationDelete = vi.fn().mockResolvedValue(undefined);
+    const assignmentDelete = vi.fn().mockResolvedValue(undefined);
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Manual Engine',
+      registrationSource: 'user',
+      lifecycleStatus: 'active',
+      tenantId: null,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'ExternalEngineRegistration') return { delete: registrationDelete };
+        if (entity?.name === 'EngineSetMaterialization') return { delete: materializationDelete };
+        if (entity?.name === 'RbacRoleAssignment') return { delete: assignmentDelete };
+        return { findOne, findOneBy, delete: engineDelete };
+      },
+    });
+
+    await request(app).delete('/engines-api/engines/e1').expect(204);
+
+    expect(engineDelete).toHaveBeenCalledWith({ id: 'e1' });
+    expect(assignmentDelete).toHaveBeenCalledWith({
+      source: 'legacy',
+      scopeType: 'engine',
+      scopeId: 'e1',
+    });
+    expect(permissionServiceMock.syncLegacyRoleAssignments).not.toHaveBeenCalled();
+  });
+
   it('rejects manual deletion of externally registered engines', async () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delete');

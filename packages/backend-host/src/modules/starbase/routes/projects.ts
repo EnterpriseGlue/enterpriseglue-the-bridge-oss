@@ -13,6 +13,7 @@ import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
 import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMember.js';
 import { ProjectMemberRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMemberRole.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Invitation } from '@enterpriseglue/shared/infrastructure/persistence/entities/Invitation.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
@@ -31,6 +32,7 @@ import {
   type DeploymentEligibilityResult,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { PlatformPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { writeLegacyProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/legacy-project-role-assignments.js';
 import { projectCreateLimiter, apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import {
   applyPreparedEngineImportToProject,
@@ -489,6 +491,15 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
       .orIgnore()
       .execute();
 
+    await writeLegacyProjectMemberRoleAssignments(manager, {
+      projectId: id,
+      tenantId: req.tenant?.tenantId || null,
+      userId,
+      roles: ['owner'],
+      createdById: null,
+      createdAt: membershipNow,
+    });
+
     if (preparedImport) {
       await applyPreparedEngineImportToProject({
         manager,
@@ -498,9 +509,6 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
       });
     }
   });
-
-  await permissionService.syncLegacyRoleAssignments({ projectIds: [id] })
-    .catch((error) => logger.warn('Failed to sync legacy project role assignments', { projectId: id, error }));
 
   res.json({ id, name: trimmed, ownerId: userId, createdAt: now, updatedAt: now });
 }));
@@ -541,8 +549,11 @@ r.delete('/starbase-api/projects/:projectId', apiLimiter, requireAuth, requireAc
 
   // Delete project and all its resources using cascade delete service
   await CascadeDeleteService.deleteProject(projectId);
-  await permissionService.syncLegacyRoleAssignments({ projectIds: [projectId] })
-    .catch((error) => logger.warn('Failed to prune legacy project role assignments', { projectId, error }));
+  await (await getDataSource()).getRepository(RbacRoleAssignment).delete({
+    source: 'legacy',
+    scopeType: 'project',
+    scopeId: projectId,
+  });
 
   res.status(204).end();
 }));

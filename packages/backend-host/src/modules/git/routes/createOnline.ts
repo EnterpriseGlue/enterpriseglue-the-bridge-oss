@@ -27,7 +27,7 @@ import {
   assertUserCanImportFromEngine,
   prepareLatestEngineImport,
 } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
-import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { writeLegacyProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/legacy-project-role-assignments.js';
 
 const router = Router();
 
@@ -219,8 +219,14 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
       .orIgnore()
       .execute();
 
-    await permissionService.syncLegacyRoleAssignments({ projectIds: [projectId] })
-      .catch((error) => logger.warn('Failed to sync legacy project role assignments', { projectId, error }));
+    await writeLegacyProjectMemberRoleAssignments(dataSource, {
+      projectId,
+      tenantId: req.tenant?.tenantId || null,
+      userId,
+      roles: ['owner'],
+      createdById: null,
+      createdAt: now,
+    });
 
     if (preparedImport) {
       await applyPreparedEngineImportToProject({

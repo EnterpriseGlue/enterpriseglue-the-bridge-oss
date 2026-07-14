@@ -345,6 +345,7 @@ describe('starbase projects routes', () => {
 
   it('creates a project through project.projects.create', async () => {
     const projectInsert = vi.fn().mockResolvedValue(undefined);
+    const assignmentUpsert = vi.fn().mockResolvedValue(undefined);
     const insertBuilder = {
       insert: vi.fn().mockReturnThis(),
       values: vi.fn().mockReturnThis(),
@@ -355,6 +356,9 @@ describe('starbase projects routes', () => {
       getRepository: (entity: any) => {
         if (entity?.name === 'Project') {
           return { insert: projectInsert };
+        }
+        if (entity?.name === 'RbacRoleAssignment') {
+          return { upsert: assignmentUpsert };
         }
         return { createQueryBuilder: vi.fn().mockReturnValue(insertBuilder) };
       },
@@ -376,7 +380,16 @@ describe('starbase projects routes', () => {
       name: 'Created Project',
       ownerId: 'user-1',
     }));
-    expect(permissionService.syncLegacyRoleAssignments).toHaveBeenCalledWith({ projectIds: [response.body.id] });
+    expect(assignmentUpsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalType: 'user',
+        principalId: 'user-1',
+        scopeType: 'project',
+        scopeId: response.body.id,
+        source: 'legacy',
+      }),
+    ], expect.objectContaining({ conflictPaths: ['id'] }));
+    expect(permissionService.syncLegacyRoleAssignments).not.toHaveBeenCalled();
   });
 
   it('denies project creation before transaction when project.projects.create is missing', async () => {
@@ -443,9 +456,11 @@ describe('starbase projects routes', () => {
     const projectRepo = {
       findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: null }),
     };
+    const assignmentDelete = vi.fn().mockResolvedValue(undefined);
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if ((entity as any)?.name === 'Project') return projectRepo;
+        if ((entity as any)?.name === 'RbacRoleAssignment') return { delete: assignmentDelete };
         return {};
       },
     });
@@ -459,7 +474,12 @@ describe('starbase projects routes', () => {
       resourceId: projectId,
     }));
     expect(CascadeDeleteService.deleteProject).toHaveBeenCalledWith(projectId);
-    expect(permissionService.syncLegacyRoleAssignments).toHaveBeenCalledWith({ projectIds: [projectId] });
+    expect(assignmentDelete).toHaveBeenCalledWith({
+      source: 'legacy',
+      scopeType: 'project',
+      scopeId: projectId,
+    });
+    expect(permissionService.syncLegacyRoleAssignments).not.toHaveBeenCalled();
   });
 
   it('previews latest engine import definitions for project creation', async () => {

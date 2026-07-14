@@ -1532,8 +1532,11 @@ r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, requireAction('
   await dataSource.getRepository(ExternalEngineRegistration).delete({ engineId })
   await dataSource.getRepository(EngineSetMaterialization).delete({ engineId })
   await engineRepo.delete({ id: engineId })
-  await permissionService.syncLegacyRoleAssignments({ engineIds: [engineId] })
-    .catch((error) => logger.warn('Failed to prune legacy engine role assignments', { engineId, error }))
+  await dataSource.getRepository(RbacRoleAssignment).delete({
+    source: 'legacy',
+    scopeType: 'engine',
+    scopeId: engineId,
+  })
   res.status(204).end()
 }))
 
