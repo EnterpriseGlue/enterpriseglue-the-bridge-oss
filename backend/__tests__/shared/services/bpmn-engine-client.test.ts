@@ -7,6 +7,7 @@ import {
   camundaPost,
   fetchBpmnEngineEndpoint,
   resolveBpmnEngineConnection,
+  resolveBpmnEngineRequestUrl,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   runWithBpmnEngineRequestContext,
@@ -219,6 +220,11 @@ describe('bpmn-engine-client', () => {
         process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS = previousRewrite;
       }
     }
+  });
+
+  it('rejects non-HTTP engine endpoint schemes before an outbound request', () => {
+    expect(() => resolveBpmnEngineRequestUrl('ftp://engine.example.test/engine-rest', '/version'))
+      .toThrow('Engine endpoint URL must use HTTP or HTTPS');
   });
 
   it('obtains OAuth2 client credentials tokens server-side before calling the engine', async () => {

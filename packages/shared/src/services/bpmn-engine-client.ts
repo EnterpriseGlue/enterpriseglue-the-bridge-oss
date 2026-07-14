@@ -181,11 +181,19 @@ function shouldRewriteDockerLoopbackEngineUrls(): boolean {
 
 export function resolveBpmnEngineRequestUrl(baseUrl: string, path = ''): string {
   const rawUrl = path.startsWith('http') ? path : baseUrl.replace(/\/$/, '') + path
+  let parsed: URL
+  try {
+    parsed = new URL(rawUrl)
+  } catch {
+    throw Errors.validation('Engine endpoint URL is invalid')
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw Errors.validation('Engine endpoint URL must use HTTP or HTTPS')
+  }
   if (!shouldRewriteDockerLoopbackEngineUrls() || !isLoopbackEngineHost(rawUrl)) return rawUrl
 
-  const rewritten = new URL(rawUrl)
-  rewritten.hostname = 'host.docker.internal'
-  return rewritten.toString()
+  parsed.hostname = 'host.docker.internal'
+  return parsed.toString()
 }
 
 async function getEngine(engineId: string): Promise<EngineCfg> {
