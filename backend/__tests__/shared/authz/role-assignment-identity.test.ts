@@ -31,7 +31,12 @@ describe('canonical role assignment identity', () => {
   it('changes for every authorization-relevant identity component', () => {
     const key = canonicalRoleAssignmentKey(base);
     expect(canonicalRoleAssignmentKey({ ...base, tenantId: 'tenant-1' })).not.toBe(key);
+    expect(canonicalRoleAssignmentKey({ ...base, principalType: 'group' })).not.toBe(key);
+    expect(canonicalRoleAssignmentKey({ ...base, principalId: 'user-2' })).not.toBe(key);
     expect(canonicalRoleAssignmentKey({ ...base, roleId: 'system.engine.deployer' })).not.toBe(key);
+    expect(canonicalRoleAssignmentKey({ ...base, scopeType: 'engine_set' })).not.toBe(key);
+    expect(canonicalRoleAssignmentKey({ ...base, scopeId: 'engine-2' })).not.toBe(key);
+    expect(canonicalRoleAssignmentKey({ ...base, source: 'config' })).not.toBe(key);
     expect(canonicalRoleAssignmentKey({ ...base, source: 'sso', sourceRef: 'mapping-1' })).not.toBe(key);
   });
 });

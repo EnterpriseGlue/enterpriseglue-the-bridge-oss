@@ -2383,7 +2383,7 @@ Phase 0 exit criteria:
 
 ### Phase 8: Verification
 
-- [ ] ⬜ Schema tests prove role-assignment principal/scope/source uniqueness, tenant-scoped custom role keys, external identity uniqueness, one target per project/engine pair, and nullable deployment project lineage.
+- [x] ✅ Schema tests prove role-assignment principal/scope/source uniqueness, tenant-scoped custom role keys, external identity uniqueness, one target per project/engine pair, and nullable deployment project lineage. The focused TypeORM metadata contract also rejects the obsolete global role-key unique constraint, while canonical-key tests prove every assignment and external-subject identity component changes the persisted unique key.
 - [ ] ⬜ Legacy-removal tests prove platform admin, project/engine member rows, owner/delegate metadata, and old role fields grant nothing without canonical assignments.
 - [ ] ⬜ Bootstrap, invitation, project creation, engine creation, ownership/delegate governance, local login, and SSO login tests prove canonical assignments are created at the originating command boundary.
 - [ ] ⬜ Provider routing tests prove two providers of the same protocol remain isolated by provider id and state; generic OIDC is exercised end to end.
