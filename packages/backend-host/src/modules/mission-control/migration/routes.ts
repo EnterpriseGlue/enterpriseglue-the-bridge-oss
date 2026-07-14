@@ -24,10 +24,14 @@ r.post('/mission-control-api/migration/preview', requireRuntimeMigrationAction('
     if (Array.isArray(processInstanceIds) && processInstanceIds.length > 0) {
       return res.status(200).json({ count: processInstanceIds.length })
     }
+    if (req.authorizedRuntimeResourceKeys) {
+      throw Errors.forbidden('Resource-aware migration preview counts are not supported')
+    }
     const engineId = (req as any).engineId as string
     const count = await previewMigrationCount(engineId, plan, processInstanceIds)
     res.status(200).json({ count })
   } catch (e: any) {
+    if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to preview affected instances')
   }
 }))

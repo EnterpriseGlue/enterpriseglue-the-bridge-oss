@@ -1155,6 +1155,7 @@ export function requireRuntimeMigrationAction(
         throw Errors.forbidden('Engine runtime access is not allowed');
       }
       let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
+      let resourceKeys: string[] | undefined;
       if (!broad) {
         const plan = (req.body?.[options.planKey || 'plan'] && typeof req.body[options.planKey || 'plan'] === 'object')
           ? req.body[options.planKey || 'plan'] as Record<string, unknown>
@@ -1169,9 +1170,10 @@ export function requireRuntimeMigrationAction(
         const definitions = await Promise.all([sourceId, targetId].map((id) => camundaGet<Record<string, unknown>>(
           engineId, `/process-definition/${encodeURIComponent(id)}`
         )));
-        const resourceKeys = definitions.map((definition) => typeof definition.key === 'string' ? definition.key.trim() : '');
-        if (resourceKeys.some((key) => !key)) throw Errors.forbidden('Migration definitions cannot be resolved for authorization');
-        const resources = await Promise.all(resourceKeys.map((resourceKey) => dataSource.getRepository(RuntimeResource).findOne({
+        const resolvedResourceKeys = definitions.map((definition) => typeof definition.key === 'string' ? definition.key.trim() : '');
+        if (resolvedResourceKeys.some((key) => !key)) throw Errors.forbidden('Migration definitions cannot be resolved for authorization');
+        resourceKeys = resolvedResourceKeys;
+        const resources = await Promise.all(resolvedResourceKeys.map((resourceKey) => dataSource.getRepository(RuntimeResource).findOne({
           where: { engineId, resourceKind: options.resourceKind, resourceKey, isActive: true },
           select: ['id', 'tenantId'],
         })));
@@ -1188,7 +1190,7 @@ export function requireRuntimeMigrationAction(
           const instances = await Promise.all(instanceIds.map((id) => camundaGet<Record<string, unknown>>(
             engineId, `/process-instance/${encodeURIComponent(id)}`
           )));
-          if (instances.some((instance) => instance.definitionKey !== resourceKeys[0])) {
+          if (instances.some((instance) => instance.definitionKey !== resolvedResourceKeys[0])) {
             throw Errors.forbidden('A selected process instance does not belong to the authorized migration source');
           }
         }
@@ -1197,6 +1199,7 @@ export function requireRuntimeMigrationAction(
       (req as Request & { engineId?: string }).engineId = engineId;
       req.authzAction = action;
       req.authzResource = resource;
+      req.authorizedRuntimeResourceKeys = resourceKeys;
       return next();
     } catch (error) {
       return next(error instanceof Error ? error : Errors.internal('Runtime migration authorization failed'));

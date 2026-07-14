@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import migrationRouter from '../../../../../packages/backend-host/src/modules/mission-control/migration/routes.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
@@ -10,6 +11,7 @@ import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.j
 import {
   generateMigrationPlan,
   executeMigrationAsync,
+  previewMigrationCount,
 } from '../../../../../packages/backend-host/src/modules/mission-control/migration/service.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -64,6 +66,7 @@ describe('mission-control migration routes', () => {
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(migrationRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -164,5 +167,26 @@ describe('mission-control migration routes', () => {
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       resourceType: 'engine_runtime_resource', resourceId: 'resource-payments-v2',
     }));
+  });
+
+  it('fails closed for an unselected migration preview on a resource-aware engine', async () => {
+    const runtimeResourceRepo = { findOne: vi.fn().mockResolvedValue({ id: 'resource-payments', tenantId: null }) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
+        if (entity === RuntimeResource) return runtimeResourceRepo;
+        return { findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (camundaGet as unknown as Mock).mockResolvedValue({ key: 'payments' });
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (_permission: string, context: any) => context.resourceType === 'engine_runtime_resource');
+
+    const response = await request(app)
+      .post('/mission-control-api/migration/preview')
+      .send({ engineId: 'central-engine', plan: { sourceProcessDefinitionId: 'payments:1', targetProcessDefinitionId: 'payments:2' } });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Resource-aware migration preview counts are not supported');
+    expect(previewMigrationCount).not.toHaveBeenCalled();
   });
 });
