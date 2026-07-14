@@ -1,9 +1,3 @@
-type DeployMembership = {
-  role: string
-  roles?: string[]
-  deployAllowed?: boolean | null
-}
-
 type ConnectedEngine = {
   engineId: string
   engineName: string
@@ -48,22 +42,6 @@ export type ProjectEngineAccessData = {
   availableEngines: Array<{ id: string; name: string }>
 }
 
-export function canDeployByProjectRole(
-  membership: DeployMembership | null | undefined,
-  _defaultDeployRoles?: string[]
-): boolean {
-  if (!membership) return false
-
-  const effectiveRole = String(membership.role || '')
-  const hasDeployRole = ['owner', 'delegate', 'developer'].includes(effectiveRole)
-
-  if (!hasDeployRole && effectiveRole === 'editor' && membership.deployAllowed) {
-    return true
-  }
-
-  return hasDeployRole
-}
-
 export function hasConnectedEngine(engineAccess: ProjectEngineAccessData | null | undefined): boolean {
   const connectedEngines = Array.isArray(engineAccess?.accessedEngines) ? engineAccess.accessedEngines : []
   return connectedEngines.some((engine) => (
@@ -71,12 +49,4 @@ export function hasConnectedEngine(engineAccess: ProjectEngineAccessData | null 
     engine.engineId !== '__env__' &&
     (engine.manualDeployAllowed !== false || engine.ciDeployAllowed === true)
   ))
-}
-
-export function canDeployProject(
-  membership: DeployMembership | null | undefined,
-  engineAccess: ProjectEngineAccessData | null | undefined,
-  defaultDeployRoles?: string[]
-): boolean {
-  return canDeployByProjectRole(membership, defaultDeployRoles) && hasConnectedEngine(engineAccess)
 }

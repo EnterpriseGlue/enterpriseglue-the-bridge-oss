@@ -25,7 +25,7 @@ import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
 import type { Project, ProjectMember, EngineAccessData, SyncDirection, BulkSyncResult } from './projectOverviewTypes'
 import type { ProjectOverviewBulkAction, ProjectOverviewRowAction } from './components/ProjectOverviewTable'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
-import { canDeployProject } from '../utils/deployEligibility'
+import { hasConnectedEngine } from '../utils/deployEligibility'
 import { PlatformPermission, ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import styles from './ProjectOverview.module.css'
@@ -451,16 +451,17 @@ export default function ProjectOverview() {
   const deployableProjectIdsSet = React.useMemo(() => {
     const ids = new Set<string>()
     projectIds.forEach((projectId, index) => {
-      if (canDeployProject(
-        membershipQueries[index]?.data,
-        engineAccessQueries[index]?.data,
-        platformSettings?.defaultDeployRoles
-      )) {
+      const canDeploy = evaluateActionSnapshot(
+        permissions,
+        'project.deploy.create',
+        { type: 'project', id: projectId }
+      ).allowed || hasProjectPermission(projectId, ProjectPermission.DEPLOY)
+      if (canDeploy && hasConnectedEngine(engineAccessQueries[index]?.data)) {
         ids.add(projectId)
       }
     })
     return ids
-  }, [engineAccessQueries, membershipQueries, platformSettings?.defaultDeployRoles, projectIds])
+  }, [engineAccessQueries, hasProjectPermission, permissions, projectIds])
 
   const membershipByProjectId = React.useMemo(() => {
     const memberships = new Map<string, ProjectMember | null | undefined>()
