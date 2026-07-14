@@ -91,6 +91,7 @@ export type EngineConnectionInput = EngineCredentialInput & {
 
 export type EngineTransportDiagnostics = {
   connectionMode: 'direct' | 'customer_sidecar';
+  upstreamHop: 'enterpriseglue_to_engine' | 'enterpriseglue_to_sidecar';
   endpointAuthentication: EngineAuthType;
   downstreamAuthentication: 'not_applicable' | 'customer_managed';
   attempts?: number;
@@ -208,6 +209,7 @@ export function describeBpmnEngineTransport(input: EngineCredentialInput & { con
   const endpointAuthentication = (input.authType || (input.username ? 'basic' : 'none')) as EngineAuthType
   return {
     connectionMode,
+    upstreamHop: connectionMode === 'customer_sidecar' ? 'enterpriseglue_to_sidecar' : 'enterpriseglue_to_engine',
     endpointAuthentication,
     downstreamAuthentication: connectionMode === 'customer_sidecar' ? 'customer_managed' : 'not_applicable',
   }

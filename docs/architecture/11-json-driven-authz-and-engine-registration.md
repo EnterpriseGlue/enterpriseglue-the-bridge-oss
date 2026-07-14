@@ -651,7 +651,7 @@ UI impact:
 - [x] ✅ Engine create/edit and JSON preview show `Direct engine` or `Customer sidecar/gateway` as the connection path.
 - [x] ✅ Selecting customer sidecar changes credential copy to customer-managed endpoint authentication and allows the policy-controlled no-credential option.
 - [x] ✅ Engine detail shows `Customer-managed engine authentication`; it never implies that EnterpriseGlue authorization is disabled.
-- [ ] ⬜ Connection tests identify the failing hop as `EnterpriseGlue -> sidecar`; they do not request or display the customer's downstream peer token.
+- [x] ✅ Connection tests identify the failing hop as `EnterpriseGlue -> sidecar`; they expose a sanitized `upstreamHop` diagnostic and never request or display the customer's downstream peer token.
 - [ ] ⬜ Effective Access, Mission Control, deployment eligibility, Dashboard filtering, and bridge decisions behave identically for direct and sidecar-backed engines.
 
 Required tests:

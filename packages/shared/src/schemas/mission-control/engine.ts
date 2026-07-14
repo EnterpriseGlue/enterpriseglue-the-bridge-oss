@@ -22,6 +22,7 @@ export const EndpointAuthenticationPolicyErrorSchema = z.object({
 
 export const EngineTransportDiagnosticsSchema = z.object({
   connectionMode: EngineConnectionModeSchema,
+  upstreamHop: z.enum(['enterpriseglue_to_engine', 'enterpriseglue_to_sidecar']),
   endpointAuthentication: EngineAuthTypeSchema,
   downstreamAuthentication: z.enum(['not_applicable', 'customer_managed']),
   attempts: z.number().int().min(1).max(2).optional(),

@@ -94,6 +94,7 @@ describe('bpmn-engine-client', () => {
     expect(connection.headers).not.toHaveProperty('Authorization');
     expect(connection.diagnostics).toEqual({
       connectionMode: 'customer_sidecar',
+      upstreamHop: 'enterpriseglue_to_sidecar',
       endpointAuthentication: 'none',
       downstreamAuthentication: 'customer_managed',
     });

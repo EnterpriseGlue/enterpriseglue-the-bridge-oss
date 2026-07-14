@@ -860,7 +860,9 @@ async function testEngineConnectionAndRecord(
   } catch {
     const latencyMs = Date.now() - started
     status = 'disconnected'
-    message = 'Failed to connect to engine endpoint'
+    message = eng.connectionMode === 'customer_sidecar'
+      ? 'Failed to connect to EnterpriseGlue -> customer sidecar endpoint'
+      : 'Failed to connect to EnterpriseGlue -> engine endpoint'
     const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
     await healthRepo.insert(rec)
     return {

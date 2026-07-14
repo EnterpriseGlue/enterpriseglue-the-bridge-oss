@@ -951,6 +951,7 @@ describe('mission-control engines routes', () => {
       version: '8.7.0',
       transport: {
         connectionMode: 'customer_sidecar',
+        upstreamHop: 'enterpriseglue_to_sidecar',
         endpointAuthentication: 'none',
         downstreamAuthentication: 'customer_managed',
       },
@@ -958,6 +959,51 @@ describe('mission-control engines routes', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://sidecar.example.com/engine-rest/version', expect.objectContaining({
       method: 'GET',
       headers: expect.not.objectContaining({ Authorization: expect.anything() }),
+    }));
+  });
+
+  it('reports a failed connection test as the EnterpriseGlue-to-sidecar hop without disclosing downstream credentials', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const healthInsert = vi.fn().mockResolvedValue({});
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Customer sidecar',
+      baseUrl: 'https://sidecar.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+      username: null,
+      passwordEnc: 'downstream-secret-must-not-leak',
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthAudience: null,
+      lifecycleStatus: 'active',
+      tenantId: null,
+    });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'EngineHealth') return { insert: healthInsert };
+        return { findOne, findOneBy };
+      },
+    });
+    fetchMock.mockRejectedValueOnce(new Error('TLS handshake failed: downstream-secret-must-not-leak'));
+
+    const response = await request(app).post('/engines-api/engines/e1/test');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      status: 'disconnected',
+      message: 'Failed to connect to EnterpriseGlue -> customer sidecar endpoint',
+      transport: {
+        connectionMode: 'customer_sidecar',
+        upstreamHop: 'enterpriseglue_to_sidecar',
+        downstreamAuthentication: 'customer_managed',
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('downstream-secret-must-not-leak');
+    expect(healthInsert).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Failed to connect to EnterpriseGlue -> customer sidecar endpoint',
     }));
   });
 
