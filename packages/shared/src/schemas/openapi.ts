@@ -830,6 +830,8 @@ const EngineTransportDiagnosticsSchema = z.object({
   connectionMode: z.enum(['direct', 'customer_sidecar']),
   endpointAuthentication: z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials']),
   downstreamAuthentication: z.enum(['not_applicable', 'customer_managed']),
+  attempts: z.number().int().min(1).max(2).optional(),
+  timeoutMs: z.number().int().min(100).max(60_000).optional(),
 })
 registry.register('EngineTransportDiagnostics', EngineTransportDiagnosticsSchema)
 

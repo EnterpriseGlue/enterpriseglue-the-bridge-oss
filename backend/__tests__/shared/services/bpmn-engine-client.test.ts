@@ -5,6 +5,7 @@ import { fetch } from 'undici';
 import {
   camundaGet,
   camundaPost,
+  fetchBpmnEngineEndpoint,
   resolveBpmnEngineConnection,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
@@ -62,6 +63,7 @@ describe('bpmn-engine-client', () => {
 
     expect(fetch).toHaveBeenCalledWith('http://localhost:8080/engine-rest/version', {
       method: 'GET',
+      signal: expect.anything(),
       headers: expect.objectContaining({
         'Content-Type': 'application/json',
         'X-EnterpriseGlue-Request-Id': 'req-1',
@@ -94,6 +96,52 @@ describe('bpmn-engine-client', () => {
     expect(JSON.stringify(connection.diagnostics)).not.toContain('must-not-appear');
   });
 
+  it('retries one transient safe-read failure and reports bounded transport diagnostics', async () => {
+    (fetch as unknown as Mock)
+      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Unavailable', body: null })
+      .mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK' });
+
+    const result = await fetchBpmnEngineEndpoint({
+      id: 'engine-sidecar',
+      baseUrl: 'https://sidecar.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+    }, { engineId: 'engine-sidecar', method: 'GET', path: '/version', timeoutMs: 500 });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.response.status).toBe(200);
+    expect(result.diagnostics).toMatchObject({ attempts: 2, timeoutMs: 500, connectionMode: 'customer_sidecar' });
+  });
+
+  it('never retries mutations and sanitizes exhausted transport errors', async () => {
+    (fetch as unknown as Mock).mockRejectedValueOnce(new Error('connect ECONNREFUSED https://secret-engine.example.com'));
+
+    await fetchBpmnEngineEndpoint({
+      id: 'engine-sidecar',
+      baseUrl: 'https://secret-engine.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+    }, { engineId: 'engine-sidecar', method: 'POST', path: '/process-definition/key/order/start' }, { body: '{}' }).then(
+      () => { throw new Error('Expected transport failure'); },
+      (error: { code: string; statusCode: number; toJSON: () => unknown }) => {
+        expect(error.code).toBe('ENGINE_TRANSPORT_UNAVAILABLE');
+        expect(error.statusCode).toBe(502);
+        expect(error.toJSON()).toEqual({
+          error: 'The engine endpoint is unavailable',
+          code: 'ENGINE_TRANSPORT_UNAVAILABLE',
+          details: {
+            operationClass: 'engine.instance.mutate',
+            attempts: 1,
+            timeoutMs: 10_000,
+            connectionMode: 'customer_sidecar',
+          },
+        });
+        expect(JSON.stringify(error.toJSON())).not.toContain('secret-engine.example.com');
+      },
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('infers mutating operation classes for sidecar policy checks', async () => {
     await runWithBpmnEngineRequestContext({ requestId: 'req-2' }, async () => {
       await camundaPost('engine-1', '/process-definition/key/order/start', {});
@@ -101,6 +149,7 @@ describe('bpmn-engine-client', () => {
 
     expect(fetch).toHaveBeenCalledWith('http://localhost:8080/engine-rest/process-definition/key/order/start', {
       method: 'POST',
+      signal: expect.anything(),
       headers: expect.objectContaining({
         'X-EnterpriseGlue-Request-Id': 'req-2',
         'X-EnterpriseGlue-Engine-Id': 'engine-1',
@@ -134,6 +183,7 @@ describe('bpmn-engine-client', () => {
 
     expect(fetch).toHaveBeenCalledWith('http://localhost:8080/engine-rest/version', {
       method: 'GET',
+      signal: expect.anything(),
       headers: expect.objectContaining({
         Authorization: `Basic ${Buffer.from('demo:demo-secret').toString('base64')}`,
         'X-EnterpriseGlue-Request-Id': 'req-3',
@@ -151,6 +201,7 @@ describe('bpmn-engine-client', () => {
 
       expect(fetch).toHaveBeenCalledWith('http://host.docker.internal:8080/engine-rest/version', {
         method: 'GET',
+        signal: expect.anything(),
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
           'X-EnterpriseGlue-Engine-Id': 'engine-1',
@@ -211,6 +262,7 @@ describe('bpmn-engine-client', () => {
 
     expect(fetch).toHaveBeenNthCalledWith(1, 'https://keycloak.example.com/realms/acme/protocol/openid-connect/token', {
       method: 'POST',
+      signal: expect.anything(),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: expect.any(URLSearchParams),
     });
@@ -223,6 +275,7 @@ describe('bpmn-engine-client', () => {
 
     expect(fetch).toHaveBeenNthCalledWith(2, 'http://localhost:8080/engine-rest/version', {
       method: 'GET',
+      signal: expect.anything(),
       headers: expect.objectContaining({
         Authorization: 'Bearer oauth-access-token',
         'X-EnterpriseGlue-Request-Id': 'req-4',
@@ -251,6 +304,29 @@ describe('bpmn-engine-client', () => {
       message: 'Engine OAuth2 token request failed with status 401',
     });
 
+  });
+
+  it('sanitizes OAuth token endpoint network failures', async () => {
+    (fetch as unknown as Mock).mockRejectedValueOnce(
+      new Error('connect ECONNREFUSED https://identity.example.com/oauth/token?client_secret=must-not-leak'),
+    );
+
+    await resolveBpmnEngineConnection({
+      id: 'engine-oauth-network-failure',
+      baseUrl: 'https://engine.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'oauth2-client-credentials',
+      username: 'client-id',
+      passwordEnc: 'client-secret',
+      oauthTokenUrl: 'https://identity.example.com/oauth/token',
+    }, { engineId: 'engine-oauth-network-failure', method: 'GET', path: '/version' }).then(
+      () => { throw new Error('Expected OAuth transport failure'); },
+      (error: { message: string; toJSON: () => unknown }) => {
+        expect(error.message).toBe('Engine OAuth2 token request failed');
+        expect(JSON.stringify(error.toJSON())).not.toContain('identity.example.com');
+        expect(JSON.stringify(error.toJSON())).not.toContain('must-not-leak');
+      },
+    );
   });
 
   it('reports an engine rejection as an operational failure rather than local authorization denial', async () => {

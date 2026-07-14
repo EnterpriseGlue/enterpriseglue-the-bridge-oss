@@ -15,8 +15,8 @@ import { File as FileEntity } from '@enterpriseglue/shared/infrastructure/persis
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js'
 import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js'
 import { In } from 'typeorm'
-import { fetch, FormData } from 'undici'
-import { resolveBpmnEngineConnection } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { FormData } from 'undici'
+import { fetchBpmnEngineEndpoint } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
@@ -508,8 +508,13 @@ async function createEngineDeployment(req: Request, res: Response) {
     logger.info('Engine deploy: form built', { resources: used.size, ms: Date.now() - formBuildStart })
 
     const camundaStart = Date.now()
-    const connection = await resolveBpmnEngineConnection(engine, { engineId: actualEngineId, method: 'POST', path: '/deployment/create', contentType: null })
-    const r2 = await fetch(connection.url, { method: 'POST', headers: connection.headers, body: form as any })
+    const { response: r2 } = await fetchBpmnEngineEndpoint(engine, {
+      engineId: actualEngineId,
+      method: 'POST',
+      path: '/deployment/create',
+      contentType: null,
+      retry: 'never',
+    }, { body: form as any })
     const text = await r2.text()
     logger.info('Engine deploy: Camunda response', { status: r2.status, ms: Date.now() - camundaStart })
     if (!r2.ok) {
@@ -835,10 +840,10 @@ const engineId = String(req.params.engineId)
 
 try {
   const engine = await getEngineById(engineId)
-  const connection = await resolveBpmnEngineConnection(engine, { engineId, method: 'GET', path: '/deployment' })
-  const url = new URL(connection.url)
-  for (const [k,v] of Object.entries(req.query)) url.searchParams.set(k, String(v))
-  const r2 = await fetch(url.toString(), { headers: connection.headers })
+  const query = new URLSearchParams()
+  for (const [k,v] of Object.entries(req.query)) query.set(k, String(v))
+  const path = `/deployment${query.size > 0 ? `?${query.toString()}` : ''}`
+  const { response: r2 } = await fetchBpmnEngineEndpoint(engine, { engineId, method: 'GET', path })
   const text = await r2.text()
   sendUpstream(res, r2.status, text)
 } catch (e: any) {
@@ -852,8 +857,7 @@ const engineId = String(req.params.engineId)
 try {
   const engine = await getEngineById(engineId)
   const path = `/deployment/${encodeURIComponent(String(req.params.id))}`
-  const connection = await resolveBpmnEngineConnection(engine, { engineId, method: 'GET', path })
-  const r2 = await fetch(connection.url, { headers: connection.headers })
+  const { response: r2 } = await fetchBpmnEngineEndpoint(engine, { engineId, method: 'GET', path })
   const text = await r2.text()
   sendUpstream(res, r2.status, text)
 } catch (e: any) {
@@ -868,8 +872,7 @@ try {
   const engine = await getEngineById(engineId)
   const cascade = req.query.cascade === 'true'
   const path = `/deployment/${encodeURIComponent(String(req.params.id))}${cascade ? '?cascade=true' : ''}`
-  const connection = await resolveBpmnEngineConnection(engine, { engineId, method: 'DELETE', path })
-  const r2 = await fetch(connection.url, { method: 'DELETE', headers: connection.headers })
+  const { response: r2 } = await fetchBpmnEngineEndpoint(engine, { engineId, method: 'DELETE', path, retry: 'never' })
   if (r2.status === 204) return res.status(204).end()
   const text = await r2.text()
   sendUpstream(res, r2.status, text)

@@ -93,6 +93,8 @@ export type EngineTransportDiagnostics = {
   connectionMode: 'direct' | 'customer_sidecar';
   endpointAuthentication: EngineAuthType;
   downstreamAuthentication: 'not_applicable' | 'customer_managed';
+  attempts?: number;
+  timeoutMs?: number;
 };
 
 export type ResolvedBpmnEngineConnection = {
@@ -100,6 +102,29 @@ export type ResolvedBpmnEngineConnection = {
   headers: Record<string, string>;
   diagnostics: EngineTransportDiagnostics;
 };
+
+export type BpmnEngineRequestOptions = {
+  engineId?: string;
+  method?: string;
+  path?: string;
+  contentType?: string | null;
+  timeoutMs?: number;
+  retry?: 'safe_read' | 'never';
+};
+
+export type BpmnEngineFetchResult = {
+  response: Awaited<ReturnType<typeof fetch>>;
+  diagnostics: EngineTransportDiagnostics;
+};
+
+const DEFAULT_ENGINE_REQUEST_TIMEOUT_MS = 10_000
+const MAX_ENGINE_REQUEST_TIMEOUT_MS = 60_000
+const TRANSIENT_ENGINE_STATUSES = new Set([429, 502, 503, 504])
+
+function boundedTimeoutMs(value?: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_ENGINE_REQUEST_TIMEOUT_MS
+  return Math.max(100, Math.min(MAX_ENGINE_REQUEST_TIMEOUT_MS, Math.trunc(value!)))
+}
 
 export function describeBpmnEngineTransport(input: EngineCredentialInput & { connectionMode?: string | null }): EngineTransportDiagnostics {
   const connectionMode = input.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
@@ -247,11 +272,17 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
   if (cfg.oauthScopes) body.set('scope', cfg.oauthScopes)
   if (cfg.oauthAudience) body.set('audience', cfg.oauthAudience)
 
-  const response = await fetch(cfg.oauthTokenUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  })
+  let response: Awaited<ReturnType<typeof fetch>>
+  try {
+    response = await fetch(cfg.oauthTokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(DEFAULT_ENGINE_REQUEST_TIMEOUT_MS),
+    })
+  } catch {
+    throw Errors.authFailed('Engine OAuth2 token request failed')
+  }
   if (!response.ok) {
     await response.text().catch(() => '')
     throw Errors.authFailed(`Engine OAuth2 token request failed with status ${response.status}`)
@@ -267,7 +298,7 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
 
 export async function resolveBpmnEngineConnection(
   input: EngineConnectionInput,
-  request: { engineId?: string; method?: string; path?: string; contentType?: string | null } = {},
+  request: BpmnEngineRequestOptions = {},
 ): Promise<ResolvedBpmnEngineConnection> {
   const engineId = request.engineId || input.id || 'unknown'
   const method = request.method || 'GET'
@@ -305,10 +336,81 @@ export async function resolveBpmnEngineConnection(
   }
 }
 
+/**
+ * Executes all persisted-engine HTTP calls through one bounded transport.
+ * Only safe reads retry, and thrown errors never contain endpoint URLs,
+ * credentials, or upstream response bodies.
+ */
+export async function fetchBpmnEngineEndpoint(
+  input: EngineConnectionInput,
+  request: BpmnEngineRequestOptions = {},
+  init: Parameters<typeof fetch>[1] = {},
+): Promise<BpmnEngineFetchResult> {
+  const method = String(request.method || init?.method || 'GET').toUpperCase()
+  const retry = request.retry || (method === 'GET' ? 'safe_read' : 'never')
+  const maxAttempts = retry === 'safe_read' && method === 'GET' ? 2 : 1
+  const timeoutMs = boundedTimeoutMs(request.timeoutMs)
+  const connection = await resolveBpmnEngineConnection(input, { ...request, method })
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const timeoutSignal = AbortSignal.timeout(timeoutMs)
+      const callerSignal = init?.signal
+      const signal = callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal
+      const response = await fetch(connection.url, {
+        ...init,
+        method,
+        headers: { ...connection.headers, ...(init?.headers || {}) },
+        signal,
+      })
+      if (attempt < maxAttempts && TRANSIENT_ENGINE_STATUSES.has(response.status)) {
+        await response.body?.cancel().catch(() => undefined)
+        continue
+      }
+      return {
+        response,
+        diagnostics: { ...connection.diagnostics, attempts: attempt, timeoutMs },
+      }
+    } catch {
+      if (attempt < maxAttempts) continue
+      throw new BpmnEngineTransportError({
+        method,
+        path: request.path || '',
+        attempts: attempt,
+        timeoutMs,
+        connectionMode: connection.diagnostics.connectionMode,
+      })
+    }
+  }
+
+  throw new BpmnEngineTransportError({
+    method,
+    path: request.path || '',
+    attempts: maxAttempts,
+    timeoutMs,
+    connectionMode: connection.diagnostics.connectionMode,
+  })
+}
+
+export class BpmnEngineTransportError extends AppError {
+  constructor(input: { method: string; path: string; attempts: number; timeoutMs: number; connectionMode: 'direct' | 'customer_sidecar' }) {
+    super(
+      'ENGINE_TRANSPORT_UNAVAILABLE',
+      'The engine endpoint is unavailable',
+      502,
+      {
+        operationClass: inferOperationClass(input.method, input.path),
+        attempts: input.attempts,
+        timeoutMs: input.timeoutMs,
+        connectionMode: input.connectionMode,
+      },
+    )
+  }
+}
+
 export async function camundaGet<T = unknown>(engineId: string, path: string, params?: Record<string, any>): Promise<T> {
   const cfg = await getEngine(engineId)
-  const connection = await resolveBpmnEngineConnection(cfg, { engineId, method: 'GET', path })
-  const url = new URL(connection.url)
+  const url = new URL(resolveBpmnEngineRequestUrl(cfg.baseUrl, path))
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v === undefined || v === null || v === '') continue
@@ -316,10 +418,7 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
       else url.searchParams.set(k, String(v))
     }
   }
-  const res = await fetch(url.toString(), {
-    method: 'GET',
-    headers: connection.headers,
-  })
+  const { response: res } = await fetchBpmnEngineEndpoint(cfg, { engineId, method: 'GET', path: `${path}${url.search}` })
   if (!res.ok) {
     await res.text().catch(() => '')
     throw new BpmnEngineOperationError({ method: 'GET', path, status: res.status })
@@ -331,10 +430,7 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
 
 async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
   const cfg = await getEngine(engineId)
-  const connection = await resolveBpmnEngineConnection(cfg, { engineId, method, path })
-  const res = await fetch(connection.url, {
-    method,
-    headers: connection.headers,
+  const { response: res } = await fetchBpmnEngineEndpoint(cfg, { engineId, method, path }, {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {

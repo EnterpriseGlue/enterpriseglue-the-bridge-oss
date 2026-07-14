@@ -24,7 +24,7 @@ import { engineService, engineSetService, platformSettingsService, projectEngine
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
-import { describeBpmnEngineTransport, resolveBpmnEngineConnection, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { describeBpmnEngineTransport, fetchBpmnEngineEndpoint, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js'
 import { config } from '@enterpriseglue/shared/config/index.js'
 import { logAudit } from '@enterpriseglue/shared/services/audit.js'
@@ -868,8 +868,7 @@ async function testEngineConnectionAndRecord(
   let message: string | null = null
 
   try {
-    const connection = await resolveBpmnEngineConnection(eng, { engineId: eng.id, method: 'GET', path: '/version' })
-    const response = await fetch(connection.url, { method: 'GET', headers: connection.headers })
+    const { response, diagnostics } = await fetchBpmnEngineEndpoint(eng, { engineId: eng.id, method: 'GET', path: '/version' })
     const latencyMs = Date.now() - started
     if (response.ok) {
       status = 'connected'
@@ -882,14 +881,14 @@ async function testEngineConnectionAndRecord(
       await engineRepo.update({ id: eng.id }, { version: version || null, updatedAt: Date.now() })
       const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message: null, checkedAt: Date.now() }
       await healthRepo.insert(rec)
-      return { ...rec, version, transport: connection.diagnostics }
+      return { ...rec, version, transport: diagnostics }
     }
 
     status = 'disconnected'
     message = `${response.status} ${response.statusText}`
     const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
     await healthRepo.insert(rec)
-    return { ...rec, version: null, transport: connection.diagnostics }
+    return { ...rec, version: null, transport: diagnostics }
   } catch {
     const latencyMs = Date.now() - started
     status = 'disconnected'
