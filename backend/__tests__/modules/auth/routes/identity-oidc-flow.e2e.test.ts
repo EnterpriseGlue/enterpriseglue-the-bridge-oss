@@ -10,7 +10,7 @@ const identityProviderService = vi.hoisted(() => ({
   getById: vi.fn(),
   listEnabledDirectLoginProviders: vi.fn(),
 }));
-const identityProviderProvisioningService = vi.hoisted(() => ({ provisionOidcUser: vi.fn() }));
+const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn() }));
 const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService }));
@@ -64,7 +64,7 @@ describe('provider-neutral OIDC browser flow', () => {
     identityProviderService.getById.mockImplementation(async (id: string) => byId.get(id) || null);
     identityProviderService.getByKey.mockImplementation(async (key: string) => byKey.get(key) || null);
     identityProviderService.listEnabledDirectLoginProviders.mockResolvedValue([providerA, providerB]);
-    identityProviderProvisioningService.provisionOidcUser.mockImplementation(async (provider: typeof providerA, claims: { email?: string }) => ({
+    identityProviderProvisioningService.reconcileOidcLogin.mockImplementation(async (provider: typeof providerA, claims: { email?: string }) => ({
       id: `user-for-${provider.id}`,
       email: claims.email || 'person@example.test',
       isActive: true,
@@ -110,7 +110,7 @@ describe('provider-neutral OIDC browser flow', () => {
       .query({ code: 'code-b', state: stateB })
       .redirects(0);
     expect(crossedState.status).toBe(401);
-    expect(identityProviderProvisioningService.provisionOidcUser).not.toHaveBeenCalled();
+    expect(identityProviderProvisioningService.reconcileOidcLogin).not.toHaveBeenCalled();
 
     protocol.setTokenClaims({
       sub: 'subject-a',
@@ -142,12 +142,12 @@ describe('provider-neutral OIDC browser flow', () => {
     expect(identityProviderService.getById).toHaveBeenCalledWith(providerB.id, null);
     expect(identityProviderService.getByKey).toHaveBeenCalledWith(providerA.key, null);
     expect(identityProviderService.getByKey).toHaveBeenCalledWith(providerB.key, null);
-    expect(identityProviderProvisioningService.provisionOidcUser).toHaveBeenNthCalledWith(
+    expect(identityProviderProvisioningService.reconcileOidcLogin).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ id: providerA.id, key: providerA.key }),
       expect.objectContaining({ sub: 'subject-a', groups: ['group-a'] }),
     );
-    expect(identityProviderProvisioningService.provisionOidcUser).toHaveBeenNthCalledWith(
+    expect(identityProviderProvisioningService.reconcileOidcLogin).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ id: providerB.id, key: providerB.key }),
       expect.objectContaining({ sub: 'subject-b', groups: ['group-b'] }),

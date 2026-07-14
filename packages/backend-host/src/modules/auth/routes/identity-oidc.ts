@@ -84,7 +84,7 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
   if (provider.protocol !== 'ldap' || !provider.isEnabled || provider.authenticationMode !== 'direct') throw Errors.unauthorized('Invalid directory credentials');
   try {
     const identity = await directLdapIdentityService.authenticate(provider, req.body.username, req.body.password);
-    const user = await identityProviderProvisioningService.provisionLdapUser(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
+    const user = await identityProviderProvisioningService.reconcileLdapLogin(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
     if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
     await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap' } }));
     await setProviderSession(req, res, user as any, provider);
@@ -143,7 +143,7 @@ router.get('/api/auth/identity/callback', apiLimiter, asyncHandler(async (req: R
   requireDirectOidc(provider);
   if (parsed.providerId && parsed.providerId !== provider.id) throw Errors.unauthorized('Identity provider state does not match the selected provider');
   const claims = await genericOidcService.exchangeCode(configuration(provider), { code: req.query.code, codeVerifier: verifier, nonce: parsed.nonce });
-  const user = await identityProviderProvisioningService.provisionOidcUser(provider, claims);
+  const user = await identityProviderProvisioningService.reconcileOidcLogin(provider, claims);
   if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
   await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'oidc' } }));
   await setProviderSession(req, res, user as any, provider);
@@ -164,7 +164,7 @@ router.post('/api/auth/providers/saml/callback', apiLimiter, asyncHandler(async 
   const profile = await genericSamlService.validatePostResponse(rawConfiguration, samlResponse);
   await samlAssertionReplayService.consume({ providerId: provider.id, tenantId: provider.tenantId, samlResponse });
   const identity = genericSamlService.extractUserClaims(rawConfiguration, profile);
-  const user = await identityProviderProvisioningService.provisionSamlUser(provider, {
+  const user = await identityProviderProvisioningService.reconcileSamlLogin(provider, {
     subjectId: identity.subjectId,
     email: identity.email,
     displayName: identity.displayName,

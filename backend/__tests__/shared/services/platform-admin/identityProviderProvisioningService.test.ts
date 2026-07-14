@@ -9,12 +9,14 @@ const manager = vi.hoisted(() => ({
 }));
 const ssoNormalizedIdentityService = vi.hoisted(() => ({ upsertIdentityWithManager: vi.fn() }));
 const authzGroupService = vi.hoisted(() => ({ ensureAuthenticatedUserMembershipWithManager: vi.fn() }));
+const ssoSyncDiagnosticsService = vi.hoisted(() => ({ startRun: vi.fn(), completeRun: vi.fn(), failRun: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(async () => ({ transaction: async (callback: (transactionManager: typeof manager) => unknown) => callback(manager) })),
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({ authzGroupService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService }));
 
 import { identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
 
@@ -29,6 +31,9 @@ describe('IdentityProviderProvisioningService', () => {
     stores.user.insert.mockResolvedValue(undefined);
     ssoNormalizedIdentityService.upsertIdentityWithManager.mockResolvedValue({ id: 'snapshot-1', created: true });
     authzGroupService.ensureAuthenticatedUserMembershipWithManager.mockResolvedValue({ id: 'baseline-1', created: true });
+    ssoSyncDiagnosticsService.startRun.mockResolvedValue('run-1');
+    ssoSyncDiagnosticsService.completeRun.mockResolvedValue(undefined);
+    ssoSyncDiagnosticsService.failRun.mockResolvedValue(undefined);
   });
 
   it('writes the normalized identity in the provisioning transaction, where membership reconciliation is orchestrated', async () => {
@@ -110,5 +115,32 @@ describe('IdentityProviderProvisioningService', () => {
     })).rejects.toThrow('requires administrator relinking');
     expect(stores.user.findOneBy).not.toHaveBeenCalled();
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
+  });
+
+  it('records the same diagnostics model for direct login reconciliation', async () => {
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1' } as any;
+    await identityProviderProvisioningService.reconcileLdapLogin(provider, {
+      subjectId: 'subject-1', email: 'person@example.test', claims: { sub: 'subject-1', email: 'person@example.test' },
+    });
+
+    expect(ssoSyncDiagnosticsService.startRun).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-1', providerId: 'provider-1', trigger: 'login', details: expect.objectContaining({ source: 'identity_provider_reconciliation', protocol: 'ldap' }),
+    }));
+    expect(ssoSyncDiagnosticsService.completeRun).toHaveBeenCalledWith('run-1', expect.objectContaining({
+      tenantId: 'tenant-1', providerId: 'provider-1', userId: expect.any(String),
+    }));
+  });
+
+  it('records a failed login reconciliation without suppressing the provisioning failure', async () => {
+    stores.externalIdentity.findOne.mockResolvedValueOnce({ userId: 'linked-user-1', status: 'unlinked' });
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1' } as any;
+
+    await expect(identityProviderProvisioningService.reconcileLdapLogin(provider, {
+      subjectId: 'subject-1', email: 'person@example.test', claims: { sub: 'subject-1', email: 'person@example.test' },
+    })).rejects.toThrow('requires administrator relinking');
+
+    expect(ssoSyncDiagnosticsService.failRun).toHaveBeenCalledWith('run-1', expect.any(Error), expect.objectContaining({
+      tenantId: 'tenant-1', providerId: 'provider-1', details: expect.objectContaining({ mode: 'login' }),
+    }));
   });
 });

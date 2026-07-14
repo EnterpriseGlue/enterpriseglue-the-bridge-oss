@@ -2303,7 +2303,7 @@ Phase 0 exit criteria:
 ### Phase 4: Runtime Integration
 
 - [x] ✅ Ensure direct OIDC, SAML, and LDAP adapters normalize identities before mappings create provider-managed group memberships at provisioning time.
-- [ ] ⬜ Ensure login and scheduled synchronization share one identity reconciliation service and diagnostics model.
+- [x] ✅ Ensure login and scheduled synchronization share one identity reconciliation service and diagnostics model. Direct OIDC, SAML, and LDAP login call explicit reconciliation entry points in the normalized provisioning service; scheduled LDAP uses that same provisioning service, and both paths persist `SsoSyncRun` lifecycle diagnostics.
 - [x] ✅ Enforce `enterpriseglue_authoritative` as the only active runtime authorization mode in v1. Shared schema and settings-route tests reject later authority modes with a stable validation contract.
 - [x] ✅ Ensure provider-created group memberships use `source = "identity_provider"` plus provider/mapping lineage for direct OIDC, SAML, and LDAP provisioning.
 - [x] ✅ Ensure config-managed assignments use `source = "config"` and source lineage. Apply persists the canonical assignment key, bundle source reference, object hash, ownership mode, and last-applied state, then removes only matching source-owned assignments in authoritative mode.

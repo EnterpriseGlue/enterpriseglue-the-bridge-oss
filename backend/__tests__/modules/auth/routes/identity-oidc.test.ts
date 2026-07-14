@@ -8,7 +8,7 @@ const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: 
 const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn() }));
 const genericSamlService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), validatePostResponse: vi.fn(), extractUserClaims: vi.fn() }));
 const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
-const identityProviderProvisioningService = vi.hoisted(() => ({ provisionOidcUser: vi.fn(), provisionLdapUser: vi.fn(), provisionSamlUser: vi.fn() }));
+const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn(), reconcileLdapLogin: vi.fn(), reconcileSamlLogin: vi.fn() }));
 const directLdapIdentityService = vi.hoisted(() => ({ authenticate: vi.fn() }));
 const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 
@@ -38,9 +38,9 @@ describe('provider-neutral OIDC routes', () => {
     identityProviderService.listEnabledDirectLoginProviders.mockResolvedValue([provider]);
     genericOidcService.createAuthorizationRequest.mockResolvedValue({ url: 'https://issuer.example.test/authorize', codeVerifier: 'verifier' });
     genericOidcService.exchangeCode.mockResolvedValue({ sub: 'subject-1', email: 'person@example.test', nonce: 'nonce' });
-    identityProviderProvisioningService.provisionOidcUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
-    identityProviderProvisioningService.provisionLdapUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
-    identityProviderProvisioningService.provisionSamlUser.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
+    identityProviderProvisioningService.reconcileOidcLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
+    identityProviderProvisioningService.reconcileLdapLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
+    identityProviderProvisioningService.reconcileSamlLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
     directLdapIdentityService.authenticate.mockResolvedValue({ subjectId: 'ldap-user-1', email: 'person@example.test', displayName: 'Person', firstName: 'Person', lastName: 'Example', groups: ['ops'] });
     genericSamlService.createAuthorizationRequest.mockResolvedValue({ url: 'https://idp.example.test/sso?SAMLRequest=request', entryPoint: 'https://idp.example.test/sso' });
     genericSamlService.validatePostResponse.mockResolvedValue({ nameID: 'person@example.test', groups: ['ops'] });
@@ -116,7 +116,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.status).toBe(401);
     expect(response.body.error).toBe('Identity provider state does not match the selected provider');
     expect(genericOidcService.exchangeCode).not.toHaveBeenCalled();
-    expect(identityProviderProvisioningService.provisionOidcUser).not.toHaveBeenCalled();
+    expect(identityProviderProvisioningService.reconcileOidcLogin).not.toHaveBeenCalled();
     expect(authSessionService.issue).not.toHaveBeenCalled();
   });
 
@@ -166,7 +166,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(callback.status).toBe(302);
     expect(genericSamlService.validatePostResponse).toHaveBeenCalledWith(expect.any(Object), 'signed-response');
     expect(samlAssertionReplayService.consume).toHaveBeenCalledWith({ providerId: 'provider-1', tenantId: null, samlResponse: 'signed-response' });
-    expect(identityProviderProvisioningService.provisionSamlUser).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'saml' }), expect.objectContaining({ subjectId: 'subject-1', claims: expect.objectContaining({ groups: ['ops'] }) }));
+    expect(identityProviderProvisioningService.reconcileSamlLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'saml' }), expect.objectContaining({ subjectId: 'subject-1', claims: expect.objectContaining({ groups: ['ops'] }) }));
     expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
   });
 
@@ -179,7 +179,7 @@ describe('provider-neutral OIDC routes', () => {
 
     expect(response.status).toBe(401);
     expect(genericSamlService.validatePostResponse).not.toHaveBeenCalled();
-    expect(identityProviderProvisioningService.provisionSamlUser).not.toHaveBeenCalled();
+    expect(identityProviderProvisioningService.reconcileSamlLogin).not.toHaveBeenCalled();
   });
 
   it('rejects a replayed SAML assertion before provisioning a user session', async () => {
@@ -192,7 +192,7 @@ describe('provider-neutral OIDC routes', () => {
       .send({ SAMLResponse: 'replayed-response', RelayState: relayState });
 
     expect(response.status).toBe(401);
-    expect(identityProviderProvisioningService.provisionSamlUser).not.toHaveBeenCalled();
+    expect(identityProviderProvisioningService.reconcileSamlLogin).not.toHaveBeenCalled();
     expect(authSessionService.issue).not.toHaveBeenCalled();
   });
 });
