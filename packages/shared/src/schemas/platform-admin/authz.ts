@@ -11,6 +11,7 @@ import {
   AUTHZ_ROUTE_EXEMPTION_KINDS,
 } from '../../authz/route-exemptions.js';
 import { EngineConnectionModeSchema } from '../mission-control/engine.js';
+import { RuntimeResourceKindSchema } from './config-bundle.js';
 
 export const AuthzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
 export const AuthzPrincipalTypeSchema = z.enum(AUTHZ_PRINCIPAL_TYPES);
@@ -899,6 +900,70 @@ export const EffectiveAccessEvaluateResponseSchema = z.object({
   })),
 });
 
+/** Sanitized runtime authorization inventory; it never contains engine payload data. */
+export const RuntimeResourceSchema = z.object({
+  id: z.string(),
+  tenantId: z.string().nullable(),
+  engineId: z.string(),
+  resourceKind: RuntimeResourceKindSchema,
+  resourceKey: z.string(),
+  runtimeTenantId: z.string(),
+  engineResourceId: z.string().nullable(),
+  deploymentId: z.string().nullable(),
+  projectId: z.string().nullable(),
+  fileId: z.string().nullable(),
+  version: z.number().int().nullable(),
+  labelsJson: z.string(),
+  lineageJson: z.string(),
+  source: z.string(),
+  sourceRef: z.string().nullable(),
+  observedAt: z.number(),
+  isActive: z.boolean(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export const RuntimeResourceSetSchema = z.object({
+  id: z.string(),
+  tenantId: z.string().nullable(),
+  key: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  engineId: z.string(),
+  resourceKind: RuntimeResourceKindSchema,
+  selectorJson: z.string(),
+  selectorFingerprint: z.string(),
+  runtimeTenantId: z.string().nullable(),
+  source: z.string(),
+  sourceRef: z.string().nullable(),
+  sourceHash: z.string().nullable(),
+  lastAppliedAt: z.number().nullable(),
+  driftStatus: z.string().nullable(),
+  isArchived: z.boolean(),
+  createdById: z.string().nullable(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export const RuntimeResourceQuerySchema = z.object({
+  engineId: z.string().min(1),
+  resourceKind: RuntimeResourceKindSchema.optional(),
+  includeInactive: z.enum(['true', 'false']).optional(),
+});
+
+export const RuntimeResourceSetQuerySchema = z.object({
+  engineId: z.string().min(1).optional(),
+  includeArchived: z.enum(['true', 'false']).optional(),
+});
+
+export const RuntimeResourceSetMaterializationResultSchema = z.object({
+  runtimeResourceSetId: z.string(),
+  matched: z.number().int().nonnegative(),
+  created: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  removed: z.number().int().nonnegative(),
+});
+
 export const SsoAssignmentMappingSchema = z.object({
   id: z.string(),
   tenantId: z.string().nullable().optional(),
@@ -1115,6 +1180,8 @@ export type DeploymentEligibilityEvaluateRequest = z.infer<typeof DeploymentElig
 export type DeploymentEligibilityEvaluateResponse = z.infer<typeof DeploymentEligibilityEvaluateResponseSchema>;
 export type EffectiveAccessEvaluateRequest = z.infer<typeof EffectiveAccessEvaluateRequestSchema>;
 export type EffectiveAccessEvaluateResponse = z.infer<typeof EffectiveAccessEvaluateResponseSchema>;
+export type RuntimeResource = z.infer<typeof RuntimeResourceSchema>;
+export type RuntimeResourceSet = z.infer<typeof RuntimeResourceSetSchema>;
 export type SsoAssignmentMapping = z.infer<typeof SsoAssignmentMappingSchema>;
 export type SsoEngineAccessSnapshot = z.infer<typeof SsoEngineAccessSnapshotSchema>;
 export type SsoEngineAccessSnapshotStatus = z.infer<typeof SsoEngineAccessSnapshotStatusSchema>;

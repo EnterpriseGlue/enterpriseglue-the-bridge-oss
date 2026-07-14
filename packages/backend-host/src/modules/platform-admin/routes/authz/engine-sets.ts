@@ -11,13 +11,9 @@ import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persis
 import { engineSetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
+import { RuntimeResourceQuerySchema, RuntimeResourceSetQuerySchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
-const runtimeResourceQuerySchema = z.object({
-  engineId: z.string().min(1),
-  resourceKind: z.enum(['process_definition', 'decision_definition']).optional(),
-  includeInactive: z.enum(['true', 'false']).optional(),
-});
 const engineSetSelectorSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('all') }),
   z.object({ mode: z.literal('engine_ids'), engineIds: z.array(z.string().min(1)).min(1) }),
@@ -123,7 +119,7 @@ export function registerEngineSetRoutes(router: Router, { requirePlatformAction 
     }
   }));
 
-  router.get('/api/authz/runtime-resources', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.read'), validateQuery(runtimeResourceQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/api/authz/runtime-resources', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.read'), validateQuery(RuntimeResourceQuerySchema), asyncHandler(async (req: Request, res: Response) => {
     const tenantId = req.tenant?.tenantId || null;
     const resources = await (await getDataSource()).getRepository(RuntimeResource).find({
       where: { engineId: String(req.query.engineId), ...(req.query.resourceKind ? { resourceKind: String(req.query.resourceKind) } : {}), ...(req.query.includeInactive === 'true' ? {} : { isActive: true }) },
@@ -132,7 +128,7 @@ export function registerEngineSetRoutes(router: Router, { requirePlatformAction 
     res.json(resources.filter((resource) => (resource.tenantId || null) === tenantId));
   }));
 
-  router.get('/api/authz/runtime-resource-sets', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.read'), validateQuery(z.object({ engineId: z.string().min(1).optional(), includeArchived: z.enum(['true', 'false']).optional() })), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/api/authz/runtime-resource-sets', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.read'), validateQuery(RuntimeResourceSetQuerySchema), asyncHandler(async (req: Request, res: Response) => {
     const tenantId = req.tenant?.tenantId || null;
     const sets = await (await getDataSource()).getRepository(RuntimeResourceSet).find({
       where: { ...(req.query.engineId ? { engineId: String(req.query.engineId) } : {}), ...(req.query.includeArchived === 'true' ? {} : { isArchived: false }) },
