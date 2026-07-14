@@ -100,6 +100,26 @@ describe('provider-neutral OIDC routes', () => {
     expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
   });
 
+  it('rejects callback state when its provider id resolves to a different same-protocol provider', async () => {
+    const state = Buffer.from(JSON.stringify({ timestamp: Date.now(), nonce: 'nonce', providerId: 'provider-1', identityProviderKey: 'identity.oidc.main' })).toString('base64');
+    identityProviderService.getByKey.mockResolvedValue({
+      ...provider,
+      id: 'provider-2',
+      key: 'identity.oidc.secondary',
+    });
+
+    const response = await request(app)
+      .get(`/api/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
+      .redirects(0);
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('Identity provider state does not match the selected provider');
+    expect(genericOidcService.exchangeCode).not.toHaveBeenCalled();
+    expect(identityProviderProvisioningService.provisionOidcUser).not.toHaveBeenCalled();
+    expect(authSessionService.issue).not.toHaveBeenCalled();
+  });
+
   it('authenticates a direct LDAP provider without returning directory credentials', async () => {
     identityProviderService.getByKey.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
     const response = await request(app).post('/api/auth/identity/identity.oidc.main/ldap/login').send({ username: 'person@example.test', password: 'directory-password' });
