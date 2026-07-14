@@ -3,6 +3,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { ConfigBundleIdentityReplayTask } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleIdentityReplayTask.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
+import { ssoSyncDiagnosticsService } from './SsoSyncDiagnosticsService.js';
 
 const ACTIVE_STATUSES: Array<ConfigBundleIdentityReplayTask['status']> = ['queued', 'running'];
 const DEFAULT_PAGE_LIMIT = 500;
@@ -22,6 +23,7 @@ export interface ConfigBundleIdentityReplayTaskResult {
   taskId: string;
   applyRunId: string;
   providerId: string;
+  syncRunId: string | null;
   status: ConfigBundleIdentityReplayTask['status'];
   scanned: number;
   created: number;
@@ -55,6 +57,13 @@ class ConfigBundleIdentityReplayTaskService {
     const repo = dataSource.getRepository(ConfigBundleIdentityReplayTask);
     const tenantId = input.tenantId || null;
     const now = Date.now();
+    const existing = await repo.findOne({ where: { applyRunId: input.applyRunId, providerId } });
+    const syncRunId = existing?.syncRunId || await ssoSyncDiagnosticsService.startRun({
+      tenantId,
+      providerId,
+      trigger: 'mapping_change',
+      details: { kind: 'config_bundle_identity_replay', applyRunId: input.applyRunId },
+    });
 
     // A later bundle is authoritative for the same provider. Its replay starts
     // from a fresh snapshot page, so older queued work must not race it.
@@ -70,10 +79,10 @@ class ConfigBundleIdentityReplayTaskService {
       updatedAt: now,
     });
 
-    const existing = await repo.findOne({ where: { applyRunId: input.applyRunId, providerId } });
     if (existing) {
       await repo.update({ id: existing.id }, {
         status: 'queued',
+        syncRunId: existing.syncRunId || syncRunId,
         cursor: input.cursor,
         leaseId: null,
         leaseExpiresAt: null,
@@ -91,7 +100,7 @@ class ConfigBundleIdentityReplayTaskService {
     }
 
     await repo.insert({
-      id: generateId(), tenantId, applyRunId: input.applyRunId, providerId,
+      id: generateId(), tenantId, applyRunId: input.applyRunId, providerId, syncRunId,
       status: 'queued', cursor: input.cursor, leaseId: null, leaseExpiresAt: null,
       attempts: 0, nextAttemptAt: null,
       scanned: input.initial.scanned, created: input.initial.created, removed: input.initial.removed, failed: input.initial.failed,
@@ -157,8 +166,17 @@ class ConfigBundleIdentityReplayTaskService {
           completedAt: completed ? Date.now() : null,
           updatedAt: Date.now(),
         });
+        if (completed) {
+          await ssoSyncDiagnosticsService.completeRun(candidate.syncRunId, {
+            tenantId: candidate.tenantId,
+            providerId: candidate.providerId,
+            groupMembershipsCreated: candidate.created + replay.created,
+            groupMembershipsRemoved: candidate.removed + replay.removed,
+            details: { kind: 'config_bundle_identity_replay', applyRunId: candidate.applyRunId, taskId: candidate.id },
+          });
+        }
         return {
-          taskId: candidate.id, applyRunId: candidate.applyRunId, providerId: candidate.providerId,
+          taskId: candidate.id, applyRunId: candidate.applyRunId, providerId: candidate.providerId, syncRunId: candidate.syncRunId || null,
           status: completed ? 'completed' : 'queued', scanned: candidate.scanned + replay.scanned,
           created: candidate.created + replay.created, removed: candidate.removed + replay.removed,
           failed: candidate.failed + replay.failed, truncated: replay.truncated, nextCursor: replay.nextCursor,
@@ -170,8 +188,13 @@ class ConfigBundleIdentityReplayTaskService {
           status: 'queued', leaseId: null, leaseExpiresAt: null, attempts,
           nextAttemptAt: retryAt, lastError: error instanceof Error ? error.message.slice(0, 2000) : String(error).slice(0, 2000), updatedAt: Date.now(),
         });
+        await ssoSyncDiagnosticsService.failRun(candidate.syncRunId, error, {
+          tenantId: candidate.tenantId,
+          providerId: candidate.providerId,
+          details: { kind: 'config_bundle_identity_replay', applyRunId: candidate.applyRunId, taskId: candidate.id },
+        });
         return {
-          taskId: candidate.id, applyRunId: candidate.applyRunId, providerId: candidate.providerId,
+          taskId: candidate.id, applyRunId: candidate.applyRunId, providerId: candidate.providerId, syncRunId: candidate.syncRunId || null,
           status: 'queued', scanned: candidate.scanned, created: candidate.created, removed: candidate.removed,
           failed: candidate.failed + 1, truncated: true, nextCursor: candidate.cursor,
         };

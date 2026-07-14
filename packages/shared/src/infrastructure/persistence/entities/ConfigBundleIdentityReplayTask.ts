@@ -10,6 +10,7 @@ export class ConfigBundleIdentityReplayTask extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true }) tenantId!: string | null;
   @Column({ name: 'apply_run_id', type: 'text' }) applyRunId!: string;
   @Column({ name: 'provider_id', type: 'text' }) providerId!: string;
+  @Column({ name: 'sync_run_id', type: 'text', nullable: true }) syncRunId!: string | null;
   @Column({ type: 'text' }) status!: 'queued' | 'running' | 'completed' | 'cancelled';
   @Column({ type: 'text', nullable: true }) cursor!: string | null;
   @Column({ name: 'lease_id', type: 'text', nullable: true }) leaseId!: string | null;

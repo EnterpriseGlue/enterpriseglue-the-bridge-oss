@@ -170,6 +170,7 @@ export function registerConfigBundleRoutes(
     res.json(tasks.map((task) => ({
       id: task.id,
       providerId: task.providerId,
+      syncRunId: task.syncRunId,
       status: task.status,
       attempts: task.attempts,
       nextAttemptAt: task.nextAttemptAt,

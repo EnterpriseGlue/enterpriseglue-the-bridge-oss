@@ -1960,7 +1960,7 @@ Config transport and response rules:
 - [x] ✅ Add deterministic config-bundle preview validation for declared JSON imports with strict schema validation, object counts, undeclared/missing file rejection, and canonical SHA-256 hash. The current diff covers every object family that apply mutates, enforces required acknowledgements, and reports aggregate current-membership impact; exact external-identity reconciliation preview remains pending.
 - [x] ✅ Require idempotency keys for every apply caller. The API/CLI supports persisted tenant-scoped idempotency keys and replays completed matching receipts; the Platform Settings UI generates one per successful preview and reuses it for the corresponding apply attempt.
 - [ ] ⬜ Return `202 Accepted` plus a run id for asynchronous identity/runtime reconciliation triggered after apply.
-- [ ] ⬜ Keep config run and identity sync run ids cross-linked for diagnostics and audit.
+- [x] ✅ Keep config apply-run and identity sync-run ids cross-linked for diagnostics and audit. Every queued provider replay creates one persisted sync run, stores its id on the tenant-scoped continuation task, includes both ids in diagnostic details, exposes the link through the apply-run task receipt/OpenAPI, and renders it in Configuration history.
 
 ## UI Design
 
