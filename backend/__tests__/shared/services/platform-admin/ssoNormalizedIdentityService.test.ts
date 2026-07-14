@@ -90,7 +90,7 @@ describe('ssoNormalizedIdentityService', () => {
     }));
     expect(update).not.toHaveBeenCalled();
     expect(externalRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
-      providerId: 'provider-1', subjectId: 'subject-1', userId: 'user-1', emailHint: 'user@example.com', identityKey: expect.any(String),
+      tenantId: 'tenant-a', directoryTenantId: 'idp-tenant', providerId: 'provider-1', subjectId: 'subject-1', userId: 'user-1', emailHint: 'user@example.com', identityKey: expect.any(String),
     }));
     expect(syncMembershipsInStore).toHaveBeenCalledWith(dataSource, 'user-1', 'tenant-a', expect.objectContaining({ providerKey: 'provider-1', providerType: 'saml' }));
   });

@@ -1826,7 +1826,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Replace or evolve SSO-specific provider/mapping/snapshot/sync entities into provider-neutral identity entities with OIDC, SAML, and LDAP support.
 - [x] ✅ Add `ExternalIdentity` as the account-link table with a collision-safe canonical `(tenantId, providerId, subjectId)` key, indexed `userId`, migration coverage, and fail-closed concurrent-link handling; keep normalized entitlement snapshots diagnostic/reconciliation data only.
 - [ ] ⬜ Replace provider-specific `User.entraId` / `User.googleId` authorization-link use with `ExternalIdentity` and define explicit verified-email linking policy for standalone-to-SSO transition.
-- [ ] ⬜ Split EnterpriseGlue `tenantId` from external `directoryTenantId`/issuer tenant fields in provider schemas and persistence.
+- [x] ✅ Split EnterpriseGlue `tenantId` from external `directoryTenantId`/issuer tenant fields in provider and external-identity schemas, migrations, and normalized-identity linking. Contracts assert that the two values persist independently.
 - [ ] ⬜ Add `identity_provider` membership/assignment source semantics with explicit provider id and mapping id lineage; migrate current `sso` source handling in the same milestone.
 - [ ] ⬜ Add `EngineRuntimeResource` and `EngineRuntimeResourceSet` entities plus materialization lineage and uniqueness on engine, kind, key, and optional engine tenant id.
 - [x] ✅ Add `runtimeAccessScope`, deployment integration configuration, and first-class `connectionMode` to `Engine`; add platform policy persistence for credentialless private-sidecar endpoints.

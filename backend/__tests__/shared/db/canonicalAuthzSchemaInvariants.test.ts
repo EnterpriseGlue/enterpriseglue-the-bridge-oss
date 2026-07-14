@@ -3,10 +3,12 @@ import { getMetadataArgsStorage } from 'typeorm';
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { AddExternalIdentities1700000000047 } from '@enterpriseglue/shared/db/migrations/1700000000047-add-external-identities.js';
+import { AddIdentityProviders1700000000056 } from '@enterpriseglue/shared/db/migrations/1700000000056-add-identity-providers.js';
 import { externalIdentityKey } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
 
 function column(target: Function, propertyName: string) {
@@ -77,6 +79,22 @@ describe('canonical authorization persistence schema invariants', () => {
       expect.objectContaining({ columnNames: ['tenant_id', 'provider_id', 'subject_id'] }),
       expect.objectContaining({ columnNames: ['user_id'] }),
     ]));
+  });
+
+  it('keeps EnterpriseGlue tenancy distinct from external directory tenancy in identity persistence', async () => {
+    expect(column(IdentityProvider, 'tenantId')?.options.name).toBe('tenant_id');
+    expect(column(IdentityProvider, 'directoryTenantId')?.options.name).toBe('directory_tenant_id');
+    expect(column(ExternalIdentity, 'tenantId')?.options.name).toBe('tenant_id');
+    expect(column(ExternalIdentity, 'directoryTenantId')?.options.name).toBe('directory_tenant_id');
+
+    const createTable = vi.fn().mockResolvedValue(undefined);
+    await new AddIdentityProviders1700000000056().up({
+      hasTable: vi.fn().mockResolvedValue(false),
+      createTable,
+    } as any);
+
+    expect(createTable.mock.calls[0][0].columns.map((candidate: { name: string }) => candidate.name))
+      .toEqual(expect.arrayContaining(['tenant_id', 'directory_tenant_id']));
   });
 
   it('enforces one project-engine target independent of source ownership', () => {
