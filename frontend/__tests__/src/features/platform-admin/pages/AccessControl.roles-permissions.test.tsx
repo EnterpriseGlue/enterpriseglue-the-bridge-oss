@@ -28,6 +28,7 @@ const {
   getSsoTargetRoleOptions,
 } = await import('@src/features/platform-admin/pages/AccessControl');
 const { RoleAssignmentsTable } = await import('@src/features/platform-admin/pages/access-control/RoleAssignmentsTable');
+const { withAssignmentPrincipalType } = await import('@src/features/platform-admin/pages/access-control/assignmentFormOptions');
 import {
   resetAccessControlMocks,
   ssoAssignmentTestState,
@@ -91,6 +92,10 @@ function expectButtonAbsentOrDisabled(container: typeof screen | ReturnType<type
 
 describe('AccessControl roles and permissions', () => {
   beforeEach(resetAccessControlMocks);
+
+  it('normalizes incompatible scopes when changing an assignment to a service account', () => {
+    expect(withAssignmentPrincipalType({ principalType: 'user', principalId: 'user-1', roleId: 'role-1', resourceType: 'platform', resourceId: '', runtimeEngineId: 'engine-1' }, 'service_account')).toMatchObject({ principalType: 'service_account', principalId: '', roleId: '', resourceType: 'engine', runtimeEngineId: 'engine-1' });
+  });
 
   it('renders role and permission catalog data', () => {
     render(<AccessControl />);
