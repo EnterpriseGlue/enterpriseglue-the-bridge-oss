@@ -116,6 +116,7 @@ export default function RoleLibrarySettingsTab() {
   const [metadataDraft, setMetadataDraft] = useState({ name: '', description: '' });
   const [createOpen, setCreateOpen] = useState(false);
   const [createTarget, setCreateTarget] = useState<'manual' | 'config'>('manual');
+  const [archiveConfirmation, setArchiveConfirmation] = useState(false);
   const [createRiskAcknowledged, setCreateRiskAcknowledged] = useState(false);
   const [form, setForm] = useState(blank);
   const [configForm, setConfigForm] = useState(blankConfig);
@@ -160,6 +161,15 @@ export default function RoleLibrarySettingsTab() {
       setForm(blank);
     },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to create role').message),
+  });
+  const archive = useMutation({
+    mutationFn: () => apiClient.delete(`/api/authz/roles/${selected!.id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rbac-roles'] });
+      setSelectedId(null);
+      setArchiveConfirmation(false);
+    },
+    onError: (value: unknown) => setError(parseApiError(value, 'Unable to archive role').message),
   });
   const startCreate = (copy = false, target: 'manual' | 'config' = 'manual') => {
     setError(null);
@@ -214,7 +224,7 @@ export default function RoleLibrarySettingsTab() {
       <div>{selected && detail ? <>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-4)', alignItems: 'start', flexWrap: 'wrap' }}><div><h4 style={{ margin: 0 }}>{selected.name}</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{selected.description || 'No description'} · {selected.permissionCount} permissions</p></div><div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>{selected.kind === 'system' && <><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={() => startCreate(true)}>Duplicate</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Download} onClick={() => startCreate(true, 'config')}>Export config role</Button></GuardedAction></>}</div></div>
         {selected.source === 'config' && <InlineNotification kind={configWarnEditable ? 'warning' : 'info'} title={configWarnEditable ? 'Configuration warning mode' : 'Managed by configuration'} subtitle={configWarnEditable ? 'Local edits are allowed and will be marked as drift until the configuration bundle is reconciled.' : 'Update this role in its configuration bundle.'} hideCloseButton lowContrast style={{ marginTop: 'var(--spacing-4)' }} />}
-        {editable && <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}><TextInput id="role-library-edit-name" labelText="Role name" value={metadataDraft.name} onChange={(event) => setMetadataDraft((current) => ({ ...current, name: event.target.value }))} /><TextArea id="role-library-edit-description" labelText="Description" value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} rows={2} /></div><div style={{ position: 'sticky', top: 'var(--spacing-3)', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', marginTop: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => { setDraft(detail.permissions); setMetadataDraft({ name: detail.name, description: detail.description || '' }); }}>Reset</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={!hasUnsavedRoleChanges || save.isPending || !metadataDraft.name.trim()} onClick={() => save.mutate()}>Save</Button></GuardedAction></div></>}
+        {editable && <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}><TextInput id="role-library-edit-name" labelText="Role name" value={metadataDraft.name} onChange={(event) => setMetadataDraft((current) => ({ ...current, name: event.target.value }))} /><TextArea id="role-library-edit-description" labelText="Description" value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} rows={2} /></div><div style={{ position: 'sticky', top: 'var(--spacing-3)', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', marginTop: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => { setDraft(detail.permissions); setMetadataDraft({ name: detail.name, description: detail.description || '' }); }}>Reset</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button aria-label="Archive custom role" kind="danger--tertiary" size="sm" disabled={archive.isPending} onClick={() => setArchiveConfirmation(true)}>Archive</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={!hasUnsavedRoleChanges || save.isPending || !metadataDraft.name.trim()} onClick={() => save.mutate()}>Save</Button></GuardedAction></div></>}
         <div style={{ marginTop: 'var(--spacing-5)' }}><PermissionPicker permissions={selectedRolePermissions} draft={draft} editable={editable && manage.allowed} idPrefix="role-library" onToggle={toggle} /></div>
       </> : <InlineNotification kind="info" title="Select a role" subtitle="Choose a role from the library to inspect its permissions." hideCloseButton lowContrast />}</div>
     </div>
@@ -233,6 +243,9 @@ export default function RoleLibrarySettingsTab() {
         <PermissionPicker key={form.scope} permissions={createRolePermissions} draft={draft} editable={manage.allowed} idPrefix="create-role" onToggle={toggle} />
         {createTarget === 'manual' && createSelectedRiskyPermissions.length > 0 && <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}><InlineNotification kind="warning" title="Sensitive permissions selected" subtitle={createSelectedRiskyPermissions.map((permission) => permission.key).join(', ')} hideCloseButton lowContrast /><Checkbox id="role-library-risk-acknowledged" labelText="I understand this role includes sensitive permissions." checked={createRiskAcknowledged} onChange={(_event, { checked }) => setCreateRiskAcknowledged(Boolean(checked))} /></div>}
       </div>
+    </Modal>
+    <Modal open={archiveConfirmation} danger modalHeading="Archive custom role" primaryButtonText="Archive" secondaryButtonText="Cancel" onRequestClose={() => setArchiveConfirmation(false)} onRequestSubmit={() => archive.mutate()} primaryButtonDisabled={archive.isPending}>
+      <p>Archive {selected?.name}? New assignments will no longer be allowed.</p>
     </Modal>
   </Tile>;
 }

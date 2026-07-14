@@ -1,6 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RoleLibrarySettingsTab from '@src/features/platform-admin/components/RoleLibrarySettingsTab';
 import { apiClient } from '@src/shared/api/client';
@@ -10,7 +10,7 @@ const authState = vi.hoisted(() => ({
   permissions: { userId: 'admin-1', platform: ['platform:authz:roles:view', 'platform:authz:roles:manage'], projects: [], engines: [], generatedAt: 1 } as CurrentUserPermissions,
 }));
 
-vi.mock('@src/shared/api/client', () => ({ apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
+vi.mock('@src/shared/api/client', () => ({ apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: () => authState }));
 
 const roles = [
@@ -84,6 +84,18 @@ describe('RoleLibrarySettingsTab interactions', () => {
     expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();
     fireEvent.click(screen.getByLabelText('I understand this role includes sensitive permissions.'));
     expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled();
+  });
+
+  it('confirms before archiving an editable custom role', async () => {
+    vi.mocked(apiClient.delete).mockResolvedValue(undefined);
+    renderTab();
+    await screen.findByText('Custom Operator');
+    fireEvent.click(screen.getByRole('button', { name: /Custom Operator custom engine/ }));
+    await waitFor(() => expect(document.getElementById('role-library-edit-name')).toHaveValue('Custom Operator'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive custom role' }));
+    expect(screen.getByText('Archive custom role')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Archive custom role' })).getByRole('button', { name: /Archive$/ }));
+    await waitFor(() => expect(apiClient.delete).toHaveBeenCalledWith('/api/authz/roles/role-custom'));
   });
 
   it('marks config-owned roles and disables their local permission controls', async () => {
