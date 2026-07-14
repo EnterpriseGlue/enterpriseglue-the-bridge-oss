@@ -124,7 +124,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, engineRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -195,6 +195,44 @@ describe('configBundleApplyService', () => {
 
     expect(roleInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync' }));
     expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync' }));
+  });
+
+  it('restores drifted config-warning roles and groups to the previewed state', async () => {
+    const { roleRepo, groupRepo, permissionRepo } = setupDataSource();
+    roleRepo.find.mockResolvedValue([{
+      id: 'role-deployer', tenantId: 'tenant-a', key: 'custom.engine.deployer', name: 'Locally edited role', description: null,
+      scope: 'engine', source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', driftStatus: 'drifted', isArchived: false,
+    }]);
+    groupRepo.find.mockResolvedValue([{
+      id: 'group-deployers', tenantId: 'tenant-a', key: 'group.deployers', name: 'Locally edited group', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', driftStatus: 'drifted', isArchived: false,
+    }]);
+    permissionRepo.find.mockResolvedValue([{ roleId: 'role-deployer', permissionId: 'engine:deploy' }]);
+    const warningFiles = {
+      './roles.json': {
+        roles: [{ key: 'custom.engine.deployer', name: 'Deployer', scope: 'engine', permissions: ['engine:deploy'], ownershipMode: 'config_warn' }],
+      },
+      './groups.json': {
+        groups: [{ key: 'group.deployers', name: 'Deployers', ownershipMode: 'config_warn' }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle, files: warningFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle,
+      files: warningFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.updated).toBe(2);
+    expect(roleRepo.update).toHaveBeenCalledWith({ id: 'role-deployer' }, expect.objectContaining({
+      name: 'Deployer', ownershipMode: 'config_warn', driftStatus: 'in_sync', sourceHash: expect.any(String), lastAppliedAt: expect.any(Number),
+    }));
+    expect(groupRepo.update).toHaveBeenCalledWith({ id: 'group-deployers' }, expect.objectContaining({
+      name: 'Deployers', ownershipMode: 'config_warn', driftStatus: 'in_sync', sourceHash: expect.any(String), lastAppliedAt: expect.any(Number),
+    }));
   });
 
   it('leaves an untransferred manual target unapplied and preserves the row', async () => {
@@ -382,6 +420,62 @@ describe('configBundleApplyService', () => {
       tenantId: 'tenant-a',
       actorId: 'admin-1',
     })).rejects.toMatchObject({ statusCode: 422, message: expect.stringContaining('config.authoritative_archive:group:group.stale') });
+  });
+
+  it('authoritatively archives source-owned groups while preserving manual groups', async () => {
+    const { groupRepo, auditInsert } = setupDataSource();
+    groupRepo.find.mockResolvedValue([
+      {
+        id: 'group-stale', tenantId: 'tenant-a', key: 'group.stale', name: 'Stale', description: null,
+        source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_locked', driftStatus: 'in_sync', isArchived: false,
+      },
+      {
+        id: 'group-manual', tenantId: 'tenant-a', key: 'group.manual', name: 'Manual', description: null,
+        source: 'manual', sourceRef: null, ownershipMode: 'manual', driftStatus: null, isArchived: false,
+      },
+    ]);
+    const cleanupBundle = { ...bundle, imports: ['./groups.json'] };
+    const cleanupFiles = { './groups.json': { groups: [] } };
+    const preview = configBundlePreviewService.preview({ bundle: cleanupBundle, files: cleanupFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle: cleanupBundle,
+      files: cleanupFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      acknowledgements: ['config.authoritative_archive:group:group.stale'],
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.archived).toBe(1);
+    expect(groupRepo.update).toHaveBeenCalledTimes(1);
+    expect(groupRepo.update).toHaveBeenCalledWith({ id: 'group-stale' }, expect.objectContaining({ isArchived: true, driftStatus: 'in_sync' }));
+    expect(groupRepo.update).not.toHaveBeenCalledWith({ id: 'group-manual' }, expect.anything());
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ action: 'authz.config_bundle.group.archive', resourceId: 'group-stale' }));
+  });
+
+  it('rejects invalid and preview-only bundles before opening a transaction', async () => {
+    const { dataSource } = setupDataSource();
+    const previewOnlyBundle = { ...bundle, mode: 'preview_only' };
+    const preview = configBundlePreviewService.preview({ bundle: previewOnlyBundle, files });
+
+    await expect(configBundleApplyService.apply({
+      bundle: previewOnlyBundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 422, message: expect.stringContaining('preview_only') });
+
+    await expect(configBundleApplyService.apply({
+      bundle: { ...bundle, kind: 'UnsupportedBundleKind' },
+      files,
+      expectedPreviewHash: 'invalid',
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 422, message: 'Configuration bundle is invalid' });
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
   it('rejects stale or arbitrary preview hashes before opening a transaction', async () => {
