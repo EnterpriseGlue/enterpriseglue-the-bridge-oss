@@ -16,6 +16,7 @@ import { AddIdentityProviders1700000000056 } from '@enterpriseglue/shared/db/mig
 import { AddRuntimeResourceSets1700000000054 } from '@enterpriseglue/shared/db/migrations/1700000000054-add-runtime-resource-sets.js';
 import { AddRuntimeResourceInventory1700000000055 } from '@enterpriseglue/shared/db/migrations/1700000000055-add-runtime-resource-inventory.js';
 import { AddDeploymentHistoryLineage1700000000058 } from '@enterpriseglue/shared/db/migrations/1700000000058-add-deployment-history-lineage.js';
+import { RequireCanonicalRoleAssignmentShape1700000000084 } from '@enterpriseglue/shared/db/migrations/1700000000084-require-canonical-role-assignment-shape.js';
 import { externalIdentityKey } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
 
 function column(target: Function, propertyName: string) {
@@ -41,6 +42,13 @@ describe('canonical authorization persistence schema invariants', () => {
   it('enforces one canonical assignment per principal, role, scope, and source identity', () => {
     expect(uniqueColumnSets(RbacRoleAssignment)).toContainEqual(['assignmentKey']);
     expect(column(RbacRoleAssignment, 'assignmentKey')?.options.nullable).not.toBe(true);
+    expect(column(RbacRoleAssignment, 'principalType')?.options.nullable).not.toBe(true);
+    expect(column(RbacRoleAssignment, 'principalId')?.options.nullable).not.toBe(true);
+    expect(column(RbacRoleAssignment, 'scopeType')?.options.nullable).not.toBe(true);
+  });
+
+  it('requires canonical assignment shape only after a fail-closed backfill', () => {
+    expect(new RequireCanonicalRoleAssignmentShape1700000000084().name).toBe('RequireCanonicalRoleAssignmentShape1700000000084');
   });
 
   it('scopes custom role key uniqueness by canonical tenant identity', () => {

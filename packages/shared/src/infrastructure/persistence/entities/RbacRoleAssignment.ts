@@ -17,11 +17,11 @@ export class RbacRoleAssignment extends AppBaseEntity {
   @Column({ name: 'user_id', type: 'text', nullable: true })
   userId!: string | null;
 
-  @Column({ name: 'principal_type', type: 'text', nullable: true })
-  principalType!: string | null;
+  @Column({ name: 'principal_type', type: 'text' })
+  principalType!: string;
 
-  @Column({ name: 'principal_id', type: 'text', nullable: true })
-  principalId!: string | null;
+  @Column({ name: 'principal_id', type: 'text' })
+  principalId!: string;
 
   /** Canonical tenant/principal/role/scope/source identity for uniqueness. */
   @Column({ name: 'assignment_key', type: 'text' })
@@ -36,8 +36,8 @@ export class RbacRoleAssignment extends AppBaseEntity {
   @Column({ name: 'resource_id', type: 'text', nullable: true })
   resourceId!: string | null;
 
-  @Column({ name: 'scope_type', type: 'text', nullable: true })
-  scopeType!: string | null;
+  @Column({ name: 'scope_type', type: 'text' })
+  scopeType!: string;
 
   @Column({ name: 'scope_id', type: 'text', nullable: true })
   scopeId!: string | null;
