@@ -63,6 +63,7 @@ describe('bpmn-engine-client', () => {
 
     expect(fetch).toHaveBeenCalledWith('http://localhost:8080/engine-rest/version', {
       method: 'GET',
+      redirect: 'error',
       signal: expect.anything(),
       headers: expect.objectContaining({
         'Content-Type': 'application/json',
@@ -149,6 +150,7 @@ describe('bpmn-engine-client', () => {
 
     expect(fetch).toHaveBeenCalledWith('http://localhost:8080/engine-rest/process-definition/key/order/start', {
       method: 'POST',
+      redirect: 'error',
       signal: expect.anything(),
       headers: expect.objectContaining({
         'X-EnterpriseGlue-Request-Id': 'req-2',
@@ -183,6 +185,7 @@ describe('bpmn-engine-client', () => {
 
     expect(fetch).toHaveBeenCalledWith('http://localhost:8080/engine-rest/version', {
       method: 'GET',
+      redirect: 'error',
       signal: expect.anything(),
       headers: expect.objectContaining({
         Authorization: `Basic ${Buffer.from('demo:demo-secret').toString('base64')}`,
@@ -201,6 +204,7 @@ describe('bpmn-engine-client', () => {
 
       expect(fetch).toHaveBeenCalledWith('http://host.docker.internal:8080/engine-rest/version', {
         method: 'GET',
+        redirect: 'error',
         signal: expect.anything(),
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
@@ -262,6 +266,7 @@ describe('bpmn-engine-client', () => {
 
     expect(fetch).toHaveBeenNthCalledWith(1, 'https://keycloak.example.com/realms/acme/protocol/openid-connect/token', {
       method: 'POST',
+      redirect: 'error',
       signal: expect.anything(),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: expect.any(URLSearchParams),
@@ -275,6 +280,7 @@ describe('bpmn-engine-client', () => {
 
     expect(fetch).toHaveBeenNthCalledWith(2, 'http://localhost:8080/engine-rest/version', {
       method: 'GET',
+      redirect: 'error',
       signal: expect.anything(),
       headers: expect.objectContaining({
         Authorization: 'Bearer oauth-access-token',

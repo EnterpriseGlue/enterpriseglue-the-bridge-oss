@@ -276,6 +276,7 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
   try {
     response = await fetch(cfg.oauthTokenUrl, {
       method: 'POST',
+      redirect: 'error',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
       signal: AbortSignal.timeout(DEFAULT_ENGINE_REQUEST_TIMEOUT_MS),
@@ -360,6 +361,7 @@ export async function fetchBpmnEngineEndpoint(
       const response = await fetch(connection.url, {
         ...init,
         method,
+        redirect: init?.redirect || 'error',
         headers: { ...connection.headers, ...(init?.headers || {}) },
         signal,
       })
