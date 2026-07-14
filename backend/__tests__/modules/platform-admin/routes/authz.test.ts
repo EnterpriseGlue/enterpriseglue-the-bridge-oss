@@ -2293,6 +2293,29 @@ describe('platform-admin authz routes', () => {
     }), expect.objectContaining({ credentiallessCustomerSidecarsEnabled: false }));
   });
 
+  it('returns an accepted apply receipt when identity replay continues asynchronously', async () => {
+    configBundleApplyMock.apply.mockResolvedValueOnce({
+      canonicalHash: 'preview-hash', created: 0, updated: 1, archived: 0, changes: [], applyRunId: 'config-run-async',
+      reconciliation: {
+        status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0,
+        identitySnapshot: { mode: 'apply', status: 'truncated', providerCount: 1, scanned: 500, created: 4, removed: 1, failed: 0 },
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/authz/config-bundles/apply')
+      .send({
+        bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle' },
+        files: {}, expectedPreviewHash: 'preview-hash', idempotencyKey: 'config-apply-async-2026-07-14',
+      });
+
+    expect(response.status).toBe(202);
+    expect(response.body).toMatchObject({
+      applyRunId: 'config-run-async',
+      reconciliation: { identitySnapshot: { status: 'truncated', providerCount: 1 } },
+    });
+  });
+
   it('requires target-management permission when config apply transfers target ownership', async () => {
     sharedPermissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
       permission !== 'platform:project-engine-targets:manage'

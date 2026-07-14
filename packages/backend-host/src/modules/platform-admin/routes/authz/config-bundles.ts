@@ -135,7 +135,8 @@ export function registerConfigBundleRoutes(
         apiClientId: req.apiClient?.id || null,
       },
     });
-    res.status(200).json(result);
+    const identityReplayQueued = result.reconciliation.identitySnapshot?.status === 'truncated';
+    res.status(identityReplayQueued ? 202 : 200).json(result);
   }));
 
   router.get('/api/authz/config-bundles/runs', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
