@@ -197,6 +197,29 @@ describe('mission-control engines routes', () => {
     ]);
   });
 
+  it('lists evaluator-visible engines for a custom-role user without inventing a legacy role string', async () => {
+    permissionServiceMock.getKnownEngineIdsForUser.mockResolvedValue(['custom-engine']);
+    permissionServiceMock.hasPermission.mockImplementation(async (_permission: string, context: { resourceId?: string }) =>
+      context.resourceId === 'custom-engine'
+    );
+    (engineService as any).getEngineRole.mockResolvedValue(null);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        find: vi.fn().mockResolvedValue([{ id: 'custom-engine', name: 'Custom role engine', runtimeAccessScope: 'engine_wide' }]),
+        findOne: vi.fn().mockResolvedValue({ id: 'custom-engine', tenantId: null, name: 'Custom role engine' }),
+      }),
+    });
+
+    const response = await request(app).get('/engines-api/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      expect.objectContaining({ id: 'custom-engine', name: 'Custom role engine', myRole: null }),
+    ]);
+    expect(permissionServiceMock.getKnownEngineIdsForUser).toHaveBeenCalledWith('user-1', null);
+    expect(engineService.getEngineRole).toHaveBeenCalledWith('user-1', 'custom-engine', null);
+  });
+
   it('returns engine credential state but never the stored secret through scoped engine secret view permission', async () => {
     (engineService as any).getUserEngines.mockResolvedValueOnce([
       { engine: { id: 'e1', name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }, role: 'operator' },

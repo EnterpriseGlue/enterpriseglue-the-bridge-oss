@@ -223,7 +223,9 @@ describe('GET /api/dashboard/context', () => {
   it('marks engines visible through a narrow runtime resource grant as scoped', async () => {
     vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
       ...emptyPermissions(),
-      engines: [{ resourceId: 'engine-central', permissions: ['engine:deploy:view'] }],
+      // Runtime-resource-only users discover the containing engine but do not
+      // receive a synthetic engine-wide permission in their snapshot.
+      engines: [{ resourceId: 'engine-central', permissions: [] }],
     });
     vi.mocked(permissionService.getVisibleRuntimeResources).mockResolvedValue([{ resourceKey: 'payments' }] as any);
     const projectMemberRepo = { find: vi.fn().mockResolvedValue([]) };
@@ -243,6 +245,10 @@ describe('GET /api/dashboard/context', () => {
     expect(response.status).toBe(200);
     expect(response.body.runtimeScopedEngineIds).toEqual(['engine-central']);
     expect(response.body.accessibleEngineIds).toContain('engine-central');
+    expect(response.body.canViewEngines).toBe(true);
+    expect(response.body.canViewProcessData).toBe(true);
+    expect(response.body.canViewMetrics).toBe(true);
+    expect(response.body.canViewDeployments).toBe(false);
   });
 
   it('derives platform-admin dashboard flags from platform permissions', async () => {
