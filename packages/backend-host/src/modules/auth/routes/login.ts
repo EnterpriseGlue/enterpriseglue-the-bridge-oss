@@ -47,17 +47,6 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   const dataSource = await getDataSource();
 
   const ssoRequired = await isSsoRequiredForLogin(dataSource);
-  if (ssoRequired) {
-    await logAudit({
-      tenantId: req.tenant?.tenantId,
-      action: AuditActions.LOGIN_FAILED,
-      ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
-      userAgent: req.headers['user-agent'],
-      details: { email, reason: 'local_login_disabled_by_sso_policy' },
-    });
-    throw Errors.forbidden('Local login is disabled. Please use your SSO provider.');
-  }
-
   const userRepo = dataSource.getRepository(User);
   const refreshTokenRepo = dataSource.getRepository(RefreshToken);
 
@@ -67,6 +56,24 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
     .where('u.isActive = :isActive', { isActive: activeValue });
   qb = addCaseInsensitiveEquals(qb, 'u', 'email', 'email', email);
   const user = await qb.getOne();
+
+  let preloadedPlatformAdministratorUserIds: Set<string> | null = null;
+  if (ssoRequired) {
+    if (user?.authProvider === 'local' && user.passwordHash) {
+      preloadedPlatformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
+    }
+    if (!user || !preloadedPlatformAdministratorUserIds?.has(user.id)) {
+      await logAudit({
+        tenantId: req.tenant?.tenantId,
+        userId: user?.id,
+        action: AuditActions.LOGIN_FAILED,
+        ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+        userAgent: req.headers['user-agent'],
+        details: { email, reason: 'local_login_disabled_by_sso_policy' },
+      });
+      throw Errors.forbidden('Local login is disabled. Please use your SSO provider.');
+    }
+  }
 
   if (!user) {
     // Log failed login attempt
@@ -202,7 +209,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
     userId: user.id,
     tenantId: req.tenant?.tenantId || null,
   });
-  const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
+  const platformAdministratorUserIds = preloadedPlatformAdministratorUserIds || await getActivePlatformAdministratorUserIds([user.id], dataSource);
   
   // Set tokens in HTTP-only cookies (same pattern as Microsoft OAuth)
   res.cookie('accessToken', accessToken, {

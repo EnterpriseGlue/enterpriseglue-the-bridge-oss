@@ -12,6 +12,8 @@ import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilit
 import { getDatabaseType } from '@enterpriseglue/shared/db/adapters/QueryHelpers.js';
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
+const getActivePlatformAdministratorUserIds = vi.hoisted(() => vi.fn().mockResolvedValue(new Set()));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
@@ -25,7 +27,7 @@ vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
-  getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
+  getActivePlatformAdministratorUserIds,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({
@@ -80,6 +82,7 @@ describe('auth login routes', () => {
     app.use(loginRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
+    getActivePlatformAdministratorUserIds.mockResolvedValue(new Set());
 
     userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
@@ -122,7 +125,63 @@ describe('auth login routes', () => {
 
     expect(response.status).toBe(403);
     expect(response.body.error).toContain('Local login is disabled. Please use your SSO provider.');
-    expect(userRepo.createQueryBuilder).not.toHaveBeenCalled();
+    expect(userRepo.createQueryBuilder).toHaveBeenCalled();
+  });
+
+  it('allows a canonical local platform administrator to use break-glass login while SSO is active', async () => {
+    ssoProviderRepo.count.mockResolvedValue(1);
+    getActivePlatformAdministratorUserIds.mockResolvedValue(new Set(['break-glass-1']));
+    (verifyPassword as unknown as Mock).mockResolvedValue(true);
+    userRepo.createQueryBuilder.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getOne: vi.fn().mockResolvedValue({
+        id: 'break-glass-1',
+        email: 'break-glass@example.com',
+        authProvider: 'local',
+        passwordHash: 'local-password-hash',
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        isEmailVerified: true,
+        firstName: 'Break',
+        lastName: 'Glass',
+        mustResetPassword: false,
+        createdByUserId: null,
+      }),
+    });
+
+    const response = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'break-glass@example.com', password: 'Password123!' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.user).toMatchObject({ id: 'break-glass-1', platformRole: 'admin' });
+    expect(getActivePlatformAdministratorUserIds).toHaveBeenCalledWith(['break-glass-1'], expect.any(Object));
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(expect.any(Object), 'break-glass-1');
+  });
+
+  it('keeps local non-administrator accounts blocked while SSO is active', async () => {
+    ssoProviderRepo.count.mockResolvedValue(1);
+    getActivePlatformAdministratorUserIds.mockResolvedValue(new Set());
+    userRepo.createQueryBuilder.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getOne: vi.fn().mockResolvedValue({
+        id: 'local-user-1',
+        email: 'local@example.com',
+        authProvider: 'local',
+        passwordHash: 'local-password-hash',
+        isActive: true,
+      }),
+    });
+
+    const response = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'local@example.com', password: 'Password123!' });
+
+    expect(response.status).toBe(403);
+    expect(verifyPassword).not.toHaveBeenCalled();
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
   });
 
   it('blocks local login for an enabled direct provider-neutral identity provider', async () => {

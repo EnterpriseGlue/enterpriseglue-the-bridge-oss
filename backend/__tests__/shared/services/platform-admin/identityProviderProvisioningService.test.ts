@@ -60,14 +60,14 @@ describe('IdentityProviderProvisioningService', () => {
   });
 
   it('allows verified email linking only when the selected provider explicitly enables it', async () => {
-    const existingUser = { id: 'local-user-1', email: 'person@example.test', firstName: null, lastName: null, platformRole: 'user', isActive: true, isEmailVerified: true };
+    const existingUser = { id: 'local-user-1', email: 'person@example.test', firstName: null, lastName: null, platformRole: 'user', authProvider: 'local', passwordHash: 'local-password-hash', isActive: true, isEmailVerified: true };
     stores.user.findOneBy.mockResolvedValueOnce(existingUser);
     const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: JSON.stringify({ allowVerifiedEmailLinking: true }) } as any;
 
     await identityProviderProvisioningService.provisionLdapUser(provider, {
       subjectId: 'subject-1', email: 'person@example.test', claims: { sub: 'subject-1', email: 'person@example.test' },
     });
-    expect(stores.user.update).toHaveBeenCalledWith({ id: 'local-user-1' }, expect.objectContaining({ email: 'person@example.test' }));
+    expect(stores.user.update).toHaveBeenCalledWith({ id: 'local-user-1' }, expect.objectContaining({ email: 'person@example.test', authProvider: 'local' }));
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({ userId: 'local-user-1' }));
   });
 
@@ -81,6 +81,17 @@ describe('IdentityProviderProvisioningService', () => {
     await expect(identityProviderProvisioningService.provisionLdapUser(provider, {
       subjectId: 'subject-1', email: 'person@example.test', claims: { sub: 'subject-1', email: 'person@example.test' },
     })).rejects.toThrow('already linked to another user account');
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
+  });
+
+  it('fails closed after an external identity has been explicitly unlinked', async () => {
+    stores.externalIdentity.findOne.mockResolvedValueOnce({ userId: 'linked-user-1', status: 'unlinked' });
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: '{}' } as any;
+
+    await expect(identityProviderProvisioningService.provisionLdapUser(provider, {
+      subjectId: 'subject-1', email: 'person@example.test', claims: { sub: 'subject-1', email: 'person@example.test' },
+    })).rejects.toThrow('requires administrator relinking');
+    expect(stores.user.findOneBy).not.toHaveBeenCalled();
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
   });
 });

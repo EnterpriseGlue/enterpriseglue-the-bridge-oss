@@ -127,6 +127,19 @@ client secret.
    archive a legacy provider because legacy records are platform-global whereas
    provider-neutral definitions may be tenant-scoped.
 
+When any direct SSO provider is enabled, password login remains disabled for
+ordinary local accounts. The break-glass exception is limited to an active local
+account that still has a password and an active canonical Platform Administrator
+membership. Verified-email linking does not replace that account's local
+authentication method or password. Removing its administrator membership closes
+the exception immediately.
+
+Unlinking a provider identity marks that provider/subject link and normalized
+snapshot as unlinked, removes only memberships sourced from that provider,
+and revokes only refresh sessions issued through that provider for the linked
+user. Other provider links, local credentials, and manual access remain intact.
+The unlinked subject fails closed until an administrator intentionally relinks it.
+
 Rollback is intentionally simple: disable the new provider, re-enable the
 previous legacy provider, and investigate the new provider's mapping or secret
 reference. Do not remove environment variables or legacy provider records until

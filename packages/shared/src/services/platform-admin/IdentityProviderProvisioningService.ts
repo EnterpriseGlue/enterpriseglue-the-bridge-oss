@@ -64,6 +64,9 @@ class IdentityProviderProvisioningService {
       const externalIdentityRepo = manager.getRepository(ExternalIdentity);
       const identityKey = externalIdentityKey({ tenantId: provider.tenantId, providerId: provider.id, subjectId: input.subjectId });
       const externalIdentity = await externalIdentityRepo.findOne({ where: { identityKey } });
+      if (externalIdentity?.status === 'unlinked') {
+        throw new Error('External identity has been unlinked and requires administrator relinking');
+      }
       let user = externalIdentity ? await userRepo.findOneBy({ id: externalIdentity.userId }) : null;
       if (externalIdentity && !user) throw new Error('External identity references a missing user account');
       if (!externalIdentity) {
@@ -83,7 +86,8 @@ class IdentityProviderProvisioningService {
           const matchingEmailUser = await userRepo.findOneBy({ email });
           if (matchingEmailUser && matchingEmailUser.id !== user.id) throw new Error('Identity provider email is already linked to another user account');
         }
-        await userRepo.update({ id: user.id }, { email: emailVerified ? email : user.email, authProvider: input.providerType, firstName: input.firstName || user.firstName, lastName: input.lastName || user.lastName, isEmailVerified: Boolean(user.isEmailVerified || emailVerified), lastLoginAt: now, updatedAt: now });
+        const authProvider = user.authProvider === 'local' && user.passwordHash ? 'local' : input.providerType;
+        await userRepo.update({ id: user.id }, { email: emailVerified ? email : user.email, authProvider, firstName: input.firstName || user.firstName, lastName: input.lastName || user.lastName, isEmailVerified: Boolean(user.isEmailVerified || emailVerified), lastLoginAt: now, updatedAt: now });
         user = { ...user, email: emailVerified ? email : user.email } as User;
       }
       await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
