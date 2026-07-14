@@ -2134,6 +2134,7 @@ const IdentityProviderResponseSchema = IdentityProviderRequestSchema.extend({
   updatedAt: z.number(),
 }).omit({ configuration: true, sync: true });
 registry.register('IdentityProvider', IdentityProviderResponseSchema);
+const identityProviderMigrationSchemas = await import('./platform-admin/authz.js');
 registry.registerPath({
   method: 'get',
   path: '/api/identity/providers',
@@ -2167,22 +2168,20 @@ registry.registerPath({
   method: 'get',
   path: '/api/identity/providers/migration-readiness',
   ...authzExtension('platform.sso.providers.manage', 'GET', '/api/identity/providers/migration-readiness'),
-  request: { query: z.object({ targetProviderKey: z.string().min(1).max(128), legacyProviderId: z.string().min(1).max(128).optional() }) },
-  responses: { 200: { description: 'Non-mutating provider-neutral migration readiness and blockers, optionally including the selected legacy provider default-role mapping', content: { 'application/json': { schema: z.object({ ready: z.boolean(), targetProviderKey: z.string(), legacyProviderId: z.string().nullable(), requiredDefaultGroupId: z.string().nullable(), activeMappingCount: z.number().int().nonnegative(), checks: z.object({ targetExists: z.boolean(), directOidc: z.boolean(), directLoginProtocol: z.boolean(), enabled: z.boolean(), secretReferenceConfigured: z.boolean(), secretReferenceAvailable: z.boolean(), activeMappingsConfigured: z.boolean(), defaultRoleMappingConfigured: z.boolean().nullable() }), blockers: z.array(z.enum(['target_not_found', 'target_not_direct_oidc', 'target_protocol_mismatch', 'target_disabled', 'secret_reference_missing', 'secret_reference_unavailable', 'identity_mappings_missing', 'legacy_provider_not_found', 'default_role_mapping_missing'])) }) } } } },
-});
-const LegacyIdentityProviderCutoverRequestSchema = z.object({ legacyProviderId: z.string().min(1).max(128), targetProviderKey: z.string().min(1).max(128) });
-const LegacyIdentityProviderCutoverResponseSchema = z.object({
-  legacyProvider: z.object({ id: z.string(), name: z.string(), type: z.enum(['microsoft', 'google', 'oidc', 'saml']) }),
-  targetProviderKey: z.string(),
-  legacyProviderDisabled: z.boolean(),
-  alreadyDisabled: z.boolean(),
+  request: { query: identityProviderMigrationSchemas.IdentityProviderMigrationReadinessQuerySchema },
+  responses: {
+    200: {
+      description: 'Non-mutating provider-neutral migration readiness and blockers, optionally including the selected legacy provider default-role mapping',
+      content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderMigrationReadinessResponseSchema } },
+    },
+  },
 });
 registry.registerPath({
   method: 'post',
   path: '/api/identity/providers/legacy-cutover',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/legacy-cutover'),
-  request: { body: { content: { 'application/json': { schema: LegacyIdentityProviderCutoverRequestSchema } } } },
-  responses: { 200: { description: 'Disable a persisted legacy provider after its provider-neutral replacement passes readiness checks', content: { 'application/json': { schema: LegacyIdentityProviderCutoverResponseSchema } } }, 400: { description: 'Target provider is not ready or legacy provider is environment-managed' }, 404: { description: 'Legacy provider not found' } },
+  request: { body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.LegacyIdentityProviderCutoverRequestSchema } } } },
+  responses: { 200: { description: 'Disable a persisted legacy provider after its provider-neutral replacement passes readiness checks', content: { 'application/json': { schema: identityProviderMigrationSchemas.LegacyIdentityProviderCutoverResponseSchema } } }, 400: { description: 'Target provider is not ready or legacy provider is environment-managed' }, 404: { description: 'Legacy provider not found' } },
 });
 registry.registerPath({
   method: 'get',

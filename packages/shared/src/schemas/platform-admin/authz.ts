@@ -1162,6 +1162,56 @@ export const IdentityProviderMembershipReplayResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+export const IdentityProviderMigrationReadinessQuerySchema = z.object({
+  targetProviderKey: z.string().min(1).max(128),
+  legacyProviderId: z.string().min(1).max(128).optional(),
+});
+
+export const LegacyIdentityProviderCutoverRequestSchema = z.object({
+  legacyProviderId: z.string().min(1).max(128),
+  targetProviderKey: z.string().min(1).max(128),
+});
+
+export const LegacyIdentityProviderCutoverResponseSchema = z.object({
+  legacyProvider: z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.enum(['microsoft', 'google', 'oidc', 'saml']),
+  }),
+  targetProviderKey: z.string(),
+  legacyProviderDisabled: z.boolean(),
+  alreadyDisabled: z.boolean(),
+});
+
+export const IdentityProviderMigrationReadinessResponseSchema = z.object({
+  ready: z.boolean(),
+  targetProviderKey: z.string(),
+  legacyProviderId: z.string().nullable(),
+  requiredDefaultGroupId: z.string().nullable(),
+  activeMappingCount: z.number().int().nonnegative(),
+  checks: z.object({
+    targetExists: z.boolean(),
+    directOidc: z.boolean(),
+    directLoginProtocol: z.boolean(),
+    enabled: z.boolean(),
+    secretReferenceConfigured: z.boolean(),
+    secretReferenceAvailable: z.boolean(),
+    activeMappingsConfigured: z.boolean(),
+    defaultRoleMappingConfigured: z.boolean().nullable(),
+  }),
+  blockers: z.array(z.enum([
+    'target_not_found',
+    'target_not_direct_oidc',
+    'target_protocol_mismatch',
+    'target_disabled',
+    'secret_reference_missing',
+    'secret_reference_unavailable',
+    'identity_mappings_missing',
+    'legacy_provider_not_found',
+    'default_role_mapping_missing',
+  ])),
+});
+
 export const SsoAssignmentMappingSchema = z.object({
   id: z.string(),
   tenantId: z.string().nullable().optional(),
