@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const stores = vi.hoisted(() => ({
-  externalIdentity: { findOne: vi.fn() },
+  externalIdentity: { findOne: vi.fn(), insert: vi.fn(), update: vi.fn() },
   user: { findOneBy: vi.fn(), insert: vi.fn(), update: vi.fn() },
 }));
 const manager = vi.hoisted(() => ({
@@ -23,6 +23,8 @@ describe('IdentityProviderProvisioningService', () => {
     vi.clearAllMocks();
     manager.getRepository.mockImplementation((entity: { name: string }) => entity.name === 'ExternalIdentity' ? stores.externalIdentity : stores.user);
     stores.externalIdentity.findOne.mockResolvedValue(null);
+    stores.externalIdentity.insert.mockResolvedValue(undefined);
+    stores.externalIdentity.update.mockResolvedValue(undefined);
     stores.user.findOneBy.mockResolvedValue(null);
     stores.user.insert.mockResolvedValue(undefined);
     ssoNormalizedIdentityService.upsertIdentityWithManager.mockResolvedValue({ id: 'snapshot-1', created: true });
@@ -36,6 +38,10 @@ describe('IdentityProviderProvisioningService', () => {
       email: 'person@example.test',
       claims: { sub: 'subject-1', email: 'person@example.test', groups: ['team-a'] },
     });
+    expect(stores.externalIdentity.insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-1', providerId: 'provider-1', providerType: 'ldap', subjectId: 'subject-1',
+      identityKey: expect.any(String), status: 'active', emailHint: 'person@example.test',
+    }));
 
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(
       manager,
