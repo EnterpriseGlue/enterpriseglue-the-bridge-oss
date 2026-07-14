@@ -1828,7 +1828,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Replace provider-specific `User.entraId` / `User.googleId` authorization-link use with `ExternalIdentity` and define explicit verified-email linking policy for standalone-to-SSO transition.
 - [x] ✅ Split EnterpriseGlue `tenantId` from external `directoryTenantId`/issuer tenant fields in provider and external-identity schemas, migrations, and normalized-identity linking. Contracts assert that the two values persist independently.
 - [ ] ⬜ Add `identity_provider` membership/assignment source semantics with explicit provider id and mapping id lineage; migrate current `sso` source handling in the same milestone.
-- [ ] ⬜ Add `EngineRuntimeResource` and `EngineRuntimeResourceSet` entities plus materialization lineage and uniqueness on engine, kind, key, and optional engine tenant id.
+- [x] ✅ Add `RuntimeResource` and `RuntimeResourceSet` entities with set-materialization lineage. Portable canonical uniqueness covers engine, kind, key, and normalized runtime tenant; set membership is uniquely materialized per resource. Entity and migration contracts verify the complete persistence shape.
 - [x] ✅ Add `runtimeAccessScope`, deployment integration configuration, and first-class `connectionMode` to `Engine`; add platform policy persistence for credentialless private-sidecar endpoints.
 - [ ] ⬜ Extend `EngineDeployment` and `EngineDeploymentArtifact` for direct discovery, nullable project lineage, receipt provenance, and lineage quality.
 - [ ] ⬜ Replace legacy role-assignment uniqueness with principal/scope/source uniqueness and make legacy `userId`, `resourceType`, `resourceId`, and `sourceMappingId` aliases removable.

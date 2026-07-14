@@ -7,8 +7,13 @@ import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persiste
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { AddExternalIdentities1700000000047 } from '@enterpriseglue/shared/db/migrations/1700000000047-add-external-identities.js';
 import { AddIdentityProviders1700000000056 } from '@enterpriseglue/shared/db/migrations/1700000000056-add-identity-providers.js';
+import { AddRuntimeResourceSets1700000000054 } from '@enterpriseglue/shared/db/migrations/1700000000054-add-runtime-resource-sets.js';
+import { AddRuntimeResourceInventory1700000000055 } from '@enterpriseglue/shared/db/migrations/1700000000055-add-runtime-resource-inventory.js';
 import { externalIdentityKey } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
 
 function column(target: Function, propertyName: string) {
@@ -104,5 +109,29 @@ describe('canonical authorization persistence schema invariants', () => {
   it('allows discovered deployment and artifact lineage without a project', () => {
     expect(column(EngineDeployment, 'projectId')?.options.nullable).toBe(true);
     expect(column(EngineDeploymentArtifact, 'projectId')?.options.nullable).toBe(true);
+  });
+
+  it('persists canonical runtime resources, sets, and materialization lineage', async () => {
+    expect(uniqueColumnSets(RuntimeResource)).toContainEqual(['engineId', 'resourceKind', 'resourceKey', 'runtimeTenantId']);
+    expect(uniqueColumnSets(RuntimeResourceSet)).toContainEqual(['tenantId', 'key']);
+    expect(uniqueColumnSets(RuntimeResourceSetMaterialization)).toContainEqual(['runtimeResourceSetId', 'runtimeResourceId']);
+    expect(column(RuntimeResource, 'runtimeTenantId')?.options.default).toBe('');
+    expect(column(RuntimeResourceSetMaterialization, 'lineageJson')?.options.nullable).not.toBe(true);
+
+    const createTable = vi.fn().mockResolvedValue(undefined);
+    const queryRunner = { hasTable: vi.fn().mockResolvedValue(false), createTable };
+    await new AddRuntimeResourceSets1700000000054().up(queryRunner as any);
+    await new AddRuntimeResourceInventory1700000000055().up(queryRunner as any);
+
+    const tables = createTable.mock.calls.map(([table]) => table);
+    expect(tables.map((table) => table.name)).toEqual([
+      'runtime_resource_sets', 'runtime_resources', 'runtime_resource_set_materializations',
+    ]);
+    expect(tables[1].uniques).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columnNames: ['engine_id', 'resource_kind', 'resource_key', 'runtime_tenant_id'] }),
+    ]));
+    expect(tables[2].uniques).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columnNames: ['runtime_resource_set_id', 'runtime_resource_id'] }),
+    ]));
   });
 });
