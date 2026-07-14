@@ -60,7 +60,7 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
-import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, withAssignmentPrincipalType, withAssignmentResourceType, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
+import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, canSubmitAssignment, DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, withAssignmentPrincipalType, withAssignmentResourceType, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -2474,12 +2474,7 @@ function RoleAssignmentsPanel({
     }
   }, [assignableRoles, form.roleId]);
 
-  const canAssign = Boolean(
-    form.principalId &&
-    form.roleId &&
-    (form.resourceType === 'platform' || form.resourceId) &&
-    !pending
-  );
+  const canAssign = canSubmitAssignment(form, pending);
 
   return (
     <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
