@@ -185,6 +185,35 @@ describe('Microsoft OAuth flow e2e harness', () => {
     }));
   });
 
+  it('binds a selected legacy Microsoft provider through start, callback, and reconciliation', async () => {
+    const agent = request.agent(app);
+
+    const initResponse = await agent.get('/api/auth/microsoft').query({ providerId: 'legacy-microsoft-1' });
+    expect(initResponse.status).toBe(302);
+    expect(initResponse.headers.location).toBe('/api/auth/microsoft/start?providerId=legacy-microsoft-1');
+
+    const startResponse = await agent.get(initResponse.headers.location);
+    const state = getCookieValue(getSetCookieHeader(startResponse.headers), 'oauth_state');
+    expect(state).toBeTruthy();
+    expect(isMicrosoftAuthEnabled as unknown as Mock).toHaveBeenCalledWith('legacy-microsoft-1');
+    expect(getAuthorizationUrl as unknown as Mock).toHaveBeenCalledWith(state, 'legacy-microsoft-1');
+
+    const callbackResponse = await agent
+      .get('/api/auth/microsoft/callback')
+      .query({ code: 'auth-code', state });
+
+    expect(callbackResponse.status).toBe(302);
+    expect(exchangeCodeForTokens as unknown as Mock).toHaveBeenCalledWith('auth-code', 'legacy-microsoft-1');
+    expect(provisionMicrosoftUser as unknown as Mock).toHaveBeenCalledWith(
+      expect.objectContaining({ oid: 'oid-123' }),
+      'legacy-microsoft-1',
+    );
+    expect(ssoProvisionedHook).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'microsoft',
+      providerId: 'legacy-microsoft-1',
+    }));
+  });
+
   it('rejects a mocked Entra authorization URL with an unexpected host', async () => {
     (getAuthorizationUrl as unknown as Mock).mockResolvedValueOnce(
       'https://login.microsoftonline.invalid/common/oauth2/v2.0/authorize'

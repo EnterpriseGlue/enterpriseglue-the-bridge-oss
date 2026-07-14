@@ -9,6 +9,7 @@ import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platf
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
 const externalIdentityService = vi.hoisted(() => ({ getActiveLinkedUserIdWithManager: vi.fn(), upsertWithManager: vi.fn() }));
+const legacyProviderService = vi.hoisted(() => ({ getProviderWithSecrets: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   shouldUseSecureCookies: () => false,
@@ -25,6 +26,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js', () => ({ externalIdentityService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoProviderService.js', () => ({ ssoProviderService: legacyProviderService }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoClaimsMappingService.js', () => ({
   ssoClaimsMappingService: {
@@ -72,13 +74,28 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsServic
 describe('microsoft service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    legacyProviderService.getProviderWithSecrets.mockResolvedValue(null);
     externalIdentityService.getActiveLinkedUserIdWithManager.mockResolvedValue(null);
     externalIdentityService.upsertWithManager.mockResolvedValue({ id: 'external-identity-1', created: true });
   });
 
-  it('returns false when Microsoft auth not configured', () => {
-    const result = isMicrosoftAuthEnabled();
+  it('returns false when Microsoft auth not configured', async () => {
+    const result = await isMicrosoftAuthEnabled();
     expect(result).toBe(false);
+  });
+
+  it('accepts only an enabled selected Microsoft provider with its own credentials', async () => {
+    legacyProviderService.getProviderWithSecrets.mockResolvedValue({
+      id: 'legacy-microsoft-1', type: 'microsoft', enabled: true, clientId: 'client-1', clientSecretEnc: 'secret-1', tenantId: 'directory-1', callbackUrl: 'https://app.example.test/api/auth/microsoft/callback',
+    });
+
+    await expect(isMicrosoftAuthEnabled('legacy-microsoft-1')).resolves.toBe(true);
+    expect(legacyProviderService.getProviderWithSecrets).toHaveBeenCalledWith('legacy-microsoft-1');
+
+    legacyProviderService.getProviderWithSecrets.mockResolvedValue({
+      id: 'legacy-google-1', type: 'google', enabled: true, clientId: 'client-1', clientSecretEnc: 'secret-1', tenantId: null, callbackUrl: null,
+    });
+    await expect(isMicrosoftAuthEnabled('legacy-google-1')).resolves.toBe(false);
   });
 
   it('syncs SSO group memberships before engine assignments when provisioning a new user', async () => {
@@ -206,6 +223,39 @@ describe('microsoft service', () => {
     expect(externalIdentityService.upsertWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
       providerId: 'legacy:microsoft', subjectId: 'oid-linked', userId: 'user-linked',
     }));
+  });
+
+  it('promotes a compatibility identity link into the selected legacy Microsoft provider lineage', async () => {
+    const linkedUser = { id: 'user-linked', email: 'before@example.test', authProvider: 'microsoft', firstName: null, lastName: null, platformRole: 'user' };
+    const userRepo = { findOneBy: vi.fn().mockResolvedValue(linkedUser), update: vi.fn(), insert: vi.fn() };
+    const manager = { getRepository: vi.fn().mockReturnValue(userRepo) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: (callback: any) => callback(manager) });
+    (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('user');
+    externalIdentityService.getActiveLinkedUserIdWithManager
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce('user-linked');
+
+    await provisionMicrosoftUser({ oid: 'oid-linked', email: 'person@example.test', tid: 'directory-1' }, 'legacy-microsoft-1');
+
+    expect(externalIdentityService.getActiveLinkedUserIdWithManager).toHaveBeenNthCalledWith(1, manager, {
+      providerId: 'legacy-microsoft-1', subjectId: 'oid-linked',
+    });
+    expect(externalIdentityService.getActiveLinkedUserIdWithManager).toHaveBeenNthCalledWith(2, manager, {
+      providerId: 'legacy:microsoft', subjectId: 'oid-linked',
+    });
+    expect(externalIdentityService.upsertWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
+      providerId: 'legacy-microsoft-1', subjectId: 'oid-linked', userId: 'user-linked',
+    }));
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
+      providerId: 'legacy-microsoft-1', providerSubject: 'oid-linked',
+    }));
+    expect(ssoGroupMappingService.syncMembershipsForUserWithManager).toHaveBeenCalledWith(
+      manager, 'user-linked', expect.any(Object), 'legacy-microsoft-1',
+    );
+    expect(ssoAssignmentMappingService.syncAssignmentsForUserWithManager).toHaveBeenCalledWith(
+      manager, 'user-linked', expect.any(Object), 'legacy-microsoft-1',
+    );
+    expect(ssoSyncDiagnosticsService.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({ providerId: 'legacy-microsoft-1' }));
   });
 
   it('does not link an unverified standalone account by matching email', async () => {

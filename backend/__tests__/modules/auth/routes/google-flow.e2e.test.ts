@@ -182,6 +182,35 @@ describe('Google OAuth flow e2e harness', () => {
     }));
   });
 
+  it('binds a selected legacy Google provider through start, callback, and reconciliation', async () => {
+    const agent = request.agent(app);
+
+    const initResponse = await agent.get('/api/auth/google').query({ providerId: 'legacy-google-1' });
+    expect(initResponse.status).toBe(302);
+    expect(initResponse.headers.location).toBe('/api/auth/google/start?providerId=legacy-google-1');
+
+    const startResponse = await agent.get(initResponse.headers.location);
+    const state = getCookieValue(getSetCookieHeader(startResponse.headers), 'oauth_state');
+    expect(state).toBeTruthy();
+    expect(isGoogleAuthEnabled as unknown as Mock).toHaveBeenCalledWith('legacy-google-1');
+    expect(getGoogleAuthorizationUrl as unknown as Mock).toHaveBeenCalledWith(state, 'legacy-google-1');
+
+    const callbackResponse = await agent
+      .get('/api/auth/google/callback')
+      .query({ code: 'auth-code', state });
+
+    expect(callbackResponse.status).toBe(302);
+    expect(exchangeGoogleCodeForTokens as unknown as Mock).toHaveBeenCalledWith('auth-code', 'legacy-google-1');
+    expect(provisionGoogleUser as unknown as Mock).toHaveBeenCalledWith(
+      expect.objectContaining({ sub: 'google-123' }),
+      'legacy-google-1',
+    );
+    expect(ssoProvisionedHook).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'google',
+      providerId: 'legacy-google-1',
+    }));
+  });
+
   it('rejects callback when state does not match cookie', async () => {
     const agent = request.agent(app);
     await agent.get('/api/auth/google/start');

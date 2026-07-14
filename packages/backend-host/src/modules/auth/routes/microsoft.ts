@@ -21,6 +21,7 @@ import {
   appendSsoStartQuery,
   getSsoRedirectUrl,
   getSsoReturnPath,
+  getSsoProviderId,
   notifySsoUserProvisioned,
   parseSsoState,
 } from './sso-state.js';
@@ -32,7 +33,7 @@ const router = Router();
  * GET /api/auth/microsoft/status
  */
 router.get('/api/auth/microsoft/status', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const enabled = isMicrosoftAuthEnabled();
+  const enabled = await isMicrosoftAuthEnabled();
   res.json({ 
     enabled,
     message: enabled ? 'Microsoft Entra ID authentication is available' : 'Microsoft Entra ID is not configured'
@@ -45,7 +46,7 @@ router.get('/api/auth/microsoft/status', apiLimiter, asyncHandler(async (req: Re
  * Redirects user to Microsoft login page
  */
 router.get('/api/auth/microsoft', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
-  if (!isMicrosoftAuthEnabled()) {
+  if (!await isMicrosoftAuthEnabled(getSsoProviderId(req))) {
       return res.status(503).json({ 
         error: 'Microsoft Entra ID authentication is not configured',
         message: 'Please configure MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, and MICROSOFT_TENANT_ID in your environment'
@@ -91,7 +92,9 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
     logger.info('[Microsoft Auth] Exchanging code for tokens...');
 
     // Exchange authorization code for tokens
-    const tokenResponse = await exchangeCodeForTokens(code);
+    const tokenResponse = ssoState?.providerId
+      ? await exchangeCodeForTokens(code, ssoState.providerId)
+      : await exchangeCodeForTokens(code);
     
     logger.info('[Microsoft Auth] Token exchange successful');
 
@@ -105,7 +108,9 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
     });
 
     // Create or update user (JIT provisioning)
-    const user = await provisionMicrosoftUser(userInfo);
+    const user = ssoState?.providerId
+      ? await provisionMicrosoftUser(userInfo, ssoState.providerId)
+      : await provisionMicrosoftUser(userInfo);
     
     if (!user) {
       throw new Error('Failed to provision user');
@@ -135,6 +140,7 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
 
     await notifySsoUserProvisioned(req, {
       provider: 'microsoft',
+      providerId: ssoState?.providerId,
       tenantSlug: ssoState?.tenantSlug ?? null,
       returnTo: getSsoReturnPath(ssoState),
       user,
@@ -149,7 +155,7 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
     await logAudit({
       action: AuditActions.LOGIN_SUCCESS,
       userId: user.id,
-      details: { provider: 'microsoft', entraId: userInfo.oid },
+      details: { provider: 'microsoft', providerId: ssoState?.providerId || null, entraId: userInfo.oid },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });

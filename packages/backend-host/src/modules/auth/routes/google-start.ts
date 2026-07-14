@@ -4,7 +4,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { isGoogleAuthEnabled, getGoogleAuthorizationUrl } from '@enterpriseglue/shared/services/google.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
-import { buildSsoState } from './sso-state.js';
+import { buildSsoState, getSsoProviderId } from './sso-state.js';
 
 const router = Router();
 
@@ -14,7 +14,8 @@ const router = Router();
  */
 router.get('/api/auth/google/start', apiLimiter, async (req: Request, res: Response) => {
   try {
-    const enabled = await isGoogleAuthEnabled();
+    const providerId = getSsoProviderId(req);
+    const enabled = await isGoogleAuthEnabled(providerId);
     if (!enabled) {
       return res.status(503).json({
         error: 'Google authentication is not configured',
@@ -22,7 +23,7 @@ router.get('/api/auth/google/start', apiLimiter, async (req: Request, res: Respo
       });
     }
 
-    const state = buildSsoState(req);
+    const state = buildSsoState(req, providerId);
 
     res.cookie('oauth_state', state, {
       httpOnly: true,
@@ -31,7 +32,9 @@ router.get('/api/auth/google/start', apiLimiter, async (req: Request, res: Respo
       maxAge: 10 * 60 * 1000,
     });
 
-    const authUrl = await getGoogleAuthorizationUrl(state);
+    const authUrl = providerId
+      ? await getGoogleAuthorizationUrl(state, providerId)
+      : await getGoogleAuthorizationUrl(state);
 
     let safeUrl: string | null = null;
     try {

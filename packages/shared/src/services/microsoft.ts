@@ -16,8 +16,22 @@ import { ssoGroupMappingService } from './platform-admin/SsoGroupMappingService.
 import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIdentityService.js';
 import { ssoSyncDiagnosticsService, type SsoSyncCounts } from './platform-admin/SsoSyncDiagnosticsService.js';
 import { externalIdentityService } from './platform-admin/ExternalIdentityService.js';
+import { ssoProviderService } from './platform-admin/SsoProviderService.js';
 
 const LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID = 'legacy:microsoft';
+
+function selectedProviderId(providerId?: string | null): string | null {
+  const normalized = providerId?.trim();
+  return normalized || null;
+}
+
+function reconciliationProviderId(providerId?: string | null): string {
+  return selectedProviderId(providerId) || 'microsoft';
+}
+
+function externalIdentityProviderId(providerId?: string | null): string {
+  return selectedProviderId(providerId) || LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID;
+}
 
 /**
  * Microsoft user info from ID token
@@ -43,28 +57,59 @@ type ConfidentialClientApplication = any;
 /**
  * Check if Microsoft Entra ID is configured
  */
-export function isMicrosoftAuthEnabled(): boolean {
-  return !!(
-    config.microsoftClientId &&
-    config.microsoftClientSecret &&
-    config.microsoftTenantId &&
-    config.microsoftRedirectUri
-  );
+export async function isMicrosoftAuthEnabled(providerId?: string): Promise<boolean> {
+  try {
+    await getMicrosoftConfig(providerId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getMicrosoftConfig(providerId?: string): Promise<{
+  clientId: string;
+  clientSecret: string;
+  tenantId: string;
+  redirectUri: string;
+}> {
+  const selectedId = selectedProviderId(providerId);
+  if (selectedId) {
+    const provider = await ssoProviderService.getProviderWithSecrets(selectedId);
+    if (!provider || provider.type !== 'microsoft' || !provider.enabled || !provider.clientId || !provider.clientSecretEnc || !provider.tenantId) {
+      throw new Error('Selected Microsoft OAuth provider is not configured');
+    }
+    return {
+      clientId: provider.clientId,
+      clientSecret: provider.clientSecretEnc,
+      tenantId: provider.tenantId,
+      redirectUri: provider.callbackUrl || `${config.frontendUrl}/api/auth/microsoft/callback`,
+    };
+  }
+
+  if (!config.microsoftClientId || !config.microsoftClientSecret || !config.microsoftTenantId || !config.microsoftRedirectUri) {
+    throw new Error('Microsoft Entra ID is not configured');
+  }
+
+  return {
+    clientId: config.microsoftClientId,
+    clientSecret: config.microsoftClientSecret,
+    tenantId: config.microsoftTenantId,
+    redirectUri: config.microsoftRedirectUri,
+  };
 }
 
 /**
  * Create MSAL confidential client application
  */
-function getMsalClient(): ConfidentialClientApplication {
-  if (!isMicrosoftAuthEnabled()) {
-    throw new Error('Microsoft Entra ID is not configured');
-  }
+async function getMsalClient(providerId?: string): Promise<{ client: ConfidentialClientApplication; redirectUri: string }> {
+  const microsoftConfig = await getMicrosoftConfig(providerId);
 
-  return new msalNode.ConfidentialClientApplication({
+  return {
+    client: new msalNode.ConfidentialClientApplication({
     auth: {
-      clientId: config.microsoftClientId!,
-      authority: `https://login.microsoftonline.com/${config.microsoftTenantId}`,
-      clientSecret: config.microsoftClientSecret!,
+      clientId: microsoftConfig.clientId,
+      authority: `https://login.microsoftonline.com/${microsoftConfig.tenantId}`,
+      clientSecret: microsoftConfig.clientSecret,
     },
     system: {
       loggerOptions: {
@@ -78,19 +123,21 @@ function getMsalClient(): ConfidentialClientApplication {
         logLevel: config.nodeEnv === 'development' ? 3 : 1, // 3 = Verbose in dev, 1 = Error in prod
       },
     },
-  });
+    }),
+    redirectUri: microsoftConfig.redirectUri,
+  };
 }
 
 /**
  * Generate authorization URL to initiate OAuth flow
  * User will be redirected to this URL to sign in with Microsoft
  */
-export async function getAuthorizationUrl(state?: string): Promise<string> {
-  const msalClient = getMsalClient();
+export async function getAuthorizationUrl(state?: string, providerId?: string): Promise<string> {
+  const { client: msalClient, redirectUri } = await getMsalClient(providerId);
 
   const authCodeUrlParameters: AuthorizationUrlRequest = {
     scopes: ['openid', 'profile', 'email', 'User.Read'],
-    redirectUri: config.microsoftRedirectUri!,
+    redirectUri,
     state: state || generateId(), // CSRF protection
     prompt: 'select_account', // Let user choose account
   };
@@ -102,13 +149,13 @@ export async function getAuthorizationUrl(state?: string): Promise<string> {
  * Exchange authorization code for tokens
  * This happens after user authenticates and Microsoft redirects back
  */
-export async function exchangeCodeForTokens(code: string) {
-  const msalClient = getMsalClient();
+export async function exchangeCodeForTokens(code: string, providerId?: string) {
+  const { client: msalClient, redirectUri } = await getMsalClient(providerId);
 
   const tokenRequest: AuthorizationCodeRequest = {
     code,
     scopes: ['openid', 'profile', 'email', 'User.Read'],
-    redirectUri: config.microsoftRedirectUri!,
+    redirectUri,
   };
 
   const response = await msalClient.acquireTokenByCode(tokenRequest);
@@ -151,17 +198,18 @@ async function syncMicrosoftAuthorizationForUser(
   userId: string,
   userInfo: MicrosoftUserInfo,
   ssoClaims: SsoClaims,
-  resolvedPlatformRole: 'admin' | 'user'
+  resolvedPlatformRole: 'admin' | 'user',
+  providerId: string,
 ): Promise<SsoSyncCounts> {
   const baselineMembership = await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
   const legacyRoleMembership = await authzGroupService.syncLegacySsoPlatformAdministratorMembershipWithManager(
     manager,
     userId,
-    'microsoft',
+    providerId,
     resolvedPlatformRole
   );
   const normalizedIdentitySync = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
-    providerId: 'microsoft',
+    providerId,
     providerType: 'microsoft',
     providerSubject: userInfo.oid,
     subjectClaim: 'oid',
@@ -173,8 +221,8 @@ async function syncMicrosoftAuthorizationForUser(
     lastName: userInfo.family_name || null,
     claims: ssoClaims,
   });
-  const groupSync = await ssoGroupMappingService.syncMembershipsForUserWithManager(manager, userId, ssoClaims, 'microsoft');
-  const assignmentSync = await ssoAssignmentMappingService.syncAssignmentsForUserWithManager(manager, userId, ssoClaims, 'microsoft');
+  const groupSync = await ssoGroupMappingService.syncMembershipsForUserWithManager(manager, userId, ssoClaims, providerId);
+  const assignmentSync = await ssoAssignmentMappingService.syncAssignmentsForUserWithManager(manager, userId, ssoClaims, providerId);
   return {
     groupMembershipsCreated: groupSync.created + (normalizedIdentitySync.groupMembershipsCreated || 0) + (baselineMembership.created ? 1 : 0) + (legacyRoleMembership.created ? 1 : 0),
     groupMembershipsUpdated: groupSync.updated,
@@ -189,9 +237,11 @@ async function syncMicrosoftAuthorizationForUser(
  * Create or update user from Microsoft authentication
  * Just-In-Time (JIT) provisioning with SSO claims-based role mapping
  */
-export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
+export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo, selectedId?: string) {
   const dataSource = await getDataSource();
   const now = Date.now();
+  const providerId = reconciliationProviderId(selectedId);
+  const externalProviderId = externalIdentityProviderId(selectedId);
 
   // Resolve platform role from SSO claims (groups, roles, email domain)
   const ssoClaims: SsoClaims = {
@@ -199,7 +249,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
     groups: userInfo.groups || [],
     roles: userInfo.roles || [],
   };
-  const resolvedRole = await ssoClaimsMappingService.resolveRoleFromClaims(ssoClaims, 'microsoft');
+  const resolvedRole = await ssoClaimsMappingService.resolveRoleFromClaims(ssoClaims, providerId);
 
   logger.info('[Microsoft Auth] SSO claims role resolution:', {
     email: userInfo.email,
@@ -209,7 +259,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
   });
 
   const runId = await ssoSyncDiagnosticsService.startRun({
-    providerId: 'microsoft',
+    providerId,
     trigger: 'login',
     details: {
       email: userInfo.email,
@@ -222,10 +272,19 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
   try {
     const result = await dataSource.transaction(async (manager) => {
       const userRepo = manager.getRepository(User);
-      const linkedUserId = await externalIdentityService.getActiveLinkedUserIdWithManager(manager, {
-        providerId: LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID,
+      const providerLinkedUserId = await externalIdentityService.getActiveLinkedUserIdWithManager(manager, {
+        providerId: externalProviderId,
         subjectId: userInfo.oid,
       });
+      // Promote a continuity link from the shared compatibility namespace to
+      // the exact selected legacy provider after a successful login.
+      const legacyLinkedUserId = !providerLinkedUserId && externalProviderId !== LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID
+        ? await externalIdentityService.getActiveLinkedUserIdWithManager(manager, {
+          providerId: LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID,
+          subjectId: userInfo.oid,
+        })
+        : null;
+      const linkedUserId = providerLinkedUserId || legacyLinkedUserId;
       const existingByExternalIdentity = linkedUserId ? await userRepo.findOneBy({ id: linkedUserId }) : null;
       if (linkedUserId && !existingByExternalIdentity) throw new Error('External identity references a missing user account');
 
@@ -248,7 +307,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
         });
 
         await externalIdentityService.upsertWithManager(manager, {
-          providerId: LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID,
+          providerId: externalProviderId,
           providerType: 'microsoft',
           subjectId: userInfo.oid,
           directoryTenantId: userInfo.tid,
@@ -257,7 +316,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
           now,
         });
 
-        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole);
+        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole, providerId);
 
         return {
           ...user,
@@ -290,7 +349,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
         });
 
         await externalIdentityService.upsertWithManager(manager, {
-          providerId: LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID,
+          providerId: externalProviderId,
           providerType: 'microsoft',
           subjectId: userInfo.oid,
           directoryTenantId: userInfo.tid,
@@ -299,7 +358,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
           now,
         });
 
-        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole);
+        syncCounts = await syncMicrosoftAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole, providerId);
 
         return {
           ...user,
@@ -333,7 +392,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
 
       const newUser = await userRepo.findOneBy({ id: userId });
       await externalIdentityService.upsertWithManager(manager, {
-        providerId: LEGACY_MICROSOFT_EXTERNAL_PROVIDER_ID,
+        providerId: externalProviderId,
         providerType: 'microsoft',
         subjectId: userInfo.oid,
         directoryTenantId: userInfo.tid,
@@ -341,12 +400,12 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
         emailHint: userInfo.email,
         now,
       });
-      syncCounts = await syncMicrosoftAuthorizationForUser(manager, userId, userInfo, ssoClaims, resolvedRole);
+      syncCounts = await syncMicrosoftAuthorizationForUser(manager, userId, userInfo, ssoClaims, resolvedRole, providerId);
       return newUser;
     });
 
     await ssoSyncDiagnosticsService.completeRun(runId, {
-      providerId: 'microsoft',
+      providerId,
       userId: result?.id ?? null,
       ...syncCounts,
       details: {
@@ -356,7 +415,7 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
     return result;
   } catch (error) {
     await ssoSyncDiagnosticsService.failRun(runId, error, {
-      providerId: 'microsoft',
+      providerId,
       details: {
         email: userInfo.email,
       },

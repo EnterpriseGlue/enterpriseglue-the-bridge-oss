@@ -22,6 +22,7 @@ import {
   getSsoRedirectUrl,
   getSsoReturnPath,
   notifySsoUserProvisioned,
+  getSsoProviderId,
   parseSsoState,
 } from './sso-state.js';
 
@@ -45,7 +46,7 @@ router.get('/api/auth/google/status', apiLimiter, asyncHandler(async (req: Reque
  * Redirects user to Google login page
  */
 router.get('/api/auth/google', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const enabled = await isGoogleAuthEnabled();
+  const enabled = await isGoogleAuthEnabled(getSsoProviderId(req));
   if (!enabled) {
     return res.status(503).json({ 
       error: 'Google authentication is not configured',
@@ -91,7 +92,9 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
     logger.info('[Google Auth] Exchanging code for tokens...');
 
     // Exchange authorization code for tokens
-    const tokenResponse = await exchangeGoogleCodeForTokens(code);
+    const tokenResponse = ssoState?.providerId
+      ? await exchangeGoogleCodeForTokens(code, ssoState.providerId)
+      : await exchangeGoogleCodeForTokens(code);
     
     logger.info('[Google Auth] Token exchange successful');
 
@@ -105,7 +108,9 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
     });
 
     // Create or update user (JIT provisioning)
-    const user = await provisionGoogleUser(userInfo);
+    const user = ssoState?.providerId
+      ? await provisionGoogleUser(userInfo, ssoState.providerId)
+      : await provisionGoogleUser(userInfo);
     
     if (!user) {
       throw new Error('Failed to provision user');
@@ -135,6 +140,7 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
 
     await notifySsoUserProvisioned(req, {
       provider: 'google',
+      providerId: ssoState?.providerId,
       tenantSlug: ssoState?.tenantSlug ?? null,
       returnTo: getSsoReturnPath(ssoState),
       user,
@@ -149,7 +155,7 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
     await logAudit({
       action: AuditActions.LOGIN_SUCCESS,
       userId: user.id,
-      details: { provider: 'google', googleId: userInfo.sub },
+      details: { provider: 'google', providerId: ssoState?.providerId || null, googleId: userInfo.sub },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });

@@ -88,7 +88,7 @@ export function appendSsoStartQuery(req: Request, startPath: string): string {
   const params = new URLSearchParams();
   const tenantSlug = sanitizeTenantSlug(req.query.tenantSlug);
   const returnTo = sanitizeReturnTo(req.query.returnTo, tenantSlug);
-  const providerId = sanitizeProviderId(req.query.providerId);
+  const providerId = getSsoProviderId(req);
 
   if (tenantSlug) params.set('tenantSlug', tenantSlug);
   if (returnTo) params.set('returnTo', returnTo);
@@ -96,6 +96,15 @@ export function appendSsoStartQuery(req: Request, startPath: string): string {
 
   const query = params.toString();
   return query ? `${startPath}?${query}` : startPath;
+}
+
+/**
+ * Returns a provider selection only when it is safe to carry through the
+ * start route and bind into callback state. Callers without a valid selected
+ * provider retain the legacy compatibility flow.
+ */
+export function getSsoProviderId(req: Request): string | undefined {
+  return sanitizeProviderId(req.query.providerId);
 }
 
 export function parseSsoState(rawState: unknown): SsoState | null {

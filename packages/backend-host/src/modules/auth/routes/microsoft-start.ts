@@ -4,7 +4,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { isMicrosoftAuthEnabled, getAuthorizationUrl } from '@enterpriseglue/shared/services/microsoft.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
-import { buildSsoState } from './sso-state.js';
+import { buildSsoState, getSsoProviderId } from './sso-state.js';
 
 const router = Router();
 
@@ -14,7 +14,8 @@ const router = Router();
  */
 router.get('/api/auth/microsoft/start', apiLimiter, async (req: Request, res: Response) => {
   try {
-    if (!isMicrosoftAuthEnabled()) {
+    const providerId = getSsoProviderId(req);
+    if (!await isMicrosoftAuthEnabled(providerId)) {
       return res.status(503).json({
         error: 'Microsoft Entra ID authentication is not configured',
         message:
@@ -22,7 +23,7 @@ router.get('/api/auth/microsoft/start', apiLimiter, async (req: Request, res: Re
       });
     }
 
-    const state = buildSsoState(req);
+    const state = buildSsoState(req, providerId);
 
     res.cookie('oauth_state', state, {
       httpOnly: true,
@@ -31,7 +32,9 @@ router.get('/api/auth/microsoft/start', apiLimiter, async (req: Request, res: Re
       maxAge: 10 * 60 * 1000,
     });
 
-    const authUrl = await getAuthorizationUrl(state);
+    const authUrl = providerId
+      ? await getAuthorizationUrl(state, providerId)
+      : await getAuthorizationUrl(state);
 
     let safeUrl: string | null = null;
     try {
