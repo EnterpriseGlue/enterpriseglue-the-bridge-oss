@@ -14,6 +14,11 @@ export type EngineSetSelectorMode = 'all' | 'engine_ids' | 'labels';
 export type EngineSetLabelMatch = 'all' | 'any';
 export type EngineSetSelectorRiskReason = 'all_engines_selector' | 'any_label_match';
 
+/** Canonical portable identity for a global or tenant-scoped Engine Set key. */
+export function engineSetKeyIdentity(tenantId: string | null | undefined, key: string): string {
+  return `${tenantId || 'platform'}:${key.trim()}`;
+}
+
 export interface EngineSetSelector {
   mode: EngineSetSelectorMode;
   engineIds?: string[];
@@ -353,6 +358,7 @@ class EngineSetServiceClass {
       id,
       tenantId,
       key,
+      engineSetKeyIdentity: engineSetKeyIdentity(tenantId, key),
       name,
       description: input.description?.trim() || null,
       selectorJson: stableJson(selector),
@@ -633,14 +639,7 @@ class EngineSetServiceClass {
   }
 
   private async assertUniqueKey(repo: Repository<EngineSet>, key: string, tenantId: string | null): Promise<void> {
-    const duplicateQb = repo.createQueryBuilder('engineSet')
-      .where('engineSet.key = :key', { key });
-    if (tenantId) {
-      duplicateQb.andWhere('engineSet.tenantId = :tenantId', { tenantId });
-    } else {
-      duplicateQb.andWhere('engineSet.tenantId IS NULL');
-    }
-    if (await duplicateQb.getOne()) {
+    if (await repo.findOneBy({ engineSetKeyIdentity: engineSetKeyIdentity(tenantId, key) })) {
       throw Errors.conflict('Engine Set key already exists');
     }
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import {
   Engine,
@@ -6,7 +6,7 @@ import {
   EngineSetMaterialization,
   ExternalEngineRegistration,
 } from '@enterpriseglue/shared/db/entities/index.js';
-import { engineSetService } from '@enterpriseglue/shared/services/platform-admin/EngineSetService.js';
+import { engineSetKeyIdentity, engineSetService } from '@enterpriseglue/shared/services/platform-admin/EngineSetService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -27,6 +27,10 @@ describe('engineSetService', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('requires acknowledgement before creating broad Engine Sets', async () => {
     await expect(engineSetService.createEngineSet({
       name: 'All Engines',
@@ -34,6 +38,28 @@ describe('engineSetService', () => {
     })).rejects.toThrow('High-risk Engine Set selector requires acknowledgement');
 
     expect(getDataSource).not.toHaveBeenCalled();
+  });
+
+  it('writes and checks a non-null canonical identity for a tenant Engine Set key', async () => {
+    const insert = vi.fn().mockResolvedValue(undefined);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === EngineSet) return { findOneBy: vi.fn().mockResolvedValue(null), insert };
+        throw new Error('Unexpected repository');
+      },
+    });
+    vi.spyOn(engineSetService, 'materializeEngineSet').mockResolvedValueOnce({
+      engineSetId: 'set-a', selectorFingerprint: 'fingerprint', matched: 0, created: 0, updated: 0, removed: 0, materializations: [],
+    });
+
+    await engineSetService.createEngineSet({
+      tenantId: 'tenant-a', key: 'operators', name: 'Operators', selector: { mode: 'engine_ids', engineIds: ['engine-1'] },
+    });
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a', key: 'operators', engineSetKeyIdentity: 'tenant-a:operators',
+    }));
+    expect(engineSetKeyIdentity(null, 'operators')).toBe('platform:operators');
   });
 
   it('returns risk reasons and warnings when previewing broad selectors', async () => {

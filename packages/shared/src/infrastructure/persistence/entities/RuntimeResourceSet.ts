@@ -3,11 +3,13 @@ import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'runtime_resource_sets', schema: 'main' })
 @Unique('uq_runtime_resource_sets_tenant_key', ['tenantId', 'key'])
+@Index('uq_runtime_resource_sets_key_identity', ['runtimeResourceSetKeyIdentity'], { unique: true })
 @Index('idx_runtime_resource_sets_engine', ['engineId'])
 @Index('idx_runtime_resource_sets_source', ['source', 'sourceRef'])
 export class RuntimeResourceSet extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true }) tenantId!: string | null;
   @Column({ type: 'text' }) key!: string;
+  @Column({ name: 'runtime_resource_set_key_identity', type: 'text' }) runtimeResourceSetKeyIdentity!: string;
   @Column({ type: 'text' }) name!: string;
   @Column({ type: 'text', nullable: true }) description!: string | null;
   @Column({ name: 'engine_id', type: 'text' }) engineId!: string;

@@ -24,6 +24,7 @@ import {
   SYSTEM_ROLE_IDS,
 } from './permissions.js';
 import { authzGroupService } from './AuthzGroupService.js';
+import { engineSetKeyIdentity } from './EngineSetService.js';
 import { identityEntitlementMappingService, type ManagedIdentityEntitlementMapping } from './IdentityEntitlementMappingService.js';
 import { ssoEngineAccessSnapshotService } from './SsoEngineAccessSnapshotService.js';
 import { recordLegacyMappingConversion } from './LegacyMappingConversionAudit.js';
@@ -973,6 +974,7 @@ class SsoAssignmentMappingServiceClass {
         id: engineSetId,
         tenantId: normalizedTenantId,
         key,
+        engineSetKeyIdentity: engineSetKeyIdentity(normalizedTenantId, key),
         name,
         description: 'Managed by SSO engine assignment mapping.',
         selectorJson,

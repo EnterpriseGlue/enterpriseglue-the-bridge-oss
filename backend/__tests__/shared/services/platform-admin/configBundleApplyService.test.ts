@@ -34,6 +34,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventory
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/EngineSetService.js', () => ({
   engineSetService: { materializeEngineSet: vi.fn().mockResolvedValue({}), materializeEngineSetsForEngine },
+  engineSetKeyIdentity: (tenantId: string | null, key: string) => `${tenantId || 'platform'}:${key.trim()}`,
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({
   ssoNormalizedIdentityService: { replayMemberships, previewMemberships },
@@ -124,7 +125,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -817,7 +818,22 @@ describe('configBundleApplyService', () => {
     };
     const preview = configBundlePreviewService.preview({ bundle: runtimeBundle, files: runtimeFiles });
     await configBundleApplyService.apply({ bundle: runtimeBundle, files: runtimeFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
-    expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ key: 'runtime.payments', engineId: 'engine-1', resourceKind: 'process_definition', source: 'config', sourceRef: 'config_bundle:acme.authz' }));
+    expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ key: 'runtime.payments', runtimeResourceSetKeyIdentity: 'tenant-a:runtime.payments', engineId: 'engine-1', resourceKind: 'process_definition', source: 'config', sourceRef: 'config_bundle:acme.authz' }));
     expect(materializeRuntimeResourceSet).toHaveBeenCalledWith(expect.any(String), 'tenant-a');
+  });
+
+  it('applies a canonical key identity to a config-owned Engine Set', async () => {
+    const { engineSetRepo } = setupDataSource();
+    const engineSetBundle = { ...bundle, imports: ['./engine-sets.json'] };
+    const engineSetFiles = {
+      './engine-sets.json': { engineSets: [{ key: 'engines.prod', name: 'Production engines', selector: { mode: 'all' } }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: engineSetBundle, files: engineSetFiles });
+
+    await configBundleApplyService.apply({ bundle: engineSetBundle, files: engineSetFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1', acknowledgements: ['config.engine_set_broad:engines.prod'] });
+
+    expect(engineSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'engines.prod', engineSetKeyIdentity: 'tenant-a:engines.prod', source: 'config',
+    }));
   });
 });

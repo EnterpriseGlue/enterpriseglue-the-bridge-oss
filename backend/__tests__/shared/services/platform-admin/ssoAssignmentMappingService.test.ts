@@ -669,6 +669,7 @@ describe('ssoAssignmentMappingService', () => {
     }));
     expect(dynamicMocks.engineSetInsert).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a',
+      engineSetKeyIdentity: expect.stringMatching(/^tenant-a:/),
       source: 'sso',
       sourceRef: expect.any(String),
       selectorJson: expect.stringContaining('"mode":"all"'),

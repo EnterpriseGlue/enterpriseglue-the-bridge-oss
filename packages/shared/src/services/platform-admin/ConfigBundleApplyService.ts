@@ -15,7 +15,7 @@ import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persiste
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
-import { engineSetService } from './EngineSetService.js';
+import { engineSetKeyIdentity, engineSetService } from './EngineSetService.js';
 import { runtimeResourceInventoryService } from './RuntimeResourceInventoryService.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
 import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js';
@@ -80,6 +80,10 @@ function canonicalRoleKeyIdentity(tenantId: string | null, key: string): string 
 }
 
 function canonicalEngineKeyIdentity(tenantId: string | null, key: string): string {
+  return `${tenantId || 'platform'}:${key}`;
+}
+
+function runtimeResourceSetKeyIdentity(tenantId: string | null, key: string): string {
   return `${tenantId || 'platform'}:${key}`;
 }
 
@@ -508,7 +512,7 @@ class ConfigBundleApplyService {
           if (change.operation === 'create' && desired) {
             const id = generateId();
             const selector = resolveConfigEngineSetSelector(desired.selector, keyToId);
-            await engineSetRepo.insert({ id, tenantId, key: desired.key, name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), selectorFingerprint: '', source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', isArchived: false, createdById: input.actorId, lastMaterializedAt: null, materializationStatus: 'pending', materializationError: null, createdAt: now, updatedAt: now });
+            await engineSetRepo.insert({ id, tenantId, key: desired.key, engineSetKeyIdentity: engineSetKeyIdentity(tenantId, desired.key), name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), selectorFingerprint: '', source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', isArchived: false, createdById: input.actorId, lastMaterializedAt: null, materializationStatus: 'pending', materializationError: null, createdAt: now, updatedAt: now });
             materializeIds.push(id); created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
             const selector = resolveConfigEngineSetSelector(desired.selector, keyToId);
@@ -539,7 +543,7 @@ class ConfigBundleApplyService {
           } : null;
           if (change.operation === 'create' && desired && values) {
             const id = generateId();
-            await runtimeResourceSetRepo.insert({ id, tenantId, key: desired.key, ...values, source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, createdById: input.actorId, createdAt: now });
+            await runtimeResourceSetRepo.insert({ id, tenantId, key: desired.key, runtimeResourceSetKeyIdentity: runtimeResourceSetKeyIdentity(tenantId, desired.key), ...values, source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, createdById: input.actorId, createdAt: now });
             materializeRuntimeResourceSetIds.push(id);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.runtime_resource_set.create', resourceType: 'runtime_resource_set', resourceId: id, details: { bundleKey: manifest.metadata.key, runtimeResourceSetKey: desired.key, canonicalHash: diff.canonicalHash } });
             created += 1;

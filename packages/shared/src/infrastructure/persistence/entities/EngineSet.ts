@@ -3,6 +3,7 @@ import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'engine_sets', schema: 'main' })
 @Unique('uq_engine_sets_tenant_key', ['tenantId', 'key'])
+@Index('uq_engine_sets_key_identity', ['engineSetKeyIdentity'], { unique: true })
 @Index('idx_engine_sets_tenant', ['tenantId'])
 @Index('idx_engine_sets_source', ['source', 'sourceRef'])
 @Index('idx_engine_sets_archived', ['isArchived'])
@@ -12,6 +13,9 @@ export class EngineSet extends AppBaseEntity {
 
   @Column({ type: 'text' })
   key!: string;
+
+  @Column({ name: 'engine_set_key_identity', type: 'text' })
+  engineSetKeyIdentity!: string;
 
   @Column({ type: 'text' })
   name!: string;
