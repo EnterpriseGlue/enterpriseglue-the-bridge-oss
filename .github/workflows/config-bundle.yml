@@ -98,6 +98,12 @@ jobs:
             exit 64
           fi
 
+      - name: Validate configuration bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm authz:config validate "$BUNDLE_PATH"
+
       - name: Preview configuration bundle
         shell: bash
         run: |
