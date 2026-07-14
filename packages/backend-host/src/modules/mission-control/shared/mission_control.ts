@@ -91,8 +91,9 @@ r.use('/mission-control-api', requireAuth)
 r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await listProcessDefinitions(engineId, req.query as { key?: string; nameLike?: string; latest?: string })
     const keys = req.authorizedRuntimeResourceKeys
+    const query = keys ? getBoundedRuntimeResourceQuery(req.query) : req.query
+    const data = await listProcessDefinitions(engineId, query as { key?: string; nameLike?: string; latest?: string; maxResults?: number })
     res.json(keys ? data.filter((definition) => keys.includes(String(definition?.key || ''))) : data)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process definitions')
@@ -194,9 +195,10 @@ r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('
     const keys = req.authorizedRuntimeResourceKeys
     const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null
     const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null
+    const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query
     const data = visibleKeys
-      ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listProcessInstancesDetailed(engineId, { ...req.query, processDefinitionKey })))).flat()
-      : await listProcessInstancesDetailed(engineId, req.query as any)
+      ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listProcessInstancesDetailed(engineId, { ...query, processDefinitionKey })))).flat()
+      : await listProcessInstancesDetailed(engineId, query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
     res.json(redacted)
   } catch (e: any) {

@@ -9,6 +9,8 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   getActiveActivityCounts,
+  listProcessDefinitions,
+  listProcessInstancesDetailed,
   getProcessInstanceVariableHistory,
   getProcessInstanceExecutionDetails,
   previewProcessInstanceCount,
@@ -163,6 +165,26 @@ describe('mission-control shared mission_control routes', () => {
     expect(previewProcessInstanceCount).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'payments' }));
     expect(previewProcessInstanceCount).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'invoices' }));
     expect(previewProcessInstanceCount).not.toHaveBeenCalledWith('engine-77', expect.not.objectContaining({ processDefinitionKey: expect.any(String) }));
+  });
+
+  it('bounds compatibility process-definition and instance collections for resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const [definitions, instances] = await Promise.all([
+      request(app).get('/mission-control-api/process-definitions').query({ engineId: 'engine-77', maxResults: 25 }),
+      request(app).get('/mission-control-api/process-instances').query({ engineId: 'engine-77', maxResults: 25 }),
+    ]);
+
+    expect(definitions.status).toBe(200);
+    expect(instances.status).toBe(200);
+    expect(listProcessDefinitions).toHaveBeenCalledWith('engine-77', expect.objectContaining({ maxResults: 25 }));
+    expect(listProcessInstancesDetailed).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'payments', maxResults: 25 }));
   });
 
   it('allows incidents only when their live process-instance lineage resolves to an authorized runtime resource', async () => {

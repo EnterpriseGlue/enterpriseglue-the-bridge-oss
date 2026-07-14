@@ -16,12 +16,13 @@ import {
   getUserOperationLog,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 
-export async function listProcessDefinitions(engineId: string, params: { key?: string; nameLike?: string; latest?: string }) {
-  const { key, nameLike, latest } = params
+export async function listProcessDefinitions(engineId: string, params: { key?: string; nameLike?: string; latest?: string; maxResults?: number }) {
+  const { key, nameLike, latest, maxResults } = params
   const query: Record<string, any> = {}
   if (key) query.key = key
   if (nameLike) query.nameLike = nameLike
   if (latest) query.latestVersion = latest === 'true' || latest === '1'
+  if (maxResults !== undefined) query.maxResults = maxResults
   return camundaGet<any[]>(engineId, '/process-definition', query)
 }
 
