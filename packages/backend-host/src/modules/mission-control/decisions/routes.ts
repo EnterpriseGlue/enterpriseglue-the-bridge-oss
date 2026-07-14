@@ -4,11 +4,6 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
-import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
-import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
-import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
-import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import {
   listDecisionDefinitions,
   fetchDecisionDefinition,
@@ -21,6 +16,7 @@ import {
   EvaluateDecisionRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/decision.js';
 import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js';
+import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js';
 
 const r = Router();
 
@@ -30,26 +26,6 @@ const editTargetQuerySchema = z.object({
   version: z.coerce.number().int().positive(),
   decisionDefinitionId: z.string().min(1).optional(),
 });
-
-function projectPermissionContext(req: Request, projectId: string) {
-  return {
-    userId: req.user!.userId,
-    resourceType: 'project' as const,
-    resourceId: projectId,
-  };
-}
-
-function hasProjectPermission(req: Request, projectId: string, permission: Permission) {
-  return permissionService.hasPermission(permission, projectPermissionContext(req, projectId));
-}
-
-async function canViewProjectFile(req: Request, projectId: string) {
-  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_VIEW);
-}
-
-async function canEditProjectFile(req: Request, projectId: string) {
-  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_EDIT);
-}
 
 r.use(requireAuth);
 
@@ -64,122 +40,22 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
   const engineId = (req as any).engineId as string;
   const decisionKey = String(req.query.key || '').trim();
   const decisionDefinitionId = req.query.decisionDefinitionId ? String(req.query.decisionDefinitionId) : null;
-  const versionRaw = Number(req.query.version);
-
-  const decisionVersion = Math.trunc(versionRaw);
-  const dataSource = await getDataSource();
-  const artifactRepo = dataSource.getRepository(EngineDeploymentArtifact);
-  const deploymentRepo = dataSource.getRepository(EngineDeployment);
-  const fileCommitVersionRepo = dataSource.getRepository(FileCommitVersion);
-
-  const baseWhere: {
-    engineId: string;
-    artifactKind: 'decision';
-    artifactKey: string;
-    artifactVersion: number;
-  } = {
+  const decisionVersion = Math.trunc(Number(req.query.version));
+  const target = await resolveDeployedEditTarget({
+    userId: req.user!.userId,
     engineId,
     artifactKind: 'decision',
     artifactKey: decisionKey,
     artifactVersion: decisionVersion,
-  };
-
-  let candidates = await artifactRepo.find({
-    where: decisionDefinitionId ? { ...baseWhere, artifactId: decisionDefinitionId } : baseWhere,
-    order: { createdAt: 'DESC' },
-    take: 100,
+    artifactId: decisionDefinitionId,
   });
+  if (!target) throw Errors.notFound('Deployed decision mapping');
 
-  // Compatibility fallback: legacy rows may not have artifactId populated.
-  if (decisionDefinitionId && candidates.length === 0) {
-    candidates = await artifactRepo.find({
-      where: baseWhere,
-      order: { createdAt: 'DESC' },
-      take: 100,
-    });
-  }
-
-  for (const row of candidates) {
-    const projectId = String(row.projectId || '');
-    const fileId = row.fileId ? String(row.fileId) : '';
-    if (!projectId || !fileId) continue;
-
-    const canRead = await canViewProjectFile(req, projectId);
-    if (!canRead) continue;
-
-    const canEdit = await canEditProjectFile(req, projectId);
-    const commitId = row.fileGitCommitId ? String(row.fileGitCommitId) : null;
-    let fileVersionNumber: number | null = null;
-    let mappingSource: 'git-commit' | 'db-timestamp' | 'db-latest' | 'deployment-timestamp' = 'db-latest';
-
-    const engineDeploymentId = String(row.engineDeploymentId || '');
-    const deploymentRow = engineDeploymentId
-      ? await deploymentRepo.findOne({ where: { id: engineDeploymentId }, select: ['deployedAt', 'lineageQuality'] })
-      : null;
-    const lineageQuality = deploymentRow?.lineageQuality || 'complete';
-    if (!deploymentRow || !['complete', 'reported'].includes(lineageQuality)) continue;
-    const deployedAt = deploymentRow?.deployedAt ? Number(deploymentRow.deployedAt) : null;
-    const deploymentTimestamp = deployedAt ?? Number(row.createdAt);
-
-    if (commitId) {
-      const byCommit = await fileCommitVersionRepo.findOne({
-        where: { fileId, commitId },
-        select: ['versionNumber'],
-      });
-      if (byCommit && Number.isFinite(Number(byCommit.versionNumber))) {
-        fileVersionNumber = Number(byCommit.versionNumber);
-        mappingSource = 'git-commit';
-      }
-    }
-
-    if (fileVersionNumber === null) {
-      const byTimestamp = await fileCommitVersionRepo.createQueryBuilder('v')
-        .select(['v.versionNumber AS "versionNumber"'])
-        .where('v.fileId = :fileId', { fileId })
-        .andWhere('v.createdAt <= :createdAt', { createdAt: deploymentTimestamp })
-        .orderBy('v.createdAt', 'DESC')
-        .limit(1)
-        .getRawOne<{ versionNumber?: number }>();
-
-      if (byTimestamp && Number.isFinite(Number(byTimestamp.versionNumber))) {
-        fileVersionNumber = Number(byTimestamp.versionNumber);
-        mappingSource = deployedAt ? 'deployment-timestamp' : 'db-timestamp';
-      }
-    }
-
-    if (lineageQuality === 'reported' && fileVersionNumber === null) continue;
-
-    if (fileVersionNumber === null) {
-      const byLatest = await fileCommitVersionRepo.createQueryBuilder('v')
-        .select(['v.versionNumber AS "versionNumber"'])
-        .where('v.fileId = :fileId', { fileId })
-        .orderBy('v.createdAt', 'DESC')
-        .limit(1)
-        .getRawOne<{ versionNumber?: number }>();
-
-      if (byLatest && Number.isFinite(Number(byLatest.versionNumber))) {
-        fileVersionNumber = Number(byLatest.versionNumber);
-      }
-    }
-
-    return res.json({
-      canShowEditButton: true,
-      canEdit,
-      engineId,
-      decisionKey,
-      decisionVersion,
-      projectId,
-      fileId,
-      engineDeploymentId: String(row.engineDeploymentId || ''),
-      commitId,
-      fileVersionNumber,
-      mappingSource,
-      lineageQuality,
-      artifactCreatedAt: Number(row.createdAt),
-    });
-  }
-
-  throw Errors.notFound('Deployed decision mapping');
+  res.json({
+    ...target,
+    decisionKey,
+    decisionVersion,
+  });
 }));
 
 // List decision definitions

@@ -120,7 +120,10 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
       : null
     const lineageQuality = deploymentRow?.lineageQuality || 'complete'
     if (!deploymentRow || !['complete', 'reported'].includes(lineageQuality)) continue
-    const deployedAt = toFiniteNumber(deploymentRow?.deployedAt)
+    // Preserve the established route contract: an absent or zero deployment
+    // timestamp falls back to the artifact timestamp and is labeled as a
+    // database timestamp mapping.
+    const deployedAt = deploymentRow?.deployedAt ? toFiniteNumber(deploymentRow.deployedAt) : null
     const artifactCreatedAt = toFiniteNumber(row.createdAt) ?? 0
     const deploymentTimestamp = deployedAt ?? artifactCreatedAt
 
