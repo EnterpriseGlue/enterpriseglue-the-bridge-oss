@@ -5,6 +5,7 @@ import {
   getConfigBundleEffectiveAccessHref,
   getConfigBundleChangeRisk,
   groupConfigBundleChanges,
+  groupConfigBundleChangesByObjectType,
 } from '@src/features/platform-admin/components/configBundleDiff';
 
 const changes = [
@@ -33,6 +34,15 @@ describe('ConfigurationBundleSettingsTab diff helpers', () => {
       ['requires_attention', 2],
       ['review', 1],
       ['informational', 1],
+    ]);
+  });
+
+  it('subgroups each review priority by object family', () => {
+    expect(groupConfigBundleChangesByObjectType(changes).map((group) => [group.objectType, group.changes.length])).toEqual([
+      ['engine', 1],
+      ['group', 1],
+      ['role', 1],
+      ['target', 1],
     ]);
   });
 

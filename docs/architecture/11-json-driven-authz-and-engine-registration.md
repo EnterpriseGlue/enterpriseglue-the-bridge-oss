@@ -1975,7 +1975,7 @@ UI capabilities:
 
 - [ ] ⬜ Upload folder zip, single JSON file, or paste Git URL.
 - [x] ✅ Show schema validation results before diff in Platform Settings > Configuration Bundles.
-- [ ] ⬜ Show object diff grouped by Engines, Engine Sets, Runtime Resource Sets, Roles, Groups, Identity Providers, Identity Mappings, Assignments, and Project-engine targets.
+- [x] ✅ Show object diff grouped by Engines, Engine Sets, Runtime Resource Sets, Roles, Groups, Identity Providers, Identity Mappings, Assignments, and Project-engine targets, while retaining attention-first review priority.
 - [x] ✅ Show and require acknowledgement for all-engine/any-label selectors, broad identity-mapping operators, and destructive authoritative removals. Regex mappings are not part of the current config schema; external-only mode and secret-reference diagnostics remain pending.
 - [x] ✅ Require an exact preview hash to prevent time-of-check/time-of-use drift, and require an expected tenant scope for CLI/CI applies so target credentials cannot apply to a different tenant.
 - [ ] ⬜ Show config-managed badges in Engine Detail, Access Control roles/groups/mappings, Engine Sets, and project deployment target views.

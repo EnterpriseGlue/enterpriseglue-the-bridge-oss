@@ -88,3 +88,15 @@ export function groupConfigBundleChanges(changes: ConfigBundleDiffChange[]): Arr
     changes: changes.filter((change) => getConfigBundleChangeRisk(change) === risk),
   })).filter((group) => group.changes.length > 0);
 }
+
+export function groupConfigBundleChangesByObjectType(changes: ConfigBundleDiffChange[]): Array<{
+  objectType: string;
+  changes: ConfigBundleDiffChange[];
+}> {
+  return Array.from(changes.reduce((groups, change) => {
+    groups.set(change.objectType, [...(groups.get(change.objectType) || []), change]);
+    return groups;
+  }, new Map<string, ConfigBundleDiffChange[]>()).entries())
+    .map(([objectType, groupedChanges]) => ({ objectType, changes: groupedChanges }))
+    .sort((left, right) => formatConfigBundleObjectType(left.objectType).localeCompare(formatConfigBundleObjectType(right.objectType)));
+}
