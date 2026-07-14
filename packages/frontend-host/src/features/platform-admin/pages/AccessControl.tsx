@@ -123,6 +123,7 @@ import {
   useRbacRoles,
   useReactivateExternalEngine,
   useReconcileExternalEngine,
+  useReconcileRuntimeResources,
   useRevokeApiClient,
   useRevokeServiceAccount,
   useRotateApiClient,
@@ -5249,10 +5250,7 @@ export default function AccessControl() {
     enabled: engineSetsReadDecision.allowed && Boolean(selectedRuntimeEngineId),
     queryFn: () => apiClient.get<RuntimeResourceInventoryRow[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(selectedRuntimeEngineId)}`),
   });
-  const reconcileRuntimeResourcesM = useMutation({
-    mutationFn: () => apiClient.post<{ created: number; updated: number; deactivated: number; materializedSets: number; deployments: { created: number; updated: number; artifactsCreated: number } }>(`/api/authz/runtime-resources/${encodeURIComponent(selectedRuntimeEngineId)}/reconcile`, {}),
-    onSuccess: () => { void runtimeResourcesQ.refetch(); },
-  });
+  const reconcileRuntimeResourcesM = useReconcileRuntimeResources();
   const assignmentsReadUnavailableReason = unavailableReason(assignmentsReadDecision, 'Missing permission platform:authz:roles:view');
   const ssoAssignmentsManageUnavailableReason = unavailableReason(ssoAssignmentsManageDecision, 'Missing permission platform:sso-assignments:manage');
   const engineSetsManageUnavailableReason = unavailableReason(engineSetsManageDecision, 'Missing permission platform:engine-sets:manage');
@@ -6831,7 +6829,7 @@ export default function AccessControl() {
               reconcileError={reconcileRuntimeResourcesM.error}
               reconcileResult={reconcileRuntimeResourcesM.data}
               onSelectEngine={setSelectedRuntimeEngineId}
-              onReconcile={() => reconcileRuntimeResourcesM.mutate()}
+              onReconcile={() => reconcileRuntimeResourcesM.mutate(selectedRuntimeEngineId)}
             />
           </TabPanel>
           )}

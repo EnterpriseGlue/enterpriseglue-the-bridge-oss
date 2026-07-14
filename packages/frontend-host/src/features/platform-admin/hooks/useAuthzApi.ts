@@ -705,6 +705,18 @@ export interface RuntimeResourceSetMaterializationResult {
   removed: number;
 }
 
+export interface RuntimeResourceReconciliationResult {
+  created: number;
+  updated: number;
+  deactivated: number;
+  materializedSets: number;
+  deployments: {
+    created: number;
+    updated: number;
+    artifactsCreated: number;
+  };
+}
+
 export interface PolicyCondition {
   timeWindow?: {
     start?: string;
@@ -1413,6 +1425,17 @@ export function useMaterializeRuntimeResourceSet() {
   return useMutation({
     mutationFn: (id: string) => apiClient.post<RuntimeResourceSetMaterializationResult>(`/api/authz/runtime-resource-sets/${encodeURIComponent(id)}/materialize`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'runtime-resource-sets'] }),
+  });
+}
+
+export function useReconcileRuntimeResources() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (engineId: string) => apiClient.post<RuntimeResourceReconciliationResult>(`/api/authz/runtime-resources/${encodeURIComponent(engineId)}/reconcile`, {}),
+    onSuccess: (_result, engineId) => {
+      qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'runtime-resources', engineId] });
+      qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'runtime-resource-sets'] });
+    },
   });
 }
 
