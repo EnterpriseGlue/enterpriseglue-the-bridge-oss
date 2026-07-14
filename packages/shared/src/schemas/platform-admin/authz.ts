@@ -1046,6 +1046,79 @@ export const IdentityMappingProvisionAccessResponseSchema = z.object({
   createdGroup: z.object({ id: z.string() }).nullable(),
 });
 
+export const SsoSyncRunSchema = z.object({
+  id: z.string(),
+  tenantId: z.string().nullable(),
+  providerId: z.string().nullable(),
+  userId: z.string().nullable(),
+  trigger: z.enum(['login', 'scheduled', 'manual', 'mapping_change', 'engine_change']),
+  status: z.enum(['running', 'success', 'failed']),
+  startedAt: z.number(),
+  completedAt: z.number().nullable(),
+  groupMembershipsCreated: z.number(),
+  groupMembershipsUpdated: z.number(),
+  groupMembershipsRemoved: z.number(),
+  assignmentsCreated: z.number(),
+  assignmentsUpdated: z.number(),
+  assignmentsRemoved: z.number(),
+  errorCode: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  details: z.string(),
+});
+
+export const SsoSyncEventSchema = z.object({
+  id: z.string(),
+  tenantId: z.string().nullable(),
+  providerId: z.string().nullable(),
+  runId: z.string(),
+  severity: z.enum(['info', 'warning', 'error']),
+  type: z.string(),
+  userId: z.string().nullable(),
+  mappingType: z.string().nullable(),
+  mappingId: z.string().nullable(),
+  resourceType: z.string().nullable(),
+  resourceId: z.string().nullable(),
+  message: z.string(),
+  details: z.string(),
+  createdAt: z.number(),
+});
+
+export const SsoSyncRunsQuerySchema = z.object({
+  providerId: z.string().min(1).optional(),
+  userId: z.string().uuid().optional(),
+  status: z.enum(['running', 'success', 'failed']).optional(),
+  trigger: z.enum(['login', 'scheduled', 'manual', 'mapping_change', 'engine_change']).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export const SsoSyncEventsQuerySchema = z.object({
+  providerId: z.string().min(1).optional(),
+  severity: z.enum(['info', 'warning', 'error']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+export const SsoSyncDiagnosticsRunRequestSchema = z.object({
+  providerId: z.string().min(1).optional(),
+  trigger: z.enum(['manual', 'scheduled', 'mapping_change', 'engine_change']).optional(),
+  includeProviderChecks: z.boolean().optional(),
+  includeSnapshotReplay: z.boolean().optional(),
+  refreshProviderClaims: z.boolean().optional(),
+  includeCleanup: z.boolean().optional(),
+});
+
+export const SsoSyncDiagnosticsScanResultSchema = z.object({
+  runId: z.string().nullable(),
+  scannedGroupMappings: z.number(),
+  scannedAssignmentMappings: z.number(),
+  scannedGroupMemberships: z.number(),
+  scannedAssignments: z.number(),
+  warnings: z.number(),
+  errors: z.number(),
+  providerIdentityCheck: z.record(z.string(), z.unknown()).optional(),
+  snapshotReconciliation: z.record(z.string(), z.unknown()).optional(),
+  cleanup: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const SsoAssignmentMappingSchema = z.object({
   id: z.string(),
   tenantId: z.string().nullable().optional(),

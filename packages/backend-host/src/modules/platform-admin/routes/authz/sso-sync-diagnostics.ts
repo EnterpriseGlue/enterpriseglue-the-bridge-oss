@@ -7,28 +7,18 @@ import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import {
+  SsoSyncDiagnosticsRunRequestSchema,
+  SsoSyncEventsQuerySchema,
+  SsoSyncRunsQuerySchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
-const ssoSyncRunsQuerySchema = z.object({
-  providerId: z.string().min(1).optional(), userId: z.string().uuid().optional(),
-  status: z.enum(['running', 'success', 'failed']).optional(),
-  trigger: z.enum(['login', 'scheduled', 'manual', 'mapping_change', 'engine_change']).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-});
-const ssoSyncEventsQuerySchema = z.object({
-  providerId: z.string().min(1).optional(), severity: z.enum(['info', 'warning', 'error']).optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional(),
-});
-const ssoSyncDiagnosticsRunSchema = z.object({
-  providerId: z.string().min(1).optional(), trigger: z.enum(['manual', 'scheduled', 'mapping_change', 'engine_change']).optional(),
-  includeProviderChecks: z.boolean().optional(), includeSnapshotReplay: z.boolean().optional(),
-  refreshProviderClaims: z.boolean().optional(), includeCleanup: z.boolean().optional(),
-});
 
 export interface SsoSyncDiagnosticsRouteDependencies { requirePlatformAction: (actionId: string) => RequestHandler; }
 
 export function registerSsoSyncDiagnosticsRoutes(router: Router, { requirePlatformAction }: SsoSyncDiagnosticsRouteDependencies): void {
-  router.get('/api/authz/sso-sync-runs', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.read'), validateQuery(ssoSyncRunsQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/api/authz/sso-sync-runs', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.read'), validateQuery(SsoSyncRunsQuerySchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const runs = await ssoSyncDiagnosticsService.listRuns({
         tenantId: req.tenant?.tenantId || null,
@@ -46,7 +36,7 @@ export function registerSsoSyncDiagnosticsRoutes(router: Router, { requirePlatfo
     }
   }));
 
-  router.post('/api/authz/sso-sync-runs/reconcile', apiLimiter, requireAuth, reconciliationLimiter, requirePlatformAction('platform.sso.engine-assignments.manage'), identityAdminJsonPayloadLimit, validateBody(ssoSyncDiagnosticsRunSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/sso-sync-runs/reconcile', apiLimiter, requireAuth, reconciliationLimiter, requirePlatformAction('platform.sso.engine-assignments.manage'), identityAdminJsonPayloadLimit, validateBody(SsoSyncDiagnosticsRunRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const baseInput = {
         tenantId: req.tenant?.tenantId || null, providerId: req.body.providerId || null, trigger: req.body.trigger || 'manual',
@@ -64,7 +54,7 @@ export function registerSsoSyncDiagnosticsRoutes(router: Router, { requirePlatfo
     }
   }));
 
-  router.get('/api/authz/sso-sync-runs/:id/events', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.read'), validateParams(idParamSchema), validateQuery(ssoSyncEventsQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/api/authz/sso-sync-runs/:id/events', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.read'), validateParams(idParamSchema), validateQuery(SsoSyncEventsQuerySchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const events = await ssoSyncDiagnosticsService.listEvents({
         tenantId: req.tenant?.tenantId || null,

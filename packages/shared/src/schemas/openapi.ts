@@ -3409,6 +3409,12 @@ const {
   SsoAssignmentMappingSchema,
   SsoEngineAccessSnapshotQuerySchema,
   SsoEngineAccessSnapshotSchema,
+  SsoSyncDiagnosticsRunRequestSchema,
+  SsoSyncDiagnosticsScanResultSchema,
+  SsoSyncEventSchema,
+  SsoSyncEventsQuerySchema,
+  SsoSyncRunSchema,
+  SsoSyncRunsQuerySchema,
   EngineAccessTransitionCleanupApplyRequestSchema,
   EngineAccessTransitionCleanupApplyResponseSchema,
   EngineAccessTransitionCleanupPreviewSchema,
@@ -3553,79 +3559,6 @@ const SsoGroupMappingTestResponseSchema = z.object({
     groupId: z.string(),
     mappingId: z.string(),
   })),
-});
-
-const SsoSyncRunResponseSchema = z.object({
-  id: z.string(),
-  tenantId: z.string().nullable(),
-  providerId: z.string().nullable(),
-  userId: z.string().nullable(),
-  trigger: z.enum(['login', 'scheduled', 'manual', 'mapping_change', 'engine_change']),
-  status: z.enum(['running', 'success', 'failed']),
-  startedAt: z.number(),
-  completedAt: z.number().nullable(),
-  groupMembershipsCreated: z.number(),
-  groupMembershipsUpdated: z.number(),
-  groupMembershipsRemoved: z.number(),
-  assignmentsCreated: z.number(),
-  assignmentsUpdated: z.number(),
-  assignmentsRemoved: z.number(),
-  errorCode: z.string().nullable(),
-  errorMessage: z.string().nullable(),
-  details: z.string(),
-});
-
-const SsoSyncEventResponseSchema = z.object({
-  id: z.string(),
-  tenantId: z.string().nullable(),
-  providerId: z.string().nullable(),
-  runId: z.string(),
-  severity: z.enum(['info', 'warning', 'error']),
-  type: z.string(),
-  userId: z.string().nullable(),
-  mappingType: z.string().nullable(),
-  mappingId: z.string().nullable(),
-  resourceType: z.string().nullable(),
-  resourceId: z.string().nullable(),
-  message: z.string(),
-  details: z.string(),
-  createdAt: z.number(),
-});
-
-const SsoSyncRunsQueryOpenApiSchema = z.object({
-  providerId: z.string().optional(),
-  userId: z.string().optional(),
-  status: z.enum(['running', 'success', 'failed']).optional(),
-  trigger: z.enum(['login', 'scheduled', 'manual', 'mapping_change', 'engine_change']).optional(),
-  limit: z.number().int().min(1).max(100).optional(),
-});
-
-const SsoSyncEventsQueryOpenApiSchema = z.object({
-  providerId: z.string().optional(),
-  severity: z.enum(['info', 'warning', 'error']).optional(),
-  limit: z.number().int().min(1).max(200).optional(),
-});
-
-const SsoSyncDiagnosticsRunRequestSchema = z.object({
-  providerId: z.string().optional(),
-  trigger: z.enum(['manual', 'scheduled', 'mapping_change', 'engine_change']).optional(),
-  includeProviderChecks: z.boolean().optional(),
-  includeSnapshotReplay: z.boolean().optional(),
-  refreshProviderClaims: z.boolean().optional(),
-  includeCleanup: z.boolean().optional(),
-});
-
-const SsoSyncDiagnosticsScanResultSchema = z.object({
-  runId: z.string().nullable(),
-  scannedGroupMappings: z.number(),
-  scannedAssignmentMappings: z.number(),
-  scannedGroupMemberships: z.number(),
-  scannedAssignments: z.number(),
-  warnings: z.number(),
-  errors: z.number(),
-  providerIdentityCheck: z.record(z.string(), z.unknown()).optional(),
-  snapshotReconciliation: z.record(z.string(), z.unknown()).optional(),
-  cleanup: z.record(z.string(), z.unknown()).optional(),
 });
 
 const ConfigBundleFilesOpenApiSchema = z.object({
@@ -3932,9 +3865,9 @@ registry.registerPath({ method: 'post', path: '/api/engines/{engineId}/access/tr
 registry.registerPath({ method: 'post', path: '/api/engines/{engineId}/access/transition-cleanup', ...authzExtension('platform.sso.engine-assignments.manage', 'POST', '/api/engines/:engineId/access/transition-cleanup'), request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: EngineAccessTransitionCleanupApplyRequestSchema } } } }, responses: { 200: { description: 'Remove selected duplicate manual engine access assignments after transition preview', content: { 'application/json': { schema: EngineAccessTransitionCleanupApplyResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/mission-control/bridge/starbase-edit/evaluate', ...authzExtension('mission-control.bridge.starbase-edit.evaluate', 'POST', '/api/mission-control/bridge/starbase-edit/evaluate'), request: { body: { content: { 'application/json': { schema: BridgeDecisionRequestSchema } } } }, responses: { 200: { description: 'Evaluate Mission Control to Starbase edit bridge access', content: { 'application/json': { schema: BridgeDecisionResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/starbase/bridge/mission-control/evaluate', ...authzExtension('starbase.bridge.mission-control.evaluate', 'POST', '/api/starbase/bridge/mission-control/evaluate'), request: { body: { content: { 'application/json': { schema: BridgeDecisionRequestSchema } } } }, responses: { 200: { description: 'Evaluate Starbase to Mission Control runtime bridge access', content: { 'application/json': { schema: BridgeDecisionResponseSchema } } } } });
-registry.registerPath({ method: 'get', path: '/api/authz/sso-sync-runs', ...authzExtension('platform.sso.engine-assignments.read', 'GET', '/api/authz/sso-sync-runs'), request: { query: SsoSyncRunsQueryOpenApiSchema }, responses: { 200: { description: 'List SSO authorization sync runs', content: { 'application/json': { schema: z.array(SsoSyncRunResponseSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/api/authz/sso-sync-runs', ...authzExtension('platform.sso.engine-assignments.read', 'GET', '/api/authz/sso-sync-runs'), request: { query: SsoSyncRunsQuerySchema }, responses: { 200: { description: 'List SSO authorization sync runs', content: { 'application/json': { schema: z.array(SsoSyncRunSchema) } } } } });
 registry.registerPath({ method: 'post', path: '/api/authz/sso-sync-runs/reconcile', ...authzExtension('platform.sso.engine-assignments.manage', 'POST', '/api/authz/sso-sync-runs/reconcile'), request: { body: { content: { 'application/json': { schema: SsoSyncDiagnosticsRunRequestSchema } } } }, responses: { 200: { description: 'Run SSO authorization reconciliation diagnostics and optional provider/snapshot/cleanup passes', content: { 'application/json': { schema: SsoSyncDiagnosticsScanResultSchema } } } } });
-registry.registerPath({ method: 'get', path: '/api/authz/sso-sync-runs/{id}/events', ...authzExtension('platform.sso.engine-assignments.read', 'GET', '/api/authz/sso-sync-runs/:id/events'), request: { params: z.object({ id: z.string() }), query: SsoSyncEventsQueryOpenApiSchema }, responses: { 200: { description: 'List SSO authorization sync run events', content: { 'application/json': { schema: z.array(SsoSyncEventResponseSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/api/authz/sso-sync-runs/{id}/events', ...authzExtension('platform.sso.engine-assignments.read', 'GET', '/api/authz/sso-sync-runs/:id/events'), request: { params: z.object({ id: z.string() }), query: SsoSyncEventsQuerySchema }, responses: { 200: { description: 'List SSO authorization sync run events', content: { 'application/json': { schema: z.array(SsoSyncEventSchema) } } } } });
 
 // SSO group mappings
 registry.registerPath({ method: 'get', path: '/api/authz/sso-group-mappings', ...authzExtension('platform.sso.group-mappings.read', 'GET', '/api/authz/sso-group-mappings'), responses: { 200: { description: 'List SSO claim-to-group mappings', content: { 'application/json': { schema: z.array(SsoGroupMappingSchema) } } } } });
