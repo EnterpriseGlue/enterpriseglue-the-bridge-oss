@@ -1846,7 +1846,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Complete provider-id-bound auth start/callback orchestration for every protocol. Generic OIDC uses provider-bound state, PKCE, nonce, discovery, JWKS verification, and normalized provisioning; generic SAML uses signed RelayState and assertion verification; direct LDAP supports LDAPS service lookup, user bind verification, and normalized group output. Legacy Microsoft/Google migration remains pending.
 - [ ] ⬜ Converge platform-role, group, and direct-engine SSO mapping services into group-first identity mappings; UI convenience flows create a managed internal group plus normal scoped assignment.
 - [x] ✅ Add shared runtime inventory, runtime-resource-set materialization, and deployment-receipt services. Runtime authorization filtering and scheduled deployment reconciliation remain pending.
-- [ ] ⬜ Extend `DeploymentEligibilityService` only for deployment eligibility; do not mix deployment metadata discovery into the eligibility evaluator.
+- [x] ✅ Keep `DeploymentEligibilityService` limited to target, permission, capability, environment, and policy gates. Direct discovery and receipt lineage remain separate services; the deployment-eligibility lane verifies the service and all principal-aware route integrations.
 - [ ] ⬜ Extend permission/effective-access services to resolve engine-wide versus resource-aware runtime scopes and explain broad-grant shadowing.
 
 ### Backend Host
