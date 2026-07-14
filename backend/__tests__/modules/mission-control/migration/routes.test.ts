@@ -4,7 +4,9 @@ import express from 'express';
 import migrationRouter from '../../../../../packages/backend-host/src/modules/mission-control/migration/routes.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   generateMigrationPlan,
   executeMigrationAsync,
@@ -12,6 +14,10 @@ import {
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
+}));
+
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
+  camundaGet: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -120,5 +126,43 @@ describe('mission-control migration routes', () => {
 
     expect(response.status).toBe(403);
     expect(generateMigrationPlan).not.toHaveBeenCalled();
+  });
+
+  it('requires both live-resolved migration definitions to be authorized runtime resources on a central engine', async () => {
+    const runtimeResourceRepo = {
+      findOne: vi.fn(async ({ where }: any) => (
+        where.resourceKey === 'payments-v1' ? { id: 'resource-payments-v1', tenantId: null } : { id: 'resource-payments-v2', tenantId: null }
+      )),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
+        if (entity === RuntimeResource) return runtimeResourceRepo;
+        return { findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (camundaGet as unknown as Mock)
+      .mockResolvedValueOnce({ id: 'definition-source', key: 'payments-v1' })
+      .mockResolvedValueOnce({ id: 'definition-target', key: 'payments-v2' });
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (_permission: string, context: any) =>
+      context.resourceType === 'engine_runtime_resource'
+    );
+
+    const response = await request(app)
+      .post('/mission-control-api/migration/generate')
+      .send({ engineId: 'central-engine', sourceProcessDefinitionId: 'untrusted-source-id', targetProcessDefinitionId: 'untrusted-target-id' });
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).toHaveBeenCalledWith('central-engine', '/process-definition/untrusted-source-id');
+    expect(camundaGet).toHaveBeenCalledWith('central-engine', '/process-definition/untrusted-target-id');
+    expect(runtimeResourceRepo.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ engineId: 'central-engine', resourceKind: 'process_definition', resourceKey: 'payments-v1', isActive: true }),
+    }));
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      resourceType: 'engine_runtime_resource', resourceId: 'resource-payments-v1',
+    }));
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      resourceType: 'engine_runtime_resource', resourceId: 'resource-payments-v2',
+    }));
   });
 });

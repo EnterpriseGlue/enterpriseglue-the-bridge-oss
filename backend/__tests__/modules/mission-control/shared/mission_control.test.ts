@@ -4,7 +4,9 @@ import express from 'express';
 import missionControlRouter from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission_control.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   getActiveActivityCounts,
   getProcessInstanceVariableHistory,
@@ -15,6 +17,10 @@ import {
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
+}));
+
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
+  camundaGet: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -156,6 +162,34 @@ describe('mission-control shared mission_control routes', () => {
     expect(previewProcessInstanceCount).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'payments' }));
     expect(previewProcessInstanceCount).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'invoices' }));
     expect(previewProcessInstanceCount).not.toHaveBeenCalledWith('engine-77', expect.not.objectContaining({ processDefinitionKey: expect.any(String) }));
+  });
+
+  it('allows incidents only when their live process-instance lineage resolves to an authorized runtime resource', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
+        if (entity === RuntimeResource) return { findOne: vi.fn().mockResolvedValue({ id: 'resource-payments', tenantId: null }) };
+        return { findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (camundaGet as unknown as Mock).mockResolvedValue({ id: 'instance-1', definitionKey: 'payments-order' });
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (_permission: string, context: any) =>
+      context.resourceType === 'engine_runtime_resource' && context.resourceId === 'resource-payments'
+    );
+    const incidents = [{ id: 'incident-1', incidentType: 'failedJob' }];
+    const { listProcessInstanceIncidents } = await import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js');
+    vi.mocked(listProcessInstanceIncidents).mockResolvedValueOnce(incidents as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/instance-1/incidents')
+      .query({ engineId: 'central-engine' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(incidents);
+    expect(camundaGet).toHaveBeenCalledWith('central-engine', '/process-instance/instance-1');
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      resourceType: 'engine_runtime_resource', resourceId: 'resource-payments',
+    }));
   });
 
   it('returns variable history for a process instance variable and allows engineId in query', async () => {
