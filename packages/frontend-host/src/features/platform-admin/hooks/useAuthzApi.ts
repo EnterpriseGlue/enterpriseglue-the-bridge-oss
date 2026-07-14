@@ -1163,10 +1163,11 @@ export function useCreateCustomPermission() {
   });
 }
 
-export function useRbacRoles() {
+export function useRbacRoles(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.roles,
     queryFn: () => apiClient.get<RoleSummary[]>('/api/authz/roles'),
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -1288,7 +1289,7 @@ export function useRemoveRoleAssignment() {
   });
 }
 
-export function useAuthzGroups(params?: { includeArchived?: boolean }) {
+export function useAuthzGroups(params?: { includeArchived?: boolean }, options: { enabled?: boolean } = {}) {
   const searchParams = new URLSearchParams();
   if (params?.includeArchived) searchParams.set('includeArchived', 'true');
   const queryString = searchParams.toString();
@@ -1296,6 +1297,7 @@ export function useAuthzGroups(params?: { includeArchived?: boolean }) {
   return useQuery({
     queryKey: authzQueryKeys.groups(params),
     queryFn: () => apiClient.get<AuthzGroup[]>(url),
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -1516,13 +1518,14 @@ export function useReconcileExternalEngine() {
   });
 }
 
-export function useEngineSets(params?: { includeArchived?: boolean }) {
+export function useEngineSets(params?: { includeArchived?: boolean }, options: { enabled?: boolean } = {}) {
   const searchParams = new URLSearchParams();
   if (params?.includeArchived) searchParams.set('includeArchived', 'true');
   const queryString = searchParams.toString();
   return useQuery({
     queryKey: authzQueryKeys.engineSets(params),
     queryFn: () => apiClient.get<EngineSetSummary[]>(`/api/authz/engine-sets${queryString ? `?${queryString}` : ''}`),
+    enabled: options.enabled ?? true,
   });
 }
 
