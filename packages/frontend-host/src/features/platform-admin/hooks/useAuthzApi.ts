@@ -717,6 +717,67 @@ export interface RuntimeResourceReconciliationResult {
   };
 }
 
+export type IdentityProviderProtocol = 'oidc' | 'saml' | 'ldap';
+export type IdentityProviderAuthenticationMode = 'direct' | 'claims_only';
+
+export interface IdentityProvider {
+  id: string;
+  key: string;
+  protocol: IdentityProviderProtocol;
+  isEnabled: boolean;
+  authenticationMode: IdentityProviderAuthenticationMode;
+  directoryTenantId: string | null;
+  configurationJson: string;
+  syncJson: string;
+  ownershipMode: string;
+  sourceRef: string | null;
+}
+
+export interface IdentityProviderMembershipReplayResult {
+  runId: string | null;
+  scanned: number;
+  created: number;
+  removed: number;
+  failed: number;
+  truncated: boolean;
+  nextCursor: string | null;
+}
+
+export interface IdentityProviderMembershipPreviewResult {
+  scanned: number;
+  additions: number;
+  removals: number;
+  unchanged: number;
+  failed: number;
+  truncated: boolean;
+  nextCursor: string | null;
+  latestSnapshotAt: number | null;
+  warnings: Array<'stored_snapshots_only' | 'no_active_snapshots' | 'truncated'>;
+  mappings: Array<{ mappingId: string; targetGroupId: string; additions: number; removals: number; unchanged: number }>;
+}
+
+export type IdentityProviderConnectionTestResult =
+  | { status: 'connected'; protocol: 'oidc'; issuer: string }
+  | { status: 'connected'; protocol: 'saml'; entityDescriptorCount: number }
+  | { status: 'connected'; protocol: 'ldap'; sampledIdentities: number };
+
+export interface IdentityProviderMigrationReadiness {
+  ready: boolean;
+  targetProviderKey: string;
+  legacyProviderId: string | null;
+  requiredDefaultGroupId: string | null;
+  activeMappingCount: number;
+  checks: { defaultRoleMappingConfigured: boolean | null; directLoginProtocol: boolean };
+  blockers: Array<'target_not_found' | 'target_not_direct_oidc' | 'target_protocol_mismatch' | 'target_disabled' | 'secret_reference_missing' | 'secret_reference_unavailable' | 'identity_mappings_missing' | 'legacy_provider_not_found' | 'default_role_mapping_missing'>;
+}
+
+export interface LegacyIdentityProviderCutoverResult {
+  legacyProvider: { id: string; name: string; type: 'microsoft' | 'google' | 'oidc' | 'saml' };
+  targetProviderKey: string;
+  legacyProviderDisabled: boolean;
+  alreadyDisabled: boolean;
+}
+
 export interface PolicyCondition {
   timeWindow?: {
     start?: string;

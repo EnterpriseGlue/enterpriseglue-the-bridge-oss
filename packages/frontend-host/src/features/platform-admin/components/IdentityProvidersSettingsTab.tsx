@@ -8,21 +8,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
+import type {
+  IdentityProvider,
+  IdentityProviderConnectionTestResult,
+  IdentityProviderMembershipPreviewResult,
+  IdentityProviderMembershipReplayResult,
+  IdentityProviderMigrationReadiness,
+  IdentityProviderProtocol,
+  LegacyIdentityProviderCutoverResult,
+} from '../hooks/useAuthzApi';
 
-type Protocol = 'oidc' | 'saml' | 'ldap';
+type Protocol = IdentityProviderProtocol;
 type AuthenticationMode = 'direct' | 'claims_only';
-interface IdentityProvider {
-  id: string;
-  key: string;
-  protocol: Protocol;
-  isEnabled: boolean;
-  authenticationMode: AuthenticationMode;
-  directoryTenantId: string | null;
-  configurationJson: string;
-  syncJson: string;
-  ownershipMode: string;
-  sourceRef: string | null;
-}
 
 export function isConfigLockedIdentityProvider(provider: { ownershipMode?: string | null } | null | undefined): boolean {
   return provider?.ownershipMode === 'config_locked';
@@ -44,12 +41,12 @@ type LegacyMigrationDraft = {
   requirements: string[];
   warnings: string[];
 };
-type MembershipReplayResult = { runId: string | null; scanned: number; created: number; removed: number; failed: number; truncated: boolean; nextCursor: string | null };
-type MembershipPreviewResult = { scanned: number; additions: number; removals: number; unchanged: number; failed: number; truncated: boolean; nextCursor: string | null; latestSnapshotAt: number | null; warnings: Array<'stored_snapshots_only' | 'no_active_snapshots' | 'truncated'>; mappings: Array<{ mappingId: string; targetGroupId: string; additions: number; removals: number; unchanged: number }> };
+type MembershipReplayResult = IdentityProviderMembershipReplayResult;
+type MembershipPreviewResult = IdentityProviderMembershipPreviewResult;
 type SyncRun = { id: string; status: 'running' | 'success' | 'failed'; trigger: string; startedAt: number; completedAt: number | null; groupMembershipsCreated: number; groupMembershipsRemoved: number; errorMessage: string | null };
-type ConnectionTestResult = { status: 'connected'; protocol: Protocol; issuer?: string; sampledIdentities?: number; entityDescriptorCount?: number };
-type MigrationReadiness = { ready: boolean; targetProviderKey: string; legacyProviderId: string | null; requiredDefaultGroupId: string | null; activeMappingCount: number; checks: { defaultRoleMappingConfigured: boolean | null; directLoginProtocol: boolean }; blockers: Array<'target_not_found' | 'target_not_direct_oidc' | 'target_protocol_mismatch' | 'target_disabled' | 'secret_reference_missing' | 'secret_reference_unavailable' | 'identity_mappings_missing' | 'legacy_provider_not_found' | 'default_role_mapping_missing'> };
-type LegacyCutoverResult = { legacyProvider: { id: string; name: string; type: 'microsoft' | 'google' | 'oidc' | 'saml' }; targetProviderKey: string; legacyProviderDisabled: boolean; alreadyDisabled: boolean };
+type ConnectionTestResult = IdentityProviderConnectionTestResult;
+type MigrationReadiness = IdentityProviderMigrationReadiness;
+type LegacyCutoverResult = LegacyIdentityProviderCutoverResult;
 
 type FormState = {
   key: string; protocol: Protocol; isEnabled: boolean; authenticationMode: AuthenticationMode; directoryTenantId: string;
@@ -185,7 +182,7 @@ export default function IdentityProvidersSettingsTab() {
       {error && <InlineNotification kind="error" title="Provider action failed" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {previewResult && <InlineNotification kind={previewResult.result.failed > 0 || previewResult.result.warnings.includes('no_active_snapshots') ? 'warning' : 'info'} title={`Stored membership preview: ${previewResult.providerKey}`} subtitle={`${previewResult.result.scanned} snapshots checked: ${previewResult.result.additions} additions and ${previewResult.result.removals} removals would result. This preview uses stored snapshots and does not query the provider.${previewResult.result.truncated ? ' More snapshots remain; continue the preview for complete counts.' : ''}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {replayResult && <InlineNotification kind={replayResult.result.failed > 0 ? 'warning' : 'success'} title={`Stored membership replay: ${replayResult.providerKey}`} subtitle={`${replayResult.result.scanned} snapshots checked, ${replayResult.result.created} added, ${replayResult.result.removed} removed${replayResult.result.failed > 0 ? `, ${replayResult.result.failed} failed` : ''}${replayResult.result.truncated ? '. More snapshots remain; use Continue membership replay.' : '.'}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
-      {connectionResult && <InlineNotification kind="success" title={`Connection test: ${connectionResult.providerKey}`} subtitle={`${connectionResult.result.protocol.toUpperCase()} connection verified${connectionResult.result.issuer ? ` for ${connectionResult.result.issuer}` : ''}${connectionResult.result.sampledIdentities !== undefined ? `; sampled ${connectionResult.result.sampledIdentities} directory identities` : ''}${connectionResult.result.entityDescriptorCount !== undefined ? `; validated ${connectionResult.result.entityDescriptorCount} SAML entity descriptors` : ''}.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+      {connectionResult && <InlineNotification kind="success" title={`Connection test: ${connectionResult.providerKey}`} subtitle={`${connectionResult.result.protocol.toUpperCase()} connection verified${connectionResult.result.protocol === 'oidc' ? ` for ${connectionResult.result.issuer}` : ''}${connectionResult.result.protocol === 'ldap' ? `; sampled ${connectionResult.result.sampledIdentities} directory identities` : ''}${connectionResult.result.protocol === 'saml' ? `; validated ${connectionResult.result.entityDescriptorCount} SAML entity descriptors` : ''}.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {migrationReadiness && <InlineNotification kind={migrationReadiness.ready ? 'success' : 'warning'} title={`Migration readiness: ${migrationReadiness.targetProviderKey}`} subtitle={migrationReadiness.ready ? `Ready for an operator-managed legacy cutover with ${migrationReadiness.activeMappingCount} active identity mapping${migrationReadiness.activeMappingCount === 1 ? '' : 's'}.${migrationReadiness.requiredDefaultGroupId ? ` The required ${migrationReadiness.requiredDefaultGroupId} authenticated-identity mapping is configured.` : ''}` : `Not ready: ${migrationReadiness.blockers.join(', ').split('_').join(' ')}.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {cutoverResult && <InlineNotification kind="success" title="Legacy provider cut over" subtitle={`${cutoverResult.legacyProvider.name} was ${cutoverResult.alreadyDisabled ? 'already disabled' : 'disabled'} after ${cutoverResult.targetProviderKey} passed provider-neutral migration readiness.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {manage.allowed && legacyMigratableProviders.length > 0 && <div style={{ borderTop: '1px solid var(--cds-border-subtle)', paddingTop: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}>
