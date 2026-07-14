@@ -2242,7 +2242,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add label validation for engine metadata keys such as `country`, `domain`, `environment`, `region`, `businessUnit`, `criticality`, and customer-defined keys. Keys are stable lower-camel, snake, dot, or dash identifiers without whitespace; values remain customer-defined text.
 - [x] ✅ Document that labels, not display-only metadata, are used for Engine Set selectors and authorization-adjacent filtering.
 - [ ] ⬜ Add validation that secret refs are references only, not plaintext secrets.
-- [ ] ⬜ Add explicit validation and warning copy for `auth.type = "none"` as no EnterpriseGlue-managed endpoint credentials; permit it only for policy-approved `customer_sidecar` engines.
+- [x] ✅ Add explicit validation and warning copy for `auth.type = "none"` as no EnterpriseGlue-managed endpoint credentials; permit it only for policy-approved `customer_sidecar` engines.
 - [ ] ⬜ Add tests for valid and invalid config bundles.
 
 ### Phase 2: Preview Service
@@ -2317,10 +2317,10 @@ Phase 0 exit criteria:
 - [x] ✅ Ensure process instance, job, incident, batch, and migration mutations resolve inherited process definition or decision scopes before authorization.
 - [x] ✅ Ensure EnterpriseGlue denial prevents engine calls even when the engine might allow the request.
 - [x] ✅ Ensure engine-side rejection after EnterpriseGlue allow is reported as an operational engine rejection, not as an authorization fallback. The shared engine client returns a sanitized `ENGINE_OPERATION_REJECTED` 502 response with the upstream status and operation class; it never exposes upstream URLs or bodies.
-- [ ] ⬜ Route direct and customer-sidecar engines through one connection resolver so authorization, redaction, retries, timeouts, and audit behavior cannot drift by transport.
+- [ ] ⬜ Route direct and customer-sidecar engines through one connection resolver so authorization, redaction, retries, timeouts, and audit behavior cannot drift by transport. The shared resolver now covers endpoint authentication, request metadata, URL handling, health/version checks, deployments, and sanitized transport diagnostics; bounded retry/timeout policy remains pending.
 - [ ] ⬜ Ensure effective-access explanations include config bundle lineage.
 - [ ] ⬜ Ensure `auth.type = "none"` engines still require normal EnterpriseGlue project, engine, target, mode, and policy authorization before calls are sent to the sidecar.
-- [ ] ⬜ Ensure health/version checks can run through customer sidecar base URLs without EnterpriseGlue-managed credentials.
+- [x] ✅ Ensure health/version checks can run through customer sidecar base URLs without EnterpriseGlue-managed credentials.
 - [ ] ⬜ Ensure runtime never reads JSON files directly.
 
 ### Phase 5: APIs And OpenAPI
@@ -2331,7 +2331,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add direct deployment receipt and deployment lineage APIs with machine-principal authorization and idempotency keys. Receipts are merged into the canonical deployment history, so proxy and externally reported deployment lineage use one model.
 - [x] ✅ Add OpenAPI schemas for every config object. The config-bundle lifecycle now has typed manifest, imported-file schemas, preview, diff, hash-bound apply, apply-history, and export contracts.
 - [ ] ⬜ Add OpenAPI schemas for runtime authorization mode and unsupported-mode validation errors.
-- [ ] ⬜ Add OpenAPI schemas for engine `connectionMode`, endpoint-auth policy errors, sanitized transport diagnostics, and manual/external/config registration parity.
+- [ ] ⬜ Add OpenAPI schemas for engine `connectionMode`, endpoint-auth policy errors, sanitized transport diagnostics, and manual/external/config registration parity. Engine request/response schemas carry `connectionMode`, and health/external-registration responses now expose the enum-only sanitized transport diagnostic; explicit endpoint-policy error schemas and full registration parity remain pending.
 - [ ] ⬜ Add OpenAPI `x-enterpriseglue-authz` metadata.
 - [ ] ⬜ Add OpenAPI `x-enterpriseglue-authz` metadata for every Mission Control route, including collection filter mode and runtime resource resolver.
 - [ ] ⬜ Add route inventory entries and tests.

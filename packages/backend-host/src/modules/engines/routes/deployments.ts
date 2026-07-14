@@ -16,7 +16,7 @@ import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js'
 import { In } from 'typeorm'
 import { fetch, FormData } from 'undici'
-import { buildEngineCredentialHeaders, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { resolveBpmnEngineConnection } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
@@ -148,10 +148,6 @@ function requirePipelineReceiptsEnabled(req: Request, _res: Response, next: Next
     if (engine.pipelineReceiptEnabled === false) throw Errors.conflict('Pipeline deployment receipts are disabled for this engine')
     next()
   })().catch(next)
-}
-
-function authHeaders(e: { authType?: string | null; username?: string | null; passwordEnc?: string | null }): Record<string, string> {
-  return buildEngineCredentialHeaders(e)
 }
 
 function deploymentActorId(req: Request): string {
@@ -512,8 +508,8 @@ async function createEngineDeployment(req: Request, res: Response) {
     logger.info('Engine deploy: form built', { resources: used.size, ms: Date.now() - formBuildStart })
 
     const camundaStart = Date.now()
-    const url = resolveBpmnEngineRequestUrl(String(engine.baseUrl || ''), '/deployment/create')
-    const r2 = await fetch(url, { method: 'POST', headers: { ...authHeaders(engine) }, body: form as any })
+    const connection = await resolveBpmnEngineConnection(engine, { engineId: actualEngineId, method: 'POST', path: '/deployment/create', contentType: null })
+    const r2 = await fetch(connection.url, { method: 'POST', headers: connection.headers, body: form as any })
     const text = await r2.text()
     logger.info('Engine deploy: Camunda response', { status: r2.status, ms: Date.now() - camundaStart })
     if (!r2.ok) {
@@ -839,9 +835,10 @@ const engineId = String(req.params.engineId)
 
 try {
   const engine = await getEngineById(engineId)
-  const url = new URL(resolveBpmnEngineRequestUrl(String(engine.baseUrl || ''), '/deployment'))
+  const connection = await resolveBpmnEngineConnection(engine, { engineId, method: 'GET', path: '/deployment' })
+  const url = new URL(connection.url)
   for (const [k,v] of Object.entries(req.query)) url.searchParams.set(k, String(v))
-  const r2 = await fetch(url.toString(), { headers: { 'Content-Type': 'application/json', ...authHeaders(engine) } })
+  const r2 = await fetch(url.toString(), { headers: connection.headers })
   const text = await r2.text()
   sendUpstream(res, r2.status, text)
 } catch (e: any) {
@@ -854,8 +851,9 @@ const engineId = String(req.params.engineId)
 
 try {
   const engine = await getEngineById(engineId)
-  const url = resolveBpmnEngineRequestUrl(String(engine.baseUrl || ''), `/deployment/${encodeURIComponent(String(req.params.id))}`)
-  const r2 = await fetch(url, { headers: { 'Content-Type': 'application/json', ...authHeaders(engine) } })
+  const path = `/deployment/${encodeURIComponent(String(req.params.id))}`
+  const connection = await resolveBpmnEngineConnection(engine, { engineId, method: 'GET', path })
+  const r2 = await fetch(connection.url, { headers: connection.headers })
   const text = await r2.text()
   sendUpstream(res, r2.status, text)
 } catch (e: any) {
@@ -869,8 +867,9 @@ const engineId = String(req.params.engineId)
 try {
   const engine = await getEngineById(engineId)
   const cascade = req.query.cascade === 'true'
-  const url = resolveBpmnEngineRequestUrl(String(engine.baseUrl || ''), `/deployment/${encodeURIComponent(String(req.params.id))}${cascade ? '?cascade=true' : ''}`)
-  const r2 = await fetch(url, { method: 'DELETE', headers: { ...authHeaders(engine) } })
+  const path = `/deployment/${encodeURIComponent(String(req.params.id))}${cascade ? '?cascade=true' : ''}`
+  const connection = await resolveBpmnEngineConnection(engine, { engineId, method: 'DELETE', path })
+  const r2 = await fetch(connection.url, { method: 'DELETE', headers: connection.headers })
   if (r2.status === 204) return res.status(204).end()
   const text = await r2.text()
   sendUpstream(res, r2.status, text)

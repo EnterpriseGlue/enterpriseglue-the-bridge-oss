@@ -826,12 +826,20 @@ registry.registerPath({
 // -----------------------------
 registry.register('Engine', EngineSchema)
 
+const EngineTransportDiagnosticsSchema = z.object({
+  connectionMode: z.enum(['direct', 'customer_sidecar']),
+  endpointAuthentication: z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials']),
+  downstreamAuthentication: z.enum(['not_applicable', 'customer_managed']),
+})
+registry.register('EngineTransportDiagnostics', EngineTransportDiagnosticsSchema)
+
 const ExternalRegistrationHealthSchema = z.object({
   status: z.enum(['connected','disconnected','unknown']),
   latencyMs: z.number().nullable().optional(),
   message: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
   checkedAt: z.number(),
+  transport: EngineTransportDiagnosticsSchema.optional(),
 })
 const ExternalProjectEngineTargetModeFlagsSchema = z.object({
   allowManualDeploy: z.boolean().optional(),
@@ -1021,6 +1029,7 @@ const EngineHealthSchema = z.object({
   message: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
   checkedAt: z.number(),
+  transport: EngineTransportDiagnosticsSchema.optional(),
 })
 registry.register('EngineHealth', EngineHealthSchema)
 

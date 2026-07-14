@@ -5,6 +5,7 @@ import { fetch } from 'undici';
 import {
   camundaGet,
   camundaPost,
+  resolveBpmnEngineConnection,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   runWithBpmnEngineRequestContext,
@@ -71,6 +72,26 @@ describe('bpmn-engine-client', () => {
         'X-EnterpriseGlue-Operation-Class': 'engine.read',
       }),
     });
+  });
+
+  it('resolves credentialless sidecars without exposing endpoint or credential details in diagnostics', async () => {
+    const connection = await resolveBpmnEngineConnection({
+      id: 'engine-sidecar',
+      baseUrl: 'https://private-sidecar.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+      passwordEnc: 'must-not-appear',
+    }, { engineId: 'engine-sidecar', method: 'GET', path: '/version' });
+
+    expect(connection.url).toBe('https://private-sidecar.example.com/engine-rest/version');
+    expect(connection.headers).not.toHaveProperty('Authorization');
+    expect(connection.diagnostics).toEqual({
+      connectionMode: 'customer_sidecar',
+      endpointAuthentication: 'none',
+      downstreamAuthentication: 'customer_managed',
+    });
+    expect(JSON.stringify(connection.diagnostics)).not.toContain('private-sidecar.example.com');
+    expect(JSON.stringify(connection.diagnostics)).not.toContain('must-not-appear');
   });
 
   it('infers mutating operation classes for sidecar policy checks', async () => {
@@ -208,6 +229,28 @@ describe('bpmn-engine-client', () => {
         'X-EnterpriseGlue-Operation-Class': 'engine.read',
       }),
     });
+  });
+
+  it('sanitizes OAuth token endpoint failures', async () => {
+    (fetch as unknown as Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      text: vi.fn().mockResolvedValue('client_secret=must-not-leak'),
+    });
+
+    await expect(resolveBpmnEngineConnection({
+      id: 'engine-oauth-failure',
+      baseUrl: 'https://engine.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'oauth2-client-credentials',
+      username: 'client-id',
+      passwordEnc: 'client-secret',
+      oauthTokenUrl: 'https://identity.example.com/oauth/token',
+    }, { engineId: 'engine-oauth-failure', method: 'GET', path: '/version' })).rejects.toMatchObject({
+      message: 'Engine OAuth2 token request failed with status 401',
+    });
+
   });
 
   it('reports an engine rejection as an operational failure rather than local authorization denial', async () => {

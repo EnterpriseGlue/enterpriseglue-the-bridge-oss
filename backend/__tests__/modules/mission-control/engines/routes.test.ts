@@ -835,6 +835,57 @@ describe('mission-control engines routes', () => {
     expect(healthInsert).not.toHaveBeenCalled();
   });
 
+  it('runs credentialless customer-sidecar health checks through the shared connection resolver', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const healthInsert = vi.fn().mockResolvedValue({});
+    const engineUpdate = vi.fn().mockResolvedValue({});
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Customer sidecar',
+      baseUrl: 'https://sidecar.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+      username: null,
+      passwordEnc: null,
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthAudience: null,
+      lifecycleStatus: 'active',
+      tenantId: null,
+    });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'EngineHealth') return { insert: healthInsert };
+        return { findOne, findOneBy, update: engineUpdate };
+      },
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: vi.fn().mockResolvedValue({ version: '8.7.0' }),
+    });
+
+    const response = await request(app).post('/engines-api/engines/e1/test');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      status: 'connected',
+      version: '8.7.0',
+      transport: {
+        connectionMode: 'customer_sidecar',
+        endpointAuthentication: 'none',
+        downstreamAuthentication: 'customer_managed',
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith('https://sidecar.example.com/engine-rest/version', expect.objectContaining({
+      method: 'GET',
+      headers: expect.not.objectContaining({ Authorization: expect.anything() }),
+    }));
+  });
+
   it('lists saved filters only for engines authorized by the action resolver', async () => {
     const engineFind = vi.fn().mockResolvedValue([
       { id: 'e1', tenantId: null },

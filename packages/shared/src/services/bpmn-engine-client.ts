@@ -65,9 +65,10 @@ type EngineAuthType = 'none' | 'basic' | 'bearer' | 'oauth2-client-credentials'
 type EngineCfg = {
   id: string;
   baseUrl: string;
+  connectionMode: 'direct' | 'customer_sidecar';
   authType: EngineAuthType;
   username?: string | null;
-  password?: string | null;
+  passwordEnc?: string | null;
   oauthTokenUrl?: string | null;
   oauthScopes?: string | null;
   oauthAudience?: string | null;
@@ -78,6 +79,37 @@ export type EngineCredentialInput = {
   username?: string | null;
   passwordEnc?: string | null;
 };
+
+export type EngineConnectionInput = EngineCredentialInput & {
+  id?: string | null;
+  baseUrl: string;
+  connectionMode?: string | null;
+  oauthTokenUrl?: string | null;
+  oauthScopes?: string | null;
+  oauthAudience?: string | null;
+};
+
+export type EngineTransportDiagnostics = {
+  connectionMode: 'direct' | 'customer_sidecar';
+  endpointAuthentication: EngineAuthType;
+  downstreamAuthentication: 'not_applicable' | 'customer_managed';
+};
+
+export type ResolvedBpmnEngineConnection = {
+  url: string;
+  headers: Record<string, string>;
+  diagnostics: EngineTransportDiagnostics;
+};
+
+export function describeBpmnEngineTransport(input: EngineCredentialInput & { connectionMode?: string | null }): EngineTransportDiagnostics {
+  const connectionMode = input.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
+  const endpointAuthentication = (input.authType || (input.username ? 'basic' : 'none')) as EngineAuthType
+  return {
+    connectionMode,
+    endpointAuthentication,
+    downstreamAuthentication: connectionMode === 'customer_sidecar' ? 'customer_managed' : 'not_applicable',
+  }
+}
 
 /** Shared credential projection for all EnterpriseGlue-to-endpoint calls. */
 export function buildEngineCredentialHeaders(input: EngineCredentialInput): Record<string, string> {
@@ -147,13 +179,13 @@ async function getEngine(engineId: string): Promise<EngineCfg> {
     oauthAudience?: string | null;
   }
   const authType = (engineRow.authType || (engineRow.username ? 'basic' : 'none')) as EngineAuthType
-  const password = secretResolver.resolveStored(engineRow.passwordEnc)
   return {
     id: engineId,
     baseUrl: String(row.baseUrl),
+    connectionMode: row.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct',
     authType,
     username: engineRow.username || null,
-    password,
+    passwordEnc: engineRow.passwordEnc || null,
     oauthTokenUrl: engineRow.oauthTokenUrl || null,
     oauthScopes: engineRow.oauthScopes || null,
     oauthAudience: engineRow.oauthAudience || null,
@@ -194,7 +226,8 @@ export class BpmnEngineOperationError extends AppError {
 async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<string> {
   if (!cfg.oauthTokenUrl) throw Errors.validation('OAuth2 token URL is required for engine client credentials auth')
   if (!cfg.username) throw Errors.validation('OAuth2 client id is required for engine client credentials auth')
-  if (!cfg.password) throw Errors.validation('OAuth2 client secret is required for engine client credentials auth')
+  const password = secretResolver.resolveStored(cfg.passwordEnc)
+  if (!password) throw Errors.validation('OAuth2 client secret is required for engine client credentials auth')
 
   const cacheKey = [
     cfg.id,
@@ -210,7 +243,7 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
   const body = new URLSearchParams()
   body.set('grant_type', 'client_credentials')
   body.set('client_id', cfg.username)
-  body.set('client_secret', cfg.password)
+  body.set('client_secret', password)
   if (cfg.oauthScopes) body.set('scope', cfg.oauthScopes)
   if (cfg.oauthAudience) body.set('audience', cfg.oauthAudience)
 
@@ -220,8 +253,8 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
     body,
   })
   if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw Errors.authFailed(`Engine OAuth2 token request failed: ${response.status} ${response.statusText} ${text}`)
+    await response.text().catch(() => '')
+    throw Errors.authFailed(`Engine OAuth2 token request failed with status ${response.status}`)
   }
 
   const payload = await response.json() as { access_token?: string; expires_in?: number }
@@ -232,13 +265,29 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
   return payload.access_token
 }
 
-async function buildHeaders(cfg: EngineCfg, meta: { engineId: string; method: string; path: string }): Promise<Record<string, string>> {
-  const h: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...buildEngineCredentialHeaders({ authType: cfg.authType, username: cfg.username, passwordEnc: cfg.password }),
-  }
-  if (cfg.authType === 'oauth2-client-credentials') {
-    h['Authorization'] = `Bearer ${await resolveOAuthClientCredentialsToken(cfg)}`
+export async function resolveBpmnEngineConnection(
+  input: EngineConnectionInput,
+  request: { engineId?: string; method?: string; path?: string; contentType?: string | null } = {},
+): Promise<ResolvedBpmnEngineConnection> {
+  const engineId = request.engineId || input.id || 'unknown'
+  const method = request.method || 'GET'
+  const path = request.path || ''
+  const diagnostics = describeBpmnEngineTransport(input)
+  const { connectionMode, endpointAuthentication: authType } = diagnostics
+  const h: Record<string, string> = { ...buildEngineCredentialHeaders(input) }
+  if (request.contentType !== null) h['Content-Type'] = request.contentType || 'application/json'
+  if (authType === 'oauth2-client-credentials') {
+    h['Authorization'] = `Bearer ${await resolveOAuthClientCredentialsToken({
+      id: String(input.id || engineId),
+      baseUrl: input.baseUrl,
+      connectionMode,
+      authType,
+      username: input.username,
+      passwordEnc: input.passwordEnc,
+      oauthTokenUrl: input.oauthTokenUrl,
+      oauthScopes: input.oauthScopes,
+      oauthAudience: input.oauthAudience,
+    })}`
   }
 
   const requestContext = getBpmnEngineRequestContext()
@@ -246,15 +295,20 @@ async function buildHeaders(cfg: EngineCfg, meta: { engineId: string; method: st
   if (requestContext?.userId) h['X-EnterpriseGlue-User-Id'] = requestContext.userId
   if (requestContext?.tenantId) h['X-EnterpriseGlue-Tenant-Id'] = requestContext.tenantId
   if (requestContext?.tenantSlug) h['X-EnterpriseGlue-Tenant-Slug'] = requestContext.tenantSlug
-  h['X-EnterpriseGlue-Engine-Id'] = requestContext?.engineId || meta.engineId
-  h['X-EnterpriseGlue-Operation-Class'] = inferOperationClass(meta.method, meta.path)
+  h['X-EnterpriseGlue-Engine-Id'] = requestContext?.engineId || engineId
+  h['X-EnterpriseGlue-Operation-Class'] = inferOperationClass(method, path)
 
-  return h
+  return {
+    url: resolveBpmnEngineRequestUrl(input.baseUrl, path),
+    headers: h,
+    diagnostics,
+  }
 }
 
 export async function camundaGet<T = unknown>(engineId: string, path: string, params?: Record<string, any>): Promise<T> {
   const cfg = await getEngine(engineId)
-  const url = new URL(resolveBpmnEngineRequestUrl(cfg.baseUrl, path))
+  const connection = await resolveBpmnEngineConnection(cfg, { engineId, method: 'GET', path })
+  const url = new URL(connection.url)
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v === undefined || v === null || v === '') continue
@@ -264,7 +318,7 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
   }
   const res = await fetch(url.toString(), {
     method: 'GET',
-    headers: await buildHeaders(cfg, { engineId, method: 'GET', path }),
+    headers: connection.headers,
   })
   if (!res.ok) {
     await res.text().catch(() => '')
@@ -277,10 +331,10 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
 
 async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
   const cfg = await getEngine(engineId)
-  const url = resolveBpmnEngineRequestUrl(cfg.baseUrl, path)
-  const res = await fetch(url, {
+  const connection = await resolveBpmnEngineConnection(cfg, { engineId, method, path })
+  const res = await fetch(connection.url, {
     method,
-    headers: await buildHeaders(cfg, { engineId, method, path }),
+    headers: connection.headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {

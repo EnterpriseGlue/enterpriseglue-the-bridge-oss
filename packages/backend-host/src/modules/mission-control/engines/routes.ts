@@ -24,7 +24,7 @@ import { engineService, engineSetService, platformSettingsService, projectEngine
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
-import { buildEngineCredentialHeaders, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { describeBpmnEngineTransport, resolveBpmnEngineConnection, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js'
 import { config } from '@enterpriseglue/shared/config/index.js'
 import { logAudit } from '@enterpriseglue/shared/services/audit.js'
@@ -858,19 +858,18 @@ async function assertEngineCanUseEngineWideAccess(dataSource: DataSource, engine
 
 async function testEngineConnectionAndRecord(
   dataSource: Awaited<ReturnType<typeof getDataSource>>,
-  eng: Pick<Engine, 'id' | 'baseUrl' | 'authType' | 'username' | 'passwordEnc'>
+  eng: Pick<Engine, 'id' | 'baseUrl' | 'connectionMode' | 'authType' | 'username' | 'passwordEnc' | 'oauthTokenUrl' | 'oauthScopes' | 'oauthAudience'>
 ) {
   const engineRepo = dataSource.getRepository(Engine)
   const healthRepo = dataSource.getRepository(EngineHealth)
-  const url = resolveBpmnEngineRequestUrl(String(eng.baseUrl || ''), '/version')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...buildEngineCredentialHeaders(eng) }
   const started = Date.now()
   let status: 'connected'|'disconnected'|'unknown' = 'unknown'
   let version: string | null = null
   let message: string | null = null
 
   try {
-    const response = await fetch(url, { method: 'GET', headers })
+    const connection = await resolveBpmnEngineConnection(eng, { engineId: eng.id, method: 'GET', path: '/version' })
+    const response = await fetch(connection.url, { method: 'GET', headers: connection.headers })
     const latencyMs = Date.now() - started
     if (response.ok) {
       status = 'connected'
@@ -883,21 +882,25 @@ async function testEngineConnectionAndRecord(
       await engineRepo.update({ id: eng.id }, { version: version || null, updatedAt: Date.now() })
       const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message: null, checkedAt: Date.now() }
       await healthRepo.insert(rec)
-      return { status, latencyMs, version, checkedAt: rec.checkedAt }
+      return { ...rec, version, transport: connection.diagnostics }
     }
 
     status = 'disconnected'
     message = `${response.status} ${response.statusText}`
     const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
     await healthRepo.insert(rec)
-    return { status, latencyMs, version: null, message, checkedAt: rec.checkedAt }
-  } catch (e: any) {
+    return { ...rec, version: null, transport: connection.diagnostics }
+  } catch {
     const latencyMs = Date.now() - started
     status = 'disconnected'
-    message = e?.message || 'Failed to connect'
+    message = 'Failed to connect to engine endpoint'
     const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
     await healthRepo.insert(rec)
-    return { status, latencyMs, version: null, message, checkedAt: rec.checkedAt }
+    return {
+      ...rec,
+      version: null,
+      transport: describeBpmnEngineTransport(eng),
+    }
   }
 }
 
@@ -1560,7 +1563,6 @@ r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, requireAction('
 r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
-  const healthRepo = dataSource.getRepository(EngineHealth)
   const engineId = String(req.params.id)
   const eng = await engineRepo.findOneBy({ id: engineId })
   if (!eng) throw Errors.notFound('Engine')
@@ -1571,37 +1573,7 @@ r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, requireActio
     throw Errors.validation('Cannot test a disabled engine; reactivate it from Access Control before testing the connection')
   }
 
-  const url = resolveBpmnEngineRequestUrl(String(eng.baseUrl || ''), '/version')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...buildEngineCredentialHeaders(eng) }
-  const started = Date.now()
-  let status: 'connected'|'disconnected'|'unknown' = 'unknown'
-  let version: string | null = null
-  let message: string | null = null
-  try {
-    const r = await fetch(url, { method: 'GET', headers })
-    const latencyMs = Date.now() - started
-    if (r.ok) {
-      status = 'connected'
-      try { const data: any = await r.json(); version = data?.version || null } catch { version = null }
-      await engineRepo.update({ id: engineId }, { version: version || null, updatedAt: Date.now() })
-      const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message: null, checkedAt: Date.now() }
-      await healthRepo.insert(rec)
-      return res.json({ status, latencyMs, version, checkedAt: rec.checkedAt })
-    } else {
-      status = 'disconnected'
-      message = `${r.status} ${r.statusText}`
-      const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
-      await healthRepo.insert(rec)
-      return res.json({ status, latencyMs, version: null, message, checkedAt: rec.checkedAt })
-    }
-  } catch (e: any) {
-    const latencyMs = Date.now() - started
-    status = 'disconnected'
-    message = e?.message || 'Failed to connect'
-    const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
-    await healthRepo.insert(rec)
-    return res.json({ status, latencyMs, version: null, message, checkedAt: rec.checkedAt })
-  }
+  return res.json(await testEngineConnectionAndRecord(dataSource, eng))
 }))
 
 // Get last health entry
@@ -1635,30 +1607,7 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, requireEngi
     // Auto-ping once if no health yet
     const eng = await engineRepo.findOneBy({ id: engineId })
     if (eng) {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json', ...buildEngineCredentialHeaders(eng) }
-      const started = Date.now()
-      try {
-        const r = await fetch(resolveBpmnEngineRequestUrl(String(eng.baseUrl || ''), '/version'), { headers })
-        const latencyMs = Date.now() - started
-        let version: string | null = null
-        let status: 'connected' | 'disconnected' = 'disconnected'
-        let message: string | null = null
-        if (r.ok) {
-          status = 'connected'
-          try { const data: any = await r.json(); version = data?.version || null } catch {}
-        } else {
-          message = `${r.status} ${r.statusText}`
-        }
-        const rec = { id: generateId(), engineId: eng.id, status, latencyMs, message, checkedAt: Date.now() }
-        await healthRepo.insert(rec)
-        if (version && !eng.version) await engineRepo.update({ id: eng.id }, { version, updatedAt: Date.now() })
-        return res.json({ ...rec, version })
-      } catch (e: any) {
-        const latencyMs = Date.now() - started
-        const rec = { id: generateId(), engineId: eng.id, status: 'disconnected' as const, latencyMs, message: e?.message || 'Failed to connect', checkedAt: Date.now() }
-        await healthRepo.insert(rec)
-        return res.json({ ...rec, version: null })
-      }
+      return res.json(await testEngineConnectionAndRecord(dataSource, eng))
     }
   }
   const last = rows.sort((a: any, b: any) => (b.checkedAt as number) - (a.checkedAt as number))[0]
