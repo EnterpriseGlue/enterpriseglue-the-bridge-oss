@@ -1,5 +1,7 @@
 .git
 .gitignore
+/.local/
+/config/
 **/node_modules
 **/dist
 **/.vite

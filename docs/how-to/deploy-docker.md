@@ -120,7 +120,7 @@ Published backend images use the same mount contract:
 EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run prod:images:postgres
 ```
 
-Paths containing spaces are supported when the environment assignment is quoted. The bundle is mounted read-only at `/etc/enterpriseglue/config/bundle.json`; optional file-backed secrets use a separate read-only directory selected with `EG_CONFIG_SECRETS_HOST_PATH`.
+Paths containing spaces are supported when the environment assignment is quoted. The bundle is mounted read-only at `/etc/enterpriseglue/config/bundle.json`; optional file-backed secrets use a separate read-only directory selected with `EG_CONFIG_SECRETS_HOST_PATH`. The production backend image runs as UID/GID `65532`, owns the empty projection directories, and never copies a customer bundle into an image layer. Repository-local `.local/` and root `config/` directories are excluded from the Docker build context as an additional safeguard.
 
 For standalone self-host Compose, download `docker-compose.config-bundle.yml` beside `docker-compose.selfhost.yml`, configure the disabled-by-default `EG_CONFIG_*` values in `.env`, and include both files:
 
