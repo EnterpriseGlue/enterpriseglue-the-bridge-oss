@@ -13,6 +13,8 @@ import {
   provisionGoogleUser,
 } from '@enterpriseglue/shared/services/google.js';
 
+const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
+
 vi.mock('@enterpriseglue/shared/services/google.js', () => ({
   isGoogleAuthEnabled: vi.fn().mockResolvedValue(true),
   getGoogleAuthorizationUrl: vi.fn(),
@@ -21,10 +23,7 @@ vi.mock('@enterpriseglue/shared/services/google.js', () => ({
   provisionGoogleUser: vi.fn(),
 }));
 
-vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
-  generateAccessToken: vi.fn().mockReturnValue('google-access-token'),
-  generateRefreshToken: vi.fn().mockReturnValue('google-refresh-token'),
-}));
+vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
 
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
@@ -115,6 +114,7 @@ describe('Google OAuth flow e2e harness', () => {
       platformRole: 'admin',
       isActive: true,
     });
+    authSessionService.issue.mockResolvedValue({ accessToken: 'google-access-token', refreshToken: 'google-refresh-token', expiresIn: 900 });
   });
 
   it('completes google start -> callback flow and sets auth cookies', async () => {
@@ -154,6 +154,10 @@ describe('Google OAuth flow e2e harness', () => {
       returnTo: '/',
       user: expect.objectContaining({ id: 'user-1' }),
     }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', email: 'google-user@example.com' }),
+      expect.objectContaining({ identityProviderId: null }),
+    );
   });
 
   it('preserves tenant context through Google start and callback', async () => {
@@ -209,6 +213,10 @@ describe('Google OAuth flow e2e harness', () => {
       provider: 'google',
       providerId: 'legacy-google-1',
     }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1' }),
+      expect.objectContaining({ identityProviderId: 'legacy-google-1' }),
+    );
   });
 
   it('rejects callback when state does not match cookie', async () => {

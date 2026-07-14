@@ -14,9 +14,9 @@ import {
   extractGoogleUserInfo,
   provisionGoogleUser
 } from '@enterpriseglue/shared/services/google.js';
-import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
+import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
+import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import {
   appendSsoStartQuery,
   getSsoRedirectUrl,
@@ -147,9 +147,11 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
       userInfo,
     });
 
-    // Generate JWT tokens
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
+    const session = await authSessionService.issue(user, {
+      identityProviderId: ssoState?.providerId || null,
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+      ipAddress: req.ip,
+    });
 
     // Log successful login
     await logAudit({
@@ -163,18 +165,20 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
     logger.info('[Google Auth] Login successful:', user.email);
 
     // Set tokens in HTTP-only cookies
-    res.cookie('accessToken', accessToken, {
+    res.cookie('accessToken', session.accessToken, {
       httpOnly: true,
-      secure: config.nodeEnv === 'production',
-      sameSite: 'strict',
-      maxAge: config.jwtAccessTokenExpires * 1000,
+      secure: shouldUseSecureCookies(),
+      sameSite: 'lax',
+      maxAge: session.expiresIn * 1000,
+      path: '/',
     });
 
-    res.cookie('refreshToken', refreshToken, {
+    res.cookie('refreshToken', session.refreshToken, {
       httpOnly: true,
-      secure: config.nodeEnv === 'production',
-      sameSite: 'strict',
+      secure: shouldUseSecureCookies(),
+      sameSite: 'lax',
       maxAge: config.jwtRefreshTokenExpires * 1000,
+      path: '/',
     });
 
     res.redirect(getSsoRedirectUrl(ssoState));

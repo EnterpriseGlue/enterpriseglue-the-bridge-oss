@@ -10,9 +10,9 @@ import {
   provisionSamlUser,
   generateSamlServiceProviderMetadata,
 } from '@enterpriseglue/shared/services/saml.js';
-import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
+import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
+import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { samlAssertionReplayService } from '@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js';
 import {
   appendSsoStartQuery,
@@ -132,8 +132,11 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
       userInfo,
     });
 
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
+    const session = await authSessionService.issue(user, {
+      identityProviderId: providerId || null,
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+      ipAddress: req.ip,
+    });
 
     await logAudit({
       action: AuditActions.LOGIN_SUCCESS,
@@ -143,18 +146,20 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
       userAgent: req.headers['user-agent'],
     });
 
-    res.cookie('accessToken', accessToken, {
+    res.cookie('accessToken', session.accessToken, {
       httpOnly: true,
-      secure: config.nodeEnv === 'production',
-      sameSite: 'strict',
-      maxAge: config.jwtAccessTokenExpires * 1000,
+      secure: shouldUseSecureCookies(),
+      sameSite: 'lax',
+      maxAge: session.expiresIn * 1000,
+      path: '/',
     });
 
-    res.cookie('refreshToken', refreshToken, {
+    res.cookie('refreshToken', session.refreshToken, {
       httpOnly: true,
-      secure: config.nodeEnv === 'production',
-      sameSite: 'strict',
+      secure: shouldUseSecureCookies(),
+      sameSite: 'lax',
       maxAge: config.jwtRefreshTokenExpires * 1000,
+      path: '/',
     });
 
     res.redirect(getSsoRedirectUrl(ssoState));

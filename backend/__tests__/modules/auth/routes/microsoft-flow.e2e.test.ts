@@ -13,6 +13,8 @@ import {
   provisionMicrosoftUser,
 } from '@enterpriseglue/shared/services/microsoft.js';
 
+const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
+
 vi.mock('@enterpriseglue/shared/services/microsoft.js', () => ({
   isMicrosoftAuthEnabled: vi.fn().mockReturnValue(true),
   getAuthorizationUrl: vi.fn(),
@@ -21,10 +23,7 @@ vi.mock('@enterpriseglue/shared/services/microsoft.js', () => ({
   provisionMicrosoftUser: vi.fn(),
 }));
 
-vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
-  generateAccessToken: vi.fn().mockReturnValue('microsoft-access-token'),
-  generateRefreshToken: vi.fn().mockReturnValue('microsoft-refresh-token'),
-}));
+vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
 
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
@@ -115,6 +114,7 @@ describe('Microsoft OAuth flow e2e harness', () => {
       platformRole: 'admin',
       isActive: true,
     });
+    authSessionService.issue.mockResolvedValue({ accessToken: 'microsoft-access-token', refreshToken: 'microsoft-refresh-token', expiresIn: 900 });
   });
 
   it('completes microsoft start -> callback flow and sets auth cookies', async () => {
@@ -155,6 +155,10 @@ describe('Microsoft OAuth flow e2e harness', () => {
       user: expect.objectContaining({ id: 'user-1' }),
       userInfo: expect.objectContaining({ email: 'entra-user@example.com' }),
     }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', email: 'entra-user@example.com' }),
+      expect.objectContaining({ identityProviderId: null }),
+    );
   });
 
   it('preserves tenant context through mocked Entra ID start -> callback flow', async () => {
@@ -212,6 +216,10 @@ describe('Microsoft OAuth flow e2e harness', () => {
       provider: 'microsoft',
       providerId: 'legacy-microsoft-1',
     }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1' }),
+      expect.objectContaining({ identityProviderId: 'legacy-microsoft-1' }),
+    );
   });
 
   it('rejects a mocked Entra authorization URL with an unexpected host', async () => {

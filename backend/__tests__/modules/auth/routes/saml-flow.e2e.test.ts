@@ -14,6 +14,7 @@ import {
 } from '@enterpriseglue/shared/services/saml.js';
 
 const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
+const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/services/saml.js', () => ({
   getSamlStatus: vi.fn().mockResolvedValue({ enabled: true }),
@@ -25,10 +26,7 @@ vi.mock('@enterpriseglue/shared/services/saml.js', () => ({
   generateSamlServiceProviderMetadata: vi.fn().mockResolvedValue('<xml />'),
 }));
 
-vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
-  generateAccessToken: vi.fn().mockReturnValue('saml-access-token'),
-  generateRefreshToken: vi.fn().mockReturnValue('saml-refresh-token'),
-}));
+vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
 
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
@@ -138,6 +136,7 @@ describe('SAML auth flow e2e harness', () => {
       isActive: true,
     });
     samlAssertionReplayService.consume.mockResolvedValue(undefined);
+    authSessionService.issue.mockResolvedValue({ accessToken: 'saml-access-token', refreshToken: 'saml-refresh-token', expiresIn: 900 });
   });
 
   it('completes start -> callback flow and sets auth cookies', async () => {
@@ -186,6 +185,10 @@ describe('SAML auth flow e2e harness', () => {
       user: expect.objectContaining({ id: 'user-1' }),
       userInfo: expect.objectContaining({ email: 'saml-user@example.com' }),
     }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', email: 'saml-user@example.com' }),
+      expect.objectContaining({ identityProviderId: 'provider-saml-1' }),
+    );
   });
 
   it('preserves tenant context through mocked Entra SAML start -> callback flow', async () => {

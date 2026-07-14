@@ -14,9 +14,9 @@ import {
   extractUserInfo,
   provisionMicrosoftUser
 } from '@enterpriseglue/shared/services/microsoft.js';
-import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
+import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
+import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import {
   appendSsoStartQuery,
   getSsoRedirectUrl,
@@ -147,9 +147,11 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
       userInfo,
     });
 
-    // Generate JWT tokens (our own tokens for the session)
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
+    const session = await authSessionService.issue(user, {
+      identityProviderId: ssoState?.providerId || null,
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+      ipAddress: req.ip,
+    });
 
     // Log successful login
     await logAudit({
@@ -163,18 +165,20 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
     logger.info('[Microsoft Auth] Login successful:', user.email);
 
     // Set tokens in HTTP-only cookies
-    res.cookie('accessToken', accessToken, {
+    res.cookie('accessToken', session.accessToken, {
       httpOnly: true,
-      secure: config.nodeEnv === 'production',
-      sameSite: 'strict',
-      maxAge: config.jwtAccessTokenExpires * 1000,
+      secure: shouldUseSecureCookies(),
+      sameSite: 'lax',
+      maxAge: session.expiresIn * 1000,
+      path: '/',
     });
 
-    res.cookie('refreshToken', refreshToken, {
+    res.cookie('refreshToken', session.refreshToken, {
       httpOnly: true,
-      secure: config.nodeEnv === 'production',
-      sameSite: 'strict',
+      secure: shouldUseSecureCookies(),
+      sameSite: 'lax',
       maxAge: config.jwtRefreshTokenExpires * 1000,
+      path: '/',
     });
 
     // Redirect directly to the captured tenant route or frontend root.
