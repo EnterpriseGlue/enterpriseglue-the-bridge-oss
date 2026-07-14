@@ -243,7 +243,10 @@ describe('mission-control processes routes', () => {
       engineId: 'central-engine', resourceKind: 'process_definition', permission: 'engine:instance:view', userId: 'hr-user',
     }));
     expect(listProcessDefinitions).toHaveBeenCalledWith('central-engine', {
-      key: undefined, nameLike: undefined, latestVersion: false, maxResults: 100,
+      key: 'payments-order', nameLike: undefined, latestVersion: false, maxResults: 100,
+    });
+    expect(listProcessDefinitions).toHaveBeenCalledWith('central-engine', {
+      key: 'hr-onboard', nameLike: undefined, latestVersion: false, maxResults: 100,
     });
   });
 

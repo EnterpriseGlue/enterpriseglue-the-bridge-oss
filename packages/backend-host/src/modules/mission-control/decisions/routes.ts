@@ -186,8 +186,19 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
 r.get('/mission-control-api/decision-definitions', requireRuntimeCollectionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition' }), validateQuery(DecisionDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
-  const data = await listDecisionDefinitions(engineId, keys ? getBoundedRuntimeResourceQuery(req.query) : req.query);
-  res.json(keys ? data.filter((definition: any) => keys.includes(String(definition?.key || ''))) : data);
+  if (!keys) {
+    return res.json(await listDecisionDefinitions(engineId, req.query));
+  }
+
+  const requestedKey = typeof req.query.key === 'string' ? req.query.key : null;
+  const visibleKeys = keys.filter((candidate) => !requestedKey || candidate === requestedKey);
+  const query = getBoundedRuntimeResourceQuery(req.query);
+  const collections = await Promise.all(visibleKeys.map(async (decisionDefinitionKey) => {
+    const definitions = await listDecisionDefinitions(engineId, { ...query, key: decisionDefinitionKey });
+    // Keep the local boundary authoritative if the engine ignores the query.
+    return definitions.filter((definition: any) => String(definition?.key || '') === decisionDefinitionKey);
+  }));
+  res.json(collections.flat());
 }));
 
 // Get decision definition by ID

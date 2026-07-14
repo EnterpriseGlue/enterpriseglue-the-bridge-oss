@@ -92,9 +92,18 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
   try {
     const engineId = (req as any).engineId as string
     const keys = req.authorizedRuntimeResourceKeys
-    const query = keys ? getBoundedRuntimeResourceQuery(req.query) : req.query
-    const data = await listProcessDefinitions(engineId, query as { key?: string; nameLike?: string; latest?: string; maxResults?: number })
-    res.json(keys ? data.filter((definition) => keys.includes(String(definition?.key || ''))) : data)
+    if (!keys) {
+      return res.json(await listProcessDefinitions(engineId, req.query as { key?: string; nameLike?: string; latest?: string; maxResults?: number }))
+    }
+
+    const requestedKey = typeof req.query.key === 'string' ? req.query.key : null
+    const visibleKeys = keys.filter((candidate) => !requestedKey || candidate === requestedKey)
+    const query = getBoundedRuntimeResourceQuery(req.query)
+    const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
+      const definitions = await listProcessDefinitions(engineId, { ...query, key: processDefinitionKey })
+      return definitions.filter((definition) => String(definition?.key || '') === processDefinitionKey)
+    }))
+    res.json(collections.flat())
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process definitions')
   }

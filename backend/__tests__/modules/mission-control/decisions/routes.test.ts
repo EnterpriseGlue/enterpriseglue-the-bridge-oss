@@ -256,7 +256,8 @@ describe('mission-control decisions routes', () => {
     expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'central-engine', resourceKind: 'decision_definition', permission: 'engine:instance:view', userId: 'hr-user',
     }));
-    expect(listDecisionDefinitions).toHaveBeenCalledWith('central-engine', expect.objectContaining({ maxResults: 100 }));
+    expect(listDecisionDefinitions).toHaveBeenCalledWith('central-engine', expect.objectContaining({ key: 'payments-risk', maxResults: 100 }));
+    expect(listDecisionDefinitions).toHaveBeenCalledWith('central-engine', expect.objectContaining({ key: 'hr-eligibility', maxResults: 100 }));
   });
 
   it('rejects oversized decision-definition collection requests for resource-aware engines', async () => {

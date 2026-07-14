@@ -80,8 +80,18 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
     maxResults,
   }
   const keys = req.authorizedRuntimeResourceKeys
-  const data = await listProcessDefinitions(engineId, keys ? getBoundedRuntimeResourceQuery(baseQuery) : baseQuery)
-  res.json(keys ? data.filter((definition: any) => keys.includes(String(definition?.key || ''))) : data)
+  if (!keys) {
+    return res.json(await listProcessDefinitions(engineId, baseQuery))
+  }
+
+  const visibleKeys = keys.filter((candidate) => !key || candidate === key)
+  const query = getBoundedRuntimeResourceQuery(baseQuery)
+  const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
+    const definitions = await listProcessDefinitions(engineId, { ...query, key: processDefinitionKey })
+    // Do not trust an upstream key filter to be enforced consistently.
+    return definitions.filter((definition: any) => String(definition?.key || '') === processDefinitionKey)
+  }))
+  res.json(collections.flat())
 }))
 
 // Resolve Starbase edit target for a deployed process version
