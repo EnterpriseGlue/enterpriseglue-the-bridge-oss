@@ -115,6 +115,7 @@ export default function RoleLibrarySettingsTab() {
   const [draft, setDraft] = useState<string[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [createTarget, setCreateTarget] = useState<'manual' | 'config'>('manual');
+  const [createRiskAcknowledged, setCreateRiskAcknowledged] = useState(false);
   const [form, setForm] = useState(blank);
   const [configForm, setConfigForm] = useState(blankConfig);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +129,7 @@ export default function RoleLibrarySettingsTab() {
   const visibleRoles = roles.filter((role) => `${role.name} ${role.key}`.toLowerCase().includes(roleSearch.toLowerCase()));
   const selectedRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === selected?.scope);
   const createRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === form.scope);
+  const createSelectedRiskyPermissions = createRolePermissions.filter((permission) => draft.includes(permission.key) && getPermissionRiskForKey(permission.key));
   const configWarnEditable = selected?.source === 'config' && selected.ownershipMode === 'config_warn';
   const editable = Boolean(selected?.kind === 'custom' && selected.isEditable && !selected.isArchived && (selected.source !== 'config' || configWarnEditable));
   const hasUnsavedRoleChanges = Boolean(detail && (
@@ -155,6 +157,7 @@ export default function RoleLibrarySettingsTab() {
   const startCreate = (copy = false, target: 'manual' | 'config' = 'manual') => {
     setError(null);
     setCreateTarget(target);
+    setCreateRiskAcknowledged(false);
     setForm(copy && selected ? { name: `${selected.name} copy`, description: selected.description || '', scope: selected.scope } : blank);
     setConfigForm(copy && selected ? { ...blankConfig, roleKey: configRoleKeyFromSystemRoleKey(selected.key) } : blankConfig);
     setDraft(copy ? detail?.permissions || [] : []);
@@ -208,12 +211,12 @@ export default function RoleLibrarySettingsTab() {
         <div style={{ marginTop: 'var(--spacing-5)' }}><PermissionPicker permissions={selectedRolePermissions} draft={draft} editable={editable && manage.allowed} idPrefix="role-library" onToggle={toggle} /></div>
       </> : <InlineNotification kind="info" title="Select a role" subtitle="Choose a role from the library to inspect its permissions." hideCloseButton lowContrast />}</div>
     </div>
-    <Modal open={createOpen} size="lg" modalHeading={createTarget === 'config' ? 'Export configuration role' : 'Create custom role'} primaryButtonText={createTarget === 'config' ? 'Export JSON' : 'Create'} secondaryButtonText="Cancel" onRequestClose={() => setCreateOpen(false)} onRequestSubmit={() => createTarget === 'config' ? exportConfigRole() : create.mutate()} primaryButtonDisabled={!form.name.trim() || !draft.length || create.isPending || (createTarget === 'config' && (!isStableConfigKey(configForm.bundleKey) || !isStableConfigKey(configForm.tenantKey) || !isStableConfigKey(configForm.roleKey) || !configForm.roleKey.startsWith('custom.')))}>
+    <Modal open={createOpen} size="lg" modalHeading={createTarget === 'config' ? 'Export configuration role' : 'Create custom role'} primaryButtonText={createTarget === 'config' ? 'Export JSON' : 'Create'} secondaryButtonText="Cancel" onRequestClose={() => setCreateOpen(false)} onRequestSubmit={() => createTarget === 'config' ? exportConfigRole() : create.mutate()} primaryButtonDisabled={!form.name.trim() || !draft.length || create.isPending || (createTarget === 'manual' && createSelectedRiskyPermissions.length > 0 && !createRiskAcknowledged) || (createTarget === 'config' && (!isStableConfigKey(configForm.bundleKey) || !isStableConfigKey(configForm.tenantKey) || !isStableConfigKey(configForm.roleKey) || !configForm.roleKey.startsWith('custom.')))}>
       <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
         {createTarget === 'config' && <InlineNotification kind="info" title="Configuration-managed duplicate" subtitle="Exports an explicit, reproducible permission snapshot. Import the JSON in Platform Settings > Configuration Bundles, preview it, then apply the exact preview." hideCloseButton lowContrast />}
         <TextInput id="role-library-name" labelText="Role name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
         <TextArea id="role-library-description" labelText="Description" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
-        <Select id="role-library-scope" labelText="Scope" value={form.scope} onChange={(event) => { setForm((current) => ({ ...current, scope: event.target.value as Scope })); setDraft([]); }}><SelectItem value="platform" text="Platform" /><SelectItem value="project" text="Project" /><SelectItem value="engine" text="Engine" /><SelectItem value="engine_runtime_resource" text="Engine runtime resource" /></Select>
+        <Select id="role-library-scope" labelText="Scope" value={form.scope} onChange={(event) => { setForm((current) => ({ ...current, scope: event.target.value as Scope })); setDraft([]); setCreateRiskAcknowledged(false); }}><SelectItem value="platform" text="Platform" /><SelectItem value="project" text="Project" /><SelectItem value="engine" text="Engine" /><SelectItem value="engine_runtime_resource" text="Engine runtime resource" /></Select>
         {createTarget === 'config' && <>
           <TextInput id="role-library-config-bundle-key" labelText="Bundle key" helperText="Use the key of the bundle that will own this role." value={configForm.bundleKey} invalid={Boolean(configForm.bundleKey) && !isStableConfigKey(configForm.bundleKey)} invalidText="Use a stable lowercase configuration key." onChange={(event) => setConfigForm((current) => ({ ...current, bundleKey: event.target.value }))} />
           <TextInput id="role-library-config-tenant-key" labelText="Tenant key" value={configForm.tenantKey} invalid={Boolean(configForm.tenantKey) && !isStableConfigKey(configForm.tenantKey)} invalidText="Use a stable lowercase configuration key." onChange={(event) => setConfigForm((current) => ({ ...current, tenantKey: event.target.value }))} />
@@ -221,6 +224,7 @@ export default function RoleLibrarySettingsTab() {
           <Select id="role-library-config-ownership" labelText="Configuration ownership" value={configForm.ownershipMode} onChange={(event) => setConfigForm((current) => ({ ...current, ownershipMode: event.target.value as ConfigRoleTemplateOwnershipMode }))}><SelectItem value="config_locked" text="Locked to configuration" /><SelectItem value="config_warn" text="Allow local edits with drift warning" /></Select>
         </>}
         <PermissionPicker key={form.scope} permissions={createRolePermissions} draft={draft} editable={manage.allowed} idPrefix="create-role" onToggle={toggle} />
+        {createTarget === 'manual' && createSelectedRiskyPermissions.length > 0 && <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}><InlineNotification kind="warning" title="Sensitive permissions selected" subtitle={createSelectedRiskyPermissions.map((permission) => permission.key).join(', ')} hideCloseButton lowContrast /><Checkbox id="role-library-risk-acknowledged" labelText="I understand this role includes sensitive permissions." checked={createRiskAcknowledged} onChange={(_event, { checked }) => setCreateRiskAcknowledged(Boolean(checked))} /></div>}
       </div>
     </Modal>
   </Tile>;
