@@ -14,7 +14,16 @@ const ConfigKeySchema = z.string()
   .min(3)
   .max(160)
   .regex(/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/, 'Use a stable lowercase config key');
-const ReferenceKeySchema = ConfigKeySchema;
+export const ConfigReferenceKeySchema = ConfigKeySchema;
+const ReferenceKeySchema = ConfigReferenceKeySchema;
+export const ConfigEngineReferenceSchema = z.object({ engineKey: ReferenceKeySchema }).strict();
+export const ConfigEngineSetReferenceSchema = z.object({ engineSetKey: ReferenceKeySchema }).strict();
+export const ConfigGroupReferenceSchema = z.object({ groupKey: ReferenceKeySchema.regex(/^group\./) }).strict();
+export const ConfigRoleReferenceSchema = z.object({ roleKey: ReferenceKeySchema }).strict();
+export const ConfigProjectReferenceSchema = z.object({
+  id: z.string().uuid().optional(),
+  key: ReferenceKeySchema.optional(),
+}).strict().refine((ref) => Boolean(ref.id || ref.key), 'A project reference requires id or key');
 const SecretReferenceSchema = z.string()
   .min(1)
   .max(512)
@@ -213,13 +222,13 @@ export const ConfigRuntimeResourceSetSchema = z.object({
   key: ConfigKeySchema.regex(/^runtime\./, 'Runtime resource set keys must use the runtime.* namespace'),
   name: z.string().min(1).max(255),
   description: z.string().max(2000).optional(),
-  engineRef: z.object({ engineKey: ReferenceKeySchema }).strict(),
+  engineRef: ConfigEngineReferenceSchema,
   resourceKind: RuntimeResourceKindSchema,
   selector: z.discriminatedUnion('mode', [
     z.object({ mode: z.literal('keys'), keys: z.array(z.string().min(1).max(255)).min(1) }).strict(),
     z.object({ mode: z.literal('prefix'), prefix: z.string().min(1).max(255) }).strict(),
     z.object({ mode: z.literal('labels'), labels: LabelSchema.refine((labels) => Object.keys(labels).length > 0), labelMatch: z.enum(['all', 'any']).default('all') }).strict(),
-    z.object({ mode: z.literal('project_lineage'), projectRef: z.object({ id: z.string().uuid().optional(), key: ReferenceKeySchema.optional() }).strict().refine((ref) => Boolean(ref.id || ref.key)) }).strict(),
+    z.object({ mode: z.literal('project_lineage'), projectRef: ConfigProjectReferenceSchema }).strict(),
   ]),
   runtimeTenantId: z.string().min(1).max(255).optional(),
   ownershipMode: ConfigOwnershipModeSchema.optional(),
@@ -230,7 +239,7 @@ export const ConfigRuntimeResourceSetsFileSchema = z.object({
 
 const ConfigAssignmentScopeSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('platform') }).strict(),
-  z.object({ type: z.literal('project'), projectRef: z.object({ id: z.string().uuid().optional(), key: ReferenceKeySchema.optional() }).strict().refine((ref) => Boolean(ref.id || ref.key)) }).strict(),
+  z.object({ type: z.literal('project'), projectRef: ConfigProjectReferenceSchema }).strict(),
   z.object({ type: z.literal('engine'), engineKey: ReferenceKeySchema }).strict(),
   z.object({ type: z.literal('engine_set'), engineSetKey: ReferenceKeySchema }).strict(),
   z.object({ type: z.literal('engine_runtime_resource'), engineKey: ReferenceKeySchema, resourceKind: RuntimeResourceKindSchema, resourceKey: z.string().min(1).max(255), runtimeTenantId: z.string().min(1).max(255).optional() }).strict(),
@@ -356,8 +365,8 @@ export const ConfigIdentityMappingsFileSchema = z.object({
 
 export const ConfigProjectEngineTargetSchema = z.object({
   key: ConfigKeySchema.optional(),
-  projectRef: z.object({ id: z.string().uuid().optional(), key: ReferenceKeySchema.optional() }).strict().refine((ref) => Boolean(ref.id || ref.key)),
-  engineRef: z.object({ engineKey: ReferenceKeySchema }).strict(),
+  projectRef: ConfigProjectReferenceSchema,
+  engineRef: ConfigEngineReferenceSchema,
   status: z.enum(['active', 'disabled']).default('active'),
   allowManualDeploy: z.boolean().default(false),
   allowCiDeploy: z.boolean().default(false),
@@ -389,3 +398,8 @@ export type ConfigBundleSettings = z.infer<typeof ConfigBundleSettingsSchema>;
 export type ConfigRole = z.infer<typeof ConfigRoleSchema>;
 export type ConfigIdentityProvider = z.infer<typeof ConfigIdentityProviderSchema>;
 export type ConfigIdentityMapping = z.infer<typeof ConfigIdentityMappingSchema>;
+export type ConfigEngineReference = z.infer<typeof ConfigEngineReferenceSchema>;
+export type ConfigEngineSetReference = z.infer<typeof ConfigEngineSetReferenceSchema>;
+export type ConfigGroupReference = z.infer<typeof ConfigGroupReferenceSchema>;
+export type ConfigRoleReference = z.infer<typeof ConfigRoleReferenceSchema>;
+export type ConfigProjectReference = z.infer<typeof ConfigProjectReferenceSchema>;

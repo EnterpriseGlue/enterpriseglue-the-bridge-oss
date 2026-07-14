@@ -2242,7 +2242,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add test-only identity fixture schemas that reuse production provider/mapping identifiers but are rejected by production bundle manifests.
 - [x] ✅ Add schema version and strict unknown-field rejection.
 - [x] ✅ Add stable object hashing and canonical JSON normalization.
-- [ ] ⬜ Add reference resolver types for `engineKey`, `engineExternalId`, `engineSetKey`, `groupKey`, `roleKey`, and `projectRef`.
+- [x] ✅ Add shared config reference schemas and inferred types for engine, Engine Set, group, role, and project references. Bundle schemas now reuse canonical engine/project reference objects instead of duplicating their validation; `engineExternalId` remains a runtime lookup concern rather than a config-key reference.
 - [x] ✅ Add validation for same-scope role permissions.
 - [x] ✅ Add validation that system roles are reference-only and not mutable.
 - [x] ✅ Add custom-role config validation for explicit `permissions`.
