@@ -2,6 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../packages/backend-host/src/app.js';
 
+const getConfigBootstrapStatus = vi.hoisted(() => vi.fn(() => ({
+  mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run', secretPreflight: 'not_required',
+})));
+
+vi.mock('../../packages/backend-host/src/services/configBundleBootstrap.js', () => ({ getConfigBootstrapStatus }));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn().mockResolvedValue({
     getRepository: vi.fn(),
@@ -46,6 +52,22 @@ describe('app', () => {
     expect(response.body).toEqual({
       status: 'ready',
       configBootstrap: { mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run', secretPreflight: 'not_required' },
+    });
+  });
+
+  it('keeps readiness closed when required identity reconciliation did not complete', async () => {
+    getConfigBootstrapStatus.mockReturnValueOnce({
+      mode: 'apply', status: 'failed', hash: 'bundle-hash', message: 'Configuration bundle identity reconciliation remains pending after bounded startup processing', reconciliation: 'pending', secretPreflight: 'passed',
+    });
+    const app = createApp({ registerRoutes: false, includeDocs: false, includeRateLimiting: false });
+    const response = await request(app).get('/ready');
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({
+      status: 'not_ready',
+      configBootstrap: {
+        mode: 'apply', status: 'failed', hash: 'bundle-hash', message: 'Configuration bundle identity reconciliation remains pending after bounded startup processing', reconciliation: 'pending', secretPreflight: 'passed',
+      },
     });
   });
 });

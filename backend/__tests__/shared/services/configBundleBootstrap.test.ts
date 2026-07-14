@@ -15,6 +15,7 @@ const preview = vi.hoisted(() => vi.fn());
 const apply = vi.hoisted(() => vi.fn());
 const secretPreflight = vi.hoisted(() => vi.fn());
 const getPlatformSettings = vi.hoisted(() => vi.fn());
+const drainApplyRun = vi.hoisted(() => vi.fn());
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({ config }));
 vi.mock('node:fs/promises', () => ({ stat, readFile }));
@@ -29,6 +30,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPrefli
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js', () => ({
   platformSettingsService: { get: getPlatformSettings },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js', () => ({
+  configBundleIdentityReplayTaskService: { drainApplyRun },
 }));
 
 import { getConfigBootstrapStatus, runConfigBundleBootstrap } from '../../../../packages/backend-host/src/services/configBundleBootstrap.js';
@@ -47,6 +51,7 @@ describe('configBundleBootstrap', () => {
     preview.mockReturnValue({ valid: true, canonicalHash: 'preview-hash', errors: [] });
     secretPreflight.mockReturnValue({ valid: true, available: true, canonicalHash: 'preview-hash', availabilityHash: 'secret-preflight-hash', errors: [] });
     getPlatformSettings.mockResolvedValue({ credentiallessCustomerSidecarsEnabled: false });
+    drainApplyRun.mockResolvedValue({ status: 'completed', pagesProcessed: 1, taskCount: 1, activeTaskCount: 0, failedTaskCount: 0 });
   });
 
   it('rejects a bootstrap apply without an explicit expected tenant scope', async () => {
@@ -106,16 +111,43 @@ describe('configBundleBootstrap', () => {
     );
   });
 
-  it('reports pending reconciliation when bootstrap creates durable replay continuation work', async () => {
+  it('drains durable identity replay continuation before reporting bootstrap ready', async () => {
     config.configExpectedTenantScope = 'tenant-a';
     apply.mockResolvedValue({
       canonicalHash: 'preview-hash',
+      applyRunId: 'apply-run-1',
       reconciliation: { identitySnapshot: { status: 'truncated' } },
     });
 
     await expect(runConfigBundleBootstrap()).resolves.toMatchObject({
       status: 'applied',
-      reconciliation: 'pending',
+      reconciliation: 'completed',
     });
+    expect(drainApplyRun).toHaveBeenCalledWith({ applyRunId: 'apply-run-1', maxPages: 100, pageLimit: 500 });
+  });
+
+  it('fails readiness when durable identity replay remains pending after bounded startup work', async () => {
+    config.configExpectedTenantScope = 'tenant-a';
+    apply.mockResolvedValue({
+      canonicalHash: 'preview-hash',
+      applyRunId: 'apply-run-1',
+      reconciliation: { identitySnapshot: { status: 'truncated' } },
+    });
+    drainApplyRun.mockResolvedValue({ status: 'pending', pagesProcessed: 100, taskCount: 1, activeTaskCount: 1, failedTaskCount: 0 });
+
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('identity reconciliation remains pending');
+    expect(getConfigBootstrapStatus()).toMatchObject({ status: 'failed', reconciliation: 'pending' });
+  });
+
+  it('fails bootstrap when the initial identity reconciliation page fails', async () => {
+    config.configExpectedTenantScope = 'tenant-a';
+    apply.mockResolvedValue({
+      canonicalHash: 'preview-hash',
+      applyRunId: 'apply-run-1',
+      reconciliation: { identitySnapshot: { status: 'failed' } },
+    });
+
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('identity reconciliation failed');
+    expect(drainApplyRun).not.toHaveBeenCalled();
   });
 });

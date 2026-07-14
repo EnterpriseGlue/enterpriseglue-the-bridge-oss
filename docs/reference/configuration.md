@@ -101,7 +101,9 @@ OpenShift ConfigMap projection to mount the non-secret JSON payload.
 `/health` exposes sanitized bootstrap state for diagnostics. `/ready` returns
 `503` after a non-fail-closed bootstrap error. Successful apply receipts report
 Engine Set and runtime-resource materialization counts; identity-provider
-directory reconciliation remains a separate operation.
+mapping changes must also finish their bounded stored-snapshot replay before
+readiness opens. Live identity-provider directory synchronization remains a
+separate scheduled operation.
 
 ### Database Compatibility (TypeORM Adapters)
 Database support is provided via TypeORM adapters and driver packages:

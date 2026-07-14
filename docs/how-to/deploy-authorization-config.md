@@ -57,7 +57,8 @@ load process environment
 -> preview and apply only when bootstrap mode is apply
 -> materialize affected Engine Sets and runtime resources
 -> record reconciliation counts in the apply receipt
--> defer provider identity reconciliation to its dedicated sync workflow
+-> synchronously drain config-affected stored identity snapshot replay within a bounded startup budget
+-> defer live external-directory synchronization to its dedicated scheduled workflow
 -> publish config status
 -> become ready
 ```
@@ -103,7 +104,7 @@ Required changes:
 - [x] ✅ Add disabled-by-default bootstrap variables to every Docker/OpenShift environment example and the configuration reference/matrix.
 - [x] ✅ Ensure backend production images can read `/etc/enterpriseglue/config` as a non-root user. The production image creates and grants the projection directory to the Chainguard runtime user.
 - [x] ✅ Keep secret files in a separate read-only mount with stricter permissions; never put them in the config bundle volume. The optional Compose overlay mounts the bundle file and secret directory independently as read-only paths.
-- [x] ✅ Add health/readiness output for bundle status, hash, and local materialization state without exposing configuration contents. Historical last-run details and provider identity reconciliation state remain pending.
+- [x] ✅ Add health/readiness output for bundle status, hash, local materialization state, and required stored-identity replay state without exposing configuration contents. Historical last-run detail metrics remain pending.
 - [ ] ⬜ Test paths containing spaces, missing mounts, read-only mounts, invalid JSON, wrong hash, unresolved secret refs, and restart idempotency.
 
 ## OpenShift And Kubernetes Changes
@@ -123,7 +124,7 @@ Required changes:
 - [x] ✅ Update the OpenShift deployment script to create/apply the bundle ConfigMap before backend rollout when enabled.
 - [x] ✅ Include bundle hash annotations in the backend pod template so an intended bundle change triggers rollout.
 - [x] ✅ Apply runtime Secret/ConfigMap values before the bundle hash triggers rollout, and reject bundle bootstrap against the mountless `dev` overlay.
-- [ ] ⬜ Complete readiness gating for migrations, catalog seed, config apply, and all required reconciliation. `/ready` fails after bootstrap configuration failure; bootstrap diagnostics now report `pending` when durable stored-identity replay continuation remains, but readiness intentionally stays available while that bounded background work completes.
+- [x] ✅ Complete readiness gating for migrations, catalog seed, config apply, and all required reconciliation. A bootstrap apply drains only its own durable stored-identity replay tasks before the server listens, bounded to 100 continuation pages of 500 identities. Initial failure, retry deferral, cancellation, or budget exhaustion fails bootstrap and keeps `/ready` at `503`; unrelated API-apply tasks remain background work. Live LDAP/directory synchronization remains intentionally scheduled rather than a startup dependency.
 - [ ] ⬜ Define failed-rollout behavior that leaves the previous ReplicaSet available when the new bundle fails closed.
 
 The OpenShift deploy script now validates the rendered overlay before mutation, injects the verified bundle path/hash into the runtime ConfigMap before triggering rollout, and supports either environment-created Secrets or pre-existing controller-managed Secrets via `OPENSHIFT_SECRET_SOURCE=external`. The External Secrets Operator example targets the exact `enterpriseglue-secrets` and `enterpriseglue-config-secrets` names consumed by the deployment.
@@ -217,7 +218,7 @@ The repository also includes a manually dispatched GitHub Actions workflow at `.
 - `identity_reconciliation_mode` is selected on workflow dispatch: `apply` is backward-compatible default behavior, `preview` records bounded stored-snapshot impact without replaying snapshots, and `none` skips that replay;
 - required reviewers for environments that permit `apply`.
 
-When a bounded `apply` replay is truncated, EnterpriseGlue records one durable continuation task per affected provider. Enable `CONFIG_BUNDLE_IDENTITY_REPLAY_INTERVAL_MS` on the backend to continue those pages. The worker leases each task, cancels stale queued work when a newer bundle supersedes the same provider, and retries transient failures with capped exponential backoff. Inspect continuation state from the apply-run details in Platform Settings or `GET /api/authz/config-bundles/runs/{id}/identity-replay-tasks`.
+When a bounded API `apply` replay is truncated, EnterpriseGlue records one durable continuation task per affected provider. Enable `CONFIG_BUNDLE_IDENTITY_REPLAY_INTERVAL_MS` on the backend to continue those pages. Startup bundle applies instead drain only the new apply run before readiness, within a 100-page/500-identity-per-page budget. The worker leases each task, cancels stale queued work when a newer bundle supersedes the same provider, and retries transient failures with capped exponential backoff. Inspect continuation state from the apply-run details in Platform Settings or `GET /api/authz/config-bundles/runs/{id}/identity-replay-tasks`.
 
 Dispatch `preview` first against an immutable reviewed commit SHA, inspect the uploaded JSON receipt, then dispatch `apply` for that same SHA. The workflow requires the literal `APPLY` confirmation and serializes runs per environment. It is intentionally not triggered by pull requests and never uses a repository-wide human credential.
 

@@ -50,4 +50,47 @@ describe('configBundleIdentityReplayTaskService', () => {
     await expect(configBundleIdentityReplayTaskService.runNextPage()).resolves.toMatchObject({ taskId: 'task-2', status: 'queued', failed: 1, truncated: true, nextCursor: 'page-3' });
     expect(update).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'task-2' }), expect.objectContaining({ status: 'queued', attempts: 2, lastError: 'identity store unavailable' }));
   });
+
+  it('drains only the selected apply run and reports completed continuation work', async () => {
+    find
+      .mockResolvedValueOnce([{
+        id: 'task-3', tenantId: null, applyRunId: 'run-3', providerId: 'provider-3', status: 'queued', cursor: 'page-2',
+        attempts: 0, scanned: 10, created: 1, removed: 0, failed: 0,
+      }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        id: 'task-3', tenantId: null, applyRunId: 'run-3', providerId: 'provider-3', status: 'completed', cursor: null,
+        attempts: 0, scanned: 15, created: 2, removed: 0, failed: 0,
+      }]);
+    replayMemberships.mockResolvedValueOnce({ scanned: 5, created: 1, removed: 0, failed: 0, truncated: false, nextCursor: null });
+
+    await expect(configBundleIdentityReplayTaskService.drainApplyRun({ applyRunId: 'run-3', maxPages: 5, pageLimit: 100 })).resolves.toEqual({
+      status: 'completed', pagesProcessed: 1, taskCount: 1, activeTaskCount: 0, failedTaskCount: 0,
+    });
+    expect(find).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: expect.arrayContaining([expect.objectContaining({ applyRunId: 'run-3', status: 'queued' })]),
+    }));
+    expect(find).toHaveBeenLastCalledWith({ where: { applyRunId: 'run-3' }, order: { createdAt: 'ASC' } });
+  });
+
+  it('reports pending when selected apply-run tasks are not currently eligible for retry', async () => {
+    find
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        id: 'task-4', tenantId: 'tenant-a', applyRunId: 'run-4', providerId: 'provider-4', status: 'queued', cursor: 'page-2',
+        attempts: 1, nextAttemptAt: Date.now() + 60_000, scanned: 10, created: 0, removed: 0, failed: 0,
+      }]);
+
+    await expect(configBundleIdentityReplayTaskService.drainApplyRun({ applyRunId: 'run-4' })).resolves.toEqual({
+      status: 'pending', pagesProcessed: 0, taskCount: 1, activeTaskCount: 1, failedTaskCount: 0,
+    });
+  });
+
+  it('fails closed when a truncated apply has no persisted continuation task', async () => {
+    find.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    await expect(configBundleIdentityReplayTaskService.drainApplyRun({ applyRunId: 'run-missing' })).resolves.toEqual({
+      status: 'failed', pagesProcessed: 0, taskCount: 0, activeTaskCount: 0, failedTaskCount: 0,
+    });
+  });
 });

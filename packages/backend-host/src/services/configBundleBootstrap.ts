@@ -3,6 +3,7 @@ import { configBundlePreviewService } from '@enterpriseglue/shared/services/plat
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
+import { configBundleIdentityReplayTaskService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js';
 import { readConfigBundleFile } from './configBundleFileIngress.js';
 
 export type ConfigBootstrapStatus = {
@@ -52,13 +53,27 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
         expectedTenantScope: config.configExpectedTenantScope,
         actorId: 'system:config-bootstrap',
       }, settings);
-      if (result.reconciliation?.identitySnapshot?.status === 'truncated') {
+      const identityStatus = result.reconciliation?.identitySnapshot?.status;
+      if (identityStatus === 'failed') {
+        throw new Error('Configuration bundle identity reconciliation failed');
+      }
+      if (identityStatus === 'truncated') {
         status = { ...status, reconciliation: 'pending' };
+        if (!result.applyRunId) throw new Error('Configuration bundle identity reconciliation continuation was not persisted');
+        const drain = await configBundleIdentityReplayTaskService.drainApplyRun({
+          applyRunId: result.applyRunId,
+          maxPages: 100,
+          pageLimit: 500,
+        });
+        if (drain.status !== 'completed') {
+          throw new Error(`Configuration bundle identity reconciliation remains ${drain.status} after bounded startup processing`);
+        }
+        status = { ...status, reconciliation: 'completed' };
       }
     }
     status = { mode, status: mode === 'apply' ? 'applied' : 'validated', hash, message: null, reconciliation: mode === 'apply' && status.reconciliation !== 'pending' ? 'completed' : status.reconciliation, secretPreflight };
   } catch (error) {
-    status = { mode, status: 'failed', hash: status.hash, message: error instanceof Error ? error.message : String(error), reconciliation: 'not_run', secretPreflight };
+    status = { mode, status: 'failed', hash: status.hash, message: error instanceof Error ? error.message : String(error), reconciliation: status.reconciliation, secretPreflight };
     throw error;
   }
   return getConfigBootstrapStatus();

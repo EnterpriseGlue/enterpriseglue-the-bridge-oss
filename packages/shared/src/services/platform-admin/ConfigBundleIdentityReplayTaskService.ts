@@ -31,6 +31,14 @@ export interface ConfigBundleIdentityReplayTaskResult {
   nextCursor: string | null;
 }
 
+export interface DrainConfigBundleIdentityReplayResult {
+  status: 'completed' | 'pending' | 'failed';
+  pagesProcessed: number;
+  taskCount: number;
+  activeTaskCount: number;
+  failedTaskCount: number;
+}
+
 function normalizePageLimit(value?: number): number {
   return Math.min(Math.max(value ?? DEFAULT_PAGE_LIMIT, 1), MAX_PAGE_LIMIT);
 }
@@ -99,21 +107,22 @@ class ConfigBundleIdentityReplayTaskService {
     });
   }
 
-  async runNextPage(options: { pageLimit?: number; leaseMs?: number } = {}): Promise<ConfigBundleIdentityReplayTaskResult | null> {
+  async runNextPage(options: { pageLimit?: number; leaseMs?: number; applyRunId?: string } = {}): Promise<ConfigBundleIdentityReplayTaskResult | null> {
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(ConfigBundleIdentityReplayTask);
     const now = Date.now();
     const pageLimit = normalizePageLimit(options.pageLimit);
     const leaseMs = Math.max(options.leaseMs ?? DEFAULT_LEASE_MS, 1_000);
 
-    await repo.update({ status: 'running', leaseExpiresAt: LessThanOrEqual(now) }, {
+    const applyRunFilter = options.applyRunId ? { applyRunId: options.applyRunId } : {};
+    await repo.update({ ...applyRunFilter, status: 'running', leaseExpiresAt: LessThanOrEqual(now) }, {
       status: 'queued', leaseId: null, leaseExpiresAt: null, updatedAt: now,
     });
 
     const candidates = await repo.find({
       where: [
-        { status: 'queued', nextAttemptAt: IsNull() },
-        { status: 'queued', nextAttemptAt: LessThanOrEqual(now) },
+        { ...applyRunFilter, status: 'queued', nextAttemptAt: IsNull() },
+        { ...applyRunFilter, status: 'queued', nextAttemptAt: LessThanOrEqual(now) },
       ],
       order: { createdAt: 'ASC' },
       take: 10,
@@ -180,6 +189,30 @@ class ConfigBundleIdentityReplayTaskService {
       results.push(result);
     }
     return results;
+  }
+
+  async drainApplyRun(options: { applyRunId: string; maxPages?: number; pageLimit?: number }): Promise<DrainConfigBundleIdentityReplayResult> {
+    const applyRunId = options.applyRunId.trim();
+    if (!applyRunId) return { status: 'failed', pagesProcessed: 0, taskCount: 0, activeTaskCount: 0, failedTaskCount: 1 };
+    const maxPages = Math.min(Math.max(options.maxPages ?? 100, 1), 1000);
+    let pagesProcessed = 0;
+    for (; pagesProcessed < maxPages; pagesProcessed += 1) {
+      const result = await this.runNextPage({ applyRunId, pageLimit: options.pageLimit });
+      if (!result) break;
+    }
+    const tasks = await (await getDataSource()).getRepository(ConfigBundleIdentityReplayTask).find({
+      where: { applyRunId },
+      order: { createdAt: 'ASC' },
+    });
+    const activeTaskCount = tasks.filter((task) => ACTIVE_STATUSES.includes(task.status)).length;
+    const failedTaskCount = tasks.filter((task) => task.status === 'cancelled' || task.failed > 0).length;
+    return {
+      status: tasks.length === 0 || failedTaskCount > 0 ? 'failed' : activeTaskCount > 0 ? 'pending' : 'completed',
+      pagesProcessed,
+      taskCount: tasks.length,
+      activeTaskCount,
+      failedTaskCount,
+    };
   }
 }
 
