@@ -35,7 +35,6 @@ import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/componen
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { apiClient } from '../../../shared/api/client';
 import { UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
-import { getPermissionRiskForKey } from '../../../shared/auth/permissionRisk';
 import { usePlatformSyncSettings } from '../hooks/usePlatformSyncSettings';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import {
@@ -65,10 +64,16 @@ import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './acc
 import { PermissionsTable } from './access-control/PermissionsTable';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
-import { groupPermissionsForRoleMatrix } from './access-control/rolePermissionPresentation';
+import {
+  filterPermissions,
+  getPermissionImplications,
+  getPermissionRisk,
+  groupPermissionsForRoleMatrix,
+} from './access-control/rolePermissionPresentation';
 import { RolesTable } from './access-control/RolesTable';
 import { ROLE_SCOPE_FILTERS, type RoleScopeFilter } from './access-control/roleScopePresentation';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
+export { filterPermissions, getPermissionImplications, getPermissionRisk } from './access-control/rolePermissionPresentation';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
   formatSsoSyncCounts as presentSsoSyncCounts,
@@ -297,8 +302,6 @@ const SYNC_MODES = [
 function unavailableReason(decision: UiAuthzDecision, fallback: string): string | undefined {
   return decision.allowed ? undefined : decision.reason || fallback;
 }
-
-export type PermissionQuickFilter = 'all' | 'view' | 'editor' | 'operator' | 'deployment';
 
 const ssoAssignmentHeaders = [
   { key: 'claim', header: 'Claim' },
@@ -1723,56 +1726,6 @@ export function filterRoles(roles: RoleSummary[], searchQuery: string, scopeFilt
 
     return matchesScope && (!query || searchable.includes(query));
   });
-}
-
-export function getPermissionRisk(permission: PermissionCatalogEntry) {
-  return getPermissionRiskForKey(permission.key);
-}
-
-export function getPermissionImplications(permission: PermissionCatalogEntry) {
-  const key = permission.key;
-  const implications: string[] = [];
-
-  if (key.startsWith('project:files:') && key !== 'project:files:view') {
-    implications.push('project:files:view');
-  }
-  if (key.startsWith('project:members:') && key !== 'project:members:view') {
-    implications.push('project:members:view');
-  }
-  if (key === 'project:versions:create' || key === 'project:versions:restore') {
-    implications.push('project:files:view');
-  }
-  if (key.startsWith('engine:members:') && key !== 'engine:members:view') {
-    implications.push('engine:members:view');
-  }
-  if (key.startsWith('engine:instance:') && key !== 'engine:instance:view') {
-    implications.push('engine:instance:view');
-  }
-  if (key.startsWith('engine:process:')) {
-    implications.push('engine:instance:view');
-  }
-  if (key === 'engine:deploy') {
-    implications.push('engine:deploy:view');
-  }
-
-  return Array.from(new Set(implications));
-}
-
-function permissionMatchesQuickFilter(permission: PermissionCatalogEntry, filter: PermissionQuickFilter) {
-  const key = permission.key;
-  if (filter === 'all') return true;
-  if (filter === 'view') return key.endsWith(':view') || key.includes(':view') || key === 'platform:audit:view';
-  if (filter === 'editor') {
-    return key.includes(':create') || key.includes(':edit') || key.includes(':update') || key.includes(':restore') || key.includes(':push') || key.includes(':pull') || key.includes(':connect');
-  }
-  if (filter === 'operator') {
-    return key.startsWith('engine:process:') || key.startsWith('engine:instance:') || key === 'engine:activate' || key === 'engine:variables:edit';
-  }
-  return key.includes(':deploy') || key === 'project:deploy' || key === 'engine:deploy' || key === 'engine:deploy:view';
-}
-
-export function filterPermissions(permissions: PermissionCatalogEntry[], quickFilter: PermissionQuickFilter) {
-  return permissions.filter((permission) => permissionMatchesQuickFilter(permission, quickFilter));
 }
 
 export function getSsoAssignmentMappingWarning(mapping: SsoAssignmentMapping, externalEngines: ExternalEngineRegistration[]) {
