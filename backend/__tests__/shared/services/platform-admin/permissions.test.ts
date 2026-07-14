@@ -4,6 +4,7 @@ import {
   EngineRolePermissions,
   ExternalEngineSystemPermissions,
   PermissionCatalog,
+  type PermissionContext,
   PlatformPermissions,
   ProjectRolePermissions,
   ProjectPermissions,
@@ -97,11 +98,57 @@ describe('permissionService', () => {
       },
     });
 
-    const result = await permissionService.hasPermission(PlatformPermissions.USER_VIEW, {
+    const legacyContext: PermissionContext & { platformRole: string } = {
       userId: 'user-1',
       platformRole: 'admin',
-    });
+    };
+    const result = await permissionService.hasPermission(PlatformPermissions.USER_VIEW, legacyContext);
     expect(result).toBe(false);
+  });
+
+  it('ignores legacy member rows and owner/delegate metadata without canonical assignments', async () => {
+    const emptyQb = {
+      select: vi.fn().mockReturnThis(),
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([]),
+      getOne: vi.fn().mockResolvedValue(null),
+    };
+    const groupMembership = createGroupMembershipRepo();
+    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', ownerId: 'user-1' }) };
+    const projectMemberRepo = { find: vi.fn().mockResolvedValue([{ projectId: 'project-1', userId: 'user-1', role: 'owner' }]) };
+    const projectMemberRoleRepo = { find: vi.fn().mockResolvedValue([{ projectId: 'project-1', userId: 'user-1', role: 'delegate' }]) };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', ownerId: 'user-1', delegateId: 'user-1' }) };
+    const engineMemberRepo = { find: vi.fn().mockResolvedValue([{ engineId: 'engine-1', userId: 'user-1', role: 'owner' }]) };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroupMembership) return groupMembership.repo;
+        if (entity === RbacRoleAssignment || entity === PermissionGrant) return { createQueryBuilder: vi.fn().mockReturnValue(emptyQb) };
+        if (entity === Project) return projectRepo;
+        if (entity === ProjectMember) return projectMemberRepo;
+        if (entity === ProjectMemberRole) return projectMemberRoleRepo;
+        if (entity === Engine) return engineRepo;
+        if (entity === EngineMember) return engineMemberRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(permissionService.evaluatePermission(ProjectPermissions.PROJECT_SETTINGS, {
+      userId: 'user-1', resourceType: 'project', resourceId: 'project-1',
+    })).resolves.toEqual({ allowed: false, reason: 'no-permission', sources: [] });
+    await expect(permissionService.evaluatePermission(EnginePermissions.ENGINE_EDIT, {
+      userId: 'user-1', resourceType: 'engine', resourceId: 'engine-1',
+    })).resolves.toEqual({ allowed: false, reason: 'no-permission', sources: [] });
+    await expect(permissionService.getKnownProjectIdsForUser('user-1')).resolves.toEqual([]);
+    await expect(permissionService.getKnownEngineIdsForUser('user-1')).resolves.toEqual([]);
+
+    expect(projectRepo.findOne).not.toHaveBeenCalled();
+    expect(projectMemberRepo.find).not.toHaveBeenCalled();
+    expect(projectMemberRoleRepo.find).not.toHaveBeenCalled();
+    expect(engineRepo.findOne).not.toHaveBeenCalled();
+    expect(engineMemberRepo.find).not.toHaveBeenCalled();
   });
 
   it('checks explicit grants when roles do not match', async () => {
