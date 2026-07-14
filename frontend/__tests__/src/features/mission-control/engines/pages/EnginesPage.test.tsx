@@ -21,6 +21,7 @@ import EnginesPage, {
   formatProjectEngineTargetStatus,
   formatEngineRegistrationSource,
   formatEngineRegistrationStatus,
+  formatEngineAuthentication,
   formatEngineTimestamp,
   getEngineActionPermissions,
   getEngineDeleteUnavailableReason,
@@ -190,6 +191,8 @@ describe('EnginesPage', () => {
           baseUrl: 'https://engine.example.com',
           type: 'operaton',
           registrationSource: 'external_api',
+          connectionMode: 'customer_sidecar',
+          authType: 'none',
           externalSystemId: 'system-1',
           externalId: 'fleet/prod',
           managementMode: 'hybrid',
@@ -341,6 +344,8 @@ describe('EnginesPage', () => {
 
     expect(await screen.findByText('Engine details')).toBeInTheDocument();
     expect(screen.getByText('Registration')).toBeInTheDocument();
+    expect(screen.getByText('Customer sidecar')).toBeInTheDocument();
+    expect(screen.getByText('Customer-managed engine authentication')).toBeInTheDocument();
     expect(screen.getAllByText('External API').length).toBeGreaterThan(0);
     expect(screen.getByText('fleet/prod')).toBeInTheDocument();
     expect(screen.getByText('Manual Override')).toBeInTheDocument();
@@ -372,6 +377,12 @@ describe('EnginesPage', () => {
     expect(screen.getByText('Legacy')).toBeInTheDocument();
     expect(screen.getByText('Production')).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toBeDisabled();
+  });
+
+  it('uses explicit endpoint-authentication copy for direct and sidecar engines', () => {
+    expect(formatEngineAuthentication({ connectionMode: 'customer_sidecar', authType: 'none' })).toBe('Customer-managed engine authentication');
+    expect(formatEngineAuthentication({ connectionMode: 'direct', authType: 'none' })).toBe('No EnterpriseGlue-managed credentials');
+    expect(formatEngineAuthentication({ connectionMode: 'direct', authType: 'oauth2-client-credentials' })).toBe('EnterpriseGlue-managed OAuth2 client credentials');
   });
 
   it('hides engine detail sections when scoped section permissions are missing', async () => {

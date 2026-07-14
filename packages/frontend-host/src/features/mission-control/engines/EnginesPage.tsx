@@ -551,6 +551,15 @@ function isManualEngineOnboardingAllowed(mode: EngineOnboardingMode | undefined)
   return (mode || 'manual_allowed') !== 'external_only'
 }
 
+export function formatEngineAuthentication(engine: { connectionMode?: string | null; authType?: string | null } | null | undefined): string {
+  if (engine?.connectionMode === 'customer_sidecar') return 'Customer-managed engine authentication'
+  if (engine?.authType === 'none') return 'No EnterpriseGlue-managed credentials'
+  if (engine?.authType === 'basic') return 'EnterpriseGlue-managed basic authentication'
+  if (engine?.authType === 'bearer') return 'EnterpriseGlue-managed bearer token'
+  if (engine?.authType === 'oauth2-client-credentials') return 'EnterpriseGlue-managed OAuth2 client credentials'
+  return 'EnterpriseGlue-managed authentication'
+}
+
 const ENGINE_SECRET_FORM_FIELDS = [
   'authType',
   'username',
@@ -1018,6 +1027,8 @@ function EngineRegistrationSection({ engine }: { engine: any }) {
         <EngineRegistrationDetail label="Last configuration apply" value={formatEngineTimestamp(engine.lastAppliedAt)} />
         <EngineRegistrationDetail label="Management mode" value={formatEngineRegistrationStatus(engine.managementMode)} tagValue={engine.managementMode || undefined} />
         <EngineRegistrationDetail label="Runtime access" value={engine.runtimeAccessScope === 'resource_aware' ? 'Resource-aware (central)' : 'Engine-wide (distributed)'} />
+        <EngineRegistrationDetail label="Connection mode" value={engine.connectionMode === 'customer_sidecar' ? 'Customer sidecar' : 'Direct'} />
+        <EngineRegistrationDetail label="Endpoint authentication" value={formatEngineAuthentication(engine)} />
         <EngineRegistrationDetail label="Deployment integration" value={engine.deploymentIntegration === 'direct_engine' ? 'Direct engine deployment' : 'EnterpriseGlue proxy'} />
         <EngineRegistrationDetail label="Metadata discovery" value={engine.metadataDiscoveryEnabled === false ? 'Disabled' : 'Enabled'} />
         <EngineRegistrationDetail label="Pipeline receipts" value={engine.pipelineReceiptEnabled === false ? 'Disabled' : 'Enabled'} />
@@ -1133,7 +1144,7 @@ export default function Engines() {
     { id: 'camunda7', label: ENGINE_TYPE_LABELS.camunda7 },
   ]), [])
   const AUTH_ITEMS = React.useMemo(() => ([
-    { id: 'none', label: 'None' },
+    { id: 'none', label: 'No EnterpriseGlue-managed credentials' },
     { id: 'basic', label: 'Basic Auth (Username/Password)' },
     { id: 'bearer', label: 'Bearer Token' },
     { id: 'oauth2-client-credentials', label: 'OAuth2 Client Credentials' },
