@@ -2295,7 +2295,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Accept idempotent pipeline receipts and upgrade discovered lineage to reported lineage when references validate.
 - [ ] ⬜ Persist process key, decision key, version, runtime tenant id, deployment id, and source observation for every discovered artifact.
 - [ ] ⬜ Ensure runtime resource set materialization refreshes after deployment lineage, engine label, runtime tenant, or selector changes.
-- [ ] ⬜ Ensure deployment dropdown uses project-engine targets plus project and engine evaluator checks.
+- [x] ✅ Ensure deployment dropdown uses project-engine targets plus project and engine evaluator checks. Starbase engine-access responses include composite manual/CI eligibility, and the deploy dialog filters or disables denied engines with Effective Access diagnostics.
 - [x] ✅ Ensure Mission Control collections with process- or decision-definition lineage filter by engine runtime resource authorization for central shared engines. Messages, signals, and metrics remain engine-wide-only and therefore fail closed for resource-only grants.
 - [x] ✅ Filter Mission Control process-definition and decision-definition collections through a bounded runtime-inventory guard for `resource_aware` engines; broad engine grants keep the existing fast path. Route coverage proves the restricted path excludes unauthorized process and decision keys.
 - [x] ✅ Resolve process/decision definition detail, XML, process definition activity counts, process-definition key resolution, and decision evaluation by id or key live from the engine before evaluating an exact runtime-resource inventory entry. Client-supplied definition ids or keys are never treated as authorization keys. Instance, history, batch, migration, and dashboard filtering remain pending.
@@ -2408,7 +2408,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Distributed-engine tests proving `engine_wide` remains the default and does not require runtime-resource materialization.
 - [ ] ⬜ Direct deployment tests proving discovery is idempotent, receipts enrich lineage, nullable project lineage is handled, and bridge links require verified lineage.
 - [x] ✅ Bridge lookup and route tests prove `file-key-match` and inferred/unverified lineage never authorize Mission Control-Starbase navigation. The edit-target API now requires a deployment artifact with project/file lineage.
-- [ ] ⬜ Deployment dropdown tests proving project target and engine permission filtering.
+- [x] ✅ Deployment dropdown tests prove project-target mode, project permission, engine permission, direct-engine transport, and manual/CI eligibility filtering.
 - [ ] ⬜ UI tests for preview, apply, badges, and config-owned read-only fields.
 - [ ] ⬜ Role editor tests for search, category selection, sensitive acknowledgement, unsaved changes, system-role duplication, config ownership, and no horizontal page overflow at supported widths.
 - [ ] ⬜ OpenAPI and route inventory guard tests.
