@@ -160,6 +160,29 @@ describe('mission-control batches routes', () => {
     expect(response.body.map((batch: { id: string }) => batch.id)).toEqual(['batch-payments']);
   });
 
+  it('bounds and pages batch records after resource-aware filtering', async () => {
+    batchRepo.find.mockResolvedValue(Array.from({ length: 102 }, (_, index) => ({
+      id: `batch-${index}`, engineId: 'engine-1', createdAt: 1000 - index,
+      metadata: JSON.stringify({ authz: { processDefinitionKeys: ['payments'] } }),
+    })));
+
+    const response = await request(app)
+      .get('/mission-control-api/batches')
+      .query({ engineId: 'engine-1', firstResult: 1, maxResults: 2 });
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((batch: { id: string }) => batch.id)).toEqual(['batch-1', 'batch-2']);
+  });
+
+  it('rejects an unsafe batch page size', async () => {
+    const response = await request(app)
+      .get('/mission-control-api/batches')
+      .query({ engineId: 'engine-1', maxResults: 101 });
+
+    expect(response.status).toBe(403);
+    expect(batchRepo.find).toHaveBeenCalled();
+  });
+
   it('keeps audit reasons locally without forwarding them to engine batch APIs', async () => {
     await request(app)
       .post('/mission-control-api/batches/process-instances/delete')

@@ -19,6 +19,7 @@ import { markBatchPollerViewer } from '../../../poller/batchPoller.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Batch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Batch.js'
+import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
 
 const r = Router()
 
@@ -154,9 +155,17 @@ r.get('/mission-control-api/batches', requireRuntimeCollectionAction('engine.run
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string
   const rows = await batchRepo.find({ where: { engineId } })
+  const firstResult = typeof req.query.firstResult === 'string' && /^\d+$/.test(req.query.firstResult)
+    ? Number(req.query.firstResult)
+    : req.query.firstResult
+  if (firstResult !== undefined && (typeof firstResult !== 'number' || !Number.isInteger(firstResult) || firstResult < 0)) {
+    throw Errors.validation('firstResult must be a non-negative integer')
+  }
+  const { maxResults } = getBoundedRuntimeResourceQuery({ maxResults: req.query.maxResults })
   const sorted = rows
     .filter((row: Batch) => !req.authorizedRuntimeResourceKeys || batchRuntimeResourceKeys(row).some((key) => req.authorizedRuntimeResourceKeys!.includes(key)))
     .sort((a: any, b: any) => b.createdAt - a.createdAt)
+    .slice(firstResult || 0, (firstResult || 0) + maxResults)
   const withSuspended = sorted.map((row: any) => {
     let suspended: boolean | undefined
     if (typeof row?.metadata === 'string' && row.metadata.trim()) {
