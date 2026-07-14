@@ -59,6 +59,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'GET', route: '/api/authz/config-bundles/runs', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/authz/config-bundles/runs/{id}', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/authz/config-bundles/runs/{id}/identity-replay-tasks', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/api/authz/config-bundles/runs/{id}/runtime-reconciliation-tasks', resourceResolver: 'platform.self' },
       ],
     },
   {

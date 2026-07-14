@@ -21,6 +21,11 @@ export type ProcessInstance = {
   endTime?: string | null
   state?: string
   hasIncident?: boolean
+  runtimeActionDecisions?: {
+    suspension: { allowed: boolean; reason?: string }
+    retry: { allowed: boolean; reason?: string }
+    terminate: { allowed: boolean; reason?: string }
+  }
 }
 
 export type ActivityCountsByState = {
@@ -101,6 +106,7 @@ export interface GetProcessInstancesParams {
   activityId?: string
   startedAfter?: string
   startedBefore?: string
+  includeActionDecisions?: boolean
 }
 
 export async function listProcessInstances(params: GetProcessInstancesParams): Promise<ProcessInstance[]> {
@@ -116,6 +122,7 @@ export async function listProcessInstances(params: GetProcessInstancesParams): P
   if (params.activityId) searchParams.set('activityId', params.activityId)
   if (params.startedAfter) searchParams.set('startedAfter', params.startedAfter)
   if (params.startedBefore) searchParams.set('startedBefore', params.startedBefore)
+  if (params.includeActionDecisions) searchParams.set('includeActionDecisions', 'true')
   return apiClient.get<ProcessInstance[]>(`/mission-control-api/process-instances?${searchParams.toString()}`, undefined, { credentials: 'include' })
 }
 

@@ -29,6 +29,11 @@ type ProcInst = {
   endTime?: string | null
   state?: string
   hasIncident?: boolean
+  runtimeActionDecisions?: {
+    suspension?: { allowed: boolean; reason?: string }
+    retry?: { allowed: boolean; reason?: string }
+    terminate?: { allowed: boolean; reason?: string }
+  }
 }
 
 interface ProcessesDataTableProps {
@@ -315,6 +320,15 @@ export function ProcessesDataTable({
         const isRetrying = !!retryingMap[inst.id]
         const anySelected = Object.values(selectedMap).some(Boolean)
         const rowDisabled = anySelected || isRetrying
+        const retryRowReason = inst.runtimeActionDecisions?.retry && !inst.runtimeActionDecisions.retry.allowed
+          ? inst.runtimeActionDecisions.retry.reason || 'Action unavailable'
+          : retryDeniedReason
+        const suspensionRowReason = inst.runtimeActionDecisions?.suspension && !inst.runtimeActionDecisions.suspension.allowed
+          ? inst.runtimeActionDecisions.suspension.reason || 'Action unavailable'
+          : suspensionDeniedReason
+        const terminateRowReason = inst.runtimeActionDecisions?.terminate && !inst.runtimeActionDecisions.terminate.allowed
+          ? inst.runtimeActionDecisions.terminate.reason || 'Action unavailable'
+          : terminateDeniedReason
 
         return (
           <div
@@ -335,8 +349,8 @@ export function ProcessesDataTable({
                   hasIconOnly
                   size="sm"
                   kind="ghost"
-                  disabled={!!retryDeniedReason}
-                  title={retryDeniedReason || undefined}
+                  disabled={!!retryRowReason}
+                  title={retryRowReason || undefined}
                   renderIcon={Renew}
                   iconDescription="Retry"
                   onClick={() => onRetry(inst.id)}
@@ -352,8 +366,8 @@ export function ProcessesDataTable({
                     hasIconOnly
                     size="sm"
                     kind="ghost"
-                    disabled={!!suspensionDeniedReason}
-                    title={suspensionDeniedReason || undefined}
+                    disabled={!!suspensionRowReason}
+                    title={suspensionRowReason || undefined}
                     renderIcon={Play}
                     iconDescription="Activate"
                     onClick={() => onActivate(inst.id)}
@@ -364,8 +378,8 @@ export function ProcessesDataTable({
                     hasIconOnly
                     size="sm"
                     kind="ghost"
-                    disabled={!!suspensionDeniedReason}
-                    title={suspensionDeniedReason || undefined}
+                    disabled={!!suspensionRowReason}
+                    title={suspensionRowReason || undefined}
                     renderIcon={Pause}
                     iconDescription="Suspend"
                     onClick={() => onSuspend(inst.id)}
@@ -380,8 +394,8 @@ export function ProcessesDataTable({
                   hasIconOnly
                   size="sm"
                   kind="danger--ghost"
-                  disabled={!!terminateDeniedReason}
-                  title={terminateDeniedReason || undefined}
+                  disabled={!!terminateRowReason}
+                  title={terminateRowReason || undefined}
                   renderIcon={TrashCan}
                   iconDescription="Cancel"
                   onClick={() => onTerminate(inst.id)}

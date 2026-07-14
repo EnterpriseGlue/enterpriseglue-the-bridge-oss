@@ -229,6 +229,7 @@ export function useProcessesData({
         activityId: flowNode || undefined,
         startedAfter: startedAfter || undefined,
         startedBefore: startedBefore || undefined,
+        includeActionDecisions: true,
       })
     },
     enabled: processInstancesEnabled && !!selectedEngineId && (!selectedVersion || !!defIdForVersion),

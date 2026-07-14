@@ -203,6 +203,44 @@ describe('mission-control process-instances routes', () => {
     }));
   });
 
+  it('adds sanitized action decisions only when requested for visible runtime rows', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockImplementation(async ({ permission }: { permission: string }) => {
+      if (permission === 'engine:instance:delete') return [];
+      return [{ resourceKey: 'payments' }];
+    });
+    (listProcessInstances as unknown as Mock).mockResolvedValueOnce([
+      { id: 'instance-payments', processDefinitionKey: 'payments' },
+    ]);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances')
+      .query({ engineId: 'engine-1', includeActionDecisions: 'true' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      {
+        id: 'instance-payments',
+        processDefinitionKey: 'payments',
+        runtimeActionDecisions: {
+          suspension: { allowed: true },
+          retry: { allowed: true },
+          terminate: { allowed: false, reason: 'Action unavailable for this runtime resource' },
+        },
+      },
+    ]);
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
+      permission: 'engine:process:modify',
+      resourceKind: 'process_definition',
+      limit: 5_000,
+    }));
+  });
+
   it('drops process instances outside the authorized definition key even when the engine ignores the query filter', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine

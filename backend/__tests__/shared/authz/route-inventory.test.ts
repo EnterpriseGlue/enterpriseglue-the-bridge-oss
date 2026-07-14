@@ -205,7 +205,7 @@ describe('authorization route inventory validation', () => {
     const expectedActions = [
       {
         actionId: 'platform.config-bundles.view', permissionId: 'platform:config-bundles:view', operation: 'read', risk: 'low', audit: false,
-        routes: [['GET', '/api/authz/config-bundles/runs'], ['GET', '/api/authz/config-bundles/runs/{id}'], ['GET', '/api/authz/config-bundles/runs/{id}/identity-replay-tasks']],
+        routes: [['GET', '/api/authz/config-bundles/runs'], ['GET', '/api/authz/config-bundles/runs/{id}'], ['GET', '/api/authz/config-bundles/runs/{id}/identity-replay-tasks'], ['GET', '/api/authz/config-bundles/runs/{id}/runtime-reconciliation-tasks']],
       },
       {
         actionId: 'platform.config-bundles.preview', permissionId: 'platform:config-bundles:preview', operation: 'read', risk: 'medium', audit: true,

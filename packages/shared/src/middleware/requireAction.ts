@@ -149,6 +149,7 @@ declare global {
       authorizedProjectIds?: string[];
       authorizedEngineIds?: string[];
       authorizedRuntimeResourceKeys?: string[];
+      runtimeAccessScope?: 'engine_wide' | 'resource_aware';
     }
   }
 }
@@ -951,6 +952,7 @@ export function requireRuntimeCollectionAction(actionId: string, options: Requir
       req.authzAction = action;
       req.authzResource = { type: 'engine', id: engineId };
       req.authorizedRuntimeResourceKeys = keys;
+      req.runtimeAccessScope = engine.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide';
       (req as Request & { engineId?: string }).engineId = engineId;
       return next();
     } catch (error) { return next(error instanceof Error ? error : Errors.internal('Runtime collection authorization failed')); }

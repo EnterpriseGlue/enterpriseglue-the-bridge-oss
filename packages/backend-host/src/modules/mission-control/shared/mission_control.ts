@@ -31,6 +31,7 @@ import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 import { filterRuntimeItemsByProcessDefinitionKeys, filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery } from './runtime-resource-filter.js'
+import { addRuntimeProcessInstanceActionDecisions } from './runtime-row-action-decisions.js'
 
 // Validation schemas
 const previewCountSchema = z.object({}).passthrough()
@@ -209,7 +210,14 @@ r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('
       )))).flat()
       : await listProcessInstancesDetailed(engineId, query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
-    res.json(redacted)
+    if (req.query.includeActionDecisions !== 'true') return res.json(redacted)
+    res.json(await addRuntimeProcessInstanceActionDecisions({
+      userId: req.user!.userId,
+      tenantId: req.tenant?.tenantId || null,
+      engineId,
+      runtimeAccessScope: (req as Request & { runtimeAccessScope?: 'engine_wide' | 'resource_aware' }).runtimeAccessScope || 'engine_wide',
+      rows: redacted,
+    }))
   } catch (e: any) {
     if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to load process instances')

@@ -13,11 +13,13 @@ import {
   modifyProcessInstanceVariables,
 } from './service.js'
 import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
+import { addRuntimeProcessInstanceActionDecisions } from '../shared/runtime-row-action-decisions.js'
 
 const r = Router()
 
 const processInstanceListQuerySchema = z.object({
   processDefinitionKey: z.string().min(1).optional(),
+  includeActionDecisions: z.enum(['true']).optional(),
   active: z.enum(['true', 'false', '1', '0']).optional(),
   suspended: z.enum(['true', 'false', '1', '0']).optional(),
   maxResults: z.coerce.number().int().positive().optional(),
@@ -56,7 +58,14 @@ r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('
       processDefinitionKey,
       ...baseQuery,
     })
-  res.json(data)
+  if (req.query.includeActionDecisions !== 'true') return res.json(data)
+  res.json(await addRuntimeProcessInstanceActionDecisions({
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    engineId,
+    runtimeAccessScope: (req as Request & { runtimeAccessScope?: 'engine_wide' | 'resource_aware' }).runtimeAccessScope || 'engine_wide',
+    rows: data,
+  }))
 }))
 
 // Get process instance by ID

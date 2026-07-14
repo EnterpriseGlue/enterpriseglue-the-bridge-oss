@@ -673,6 +673,7 @@ registry.registerPath({
       withIncidents: z.string().optional(),
       completed: z.string().optional(),
       canceled: z.string().optional(),
+      includeActionDecisions: z.enum(['true']).optional(),
     }),
   },
   responses: {

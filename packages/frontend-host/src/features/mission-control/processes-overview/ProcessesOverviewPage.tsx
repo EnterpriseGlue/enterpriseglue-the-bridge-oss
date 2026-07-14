@@ -1404,19 +1404,15 @@ export default function ProcessesOverviewPage() {
             <ProcessesDataTable
               data={instQ.data || []}
               onTerminate={(id) => {
-                if (notifyDeniedAction(instanceTerminateDecision)) return
                 terminateModal.openModal(id)
               }}
               onRetry={(id) => {
-                if (notifyDeniedAction(instanceRetryDecision)) return
                 setRetryModalInstanceId(id)
               }}
               onActivate={(id) => {
-                if (notifyDeniedAction(instanceSuspensionDecision)) return Promise.resolve()
                 return callAction('PUT', `/mission-control-api/process-instances/${id}/activate${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => instQ.refetch())
               }}
               onSuspend={(id) => {
-                if (notifyDeniedAction(instanceSuspensionDecision)) return Promise.resolve()
                 return callAction('PUT', `/mission-control-api/process-instances/${id}/suspend${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => instQ.refetch())
               }}
               actionDecisions={{

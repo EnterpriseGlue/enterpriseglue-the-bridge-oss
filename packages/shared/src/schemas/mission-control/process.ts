@@ -16,6 +16,17 @@ export const ProcessDefXmlSchema = z.object({
 });
 
 // Process instance schemas (API-only, no DB persistence)
+export const RuntimeRowActionDecisionSchema = z.object({
+  allowed: z.boolean(),
+  reason: z.string().optional(),
+});
+
+export const ProcessInstanceRuntimeActionDecisionsSchema = z.object({
+  suspension: RuntimeRowActionDecisionSchema,
+  retry: RuntimeRowActionDecisionSchema,
+  terminate: RuntimeRowActionDecisionSchema,
+});
+
 export const ProcessInstanceSchema = z.object({
   id: z.string(),
   processDefinitionKey: z.string().optional(),
@@ -24,6 +35,7 @@ export const ProcessInstanceSchema = z.object({
   startTime: z.string().nullable().optional(),
   endTime: z.string().nullable().optional(),
   state: z.enum(['ACTIVE', 'COMPLETED', 'CANCELED']).optional(),
+  runtimeActionDecisions: ProcessInstanceRuntimeActionDecisionsSchema.optional(),
 });
 
 // Variables schema
