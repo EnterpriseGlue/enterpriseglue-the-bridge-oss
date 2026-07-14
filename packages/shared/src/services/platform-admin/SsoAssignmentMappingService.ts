@@ -982,11 +982,12 @@ class SsoAssignmentMappingServiceClass {
     const fingerprint = selectorFingerprint(selector);
     const selectorJson = stableJson(selector);
     const engineSetRepo = dataSource.getRepository(EngineSet);
-    const existing = await engineSetRepo.findOne({
+    const existingEngineSets = await engineSetRepo.find({
       where: normalizedTenantId
         ? { tenantId: normalizedTenantId, source: 'sso', sourceRef: sourceRefCriteria }
         : { tenantId: IsNull(), source: 'sso', sourceRef: sourceRefCriteria },
     });
+    const existing = existingEngineSets.find((engineSet) => engineSet.sourceRef === sourceRef) || existingEngineSets[0];
     const engineSetId = existing?.id || generateId();
     const key = existing?.key || keyFromMappingId(mapping.id);
     const name = mapping.targetSelectorType === 'all_engines'
@@ -1028,6 +1029,17 @@ class SsoAssignmentMappingServiceClass {
       });
     }
 
+    const duplicateEngineSets = existingEngineSets.filter((engineSet) => engineSet.id !== engineSetId);
+    if (duplicateEngineSets.length > 0) {
+      const duplicateIds = duplicateEngineSets.map((engineSet) => engineSet.id);
+      await engineSetRepo.update({ id: In(duplicateIds) }, {
+        isArchived: true,
+        materializationStatus: 'archived',
+        updatedAt: now,
+      });
+      await dataSource.getRepository(EngineSetMaterialization).delete({ engineSetId: In(duplicateIds) });
+    }
+
     await this.materializeDynamicEngineSet(dataSource, {
       id: engineSetId,
       tenantId: normalizedTenantId,
@@ -1048,18 +1060,19 @@ class SsoAssignmentMappingServiceClass {
     const sourceRef = legacyAssignmentSourceRef(mapping);
     const sourceRefCriteria = assignmentSourceRefCriteria(sourceRef, mapping.id);
     const engineSetRepo = dataSource.getRepository(EngineSet);
-    const engineSet = await engineSetRepo.findOne({
+    const engineSets = await engineSetRepo.find({
       where: normalizedTenantId
         ? { tenantId: normalizedTenantId, source: 'sso', sourceRef: sourceRefCriteria }
         : { source: 'sso', sourceRef: sourceRefCriteria },
     });
-    if (!engineSet) return;
-    await engineSetRepo.update({ id: engineSet.id }, {
+    if (engineSets.length === 0) return;
+    const engineSetIds = engineSets.map((engineSet) => engineSet.id);
+    await engineSetRepo.update({ id: In(engineSetIds) }, {
       isArchived: true,
       materializationStatus: 'archived',
       updatedAt: Date.now(),
     });
-    await dataSource.getRepository(EngineSetMaterialization).delete({ engineSetId: engineSet.id });
+    await dataSource.getRepository(EngineSetMaterialization).delete({ engineSetId: In(engineSetIds) });
   }
 
   private async materializeDynamicEngineSet(

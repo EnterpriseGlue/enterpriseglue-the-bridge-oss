@@ -66,11 +66,13 @@ function queryBuilder(result: unknown) {
 
 function createDynamicEngineSetMocks(input: {
   engineSet?: any;
+  engineSets?: any[];
   engines?: any[];
   registrations?: any[];
   materializations?: any[];
 } = {}) {
-  const engineSetFindOne = vi.fn().mockResolvedValue(input.engineSet ?? null);
+  const engineSets = input.engineSets ?? (input.engineSet ? [input.engineSet] : []);
+  const engineSetFind = vi.fn().mockResolvedValue(engineSets);
   const engineSetInsert = vi.fn().mockResolvedValue(undefined);
   const engineSetUpdate = vi.fn().mockResolvedValue(undefined);
   const engineFind = vi.fn().mockResolvedValue(input.engines ?? []);
@@ -82,7 +84,7 @@ function createDynamicEngineSetMocks(input: {
 
   return {
     getRepository: (entity: unknown) => {
-      if (entity === EngineSet) return { findOne: engineSetFindOne, insert: engineSetInsert, update: engineSetUpdate };
+      if (entity === EngineSet) return { find: engineSetFind, insert: engineSetInsert, update: engineSetUpdate };
       if (entity === Engine) return { find: engineFind };
       if (entity === ExternalEngineRegistration) return { find: registrationFind };
       if (entity === EngineSetMaterialization) return {
@@ -93,7 +95,7 @@ function createDynamicEngineSetMocks(input: {
       };
       return null;
     },
-    engineSetFindOne,
+    engineSetFind,
     engineSetInsert,
     engineSetUpdate,
     engineFind,
@@ -588,7 +590,7 @@ describe('ssoAssignmentMappingService', () => {
         if (entity === SsoAssignmentMapping) return { insert };
         if (entity === Engine) return { findOne: engineFindOne };
         if (entity === EngineSet) return {
-          findOne: vi.fn().mockResolvedValue(null),
+          find: vi.fn().mockResolvedValue([]),
           update: vi.fn().mockResolvedValue(undefined),
         };
         if (entity === AuditLog) return { insert: auditInsert };
