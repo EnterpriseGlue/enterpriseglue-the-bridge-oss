@@ -1862,7 +1862,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Converge platform-role, group, and direct-engine SSO mapping services into group-first identity mappings; UI convenience flows create a managed internal group plus normal scoped assignment.
 - [x] ✅ Add shared runtime inventory, runtime-resource-set materialization, and deployment-receipt services. Runtime authorization filtering and scheduled deployment reconciliation remain pending.
 - [x] ✅ Keep `DeploymentEligibilityService` limited to target, permission, capability, environment, and policy gates. Direct discovery and receipt lineage remain separate services; the deployment-eligibility lane verifies the service and all principal-aware route integrations.
-- [ ] ⬜ Extend permission/effective-access services to resolve engine-wide versus resource-aware runtime scopes and explain broad-grant shadowing.
+- [x] ✅ Extend permission/effective-access services to resolve engine-wide versus resource-aware runtime scopes and explain broad-grant shadowing. Runtime evaluation resolves exact-resource, Runtime Resource Set, Engine Set, and engine-wide sources; when a matching engine-wide assignment makes a narrower runtime assignment redundant, the effective-access source identifies the shadowed assignment ids. Permission and route suites cover the diagnostic contract.
 
 ### Backend Host
 

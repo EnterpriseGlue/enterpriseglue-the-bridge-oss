@@ -896,6 +896,7 @@ export const EffectiveAccessEvaluateResponseSchema = z.object({
       targetGroupId: z.string(),
       syncMode: z.string(),
     }).nullable().optional(),
+    shadowedRuntimeAssignmentIds: z.array(z.string()).optional(),
     permission: z.string().optional(),
   })),
 });

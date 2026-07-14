@@ -10,6 +10,7 @@ import {
   ProjectPermissions,
   SYSTEM_ROLE_IDS,
   SystemRoleDefinitions,
+  annotateRuntimeGrantShadowing,
   permissionService,
 } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { listAuthzActions } from '@enterpriseglue/shared/authz/permission-actions.js';
@@ -72,6 +73,20 @@ function createGroupMembershipRepo(groupIds: string[] = []) {
 }
 
 describe('permissionService', () => {
+  it('labels engine-wide grants that shadow matching narrower runtime grants', () => {
+    const result = annotateRuntimeGrantShadowing([
+      { type: 'role-assignment', assignmentId: 'engine-grant', scopeType: 'engine', scopeId: 'engine-1' },
+      { type: 'role-assignment', assignmentId: 'runtime-grant', scopeType: 'engine_runtime_resource', scopeId: 'runtime-1' },
+      { type: 'role-assignment', assignmentId: 'runtime-set-grant', scopeType: 'engine_runtime_resource_set', scopeId: 'runtime-set-1' },
+    ]);
+
+    expect(result[0]).toMatchObject({
+      assignmentId: 'engine-grant',
+      shadowedRuntimeAssignmentIds: ['runtime-grant', 'runtime-set-grant'],
+    });
+    expect(result[1]).not.toHaveProperty('shadowedRuntimeAssignmentIds');
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

@@ -549,6 +549,7 @@ export interface PermissionEvaluationSource {
     targetGroupId: string;
     syncMode: string;
   } | null;
+  shadowedRuntimeAssignmentIds?: string[];
   permission?: string;
 }
 
@@ -572,6 +573,22 @@ function configBundleLineageForAssignment(assignment: RbacRoleAssignment): Permi
     ownershipMode: assignment.ownershipMode || 'config_locked',
     applyRun: null,
   };
+}
+
+/** Marks broad engine grants that make narrower runtime grants redundant for this evaluation. */
+export function annotateRuntimeGrantShadowing(sources: PermissionEvaluationSource[]): PermissionEvaluationSource[] {
+  const narrowAssignmentIds = sources
+    .filter((source) =>
+      (source.scopeType === 'engine_runtime_resource' || source.scopeType === 'engine_runtime_resource_set') &&
+      Boolean(source.assignmentId)
+    )
+    .map((source) => source.assignmentId as string);
+  if (narrowAssignmentIds.length === 0) return sources;
+  return sources.map((source) =>
+    source.scopeType === 'engine'
+      ? { ...source, shadowedRuntimeAssignmentIds: narrowAssignmentIds }
+      : source
+  );
 }
 
 export interface EffectiveResourcePermissions {
@@ -3246,7 +3263,8 @@ class PermissionServiceClass {
         scopeType: assignment.scopeType as ResourceType | null, scopeId: assignment.scopeId,
         configBundle: configBundleLineageForAssignment(assignment),
       }));
-      const groupLineageSources = await this.attachGroupLineage(dataSource, [...directSources, ...inheritedSources], principal, tenantId);
+      const shadowingSources = annotateRuntimeGrantShadowing([...directSources, ...inheritedSources]);
+      const groupLineageSources = await this.attachGroupLineage(dataSource, shadowingSources, principal, tenantId);
       const ssoLineageSources = await this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
       return this.attachConfigBundleLineage(dataSource, ssoLineageSources, tenantId);
     }
