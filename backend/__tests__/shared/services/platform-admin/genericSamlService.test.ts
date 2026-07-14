@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
+import { MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
 
 const configuration = {
   entityId: 'enterpriseglue-ai',
@@ -12,6 +13,8 @@ const configuration = {
 };
 
 describe('GenericSamlService', () => {
+  afterEach(() => { delete process.env.EG_SAML_PROTOCOL_CERT; });
+
   it('normalizes configured SAML attributes for provider-neutral provisioning and mappings', () => {
     const result = genericSamlService.extractUserClaims(configuration, {
       'urn:example:subject': 'subject-123',
@@ -40,5 +43,52 @@ describe('GenericSamlService', () => {
       'urn:example:subject': 'subject-123',
       'urn:example:email': 'person@example.test',
     })).toThrow('SAML signatureAlgorithm must be sha256 or sha512');
+  });
+
+  it('validates a signed SAML response from the protocol mock', async () => {
+    const provider = new MockSamlIdentityProvider();
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+
+    const profile = await genericSamlService.validatePostResponse({
+      ...configuration,
+      signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
+    }, provider.signedResponse());
+
+    expect(profile).toMatchObject({
+      nameID: 'person@example.test',
+      role: 'operator',
+      'http://schemas.microsoft.com/ws/2008/06/identity/claims/groups': ['payments', 'operations'],
+    });
+  });
+
+  it('rejects a signed SAML assertion modified after signing', async () => {
+    const provider = new MockSamlIdentityProvider();
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+    const tampered = Buffer.from(
+      Buffer.from(provider.signedResponse(), 'base64').toString('utf8').replace('payments', 'administrators'),
+    ).toString('base64');
+
+    await expect(genericSamlService.validatePostResponse({
+      ...configuration,
+      signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
+    }, tampered)).rejects.toThrow(/signature/i);
+  });
+
+  it('requires the configured certificate to rotate with SAML signing material', async () => {
+    const provider = new MockSamlIdentityProvider();
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+    provider.rotateSigningMaterial();
+    const response = provider.signedResponse();
+
+    await expect(genericSamlService.validatePostResponse({
+      ...configuration,
+      signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
+    }, response)).rejects.toThrow(/signature/i);
+
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+    await expect(genericSamlService.validatePostResponse({
+      ...configuration,
+      signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
+    }, response)).resolves.toMatchObject({ nameID: 'person@example.test' });
   });
 });

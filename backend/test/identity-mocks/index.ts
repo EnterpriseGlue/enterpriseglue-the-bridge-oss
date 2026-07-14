@@ -1,6 +1,13 @@
 import { generateKeyPairSync } from 'node:crypto';
+import { createRequire } from 'node:module';
 import jwt from 'jsonwebtoken';
 import type { IdentityProviderAdapter, NormalizedExternalIdentity, ProviderIdentityInput } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
+import { samlSigningMaterials } from './samlSigningMaterial.js';
+
+const require = createRequire(import.meta.url);
+const { signXml } = require('@node-saml/node-saml/lib/xml.js') as {
+  signXml: (xml: string, xpath: string, location: { reference: string; action: 'after' }, options: { privateKey: string; publicCert: string; signatureAlgorithm: 'sha256' }) => string;
+};
 
 export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'wrong_audience' | 'group_overage' | 'expired_token' | 'not_yet_valid_token' | 'missing_subject' | 'timeout';
 
@@ -106,6 +113,11 @@ export class MockOidcProvider {
 }
 
 export class MockSamlIdentityProvider {
+  readonly issuer = 'https://saml-mock.example.test';
+  readonly audience = 'enterpriseglue-ai';
+  readonly callbackUrl = 'https://app.example.test/api/auth/providers/saml/callback';
+  private signingMaterialIndex = 0;
+  private sequence = 0;
   private attributes: Record<string, unknown> = {
     nameID: 'person@example.test',
     'http://schemas.microsoft.com/ws/2008/06/identity/claims/groups': ['payments', 'operations'],
@@ -119,10 +131,45 @@ export class MockSamlIdentityProvider {
   assertion(): Record<string, unknown> {
     return { ...this.attributes };
   }
+
+  certificate(): string {
+    return samlSigningMaterials[this.signingMaterialIndex].certificate;
+  }
+
+  rotateSigningMaterial(): void {
+    this.signingMaterialIndex = (this.signingMaterialIndex + 1) % samlSigningMaterials.length;
+  }
+
+  signedResponse(): string {
+    const material = samlSigningMaterials[this.signingMaterialIndex];
+    const now = new Date();
+    const notBefore = new Date(now.getTime() - 60_000).toISOString();
+    const notOnOrAfter = new Date(now.getTime() + 300_000).toISOString();
+    const issueInstant = now.toISOString();
+    const sequence = ++this.sequence;
+    const nameId = xmlEscape(String(this.attributes.nameID || 'person@example.test'));
+    const attributeXml = Object.entries(this.attributes)
+      .filter(([name]) => name !== 'nameID')
+      .map(([name, value]) => `<saml:Attribute Name="${xmlEscape(name)}">${(Array.isArray(value) ? value : [value]).map((entry) => `<saml:AttributeValue>${xmlEscape(String(entry))}</saml:AttributeValue>`).join('')}</saml:Attribute>`)
+      .join('');
+    const assertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_assertion-${sequence}" Version="2.0" IssueInstant="${issueInstant}"><saml:Issuer>${this.issuer}</saml:Issuer><saml:Subject><saml:NameID>${nameId}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="${this.callbackUrl}" NotOnOrAfter="${notOnOrAfter}"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="${notBefore}" NotOnOrAfter="${notOnOrAfter}"><saml:AudienceRestriction><saml:Audience>${this.audience}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="${issueInstant}" SessionIndex="session-${sequence}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement>${attributeXml}</saml:AttributeStatement></saml:Assertion>`;
+    const signedAssertion = signXml(assertion, "/*[local-name(.)='Assertion']", { reference: "/*[local-name(.)='Assertion']/*[local-name(.)='Issuer']", action: 'after' }, { ...material, publicCert: material.certificate, signatureAlgorithm: 'sha256' });
+    const response = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_response-${sequence}" Version="2.0" IssueInstant="${issueInstant}" Destination="${this.callbackUrl}"><saml:Issuer>${this.issuer}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>${signedAssertion}</samlp:Response>`;
+    const signedResponse = signXml(response, "/*[local-name(.)='Response']", { reference: "/*[local-name(.)='Response']/*[local-name(.)='Issuer']", action: 'after' }, { ...material, publicCert: material.certificate, signatureAlgorithm: 'sha256' });
+    return Buffer.from(signedResponse).toString('base64');
+  }
+}
+
+function xmlEscape(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
 export class MockLdapDirectory {
+  readonly url = 'ldaps://directory-mock.example.test:636';
+  readonly bindDn = 'cn=service,dc=example,dc=test';
+  readonly bindPassword = 'service-password';
   private readonly users = new Map<string, { password: string; subjectId: string; memberOf: string[] }>();
+  private failureMode: 'none' | 'tls_failure' | 'timeout' | 'search_failure' | 'malformed' = 'none';
 
   constructor() {
     this.setUser('person@example.test', {
@@ -139,10 +186,40 @@ export class MockLdapDirectory {
     this.users.delete(username);
   }
 
+  setFailureMode(mode: typeof this.failureMode): void {
+    this.failureMode = mode;
+  }
+
   bind(username: string, password: string): { subjectId: string; memberOf: string[] } {
     const user = this.users.get(username);
     if (!user || user.password !== password) throw new Error('LDAP invalid credentials');
     return { subjectId: user.subjectId, memberOf: [...user.memberOf] };
+  }
+
+  client(url: string) {
+    if (!url.startsWith('ldaps://')) throw new Error('LDAP mock requires TLS');
+    if (this.failureMode === 'tls_failure') throw new Error('LDAP TLS certificate verification failed');
+    let selectedUser: { username: string; password: string; subjectId: string; memberOf: string[] } | null = null;
+    return {
+      bind: async (dn: string, password: string) => {
+        if (this.failureMode === 'timeout') throw new Error('LDAP bind timed out');
+        if (dn === this.bindDn && password === this.bindPassword) return;
+        selectedUser = [...this.users.entries()]
+          .map(([username, user]) => ({ username, ...user }))
+          .find((user) => user.subjectId === dn) || null;
+        if (!selectedUser || selectedUser.password !== password) throw new Error('LDAP invalid credentials');
+      },
+      search: async (_baseDn: string, options: { filter: string }) => {
+        if (this.failureMode === 'timeout') throw new Error('LDAP search timed out');
+        if (this.failureMode === 'search_failure') throw new Error('LDAP search failed');
+        const username = options.filter.match(/^\(mail=(.*)\)$/)?.[1] || '';
+        const user = this.users.get(username);
+        if (!user) return { searchEntries: [] };
+        if (this.failureMode === 'malformed') return { searchEntries: [{ mail: username }] };
+        return { searchEntries: [{ dn: user.subjectId, entryUUID: `uuid-${username}`, mail: username, cn: username, memberOf: [...user.memberOf] }] };
+      },
+      unbind: async () => undefined,
+    };
   }
 }
 

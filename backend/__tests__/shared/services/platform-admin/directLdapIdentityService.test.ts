@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { directLdapIdentityService, setLdapClientFactoryForTest } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
+import { MockLdapDirectory } from '../../../../test/identity-mocks/index.js';
 
 const provider = {
   id: 'provider-1', protocol: 'ldap', isEnabled: true, authenticationMode: 'direct',
@@ -62,5 +63,53 @@ describe('direct LDAP identity service', () => {
 
   it('rejects an unsafe user filter without a username placeholder', async () => {
     await expect(directLdapIdentityService.authenticate({ ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), userSearchFilter: '(objectClass=person)' }) }, 'person@example.test', 'password')).rejects.toThrow('{username}');
+  });
+
+  it('runs bind and search over the LDAPS protocol mock', async () => {
+    const directory = new MockLdapDirectory();
+    process.env.LDAP_BIND_SECRET = directory.bindPassword;
+    setLdapClientFactoryForTest((url) => directory.client(url));
+
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', 'directory-password')).resolves.toMatchObject({
+      subjectId: 'uuid-person@example.test',
+      email: 'person@example.test',
+      groups: ['cn=operations,ou=groups,dc=example,dc=test'],
+    });
+  });
+
+  it('rejects an insecure LDAP URL before opening a directory client', async () => {
+    process.env.LDAP_BIND_SECRET = 'service-password';
+    const factory = vi.fn();
+    setLdapClientFactoryForTest(factory);
+
+    await expect(directLdapIdentityService.authenticate({
+      ...provider,
+      configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), url: 'ldap://directory.example.test:389' }),
+    }, 'person@example.test', 'directory-password')).rejects.toThrow('must use LDAPS');
+    expect(factory).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['tls_failure', 'TLS certificate verification failed'],
+    ['timeout', 'timed out'],
+    ['search_failure', 'search failed'],
+  ] as const)('fails closed for LDAP %s behavior', async (failureMode, message) => {
+    const directory = new MockLdapDirectory();
+    directory.setFailureMode(failureMode);
+    process.env.LDAP_BIND_SECRET = directory.bindPassword;
+    setLdapClientFactoryForTest((url) => directory.client(url));
+
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', 'directory-password'))
+      .rejects.toThrow(message);
+  });
+
+  it('rejects a malformed LDAP search entry without a DN', async () => {
+    const directory = new MockLdapDirectory();
+    directory.setFailureMode('malformed');
+    process.env.LDAP_BIND_SECRET = directory.bindPassword;
+    setLdapClientFactoryForTest((url) => directory.client(url));
+
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', 'directory-password'))
+      .rejects.toThrow('did not include a DN');
   });
 });
