@@ -187,6 +187,27 @@ describe('mission-control shared mission_control routes', () => {
     expect(listProcessInstancesDetailed).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'payments', maxResults: 25 }));
   });
 
+  it('drops compatibility process-instance rows outside the authorized definition key', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+    vi.mocked(listProcessInstancesDetailed).mockResolvedValueOnce([
+      { id: 'instance-allowed', processDefinitionKey: 'payments' },
+      { id: 'instance-forbidden', processDefinitionKey: 'benefits' },
+    ] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'instance-allowed', processDefinitionKey: 'payments' }]);
+  });
+
   it('allows incidents only when their live process-instance lineage resolves to an authorized runtime resource', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
