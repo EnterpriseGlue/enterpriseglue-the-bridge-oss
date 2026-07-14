@@ -28,7 +28,7 @@ const {
   getSsoTargetRoleOptions,
 } = await import('@src/features/platform-admin/pages/AccessControl');
 const { RoleAssignmentsTable } = await import('@src/features/platform-admin/pages/access-control/RoleAssignmentsTable');
-const { withAssignmentPrincipalType } = await import('@src/features/platform-admin/pages/access-control/assignmentFormOptions');
+const { withAssignmentPrincipalType, withAssignmentResourceType } = await import('@src/features/platform-admin/pages/access-control/assignmentFormOptions');
 import {
   resetAccessControlMocks,
   ssoAssignmentTestState,
@@ -95,6 +95,10 @@ describe('AccessControl roles and permissions', () => {
 
   it('normalizes incompatible scopes when changing an assignment to a service account', () => {
     expect(withAssignmentPrincipalType({ principalType: 'user', principalId: 'user-1', roleId: 'role-1', resourceType: 'platform', resourceId: '', runtimeEngineId: 'engine-1' }, 'service_account')).toMatchObject({ principalType: 'service_account', principalId: '', roleId: '', resourceType: 'engine', runtimeEngineId: 'engine-1' });
+  });
+
+  it('clears role and platform resource state when changing assignment scope', () => {
+    expect(withAssignmentResourceType({ principalType: 'user', principalId: 'user-1', roleId: 'role-1', resourceType: 'engine', resourceId: 'engine-1', runtimeEngineId: 'engine-1' }, 'platform')).toMatchObject({ resourceType: 'platform', resourceId: '', runtimeEngineId: '', roleId: '' });
   });
 
   it('renders role and permission catalog data', () => {
