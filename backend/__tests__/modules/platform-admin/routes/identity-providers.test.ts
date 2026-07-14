@@ -16,6 +16,7 @@ const service = vi.hoisted(() => ({
   completeRun: vi.fn(),
   failRun: vi.fn(),
   listRuns: vi.fn(),
+  listEvents: vi.fn(),
   testConnection: vi.fn(),
   testSamlMetadata: vi.fn(),
   createLegacyMigrationDraft: vi.fn(),
@@ -38,7 +39,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.
 vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js', () => ({ legacyIdentityProviderMigrationService: { createDraft: service.createLegacyMigrationDraft, listEnvironmentDrafts: service.listEnvironmentMigrationDrafts, getReadiness: service.getMigrationReadiness, cutover: service.cutoverLegacyProvider } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { previewMemberships: service.previewMemberships, replayMemberships: service.replayMemberships } }));
-vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun, listRuns: service.listRuns } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun, listRuns: service.listRuns, listEvents: service.listEvents } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService: { testConnection: service.testConnection } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService: { listDirectoryPage: vi.fn() } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SamlMetadataService.js', () => ({ samlMetadataService: { testConnection: service.testSamlMetadata } }));
@@ -59,13 +60,14 @@ describe('identity provider routes', () => {
     service.getByKey.mockResolvedValue(provider);
     service.upsert.mockResolvedValue(provider);
     service.archive.mockResolvedValue({ providerId: 'provider-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, externalIdentitiesMarked: 1, providerRefreshSessionsRevoked: 1 });
-    service.reconcile.mockResolvedValue({ processed: 3 });
+    service.reconcile.mockResolvedValue({ processed: 3, runId: 'sync-run-ldap-1' });
     service.previewMemberships.mockResolvedValue({ scanned: 3, additions: 1, removals: 1, unchanged: 1, failed: 0, truncated: false, nextCursor: null, latestSnapshotAt: 10, warnings: ['stored_snapshots_only'], mappings: [] });
     service.replayMemberships.mockResolvedValue({ scanned: 3, created: 1, removed: 1, failed: 0, truncated: false, nextCursor: null });
     service.startRun.mockResolvedValue('sync-run-1');
     service.completeRun.mockResolvedValue(undefined);
     service.failRun.mockResolvedValue(undefined);
     service.listRuns.mockResolvedValue([{ id: 'sync-run-1', status: 'success', trigger: 'manual', startedAt: 10, completedAt: 11, groupMembershipsCreated: 1, groupMembershipsRemoved: 0, errorMessage: null }]);
+    service.listEvents.mockResolvedValue([{ id: 'event-1', providerId: 'provider-1', runId: 'sync-run-1', severity: 'info', type: 'membership_replayed', message: 'Membership replayed', details: '{}', createdAt: 11 }]);
     service.testConnection.mockResolvedValue({ issuer: 'https://login.example.test', authorizationEndpoint: 'https://login.example.test/auth', tokenEndpoint: 'https://login.example.test/token', jwksUri: 'https://login.example.test/jwks' });
     service.testSamlMetadata.mockResolvedValue({ metadataUrl: 'https://idp.example.test/metadata.xml', entityDescriptorCount: 2 });
     service.createLegacyMigrationDraft.mockResolvedValue({
@@ -153,6 +155,20 @@ describe('identity provider routes', () => {
     expect(service.listRuns).toHaveBeenCalledWith({ tenantId: 'tenant-1', providerId: 'provider-1', limit: 5 });
   });
 
+  it('lists bounded synchronization events through the provider-neutral API', async () => {
+    const response = await request(app).get('/api/identity/providers/entra/sync-runs/sync-run-1/events?severity=info&limit=25');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([expect.objectContaining({ id: 'event-1', providerId: 'provider-1', runId: 'sync-run-1' })]);
+    expect(service.listEvents).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      providerId: 'provider-1',
+      runId: 'sync-run-1',
+      severity: 'info',
+      limit: 25,
+    });
+  });
+
   it('tests OIDC discovery and audits the connection result', async () => {
     const response = await request(app).post('/api/identity/providers/entra/test-connection');
 
@@ -194,7 +210,7 @@ describe('identity provider routes', () => {
     const response = await request(app).post('/api/identity/providers/entra/reconcile');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ processed: 3 });
+    expect(response.body).toEqual({ processed: 3, runId: 'sync-run-ldap-1' });
     expect(service.reconcile).toHaveBeenCalledWith('entra', 'tenant-1', 'manual');
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.reconcile' }));
   });

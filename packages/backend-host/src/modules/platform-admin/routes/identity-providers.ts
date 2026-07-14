@@ -24,6 +24,7 @@ const migrationReadinessQuerySchema = z.object({ targetProviderKey: z.string().m
 const legacyCutoverSchema = z.object({ legacyProviderId: z.string().min(1).max(128), targetProviderKey: z.string().min(1).max(128) });
 const replayMembershipsSchema = z.object({ limit: z.number().int().min(1).max(5000).optional(), cursor: z.string().min(1).max(512).optional() });
 const syncRunsQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(10) });
+const syncEventsQuerySchema = z.object({ severity: z.enum(['info', 'warning', 'error']).optional(), limit: z.coerce.number().int().min(1).max(200).default(50) });
 
 router.get('/api/identity/providers', requireAuth, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
   res.json(await identityProviderService.list(req.tenant?.tenantId || null));
@@ -84,6 +85,17 @@ router.get('/api/identity/providers/:key/sync-runs', requireAuth, requireAction(
   const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
   res.json(await ssoSyncDiagnosticsService.listRuns({ tenantId: req.tenant?.tenantId || null, providerId: provider.id, limit: Number(req.query.limit || 10) }));
+}));
+router.get('/api/identity/providers/:key/sync-runs/:runId/events', requireAuth, requireAction('platform.sso.providers.read'), validateQuery(syncEventsQuerySchema), asyncHandler(async (req, res) => {
+  const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  res.json(await ssoSyncDiagnosticsService.listEvents({
+    tenantId: req.tenant?.tenantId || null,
+    providerId: provider.id,
+    runId: z.string().min(1).max(128).parse(req.params.runId),
+    severity: req.query.severity ? String(req.query.severity) as 'info' | 'warning' | 'error' : undefined,
+    limit: Number(req.query.limit || 50),
+  }));
 }));
 router.post('/api/identity/providers/:key/test-connection', requireAuth, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
   const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);

@@ -1898,18 +1898,18 @@ The implementation should extend existing packages rather than introduce an auth
   - Optional preflight check for secret reference availability without returning secret values.
 - [x] ✅ `GET|POST|PUT|DELETE /api/identity/providers`
   - Manages provider-neutral OIDC, SAML, and LDAP provider definitions with secret references, archival delete semantics, audit entries, and exact action/OpenAPI metadata.
-- [ ] ⬜ `POST /api/identity/providers/:id/test-connection`
-  - Performs an explicit protocol-specific connectivity/configuration test and returns sanitized capability diagnostics without creating a session or membership.
+- [x] ✅ `POST /api/identity/providers/:key/test-connection`
+  - Performs explicit LDAP bind/search, OIDC discovery, or bounded HTTPS SAML metadata validation and returns sanitized diagnostics without creating a session or membership.
 - [x] ✅ `GET|POST|PUT|DELETE /api/identity/mappings`
   - Manages normalized entitlement-to-group mappings, sync mode, source lineage, and configuration-owned edit protection.
 - [x] ✅ `POST /api/identity/mappings/test`
   - Normalizes a sanitized provider sample and returns match results and normalized entitlements without persisting membership.
 - [x] ✅ `POST /api/identity/providers/:key/reconciliation-preview`
   - Computes mapping-level membership additions/removals from bounded stored normalized snapshots without persistence or provider contact. The response is non-PII and explicitly reports snapshot-only, empty, and truncated-result warnings.
-- [ ] ⬜ `POST /api/identity/providers/:id/reconcile`
-  - Starts an asynchronous provider reconciliation run and returns its run id.
-- [ ] ⬜ `GET /api/identity/sync-runs` and `GET /api/identity/sync-runs/:id/events`
-  - Exposes provider-neutral login/scheduled reconciliation diagnostics.
+- [x] ✅ `POST /api/identity/providers/:key/reconcile`
+  - Runs one leased, bounded LDAP reconciliation page, persists its synchronization run and events, and returns the run id for diagnostics.
+- [x] ✅ `GET /api/identity/providers/:key/sync-runs` and `GET /api/identity/providers/:key/sync-runs/:runId/events`
+  - Exposes bounded provider-neutral login, replay, and scheduled reconciliation diagnostics with tenant, provider, severity, and run isolation.
 - [x] ✅ `GET /api/auth/providers/enabled`
   - Returns minimal provider-id-bound OIDC/SAML/LDAP direct-login options without secrets or mapping details. The login UI treats these as canonical, falls back to legacy provider buttons only when no direct provider-neutral option exists, redirects OIDC/SAML by provider id, and presents a dedicated direct-LDAP credential form.
 - [x] ✅ `GET /api/auth/providers/:providerId/start` for direct OIDC and SAML providers
@@ -2327,7 +2327,7 @@ Phase 0 exit criteria:
 
 - [x] ✅ Add config bundle preview/diff/apply APIs, hash-bound apply audit events, recent apply-run history API, server-side export of all apply-supported config-owned object families, ZIP-to-envelope import, and `pnpm authz:config` CI preview/apply command for JSON or ZIP input.
 - [x] ✅ Add runtime resource inventory and runtime resource set read/preview/reconcile APIs. On-demand reconciliation preserves richer lineage and deactivates only definitions absent from a confirmed engine response.
-- [ ] ⬜ Add provider-neutral identity provider, identity mapping, mapping test, sync-run, and sync-event APIs.
+- [x] ✅ Add provider-neutral identity provider, identity mapping, mapping test, sync-run, and sync-event APIs. OIDC/SAML/LDAP provider CRUD and sanitized connection tests, entitlement mapping CRUD/test/preview, bounded reconciliation/replay, provider-scoped run history, and provider/run-isolated event history now have action metadata, OpenAPI contracts, audit behavior, and route/service coverage.
 - [x] ✅ Add direct deployment receipt and deployment lineage APIs with machine-principal authorization and idempotency keys. Receipts are merged into the canonical deployment history, so proxy and externally reported deployment lineage use one model.
 - [x] ✅ Add OpenAPI schemas for every config object. The config-bundle lifecycle now has typed manifest, imported-file schemas, preview, diff, hash-bound apply, apply-history, and export contracts.
 - [ ] ⬜ Add OpenAPI schemas for runtime authorization mode and unsupported-mode validation errors.

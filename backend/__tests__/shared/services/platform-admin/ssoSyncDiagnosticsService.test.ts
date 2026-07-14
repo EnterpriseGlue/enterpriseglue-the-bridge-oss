@@ -198,7 +198,7 @@ describe('ssoSyncDiagnosticsService', () => {
       },
     ]);
 
-    const runFindOne = vi.fn().mockResolvedValue({ id: 'run-1' });
+    const runFindOne = vi.fn().mockResolvedValue({ id: 'run-1', providerId: 'provider-1' });
     const dataSource = {
       getRepository: (entity: unknown) => {
         if (entity === SsoSyncRun) return { createQueryBuilder: vi.fn().mockReturnValue(runQb), findOne: runFindOne };
@@ -247,12 +247,30 @@ describe('ssoSyncDiagnosticsService', () => {
       }),
     ]);
     expect(runFindOne).toHaveBeenCalledWith(expect.objectContaining({
-      select: ['id'],
+      select: ['id', 'providerId'],
     }));
     expect(eventQb.andWhere).toHaveBeenCalledWith('(event.tenantId = :tenantId OR event.tenantId IS NULL)', { tenantId: 'tenant-a' });
     expect(eventQb.andWhere).toHaveBeenCalledWith('event.providerId = :providerId', { providerId: 'provider-1' });
     expect(eventQb.andWhere).toHaveBeenCalledWith('event.severity = :severity', { severity: 'error' });
     expect(eventQb.take).toHaveBeenCalledWith(10);
+  });
+
+  it('does not expose sync events when the run belongs to another provider', async () => {
+    const eventQb = { createQueryBuilder: vi.fn() };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === SsoSyncRun) return { findOne: vi.fn().mockResolvedValue({ id: 'run-1', providerId: 'provider-other' }) };
+        if (entity === SsoSyncEvent) return eventQb;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(ssoSyncDiagnosticsService.listEvents({
+      tenantId: 'tenant-a',
+      providerId: 'provider-1',
+      runId: 'run-1',
+    })).resolves.toEqual([]);
+    expect(eventQb.createQueryBuilder).not.toHaveBeenCalled();
   });
 
   it('replays normalized SSO identity snapshots against current mappings', async () => {

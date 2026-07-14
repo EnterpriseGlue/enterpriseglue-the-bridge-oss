@@ -339,9 +339,9 @@ class SsoSyncDiagnosticsServiceClass {
           { id: input.runId, tenantId: IsNull() },
         ]
         : { id: input.runId, tenantId: IsNull() },
-      select: ['id'],
+      select: ['id', 'providerId'],
     });
-    if (!run) {
+    if (!run || (input.providerId && run.providerId !== input.providerId)) {
       return [];
     }
 

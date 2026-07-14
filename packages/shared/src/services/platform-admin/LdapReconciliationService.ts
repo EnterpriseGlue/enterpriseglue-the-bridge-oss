@@ -7,7 +7,7 @@ import { ssoSyncDiagnosticsService } from './SsoSyncDiagnosticsService.js';
 function sync(provider: { syncJson: string }): Record<string, unknown> { try { return JSON.parse(provider.syncJson) as Record<string, unknown>; } catch { return {}; } }
 
 class LdapReconciliationService {
-  async reconcileProvider(key: string, tenantId?: string | null, trigger: 'scheduled' | 'manual' = 'scheduled'): Promise<{ skipped?: string; processed?: number }> {
+  async reconcileProvider(key: string, tenantId?: string | null, trigger: 'scheduled' | 'manual' = 'scheduled'): Promise<{ skipped?: string; processed?: number; runId?: string | null }> {
     const provider = await identityProviderService.getByKey(key, tenantId);
     if (!provider || !provider.isEnabled || provider.protocol !== 'ldap') return { skipped: 'provider_unavailable' };
     const configuration = sync(provider);
@@ -22,7 +22,7 @@ class LdapReconciliationService {
       for (const identity of page.identities) await identityProviderProvisioningService.provisionLdapUser(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
       await identityReconciliationCheckpointService.complete(provider.id, lease.leaseId, page.nextCursor);
       await ssoSyncDiagnosticsService.completeRun(runId, { tenantId, providerId: provider.id, details: { source: 'ldap_reconciliation', processed: page.identities.length } });
-      return { processed: page.identities.length };
+      return { processed: page.identities.length, runId };
     } catch (error) { await identityReconciliationCheckpointService.release(provider.id, lease.leaseId); await ssoSyncDiagnosticsService.failRun(runId, error, { tenantId, providerId: provider.id, details: { source: 'ldap_reconciliation' } }); throw error; }
   }
 }

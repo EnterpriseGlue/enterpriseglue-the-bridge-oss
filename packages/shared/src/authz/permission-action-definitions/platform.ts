@@ -719,6 +719,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'GET', route: '/api/identity/providers', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/identity/providers/{key}', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/identity/providers/{key}/sync-runs', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/api/identity/providers/{key}/sync-runs/{runId}/events', resourceResolver: 'platform.self' },
       ],
     },
   {

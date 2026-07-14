@@ -2178,6 +2178,19 @@ registry.registerPath({
   request: { params: z.object({ key: z.string() }), query: z.object({ limit: z.coerce.number().int().min(1).max(100).optional() }) },
   responses: { 200: { description: 'Recent identity provider synchronization runs', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), status: z.enum(['running', 'success', 'failed']), trigger: z.enum(['login', 'scheduled', 'manual', 'mapping_change', 'engine_change']), startedAt: z.number(), completedAt: z.number().nullable(), groupMembershipsCreated: z.number().int(), groupMembershipsRemoved: z.number().int(), errorMessage: z.string().nullable() })) } } }, 404: { description: 'Identity provider not found' } },
 });
+const IdentityProviderSyncEventResponseSchema = z.object({
+  id: z.string(), tenantId: z.string().nullable(), providerId: z.string().nullable(), runId: z.string(),
+  severity: z.enum(['info', 'warning', 'error']), type: z.string(), userId: z.string().nullable(),
+  mappingType: z.string().nullable(), mappingId: z.string().nullable(), resourceType: z.string().nullable(),
+  resourceId: z.string().nullable(), message: z.string(), details: z.string(), createdAt: z.number(),
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/identity/providers/{key}/sync-runs/{runId}/events',
+  ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers/{key}/sync-runs/{runId}/events'),
+  request: { params: z.object({ key: z.string(), runId: z.string().min(1).max(128) }), query: z.object({ severity: z.enum(['info', 'warning', 'error']).optional(), limit: z.coerce.number().int().min(1).max(200).optional() }) },
+  responses: { 200: { description: 'Provider-scoped synchronization events for one run', content: { 'application/json': { schema: z.array(IdentityProviderSyncEventResponseSchema) } } }, 404: { description: 'Identity provider not found' } },
+});
 registry.registerPath({
   method: 'post',
   path: '/api/identity/providers',
@@ -2197,7 +2210,7 @@ registry.registerPath({
   path: '/api/identity/providers/{key}/reconcile',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/reconcile'),
   request: { params: z.object({ key: z.string() }) },
-  responses: { 200: { description: 'Run one bounded LDAP directory reconciliation page', content: { 'application/json': { schema: z.object({ skipped: z.string().optional(), processed: z.number().int().optional() }) } } } },
+  responses: { 200: { description: 'Run one bounded LDAP directory reconciliation page', content: { 'application/json': { schema: z.object({ skipped: z.string().optional(), processed: z.number().int().optional(), runId: z.string().nullable().optional() }) } } } },
 });
 const IdentityProviderReconciliationPreviewSchema = z.object({
   scanned: z.number().int().nonnegative(),
