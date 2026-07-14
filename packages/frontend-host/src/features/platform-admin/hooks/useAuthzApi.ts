@@ -717,6 +717,107 @@ export interface RuntimeResourceReconciliationResult {
   };
 }
 
+export type ConfigBundleIdentityReconciliationMode = 'none' | 'preview' | 'apply';
+export type ConfigBundleIdentitySnapshotStatus = 'not_needed' | 'skipped' | 'previewed' | 'completed' | 'truncated' | 'failed';
+export type ConfigBundleRuntimeReconciliationStatus = 'not_needed' | 'queued' | 'completed' | 'failed';
+
+export interface ConfigBundleIdentitySnapshot {
+  mode: ConfigBundleIdentityReconciliationMode;
+  status: ConfigBundleIdentitySnapshotStatus;
+  providerCount: number;
+  scanned: number;
+  created: number;
+  removed: number;
+  failed: number;
+}
+
+export interface ConfigBundleRuntimeReconciliation {
+  status: ConfigBundleRuntimeReconciliationStatus;
+  taskId: string | null;
+  engineSetCount: number;
+  runtimeResourceSetCount: number;
+  engineCount: number;
+}
+
+export interface ConfigBundleApplyReconciliation {
+  engineSetCount: number;
+  runtimeResourceSetCount: number;
+  engineCount: number;
+  identitySnapshot: ConfigBundleIdentitySnapshot;
+  runtimeReconciliation: ConfigBundleRuntimeReconciliation;
+}
+
+export interface ConfigBundleApplyResult {
+  reconciliation: ConfigBundleApplyReconciliation;
+}
+
+export interface ConfigBundleBootstrapStatus {
+  mode: 'disabled' | 'validate' | 'apply';
+  status: 'disabled' | 'validated' | 'applied' | 'failed';
+  hash: string | null;
+  message: string | null;
+  reconciliation: 'not_run' | 'completed' | 'pending';
+  secretPreflight: 'not_required' | 'passed' | 'failed';
+  issueCode: string | null;
+}
+
+export interface ConfigBundleApplyRunChange {
+  objectType: string;
+  key: string;
+  operation: string;
+  reason: string;
+}
+
+export interface ConfigBundleApplyRun {
+  id: string;
+  bundleKey: string;
+  bundleApiVersion?: string | null;
+  actorId: string | null;
+  createdAt: number;
+  canonicalHash?: string;
+  created?: number;
+  updated?: number;
+  archived?: number;
+  mode?: string | null;
+  status?: 'pending' | 'succeeded' | 'failed';
+  errorMessage?: string | null;
+  completedAt?: number | null;
+  reconciliation?: ConfigBundleApplyReconciliation;
+  bootstrap?: ConfigBundleBootstrapStatus;
+  changes?: ConfigBundleApplyRunChange[];
+}
+
+export interface ConfigBundleIdentityReplayTask {
+  id: string;
+  providerId: string;
+  syncRunId: string | null;
+  status: 'queued' | 'running' | 'completed' | 'cancelled';
+  attempts: number;
+  nextAttemptAt: number | null;
+  scanned: number;
+  created: number;
+  removed: number;
+  failed: number;
+  lastError: string | null;
+  completedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ConfigBundleRuntimeReconciliationTask {
+  id: string;
+  status: 'queued' | 'running' | 'completed';
+  attempts: number;
+  nextAttemptAt: number | null;
+  engineSetIds: string[];
+  runtimeResourceSetIds: string[];
+  engineIds: string[];
+  lastError: string | null;
+  completedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type IdentityProviderProtocol = 'oidc' | 'saml' | 'ldap';
 export type IdentityProviderAuthenticationMode = 'direct' | 'claims_only';
 

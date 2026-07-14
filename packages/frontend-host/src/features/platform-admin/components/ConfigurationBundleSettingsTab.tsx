@@ -6,6 +6,13 @@ import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { useAuth } from '../../../shared/hooks/useAuth';
+import type {
+  ConfigBundleApplyResult,
+  ConfigBundleApplyRun,
+  ConfigBundleIdentityReplayTask,
+  ConfigBundleIdentitySnapshot,
+  ConfigBundleRuntimeReconciliationTask,
+} from '../hooks/useAuthzApi';
 import {
   filterConfigBundleChanges,
   formatConfigBundleObjectType,
@@ -22,13 +29,6 @@ type Preview = { valid: boolean; canonicalHash?: string; errors: ConfigBundleVal
 type DiffWarning = { id: string; message: string; acknowledgementId?: string };
 type Diff = Preview & { changes: ConfigBundleDiffChange[]; warnings: DiffWarning[]; requiredAcknowledgements: string[]; affectedPrincipals: { affectedGroupCount: number; affectedUserCount: number; externalIdentityMappingChangeCount: number } };
 type SecretPreflight = { valid: boolean; canonicalHash?: string; availabilityHash?: string; available: boolean; errors: ConfigBundleValidationIssue[]; references: Array<{ reference: string; locations: string[]; available: boolean; reason?: string }> };
-type BootstrapStatus = { mode: 'disabled' | 'validate' | 'apply'; status: 'disabled' | 'validated' | 'applied' | 'failed'; hash: string | null; message: string | null; reconciliation: 'not_run' | 'completed' | 'pending'; secretPreflight: 'not_required' | 'passed' | 'failed'; issueCode: string | null };
-type ApplyRun = { id: string; bundleKey: string; bundleApiVersion?: string | null; actorId: string | null; createdAt: number; canonicalHash?: string; created?: number; updated?: number; archived?: number; mode?: string | null; status?: 'pending' | 'succeeded' | 'failed'; errorMessage?: string | null; completedAt?: number | null; reconciliation?: ApplyResult['reconciliation']; bootstrap?: BootstrapStatus; changes?: ConfigBundleDiffChange[] };
-type IdentityReplayTask = { id: string; providerId: string; syncRunId: string | null; status: 'queued' | 'running' | 'completed' | 'cancelled'; attempts: number; nextAttemptAt: number | null; scanned: number; created: number; removed: number; failed: number; lastError: string | null; completedAt: number | null; createdAt: number; updatedAt: number };
-type IdentitySnapshot = { mode: 'none' | 'preview' | 'apply'; status: 'not_needed' | 'skipped' | 'previewed' | 'completed' | 'truncated' | 'failed'; providerCount: number; scanned: number; created: number; removed: number; failed: number };
-type RuntimeReconciliation = { status: 'not_needed' | 'queued' | 'completed' | 'failed'; taskId: string | null; engineSetCount: number; runtimeResourceSetCount: number; engineCount: number };
-type RuntimeReconciliationTask = { id: string; status: 'queued' | 'running' | 'completed'; attempts: number; nextAttemptAt: number | null; engineSetIds: string[]; runtimeResourceSetIds: string[]; engineIds: string[]; lastError: string | null; completedAt: number | null; createdAt: number; updatedAt: number };
-type ApplyResult = { reconciliation: { engineSetCount: number; runtimeResourceSetCount: number; engineCount: number; identitySnapshot: IdentitySnapshot; runtimeReconciliation: RuntimeReconciliation } };
 const placeholder = '{\n  "bundle": {\n    "apiVersion": "enterpriseglue.ai/v1alpha1",\n    "kind": "EnterpriseGlueConfigBundle",\n    "metadata": { "key": "example.authz", "owner": "platform" },\n    "tenantKey": "default",\n    "mode": "preview_only",\n    "settings": {},\n    "imports": ["./groups.json"]\n  },\n  "files": { "./groups.json": { "groups": [] } }\n}';
 const ciCommand = `export ENTERPRISEGLUE_API_URL="https://enterpriseglue.example"\nexport ENTERPRISEGLUE_API_TOKEN="$EG_CONFIG_TOKEN"\nexport ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE="<tenant-id>"\n\npnpm authz:config preview ./enterpriseglue-config.json\npnpm authz:config apply ./enterpriseglue-config.json`;
 
@@ -48,7 +48,7 @@ function RuntimeResourceChangeDetails({ changes }: { changes: NonNullable<Config
   </div>;
 }
 
-function identitySnapshotMessage(snapshot: IdentitySnapshot): string {
+function identitySnapshotMessage(snapshot: ConfigBundleIdentitySnapshot): string {
   if (snapshot.status === 'not_needed') return '';
   if (snapshot.status === 'skipped') return ` Stored identity reconciliation was skipped for ${snapshot.providerCount} provider${snapshot.providerCount === 1 ? '' : 's'}.`;
   const verb = snapshot.mode === 'preview' ? 'would add' : 'added';
@@ -68,14 +68,14 @@ export default function ConfigurationBundleSettingsTab() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [diff, setDiff] = useState<Diff | null>(null);
   const [secretPreflight, setSecretPreflight] = useState<SecretPreflight | null>(null);
-  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+  const [applyResult, setApplyResult] = useState<ConfigBundleApplyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'preview' | 'preflight' | 'apply' | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
-  const [runs, setRuns] = useState<ApplyRun[]>([]);
-  const [selectedRun, setSelectedRun] = useState<ApplyRun | null>(null);
-  const [identityReplayTasks, setIdentityReplayTasks] = useState<IdentityReplayTask[]>([]);
-  const [runtimeReconciliationTasks, setRuntimeReconciliationTasks] = useState<RuntimeReconciliationTask[]>([]);
+  const [runs, setRuns] = useState<ConfigBundleApplyRun[]>([]);
+  const [selectedRun, setSelectedRun] = useState<ConfigBundleApplyRun | null>(null);
+  const [identityReplayTasks, setIdentityReplayTasks] = useState<ConfigBundleIdentityReplayTask[]>([]);
+  const [runtimeReconciliationTasks, setRuntimeReconciliationTasks] = useState<ConfigBundleRuntimeReconciliationTask[]>([]);
   const [runDetailBusy, setRunDetailBusy] = useState<string | null>(null);
   const [changeQuery, setChangeQuery] = useState('');
   const [changeOperation, setChangeOperation] = useState('all');
@@ -83,7 +83,7 @@ export default function ConfigurationBundleSettingsTab() {
   const [changeRisk, setChangeRisk] = useState<ConfigBundleChangeRisk | 'all'>('all');
   const [acknowledgements, setAcknowledgements] = useState<string[]>([]);
   const [applyIdempotencyKey, setApplyIdempotencyKey] = useState<string | null>(null);
-  const [identityReconciliationMode, setIdentityReconciliationMode] = useState<IdentitySnapshot['mode']>('apply');
+  const [identityReconciliationMode, setIdentityReconciliationMode] = useState<ConfigBundleIdentitySnapshot['mode']>('apply');
   const [ciCommandCopied, setCiCommandCopied] = useState(false);
   const parse = (): { bundle: unknown; files: Record<string, unknown> } => {
     const value = JSON.parse(source) as { bundle: unknown; files: Record<string, unknown> };
@@ -101,7 +101,7 @@ export default function ConfigurationBundleSettingsTab() {
     setBusy('apply'); setError(null);
     try {
       const input = parse();
-      const result = await apiClient.post<ApplyResult>('/api/authz/config-bundles/apply', { ...input, expectedPreviewHash: preview.canonicalHash, ...(secretPreflight?.valid && secretPreflight.available && secretPreflight.canonicalHash === preview.canonicalHash && secretPreflight.availabilityHash ? { expectedSecretPreflightHash: secretPreflight.availabilityHash } : {}), acknowledgements, idempotencyKey: applyIdempotencyKey || crypto.randomUUID(), identityReconciliationMode });
+      const result = await apiClient.post<ConfigBundleApplyResult>('/api/authz/config-bundles/apply', { ...input, expectedPreviewHash: preview.canonicalHash, ...(secretPreflight?.valid && secretPreflight.available && secretPreflight.canonicalHash === preview.canonicalHash && secretPreflight.availabilityHash ? { expectedSecretPreflightHash: secretPreflight.availabilityHash } : {}), acknowledgements, idempotencyKey: applyIdempotencyKey || crypto.randomUUID(), identityReconciliationMode });
       setApplyResult(result);
       // Bundles can change any authorization-managed object. Refresh the
       // context snapshot used by guards and invalidate all query consumers.
@@ -122,16 +122,16 @@ export default function ConfigurationBundleSettingsTab() {
     finally { setBusy(null); }
   };
   const loadRuns = async () => {
-    try { setRuns(await apiClient.get<ApplyRun[]>('/api/authz/config-bundles/runs?limit=10')); }
+    try { setRuns(await apiClient.get<ConfigBundleApplyRun[]>('/api/authz/config-bundles/runs?limit=10')); }
     catch (value) { setError(parseApiError(value, 'Configuration history could not be loaded').message); }
   };
   const loadRunDetail = async (runId: string) => {
     setRunDetailBusy(runId);
     try {
       const [run, tasks, runtimeTasks] = await Promise.all([
-        apiClient.get<ApplyRun>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId)}`),
-        apiClient.get<IdentityReplayTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId)}/identity-replay-tasks`),
-        apiClient.get<RuntimeReconciliationTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId)}/runtime-reconciliation-tasks`),
+        apiClient.get<ConfigBundleApplyRun>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId)}`),
+        apiClient.get<ConfigBundleIdentityReplayTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId)}/identity-replay-tasks`),
+        apiClient.get<ConfigBundleRuntimeReconciliationTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId)}/runtime-reconciliation-tasks`),
       ]);
       setSelectedRun(run); setIdentityReplayTasks(tasks); setRuntimeReconciliationTasks(runtimeTasks);
     }
@@ -205,7 +205,7 @@ export default function ConfigurationBundleSettingsTab() {
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}><div><h3 style={{ margin: 0, fontSize: '1rem' }}>Configuration Bundles</h3><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Validate, review, and apply JSON-managed authorization, identity, engine, and deployment-target configuration.</p></div>{preview?.valid && <Tag type="green">Preview valid</Tag>}</div>
     {error && <InlineNotification kind="error" title="Configuration bundle" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
     <TextArea id="configuration-bundle-json" labelText="Configuration bundle JSON" value={source} onChange={(event) => setSource(event.target.value)} rows={22} helperText="Use the same bundle and files shape as CI/CD. Folder-style ZIP archives must contain bundle.json. Secret references only; plaintext secrets are rejected." />
-    <Select id="configuration-identity-reconciliation-mode" labelText="Stored identity snapshot replay" value={identityReconciliationMode} disabled={busy !== null} onChange={(event) => setIdentityReconciliationMode(event.target.value as IdentitySnapshot['mode'])} helperText="Runs only after the configuration transaction commits. Preview does not replay snapshots; source-scoped mapping cleanup still applies.">
+    <Select id="configuration-identity-reconciliation-mode" labelText="Stored identity snapshot replay" value={identityReconciliationMode} disabled={busy !== null} onChange={(event) => setIdentityReconciliationMode(event.target.value as ConfigBundleIdentitySnapshot['mode'])} helperText="Runs only after the configuration transaction commits. Preview does not replay snapshots; source-scoped mapping cleanup still applies.">
       <SelectItem value="apply" text="Apply bounded membership changes" />
       <SelectItem value="preview" text="Preview bounded membership changes" />
       <SelectItem value="none" text="Skip stored identity reconciliation" />
