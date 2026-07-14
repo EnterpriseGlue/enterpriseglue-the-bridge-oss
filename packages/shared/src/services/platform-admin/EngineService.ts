@@ -555,7 +555,6 @@ export class EngineService {
       await assignmentRepo.insert({
         id: `${ENGINE_GOVERNANCE_SOURCE}:engine:${engine.id}:${entry.slot}:${entry.userId}`,
         tenantId: engine.tenantId ?? null,
-        userId: null,
         principalType: 'user',
         principalId: entry.userId,
         assignmentKey: canonicalRoleAssignmentKey({
@@ -569,12 +568,9 @@ export class EngineService {
           sourceRef: entry.sourceRef,
         }),
         roleId: entry.roleId,
-        resourceType: null,
-        resourceId: null,
         scopeType: 'engine',
         scopeId: engine.id,
         source: ENGINE_GOVERNANCE_SOURCE,
-        sourceMappingId: null,
         sourceRef: entry.sourceRef,
         expiresAt: null,
         lastSeenAt: now,

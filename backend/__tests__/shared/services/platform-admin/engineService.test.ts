@@ -221,19 +221,20 @@ describe('EngineService', () => {
     expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       id: 'system:engine:engine-1:delegate:delegate-1',
       tenantId: 'tenant-1',
-      userId: null,
       principalType: 'user',
       principalId: 'delegate-1',
       roleId: 'system.engine.delegate',
-      resourceType: null,
-      resourceId: null,
       scopeType: 'engine',
       scopeId: 'engine-1',
       source: 'system',
-      sourceMappingId: null,
       sourceRef: 'engine:engine-1:governance-delegate',
       createdById: null,
     }));
+    const insertedAssignment = assignmentRepo.insert.mock.calls[0][0];
+    expect(insertedAssignment).not.toHaveProperty('userId');
+    expect(insertedAssignment).not.toHaveProperty('resourceType');
+    expect(insertedAssignment).not.toHaveProperty('resourceId');
+    expect(insertedAssignment).not.toHaveProperty('sourceMappingId');
     expect(legacySyncSpy).not.toHaveBeenCalled();
   });
 
@@ -334,14 +335,10 @@ describe('EngineService', () => {
     expect(assignmentRepo.insert).toHaveBeenCalledTimes(1);
     expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       id: 'system:engine:engine-1:owner:new-owner',
-      userId: null,
       principalType: 'user',
       principalId: 'new-owner',
       roleId: 'system.engine.owner',
-      resourceType: null,
-      resourceId: null,
       source: 'system',
-      sourceMappingId: null,
       sourceRef: 'engine:engine-1:governance-owner',
     }));
     expect(legacySyncSpy).not.toHaveBeenCalled();
