@@ -19,6 +19,7 @@ import {
   AuthzGroup,
   AuthzGroupMembership,
   ConfigRoleAssignmentOverride,
+  ConfigBundleApplyRun,
   Engine,
   EngineSet,
   EngineSetMaterialization,
@@ -774,6 +775,81 @@ describe('permissionService', () => {
       groupMembership: { id: 'membership-identity-operators', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-operators' },
       identityEntitlementMapping: { id: 'mapping-operators', providerId: 'identity.oidc.main', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', targetGroupId: 'group-operators', syncMode: 'authoritative' },
     });
+  });
+
+  it('explains configuration bundle lineage for config-managed role assignments', async () => {
+    const assignmentQb = {
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([{
+        id: 'assignment-config-operators',
+        roleId: 'role-config-operator',
+        principalType: 'user',
+        principalId: 'user-1',
+        source: 'config',
+        sourceMappingId: null,
+        sourceRef: 'config_bundle:acme.authz',
+        scopeType: 'project',
+        scopeId: 'project-1',
+        sourceHash: 'assignment-object-hash',
+        lastAppliedAt: 1700000000000,
+        driftStatus: 'in_sync',
+        ownershipMode: 'config_locked',
+      }]),
+    };
+    const groupMembership = createGroupMembershipRepo();
+    const applyRunRepo = {
+      find: vi.fn().mockResolvedValue([{
+        id: 'apply-run-1',
+        bundleKey: 'acme.authz',
+        canonicalHash: 'bundle-canonical-hash',
+        status: 'succeeded',
+        completedAt: 1700000001000,
+        createdAt: 1699999999000,
+        updatedAt: 1700000001000,
+      }]),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroupMembership) return groupMembership.repo;
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+        if (entity === ConfigBundleApplyRun) return applyRunRepo;
+        if (entity === RbacRolePermission || entity === RbacRole) return {};
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const result = await permissionService.evaluatePermission(ProjectPermissions.FILES_VIEW, {
+      userId: 'user-1',
+      resourceType: 'project',
+      resourceId: 'project-1',
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(result.sources[0]).toMatchObject({
+      assignmentId: 'assignment-config-operators',
+      source: 'config',
+      configBundle: {
+        bundleKey: 'acme.authz',
+        sourceRef: 'config_bundle:acme.authz',
+        objectType: 'role_assignment',
+        objectId: 'assignment-config-operators',
+        sourceHash: 'assignment-object-hash',
+        lastAppliedAt: 1700000000000,
+        driftStatus: 'in_sync',
+        ownershipMode: 'config_locked',
+        applyRun: {
+          id: 'apply-run-1',
+          canonicalHash: 'bundle-canonical-hash',
+          appliedAt: 1700000001000,
+        },
+      },
+    });
+    expect(applyRunRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+      order: { completedAt: 'DESC', createdAt: 'DESC' },
+    }));
   });
 
   it('explains SSO Engine Set role assignment lineage', async () => {

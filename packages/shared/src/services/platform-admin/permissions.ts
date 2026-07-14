@@ -34,6 +34,7 @@ import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigRoleAssignmentOverride.js';
+import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, IsNull, Not, type DataSource, type EntityManager } from 'typeorm';
@@ -494,6 +495,21 @@ export interface PermissionEvaluationSource {
   } | null;
   matchedBy?: Record<string, unknown> | null;
   lineage?: Record<string, unknown> | null;
+  configBundle?: {
+    bundleKey: string;
+    sourceRef: string;
+    objectType: 'role_assignment';
+    objectId: string;
+    sourceHash: string | null;
+    lastAppliedAt: number | null;
+    driftStatus: string | null;
+    ownershipMode: string;
+    applyRun: {
+      id: string;
+      canonicalHash: string;
+      appliedAt: number;
+    } | null;
+  };
   ssoMapping?: {
     id: string;
     providerId: string | null;
@@ -529,6 +545,22 @@ export interface BasePermissionEvaluation {
   allowed: boolean;
   reason: string;
   sources: PermissionEvaluationSource[];
+}
+
+function configBundleLineageForAssignment(assignment: RbacRoleAssignment): PermissionEvaluationSource['configBundle'] {
+  const sourceRef = assignment.sourceRef || '';
+  if (assignment.source !== 'config' || !sourceRef.startsWith('config_bundle:')) return undefined;
+  return {
+    bundleKey: sourceRef.slice('config_bundle:'.length),
+    sourceRef,
+    objectType: 'role_assignment',
+    objectId: assignment.id,
+    sourceHash: assignment.sourceHash ?? null,
+    lastAppliedAt: assignment.lastAppliedAt ?? null,
+    driftStatus: assignment.driftStatus ?? null,
+    ownershipMode: assignment.ownershipMode || 'config_locked',
+    applyRun: null,
+  };
 }
 
 export interface EffectiveResourcePermissions {
@@ -3141,6 +3173,7 @@ class PermissionServiceClass {
       sourceRef: assignment.sourceRef,
       scopeType: assignment.scopeType as ResourceType | null,
       scopeId: assignment.scopeId,
+      configBundle: configBundleLineageForAssignment(assignment),
     }));
 
     if (resourceType === 'engine_runtime_resource' && resourceId && runtimeResource) {
@@ -3177,14 +3210,17 @@ class PermissionServiceClass {
         principalType: assignment.principalType as PrincipalType, principalId: assignment.principalId!, source: assignment.source,
         sourceMappingId: assignment.sourceMappingId, sourceRef: assignment.sourceRef,
         scopeType: assignment.scopeType as ResourceType | null, scopeId: assignment.scopeId,
+        configBundle: configBundleLineageForAssignment(assignment),
       }));
       const groupLineageSources = await this.attachGroupLineage(dataSource, [...directSources, ...inheritedSources], principal, tenantId);
-      return this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
+      const ssoLineageSources = await this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
+      return this.attachConfigBundleLineage(dataSource, ssoLineageSources, tenantId);
     }
 
     if (resourceType !== 'engine' || !resourceId) {
       const groupLineageSources = await this.attachGroupLineage(dataSource, directSources, principal, tenantId);
-      return this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
+      const ssoLineageSources = await this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
+      return this.attachConfigBundleLineage(dataSource, ssoLineageSources, tenantId);
     }
 
     const engineSetQb = assignmentRepo.createQueryBuilder('assignment')
@@ -3262,11 +3298,13 @@ class PermissionServiceClass {
         engineRegistration,
         matchedBy: parseJsonRecord(materialization?.matchedByJson),
         lineage: parseJsonRecord(materialization?.lineageJson),
+        configBundle: configBundleLineageForAssignment(assignment),
       };
     });
 
     const groupLineageSources = await this.attachGroupLineage(dataSource, [...directSources, ...engineSetSources], principal, tenantId);
-    return this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
+    const ssoLineageSources = await this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
+    return this.attachConfigBundleLineage(dataSource, ssoLineageSources, tenantId);
   }
 
   private async attachGroupLineage(
@@ -3405,6 +3443,42 @@ class PermissionServiceClass {
           claimValue: mapping.claimValue,
           claimOperator: mapping.claimOperator,
           targetSelectorType: mapping.targetSelectorType,
+        },
+      };
+    });
+  }
+
+  private async attachConfigBundleLineage(
+    dataSource: DataSource,
+    sources: PermissionEvaluationSource[],
+    tenantId?: string | null
+  ): Promise<PermissionEvaluationSource[]> {
+    const bundleKeys = Array.from(new Set(
+      sources.map((source) => source.configBundle?.bundleKey).filter((key): key is string => Boolean(key))
+    ));
+    if (bundleKeys.length === 0) return sources;
+
+    const runs = await dataSource.getRepository(ConfigBundleApplyRun).find({
+      where: tenantScopedWhere({ bundleKey: In(bundleKeys), status: 'succeeded' as const }, tenantId),
+      order: { completedAt: 'DESC', createdAt: 'DESC' },
+    });
+    const latestRunByBundleKey = new Map<string, ConfigBundleApplyRun>();
+    for (const run of runs) {
+      if (!latestRunByBundleKey.has(run.bundleKey)) latestRunByBundleKey.set(run.bundleKey, run);
+    }
+
+    return sources.map((source) => {
+      if (!source.configBundle) return source;
+      const run = latestRunByBundleKey.get(source.configBundle.bundleKey);
+      return {
+        ...source,
+        configBundle: {
+          ...source.configBundle,
+          applyRun: run ? {
+            id: run.id,
+            canonicalHash: run.canonicalHash,
+            appliedAt: run.completedAt ?? run.updatedAt,
+          } : null,
         },
       };
     });

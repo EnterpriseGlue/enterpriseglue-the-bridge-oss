@@ -859,6 +859,21 @@ export const EffectiveAccessEvaluateResponseSchema = z.object({
     }).nullable().optional(),
     matchedBy: z.record(z.string(), z.unknown()).nullable().optional(),
     lineage: z.record(z.string(), z.unknown()).nullable().optional(),
+    configBundle: z.object({
+      bundleKey: z.string(),
+      sourceRef: z.string(),
+      objectType: z.literal('role_assignment'),
+      objectId: z.string(),
+      sourceHash: z.string().nullable(),
+      lastAppliedAt: z.number().nullable(),
+      driftStatus: z.string().nullable(),
+      ownershipMode: z.string(),
+      applyRun: z.object({
+        id: z.string(),
+        canonicalHash: z.string(),
+        appliedAt: z.number(),
+      }).nullable(),
+    }).optional(),
     ssoMapping: z.object({
       id: z.string(),
       providerId: z.string().nullable(),

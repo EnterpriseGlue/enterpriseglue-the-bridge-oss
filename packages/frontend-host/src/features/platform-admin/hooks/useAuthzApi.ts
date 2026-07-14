@@ -607,6 +607,17 @@ export interface EffectiveAccessResult {
     } | null;
     matchedBy?: Record<string, unknown> | null;
     lineage?: Record<string, unknown> | null;
+    configBundle?: {
+      bundleKey: string;
+      sourceRef: string;
+      objectType: 'role_assignment';
+      objectId: string;
+      sourceHash: string | null;
+      lastAppliedAt: number | null;
+      driftStatus: string | null;
+      ownershipMode: string;
+      applyRun: { id: string; canonicalHash: string; appliedAt: number } | null;
+    };
     ssoMapping?: {
       id: string;
       providerId: string | null;

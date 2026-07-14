@@ -119,6 +119,15 @@ function formatEngineRegistrationLineage(source: EffectiveAccessSource) {
   return `Engine registration: ${parts.join(' ') || registration.engineId}`;
 }
 
+function formatConfigBundleLineage(source: EffectiveAccessSource) {
+  const config = source.configBundle;
+  if (!config) return null;
+  const apply = config.applyRun
+    ? `apply=${config.applyRun.id} hash=${config.applyRun.canonicalHash}`
+    : 'apply=unresolved';
+  return `Config bundle: ${config.bundleKey} ${config.objectType}:${config.objectId} ${apply} drift=${config.driftStatus || 'unknown'}`;
+}
+
 export function formatEffectiveAccessLineage(source: EffectiveAccessSource) {
   const parts = [
     source.source ? `Assignment source: ${source.source}` : null,
@@ -130,6 +139,7 @@ export function formatEffectiveAccessLineage(source: EffectiveAccessSource) {
     formatEngineRegistrationLineage(source),
     source.matchedBy ? `Matched by: ${formatEngineSetMatchedBy(source.matchedBy)}` : null,
     source.lineage ? `Lineage: ${formatEngineSetMatchedBy(source.lineage)}` : null,
+    formatConfigBundleLineage(source),
   ].filter((part): part is string => Boolean(part));
   return parts.length > 0 ? parts.join(' | ') : '-';
 }
