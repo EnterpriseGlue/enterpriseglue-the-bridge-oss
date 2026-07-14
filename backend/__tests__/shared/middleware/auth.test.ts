@@ -276,27 +276,43 @@ describe('auth middleware', () => {
   });
 
   describe('optionalAuth', () => {
-    it('adds user when token present', () => {
+    it('adds user when token belongs to an active current session', async () => {
       req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
-      (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'access', platformRole: 'user', email: 'user@example.com' });
+      (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'access', platformRole: 'user', email: 'user@example.com', authSessionVersion: 2 });
+      (getDataSource as any).mockResolvedValue({
+        getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', isActive: true, authSessionVersion: 2 }) }),
+      });
 
-      optionalAuth(req as Request, res as Response, next);
+      await optionalAuth(req as Request, res as Response, next);
 
       expect(req.user).toBeDefined();
       expect(next).toHaveBeenCalled();
     });
 
-    it('continues without user when no token', () => {
-      optionalAuth(req as Request, res as Response, next);
+    it('continues without user when no token', async () => {
+      await optionalAuth(req as Request, res as Response, next);
 
       expect(req.user).toBeUndefined();
       expect(next).toHaveBeenCalled();
     });
 
-    it('ignores malformed tokens without attempting verification', () => {
+    it('does not attach a user from a revoked session', async () => {
+      req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
+      (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'access', email: 'user@example.com', authSessionVersion: 1 });
+      (getDataSource as any).mockResolvedValue({
+        getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', isActive: true, authSessionVersion: 2 }) }),
+      });
+
+      await optionalAuth(req as Request, res as Response, next);
+
+      expect(req.user).toBeUndefined();
+      expect(next).toHaveBeenCalled();
+    });
+
+    it('ignores malformed tokens without attempting verification', async () => {
       req.headers = { authorization: 'Bearer invalid token with spaces' };
 
-      optionalAuth(req as Request, res as Response, next);
+      await optionalAuth(req as Request, res as Response, next);
 
       expect(jwt.verifyToken).not.toHaveBeenCalled();
       expect(req.user).toBeUndefined();

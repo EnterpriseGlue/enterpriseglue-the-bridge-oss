@@ -205,12 +205,18 @@ export function requireOnboarding(req: Request, res: Response, next: NextFunctio
  * Optional auth - adds user if token present, but doesn't require it
  * Checks both Authorization header and cookies
  */
-export function optionalAuth(req: Request, res: Response, next: NextFunction) {
+export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
   try {
     const tokenPayload = readOptionalAuthPayload(req);
     const payload = tokenPayload ? normalizeUserPrincipal(tokenPayload) : null;
     if (payload?.type === 'access') {
-      req.user = payload;
+      const user = await (await getDataSource()).getRepository(User).findOneBy({
+        id: payload.userId,
+        isActive: true,
+      });
+      if (user && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
+        req.user = payload;
+      }
     }
   } catch {
     // Ignore errors for optional auth
