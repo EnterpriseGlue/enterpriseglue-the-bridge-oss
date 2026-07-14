@@ -77,23 +77,42 @@ describe('SsoProviderService', () => {
     expect(update).toHaveBeenCalledWith({ id: 'provider-2' }, expect.objectContaining({ enabled: true }));
   });
 
-  it('stores new provider secrets with the shared encrypted secret resolver', async () => {
+  it('stores provider credentials as opaque ciphertext and redacts them from public reads', async () => {
+    const clientSecret = 'oidc-client-secret-sentinel';
+    const certificate = 'saml-certificate-sentinel';
     const insert = vi.fn();
+    const find = vi.fn();
 
     (getDataSource as unknown as Mock).mockResolvedValue({
-      getRepository: () => ({ insert }),
+      getRepository: () => ({ insert, find }),
     });
 
     await ssoProviderService.createProvider({
       name: 'OIDC',
       type: 'oidc',
       clientId: 'client-id',
-      clientSecret: 'provider-secret',
+      clientSecret,
+      certificate,
     });
 
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+    const persisted = insert.mock.calls[0]?.[0];
+    expect(persisted).toEqual(expect.objectContaining({
       clientSecretEnc: expect.stringMatching(/^v2:/),
+      certificateEnc: expect.stringMatching(/^v2:/),
     }));
+    expect(JSON.stringify(persisted)).not.toContain(clientSecret);
+    expect(JSON.stringify(persisted)).not.toContain(certificate);
+
+    find.mockResolvedValue([{ ...persisted, id: 'provider-1' }]);
+    const publicProviders = await ssoProviderService.getAllProviders();
+    expect(publicProviders[0]).toEqual(expect.objectContaining({
+      hasClientSecret: true,
+      hasCertificate: true,
+    }));
+    expect(JSON.stringify(publicProviders)).not.toContain(clientSecret);
+    expect(JSON.stringify(publicProviders)).not.toContain(certificate);
+    expect(JSON.stringify(publicProviders)).not.toContain(persisted.clientSecretEnc);
+    expect(JSON.stringify(publicProviders)).not.toContain(persisted.certificateEnc);
   });
 
   it('rejects SHA-1 for legacy SAML provider create and update paths', async () => {

@@ -111,6 +111,31 @@ describe('platform-admin sso-providers routes', () => {
     }));
   });
 
+  it('never copies provider credentials into API responses or audit details', async () => {
+    const clientSecret = 'provider-api-secret-sentinel';
+    const certificate = 'provider-api-certificate-sentinel';
+
+    const response = await request(app)
+      .post('/api/sso/providers')
+      .send({
+        name: 'Credential boundary provider',
+        type: 'oidc',
+        clientId: 'client-id',
+        clientSecret,
+        certificate,
+      });
+
+    expect(response.status).toBe(201);
+    expect(ssoProviderServiceMock.createProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ clientSecret, certificate }),
+      'admin-1',
+    );
+    expect(JSON.stringify(response.body)).not.toContain(clientSecret);
+    expect(JSON.stringify(response.body)).not.toContain(certificate);
+    expect(JSON.stringify((logAudit as unknown as Mock).mock.calls)).not.toContain(clientSecret);
+    expect(JSON.stringify((logAudit as unknown as Mock).mock.calls)).not.toContain(certificate);
+  });
+
   it('converts an acknowledged admin default role into an explicit identity mapping', async () => {
     ssoProviderServiceMock.getProvider.mockResolvedValue({ id: 'provider-1', defaultRole: 'admin' });
     const response = await request(app).post('/api/sso/providers/provider-1/migrate-default-role').send({ providerKey: 'entra-main', riskAcknowledged: true });

@@ -8,12 +8,15 @@ import { decrypt, isEncrypted } from '@enterpriseglue/shared/services/encryption
 
 describe('SecretResolver', () => {
   it('stores new local values using authenticated encryption', () => {
-    const stored = secretResolver.storeEncryptedLocal('provider-secret');
+    const plaintext = 'provider-secret-sentinel';
+    const stored = secretResolver.storeEncryptedLocal(plaintext);
 
     expect(stored).toMatch(/^v2:/);
     expect(isEncrypted(stored)).toBe(true);
-    expect(decrypt(stored)).toBe('provider-secret');
-    expect(secretResolver.resolveStored(stored)).toBe('provider-secret');
+    expect(stored).not.toContain(plaintext);
+    expect(JSON.stringify({ stored })).not.toContain(plaintext);
+    expect(decrypt(stored)).toBe(plaintext);
+    expect(secretResolver.resolveStored(stored)).toBe(plaintext);
   });
 
   it('reads legacy base64 markers without producing them on new writes', () => {
@@ -33,10 +36,14 @@ describe('SecretResolver', () => {
   });
 
   it('checks external reference availability without returning its secret value', () => {
-    vi.stubEnv('EG_TEST_PROVIDER_SECRET', 'external-secret');
+    const plaintext = 'external-provider-secret-sentinel';
+    vi.stubEnv('EG_TEST_PROVIDER_SECRET', plaintext);
     try {
-      expect(secretResolver.checkExternalReference('EG_TEST_PROVIDER_SECRET')).toEqual({ available: true });
-      expect(secretResolver.checkExternalReference('EG_TEST_MISSING_SECRET')).toEqual({ available: false, reason: 'environment_variable_missing' });
+      const available = secretResolver.checkExternalReference('EG_TEST_PROVIDER_SECRET');
+      const missing = secretResolver.checkExternalReference('EG_TEST_MISSING_SECRET');
+      expect(available).toEqual({ available: true });
+      expect(missing).toEqual({ available: false, reason: 'environment_variable_missing' });
+      expect(JSON.stringify({ available, missing })).not.toContain(plaintext);
     } finally {
       vi.unstubAllEnvs();
     }

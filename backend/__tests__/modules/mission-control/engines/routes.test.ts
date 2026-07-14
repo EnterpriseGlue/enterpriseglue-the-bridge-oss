@@ -20,8 +20,8 @@ const platformSettingsServiceMock = vi.hoisted(() => ({
 }));
 const fetchMock = vi.hoisted(() => vi.fn());
 const secretResolverMock = vi.hoisted(() => ({
-  normalizeForStorage: vi.fn((value: string | null | undefined) => value ? `v2:test:${value}` : null),
-  resolveStored: vi.fn((value: string | null | undefined) => value?.startsWith('v2:test:') ? value.slice('v2:test:'.length) : value || null),
+  normalizeForStorage: vi.fn((value: string | null | undefined) => value ? `v2:test:${Buffer.from(value).toString('base64')}` : null),
+  resolveStored: vi.fn((value: string | null | undefined) => value?.startsWith('v2:test:') ? Buffer.from(value.slice('v2:test:'.length), 'base64').toString() : value || null),
 }));
 
 vi.mock('fs', () => ({
@@ -401,7 +401,7 @@ describe('mission-control engines routes', () => {
 
     expect(response.status).toBe(200);
     expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
-      passwordEnc: 'v2:test:new-secret',
+      passwordEnc: 'v2:test:bmV3LXNlY3JldA==',
     }));
     expect(secretResolverMock.normalizeForStorage).toHaveBeenCalledWith('new-secret');
   });
@@ -1133,6 +1133,7 @@ describe('mission-control engines routes', () => {
   });
 
   it('accepts OAuth2 client credentials engine auth metadata', async () => {
+    const clientSecret = 'engine-oauth-secret-sentinel';
     const insert = vi.fn().mockResolvedValue({});
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
@@ -1148,7 +1149,7 @@ describe('mission-control engines routes', () => {
         type: 'ion',
         authType: 'oauth2-client-credentials',
         username: 'enterpriseglue',
-        passwordEnc: 'client-secret',
+        passwordEnc: clientSecret,
         oauthTokenUrl: 'https://keycloak.example.com/realms/acme/protocol/openid-connect/token',
         oauthScopes: 'engine-rest',
         oauthAudience: 'ion-engine',
@@ -1157,12 +1158,14 @@ describe('mission-control engines routes', () => {
     expect(response.status).toBe(201);
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       authType: 'oauth2-client-credentials',
-      passwordEnc: 'v2:test:client-secret',
+      passwordEnc: `v2:test:${Buffer.from(clientSecret).toString('base64')}`,
       oauthTokenUrl: 'https://keycloak.example.com/realms/acme/protocol/openid-connect/token',
       oauthScopes: 'engine-rest',
       oauthAudience: 'ion-engine',
     }));
     expect(response.body).toMatchObject({ passwordEnc: null, hasCredential: true });
+    expect(JSON.stringify(response.body)).not.toContain(clientSecret);
+    expect(JSON.stringify(insert.mock.calls)).not.toContain(clientSecret);
   });
 
   it('stores external engine metadata on normal registration', async () => {
