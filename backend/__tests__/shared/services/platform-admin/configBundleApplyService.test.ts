@@ -197,6 +197,34 @@ describe('configBundleApplyService', () => {
     expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync' }));
   });
 
+  it('leaves an untransferred manual target unapplied and preserves the row', async () => {
+    const { engineRepo, projectRepo, targetRepo, dataSource } = setupDataSource();
+    const projectId = '00000000-0000-4000-8000-000000000002';
+    const engine = { id: 'engine-manual', tenantId: 'tenant-a', configKey: 'engine.manual', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', name: 'Managed engine', baseUrl: 'https://engine.example.test/rest', type: 'operaton', externalId: null, labelsJson: '{}', runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active' };
+    const manualTarget = { id: 'target-manual', tenantId: 'tenant-a', projectId, engineId: engine.id, source: 'manual', sourceRef: null, status: 'active', allowManualDeploy: true, allowCiDeploy: false, allowApiDeploy: false, allowImport: true };
+    engineRepo.find.mockResolvedValue([engine]);
+    projectRepo.find.mockResolvedValue([{ id: projectId, tenantId: 'tenant-a' }]);
+    targetRepo.find.mockResolvedValue([manualTarget]);
+    const targetBundle = { ...bundle, imports: ['./engines.json', './project-engine-targets.json'] };
+    const targetFiles = {
+      './engines.json': { engines: [{ key: 'engine.manual', name: 'Managed engine', type: 'operaton', baseUrl: 'https://engine.example.test/rest', auth: { type: 'basic', username: 'eg', passwordRef: 'ENGINE_PASSWORD' } }] },
+      './project-engine-targets.json': { projectEngineTargets: [{ projectRef: { id: projectId }, engineRef: { engineKey: 'engine.manual' }, allowCiDeploy: true }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
+
+    await expect(configBundleApplyService.apply({
+      bundle: targetBundle,
+      files: targetFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('project_engine_target') });
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+    expect(targetRepo.insert).not.toHaveBeenCalled();
+    expect(targetRepo.update).not.toHaveBeenCalled();
+  });
+
   it('transfers a previewed manual target into config ownership and records its previous source', async () => {
     const { engineRepo, projectRepo, targetRepo, auditInsert } = setupDataSource();
     const projectId = '00000000-0000-4000-8000-000000000003';
@@ -218,8 +246,81 @@ describe('configBundleApplyService', () => {
 
     await configBundleApplyService.apply({ bundle: targetBundle, files: targetFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
 
-    expect(targetRepo.update).toHaveBeenCalledWith({ id: 'target-manual' }, expect.objectContaining({ source: 'config', sourceRef: 'config_bundle:acme.authz' }));
+    expect(targetRepo.update).toHaveBeenCalledTimes(1);
+    expect(targetRepo.update).toHaveBeenCalledWith({ id: 'target-manual' }, expect.objectContaining({
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked',
+      status: 'active',
+      allowManualDeploy: false,
+      allowCiDeploy: true,
+      allowApiDeploy: false,
+      allowImport: false,
+      driftStatus: 'in_sync',
+    }));
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ action: 'authz.config_bundle.project_engine_target.transfer_ownership', details: expect.stringContaining('"previousSource":"manual"') }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ details: expect.stringContaining('"transferReason":"Move deployment eligibility into reviewed configuration."') }));
+  });
+
+  it('updates every target deployment mode and ownership field atomically', async () => {
+    const { engineRepo, projectRepo, targetRepo, auditInsert } = setupDataSource();
+    const projectId = '00000000-0000-4000-8000-000000000004';
+    const engine = { id: 'engine-config', tenantId: 'tenant-a', configKey: 'engine.config', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', name: 'Managed engine', baseUrl: 'https://engine.example.test/rest', type: 'operaton', externalId: null, labelsJson: '{}', runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active' };
+    const existingTarget = { id: 'target-config', tenantId: 'tenant-a', projectId, engineId: engine.id, source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_locked', status: 'active', allowManualDeploy: true, allowCiDeploy: false, allowApiDeploy: false, allowImport: true };
+    engineRepo.find.mockResolvedValue([engine]);
+    projectRepo.find.mockResolvedValue([{ id: projectId, tenantId: 'tenant-a' }]);
+    projectRepo.findOne.mockResolvedValue({ id: projectId, tenantId: 'tenant-a' });
+    targetRepo.find.mockResolvedValue([existingTarget]);
+    targetRepo.findOne.mockResolvedValue(existingTarget);
+    const targetBundle = { ...bundle, imports: ['./engines.json', './project-engine-targets.json'] };
+    const targetFiles = {
+      './engines.json': { engines: [{ key: 'engine.config', name: 'Managed engine', type: 'operaton', baseUrl: 'https://engine.example.test/rest', auth: { type: 'basic', username: 'eg', passwordRef: 'ENGINE_PASSWORD' } }] },
+      './project-engine-targets.json': { projectEngineTargets: [{ projectRef: { id: projectId }, engineRef: { engineKey: 'engine.config' }, status: 'disabled', allowManualDeploy: false, allowCiDeploy: true, allowApiDeploy: true, allowImport: false, ownershipMode: 'config_warn' }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
+
+    await configBundleApplyService.apply({ bundle: targetBundle, files: targetFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+
+    expect(targetRepo.update).toHaveBeenCalledTimes(1);
+    expect(targetRepo.update).toHaveBeenCalledWith({ id: 'target-config' }, expect.objectContaining({
+      status: 'disabled',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_warn',
+      allowManualDeploy: false,
+      allowCiDeploy: true,
+      allowApiDeploy: true,
+      allowImport: false,
+      driftStatus: 'in_sync',
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ action: 'authz.config_bundle.project_engine_target.update', resourceId: 'target-config' }));
+  });
+
+  it('authoritatively archives only bundle-owned targets and preserves manual rows', async () => {
+    const { targetRepo, auditInsert } = setupDataSource();
+    const projectId = '00000000-0000-4000-8000-000000000005';
+    const configTarget = { id: 'target-config-stale', tenantId: 'tenant-a', projectId, engineId: 'engine-config', source: 'config', sourceRef: 'config_bundle:acme.authz', status: 'active' };
+    const manualTarget = { id: 'target-manual-preserved', tenantId: 'tenant-a', projectId, engineId: 'engine-manual', source: 'manual', sourceRef: null, status: 'active' };
+    targetRepo.find.mockImplementation((options?: { where?: unknown }) => Promise.resolve(options?.where ? [configTarget] : [configTarget, manualTarget]));
+    const targetBundle = { ...bundle, imports: ['./project-engine-targets.json'] };
+    const targetFiles = { './project-engine-targets.json': { projectEngineTargets: [] } };
+    const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
+    const acknowledgement = `config.authoritative_archive:project_engine_target:${projectId}:engine-config`;
+
+    const result = await configBundleApplyService.apply({
+      bundle: targetBundle,
+      files: targetFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      acknowledgements: [acknowledgement],
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.archived).toBe(1);
+    expect(targetRepo.update).toHaveBeenCalledTimes(1);
+    expect(targetRepo.update).toHaveBeenCalledWith({ id: 'target-config-stale' }, expect.objectContaining({ status: 'archived', driftStatus: 'in_sync' }));
+    expect(targetRepo.update).not.toHaveBeenCalledWith({ id: 'target-manual-preserved' }, expect.anything());
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ action: 'authz.config_bundle.project_engine_target.archive', resourceId: 'target-config-stale' }));
   });
 
   it('restores a config-warning assignment by clearing its matching local override', async () => {

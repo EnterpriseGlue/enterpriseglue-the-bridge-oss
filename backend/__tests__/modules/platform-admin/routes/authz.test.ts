@@ -2255,6 +2255,34 @@ describe('platform-admin authz routes', () => {
     }), expect.objectContaining({ credentiallessCustomerSidecarsEnabled: false }));
   });
 
+  it('requires target-management permission when config apply transfers target ownership', async () => {
+    sharedPermissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission !== 'platform:project-engine-targets:manage'
+    );
+    const response = await request(app)
+      .post('/api/authz/config-bundles/apply')
+      .send({
+        bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle' },
+        files: {
+          './project-engine-targets.json': {
+            projectEngineTargets: [{
+              projectRef: { id: 'project-1' },
+              engineRef: { engineKey: 'engine.central' },
+              transferOwnership: { reason: 'Move target into reviewed configuration.' },
+            }],
+          },
+        },
+        expectedPreviewHash: 'preview-hash',
+      });
+
+    expect(response.status).toBe(403);
+    expect(sharedPermissionServiceMock.hasPermission).toHaveBeenCalledWith(
+      'platform:project-engine-targets:manage',
+      expect.objectContaining({ userId: 'user-1', resourceType: 'platform' }),
+    );
+    expect(configBundleApplyMock.apply).not.toHaveBeenCalled();
+  });
+
   it('lists persisted configuration apply runs with retry lineage', async () => {
     const response = await request(app).get('/api/authz/config-bundles/runs');
 
