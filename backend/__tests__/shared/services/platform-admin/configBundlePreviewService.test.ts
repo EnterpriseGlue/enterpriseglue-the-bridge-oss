@@ -47,6 +47,26 @@ describe('configBundlePreviewService', () => {
     expect(permitted).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
   });
 
+  it.each([
+    { name: 'basic password', auth: { type: 'basic', username: 'engine-user', password: 'literal-basic-password' } },
+    { name: 'bearer token', auth: { type: 'bearer', token: 'literal-bearer-token' } },
+  ])('rejects plaintext $name without exposing its value in preview diagnostics', ({ auth }) => {
+    const result = configBundlePreviewService.preview({
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.private', name: 'Private engine', type: 'operaton', baseUrl: 'https://engine.example.test/engine-rest', auth,
+          }],
+        },
+      },
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(JSON.stringify(result)).not.toContain('literal-');
+  });
+
   it('rejects cross-file references that a future apply could not resolve', () => {
     const result = configBundlePreviewService.preview({
       bundle: {

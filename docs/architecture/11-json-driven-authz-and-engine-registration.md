@@ -744,7 +744,7 @@ OAuth2 client credentials keep the current public configuration shape, but secre
 - [x] ✅ Replace direct runtime consumption of `Engine.passwordEnc` with secret resolution/decryption at the engine-client boundary for BPMN client, deployment, health, and Mission Control engine calls.
 - [x] ✅ Add importer secret-ref availability validation for environment variables and approved file references without returning values.
 - [ ] ⬜ Add optional Kubernetes Secret, Docker secret, and Vault adapters later.
-- [ ] ⬜ Reject plaintext secret fields by default.
+- [x] ✅ Reject plaintext secret fields by default. Config-bundle engine authentication accepts only opaque secret references, and preview diagnostics do not echo rejected literal credential values.
 - [ ] ⬜ Audit secret reference identifiers and change events, but never resolved values; unredacted-audit permission does not reveal credentials.
 - [ ] ⬜ Keep reveal-once semantics for any generated API client credentials.
 - [ ] ⬜ Add tests proving API responses, logs, audit, config diffs, mock-provider failures, and engine errors never expose resolved secrets.
@@ -2258,9 +2258,9 @@ Phase 0 exit criteria:
 - [ ] ⬜ Add shared resource resolvers for process definition key, decision definition key, deployment id, and instance-inherited runtime resources.
 - [x] ✅ Add label validation for engine metadata keys such as `country`, `domain`, `environment`, `region`, `businessUnit`, `criticality`, and customer-defined keys. Keys are stable lower-camel, snake, dot, or dash identifiers without whitespace; values remain customer-defined text.
 - [x] ✅ Document that labels, not display-only metadata, are used for Engine Set selectors and authorization-adjacent filtering.
-- [ ] ⬜ Add validation that secret refs are references only, not plaintext secrets.
+- [x] ✅ Add validation that secret refs are references only, not plaintext secrets.
 - [x] ✅ Add explicit validation and warning copy for `auth.type = "none"` as no EnterpriseGlue-managed endpoint credentials; permit it only for policy-approved `customer_sidecar` engines.
-- [ ] ⬜ Add tests for valid and invalid config bundles.
+- [x] ✅ Add tests for valid and invalid config bundles, including literal credential rejection with redacted preview diagnostics.
 
 ### Phase 2: Preview Service
 
