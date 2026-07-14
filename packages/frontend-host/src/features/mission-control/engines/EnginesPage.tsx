@@ -37,6 +37,7 @@ import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
 import type { AccessAuthorityMode, EngineOnboardingMode } from '../../../api/platform-admin'
 import type { DeploymentHistoryView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -1496,15 +1497,13 @@ export default function Engines() {
       { credentials: 'include' }
     ),
   })
-  const runtimeResourcesQ = useQuery({
-    queryKey: ['engines', editing?.id, 'runtime-resources'],
+  const runtimeResourcesQ = useRuntimeResources(editing?.id ? String(editing.id) : undefined, {
+    includeInactive: true,
     enabled: Boolean(engineModal.isOpen && editing?.id && editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed),
-    queryFn: () => apiClient.get<RuntimeResourceAccessInventory[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(String(editing?.id))}&includeInactive=true`, undefined, { credentials: 'include' }),
   })
-  const runtimeResourceSetsQ = useQuery({
-    queryKey: ['engines', editing?.id, 'runtime-resource-sets'],
+  const runtimeResourceSetsQ = useRuntimeResourceSets(editing?.id ? String(editing.id) : undefined, {
+    includeArchived: true,
     enabled: Boolean(engineModal.isOpen && editing?.id && editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed),
-    queryFn: () => apiClient.get<RuntimeResourceSetAccessInventory[]>(`/api/authz/runtime-resource-sets?engineId=${encodeURIComponent(String(editing?.id))}&includeArchived=true`, undefined, { credentials: 'include' }),
   })
   const runtimeAssignmentsQ = useQuery({
     queryKey: ['engines', editing?.id, 'runtime-role-assignments'],
