@@ -34,7 +34,7 @@ describe('ssoGroupMappingService', () => {
     const mapping = {
       id: 'mapping-1',
       tenantId: 'tenant-a',
-      providerId: null,
+      providerId: 'provider-1',
       claimType: 'group',
       claimKey: 'groups',
       claimValue: 'Ops',
@@ -69,7 +69,7 @@ describe('ssoGroupMappingService', () => {
       },
     });
 
-    const result = await ssoGroupMappingService.syncMembershipsForUser('user-1', { groups: ['Ops'] }, undefined, 'tenant-a');
+    const result = await ssoGroupMappingService.syncMembershipsForUser('user-1', { groups: ['Ops'] }, 'provider-1', 'tenant-a');
 
     expect(result).toMatchObject({ created: 1, updated: 0, removed: 0 });
     expect(mappingQb.andWhere).toHaveBeenCalledWith(
@@ -81,7 +81,7 @@ describe('ssoGroupMappingService', () => {
       groupId: 'group-1',
       userId: 'user-1',
       source: 'sso',
-      sourceRef: 'mapping-1',
+      sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
     }));
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',

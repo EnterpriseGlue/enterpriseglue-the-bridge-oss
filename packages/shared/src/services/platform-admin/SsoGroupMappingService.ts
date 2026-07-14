@@ -9,7 +9,7 @@ import { SsoGroupMapping } from '@enterpriseglue/shared/infrastructure/persisten
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
-import { IsNull, type DataSource, type EntityManager } from 'typeorm';
+import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
 import {
   authorizationAttributeKeysFromConfiguration,
   providerNeutralLegacyEntitlement,
@@ -69,6 +69,14 @@ export interface ProviderNeutralSsoGroupMigrationResult {
 function normalizeTenantId(tenantId?: string | null): string | null {
   const normalized = tenantId?.trim();
   return normalized || null;
+}
+
+function legacyMembershipSourceRef(mapping: Pick<SsoGroupMapping, 'id' | 'providerId'>): string {
+  return mapping.providerId ? `legacy_sso:${mapping.providerId}:mapping:${mapping.id}` : mapping.id;
+}
+
+function membershipSourceRefCriteria(sourceRef: string, mappingId: string): string | ReturnType<typeof In> {
+  return sourceRef === mappingId ? mappingId : In([sourceRef, mappingId]);
 }
 
 function addTenantScopeFilter(qb: { andWhere: (...args: any[]) => any }, alias: string, tenantId?: string | null): void {
@@ -371,6 +379,7 @@ class SsoGroupMappingServiceClass {
     const now = Date.now();
 
     for (const mapping of mappings) {
+      const sourceRef = legacyMembershipSourceRef(mapping);
       const platformSettingsAllowMapping = await this.platformSettingsAllowRegexMapping(store, mapping);
       const matches = platformSettingsAllowMapping && ssoClaimMatches(claims, mapping);
       const desiredMembershipIds = new Set<string>();
@@ -381,12 +390,12 @@ class SsoGroupMappingServiceClass {
           .where('membership.userId = :userId', { userId })
           .andWhere('membership.groupId = :groupId', { groupId: mapping.targetGroupId })
           .andWhere('membership.source = :source', { source: 'sso' })
-          .andWhere('membership.sourceRef = :sourceRef', { sourceRef: mapping.id });
+          .andWhere('membership.sourceRef IN (:...sourceRefs)', { sourceRefs: [sourceRef, mapping.id] });
         addTenantScopeFilter(existingQb, 'membership', tenantId ?? mapping.tenantId);
 
         const existing = await existingQb.getOne();
         if (existing) {
-          await membershipRepo.update({ id: existing.id }, { expiresAt: null, updatedAt: now });
+          await membershipRepo.update({ id: existing.id }, { sourceRef, expiresAt: null, updatedAt: now });
           desiredMembershipIds.add(existing.id);
           updated += 1;
         } else {
@@ -397,7 +406,7 @@ class SsoGroupMappingServiceClass {
             groupId: mapping.targetGroupId,
             userId,
             source: 'sso',
-            sourceRef: mapping.id,
+            sourceRef,
             expiresAt: null,
             createdById: null,
             createdAt: now,
@@ -417,14 +426,15 @@ class SsoGroupMappingServiceClass {
       }
 
       if (mapping.syncMode === 'authoritative' || !platformSettingsAllowMapping) {
+        const sourceRefCriteria = membershipSourceRefCriteria(sourceRef, mapping.id);
         const normalizedMembershipTenantId = normalizeTenantId(tenantId ?? mapping.tenantId);
         const staleMemberships = await membershipRepo.find({
           where: normalizedMembershipTenantId
             ? [
-              { tenantId: normalizedMembershipTenantId, userId, source: 'sso', sourceRef: mapping.id },
-              { tenantId: IsNull(), userId, source: 'sso', sourceRef: mapping.id },
+              { tenantId: normalizedMembershipTenantId, userId, source: 'sso', sourceRef: sourceRefCriteria },
+              { tenantId: IsNull(), userId, source: 'sso', sourceRef: sourceRefCriteria },
             ]
-            : { userId, source: 'sso', sourceRef: mapping.id },
+            : { userId, source: 'sso', sourceRef: sourceRefCriteria },
         });
         const staleIds = staleMemberships
           .map((membership) => membership.id)
