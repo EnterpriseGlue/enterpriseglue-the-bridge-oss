@@ -188,6 +188,39 @@ Engine registration never grants human access. Visibility comes from effective s
 
 Mission Control and Dashboard engine lists include an engine only when the backend returns at least one authorized runtime resource or an engine-wide runtime read permission. Project deployment dropdowns additionally require project permission, engine deploy permission, an active project-engine target, mode eligibility, lifecycle/capability checks, and policies.
 
+### Report A Direct-Pipeline Deployment
+
+For an engine with `deploymentIntegration = "direct_engine"`, the customer pipeline deploys to the engine itself, then reports the result to EnterpriseGlue. The callback is intentionally machine-authenticated: use an API client or service account that is eligible for the project-engine target's API deployment mode. It is not a browser/UI mutation and does not grant a human user deployment access.
+
+Send one idempotent receipt after the direct deployment succeeds:
+
+```bash
+curl --fail-with-body \
+  -X POST "$ENTERPRISEGLUE_URL/engines-api/external/engines/$ENGINE_ID/deployment-receipts" \
+  -H "Authorization: Bearer $ENTERPRISEGLUE_MACHINE_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "idempotencyKey": "ci-run-1842-deploy-7d3f8c1a",
+    "projectId": "payments",
+    "engineDeploymentId": "operaton-deployment-9281",
+    "artifacts": [
+      {
+        "resourceKind": "process_definition",
+        "resourceKey": "payments-approval",
+        "version": 12,
+        "fileId": "bpmn/payments-approval.bpmn"
+      }
+    ],
+    "lineage": {
+      "pipelineRunId": "1842",
+      "commitSha": "7d3f8c1a",
+      "deploymentName": "payments-approval"
+    }
+  }'
+```
+
+The `idempotencyKey`, project, engine deployment id, and at least one process or decision artifact are required. Repeating the same receipt is safe; the response reports whether it was already recorded. Provide the versioned `fileId` and lineage whenever available: EnterpriseGlue records the receipt as `reported` lineage and can enable Mission Control-Starbase bridge navigation only after the referenced project file/version resolves. A receipt never supplies a sidecar's downstream peer token or changes the customer-sidecar transport contract.
+
 ### Customer Sidecar
 
 For a customer-owned sidecar or gateway:
