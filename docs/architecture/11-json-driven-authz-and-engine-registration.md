@@ -2214,7 +2214,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Config-manageable entities have deterministic keys and ownership metadata.
 - [ ] ⬜ Project-engine target ownership has one unambiguous effective row per pair.
 - [ ] ⬜ Runtime role assignment types can be represented without changing permission scope.
-- [ ] ⬜ Module splits preserve route/OpenAPI/frontend action inventory guards.
+- [x] ✅ Module splits preserve route/OpenAPI/frontend action inventory guards. Strict backend route inventory remains 434/434, all 168 registered UI action ids are referenced, and Admin navigation/action parity passes after the domain registry split.
 
 ### Phase 1: Shared Config Contract
 
@@ -2411,7 +2411,7 @@ Phase 0 exit criteria:
 - [x] ✅ Deployment dropdown tests prove project-target mode, project permission, engine permission, direct-engine transport, and manual/CI eligibility filtering.
 - [ ] ⬜ UI tests for preview, apply, badges, and config-owned read-only fields.
 - [ ] ⬜ Role editor tests for search, category selection, sensitive acknowledgement, unsaved changes, system-role duplication, config ownership, and no horizontal page overflow at supported widths.
-- [ ] ⬜ OpenAPI and route inventory guard tests.
+- [x] ✅ OpenAPI/action and route inventory guard tests run in strict mode, including aggregate registry validation and authenticated backend route coverage.
 - [ ] ⬜ Security tests for secret redaction and forbidden plaintext secrets.
 - [ ] ⬜ Docker dev/prod/published-image tests cover no bundle, valid mounted bundle, restart idempotency, invalid bundle, hash mismatch, unresolved secret, and fail-closed readiness.
 - [ ] ⬜ OpenShift tests cover optional ConfigMap bundle projection, separate secrets, hash-triggered rollout, successful readiness, and failed rollout preserving the prior healthy ReplicaSet.
