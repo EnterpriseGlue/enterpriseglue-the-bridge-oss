@@ -15,6 +15,7 @@ The backend deployment projects optional configuration and secret volumes. The d
 - Example manifests:
   - `infra/kubernetes/openshift/examples/image-pull-secret.example.yaml`
   - `infra/kubernetes/openshift/examples/runtime-secret.example.yaml`
+  - `infra/kubernetes/openshift/examples/external-secrets.example.yaml`
 - Env template for deployment script:
   - `infra/docker/env/examples/openshift.env.example`
 
@@ -30,15 +31,32 @@ Copy and edit the OpenShift env template:
 cp infra/docker/env/examples/openshift.env.example .local/docker/env/openshift.env
 ```
 
-Required variables include:
+Always-required variables include:
 - `OPENSHIFT_NAMESPACE`
 - `OPENSHIFT_ROUTE_HOST`
 - `BACKEND_IMAGE`
 - `FRONTEND_IMAGE`
+
+The default `OPENSHIFT_SECRET_SOURCE=environment` additionally requires:
+
 - `JWT_SECRET`
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 - `ENCRYPTION_KEY`
+
+Environment mode creates the runtime Secret from these exported values. Set `OPENSHIFT_SECRET_SOURCE=external` to require pre-existing `enterpriseglue-secrets` and, for file-backed bundle references, `enterpriseglue-config-secrets`. External mode validates those target Secrets before applying application manifests and never overwrites them.
+
+### External Secrets Operator
+
+If the cluster uses External Secrets Operator, copy `infra/kubernetes/openshift/examples/external-secrets.example.yaml`, replace the store name and remote keys, and apply it before EnterpriseGlue:
+
+```bash
+oc -n "$OPENSHIFT_NAMESPACE" apply -f infra/kubernetes/openshift/examples/external-secrets.example.yaml
+oc -n "$OPENSHIFT_NAMESPACE" wait --for=condition=Ready externalsecret/enterpriseglue-runtime --timeout=120s
+oc -n "$OPENSHIFT_NAMESPACE" wait --for=condition=Ready externalsecret/enterpriseglue-config-references --timeout=120s
+```
+
+The example uses the stable `external-secrets.io/v1` API and a `ClusterSecretStore` named `enterpriseglue-secret-store`. A namespaced `SecretStore` is also supported by changing `kind`. The controller writes the fixed target Secret names consumed by the deployment.
 
 ## Database configuration
 
@@ -91,6 +109,15 @@ EG_CONFIG_FAIL_CLOSED=true
 
 The script calculates the bundle SHA-256, creates `enterpriseglue-config-bundle`, and rolls the backend. Use `apply` only after reviewing the API/CLI preview; the projected ConfigMap contains bundle JSON only, never secret values.
 
+For environment-managed file references, place one secret per file in a private directory and configure:
+
+```env
+EG_CONFIG_SECRET_PROVIDER=file
+EG_CONFIG_SECRETS_DIR=./.local/enterpriseglue-config-secrets
+```
+
+The script creates the separate `enterpriseglue-config-secrets` Secret from that directory. In external mode, omit `EG_CONFIG_SECRETS_DIR`; the external controller must reconcile the target Secret instead. Projected files use read-only mode `0444` so OpenShift-assigned non-root UIDs can read them without requiring a fixed SCC group. The pod contains only the backend container, and access remains limited by the pod and namespace security boundaries.
+
 ## Deploy
 Use the script entrypoint (default overlay is `prod`):
 
@@ -108,7 +135,10 @@ OPENSHIFT_OVERLAY=staging pnpm run deploy:openshift
 
 ## Notes
 - The script applies base manifests via `oc apply -k` using the selected overlay.
-- Runtime secret and config are applied after base manifests so env-driven values win.
+- Before mutation, the script computes and verifies the bundle hash, renders the selected overlay with `oc kustomize`, runs client-side manifest validation, and verifies that configured bundle/secret projections exist.
+- The computed bundle path and SHA-256 are written to the runtime ConfigMap before the hash annotation triggers the backend rollout.
+- Runtime and config-reference Secrets remain separate; `OPENSHIFT_SECRET_SOURCE=external` prevents the script from replacing controller-managed Secrets.
+- Secret resource versions are copied to pod-template annotations. Rerun the deployment after an external runtime-secret rotation to roll pods even when image and bundle references are unchanged.
 - Optional health check bypass:
 
 ```bash

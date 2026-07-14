@@ -23,4 +23,7 @@ spec:
           secret:
             secretName: enterpriseglue-config-secrets
             optional: true
-            defaultMode: 0400
+            # Secret volumes are already read-only. World-readable within this
+            # single-container pod permits OpenShift's assigned non-root UID to
+            # read the files without pinning an SCC-specific fsGroup.
+            defaultMode: 0444

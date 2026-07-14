@@ -35,15 +35,45 @@ const deploymentContracts = [
   ['dev.sh', ['EG_CONFIG_BUNDLE_HOST_PATH', 'docker-compose.config-bundle.yml']],
   ['scripts/deploy-compose.sh', ['source', 'images-postgres', 'images-oracle', 'EG_CONFIG_BUNDLE_HOST_PATH', 'docker-compose.config-bundle.yml']],
   ['scripts/deploy-localhost.sh', ['EG_CONFIG_BOOTSTRAP_MODE', 'EG_CONFIG_BUNDLE_PATH']],
+  ['scripts/deploy-openshift.sh', ['prepare_config_bundle', 'validate_manifests', 'OPENSHIFT_SECRET_SOURCE', 'EG_CONFIG_BUNDLE_PATH', 'enterpriseglue-config-secrets']],
   ['infra/docker/compose/docker-compose.selfhost.yml', ['docker-compose.config-bundle.yml']],
+  ['infra/kubernetes/openshift/kustomize/components/config-bundle/backend-config-bundle.yaml', ['mountPath: /etc/enterpriseglue/config', 'secretName: enterpriseglue-config-secrets', 'defaultMode: 0444']],
+  ['infra/kubernetes/openshift/examples/external-secrets.example.yaml', ['apiVersion: external-secrets.io/v1', 'name: enterpriseglue-secrets', 'name: enterpriseglue-config-secrets']],
   ['docs/how-to/deploy-docker.md', ['EG_CONFIG_BUNDLE_HOST_PATH', 'docker-compose.config-bundle.yml']],
   ['docs/how-to/deploy-localhost.md', ['EG_CONFIG_BOOTSTRAP_MODE', 'EG_CONFIG_BUNDLE_PATH']],
+  ['docs/how-to/deploy-openshift.md', ['OPENSHIFT_SECRET_SOURCE', 'external-secrets.example.yaml', 'EG_CONFIG_SECRETS_DIR']],
 ];
 for (const [file, entries] of deploymentContracts) {
   const content = readFileSync(file, 'utf8');
   for (const entry of entries) {
     if (!content.includes(entry)) missing.push(`${file}: ${entry}`);
   }
+}
+
+const openshiftDeployScript = readFileSync('scripts/deploy-openshift.sh', 'utf8');
+const openshiftStartupOrder = [
+  'prepare_config_bundle',
+  'validate_manifests',
+  'validate_secret_source',
+  'apply_base_manifests',
+  'apply_runtime_secret',
+  'apply_config_reference_secret',
+  'apply_runtime_config',
+  'apply_config_bundle',
+  'annotate_secret_versions',
+];
+const openshiftMain = openshiftDeployScript.slice(openshiftDeployScript.indexOf('main()'));
+let previousIndex = -1;
+for (const step of openshiftStartupOrder) {
+  const stepIndex = openshiftMain.indexOf(`  ${step}`);
+  if (stepIndex < 0 || stepIndex <= previousIndex) missing.push(`scripts/deploy-openshift.sh: ordered ${step}`);
+  previousIndex = stepIndex;
+}
+for (const runtimeBinding of [
+  'EG_CONFIG_BUNDLE_PATH: "$CONFIG_BUNDLE_CONTAINER_PATH"',
+  'EG_CONFIG_EXPECTED_SHA256: "$CONFIG_BUNDLE_HASH"',
+]) {
+  if (!openshiftDeployScript.includes(runtimeBinding)) missing.push(`scripts/deploy-openshift.sh: ${runtimeBinding}`);
 }
 
 const productionDockerfile = readFileSync('backend/Dockerfile.prod', 'utf8');

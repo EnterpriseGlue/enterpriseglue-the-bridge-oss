@@ -126,6 +126,8 @@ Required changes:
 - [ ] ⬜ Complete readiness gating for migrations, catalog seed, config apply, and all required reconciliation. `/ready` fails after bootstrap configuration failure; bootstrap diagnostics now report `pending` when durable stored-identity replay continuation remains, but readiness intentionally stays available while that bounded background work completes.
 - [ ] ⬜ Define failed-rollout behavior that leaves the previous ReplicaSet available when the new bundle fails closed.
 
+The OpenShift deploy script now validates the rendered overlay before mutation, injects the verified bundle path/hash into the runtime ConfigMap before triggering rollout, and supports either environment-created Secrets or pre-existing controller-managed Secrets via `OPENSHIFT_SECRET_SOURCE=external`. The External Secrets Operator example targets the exact `enterpriseglue-secrets` and `enterpriseglue-config-secrets` names consumed by the deployment.
+
 ## CI/CD Apply Flow
 
 The implemented API-driven pipeline stages are:
