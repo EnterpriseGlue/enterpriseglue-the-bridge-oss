@@ -160,6 +160,18 @@ check_env() {
   if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
     error "Missing required environment variables: ${MISSING_VARS[*]}"
   fi
+
+  if [[ "${EG_CONFIG_BOOTSTRAP_MODE:-disabled}" != "disabled" ]]; then
+    [[ "${EG_CONFIG_BOOTSTRAP_MODE}" == "validate" || "${EG_CONFIG_BOOTSTRAP_MODE}" == "apply" ]] || \
+      error "EG_CONFIG_BOOTSTRAP_MODE must be disabled, validate, or apply"
+    [[ -n "${EG_CONFIG_BUNDLE_PATH:-}" ]] || \
+      error "EG_CONFIG_BUNDLE_PATH is required when configuration bootstrap is enabled"
+    [[ "$EG_CONFIG_BUNDLE_PATH" = /* ]] || \
+      error "EG_CONFIG_BUNDLE_PATH must be absolute for a host-based deployment"
+    [[ -f "$EG_CONFIG_BUNDLE_PATH" ]] || \
+      error "EG_CONFIG_BUNDLE_PATH does not exist or is not a file: $EG_CONFIG_BUNDLE_PATH"
+    log "✅ Authorization configuration bootstrap input is readable (${EG_CONFIG_BOOTSTRAP_MODE})"
+  fi
   
   # Check production JWT secret
   if [[ "$NODE_ENV" == "production" ]] && [[ "$JWT_SECRET" == *"change"* ]]; then

@@ -4,7 +4,7 @@ Summary: Deploy EnterpriseGlue using the Docker Compose stack defined in the rep
 
 Audience: Developers and architects.
 
-Current Compose deployments do not mount or apply authorization configuration bundles. The target optional mount, bootstrap/apply, readiness, secret, and rollback workflow is tracked in [Deploy Authorization Configuration](./deploy-authorization-config.md).
+All Compose deployment paths can optionally mount an authorization configuration bundle. Bootstrap remains disabled unless a bundle host path and `EG_CONFIG_BOOTSTRAP_MODE=validate` or `apply` are configured. The complete validation, readiness, secret, and rollback contract is documented in [Deploy Authorization Configuration](./deploy-authorization-config.md).
 
 ## Services (Dev)
 The default compose file `infra/docker/compose/docker-compose.yml` defines:
@@ -90,9 +90,21 @@ Key defaults:
 pnpm run dev
 ```
 
+To validate or apply a bundle during startup, set `EG_CONFIG_BOOTSTRAP_MODE` in the selected backend environment file and opt into the read-only overlay:
+
+```bash
+EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run dev
+```
+
 ## Start (Production)
 ```bash
 pnpm run prod
+```
+
+The same opt-in works for source-built production:
+
+```bash
+EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run prod
 ```
 
 ## Start (Production from images)
@@ -100,6 +112,22 @@ pnpm run prod
 pnpm run prod:images:postgres
 # or
 pnpm run prod:images:oracle
+```
+
+Published backend images use the same mount contract:
+
+```bash
+EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run prod:images:postgres
+```
+
+Paths containing spaces are supported when the environment assignment is quoted. The bundle is mounted read-only at `/etc/enterpriseglue/config/bundle.json`; optional file-backed secrets use a separate read-only directory selected with `EG_CONFIG_SECRETS_HOST_PATH`.
+
+For standalone self-host Compose, download `docker-compose.config-bundle.yml` beside `docker-compose.selfhost.yml`, configure the disabled-by-default `EG_CONFIG_*` values in `.env`, and include both files:
+
+```bash
+curl -O https://raw.githubusercontent.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/main/infra/docker/compose/docker-compose.config-bundle.yml
+EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" \
+docker compose -f docker-compose.selfhost.yml -f docker-compose.config-bundle.yml up -d
 ```
 
 ## Stop

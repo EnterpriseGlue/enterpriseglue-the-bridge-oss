@@ -9,6 +9,12 @@
 #   3. Edit .env — set JWT_SECRET, ADMIN_PASSWORD, ENCRYPTION_KEY, POSTGRES_PASSWORD
 #   4. docker compose -f docker-compose.selfhost.yml up -d
 #
+# Optional configuration bootstrap:
+#   Download docker-compose.config-bundle.yml beside this file, configure the
+#   disabled-by-default EG_CONFIG_* values in .env, then start with both files:
+#   EG_CONFIG_BUNDLE_HOST_PATH=./enterpriseglue-config.json docker compose \
+#     -f docker-compose.selfhost.yml -f docker-compose.config-bundle.yml up -d
+#
 # Open the app at http://localhost:8080
 
 services:

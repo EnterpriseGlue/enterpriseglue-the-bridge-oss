@@ -134,7 +134,7 @@ esac
 # start must not mount an arbitrary host file or enable config bootstrap.
 if [[ -n "${EG_CONFIG_BUNDLE_HOST_PATH:-}" ]]; then
   if [[ ! -f "$EG_CONFIG_BUNDLE_HOST_PATH" ]]; then
-    echo "EG_CONFIG_BUNDLE_HOST_PATH must reference an existing JSON bundle: $EG_CONFIG_BUNDLE_HOST_PATH" >&2
+    echo "EG_CONFIG_BUNDLE_HOST_PATH must reference an existing JSON or ZIP bundle: $EG_CONFIG_BUNDLE_HOST_PATH" >&2
     exit 1
   fi
   COMPOSE_ARGS+=( -f "$COMPOSE_DIR/docker-compose.config-bundle.yml" )

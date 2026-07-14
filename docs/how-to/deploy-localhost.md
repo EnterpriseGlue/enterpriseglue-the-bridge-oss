@@ -49,6 +49,19 @@ This will:
 
 If email verification is enabled, seed the default email configuration with `EMAIL_*` variables in `backend/.env` or `.env.selfhost` so verification links work on first deploy. You can still set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` for the seeded admin account if needed.
 
+### Optional authorization configuration bootstrap
+
+Host-based deployments read the bundle directly instead of mounting it into a container. Set an absolute, readable JSON or ZIP path in `.env.selfhost` or `backend/.env`:
+
+```dotenv
+EG_CONFIG_BUNDLE_PATH=/srv/enterpriseglue/config/enterpriseglue.json
+EG_CONFIG_BOOTSTRAP_MODE=validate
+EG_CONFIG_EXPECTED_TENANT_SCOPE=platform
+EG_CONFIG_FAIL_CLOSED=true
+```
+
+Use `validate` first, review `/health` and `/ready`, then change to `apply` only for an approved hash-bound startup apply. The deployment script rejects enabled bootstrap with a missing, relative, or unreadable `EG_CONFIG_BUNDLE_PATH`. Keep file-backed secrets outside the bundle and configure `EG_CONFIG_SECRET_FILE_ROOT` separately.
+
 ## Incremental deploy (after first install)
 
 ```bash
