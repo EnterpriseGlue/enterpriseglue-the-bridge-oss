@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
+import { useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
 
 type EntitlementType = 'group' | 'role' | 'attribute' | 'authenticated';
 type ListedEntitlementType = EntitlementType | 'scope';
@@ -15,8 +16,6 @@ interface Group { id: string; key: string; name: string; isArchived: boolean; }
 interface Role { id: string; name: string; scope: string; isAssignable: boolean; isArchived: boolean; }
 interface Engine { id: string; name: string; lifecycleStatus?: string; }
 interface EngineSet { id: string; name: string; key: string; isArchived: boolean; }
-interface RuntimeResource { id: string; resourceKey: string; resourceKind: 'process_definition' | 'decision_definition'; }
-interface RuntimeResourceSet { id: string; name: string; key: string; resourceKind: 'process_definition' | 'decision_definition'; isArchived: boolean; }
 interface LegacyMappingCoverageItem { id: string; family: 'platform_role' | 'group' | 'engine_assignment'; status: 'replacement_candidate' | 'manual_redesign_required' | 'no_replacement_candidate'; reason: string; candidateIdentityMappingIds: string[]; verification: { candidateIdentityMappingId: string; verifiedById: string | null; verifiedAt: number; note: string } | null; }
 interface LegacyMappingRetirementReadiness { ready: boolean; activeLegacyMappingCount: number; verifiedReplacementCount: number; blockers: Array<{ id: string; family: LegacyMappingCoverageItem['family']; reason: string }>; }
 type FormState = { providerKey: string; targetGroupKey: string; entitlementType: EntitlementType; externalId: string; matchOperator: MatchOperator; syncMode: 'additive' | 'authoritative'; claims: string; };
@@ -68,12 +67,12 @@ export default function IdentityMappingsSettingsTab() {
   const engineRoles = (rolesQuery.data || []).filter((role) => role.scope === 'engine' && role.isAssignable && !role.isArchived);
   const engines = (enginesQuery.data || []).filter((engine) => engine.lifecycleStatus !== 'decommissioned');
   const engineSets = (engineSetsQuery.data || []).filter((set) => !set.isArchived);
-  const runtimeResourcesQuery = useQuery({ queryKey: ['identity-mapping-runtime-resources', accessRuntimeEngineId], queryFn: () => apiClient.get<RuntimeResource[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(accessRuntimeEngineId)}`), enabled: rolesManage.allowed && Boolean(accessRuntimeEngineId) && accessScopeType === 'engine_runtime_resource' });
-  const runtimeResourceSetsQuery = useQuery({ queryKey: ['identity-mapping-runtime-resource-sets', accessRuntimeEngineId], queryFn: () => apiClient.get<RuntimeResourceSet[]>(`/api/authz/runtime-resource-sets?engineId=${encodeURIComponent(accessRuntimeEngineId)}`), enabled: rolesManage.allowed && Boolean(accessRuntimeEngineId) && accessScopeType === 'engine_runtime_resource_set' });
+  const runtimeResourcesQuery = useRuntimeResources(accessRuntimeEngineId, { enabled: rolesManage.allowed && accessScopeType === 'engine_runtime_resource' });
+  const runtimeResourceSetsQuery = useRuntimeResourceSets(accessRuntimeEngineId, { enabled: rolesManage.allowed && accessScopeType === 'engine_runtime_resource_set' });
   const runtimeResources = runtimeResourcesQuery.data || [];
   const runtimeResourceSets = (runtimeResourceSetsQuery.data || []).filter((set) => !set.isArchived);
-  const provisionRuntimeResourcesQuery = useQuery({ queryKey: ['identity-mapping-provision-runtime-resources', provisionRuntimeEngineId], queryFn: () => apiClient.get<RuntimeResource[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(provisionRuntimeEngineId)}`), enabled: rolesManage.allowed && provisionAccessInFlow && Boolean(provisionRuntimeEngineId) && provisionScopeType === 'engine_runtime_resource' });
-  const provisionRuntimeResourceSetsQuery = useQuery({ queryKey: ['identity-mapping-provision-runtime-resource-sets', provisionRuntimeEngineId], queryFn: () => apiClient.get<RuntimeResourceSet[]>(`/api/authz/runtime-resource-sets?engineId=${encodeURIComponent(provisionRuntimeEngineId)}`), enabled: rolesManage.allowed && provisionAccessInFlow && Boolean(provisionRuntimeEngineId) && provisionScopeType === 'engine_runtime_resource_set' });
+  const provisionRuntimeResourcesQuery = useRuntimeResources(provisionRuntimeEngineId, { enabled: rolesManage.allowed && provisionAccessInFlow && provisionScopeType === 'engine_runtime_resource' });
+  const provisionRuntimeResourceSetsQuery = useRuntimeResourceSets(provisionRuntimeEngineId, { enabled: rolesManage.allowed && provisionAccessInFlow && provisionScopeType === 'engine_runtime_resource_set' });
   const provisionRuntimeResources = provisionRuntimeResourcesQuery.data || [];
   const provisionRuntimeResourceSets = (provisionRuntimeResourceSetsQuery.data || []).filter((set) => !set.isArchived);
 
