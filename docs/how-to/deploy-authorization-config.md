@@ -6,6 +6,8 @@ Audience: Platform engineers, security engineers, and CI/CD maintainers.
 
 Status: **Partially implemented runbook.** API-driven configuration-bundle preview, hash-bound apply, export, apply history, and the `pnpm authz:config` CLI are available. File-based bootstrap validation/apply, optional Docker/OpenShift mounts, Engine Set/runtime-resource materialization receipts, and durable stored-identity replay continuation are available behind disabled-by-default settings. Full deployment-path coverage remains planned. Existing deployments continue to start without a bundle.
 
+For implementation completion and verification status across authorization, identity, and engine registration, use [the architecture tracker](../architecture/11-json-driven-authz-and-engine-registration.md); this runbook intentionally lists only operationally supported deployment paths.
+
 Related guides:
 
 - [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md)

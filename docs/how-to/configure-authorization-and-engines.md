@@ -6,6 +6,8 @@ Audience: Platform administrators, identity administrators, engine operators, an
 
 Status: **Incremental implementation guide for the RBAC/config refactor.** Platform Settings, Access Control, SSO, Engines, JSON bundle preview/apply/export, runtime-resource sets, provider-neutral identity mapping foundations, and engine ingestion controls are implemented in this worktree. Customer-sidecar transport, provider API reconciliation for every protocol, deployment startup automation, and other unchecked roadmap items remain target work; use only the documented implemented routes/settings in production.
 
+Current UI progress: Access Control includes modular Effective Access, SSO diagnostics, assignment-source ownership tags, and role-assignment form logic isolated for continued component extraction. See the live implementation tracker in [the architecture plan](../architecture/11-json-driven-authz-and-engine-registration.md).
+
 Related design:
 
 - [Authorization and Access Control](../architecture/09-oss-authorization-access-control-model.md)

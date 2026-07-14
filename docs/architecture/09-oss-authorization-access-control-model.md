@@ -23,6 +23,15 @@ Status legend:
 - [ ] ⬜ Todo
 - [ ] ⏸ Deferred
 
+### Current Worktree Progress
+
+- [x] ✅ Access Control has been modularized for audit, SSO diagnostics/snapshots, Effective Access, policy inspection, role-assignment results, and shared assignment-source presentation.
+- [x] ✅ Role Assignment form state, principal/scope transitions, static options, role eligibility, submission checks, and runtime-resource queries now live in `pages/access-control/assignmentFormOptions.ts`; the remaining JSX-only component move is tracked in the detailed implementation plan.
+- [x] ✅ Assignment ownership is consistently labeled as Manual, SSO-managed, identity-provider-managed, configuration-managed, API-managed, or system-managed. Only manual and locally overridable config assignments are removable.
+- [x] ✅ Focused frontend coverage verifies source ownership guards, principal/scope transitions, submission eligibility, Effective Access, principal/resource inspection, and Engine Set rendering.
+
+Detailed completion evidence and the authoritative remaining checklist are maintained in [JSON-Driven Authorization And Engine Registration](11-json-driven-authz-and-engine-registration.md).
+
 Current architecture status:
 
 - [x] ✅ RBAC persistence, permission catalog, system roles, custom roles, custom permissions, and allow-only custom role semantics.
