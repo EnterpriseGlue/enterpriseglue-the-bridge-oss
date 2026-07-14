@@ -27,41 +27,12 @@ import { PlatformPermission, ProjectPermission } from '../../../../shared/auth/p
 import { WhyUnavailableLink } from '../../../../shared/auth/guards'
 import type { ProjectEngineTargetPolicyMode } from '../../../../api/platform-admin'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
-
-type ProjectEngineTargetStatus = 'active' | 'disabled' | 'archived'
-type ProjectEngineTargetSource = 'manual' | 'legacy' | 'ci' | 'api' | 'import' | 'deployment_history' | 'external' | 'system' | 'automation' | 'config'
-type ProjectEngineTargetApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected'
-
-type ProjectEngineTarget = {
-  id: string
-  projectId: string
-  engineId: string
-  engineName: string | null
-  engineBaseUrl: string | null
-  environment: { id: string; name: string; color: string; manualDeployAllowed: boolean } | null
-  status: ProjectEngineTargetStatus
-  source: ProjectEngineTargetSource
-  sourceRef: string | null
-  ownershipMode: 'manual' | 'config_locked' | 'config_warn'
-  sourceHash: string | null
-  lastAppliedAt: number | null
-  driftStatus: string | null
-  externalSystemId: string | null
-  externalProjectId: string | null
-  externalEngineId: string | null
-  externalTargetId: string | null
-  allowManualDeploy: boolean
-  allowCiDeploy: boolean
-  allowApiDeploy: boolean
-  allowImport: boolean
-  approvalStatus: ProjectEngineTargetApprovalStatus
-  approvedAt: number | null
-  policyTags: string[]
-  diagnostics: Record<string, unknown> | null
-  lastSeenAt: number | null
-  createdAt: number
-  updatedAt: number
-}
+import type {
+  ProjectEngineTarget,
+  ProjectEngineTargetApprovalStatus,
+  ProjectEngineTargetSource,
+  ProjectEngineTargetStatus,
+} from '../../../platform-admin/hooks/useAuthzApi'
 
 type EngineOption = {
   id: string
