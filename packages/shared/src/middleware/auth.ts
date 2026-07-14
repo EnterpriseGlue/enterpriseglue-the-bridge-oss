@@ -182,7 +182,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
 export function requireOnboarding(req: Request, res: Response, next: NextFunction) {
   try {
     const token = typeof req.cookies?.onboardingToken === 'string' ? req.cookies.onboardingToken : '';
-    const payload = verifyToken(token);
+    const payload = normalizeUserPrincipal(verifyToken(token));
 
     if (payload.type !== 'onboarding' || typeof payload.invitationId !== 'string' || payload.invitationId.trim().length === 0) {
       return next(Errors.unauthorized('Invalid onboarding token'));
