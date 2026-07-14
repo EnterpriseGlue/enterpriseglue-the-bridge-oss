@@ -27,6 +27,46 @@ import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 
 const router = Router();
 
+function serializeEngineWithDetails(entry: Awaited<ReturnType<typeof engineService.getUserEngines>>[number]) {
+  const engine = entry.engine;
+  const authType = ['none', 'basic', 'bearer', 'oauth2-client-credentials'].includes(String(engine.authType))
+    ? engine.authType as 'none' | 'basic' | 'bearer' | 'oauth2-client-credentials'
+    : null;
+  return {
+    engine: {
+      id: engine.id,
+      name: engine.name,
+      baseUrl: engine.baseUrl,
+      type: engine.type,
+      authType: engine.authType,
+      connectionMode: engine.connectionMode === 'customer_sidecar' ? 'customer_sidecar' as const : 'direct' as const,
+      runtimeAccessScope: engine.runtimeAccessScope === 'resource_aware' ? 'resource_aware' as const : 'engine_wide' as const,
+      deploymentIntegration: engine.deploymentIntegration === 'direct_engine' ? 'direct_engine' as const : 'enterpriseglue_proxy' as const,
+      endpointAuthentication: {
+        type: authType,
+        credentialsConfigured: Boolean(engine.passwordEnc),
+        oauthTokenEndpointConfigured: Boolean(engine.oauthTokenUrl),
+        oauthScopesConfigured: Boolean(engine.oauthScopes),
+        oauthAudienceConfigured: Boolean(engine.oauthAudience),
+      },
+      ownerId: engine.ownerId,
+      delegateId: engine.delegateId,
+      environmentTagId: engine.environmentTagId,
+      environmentLocked: engine.environmentLocked,
+      version: engine.version,
+      createdAt: engine.createdAt,
+      updatedAt: engine.updatedAt,
+    },
+    role: entry.role,
+    environmentTag: entry.environmentTag ? {
+      id: entry.environmentTag.id,
+      name: entry.environmentTag.name,
+      color: entry.environmentTag.color,
+      manualDeployAllowed: entry.environmentTag.manualDeployAllowed,
+    } : null,
+  };
+}
+
 async function canPerformEngineMemberAction(req: Request, engineId: string, permission: EnginePermission): Promise<boolean> {
   return permissionService.hasPermission(permission, {
     userId: req.user!.userId,
@@ -770,7 +810,7 @@ router.get(
       // Filter engines by current tenant context
       const tenantId = req.tenant?.tenantId;
       const engines = await engineService.getUserEngines(userId, tenantId);
-      res.json(engines);
+      res.json(engines.map(serializeEngineWithDetails));
     } catch (error) {
       logger.error('Get my engines error:', error);
       throw Errors.internal('Failed to get engines');

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { UserSummarySchema } from './project-member.js';
+import { EngineAuthTypeSchema, EngineConnectionModeSchema } from '../mission-control/engine.js';
 
 // Engine roles
 export const EngineRoleSchema = z.enum(['owner', 'delegate', 'operator', 'deployer', 'custom']);
@@ -33,6 +34,16 @@ export const EngineMembersResponseSchema = z.object({
   pendingInvites: z.array(PendingEngineInviteSchema),
 });
 
+export const EngineRuntimeAccessScopeSchema = z.enum(['engine_wide', 'resource_aware']);
+export const EngineDeploymentIntegrationSchema = z.enum(['enterpriseglue_proxy', 'direct_engine']);
+export const EngineEndpointAuthenticationSummarySchema = z.object({
+  type: EngineAuthTypeSchema.nullable(),
+  credentialsConfigured: z.boolean(),
+  oauthTokenEndpointConfigured: z.boolean(),
+  oauthScopesConfigured: z.boolean(),
+  oauthAudienceConfigured: z.boolean(),
+});
+
 // Engine with details (for my-engines endpoint)
 export const EngineWithDetailsSchema = z.object({
   engine: z.object({
@@ -41,6 +52,10 @@ export const EngineWithDetailsSchema = z.object({
     baseUrl: z.string(),
     type: z.string().nullable().optional(),
     authType: z.string().nullable().optional(),
+    connectionMode: EngineConnectionModeSchema,
+    runtimeAccessScope: EngineRuntimeAccessScopeSchema,
+    deploymentIntegration: EngineDeploymentIntegrationSchema,
+    endpointAuthentication: EngineEndpointAuthenticationSummarySchema,
     ownerId: z.string().nullable().optional(),
     delegateId: z.string().nullable().optional(),
     environmentTagId: z.string().nullable().optional(),
@@ -99,3 +114,4 @@ export type EngineMember = z.infer<typeof EngineMemberSchema>;
 export type PendingEngineInvite = z.infer<typeof PendingEngineInviteSchema>;
 export type EngineMembersResponse = z.infer<typeof EngineMembersResponseSchema>;
 export type EngineWithDetails = z.infer<typeof EngineWithDetailsSchema>;
+export type EngineEndpointAuthenticationSummary = z.infer<typeof EngineEndpointAuthenticationSummarySchema>;

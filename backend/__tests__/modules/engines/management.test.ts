@@ -218,10 +218,35 @@ describe('engines management routes', () => {
   });
 
   it('gets user engines list', async () => {
+    (engineService.getUserEngines as any).mockResolvedValue([{
+      engine: {
+        id: 'engine-1', name: 'Central engine', baseUrl: 'https://engine.example.test/rest', type: 'operaton', authType: 'oauth2-client-credentials',
+        passwordEnc: 'ref:ENGINE_OAUTH_SECRET', oauthTokenUrl: 'https://identity.example.test/token', oauthScopes: 'engine.read', oauthAudience: 'engine-api',
+        connectionMode: 'customer_sidecar', runtimeAccessScope: 'resource_aware', deploymentIntegration: 'direct_engine',
+        ownerId: 'owner-1', delegateId: null, environmentTagId: null, environmentLocked: false, version: '1.0', createdAt: 1, updatedAt: 2,
+      },
+      role: 'operator', environmentTag: null,
+    }]);
+
     const response = await request(app).get('/engines-api/my-engines');
 
     expect(response.status).toBe(200);
-    expect(Array.isArray(response.body)).toBe(true);
+    expect(response.body).toEqual([expect.objectContaining({
+      engine: expect.objectContaining({
+        connectionMode: 'customer_sidecar',
+        runtimeAccessScope: 'resource_aware',
+        deploymentIntegration: 'direct_engine',
+        endpointAuthentication: {
+          type: 'oauth2-client-credentials',
+          credentialsConfigured: true,
+          oauthTokenEndpointConfigured: true,
+          oauthScopesConfigured: true,
+          oauthAudienceConfigured: true,
+        },
+      }),
+    })]);
+    expect(JSON.stringify(response.body)).not.toContain('ENGINE_OAUTH_SECRET');
+    expect(JSON.stringify(response.body)).not.toContain('oauthTokenUrl');
   });
 
   it('adds existing user as engine member and logs audit', async () => {
