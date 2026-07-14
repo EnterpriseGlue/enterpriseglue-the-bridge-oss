@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getMetadataArgsStorage } from 'typeorm';
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
@@ -6,6 +6,7 @@ import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persiste
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { AddExternalIdentities1700000000047 } from '@enterpriseglue/shared/db/migrations/1700000000047-add-external-identities.js';
 import { externalIdentityKey } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
 
 function column(target: Function, propertyName: string) {
@@ -50,6 +51,32 @@ describe('canonical authorization persistence schema invariants', () => {
     expect(externalIdentityKey({ ...base, tenantId: 'tenant-b' })).not.toBe(key);
     expect(externalIdentityKey({ ...base, providerId: 'provider-b' })).not.toBe(key);
     expect(externalIdentityKey({ ...base, subjectId: 'subject-b' })).not.toBe(key);
+    expect(externalIdentityKey({ tenantId: 'tenant-a|provider-a', providerId: 'subject-a', subjectId: '' }))
+      .not.toBe(externalIdentityKey({ tenantId: 'tenant-a', providerId: 'provider-a|subject-a', subjectId: '' }));
+  });
+
+  it('migrates external identity links with their portable canonical key and lookup indexes', async () => {
+    const createTable = vi.fn().mockResolvedValue(undefined);
+    const migration = new AddExternalIdentities1700000000047();
+
+    await migration.up({
+      hasTable: vi.fn().mockResolvedValue(false),
+      createTable,
+      connection: { getMetadata: () => { throw new Error('metadata unavailable'); } },
+    } as any);
+
+    const table = createTable.mock.calls[0][0];
+    expect(table.name).toBe('external_identities');
+    expect(table.uniques).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columnNames: ['identity_key'] }),
+    ]));
+    expect(table.columns.map((candidate: { name: string }) => candidate.name)).toEqual(expect.arrayContaining([
+      'tenant_id', 'provider_id', 'subject_id', 'directory_tenant_id', 'user_id', 'identity_key',
+    ]));
+    expect(table.indices).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columnNames: ['tenant_id', 'provider_id', 'subject_id'] }),
+      expect.objectContaining({ columnNames: ['user_id'] }),
+    ]));
   });
 
   it('enforces one project-engine target independent of source ownership', () => {

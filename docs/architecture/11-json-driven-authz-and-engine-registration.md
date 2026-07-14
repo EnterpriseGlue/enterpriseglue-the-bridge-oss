@@ -1824,7 +1824,7 @@ The implementation should extend existing packages rather than introduce an auth
 ### Persistence And Migrations
 
 - [ ] ⬜ Replace or evolve SSO-specific provider/mapping/snapshot/sync entities into provider-neutral identity entities with OIDC, SAML, and LDAP support.
-- [ ] ⬜ Add `ExternalIdentity` as the account-link table with unique `(tenantId, providerId, subjectId)` and indexed `userId`; keep normalized entitlement snapshots diagnostic/reconciliation data only.
+- [x] ✅ Add `ExternalIdentity` as the account-link table with a collision-safe canonical `(tenantId, providerId, subjectId)` key, indexed `userId`, migration coverage, and fail-closed concurrent-link handling; keep normalized entitlement snapshots diagnostic/reconciliation data only.
 - [ ] ⬜ Replace provider-specific `User.entraId` / `User.googleId` authorization-link use with `ExternalIdentity` and define explicit verified-email linking policy for standalone-to-SSO transition.
 - [ ] ⬜ Split EnterpriseGlue `tenantId` from external `directoryTenantId`/issuer tenant fields in provider schemas and persistence.
 - [ ] ⬜ Add `identity_provider` membership/assignment source semantics with explicit provider id and mapping id lineage; migrate current `sso` source handling in the same milestone.
