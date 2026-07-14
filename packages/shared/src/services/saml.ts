@@ -180,10 +180,6 @@ function extractCustomClaims(profile: SamlProfile): Record<string, string | stri
   return claims;
 }
 
-function asPlatformRole(role: string | null | undefined): PlatformRole {
-  return role === 'admin' ? 'admin' : 'user';
-}
-
 function getMissingSamlFields(provider: {
   entityId?: string | null;
   ssoUrl?: string | null;
@@ -410,7 +406,6 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
   const dataSource = await getDataSource();
   const now = Date.now();
   const provider = await ssoProviderService.getProvider(providerId);
-  const fallbackRole = asPlatformRole(provider?.defaultRole);
   const tenantId = provider?.tenantId || null;
 
   const ssoClaims: SsoClaims = {
@@ -423,14 +418,12 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
   const resolvedRole = await ssoClaimsMappingService.resolveRoleFromClaims(
     ssoClaims,
     providerId,
-    fallbackRole
   );
 
   logger.info('[SAML Auth] SSO claims role resolution:', {
     email: userInfo.email,
     groups: userInfo.groups,
     roles: userInfo.roles,
-    fallbackRole,
     resolvedRole,
   });
 

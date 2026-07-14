@@ -101,7 +101,8 @@ describe('saml service - provisionSamlUser', () => {
 
     (ssoProviderService.getProvider as unknown as Mock).mockResolvedValue({
       id: 'provider-saml-1',
-      defaultRole: 'user',
+      // A legacy administrator default must not affect login authorization.
+      defaultRole: 'admin',
       tenantId: 'tenant-a',
     });
 
@@ -118,6 +119,11 @@ describe('saml service - provisionSamlUser', () => {
     };
 
     const result = await provisionSamlUser(userInfo, 'provider-saml-1');
+
+    expect(ssoClaimsMappingService.resolveRoleFromClaims).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'saml-user@example.com' }),
+      'provider-saml-1',
+    );
 
     expect(ssoSyncDiagnosticsService.startRun).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a',
