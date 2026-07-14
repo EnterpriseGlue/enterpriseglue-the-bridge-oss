@@ -214,7 +214,17 @@ router.post('/api/authz/check-batch', apiLimiter, requireAuth, validateBody(auth
 router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
     const snapshot = await permissionService.getCurrentUserPermissions(req.user!.userId, req.tenant?.tenantId || null);
-    res.json(snapshot);
+    // Runtime-resource visibility is resolved server-side per request. Keep
+    // this client snapshot deliberately coarse so process/decision keys and
+    // tenant lineage cannot become a second authorization authority.
+    res.json({
+      userId: snapshot.userId,
+      platform: snapshot.platform,
+      projects: snapshot.projects.map(({ resourceId, permissions }) => ({ resourceId, permissions })),
+      engines: snapshot.engines.map(({ resourceId, permissions }) => ({ resourceId, permissions })),
+      authorizationVersion: snapshot.authorizationVersion,
+      generatedAt: snapshot.generatedAt,
+    });
   } catch (error: any) {
     logger.error('Get current user permissions error:', error);
     throw Errors.internal('Failed to get current user permissions');

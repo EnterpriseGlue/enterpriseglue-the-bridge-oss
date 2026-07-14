@@ -710,6 +710,32 @@ describe('platform-admin authz routes', () => {
     });
   });
 
+  it('never serializes runtime-resource keys into the coarse current-user permission snapshot', async () => {
+    vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
+      userId: 'user-1',
+      platform: ['platform:authz:check'],
+      projects: [{ resourceId: 'project-1', permissions: ['project:files:view'], runtimeResourceKeys: ['should-not-leak'] }],
+      engines: [{ resourceId: 'engine-central', permissions: [], runtimeResourceKeys: ['payments-order', 'credit-risk'] }],
+      authorizationVersion: 'authz:123:test',
+      generatedAt: 123,
+      runtimeResources: [{ engineId: 'engine-central', resourceKey: 'payments-order', runtimeTenantId: 'tenant-a' }],
+    } as any);
+
+    const response = await request(app).get('/api/authz/me/permissions');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      userId: 'user-1',
+      platform: ['platform:authz:check'],
+      projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
+      engines: [{ resourceId: 'engine-central', permissions: [] }],
+      authorizationVersion: 'authz:123:test',
+      generatedAt: 123,
+    });
+    expect(JSON.stringify(response.body)).not.toContain('payments-order');
+    expect(JSON.stringify(response.body)).not.toContain('tenant-a');
+  });
+
   it('lists the permission catalog', async () => {
     const response = await request(app).get('/api/authz/permissions');
 
