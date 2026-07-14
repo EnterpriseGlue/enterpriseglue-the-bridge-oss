@@ -182,6 +182,27 @@ describe('mission-control shared mission_control routes', () => {
     expect(listProcessInstancesDetailed).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'payments', maxResults: 25 }));
   });
 
+  it('preserves the fail-closed status for oversized compatibility collections', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions')
+      .query({ engineId: 'engine-77', maxResults: 101 });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({
+      code: 'runtime_filter_not_supported',
+      error: 'Resource-aware runtime queries require maxResults between 1 and 100',
+    });
+    expect(listProcessDefinitions).not.toHaveBeenCalled();
+  });
+
   it('drops compatibility process-instance rows outside the authorized definition key', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine

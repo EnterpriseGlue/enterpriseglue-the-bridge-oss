@@ -105,6 +105,7 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
     }))
     res.json(collections.flat())
   } catch (e: any) {
+    if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to load process definitions')
   }
 }))
@@ -210,6 +211,7 @@ r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
     res.json(redacted)
   } catch (e: any) {
+    if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to load process instances')
   }
 }))
@@ -306,6 +308,7 @@ r.get('/mission-control-api/history/process-instances', requireRuntimeCollection
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
     res.json(redacted)
   } catch (e: any) {
+    if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to load historic process instances')
   }
 }))
@@ -353,6 +356,7 @@ r.get('/mission-control-api/history/variable-instances', requireRuntimeCollectio
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
     res.json(redacted)
   } catch (e: any) {
+    if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to load historic variables')
   }
 }))
