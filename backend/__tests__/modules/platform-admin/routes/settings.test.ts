@@ -13,6 +13,10 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
 
+vi.mock('@enterpriseglue/shared/middleware/requirePermission.js', () => ({
+  requirePermission: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
 describe('platform-admin settings routes', () => {
   let app: express.Application;
 
@@ -50,5 +54,21 @@ describe('platform-admin settings routes', () => {
     const response = await request(app).get('/');
 
     expect(response.status).toBe(404);
+  });
+
+  it('returns the documented validation error for unsupported runtime authorization modes', async () => {
+    const response = await request(app).put('/').send({
+      engineRuntimeAuthorizationMode: 'engine_native_authority',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'Validation failed',
+      issues: [{
+        path: 'engineRuntimeAuthorizationMode',
+        message: 'Unsupported runtime authorization mode; v1 supports only enterpriseglue_authoritative',
+        code: 'invalid_value',
+      }],
+    });
   });
 });

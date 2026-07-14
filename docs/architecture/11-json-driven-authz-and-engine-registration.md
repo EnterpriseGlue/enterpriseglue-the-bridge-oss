@@ -1815,7 +1815,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Extend `packages/shared/src/schemas/platform-admin/authz.ts` with identity mapping, external identity diagnostics, runtime resource, runtime resource set, and effective-access input/output schemas.
 - [ ] ⬜ Extend `packages/shared/src/schemas/platform-admin/engine-management.ts` with `runtimeAccessScope`, `deploymentIntegration`, `connectionMode`, and sanitized endpoint-auth request/response fields.
 - [ ] ⬜ Extend `packages/shared/src/schemas/mission-control/engine.ts`, shared common engine contracts, BPMN engine client types, and external registration schemas so manual, runtime, external, and config paths expose the same engine fields.
-- [ ] ⬜ Extend `packages/shared/src/schemas/platform-admin/platform-settings.ts` with `engineRuntimeAuthorizationMode`; keep `runtimeAccessScope` per engine rather than platform-wide.
+- [x] ✅ Extend `packages/shared/src/schemas/platform-admin/platform-settings.ts` with `engineRuntimeAuthorizationMode`; `runtimeAccessScope` remains per engine rather than platform-wide.
 - [ ] ⬜ Extend `packages/shared/src/authz/permission-actions.ts` with `engine_runtime_resource` and `engine_runtime_resource_set` plus identity/config/deployment-receipt actions; runtime tenant is a resource kind, not a top-level type.
 - [ ] ⬜ Separate role permission scope from assignment target type so engine roles can target engines, Engine Sets, exact runtime resources, and runtime resource sets.
 - [ ] ⬜ Extend `packages/shared/src/schemas/openapi.ts` and generated OpenAPI output for every new and changed route.
@@ -2287,7 +2287,7 @@ Phase 0 exit criteria:
 
 - [x] ✅ Ensure direct OIDC, SAML, and LDAP adapters normalize identities before mappings create provider-managed group memberships at provisioning time.
 - [ ] ⬜ Ensure login and scheduled synchronization share one identity reconciliation service and diagnostics model.
-- [ ] ⬜ Enforce `enterpriseglue_authoritative` as the only active runtime authorization mode in v1.
+- [x] ✅ Enforce `enterpriseglue_authoritative` as the only active runtime authorization mode in v1. Shared schema and settings-route tests reject later authority modes with a stable validation contract.
 - [x] ✅ Ensure provider-created group memberships use `source = "identity_provider"` plus provider/mapping lineage for direct OIDC, SAML, and LDAP provisioning.
 - [ ] ⬜ Ensure config-managed assignments use `source = "config"` and source lineage.
 - [x] ✅ Ensure Engine Set and Runtime Resource Set materialization refresh after config-managed engine creation or label changes.
@@ -2330,7 +2330,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add provider-neutral identity provider, identity mapping, mapping test, sync-run, and sync-event APIs. OIDC/SAML/LDAP provider CRUD and sanitized connection tests, entitlement mapping CRUD/test/preview, bounded reconciliation/replay, provider-scoped run history, and provider/run-isolated event history now have action metadata, OpenAPI contracts, audit behavior, and route/service coverage.
 - [x] ✅ Add direct deployment receipt and deployment lineage APIs with machine-principal authorization and idempotency keys. Receipts are merged into the canonical deployment history, so proxy and externally reported deployment lineage use one model.
 - [x] ✅ Add OpenAPI schemas for every config object. The config-bundle lifecycle now has typed manifest, imported-file schemas, preview, diff, hash-bound apply, apply-history, and export contracts.
-- [ ] ⬜ Add OpenAPI schemas for runtime authorization mode and unsupported-mode validation errors.
+- [x] ✅ Add OpenAPI schemas for runtime authorization mode and unsupported-mode validation errors. The named `EngineRuntimeAuthorizationMode` component exposes the sole v1 literal, while `UnsupportedEngineRuntimeAuthorizationModeError` documents the settings update `400` response and its stable issue shape.
 - [ ] ⬜ Add OpenAPI schemas for engine `connectionMode`, endpoint-auth policy errors, sanitized transport diagnostics, and manual/external/config registration parity. Engine request/response schemas carry `connectionMode`, and health/external-registration responses now expose the enum-only sanitized transport diagnostic; explicit endpoint-policy error schemas and full registration parity remain pending.
 - [ ] ⬜ Add OpenAPI `x-enterpriseglue-authz` metadata.
 - [ ] ⬜ Add OpenAPI `x-enterpriseglue-authz` metadata for every Mission Control route, including collection filter mode and runtime resource resolver.
@@ -2400,7 +2400,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ Test provider and mapping UI connection-test, mapping-preview, reconciliation-preview, run-history, and sanitized failure states through MSW and browser flows.
 - [ ] ⬜ Per-engine access tests proving viewer on Engine A and admin on Engine B.
 - [ ] ⬜ Central-engine tests proving users see different process/decision resources on the same engine.
-- [ ] ⬜ Runtime authorization mode tests proving v1 accepts only `enterpriseglue_authoritative`.
+- [x] ✅ Runtime authorization mode tests prove v1 accepts only `enterpriseglue_authoritative`, the settings middleware emits the documented unsupported-mode error, and the generated OpenAPI document retains both named schemas and the `400` response contract.
 - [ ] ⬜ Mission Control collection filtering tests for process definitions, decisions, instances, jobs, incidents, batches, migrations, and dashboard summaries.
 - [x] ✅ Collection tests prove unsupported resource-aware access with no visible inventory fails closed, while supported bounded process/decision collection and count paths push authorized keys into runtime queries and return no whole-engine rows or totals.
 - [ ] ⬜ Detail/mutation tests prove client-supplied process/tenant lineage is ignored and live resolved lineage controls the decision.

@@ -1744,6 +1744,7 @@ const {
   UpdatePlatformSettingsRequest,
   EngineOnboardingModeSchema,
   EngineRuntimeAuthorizationModeSchema,
+  UnsupportedEngineRuntimeAuthorizationModeErrorSchema,
   EnterpriseGlueConfigBundleSchema,
   ConfigAssignmentsFileSchema,
   ConfigEnginesFileSchema,
@@ -1857,6 +1858,8 @@ registry.registerPath({
 });
 
 // Platform Settings
+registry.register('EngineRuntimeAuthorizationMode', EngineRuntimeAuthorizationModeSchema);
+registry.register('UnsupportedEngineRuntimeAuthorizationModeError', UnsupportedEngineRuntimeAuthorizationModeErrorSchema);
 registry.register('PlatformSettings', PlatformSettingsSchema);
 const PublicPlatformSettingsSchema = z.object({
   syncPushEnabled: z.boolean(),
@@ -1887,7 +1890,10 @@ registry.registerPath({
   path: '/api/admin/settings',
   ...authzExtension('platform.settings.manage', 'PUT', '/api/admin/settings'),
   request: { body: { content: { 'application/json': { schema: UpdatePlatformSettingsRequest } } } },
-  responses: { 200: { description: 'Updated', content: { 'application/json': { schema: SuccessResponseSchema } } } },
+  responses: {
+    200: { description: 'Updated', content: { 'application/json': { schema: SuccessResponseSchema } } },
+    400: { description: 'Unsupported runtime authorization mode', content: { 'application/json': { schema: UnsupportedEngineRuntimeAuthorizationModeErrorSchema } } },
+  },
 });
 
 // Admin Governance

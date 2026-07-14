@@ -5,7 +5,18 @@ const PiiScopeSchema = z.enum(['processDetails', 'history', 'logs', 'errors', 'a
 export const EngineOnboardingModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
 export const ProjectEngineTargetPolicyModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
 export const AccessAuthorityModeSchema = z.enum(['manual', 'transition_to_sso', 'sso_managed']);
-export const EngineRuntimeAuthorizationModeSchema = z.literal('enterpriseglue_authoritative');
+export const UnsupportedEngineRuntimeAuthorizationModeMessage = 'Unsupported runtime authorization mode; v1 supports only enterpriseglue_authoritative';
+export const EngineRuntimeAuthorizationModeSchema = z.literal('enterpriseglue_authoritative', {
+  error: UnsupportedEngineRuntimeAuthorizationModeMessage,
+});
+export const UnsupportedEngineRuntimeAuthorizationModeErrorSchema = z.object({
+  error: z.literal('Validation failed'),
+  issues: z.array(z.object({
+    path: z.string(),
+    message: z.literal(UnsupportedEngineRuntimeAuthorizationModeMessage),
+    code: z.literal('invalid_value'),
+  })).min(1),
+});
 
 // Select schema (read responses)
 export const PlatformSettingsSchema = z.object({
