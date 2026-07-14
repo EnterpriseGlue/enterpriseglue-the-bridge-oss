@@ -16,6 +16,10 @@ vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   notificationsLimiter: (_req: any, _res: any, next: any) => next(),
   dashboardLimiter: (_req: any, _res: any, next: any) => next(),
   missionControlLimiter: (_req: any, _res: any, next: any) => next(),
+  configBundleLimiter: (_req: any, _res: any, next: any) => next(),
+  identityAdminLimiter: (_req: any, _res: any, next: any) => next(),
+  reconciliationLimiter: (_req: any, _res: any, next: any) => next(),
+  engineRegistrationLimiter: (_req: any, _res: any, next: any) => next(),
   isNotificationsRequest: vi.fn().mockReturnValue(false),
   getClientIdentifier: vi.fn().mockReturnValue('test-client-id'),
 }));

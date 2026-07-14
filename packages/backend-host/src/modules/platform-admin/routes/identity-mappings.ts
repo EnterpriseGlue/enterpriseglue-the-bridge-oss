@@ -9,6 +9,8 @@ import { authzGroupService } from '@enterpriseglue/shared/services/platform-admi
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
+import { identityAdminLimiter, reconciliationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { identityAdminJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
 
 const router = Router();
 const mappingSchema = z.object({
@@ -32,15 +34,15 @@ const provisionAccessSchema = mappingSchema.omit({ targetGroupKey: true }).exten
 });
 const idSchema = z.string().min(1).max(128);
 
-router.get('/api/identity/mappings', requireAuth, requireAction('platform.sso.group-mappings.read'), asyncHandler(async (req, res) => {
+router.get('/api/identity/mappings', requireAuth, identityAdminLimiter, requireAction('platform.sso.group-mappings.read'), asyncHandler(async (req, res) => {
   res.json(await identityEntitlementMappingService.list(req.tenant?.tenantId || null));
 }));
-router.post('/api/identity/mappings', requireAuth, requireAction('platform.sso.group-mappings.manage'), validateBody(mappingSchema), asyncHandler(async (req, res) => {
+router.post('/api/identity/mappings', requireAuth, identityAdminLimiter, requireAction('platform.sso.group-mappings.manage'), identityAdminJsonPayloadLimit, validateBody(mappingSchema), asyncHandler(async (req, res) => {
   const mapping = await identityEntitlementMappingService.create(req.body, req.tenant?.tenantId || null);
   await logAudit({ action: 'identity.mapping.create', userId: req.user!.userId, resourceType: 'identity_entitlement_mapping', resourceId: mapping.id, details: { providerKey: mapping.providerKey, targetGroupKey: mapping.targetGroupKey, entitlementType: mapping.entitlementType, matchOperator: mapping.matchOperator } });
   res.status(201).json(mapping);
 }));
-router.post('/api/identity/mappings/provision-access', requireAuth, requireAction('platform.sso.group-mappings.manage'), requireAction('platform.authz.groups.manage'), requireAction('platform.authz.roles.manage'), validateBody(provisionAccessSchema), asyncHandler(async (req, res) => {
+router.post('/api/identity/mappings/provision-access', requireAuth, identityAdminLimiter, requireAction('platform.sso.group-mappings.manage'), requireAction('platform.authz.groups.manage'), requireAction('platform.authz.roles.manage'), identityAdminJsonPayloadLimit, validateBody(provisionAccessSchema), asyncHandler(async (req, res) => {
   const tenantId = req.tenant?.tenantId || null;
   const dataSource = await getDataSource();
   const result = await dataSource.transaction(async (manager) => {
@@ -75,23 +77,23 @@ router.post('/api/identity/mappings/provision-access', requireAuth, requireActio
   await logAudit({ action: 'identity.mapping.provision_access', userId: req.user!.userId, resourceType: 'identity_entitlement_mapping', resourceId: result.mapping.id, details: { targetGroupKey: result.mapping.targetGroupKey, createdGroupId: result.createdGroup?.id || null, roleId: req.body.roleId, resourceType: req.body.resourceType, resourceId: req.body.resourceId } });
   res.status(201).json(result);
 }));
-router.put('/api/identity/mappings/:id', requireAuth, requireAction('platform.sso.group-mappings.manage'), validateBody(mappingUpdateSchema), asyncHandler(async (req, res) => {
+router.put('/api/identity/mappings/:id', requireAuth, identityAdminLimiter, requireAction('platform.sso.group-mappings.manage'), identityAdminJsonPayloadLimit, validateBody(mappingUpdateSchema), asyncHandler(async (req, res) => {
   const id = idSchema.parse(req.params.id);
   const mapping = await identityEntitlementMappingService.update(id, req.body, req.tenant?.tenantId || null);
   await logAudit({ action: 'identity.mapping.update', userId: req.user!.userId, resourceType: 'identity_entitlement_mapping', resourceId: mapping.id, details: { changedFields: Object.keys(req.body) } });
   res.json(mapping);
 }));
-router.delete('/api/identity/mappings/:id', requireAuth, requireAction('platform.sso.group-mappings.manage'), asyncHandler(async (req, res) => {
+router.delete('/api/identity/mappings/:id', requireAuth, identityAdminLimiter, requireAction('platform.sso.group-mappings.manage'), asyncHandler(async (req, res) => {
   const id = idSchema.parse(req.params.id);
   await identityEntitlementMappingService.remove(id, req.tenant?.tenantId || null);
   await logAudit({ action: 'identity.mapping.delete', userId: req.user!.userId, resourceType: 'identity_entitlement_mapping', resourceId: id, details: {} });
   res.status(204).send();
 }));
-router.post('/api/identity/mappings/test', requireAuth, requireAction('platform.sso.group-mappings.manage'), validateBody(testSchema), asyncHandler(async (req, res) => {
+router.post('/api/identity/mappings/test', requireAuth, identityAdminLimiter, reconciliationLimiter, requireAction('platform.sso.group-mappings.manage'), identityAdminJsonPayloadLimit, validateBody(testSchema), asyncHandler(async (req, res) => {
   const result = await identityEntitlementMappingService.test(req.body, req.tenant?.tenantId || null);
   res.json(result);
 }));
-router.post('/api/identity/mappings/stored-snapshot-preview', requireAuth, requireAction('platform.sso.group-mappings.manage'), validateBody(storedSnapshotPreviewSchema), asyncHandler(async (req, res) => {
+router.post('/api/identity/mappings/stored-snapshot-preview', requireAuth, identityAdminLimiter, reconciliationLimiter, requireAction('platform.sso.group-mappings.manage'), identityAdminJsonPayloadLimit, validateBody(storedSnapshotPreviewSchema), asyncHandler(async (req, res) => {
   res.json(await identityEntitlementMappingService.previewStoredSnapshots(req.body, req.tenant?.tenantId || null));
 }));
 

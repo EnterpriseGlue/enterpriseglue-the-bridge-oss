@@ -83,6 +83,7 @@ vi.mock('@enterpriseglue/shared/middleware/platformAuth.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
   engineLimiter: (_req: any, _res: any, next: any) => next(),
+  engineRegistrationLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -1663,7 +1664,10 @@ describe('mission-control engines routes', () => {
         externalId: 'cluster-a/prod',
       });
 
-    expect(response.status).toBe(401);
+    expect({ status: response.status, body: response.body }).toEqual({
+      status: 401,
+      body: { error: 'API client bearer token required', code: 'UNAUTHORIZED' },
+    });
     expect(apiClientAuthMock.authenticateToken).not.toHaveBeenCalled();
   });
 

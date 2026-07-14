@@ -1,7 +1,8 @@
 import { raw, type Request, type RequestHandler, type Response, type Router } from 'express';
 import { z } from 'zod';
 import { IsNull } from 'typeorm';
-import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { configBundleLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { configBundleJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -60,7 +61,7 @@ export function registerConfigBundleRoutes(
   router: Router,
   { requireConfigBundleAccess, requireTargetTransferAccess }: ConfigBundleRouteDependencies,
 ): void {
-  router.post('/api/authz/config-bundles/import-zip', apiLimiter, requireConfigBundleAccess, raw({ type: ['application/zip', 'application/octet-stream'], limit: '1mb' }), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/import-zip', configBundleLimiter, requireConfigBundleAccess, raw({ type: ['application/zip', 'application/octet-stream'], limit: '1mb' }), asyncHandler(async (req: Request, res: Response) => {
     const payload = configBundleArchiveService.readZip(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
     await logAudit({
       tenantId: req.tenant?.tenantId || undefined,
@@ -73,13 +74,13 @@ export function registerConfigBundleRoutes(
     res.json(payload);
   }));
 
-  router.post('/api/authz/config-bundles/preview', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/preview', configBundleLimiter, requireConfigBundleAccess, configBundleJsonPayloadLimit, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
     const settings = await platformSettingsService.get();
     const preview = configBundlePreviewService.preview(req.body, settings);
     res.status(preview.valid ? 200 : 422).json(preview);
   }));
 
-  router.post('/api/authz/config-bundles/validate-secret-refs', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/validate-secret-refs', configBundleLimiter, requireConfigBundleAccess, configBundleJsonPayloadLimit, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
     const settings = await platformSettingsService.get();
     const preflight = configBundleSecretPreflightService.check(req.body, settings);
     await logAudit({
@@ -99,13 +100,13 @@ export function registerConfigBundleRoutes(
     res.status(preflight.valid ? 200 : 422).json(preflight);
   }));
 
-  router.post('/api/authz/config-bundles/diff', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/diff', configBundleLimiter, requireConfigBundleAccess, configBundleJsonPayloadLimit, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
     const settings = await platformSettingsService.get();
     const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null, settings);
     res.status(diff.valid ? 200 : 422).json(diff);
   }));
 
-  router.post('/api/authz/config-bundles/apply', apiLimiter, requireConfigBundleAccess, validateBody(configBundleApplySchema), requireTargetTransferAccess, asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/apply', configBundleLimiter, requireConfigBundleAccess, configBundleJsonPayloadLimit, validateBody(configBundleApplySchema), requireTargetTransferAccess, asyncHandler(async (req: Request, res: Response) => {
     const actorId = req.apiClient?.createdById || req.apiClient?.id || req.user!.userId;
     const settings = await platformSettingsService.get();
     const result = await configBundleApplyService.apply({
@@ -137,7 +138,7 @@ export function registerConfigBundleRoutes(
     res.status(200).json(result);
   }));
 
-  router.get('/api/authz/config-bundles/runs', apiLimiter, requireConfigBundleAccess, validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/api/authz/config-bundles/runs', configBundleLimiter, requireConfigBundleAccess, validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
     const tenantId = req.tenant?.tenantId || null;
     const rows = await (await getDataSource()).getRepository(ConfigBundleApplyRun).find({
       where: tenantId ? { tenantId } : { tenantId: IsNull() },
@@ -147,7 +148,7 @@ export function registerConfigBundleRoutes(
     res.json(rows.map(configBundleRunResponse));
   }));
 
-  router.get('/api/authz/config-bundles/runs/:id', apiLimiter, requireConfigBundleAccess, validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/api/authz/config-bundles/runs/:id', configBundleLimiter, requireConfigBundleAccess, validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
     const tenantId = req.tenant?.tenantId || null;
     const runId = String(req.params.id);
     const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
@@ -157,7 +158,7 @@ export function registerConfigBundleRoutes(
     res.json(configBundleRunResponse(row));
   }));
 
-  router.get('/api/authz/config-bundles/runs/:id/identity-replay-tasks', apiLimiter, requireConfigBundleAccess, validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/api/authz/config-bundles/runs/:id/identity-replay-tasks', configBundleLimiter, requireConfigBundleAccess, validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
     const tenantId = req.tenant?.tenantId || null;
     const runId = String(req.params.id);
     const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
@@ -182,7 +183,7 @@ export function registerConfigBundleRoutes(
     })));
   }));
 
-  router.get('/api/authz/config-bundles/export', apiLimiter, requireConfigBundleAccess, validateQuery(z.object({ bundleKey: z.string().min(3).max(160), tenantKey: z.string().min(1).max(160).optional() })), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/api/authz/config-bundles/export', configBundleLimiter, requireConfigBundleAccess, validateQuery(z.object({ bundleKey: z.string().min(3).max(160), tenantKey: z.string().min(1).max(160).optional() })), asyncHandler(async (req: Request, res: Response) => {
     res.json(await configBundleExportService.exportBundle({ bundleKey: String(req.query.bundleKey), tenantKey: req.query.tenantKey ? String(req.query.tenantKey) : undefined, tenantId: req.tenant?.tenantId || null }));
   }));
 }

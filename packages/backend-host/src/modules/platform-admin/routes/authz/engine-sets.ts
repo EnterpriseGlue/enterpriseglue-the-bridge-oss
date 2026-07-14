@@ -1,6 +1,6 @@
 import type { Request, RequestHandler, Response, Router } from 'express';
 import { z } from 'zod';
-import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { apiLimiter, reconciliationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
@@ -141,11 +141,11 @@ export function registerEngineSetRoutes(router: Router, { requirePlatformAction 
     res.json(sets.filter((set) => (set.tenantId || null) === tenantId));
   }));
 
-  router.post('/api/authz/runtime-resource-sets/:id/materialize', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/runtime-resource-sets/:id/materialize', apiLimiter, requireAuth, reconciliationLimiter, requirePlatformAction('platform.engine-sets.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
     res.json(await runtimeResourceInventoryService.materialize(String(req.params.id), req.tenant?.tenantId || null));
   }));
 
-  router.post('/api/authz/runtime-resources/:id/reconcile', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/runtime-resources/:id/reconcile', apiLimiter, requireAuth, reconciliationLimiter, requirePlatformAction('platform.engine-sets.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
     const engineId = String(req.params.id);
     const tenantId = req.tenant?.tenantId || null;
     res.json(await engineMetadataReconciliationService.reconcileEngine(engineId, tenantId));

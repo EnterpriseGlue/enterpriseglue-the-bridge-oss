@@ -1,7 +1,7 @@
 import type { Request, RequestHandler, Response, Router } from 'express';
 import { z } from 'zod';
 import { In, IsNull, Not } from 'typeorm';
-import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { apiLimiter, reconciliationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
@@ -183,7 +183,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
     }
   }));
 
-  router.post('/api/authz/external-engines/:id/reconcile', apiLimiter, requireAuth, requireAction('platform.external-engines.reconcile', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/external-engines/:id/reconcile', apiLimiter, requireAuth, reconciliationLimiter, requireAction('platform.external-engines.reconcile', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const dataSource = await getDataSource();
       const engineRepo = dataSource.getRepository(Engine);

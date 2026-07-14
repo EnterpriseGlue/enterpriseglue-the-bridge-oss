@@ -2336,7 +2336,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add OpenAPI `x-enterpriseglue-authz` metadata for every Mission Control route, including collection filter mode and runtime resource resolver. Stale active-engine operations with no runtime route were removed instead of being assigned misleading metadata.
 - [x] ✅ Add route inventory entries and tests. CI now enforces strict action-route presence, strict OpenAPI classification, metadata parity, exemption parity, and 100% authenticated backend-route coverage; a regression test proves missing Mission Control metadata fails closed.
 - [x] ✅ Add the API-client-only `config:bundle:manage` scope for CI/CD configuration lifecycle routes. It is enforced together with a platform-scoped `platform:authz:roles:manage` RBAC assignment; deployment service accounts intentionally remain deployment-only.
-- [ ] ⬜ Add rate limits and payload size limits.
+- [x] ✅ Add rate limits and payload size limits. Configuration lifecycle requests use a dedicated 120-per-15-minute production budget and 1 MiB JSON/ZIP caps; identity administration uses 300 per 15 minutes with 256 KiB JSON caps; connection tests, reconciliation, replay, materialization, and stored-snapshot previews share a stricter 30-per-15-minute budget; engine registration uses 300 per 15 minutes with a 256 KiB JSON cap. API-client ids participate in limiter keys, parser- and route-level overflow return the same sanitized `413 PAYLOAD_TOO_LARGE` contract, and all limiter responses use a stable `RATE_LIMITED` code.
 
 ### Phase 6: UI
 

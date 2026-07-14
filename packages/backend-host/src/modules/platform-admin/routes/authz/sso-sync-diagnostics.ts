@@ -1,6 +1,7 @@
 import type { Request, RequestHandler, Response, Router } from 'express';
 import { z } from 'zod';
-import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { apiLimiter, reconciliationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { identityAdminJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
@@ -45,7 +46,7 @@ export function registerSsoSyncDiagnosticsRoutes(router: Router, { requirePlatfo
     }
   }));
 
-  router.post('/api/authz/sso-sync-runs/reconcile', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateBody(ssoSyncDiagnosticsRunSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/sso-sync-runs/reconcile', apiLimiter, requireAuth, reconciliationLimiter, requirePlatformAction('platform.sso.engine-assignments.manage'), identityAdminJsonPayloadLimit, validateBody(ssoSyncDiagnosticsRunSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const baseInput = {
         tenantId: req.tenant?.tenantId || null, providerId: req.body.providerId || null, trigger: req.body.trigger || 'manual',

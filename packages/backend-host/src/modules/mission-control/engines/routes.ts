@@ -19,7 +19,7 @@ import { requireApiClientAction } from '@enterpriseglue/shared/middleware/apiCli
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js'
-import { apiLimiter, engineLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
+import { apiLimiter, engineLimiter, engineRegistrationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
 import { engineService, engineSetService, platformSettingsService, projectEngineTargetService, ApiClientScopes } from '@enterpriseglue/shared/services/platform-admin/index.js'
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
@@ -35,6 +35,7 @@ import {
   ExternalEngineRegistrationRequestSchema,
   UpdateEngineRequestSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
+import { engineRegistrationJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js'
 
 type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[] }
 
@@ -880,7 +881,7 @@ r.get('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine.
   res.json(rows)
 }))
 
-r.post('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine.inventory.create', { resourceResolver: 'platform.self' }), validateBody(createEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines', engineLimiter, requireAuth, engineRegistrationLimiter, requireAction('engine.inventory.create', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(createEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
   if ((await getEngineOnboardingMode()) === 'external_only') {
     throw Errors.forbidden('Manual engine registration is disabled by the current onboarding policy')
   }
@@ -977,7 +978,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
   resourceType: 'external_engine_system',
   resourceIdFrom: 'body',
   resourceIdKey: 'externalSystemId',
-}), validateBody(externalRegisterEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
+}), engineRegistrationLimiter, engineRegistrationJsonPayloadLimit, validateBody(externalRegisterEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const settings = await platformSettingsService.get()
@@ -1394,7 +1395,7 @@ r.get('/engines-api/engines/:id/project-targets', engineLimiter, requireAuth, va
   res.json(targets)
 }))
 
-r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT, EnginePermissions.SECRETS_MANAGE] }), validateBody(updateEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.put('/engines-api/engines/:id', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT, EnginePermissions.SECRETS_MANAGE] }), engineRegistrationJsonPayloadLimit, validateBody(updateEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const engineId = String(req.params.id)

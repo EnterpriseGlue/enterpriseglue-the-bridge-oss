@@ -24,7 +24,7 @@ describe('identity mapping routes', () => {
     vi.clearAllMocks();
     service.list.mockResolvedValue([mapping]); service.create.mockResolvedValue(mapping); service.update.mockResolvedValue(mapping); service.remove.mockResolvedValue(undefined); service.test.mockResolvedValue({ matches: true, entitlements: [{ type: 'group', externalId: 'ops' }] }); service.previewStoredSnapshots.mockResolvedValue({ scanned: 3, matches: 2, nonMatches: 1, failed: 0, truncated: false, latestSnapshotAt: 123, warnings: ['stored_snapshots_only'] });
     groups.createGroup.mockResolvedValue({ id: 'group-1' }); permissions.assignRole.mockResolvedValue({ id: 'assignment-1', warnings: [] }); dataSource.transaction.mockImplementation(async (callback: (manager: object) => Promise<unknown>) => callback({ transaction: true }));
-    app = express(); app.use(express.json()); app.use(identityMappingsRouter); app.use((error: any, _req: any, res: any, _next: any) => res.status(error.statusCode || 500).json({ error: error.message }));
+    app = express(); app.use(express.json({ limit: '512kb' })); app.use(identityMappingsRouter); app.use((error: any, _req: any, res: any, _next: any) => res.status(error.statusCode || 500).json({ error: error.message }));
   });
   it('lists tenant-scoped provider-neutral mappings', async () => {
     const response = await request(app).get('/api/identity/mappings');
@@ -59,6 +59,19 @@ describe('identity mapping routes', () => {
   it('tests claims without persisting memberships', async () => {
     const response = await request(app).post('/api/identity/mappings/test').send({ providerKey: 'identity.oidc.main', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', claims: { sub: 'user-1', groups: ['ops'] } });
     expect(response.status).toBe(200); expect(service.test).toHaveBeenCalledWith(expect.objectContaining({ claims: expect.any(Object) }), 'tenant-1');
+  });
+  it('rejects oversized identity test payloads before evaluating claims', async () => {
+    const response = await request(app).post('/api/identity/mappings/test').send({
+      providerKey: 'identity.oidc.main', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact',
+      claims: { oversized: 'x'.repeat(300 * 1024) },
+    });
+    expect(response.status).toBe(413);
+    expect(response.body).toEqual({
+      error: 'Request payload exceeds the allowed size',
+      code: 'PAYLOAD_TOO_LARGE',
+      maxBytes: 256 * 1024,
+    });
+    expect(service.test).not.toHaveBeenCalled();
   });
   it('previews stored snapshot coverage without requesting identity details', async () => {
     const response = await request(app).post('/api/identity/mappings/stored-snapshot-preview').send({ providerKey: 'identity.oidc.main', entitlementType: 'group', externalId: 'ops', matchOperator: 'exact' });

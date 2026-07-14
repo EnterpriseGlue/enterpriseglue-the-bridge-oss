@@ -48,6 +48,8 @@ const apiClientAuthMock = vi.hoisted(() => ({
 
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
+  configBundleLimiter: (_req: any, _res: any, next: any) => next(),
+  reconciliationLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -442,7 +444,7 @@ describe('platform-admin authz routes', () => {
   beforeEach(() => {
     app = express();
     app.disable('x-powered-by');
-    app.use(express.json());
+    app.use(express.json({ limit: '2mb' }));
     app.use(authzRouter);
     vi.clearAllMocks();
     (getDataSource as any).mockResolvedValue({
@@ -2120,6 +2122,22 @@ describe('platform-admin authz routes', () => {
 
     expect(invalidResponse.status).toBe(422);
     expect(invalidResponse.body).toMatchObject({ valid: false });
+  });
+
+  it('rejects oversized configuration bundle JSON before preview compilation', async () => {
+    const response = await request(app)
+      .post('/api/authz/config-bundles/preview')
+      .send({
+        bundle: {},
+        files: { './groups.json': { padding: 'x'.repeat(1024 * 1024) } },
+      });
+
+    expect(response.status).toBe(413);
+    expect(response.body).toEqual({
+      error: 'Request payload exceeds the allowed size',
+      code: 'PAYLOAD_TOO_LARGE',
+      maxBytes: 1024 * 1024,
+    });
   });
 
   it('uses platform policy when previewing credentialless customer sidecars', async () => {
