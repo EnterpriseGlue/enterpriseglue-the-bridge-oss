@@ -5,6 +5,7 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { externalIdentityKey, externalIdentityService } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -127,6 +128,7 @@ describe('externalIdentityService', () => {
     const membershipDelete = vi.fn().mockResolvedValue({ affected: 2 });
     const normalizedUpdate = vi.fn().mockResolvedValue({ affected: 1 });
     const refreshUpdate = vi.fn().mockResolvedValue({ affected: 3 });
+    const userUpdate = vi.fn().mockResolvedValue({ affected: 1 });
     const manager = { getRepository: (entity: unknown) => {
       if (entity === ExternalIdentity) return {
         findOne: vi.fn().mockResolvedValue({ id: 'identity-a', userId: 'user-1', providerId: 'oidc-a' }),
@@ -136,6 +138,7 @@ describe('externalIdentityService', () => {
       if (entity === AuthzGroupMembership) return { delete: membershipDelete };
       if (entity === SsoNormalizedIdentity) return { update: normalizedUpdate };
       if (entity === RefreshToken) return { update: refreshUpdate };
+      if (entity === User) return { findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', authSessionVersion: 2 }), update: userUpdate };
       throw new Error('Unexpected repository');
     }};
     (getDataSource as unknown as Mock).mockResolvedValue({

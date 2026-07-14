@@ -119,6 +119,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     if (!user) {
       throw Errors.unauthorized('User not found or inactive');
     }
+    if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
+      throw Errors.unauthorized('Session has been revoked');
+    }
 
     const requestPath = req.path;
     const allowUnverifiedPaths = [

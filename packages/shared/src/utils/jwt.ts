@@ -15,6 +15,7 @@ export interface JwtPayload {
   /** Explicit canonical principal fields. Omitted only by pre-refactor tokens. */
   principalType?: 'user';
   principalId?: string;
+  authSessionVersion?: number;
   type: 'access' | 'refresh' | 'onboarding';
   invitationId?: string;
   tenantSlug?: string;
@@ -29,6 +30,7 @@ export function generateAccessToken(user: User | any): string {
     email: user.email,
     principalType: 'user',
     principalId: user.id,
+    authSessionVersion: Number.isInteger(user.authSessionVersion) ? user.authSessionVersion : 0,
     type: 'access',
   };
 
@@ -46,6 +48,7 @@ export function generateRefreshToken(user: User | any): string {
     email: user.email,
     principalType: 'user',
     principalId: user.id,
+    authSessionVersion: Number.isInteger(user.authSessionVersion) ? user.authSessionVersion : 0,
     type: 'refresh',
   };
 

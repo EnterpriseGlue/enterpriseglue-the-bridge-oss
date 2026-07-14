@@ -5,6 +5,7 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 
@@ -165,6 +166,10 @@ class ExternalIdentityService {
       identityProviderId: providerId,
       revokedAt: IsNull(),
     }, { revokedAt: now });
+    const userRepo = store.getRepository(User);
+    const user = await userRepo.findOneBy({ id: userId });
+    if (!user) throw new Error('External identity references a missing user account');
+    await userRepo.update({ id: userId }, { authSessionVersion: (user.authSessionVersion || 0) + 1 });
     await identityRepo.update({ id: identity.id }, { status: 'unlinked', updatedAt: now });
 
     return {

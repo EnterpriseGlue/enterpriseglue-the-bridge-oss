@@ -75,6 +75,19 @@ describe('auth middleware', () => {
       expect(next).toHaveBeenCalled();
     });
 
+    it('rejects an access token after its user session version advances', async () => {
+      req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
+      (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'access', email: 'user@example.com', authSessionVersion: 0 });
+      (getDataSource as any).mockResolvedValue({
+        getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue({ isActive: true, isEmailVerified: true, email: 'user@example.com', authSessionVersion: 1 }) }),
+      });
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect((req as any).user?.authSessionVersion).toBe(0);
+      expect((next as any).mock.calls[0][0]?.message).toContain('Session has been revoked');
+    });
+
     it('runs enterprise tenant authorization resolver after user validation', async () => {
       const resolver = vi.fn(async (request: Request) => {
         request.tenantRole = 'tenant_admin';

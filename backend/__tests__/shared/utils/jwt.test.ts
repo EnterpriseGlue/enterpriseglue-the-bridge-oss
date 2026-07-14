@@ -12,6 +12,7 @@ describe('jwt utils', () => {
     expect(payload.platformRole).toBeUndefined();
     expect(payload.principalType).toBe('user');
     expect(payload.principalId).toBe(user.id);
+    expect(payload.authSessionVersion).toBe(0);
     expect(payload.type).toBe('access');
   });
 

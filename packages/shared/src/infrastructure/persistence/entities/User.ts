@@ -60,6 +60,10 @@ export class User extends AppBaseEntity {
   @Column({ name: 'last_login_at', type: 'bigint', nullable: true })
   lastLoginAt!: number | null;
 
+  /** Increments to reject every previously issued access and refresh session. */
+  @Column({ name: 'auth_session_version', type: 'integer', default: 0 })
+  authSessionVersion!: number;
+
   @Column({ name: 'created_by_user_id', type: 'text', nullable: true })
   createdByUserId!: string | null;
 }
