@@ -2062,13 +2062,19 @@ class PermissionServiceClass {
       qb.andWhere('assignment.principalId = :principalId', { principalId: filters.principalId });
     }
     if (filters.resourceType) {
-      qb.andWhere('assignment.resourceType = :resourceType', { resourceType: filters.resourceType });
+      qb.andWhere(
+        '(assignment.scopeType = :resourceType OR (assignment.scopeType IS NULL AND assignment.resourceType = :resourceType))',
+        { resourceType: filters.resourceType }
+      );
     }
     if (filters.resourceId !== undefined) {
       if (filters.resourceId) {
-        qb.andWhere('assignment.resourceId = :resourceId', { resourceId: filters.resourceId });
+        qb.andWhere(
+          '(assignment.scopeId = :resourceId OR (assignment.scopeId IS NULL AND assignment.resourceId = :resourceId))',
+          { resourceId: filters.resourceId }
+        );
       } else {
-        qb.andWhere('assignment.resourceId IS NULL');
+        qb.andWhere('(assignment.scopeId IS NULL AND assignment.resourceId IS NULL)');
       }
     }
     if (filters.scopeType) {

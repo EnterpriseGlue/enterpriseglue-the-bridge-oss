@@ -163,7 +163,10 @@ async function assertCanRemoveScopedAssignment(req: Request, id: string): Promis
   const assignment = await (await getDataSource()).getRepository(RbacRoleAssignment).findOne({ where: { id } });
   if (!assignment) throw Errors.notFound('Role assignment');
 
-  const resource = toScopedAssignmentResource(assignment.resourceType, assignment.resourceId);
+  const resource = toScopedAssignmentResource(
+    assignment.scopeType || assignment.resourceType,
+    assignment.scopeId ?? assignment.resourceId
+  );
   if (!resource || !await canManageScopedAssignments(req, resource)) throw Errors.adminRequired();
   const role = await permissionService.getRole(assignment.roleId, req.tenant?.tenantId || null);
   if (!role || !isScopedManagerAssignableRole(role, resource) || assignment.source !== 'manual') {

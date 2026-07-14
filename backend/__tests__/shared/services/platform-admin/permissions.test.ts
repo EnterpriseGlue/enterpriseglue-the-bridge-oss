@@ -2502,6 +2502,32 @@ describe('permissionService', () => {
     })]);
   });
 
+  it('uses canonical scope fields for legacy resource filters', async () => {
+    const assignmentQb = {
+      orderBy: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([]),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+        if (entity === RbacRole) return { find: vi.fn().mockResolvedValue([]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await permissionService.listRoleAssignments({ resourceType: 'engine', resourceId: 'engine-1' });
+
+    expect(assignmentQb.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('assignment.scopeType = :resourceType'),
+      { resourceType: 'engine' }
+    );
+    expect(assignmentQb.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('assignment.scopeId = :resourceId'),
+      { resourceId: 'engine-1' }
+    );
+  });
+
   it('syncs legacy project and engine memberships into canonical source=legacy role assignments', async () => {
     const assignmentFind = vi.fn().mockResolvedValue([
       { id: 'legacy:project:project-1:stale-user:system.project.viewer' },
