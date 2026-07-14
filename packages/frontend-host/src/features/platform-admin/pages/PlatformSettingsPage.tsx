@@ -81,46 +81,40 @@ const TAG_COLORS = [
   '#a2191f', // Dark Red
 ];
 
-type PlatformSettingsSection =
-  | 'git'
-  | 'projects'
-  | 'invite-domains'
-  | 'pii-redaction'
-  | 'engines'
-  | 'sso'
+type PlatformSettingsSectionVisibility =
+  | 'settings'
+  | 'settings-or-git-manage'
+  | 'settings-or-governance-read'
   | 'identity-providers'
   | 'identity-mappings'
   | 'configuration'
-  | 'role-library'
   | 'access-control'
-  | 'sso-mappings'
   | 'authz-policies'
-  | 'authz-audit'
-  | 'audit-logs'
-  | 'email'
-  | 'email-templates'
-  | 'branding';
+  | 'audit';
 
-const PLATFORM_SETTINGS_SECTION_LABELS: Record<PlatformSettingsSection, string> = {
-  git: 'Git',
-  projects: 'Projects',
-  'invite-domains': 'Invite Domains',
-  'pii-redaction': 'PII Redaction',
-  engines: 'Engines',
-  sso: 'SSO',
-  'identity-providers': 'Identity Providers',
-  'identity-mappings': 'Identity Mappings',
-  configuration: 'Configuration',
-  'role-library': 'Role Library',
-  'access-control': 'Access Control',
-  'sso-mappings': 'SSO Role Mappings',
-  'authz-policies': 'Authorization Policies',
-  'authz-audit': 'Authorization Audit',
-  'audit-logs': 'System Audit Logs',
-  email: 'Email',
-  'email-templates': 'Email Templates',
-  branding: 'Branding',
-};
+const PLATFORM_SETTINGS_SECTION_REGISTRY = [
+  { id: 'git', label: 'Git', visibility: 'settings-or-git-manage' },
+  { id: 'projects', label: 'Projects', visibility: 'settings-or-governance-read' },
+  { id: 'invite-domains', label: 'Invite Domains', visibility: 'settings' },
+  { id: 'pii-redaction', label: 'PII Redaction', visibility: 'settings' },
+  { id: 'engines', label: 'Engines', visibility: 'settings-or-governance-read' },
+  { id: 'sso', label: 'SSO', visibility: 'settings' },
+  { id: 'identity-providers', label: 'Identity Providers', visibility: 'identity-providers' },
+  { id: 'identity-mappings', label: 'Identity Mappings', visibility: 'identity-mappings' },
+  { id: 'configuration', label: 'Configuration', visibility: 'configuration' },
+  { id: 'role-library', label: 'Role Library', visibility: 'access-control' },
+  { id: 'access-control', label: 'Access Control', visibility: 'access-control' },
+  { id: 'sso-mappings', label: 'SSO Role Mappings', visibility: 'identity-mappings' },
+  { id: 'authz-policies', label: 'Authorization Policies', visibility: 'authz-policies' },
+  { id: 'authz-audit', label: 'Authorization Audit', visibility: 'audit' },
+  { id: 'audit-logs', label: 'System Audit Logs', visibility: 'audit' },
+  { id: 'email', label: 'Email', visibility: 'settings' },
+  { id: 'email-templates', label: 'Email Templates', visibility: 'settings' },
+  { id: 'branding', label: 'Branding', visibility: 'settings' },
+] as const satisfies ReadonlyArray<{ id: string; label: string; visibility: PlatformSettingsSectionVisibility }>;
+
+type PlatformSettingsSection = typeof PLATFORM_SETTINGS_SECTION_REGISTRY[number]['id'];
+const PLATFORM_SETTINGS_SECTION_BY_ID = new Map(PLATFORM_SETTINGS_SECTION_REGISTRY.map((section) => [section.id, section]));
 
 interface PlatformSettingsPageProps {
   section?: PlatformSettingsSection;
@@ -159,6 +153,17 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   ]);
   const canViewAuthzPolicies = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [PlatformPermission.AUTHZ_ROLES_MANAGE]);
   const canViewAudit = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [PlatformPermission.AUDIT_VIEW]);
+  const sectionVisibility: Record<PlatformSettingsSectionVisibility, boolean> = {
+    settings: canReadSettings,
+    'settings-or-git-manage': canReadSettings || canManageGitProviders,
+    'settings-or-governance-read': canReadSettings || canReadGovernance,
+    'identity-providers': canViewIdentityProviders,
+    'identity-mappings': canViewSsoMappings,
+    configuration: canViewConfiguration,
+    'access-control': canViewAccessControl,
+    'authz-policies': canViewAuthzPolicies,
+    audit: canViewAudit,
+  };
   const settingsReadUnavailableReason = hasPermissionSnapshot && !settingsReadDecision.allowed ? settingsReadDecision.reason : null;
   const settingsManageUnavailableReason = hasPermissionSnapshot && !settingsManageDecision.allowed ? settingsManageDecision.reason : null;
   const governanceReadUnavailableReason = hasPermissionSnapshot && !governanceReadDecision.allowed ? governanceReadDecision.reason : null;
@@ -378,7 +383,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     updateSettings.mutate({ credentiallessCustomerSidecarsEnabled: enabled });
   };
 
-  const sectionLabel = section ? PLATFORM_SETTINGS_SECTION_LABELS[section] : null;
+  const sectionLabel = section ? PLATFORM_SETTINGS_SECTION_BY_ID.get(section)?.label || null : null;
   const headerTitle = sectionLabel || 'Platform Settings';
   const headerSubtitle = section
     ? 'Configure platform defaults for this area'
@@ -535,31 +540,29 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     />
   );
 
-  const platformSettingsTabs = ([
-    { id: 'git', label: 'Git', visible: canReadSettings || canManageGitProviders, render: renderGit },
-    { id: 'projects', label: 'Projects', visible: canReadSettings || canReadGovernance, render: renderProjects },
-    { id: 'invite-domains', label: 'Invite Domains', visible: canReadSettings, render: renderInviteDomains },
-    { id: 'pii-redaction', label: 'PII Redaction', visible: canReadSettings, render: renderPiiRedaction },
-    { id: 'engines', label: 'Engines', visible: canReadSettings || canReadGovernance, render: renderEngines },
-    { id: 'sso', label: 'SSO', visible: canReadSettings, render: renderSso },
-    { id: 'identity-providers', label: 'Identity Providers', visible: canViewIdentityProviders, render: renderIdentityProviders },
-    { id: 'identity-mappings', label: 'Identity Mappings', visible: canViewSsoMappings, render: renderIdentityMappings },
-    { id: 'configuration', label: 'Configuration', visible: canViewConfiguration, render: renderConfiguration },
-    { id: 'role-library', label: 'Role Library', visible: canViewAccessControl, render: renderRoleLibrary },
-    { id: 'access-control', label: 'Access Control', visible: canViewAccessControl, render: renderAccessControl },
-    { id: 'sso-mappings', label: 'SSO Role Mappings', visible: canViewSsoMappings, render: renderSsoMappings },
-    { id: 'authz-policies', label: 'Authorization Policies', visible: canViewAuthzPolicies, render: renderAuthzPolicies },
-    { id: 'authz-audit', label: 'Authorization Audit', visible: canViewAudit, render: renderAuthzAudit },
-    { id: 'audit-logs', label: 'System Audit Logs', visible: canViewAudit, render: renderAuditLogs },
-    { id: 'email', label: 'Email', visible: canReadSettings, render: renderEmail },
-    { id: 'email-templates', label: 'Email Templates', visible: canReadSettings, render: renderEmailTemplates },
-    { id: 'branding', label: 'Branding', visible: canReadSettings, render: renderBranding },
-  ] as Array<{
-    id: PlatformSettingsSection;
-    label: string;
-    visible: boolean;
-    render: () => React.ReactNode;
-  }>).filter((tab) => tab.visible);
+  const sectionRenderers: Record<PlatformSettingsSection, () => React.ReactNode> = {
+    git: renderGit,
+    projects: renderProjects,
+    'invite-domains': renderInviteDomains,
+    'pii-redaction': renderPiiRedaction,
+    engines: renderEngines,
+    sso: renderSso,
+    'identity-providers': renderIdentityProviders,
+    'identity-mappings': renderIdentityMappings,
+    configuration: renderConfiguration,
+    'role-library': renderRoleLibrary,
+    'access-control': renderAccessControl,
+    'sso-mappings': renderSsoMappings,
+    'authz-policies': renderAuthzPolicies,
+    'authz-audit': renderAuthzAudit,
+    'audit-logs': renderAuditLogs,
+    email: renderEmail,
+    'email-templates': renderEmailTemplates,
+    branding: renderBranding,
+  };
+  const platformSettingsTabs = PLATFORM_SETTINGS_SECTION_REGISTRY
+    .filter((tab) => sectionVisibility[tab.visibility])
+    .map((tab) => ({ ...tab, render: sectionRenderers[tab.id] }));
 
   const selectedSectionTab = section
     ? platformSettingsTabs.find((tab) => tab.id === section)
