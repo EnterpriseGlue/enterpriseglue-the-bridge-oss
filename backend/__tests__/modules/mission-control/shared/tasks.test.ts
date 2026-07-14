@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import tasksRouter from '../../../../../packages/backend-host/src/modules/mission-control/shared/tasks.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
@@ -74,6 +75,7 @@ describe('mission-control tasks routes', () => {
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(tasksRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -118,7 +120,7 @@ describe('mission-control tasks routes', () => {
     expect(getTaskCountByQuery).toHaveBeenCalledWith('engine-1', {});
   });
 
-  it('sums task counts only across authorized process definition keys on resource-aware engines', async () => {
+  it('fails closed for task counts on resource-aware engines because count rows cannot be post-filtered', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
         ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
@@ -129,20 +131,13 @@ describe('mission-control tasks routes', () => {
       { resourceKey: 'payments' },
       { resourceKey: 'invoices' },
     ]);
-    (getTaskCountByQuery as unknown as Mock).mockImplementation(async (_engineId, query) => ({
-      count: query.processDefinitionKey === 'payments' ? 2 : 3,
-    }));
-
     const response = await request(app)
       .get('/mission-control-api/tasks/count')
       .query({ engineId: 'engine-1' });
 
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ count: 5 });
-    expect(getTaskCountByQuery).toHaveBeenCalledTimes(2);
-    expect(getTaskCountByQuery).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments' });
-    expect(getTaskCountByQuery).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'invoices' });
-    expect(getTaskCountByQuery).not.toHaveBeenCalledWith('engine-1', {});
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Resource-aware task counts are not supported');
+    expect(getTaskCountByQuery).not.toHaveBeenCalled();
   });
 
   it('queries only authorized process definition keys on resource-aware engines', async () => {

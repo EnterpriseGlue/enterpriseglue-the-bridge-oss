@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { missionControlLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
@@ -58,14 +58,12 @@ r.get('/mission-control-api/tasks', requireRuntimeCollectionAction('engine.runti
 r.get('/mission-control-api/tasks/count', requireRuntimeCollectionAction('engine.runtime.tasks.read', { resourceKind: 'process_definition' }), validateQuery(TaskQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
-  const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
-  const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
-  if (!visibleKeys) return res.json(await getTaskCountByQuery(engineId, req.query));
-  const counts = await Promise.all(visibleKeys.map((processDefinitionKey) => getTaskCountByQuery(engineId, {
-    ...req.query,
-    processDefinitionKey,
-  })));
-  res.json({ count: counts.reduce((total, result) => total + (Number(result?.count) || 0), 0) });
+  if (!keys) return res.json(await getTaskCountByQuery(engineId, req.query));
+
+  // Camunda's count response cannot be post-filtered. A non-conforming engine
+  // could return a whole-engine count despite the definition-key query, so do
+  // not turn that unverified aggregate into a resource-aware visibility leak.
+  throw Errors.forbidden('Resource-aware task counts are not supported');
 }));
 
 // Get task by ID
