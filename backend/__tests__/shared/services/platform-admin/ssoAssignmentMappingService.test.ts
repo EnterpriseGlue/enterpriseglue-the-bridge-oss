@@ -287,16 +287,17 @@ describe('ssoAssignmentMappingService', () => {
     );
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a',
-      userId: null,
       roleId: 'system.engine.operator',
-      resourceType: null,
-      resourceId: null,
       scopeType: 'engine',
       scopeId: 'engine-1',
       source: 'sso',
-      sourceMappingId: 'mapping-1',
       sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
     }));
+    const insertedAssignment = insert.mock.calls[0][0];
+    expect(insertedAssignment).not.toHaveProperty('userId');
+    expect(insertedAssignment).not.toHaveProperty('resourceType');
+    expect(insertedAssignment).not.toHaveProperty('resourceId');
+    expect(insertedAssignment).not.toHaveProperty('sourceMappingId');
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       action: 'authz.sso_assignment.create',
@@ -335,7 +336,6 @@ describe('ssoAssignmentMappingService', () => {
 
     expect(result).toMatchObject({ created: 0, updated: 1, removed: 0 });
     expect(update).toHaveBeenCalledWith({ id: 'legacy-assignment-1' }, expect.objectContaining({
-      sourceMappingId: 'mapping-1',
       sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
       assignmentKey: expect.stringContaining('legacy_sso:provider-1:mapping:mapping-1'),
     }));
@@ -1350,14 +1350,10 @@ describe('ssoAssignmentMappingService', () => {
     }));
     expect(assignmentInsert).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a',
-      userId: null,
       roleId: 'system.engine.operator',
-      resourceType: null,
-      resourceId: null,
       scopeType: 'engine_set',
       scopeId: engineSetId,
       source: 'sso',
-      sourceMappingId: 'mapping-label',
       sourceRef: 'mapping-label',
     }));
   });
@@ -1439,14 +1435,10 @@ describe('ssoAssignmentMappingService', () => {
     }));
     expect(assignmentInsert).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a',
-      userId: null,
       roleId: 'system.engine.operator',
-      resourceType: null,
-      resourceId: null,
       scopeType: 'engine_set',
       scopeId: engineSetId,
       source: 'sso',
-      sourceMappingId: 'mapping-scheduled-label',
       sourceRef: 'legacy_sso:microsoft:mapping:mapping-scheduled-label',
     }));
   });
