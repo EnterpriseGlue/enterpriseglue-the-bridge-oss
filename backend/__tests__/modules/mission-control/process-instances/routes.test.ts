@@ -203,6 +203,27 @@ describe('mission-control process-instances routes', () => {
     }));
   });
 
+  it('drops process instances outside the authorized definition key even when the engine ignores the query filter', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+    (listProcessInstances as unknown as Mock).mockResolvedValueOnce([
+      { id: 'instance-allowed', processDefinitionKey: 'payments' },
+      { id: 'instance-forbidden', processDefinitionKey: 'benefits' },
+    ]);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'instance-allowed', processDefinitionKey: 'payments' }]);
+  });
+
   it('rejects oversized process-instance collection requests for resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine

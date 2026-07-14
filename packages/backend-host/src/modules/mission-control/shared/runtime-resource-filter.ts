@@ -73,7 +73,12 @@ export function filterRuntimeItemsByResourceKey<T extends Record<string, unknown
  * rather than its stable authorization key. This helper resolves that lineage
  * server-side and drops entries that cannot be connected to an allowed key.
  */
-export async function filterRuntimeItemsByProcessDefinitionKeys<T extends { processDefinitionId?: unknown }>(
+export async function filterRuntimeItemsByProcessDefinitionKeys<T extends {
+  processDefinitionId?: unknown;
+  definitionId?: unknown;
+  processDefinitionKey?: unknown;
+  definitionKey?: unknown;
+}>(
   engineId: string,
   items: T[],
   authorizedDefinitionKeys?: string[],
@@ -86,7 +91,8 @@ export async function filterRuntimeItemsByProcessDefinitionKeys<T extends { proc
 
   const allowedKeys = new Set(authorizedDefinitionKeys)
   const definitionIds = [...new Set(items
-    .map((item) => item.processDefinitionId)
+    .filter((item) => typeof item.processDefinitionKey !== 'string' && typeof item.definitionKey !== 'string')
+    .map((item) => item.processDefinitionId ?? item.definitionId)
     .filter((id): id is string => typeof id === 'string' && id.length > 0))]
   const definitions = await Promise.all(definitionIds.map(async (id) => [
     id,
@@ -98,7 +104,12 @@ export async function filterRuntimeItemsByProcessDefinitionKeys<T extends { proc
   ]))
 
   return items.filter((item) => {
-    const definitionId = typeof item.processDefinitionId === 'string' ? item.processDefinitionId : ''
+    const directKey = typeof item.processDefinitionKey === 'string'
+      ? item.processDefinitionKey
+      : typeof item.definitionKey === 'string' ? item.definitionKey : ''
+    if (directKey) return allowedKeys.has(directKey)
+    const candidateDefinitionId = item.processDefinitionId ?? item.definitionId
+    const definitionId = typeof candidateDefinitionId === 'string' ? candidateDefinitionId : ''
     return allowedKeys.has(keyByDefinitionId.get(definitionId) || '')
   })
 }

@@ -12,7 +12,7 @@ import {
   deleteProcessInstance,
   modifyProcessInstanceVariables,
 } from './service.js'
-import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
+import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
 
 const r = Router()
 
@@ -44,10 +44,14 @@ r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('
     maxResults,
   }
   const data = visibleKeys
-    ? (await Promise.all(visibleKeys.map((key) => listProcessInstances(engineId, {
-      ...getBoundedRuntimeResourceQuery(baseQuery),
-      processDefinitionKey: key,
-    })))).flat()
+    ? (await Promise.all(visibleKeys.map(async (key) => filterRuntimeItemsByProcessDefinitionKeys(
+      engineId,
+      await listProcessInstances(engineId, {
+        ...getBoundedRuntimeResourceQuery(baseQuery),
+        processDefinitionKey: key,
+      }),
+      [key],
+    )))).flat()
     : await listProcessInstances(engineId, {
       processDefinitionKey,
       ...baseQuery,
