@@ -17,7 +17,6 @@ import { CompactDataTable } from "../../../../shared/components/ui/compact-data-
 import { STATE_COLORS } from "../../../shared/components/viewer/viewerConstants"
 import { CopyableLink } from '../../shared/components/CopyableLink'
 import { formatDurationMs } from '../../process-instance-detail/components/activityDetailUtils'
-import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 type ProcInst = {
   id: string
@@ -42,11 +41,6 @@ interface ProcessesDataTableProps {
   onRetry: (id: string) => void
   onActivate: (id: string) => Promise<any>
   onSuspend: (id: string) => Promise<any>
-  actionDecisions?: {
-    retry?: UiAuthzDecision
-    suspension?: UiAuthzDecision
-    terminate?: UiAuthzDecision
-  }
   selectedMap: Record<string, boolean>
   setSelectedMap: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   retryingMap: Record<string, boolean>
@@ -62,7 +56,6 @@ export function ProcessesDataTable({
   onRetry,
   onActivate,
   onSuspend,
-  actionDecisions,
   selectedMap,
   setSelectedMap,
   retryingMap,
@@ -71,16 +64,6 @@ export function ProcessesDataTable({
   processNameMap = {},
   searchValue,
 }: ProcessesDataTableProps) {
-  const retryDeniedReason = actionDecisions?.retry && !actionDecisions.retry.allowed
-    ? actionDecisions.retry.reason || 'Action unavailable'
-    : null
-  const suspensionDeniedReason = actionDecisions?.suspension && !actionDecisions.suspension.allowed
-    ? actionDecisions.suspension.reason || 'Action unavailable'
-    : null
-  const terminateDeniedReason = actionDecisions?.terminate && !actionDecisions.terminate.allowed
-    ? actionDecisions.terminate.reason || 'Action unavailable'
-    : null
-
   const columns: ColumnDef<ProcInst>[] = [
     {
       id: "select",
@@ -320,15 +303,15 @@ export function ProcessesDataTable({
         const isRetrying = !!retryingMap[inst.id]
         const anySelected = Object.values(selectedMap).some(Boolean)
         const rowDisabled = anySelected || isRetrying
-        const retryRowReason = inst.runtimeActionDecisions?.retry && !inst.runtimeActionDecisions.retry.allowed
-          ? inst.runtimeActionDecisions.retry.reason || 'Action unavailable'
-          : retryDeniedReason
-        const suspensionRowReason = inst.runtimeActionDecisions?.suspension && !inst.runtimeActionDecisions.suspension.allowed
-          ? inst.runtimeActionDecisions.suspension.reason || 'Action unavailable'
-          : suspensionDeniedReason
-        const terminateRowReason = inst.runtimeActionDecisions?.terminate && !inst.runtimeActionDecisions.terminate.allowed
-          ? inst.runtimeActionDecisions.terminate.reason || 'Action unavailable'
-          : terminateDeniedReason
+        const retryRowReason = inst.runtimeActionDecisions?.retry?.allowed
+          ? null
+          : inst.runtimeActionDecisions?.retry?.reason || 'Action unavailable'
+        const suspensionRowReason = inst.runtimeActionDecisions?.suspension?.allowed
+          ? null
+          : inst.runtimeActionDecisions?.suspension?.reason || 'Action unavailable'
+        const terminateRowReason = inst.runtimeActionDecisions?.terminate?.allowed
+          ? null
+          : inst.runtimeActionDecisions?.terminate?.reason || 'Action unavailable'
 
         return (
           <div

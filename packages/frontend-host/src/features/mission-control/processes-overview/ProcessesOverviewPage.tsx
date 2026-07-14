@@ -232,9 +232,7 @@ export default function ProcessesOverviewPage() {
     [selectedEngineId]
   )
   const permissionSnapshot = authContext?.permissions ?? null
-  const instanceSuspensionDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.suspension.update', selectedEngineResource)
   const instanceRetryDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.retry', selectedEngineResource)
-  const instanceTerminateDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.delete', selectedEngineResource)
   const instanceVariablesReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.variables.read', selectedEngineResource)
   const instanceActivityHistoryReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.activity-history.read', selectedEngineResource)
   const processDefinitionsReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-definitions.read', selectedEngineResource)
@@ -1450,11 +1448,6 @@ export default function ProcessesOverviewPage() {
               }}
               onSuspend={(id) => {
                 return callAction('PUT', `/mission-control-api/process-instances/${id}/suspend${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => instQ.refetch())
-              }}
-              actionDecisions={{
-                retry: instanceRetryDecision,
-                suspension: instanceSuspensionDecision,
-                terminate: instanceTerminateDecision,
               }}
               selectedMap={selectedMap}
               setSelectedMap={setSelectedMap}
