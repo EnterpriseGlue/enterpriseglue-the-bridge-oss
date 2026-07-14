@@ -14,6 +14,39 @@ describe('configBundlePreviewService', () => {
     expect(configBundlePreviewService.preview({ bundle, files: { './roles.json': { roles: [] } } })).toMatchObject({ valid: false });
   });
 
+  it('rejects credentialless sidecars unless platform policy explicitly permits them', () => {
+    const input = {
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.private-sidecar',
+            name: 'Private sidecar',
+            type: 'ion',
+            baseUrl: 'https://sidecar.example.com/engine-rest',
+            connectionMode: 'customer_sidecar',
+            auth: { type: 'none' },
+          }],
+        },
+      },
+    };
+
+    const blocked = configBundlePreviewService.preview(input);
+    expect(blocked).toMatchObject({ valid: false });
+    expect(blocked.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: './engines.json.engines.0.auth.type',
+        message: 'Credentialless customer-sidecar endpoints are disabled by platform policy',
+        objectKey: 'engine.private-sidecar',
+      }),
+    ]));
+
+    const permitted = configBundlePreviewService.preview(input, {
+      credentiallessCustomerSidecarsEnabled: true,
+    });
+    expect(permitted).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
+  });
+
   it('rejects cross-file references that a future apply could not resolve', () => {
     const result = configBundlePreviewService.preview({
       bundle: {

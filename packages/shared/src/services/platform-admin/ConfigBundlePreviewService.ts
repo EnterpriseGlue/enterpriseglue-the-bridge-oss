@@ -20,6 +20,7 @@ const FILE_SCHEMAS: Record<string, z.ZodType> = {
 };
 
 export interface ConfigBundlePreviewInput { bundle: unknown; files: Record<string, unknown>; }
+export interface ConfigBundlePolicyContext { credentiallessCustomerSidecarsEnabled: boolean; }
 export interface ConfigBundleValidationIssue {
   path: string;
   message: string;
@@ -101,6 +102,19 @@ function fileEntries(normalizedFiles: Record<string, unknown>, path: string, pro
   const file = normalizedFiles[path] as Record<string, unknown> | undefined;
   const entries = file?.[property];
   return Array.isArray(entries) ? entries : [];
+}
+
+function validateEndpointAuthenticationPolicy(
+  normalizedFiles: Record<string, unknown>,
+  policy: ConfigBundlePolicyContext,
+): RawValidationIssue[] {
+  return fileEntries(normalizedFiles, './engines.json', 'engines').flatMap((engine, index) => {
+    if (engine.auth?.type !== 'none' || policy.credentiallessCustomerSidecarsEnabled) return [];
+    return [{
+      path: `./engines.json.engines.${index}.auth.type`,
+      message: 'Credentialless customer-sidecar endpoints are disabled by platform policy',
+    }];
+  });
 }
 
 /**
@@ -269,7 +283,7 @@ function expandRoleTemplates(normalizedFiles: Record<string, unknown>): {
 }
 
 class ConfigBundlePreviewService {
-  compile(input: ConfigBundlePreviewInput): ConfigBundleCompilation {
+  compile(input: ConfigBundlePreviewInput, policy: ConfigBundlePolicyContext = { credentiallessCustomerSidecarsEnabled: false }): ConfigBundleCompilation {
     const parsedBundle = EnterpriseGlueConfigBundleSchema.safeParse(input.bundle);
     if (!parsedBundle.success) return { preview: { valid: false, errors: enrichIssues(issues('bundle', parsedBundle.error), input), counts: {} } };
     const errors: RawValidationIssue[] = [];
@@ -288,6 +302,7 @@ class ConfigBundlePreviewService {
     let roleTemplateBaselines: ConfigBundlePreview['roleTemplateBaselines'];
     if (errors.length === 0) {
       errors.push(...validateCrossFileReferences(normalizedFiles));
+      errors.push(...validateEndpointAuthenticationPolicy(normalizedFiles, policy));
       if (errors.length === 0) {
         const expanded = expandRoleTemplates(normalizedFiles);
         errors.push(...expanded.errors);
@@ -310,8 +325,8 @@ class ConfigBundlePreviewService {
     };
   }
 
-  preview(input: ConfigBundlePreviewInput): ConfigBundlePreview {
-    return this.compile(input).preview;
+  preview(input: ConfigBundlePreviewInput, policy?: ConfigBundlePolicyContext): ConfigBundlePreview {
+    return this.compile(input, policy).preview;
   }
 }
 

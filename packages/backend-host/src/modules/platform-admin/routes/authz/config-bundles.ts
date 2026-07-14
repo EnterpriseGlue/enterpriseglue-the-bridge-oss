@@ -14,6 +14,7 @@ import { configBundleExportService } from '@enterpriseglue/shared/services/platf
 import { configBundleIdentityReplayTaskService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
+import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
 
 const configBundlePreviewSchema = z.object({
   bundle: z.unknown(),
@@ -73,12 +74,14 @@ export function registerConfigBundleRoutes(
   }));
 
   router.post('/api/authz/config-bundles/preview', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
-    const preview = configBundlePreviewService.preview(req.body);
+    const settings = await platformSettingsService.get();
+    const preview = configBundlePreviewService.preview(req.body, settings);
     res.status(preview.valid ? 200 : 422).json(preview);
   }));
 
   router.post('/api/authz/config-bundles/validate-secret-refs', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
-    const preflight = configBundleSecretPreflightService.check(req.body);
+    const settings = await platformSettingsService.get();
+    const preflight = configBundleSecretPreflightService.check(req.body, settings);
     await logAudit({
       tenantId: req.tenant?.tenantId || undefined,
       userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
@@ -97,17 +100,19 @@ export function registerConfigBundleRoutes(
   }));
 
   router.post('/api/authz/config-bundles/diff', apiLimiter, requireConfigBundleAccess, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
-    const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null);
+    const settings = await platformSettingsService.get();
+    const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null, settings);
     res.status(diff.valid ? 200 : 422).json(diff);
   }));
 
   router.post('/api/authz/config-bundles/apply', apiLimiter, requireConfigBundleAccess, validateBody(configBundleApplySchema), requireTargetTransferAccess, asyncHandler(async (req: Request, res: Response) => {
     const actorId = req.apiClient?.createdById || req.apiClient?.id || req.user!.userId;
+    const settings = await platformSettingsService.get();
     const result = await configBundleApplyService.apply({
       ...req.body,
       tenantId: req.tenant?.tenantId || null,
       actorId,
-    });
+    }, settings);
     await logAudit({
       tenantId: req.tenant?.tenantId || undefined,
       userId: actorId,

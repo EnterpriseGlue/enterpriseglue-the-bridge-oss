@@ -295,6 +295,34 @@ describe('configBundleApplyService', () => {
     expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
+  it('rejects a credentialless sidecar apply when platform policy is disabled', async () => {
+    const engineBundle = { ...bundle, imports: ['./engines.json'] };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.private-sidecar', name: 'Private sidecar', type: 'ion',
+          baseUrl: 'https://sidecar.example.com/engine-rest',
+          connectionMode: 'customer_sidecar', auth: { type: 'none' },
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview(
+      { bundle: engineBundle, files: engineFiles },
+      { credentiallessCustomerSidecarsEnabled: true },
+    );
+
+    await expect(configBundleApplyService.apply({
+      bundle: engineBundle,
+      files: engineFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    }, { credentiallessCustomerSidecarsEnabled: false })).rejects.toMatchObject({
+      statusCode: 422,
+      message: 'Configuration bundle is invalid',
+    });
+  });
+
   it('rejects an apply when a checked secret reference is no longer available', async () => {
     const { dataSource } = setupDataSource();
     const engineBundle = { ...bundle, imports: ['./engines.json'] };

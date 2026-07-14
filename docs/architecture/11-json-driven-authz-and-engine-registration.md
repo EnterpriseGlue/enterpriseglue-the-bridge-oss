@@ -373,7 +373,7 @@ The production bundle now needs these object families:
 | `groups.json` | Internal group CRUD exists | Implemented: config ownership and stable references from identity mappings and assignments. |
 | `identity-providers.json` | Provider-neutral OIDC/SAML/LDAP persistence, config apply, direct-login adapters, secret resolution, and connection testing exist | Add provider-API reconciliation beyond LDAP and migrate legacy Microsoft/Google login. |
 | `identity-mappings.json` | SSO group mappings exist | Compile normalized external entitlements to internal groups independent of protocol. |
-| `engines.json` | Manual/external engine APIs exist | Implemented: `runtimeAccessScope`, deployment integration, `connectionMode`, source ownership, and config-safe secret references. Customer-sidecar endpoint policy remains deferred. |
+| `engines.json` | Manual/external engine APIs exist | Implemented: `runtimeAccessScope`, deployment integration, `connectionMode`, source ownership, config-safe secret references, and fail-closed customer-sidecar endpoint policy. |
 | `engine-sets.json` | Engine Set CRUD/materialization exists | Implemented: deterministic config keys and previewed selector materialization. |
 | `runtime-resource-sets.json` | Runtime inventory, sets, and materialization exist | Implemented: tenant/process/decision selectors, lineage, and broad-grant warnings. |
 | `assignments.json` | Principal-scoped role assignment CRUD exists | Implemented: stable references to groups, roles, engines, Engine Sets, and runtime resource sets. |
@@ -617,14 +617,14 @@ EnterpriseGlue user action
 Security requirements:
 
 - [ ] ⬜ `auth.type = "none"` must never bypass EnterpriseGlue RBAC or deployment eligibility checks.
-- [ ] ⬜ `auth.type = "none"` is valid only when `connectionMode = "customer_sidecar"` and the platform policy explicitly permits credentialless private-sidecar endpoints.
+- [x] ✅ `auth.type = "none"` is valid only when `connectionMode = "customer_sidecar"` and the platform policy explicitly permits credentialless private-sidecar endpoints.
 - [ ] ⬜ `baseUrl` should point to the customer sidecar or gateway, not a public unauthenticated engine endpoint.
 - [ ] ⬜ Sidecar endpoints should be private and network-restricted. Prefer mTLS, API-key references, or OAuth client credentials for the EnterpriseGlue-to-sidecar hop when the customer endpoint supports them.
 - [ ] ⬜ The downstream peer-to-peer token and its rotation lifecycle remain customer-owned and must never appear in config bundles, engine APIs, logs, audits, UI fields, or support diagnostics.
 - [ ] ⬜ EnterpriseGlue audit must still record the effective user, action, project, engine, and request lineage.
 - [ ] ⬜ Health checks and version reads should work through the sidecar.
 - [ ] ⬜ UI should label this as `Customer-managed engine authentication` or `No EnterpriseGlue-managed credentials`.
-- [ ] ⬜ Config preview must reject `auth.type = "none"` unless the first-class `connectionMode` is `customer_sidecar` and the relevant platform policy allows it.
+- [x] ✅ Config preview rejects `auth.type = "none"` unless the first-class `connectionMode` is `customer_sidecar` and the relevant platform policy allows it; secret preflight, diff, apply, and bootstrap use the same policy context.
 - [ ] ⬜ SSRF controls, allowed protocols/hosts, TLS verification, redirect handling, timeouts, and response-size limits apply equally to direct engine and sidecar endpoints.
 - [ ] ⬜ A transport failure or sidecar denial must fail closed and be distinguishable from an EnterpriseGlue authorization denial in diagnostics.
 
@@ -657,7 +657,7 @@ Required tests:
 
 - [ ] ⬜ Mock sidecar forwards successful metadata/runtime responses while injecting an opaque customer-owned downstream token that EnterpriseGlue cannot observe.
 - [ ] ⬜ Direct engine plus `auth.type = "none"` is rejected.
-- [ ] ⬜ Customer-sidecar plus disallowed credentialless policy is rejected.
+- [x] ✅ Customer-sidecar plus disallowed credentialless policy is rejected.
 - [ ] ⬜ EnterpriseGlue authorization denial prevents any sidecar request.
 - [ ] ⬜ Sidecar timeout, TLS failure, malformed response, and downstream denial fail closed with transport-specific diagnostics and sanitized audit data.
 - [ ] ⬜ No config export, OpenAPI response, UI model, log, or audit event contains the downstream peer token.
@@ -1828,7 +1828,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Split EnterpriseGlue `tenantId` from external `directoryTenantId`/issuer tenant fields in provider schemas and persistence.
 - [ ] ⬜ Add `identity_provider` membership/assignment source semantics with explicit provider id and mapping id lineage; migrate current `sso` source handling in the same milestone.
 - [ ] ⬜ Add `EngineRuntimeResource` and `EngineRuntimeResourceSet` entities plus materialization lineage and uniqueness on engine, kind, key, and optional engine tenant id.
-- [ ] ⬜ Add `runtimeAccessScope`, deployment integration configuration, and first-class `connectionMode` to `Engine`; add platform policy persistence for credentialless private-sidecar endpoints.
+- [x] ✅ Add `runtimeAccessScope`, deployment integration configuration, and first-class `connectionMode` to `Engine`; add platform policy persistence for credentialless private-sidecar endpoints.
 - [ ] ⬜ Extend `EngineDeployment` and `EngineDeploymentArtifact` for direct discovery, nullable project lineage, receipt provenance, and lineage quality.
 - [ ] ⬜ Replace legacy role-assignment uniqueness with principal/scope/source uniqueness and make legacy `userId`, `resourceType`, `resourceId`, and `sourceMappingId` aliases removable.
 - [ ] ⬜ Make role keys tenant-scoped where roles are tenant-owned and add deterministic config keys/source metadata to roles, groups, providers, mappings, engines, Engine Sets, and targets.
@@ -2234,7 +2234,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add system-role baseline fingerprinting to copied-role previews and the canonical preview hash, so a changed template invalidates a stale apply.
 - [x] ✅ Add settings schema for `engineRuntimeAuthorizationMode` with `enterpriseglue_authoritative` enabled in v1 and the other modes rejected as unsupported.
 - [x] ✅ Add and persist per-engine `runtimeAccessScope` and `deploymentIntegration` schemas with distributed-engine defaults.
-- [ ] ⬜ Add first-class engine `connectionMode = direct | customer_sidecar` and platform policy for credentialless private-sidecar endpoints; reject `auth.type = "none"` for direct engines.
+- [x] ✅ Add first-class engine `connectionMode = direct | customer_sidecar` and platform policy for credentialless private-sidecar endpoints; reject `auth.type = "none"` for direct engines.
 - [x] ✅ Add shared deployment receipt, ingestion source, lineage quality/readiness/issue, sanitized deployment-history, runtime inventory observation, deployment discovery, and reconciliation result schemas. Backend services validate these boundaries, OpenAPI reuses the deployment-history response schema, and Engine Detail imports the inferred shared response type instead of maintaining a duplicate interface.
 - [x] ✅ Add config schemas for runtime resource sets with exact keys, prefix selectors, labels, project lineage, and optional runtime tenant id. Deployment-lineage selectors remain pending with the runtime inventory model.
 - [x] ✅ Add shared resource types for `engine_runtime_resource` and `engine_runtime_resource_set`, persisted `RuntimeResourceSet` selector/source metadata, a sanitized runtime resource inventory, and selector materialization with lineage. Evaluator resolution and runtime discovery routes remain pending.

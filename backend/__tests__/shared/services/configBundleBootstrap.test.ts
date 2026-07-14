@@ -14,6 +14,7 @@ const readFile = vi.hoisted(() => vi.fn());
 const preview = vi.hoisted(() => vi.fn());
 const apply = vi.hoisted(() => vi.fn());
 const secretPreflight = vi.hoisted(() => vi.fn());
+const getPlatformSettings = vi.hoisted(() => vi.fn());
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({ config }));
 vi.mock('node:fs/promises', () => ({ stat, readFile }));
@@ -25,6 +26,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js', () => ({
   configBundleSecretPreflightService: { check: secretPreflight },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js', () => ({
+  platformSettingsService: { get: getPlatformSettings },
 }));
 
 import { getConfigBootstrapStatus, runConfigBundleBootstrap } from '../../../../packages/backend-host/src/services/configBundleBootstrap.js';
@@ -42,6 +46,7 @@ describe('configBundleBootstrap', () => {
     readFile.mockResolvedValue('{}');
     preview.mockReturnValue({ valid: true, canonicalHash: 'preview-hash', errors: [] });
     secretPreflight.mockReturnValue({ valid: true, available: true, canonicalHash: 'preview-hash', availabilityHash: 'secret-preflight-hash', errors: [] });
+    getPlatformSettings.mockResolvedValue({ credentiallessCustomerSidecarsEnabled: false });
   });
 
   it('rejects a bootstrap apply without an explicit expected tenant scope', async () => {
@@ -67,8 +72,14 @@ describe('configBundleBootstrap', () => {
 
     await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ mode: 'apply', status: 'applied' });
 
-    expect(preview).toHaveBeenCalledWith({ bundle, files: { './groups.json': { groups: [{ key: 'group.ops', name: 'Operations' }] } } });
-    expect(apply).toHaveBeenCalledWith(expect.objectContaining({ expectedPreviewHash: 'preview-hash', expectedTenantScope: 'tenant-a' }));
+    expect(preview).toHaveBeenCalledWith(
+      { bundle, files: { './groups.json': { groups: [{ key: 'group.ops', name: 'Operations' }] } } },
+      expect.objectContaining({ credentiallessCustomerSidecarsEnabled: false }),
+    );
+    expect(apply).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedPreviewHash: 'preview-hash', expectedTenantScope: 'tenant-a' }),
+      expect.objectContaining({ credentiallessCustomerSidecarsEnabled: false }),
+    );
   });
 
   it('requires available secret references when bootstrap preflight is enabled', async () => {
@@ -89,7 +100,10 @@ describe('configBundleBootstrap', () => {
 
     await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'applied', secretPreflight: 'passed' });
 
-    expect(apply).toHaveBeenCalledWith(expect.objectContaining({ expectedSecretPreflightHash: 'secret-preflight-hash' }));
+    expect(apply).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedSecretPreflightHash: 'secret-preflight-hash' }),
+      expect.objectContaining({ credentiallessCustomerSidecarsEnabled: false }),
+    );
   });
 
   it('reports pending reconciliation when bootstrap creates durable replay continuation work', async () => {

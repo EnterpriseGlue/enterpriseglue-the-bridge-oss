@@ -24,7 +24,7 @@ import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persis
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { createHash } from 'node:crypto';
 import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBundleDiffService.js';
-import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
+import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
 import { archiveIdentityProviderInStore } from './IdentityProviderService.js';
@@ -212,12 +212,12 @@ async function writeAudit(manager: EntityManager, input: {
  * being silently ignored.
  */
 class ConfigBundleApplyService {
-  async apply(input: ConfigBundleApplyInput): Promise<ConfigBundleApplyResult> {
+  async apply(input: ConfigBundleApplyInput, policy?: ConfigBundlePolicyContext): Promise<ConfigBundleApplyResult> {
     const identityReconciliationMode = input.identityReconciliationMode || 'apply';
     if (!['none', 'preview', 'apply'].includes(identityReconciliationMode)) {
       return fail('Identity reconciliation mode must be none, preview, or apply', 422);
     }
-    const compilation = configBundlePreviewService.compile(input);
+    const compilation = configBundlePreviewService.compile(input, policy);
     if (!compilation.preview.valid || !compilation.manifest || !compilation.files || !compilation.preview.canonicalHash) {
       return fail('Configuration bundle is invalid', 422);
     }
@@ -229,7 +229,7 @@ class ConfigBundleApplyService {
       return fail('Preview hash does not match the submitted configuration bundle', 409);
     }
     if (input.expectedSecretPreflightHash) {
-      const secretPreflight = configBundleSecretPreflightService.check({ bundle: input.bundle, files: input.files });
+      const secretPreflight = configBundleSecretPreflightService.check({ bundle: input.bundle, files: input.files }, policy);
       if (!secretPreflight.valid || !secretPreflight.available || secretPreflight.availabilityHash !== input.expectedSecretPreflightHash) {
         return fail('Secret reference availability changed or is no longer available since preflight', 409);
       }
@@ -254,7 +254,7 @@ class ConfigBundleApplyService {
       });
       if (existing) return replayExistingApplyRun(existing, compilation.preview.canonicalHash, manifest.metadata.key);
     }
-    const diff = await configBundleDiffService.diff(input, tenantId);
+    const diff = await configBundleDiffService.diff(input, tenantId, policy);
     if (!diff.valid || !diff.canonicalHash) return fail('Configuration bundle diff is invalid', 422);
     const conflicts = diff.changes.filter((change) => change.operation === 'conflict');
     if (conflicts.length > 0) {

@@ -14,7 +14,7 @@ import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persisten
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
-import { configBundlePreviewService, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
+import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { matchRuntimeResourceSetSelector, type RuntimeResourceSetSelector } from './RuntimeResourceInventoryService.js';
 import { EnginePermissions, SystemRoleDefinitions } from './permissions.js';
 import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
@@ -180,8 +180,8 @@ function broadConfigurationWarnings(files: Record<string, unknown>): ConfigBundl
  * objects. It is intentionally read-only and must be used before apply.
  */
 class ConfigBundleDiffService {
-  async diff(input: ConfigBundlePreviewInput, tenantId?: string | null): Promise<ConfigBundleDiff> {
-    const compilation = configBundlePreviewService.compile(input);
+  async diff(input: ConfigBundlePreviewInput, tenantId?: string | null, policy?: ConfigBundlePolicyContext): Promise<ConfigBundleDiff> {
+    const compilation = configBundlePreviewService.compile(input, policy);
     if (!compilation.preview.valid || !compilation.manifest || !compilation.files || !compilation.preview.canonicalHash) {
       return { valid: false, errors: compilation.preview.errors, changes: [], warnings: [], requiredAcknowledgements: [], affectedPrincipals: { affectedGroupCount: 0, affectedUserCount: 0, externalIdentityMappingChangeCount: 0 } };
     }

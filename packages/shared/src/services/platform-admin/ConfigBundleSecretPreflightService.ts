@@ -1,4 +1,4 @@
-import { configBundlePreviewService, type ConfigBundlePreviewInput, type ConfigBundleValidationIssue } from './ConfigBundlePreviewService.js';
+import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput, type ConfigBundleValidationIssue } from './ConfigBundlePreviewService.js';
 import { secretResolver, type SecretReferenceAvailability } from './SecretResolver.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 
@@ -38,8 +38,8 @@ function collectSecretReferences(value: unknown, path: string, references: Map<s
  * It never returns secret bytes and does not mutate configuration or storage.
  */
 class ConfigBundleSecretPreflightService {
-  check(input: ConfigBundlePreviewInput): ConfigBundleSecretPreflight {
-    const compilation = configBundlePreviewService.compile(input);
+  check(input: ConfigBundlePreviewInput, policy?: ConfigBundlePolicyContext): ConfigBundleSecretPreflight {
+    const compilation = configBundlePreviewService.compile(input, policy);
     if (!compilation.preview.valid || !compilation.files || !compilation.preview.canonicalHash) {
       return {
         valid: false,

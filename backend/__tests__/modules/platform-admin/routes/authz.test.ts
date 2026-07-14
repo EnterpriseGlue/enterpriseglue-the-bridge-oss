@@ -36,6 +36,9 @@ const configBundleSecretPreflightMock = vi.hoisted(() => ({
     references: [{ reference: 'MISSING_ENGINE_TOKEN', locations: ['./engines.json.engines.0.auth.tokenRef'], available: false, reason: 'environment_variable_missing' }],
   }),
 }));
+const platformSettingsServiceMock = vi.hoisted(() => ({
+  get: vi.fn().mockResolvedValue({ credentiallessCustomerSidecarsEnabled: false }),
+}));
 const apiClientAuthMock = vi.hoisted(() => ({
   requireApiClientAction: vi.fn(() => (req: any, _res: any, next: any) => {
     req.apiClient = { id: 'client-1', createdById: 'user-1', scopes: ['config:bundle:manage'] };
@@ -83,6 +86,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityRepl
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js', () => ({
   configBundleSecretPreflightService: configBundleSecretPreflightMock,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js', () => ({
+  platformSettingsService: platformSettingsServiceMock,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
@@ -2114,6 +2120,41 @@ describe('platform-admin authz routes', () => {
     expect(invalidResponse.body).toMatchObject({ valid: false });
   });
 
+  it('uses platform policy when previewing credentialless customer sidecars', async () => {
+    const payload = {
+      bundle: {
+        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        kind: 'EnterpriseGlueConfigBundle',
+        metadata: { key: 'acme.sidecar', owner: 'platform' },
+        tenantKey: 'acme',
+        mode: 'preview_only',
+        settings: {},
+        imports: ['./engines.json'],
+      },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.private-sidecar', name: 'Private sidecar', type: 'ion',
+            baseUrl: 'https://sidecar.example.com/engine-rest',
+            connectionMode: 'customer_sidecar', auth: { type: 'none' },
+          }],
+        },
+      },
+    };
+
+    platformSettingsServiceMock.get.mockResolvedValueOnce({ credentiallessCustomerSidecarsEnabled: false });
+    const blocked = await request(app).post('/api/authz/config-bundles/preview').send(payload);
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: 'Credentialless customer-sidecar endpoints are disabled by platform policy' }),
+    ]));
+
+    platformSettingsServiceMock.get.mockResolvedValueOnce({ credentiallessCustomerSidecarsEnabled: true });
+    const permitted = await request(app).post('/api/authz/config-bundles/preview').send(payload);
+    expect(permitted.status).toBe(200);
+    expect(permitted.body).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
+  });
+
   it('checks configuration secret references without returning secret values', async () => {
     const response = await request(app)
       .post('/api/authz/config-bundles/validate-secret-refs')
@@ -2191,7 +2232,7 @@ describe('platform-admin authz routes', () => {
       expectedTenantScope: 'platform',
       identityReconciliationMode: 'preview',
       actorId: 'user-1',
-    }));
+    }), expect.objectContaining({ credentiallessCustomerSidecarsEnabled: false }));
   });
 
   it('lists persisted configuration apply runs with retry lineage', async () => {
@@ -2248,7 +2289,7 @@ describe('platform-admin authz routes', () => {
     );
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       actorId: 'user-1',
-    }));
+    }), expect.objectContaining({ credentiallessCustomerSidecarsEnabled: false }));
   });
 
   it('updates, tests, and deletes SSO engine assignment mappings', async () => {

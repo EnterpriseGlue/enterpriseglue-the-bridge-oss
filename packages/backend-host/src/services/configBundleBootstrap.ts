@@ -5,6 +5,7 @@ import { configBundlePreviewService } from '@enterpriseglue/shared/services/plat
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundleArchiveService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleArchiveService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
+import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
 
 export type ConfigBootstrapStatus = {
   mode: 'disabled' | 'validate' | 'apply';
@@ -39,10 +40,11 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
     const payload = config.configBundlePath.toLowerCase().endsWith('.zip')
       ? configBundleArchiveService.readZip(source, config.configMaxBytes)
       : JSON.parse(source.toString('utf8')) as { bundle: unknown; files: Record<string, unknown> };
-    const preview = configBundlePreviewService.preview(payload);
+    const settings = await platformSettingsService.get();
+    const preview = configBundlePreviewService.preview(payload, settings);
     if (!preview.valid || !preview.canonicalHash) throw new Error(`Configuration bundle validation failed: ${preview.errors.map((item) => item.message).join('; ')}`);
     const checkedSecretPreflight = config.configRequireSecretPreflight
-      ? configBundleSecretPreflightService.check(payload)
+      ? configBundleSecretPreflightService.check(payload, settings)
       : null;
     if (checkedSecretPreflight && (!checkedSecretPreflight.valid || !checkedSecretPreflight.available || checkedSecretPreflight.canonicalHash !== preview.canonicalHash || !checkedSecretPreflight.availabilityHash)) {
       secretPreflight = 'failed';
@@ -58,7 +60,7 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
         idempotencyKey: `bootstrap:${hash}`,
         expectedTenantScope: config.configExpectedTenantScope,
         actorId: 'system:config-bootstrap',
-      });
+      }, settings);
       if (result.reconciliation?.identitySnapshot?.status === 'truncated') {
         status = { ...status, reconciliation: 'pending' };
       }
