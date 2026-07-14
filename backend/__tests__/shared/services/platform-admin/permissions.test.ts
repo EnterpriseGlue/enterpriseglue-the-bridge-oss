@@ -37,6 +37,7 @@ import {
   RbacRoleAssignment,
   RbacRolePermission,
   RuntimeResource,
+  RuntimeResourceSet,
   ServiceAccount,
   SsoAssignmentMapping,
   SsoGroupMapping,
@@ -1679,6 +1680,36 @@ describe('permissionService', () => {
 
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({ scopeType: 'engine_runtime_resource', scopeId: 'runtime-1' }));
     expect(result.warnings).toEqual([expect.stringContaining(EnginePermissions.INSTANCE_VIEW)]);
+  });
+
+  it('lets an engine-scoped role target a runtime-resource set without changing its role scope', async () => {
+    const insertAssignment = vi.fn().mockResolvedValue(undefined);
+    const duplicateQb = { where: vi.fn().mockReturnThis(), getOne: vi.fn().mockResolvedValue(null) };
+    const rolePermissionFind = vi.fn().mockResolvedValue([{ permissionId: EnginePermissions.INSTANCE_VIEW }]);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { findOne: vi.fn().mockResolvedValue({ id: 'custom.engine.viewer', scope: 'engine', kind: 'custom', tenantId: null, isArchived: false, isAssignable: true }) };
+        if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue({ id: 'group-1', isArchived: false }) };
+        if (entity === RuntimeResourceSet) return { findOne: vi.fn().mockResolvedValue({ id: 'runtime-set-1', engineId: 'engine-1' }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', runtimeAccessScope: 'resource_aware' }) };
+        if (entity === RbacRolePermission) return { find: rolePermissionFind };
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(duplicateQb), insert: insertAssignment, find: vi.fn().mockResolvedValue([]) };
+        if (entity === AuditLog) return { insert: vi.fn().mockResolvedValue(undefined) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await permissionService.assignRole({
+      principalType: 'group', principalId: 'group-1', roleId: 'custom.engine.viewer',
+      scopeType: 'engine_runtime_resource_set', scopeId: 'runtime-set-1', createdById: 'admin-1',
+    });
+
+    expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
+      // Legacy resource aliases stay unset; scopeType is the authoritative
+      // assignment target while the role itself retains its engine scope.
+      resourceType: null, resourceId: null,
+      scopeType: 'engine_runtime_resource_set', scopeId: 'runtime-set-1',
+    }));
   });
 
   it('warns when an Engine Set grant already provides the runtime permission', async () => {
