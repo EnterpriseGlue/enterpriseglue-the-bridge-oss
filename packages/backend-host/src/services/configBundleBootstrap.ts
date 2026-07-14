@@ -4,6 +4,7 @@ import { configBundleApplyService } from '@enterpriseglue/shared/services/platfo
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
 import { configBundleIdentityReplayTaskService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js';
+import { configBundleRuntimeReconciliationTaskService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
@@ -120,7 +121,8 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
       applyRunId = result.applyRunId || null;
       phase = 'identity';
       const identityStatus = result.reconciliation?.identitySnapshot?.status;
-      if (identityStatus === 'failed') {
+      const runtimeStatus = result.reconciliation?.runtimeReconciliation?.status;
+      if (identityStatus === 'failed' || runtimeStatus === 'failed') {
         throw new ConfigBootstrapFailure('identity_reconciliation_failed');
       }
       if (identityStatus === 'truncated') {
@@ -130,6 +132,18 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
           applyRunId: result.applyRunId,
           maxPages: 100,
           pageLimit: 500,
+        });
+        if (drain.status !== 'completed') {
+          throw new ConfigBootstrapFailure('identity_reconciliation_failed');
+        }
+        status = { ...status, reconciliation: 'completed' };
+      }
+      if (runtimeStatus === 'queued') {
+        status = { ...status, reconciliation: 'pending' };
+        if (!result.applyRunId) throw new ConfigBootstrapFailure('identity_reconciliation_failed');
+        const drain = await configBundleRuntimeReconciliationTaskService.drainApplyRun({
+          applyRunId: result.applyRunId,
+          maxTasks: 100,
         });
         if (drain.status !== 'completed') {
           throw new ConfigBootstrapFailure('identity_reconciliation_failed');

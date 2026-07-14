@@ -26,6 +26,9 @@ const configBundleApplyMock = vi.hoisted(() => ({
 const configBundleIdentityReplayTaskMock = vi.hoisted(() => ({
   listForApplyRun: vi.fn().mockResolvedValue([{ id: 'identity-task-1', providerId: 'provider-1', status: 'queued', attempts: 0, nextAttemptAt: null, scanned: 500, created: 2, removed: 1, failed: 0, lastError: null, completedAt: null, createdAt: 1, updatedAt: 1 }]),
 }));
+const configBundleRuntimeReconciliationTaskMock = vi.hoisted(() => ({
+  listForApplyRun: vi.fn().mockResolvedValue([{ id: 'runtime-task-1', status: 'queued', attempts: 0, nextAttemptAt: null, engineSetIdsJson: '[]', runtimeResourceSetIdsJson: '["runtime-set-1"]', engineIdsJson: '["engine-1"]', lastError: null, completedAt: null, createdAt: 1, updatedAt: 1 }]),
+}));
 const configBundleSecretPreflightMock = vi.hoisted(() => ({
   check: vi.fn().mockReturnValue({
     valid: true,
@@ -84,6 +87,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js', () => ({
   configBundleIdentityReplayTaskService: configBundleIdentityReplayTaskMock,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.js', () => ({
+  configBundleRuntimeReconciliationTaskService: configBundleRuntimeReconciliationTaskMock,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js', () => ({
@@ -2316,6 +2322,27 @@ describe('platform-admin authz routes', () => {
     });
   });
 
+  it('returns an accepted apply receipt when runtime reconciliation is queued', async () => {
+    configBundleApplyMock.apply.mockResolvedValueOnce({
+      canonicalHash: 'preview-hash', created: 0, updated: 1, archived: 0, changes: [], applyRunId: 'config-run-runtime',
+      reconciliation: {
+        status: 'completed', engineSetCount: 1, runtimeResourceSetCount: 1, engineCount: 1,
+        identitySnapshot: { mode: 'apply', status: 'completed', providerCount: 0, scanned: 0, created: 0, removed: 0, failed: 0 },
+        runtimeReconciliation: { status: 'queued', taskId: 'runtime-task-1', engineSetCount: 1, runtimeResourceSetCount: 1, engineCount: 1 },
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/authz/config-bundles/apply')
+      .send({ bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle' }, files: {}, expectedPreviewHash: 'preview-hash', idempotencyKey: 'config-apply-runtime-2026-07-14' });
+
+    expect(response.status).toBe(202);
+    expect(response.body).toMatchObject({
+      applyRunId: 'config-run-runtime',
+      reconciliation: { runtimeReconciliation: { status: 'queued', taskId: 'runtime-task-1' } },
+    });
+  });
+
   it('requires target-management permission when config apply transfers target ownership', async () => {
     sharedPermissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
       permission !== 'platform:project-engine-targets:manage'
@@ -2381,6 +2408,14 @@ describe('platform-admin authz routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual([expect.objectContaining({ id: 'identity-task-1', providerId: 'provider-1', status: 'queued', scanned: 500 })]);
     expect(configBundleIdentityReplayTaskMock.listForApplyRun).toHaveBeenCalledWith('config-run-1', null);
+  });
+
+  it('returns durable runtime reconciliation tasks only for a visible configuration apply', async () => {
+    const response = await request(app).get('/api/authz/config-bundles/runs/config-run-1/runtime-reconciliation-tasks');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([expect.objectContaining({ id: 'runtime-task-1', status: 'queued', runtimeResourceSetIds: ['runtime-set-1'], engineIds: ['engine-1'] })]);
+    expect(configBundleRuntimeReconciliationTaskMock.listForApplyRun).toHaveBeenCalledWith('config-run-1', null);
   });
 
   it('allows configuration-scoped API clients to apply bundles and preserves machine audit lineage', async () => {

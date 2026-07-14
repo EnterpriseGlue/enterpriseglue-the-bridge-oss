@@ -13,6 +13,7 @@ import { configBundleApplyService } from '@enterpriseglue/shared/services/platfo
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 import { configBundleExportService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleExportService.js';
 import { configBundleIdentityReplayTaskService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js';
+import { configBundleRuntimeReconciliationTaskService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
@@ -135,8 +136,9 @@ export function registerConfigBundleRoutes(
         apiClientId: req.apiClient?.id || null,
       },
     });
-    const identityReplayQueued = result.reconciliation.identitySnapshot?.status === 'truncated';
-    res.status(identityReplayQueued ? 202 : 200).json(result);
+    const reconciliationQueued = result.reconciliation.identitySnapshot?.status === 'truncated'
+      || result.reconciliation.runtimeReconciliation?.status === 'queued';
+    res.status(reconciliationQueued ? 202 : 200).json(result);
   }));
 
   router.get('/api/authz/config-bundles/runs', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
@@ -178,6 +180,29 @@ export function registerConfigBundleRoutes(
       created: task.created,
       removed: task.removed,
       failed: task.failed,
+      lastError: task.lastError,
+      completedAt: task.completedAt,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+    })));
+  }));
+
+  router.get('/api/authz/config-bundles/runs/:id/runtime-reconciliation-tasks', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
+    const tenantId = req.tenant?.tenantId || null;
+    const runId = String(req.params.id);
+    const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
+      where: tenantId ? { id: runId, tenantId } : { id: runId, tenantId: IsNull() },
+    });
+    if (!row) throw Errors.notFound('Configuration bundle apply run');
+    const tasks = await configBundleRuntimeReconciliationTaskService.listForApplyRun(runId, tenantId);
+    res.json(tasks.map((task) => ({
+      id: task.id,
+      status: task.status,
+      attempts: task.attempts,
+      nextAttemptAt: task.nextAttemptAt,
+      engineSetIds: JSON.parse(task.engineSetIdsJson),
+      runtimeResourceSetIds: JSON.parse(task.runtimeResourceSetIdsJson),
+      engineIds: JSON.parse(task.engineIdsJson),
       lastError: task.lastError,
       completedAt: task.completedAt,
       createdAt: task.createdAt,

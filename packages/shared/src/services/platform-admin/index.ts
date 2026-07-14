@@ -53,6 +53,7 @@ export * from './ConfigBundleSecretPreflightService.js';
 export * from './ConfigBundleDiffService.js';
 export * from './ConfigBundleApplyService.js';
 export * from './ConfigBundleIdentityReplayTaskService.js';
+export * from './ConfigBundleRuntimeReconciliationTaskService.js';
 export * from './ConfigBundleExportService.js';
 export * from './ConfigBundleArchiveService.js';
 export * from './RuntimeResourceInventoryService.js';

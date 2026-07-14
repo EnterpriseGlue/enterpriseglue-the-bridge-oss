@@ -16,6 +16,7 @@ const apply = vi.hoisted(() => vi.fn());
 const secretPreflight = vi.hoisted(() => vi.fn());
 const getPlatformSettings = vi.hoisted(() => vi.fn());
 const drainApplyRun = vi.hoisted(() => vi.fn());
+const drainRuntimeApplyRun = vi.hoisted(() => vi.fn());
 const findApplyRun = vi.hoisted(() => vi.fn());
 const updateApplyRun = vi.hoisted(() => vi.fn());
 const bootstrapLogger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
@@ -41,6 +42,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js', () => ({
   configBundleIdentityReplayTaskService: { drainApplyRun },
 }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.js', () => ({
+  configBundleRuntimeReconciliationTaskService: { drainApplyRun: drainRuntimeApplyRun },
+}));
 
 import { getConfigBootstrapMetrics, getConfigBootstrapStatus, runConfigBundleBootstrap } from '../../../../packages/backend-host/src/services/configBundleBootstrap.js';
 
@@ -59,6 +63,7 @@ describe('configBundleBootstrap', () => {
     secretPreflight.mockReturnValue({ valid: true, available: true, canonicalHash: 'preview-hash', availabilityHash: 'secret-preflight-hash', errors: [] });
     getPlatformSettings.mockResolvedValue({ credentiallessCustomerSidecarsEnabled: false });
     drainApplyRun.mockResolvedValue({ status: 'completed', pagesProcessed: 1, taskCount: 1, activeTaskCount: 0, failedTaskCount: 0 });
+    drainRuntimeApplyRun.mockResolvedValue({ status: 'completed', taskCount: 1, activeTaskCount: 0, failedTaskCount: 0 });
     findApplyRun.mockResolvedValue({ id: 'apply-run-1', resultJson: JSON.stringify({ canonicalHash: 'preview-hash', changes: [] }) });
     updateApplyRun.mockResolvedValue({ affected: 1 });
   });
@@ -214,5 +219,17 @@ describe('configBundleBootstrap', () => {
 
     await expect(runConfigBundleBootstrap()).rejects.toThrow('identity reconciliation failed');
     expect(drainApplyRun).not.toHaveBeenCalled();
+  });
+
+  it('drains queued runtime reconciliation before reporting bootstrap ready', async () => {
+    config.configExpectedTenantScope = 'tenant-a';
+    apply.mockResolvedValue({
+      canonicalHash: 'preview-hash',
+      applyRunId: 'apply-run-1',
+      reconciliation: { identitySnapshot: { status: 'completed' }, runtimeReconciliation: { status: 'queued' } },
+    });
+
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'applied', reconciliation: 'completed' });
+    expect(drainRuntimeApplyRun).toHaveBeenCalledWith({ applyRunId: 'apply-run-1', maxTasks: 100 });
   });
 });

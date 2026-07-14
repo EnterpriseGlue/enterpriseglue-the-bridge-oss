@@ -15,8 +15,7 @@ import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persiste
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
-import { engineSetKeyIdentity, engineSetService } from './EngineSetService.js';
-import { runtimeResourceInventoryService } from './RuntimeResourceInventoryService.js';
+import { engineSetKeyIdentity } from './EngineSetService.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
 import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
@@ -27,6 +26,7 @@ import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBu
 import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
+import { configBundleRuntimeReconciliationTaskService } from './ConfigBundleRuntimeReconciliationTaskService.js';
 import { archiveIdentityProviderInStore } from './IdentityProviderService.js';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 import { authzGroupKeyIdentity } from './AuthzGroupService.js';
@@ -64,6 +64,13 @@ export interface ConfigBundleApplyResult {
       created: number;
       removed: number;
       failed: number;
+    };
+    runtimeReconciliation: {
+      status: 'not_needed' | 'queued' | 'completed' | 'failed';
+      taskId: string | null;
+      engineSetCount: number;
+      runtimeResourceSetCount: number;
+      engineCount: number;
     };
   };
   idempotent?: boolean;
@@ -126,8 +133,9 @@ function tenantScopeKey(tenantId?: string | null): string {
 
 function parseStoredReconciliation(value: unknown): ConfigBundleApplyResult['reconciliation'] {
   const emptyIdentitySnapshot = { mode: 'apply' as const, status: 'not_needed' as const, providerCount: 0, scanned: 0, created: 0, removed: 0, failed: 0 };
+  const emptyRuntimeReconciliation = { status: 'not_needed' as const, taskId: null, engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 };
   if (!value || typeof value !== 'object') {
-    return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: emptyIdentitySnapshot };
+    return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: emptyIdentitySnapshot, runtimeReconciliation: emptyRuntimeReconciliation };
   }
 
   const reconciliation = value as Record<string, unknown>;
@@ -140,7 +148,7 @@ function parseStoredReconciliation(value: unknown): ConfigBundleApplyResult['rec
     || (reconciliation.runtimeResourceSetCount as number) < 0
     || (reconciliation.engineCount as number) < 0
   ) {
-    return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: emptyIdentitySnapshot };
+    return { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0, identitySnapshot: emptyIdentitySnapshot, runtimeReconciliation: emptyRuntimeReconciliation };
   }
 
   const snapshot = reconciliation.identitySnapshot as Record<string, unknown> | undefined;
@@ -150,6 +158,13 @@ function parseStoredReconciliation(value: unknown): ConfigBundleApplyResult['rec
     && ['providerCount', 'scanned', 'created', 'removed', 'failed'].every((key) => Number.isInteger(snapshot[key]) && (snapshot[key] as number) >= 0)
     ? { mode: (snapshot.mode || 'apply') as ConfigBundleIdentityReconciliationMode, status: snapshot.status as ConfigBundleApplyResult['reconciliation']['identitySnapshot']['status'], providerCount: snapshot.providerCount as number, scanned: snapshot.scanned as number, created: snapshot.created as number, removed: snapshot.removed as number, failed: snapshot.failed as number }
     : emptyIdentitySnapshot;
+  const runtime = reconciliation.runtimeReconciliation as Record<string, unknown> | undefined;
+  const runtimeReconciliation = runtime
+    && ['not_needed', 'queued', 'completed', 'failed'].includes(String(runtime.status))
+    && (runtime.taskId === null || typeof runtime.taskId === 'string')
+    && ['engineSetCount', 'runtimeResourceSetCount', 'engineCount'].every((key) => Number.isInteger(runtime[key]) && (runtime[key] as number) >= 0)
+    ? { status: runtime.status as ConfigBundleApplyResult['reconciliation']['runtimeReconciliation']['status'], taskId: runtime.taskId as string | null, engineSetCount: runtime.engineSetCount as number, runtimeResourceSetCount: runtime.runtimeResourceSetCount as number, engineCount: runtime.engineCount as number }
+    : emptyRuntimeReconciliation;
 
   return {
     status: 'completed',
@@ -157,6 +172,7 @@ function parseStoredReconciliation(value: unknown): ConfigBundleApplyResult['rec
     runtimeResourceSetCount: reconciliation.runtimeResourceSetCount as number,
     engineCount: reconciliation.engineCount as number,
     identitySnapshot,
+    runtimeReconciliation,
   };
 }
 
@@ -741,11 +757,27 @@ class ConfigBundleApplyService {
         }
       }
     });
-      for (const id of materializeIds) await engineSetService.materializeEngineSet(id, tenantId);
-      for (const id of materializeRuntimeResourceSetIds) await runtimeResourceInventoryService.materialize(id, tenantId);
-      for (const id of [...new Set(changedEngineIds)]) {
-        await engineSetService.materializeEngineSetsForEngine(id, tenantId);
-        await runtimeResourceInventoryService.materializeForEngine(id, tenantId);
+      const runtimeCounts = {
+        engineSetCount: materializeIds.length,
+        runtimeResourceSetCount: materializeRuntimeResourceSetIds.length,
+        engineCount: new Set(changedEngineIds).size,
+      };
+      let runtimeReconciliation: ConfigBundleApplyResult['reconciliation']['runtimeReconciliation'] = {
+        status: 'not_needed', taskId: null, ...runtimeCounts,
+      };
+      if (runtimeCounts.engineSetCount || runtimeCounts.runtimeResourceSetCount || runtimeCounts.engineCount) {
+        try {
+          const task = await configBundleRuntimeReconciliationTaskService.enqueue({
+            tenantId,
+            applyRunId: applyRunId!,
+            engineSetIds: materializeIds,
+            runtimeResourceSetIds: materializeRuntimeResourceSetIds,
+            engineIds: changedEngineIds,
+          });
+          runtimeReconciliation = { status: task ? 'queued' : 'not_needed', taskId: task?.id || null, ...runtimeCounts };
+        } catch {
+          runtimeReconciliation = { status: 'failed', taskId: null, ...runtimeCounts };
+        }
       }
       const providerIds = Array.from(new Set(replayProviderIds.filter(Boolean)));
       let identitySnapshot: ConfigBundleApplyResult['reconciliation']['identitySnapshot'] = { mode: identityReconciliationMode, status: 'not_needed', providerCount: 0, scanned: 0, created: 0, removed: 0, failed: 0 };
@@ -815,10 +847,9 @@ class ConfigBundleApplyService {
         changes: diff.changes,
         reconciliation: {
           status: 'completed' as const,
-          engineSetCount: materializeIds.length,
-          runtimeResourceSetCount: materializeRuntimeResourceSetIds.length,
-          engineCount: new Set(changedEngineIds).size,
+          ...runtimeCounts,
           identitySnapshot,
+          runtimeReconciliation,
         },
         ...(applyRunId ? { applyRunId } : {}),
       };

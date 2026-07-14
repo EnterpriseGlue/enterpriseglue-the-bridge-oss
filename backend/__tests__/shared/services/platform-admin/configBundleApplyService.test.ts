@@ -29,6 +29,7 @@ const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSe
 const replayMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, created: 0, removed: 0, failed: 0, truncated: false }));
 const previewMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, additions: 0, removals: 0, unchanged: 0, failed: 0, truncated: false }));
 const enqueueReplayTask = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const enqueueRuntimeReconciliationTask = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'runtime-task-1' }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
   runtimeResourceInventoryService: { materialize: materializeRuntimeResourceSet, materializeForEngine },
 }));
@@ -41,6 +42,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentitySer
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js', () => ({
   configBundleIdentityReplayTaskService: { enqueue: enqueueReplayTask },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.js', () => ({
+  configBundleRuntimeReconciliationTaskService: { enqueue: enqueueRuntimeReconciliationTask },
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -619,8 +623,9 @@ describe('configBundleApplyService', () => {
       sourceRef: 'config_bundle:acme.authz', passwordEnc: 'ref:PAYMENTS_ENGINE_PASSWORD', runtimeAccessScope: 'engine_wide',
       deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 900, pipelineReceiptEnabled: false, connectionMode: 'direct',
     }));
-    expect(materializeEngineSetsForEngine).toHaveBeenCalled();
-    expect(materializeForEngine).toHaveBeenCalled();
+    expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a', engineSetIds: [], runtimeResourceSetIds: [], engineIds: [expect.any(String)],
+    }));
   });
 
   it.each([
@@ -824,7 +829,9 @@ describe('configBundleApplyService', () => {
     const preview = configBundlePreviewService.preview({ bundle: runtimeBundle, files: runtimeFiles });
     await configBundleApplyService.apply({ bundle: runtimeBundle, files: runtimeFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
     expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ key: 'runtime.payments', runtimeResourceSetKeyIdentity: 'tenant-a:runtime.payments', engineId: 'engine-1', resourceKind: 'process_definition', source: 'config', sourceRef: 'config_bundle:acme.authz' }));
-    expect(materializeRuntimeResourceSet).toHaveBeenCalledWith(expect.any(String), 'tenant-a');
+    expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a', runtimeResourceSetIds: [expect.any(String)],
+    }));
   });
 
   it('applies a canonical key identity to a config-owned Engine Set', async () => {

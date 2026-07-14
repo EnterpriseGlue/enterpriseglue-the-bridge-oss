@@ -10,6 +10,7 @@ import { startBatchPollerIfActive } from './poller/batchPoller.js';
 import { startSsoDiagnosticsPollerIfEnabled } from './poller/ssoDiagnosticsPoller.js';
 import { startRuntimeInventoryPollerIfEnabled } from './poller/runtimeInventoryPoller.js';
 import { startConfigBundleIdentityReplayPollerIfEnabled } from './poller/configBundleIdentityReplayPoller.js';
+import { startConfigBundleRuntimeReconciliationPollerIfEnabled } from './poller/configBundleRuntimeReconciliationPoller.js';
 import { getConfigBootstrapStatus, runConfigBundleBootstrap } from './services/configBundleBootstrap.js';
 import { getConnectionPool, ConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
 import {
@@ -140,6 +141,7 @@ export async function startServer() {
   void startSsoDiagnosticsPollerIfEnabled();
   void startRuntimeInventoryPollerIfEnabled();
   void startConfigBundleIdentityReplayPollerIfEnabled();
+  void startConfigBundleRuntimeReconciliationPollerIfEnabled();
 
   // Graceful shutdown
   process.on('SIGINT', () => process.exit(0));
