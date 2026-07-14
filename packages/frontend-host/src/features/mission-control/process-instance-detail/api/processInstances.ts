@@ -22,6 +22,11 @@ export type ProcessInstanceDetail = {
   endTime?: string
   state: string
   suspended: boolean
+  runtimeActionDecisions?: {
+    suspension: { allowed: boolean; reason?: string }
+    retry: { allowed: boolean; reason?: string }
+    terminate: { allowed: boolean; reason?: string }
+  }
 }
 
 const withEngineId = (path: string, engineId?: string) => {
@@ -32,7 +37,7 @@ const withEngineId = (path: string, engineId?: string) => {
 
 // API Functions
 export async function getProcessInstance(instanceId: string, engineId?: string): Promise<ProcessInstanceDetail> {
-  return apiClient.get<ProcessInstanceDetail>(withEngineId(`/mission-control-api/process-instances/${instanceId}`, engineId), undefined, { credentials: 'include' })
+  return apiClient.get<ProcessInstanceDetail>(withEngineId(`/mission-control-api/process-instances/${instanceId}?includeActionDecisions=true`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function getProcessInstanceVariables(instanceId: string, engineId?: string): Promise<Record<string, Variable>> {

@@ -110,6 +110,25 @@ describe('mission-control process-instances routes', () => {
     expect(getProcessInstance).toHaveBeenCalledWith('engine-1', 'pi1');
   });
 
+  it('adds sanitized action decisions to an explicitly requested process-instance detail', async () => {
+    (getProcessInstance as unknown as Mock).mockResolvedValueOnce({ id: 'pi1', processDefinitionKey: 'payments' });
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/pi1')
+      .query({ engineId: 'engine-1', includeActionDecisions: 'true' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: 'pi1',
+      processDefinitionKey: 'payments',
+      runtimeActionDecisions: {
+        suspension: { allowed: true },
+        retry: { allowed: true },
+        terminate: { allowed: true },
+      },
+    });
+  });
+
   it('deletes process instances through delete permission', async () => {
     const response = await request(app)
       .delete('/mission-control-api/process-instances/pi1')

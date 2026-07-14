@@ -73,7 +73,15 @@ r.get('/mission-control-api/process-instances/:id', requireProcessInstanceAction
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)
   const data = await getProcessInstance(engineId, instanceId)
-  res.json(data)
+  if (req.query.includeActionDecisions !== 'true') return res.json(data)
+  const [withDecisions] = await addRuntimeProcessInstanceActionDecisions({
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    engineId,
+    runtimeAccessScope: (req as Request & { runtimeAccessScope?: 'engine_wide' | 'resource_aware' }).runtimeAccessScope || 'engine_wide',
+    rows: [data],
+  })
+  res.json(withDecisions)
 }))
 
 // Get process instance variables

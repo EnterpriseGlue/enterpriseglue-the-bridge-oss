@@ -230,7 +230,15 @@ r.get('/mission-control-api/process-instances/:id', requireProcessInstanceAction
     const instanceId = String(req.params.id)
     const data = await getProcessInstanceById(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
-    res.json(redacted)
+    if (req.query.includeActionDecisions !== 'true') return res.json(redacted)
+    const [withDecisions] = await addRuntimeProcessInstanceActionDecisions({
+      userId: req.user!.userId,
+      tenantId: req.tenant?.tenantId || null,
+      engineId,
+      runtimeAccessScope: (req as Request & { runtimeAccessScope?: 'engine_wide' | 'resource_aware' }).runtimeAccessScope || 'engine_wide',
+      rows: [redacted],
+    })
+    res.json(withDecisions)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process instance')
   }

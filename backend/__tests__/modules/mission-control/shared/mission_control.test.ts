@@ -12,6 +12,7 @@ import {
   getActiveActivityCounts,
   listProcessDefinitions,
   listProcessInstancesDetailed,
+  getProcessInstanceById,
   getProcessInstanceVariableHistory,
   getProcessInstanceExecutionDetails,
   previewProcessInstanceCount,
@@ -281,6 +282,24 @@ describe('mission-control shared mission_control routes', () => {
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       resourceType: 'engine_runtime_resource', resourceId: 'resource-payments',
     }));
+  });
+
+  it('adds requested action decisions to compatibility process-instance details', async () => {
+    vi.mocked(getProcessInstanceById).mockResolvedValueOnce({ id: 'instance-1', processDefinitionKey: 'payments' } as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/instance-1')
+      .query({ engineId: 'engine-77', includeActionDecisions: 'true' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: 'instance-1',
+      runtimeActionDecisions: {
+        suspension: { allowed: true },
+        retry: { allowed: true },
+        terminate: { allowed: true },
+      },
+    });
   });
 
   it('returns variable history for a process instance variable and allows engineId in query', async () => {

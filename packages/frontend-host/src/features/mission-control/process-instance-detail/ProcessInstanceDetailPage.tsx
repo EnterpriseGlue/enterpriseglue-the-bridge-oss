@@ -59,6 +59,19 @@ type ProcessEditTarget = {
   mappingSource?: string
 }
 
+function withRuntimeActionDecision(
+  fallback: UiAuthzDecision,
+  decision: { allowed: boolean; reason?: string } | undefined,
+): UiAuthzDecision {
+  if (!decision) return fallback
+  return {
+    ...fallback,
+    allowed: decision.allowed,
+    state: decision.allowed ? 'allowed' : 'disabled',
+    reason: decision.allowed ? 'Allowed for this runtime resource' : decision.reason || 'Action unavailable for this runtime resource',
+  }
+}
+
 export default function ProcessInstanceDetailPage() {
   const { instanceId } = useParams<{ instanceId: string }>()
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
@@ -89,10 +102,10 @@ export default function ProcessInstanceDetailPage() {
     () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
     [selectedEngineId]
   )
-  const suspensionDecision = useActionDecision('engine.runtime.process-instances.suspension.update', selectedEngineResource)
-  const retryDecision = useActionDecision('engine.runtime.process-instances.retry', selectedEngineResource)
+  const snapshotSuspensionDecision = useActionDecision('engine.runtime.process-instances.suspension.update', selectedEngineResource)
+  const snapshotRetryDecision = useActionDecision('engine.runtime.process-instances.retry', selectedEngineResource)
   const modifyDecision = useActionDecision('engine.runtime.process-instances.modify', selectedEngineResource)
-  const terminateDecision = useActionDecision('engine.runtime.process-instances.delete', selectedEngineResource)
+  const snapshotTerminateDecision = useActionDecision('engine.runtime.process-instances.delete', selectedEngineResource)
   const variablesReadDecision = useActionDecision('engine.runtime.process-instances.variables.read', selectedEngineResource)
   const historicVariablesReadDecision = useActionDecision('engine.runtime.history.variables.read', selectedEngineResource)
   const variableHistoryReadDecision = useActionDecision('engine.runtime.process-instances.variable-history.read', selectedEngineResource)
@@ -166,6 +179,14 @@ export default function ProcessInstanceDetailPage() {
     parentId,
     status,
   } = instanceData
+  const runtimeActionDecisions = (runtimeQ.data as { runtimeActionDecisions?: {
+    suspension?: { allowed: boolean; reason?: string }
+    retry?: { allowed: boolean; reason?: string }
+    terminate?: { allowed: boolean; reason?: string }
+  } } | undefined)?.runtimeActionDecisions
+  const suspensionDecision = withRuntimeActionDecision(snapshotSuspensionDecision, runtimeActionDecisions?.suspension)
+  const retryDecision = withRuntimeActionDecision(snapshotRetryDecision, runtimeActionDecisions?.retry)
+  const terminateDecision = withRuntimeActionDecision(snapshotTerminateDecision, runtimeActionDecisions?.terminate)
 
   const showModifyAction = status === 'ACTIVE'
   const activityOverlayData = React.useMemo(() => {

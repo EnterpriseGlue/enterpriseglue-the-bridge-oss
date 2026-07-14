@@ -982,6 +982,7 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
         select: ['id', 'tenantId', 'runtimeAccessScope'],
       });
       if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+      req.runtimeAccessScope = engine.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide';
 
       const context: PermissionContext = {
         userId: req.user.userId,
