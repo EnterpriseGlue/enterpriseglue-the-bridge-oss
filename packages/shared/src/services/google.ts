@@ -268,6 +268,9 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo) {
       const existingByEmail = await userRepo.findOneBy({ email: userInfo.email });
       if (existingByEmail) {
         const user = existingByEmail;
+        if (!userInfo.email_verified || (!user.isEmailVerified && user.authProvider !== 'google')) {
+          throw new Error('Verified local email is required before linking a Google identity');
+        }
         await userRepo.update({ id: user.id }, {
           authProvider: 'google',
           firstName: userInfo.given_name || user.firstName,

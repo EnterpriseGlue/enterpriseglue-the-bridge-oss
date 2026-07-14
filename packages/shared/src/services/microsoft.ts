@@ -273,6 +273,9 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo) {
       if (existingByEmail) {
         // Email exists but not linked to Microsoft account - link the accounts
         const user = existingByEmail;
+        if (!user.isEmailVerified && user.authProvider !== 'microsoft') {
+          throw new Error('Verified local email is required before linking a Microsoft identity');
+        }
         await userRepo.update({ id: user.id }, {
           authProvider: 'microsoft',
           entraEmail: userInfo.email,

@@ -227,4 +227,18 @@ describe('saml service - provisionSamlUser', () => {
       tenantId: 'tenant-a', providerId: 'provider-saml-1', subjectId: 'oid-linked', userId: 'user-linked',
     }));
   });
+
+  it('does not link an unverified standalone account by matching a SAML email', async () => {
+    const userRepo = { findOneBy: vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'local-user', email: 'person@example.test', authProvider: 'local', isEmailVerified: false }), update: vi.fn(), insert: vi.fn() };
+    const manager = { getRepository: vi.fn().mockReturnValue(userRepo) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: (callback: any) => callback(manager) });
+    (ssoProviderService.getProvider as unknown as Mock).mockResolvedValue({ id: 'provider-saml-1', defaultRole: 'user', tenantId: 'tenant-a' });
+    (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('user');
+
+    await expect(provisionSamlUser({ email: 'person@example.test', oid: 'oid-new', groups: [], roles: [], customClaims: {} }, 'provider-saml-1'))
+      .rejects.toThrow('Verified local email is required');
+    expect(externalIdentityService.upsertWithManager).not.toHaveBeenCalled();
+  });
 });

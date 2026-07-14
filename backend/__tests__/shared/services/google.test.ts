@@ -80,4 +80,16 @@ describe('google service', () => {
     }));
     expect(syncDiagnosticsService.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({ groupMembershipsCreated: 3, groupMembershipsRemoved: 1 }));
   });
+
+  it('requires both a verified Google email and a verified standalone account before email linking', async () => {
+    const repository = { findOneBy: vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'local-user', email: 'person@example.test', authProvider: 'local', isEmailVerified: true }), update: vi.fn(), insert: vi.fn() };
+    const manager = { getRepository: vi.fn().mockReturnValue(repository) };
+    (getDataSource as any).mockResolvedValue({ transaction: (callback: any) => callback(manager) });
+
+    await expect(provisionGoogleUser({ sub: 'google-new', email: 'person@example.test', email_verified: false }))
+      .rejects.toThrow('Verified local email is required');
+    expect(externalIdentityService.upsertWithManager).not.toHaveBeenCalled();
+  });
 });

@@ -495,6 +495,9 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
 
       if (existingByEmail) {
         const user = existingByEmail;
+        if (!user.isEmailVerified && user.authProvider !== 'saml') {
+          throw new Error('Verified local email is required before linking a SAML identity');
+        }
         await userRepo.update({ id: user.id }, {
           authProvider: 'saml',
           entraEmail: userInfo.email,

@@ -207,4 +207,17 @@ describe('microsoft service', () => {
       providerId: 'legacy:microsoft', subjectId: 'oid-linked', userId: 'user-linked',
     }));
   });
+
+  it('does not link an unverified standalone account by matching email', async () => {
+    const userRepo = { findOneBy: vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'local-user', email: 'person@example.test', authProvider: 'local', isEmailVerified: false }), update: vi.fn(), insert: vi.fn() };
+    const manager = { getRepository: vi.fn().mockReturnValue(userRepo) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: (callback: any) => callback(manager) });
+    (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('user');
+
+    await expect(provisionMicrosoftUser({ oid: 'oid-new', email: 'person@example.test', tid: 'directory-1' }))
+      .rejects.toThrow('Verified local email is required');
+    expect(externalIdentityService.upsertWithManager).not.toHaveBeenCalled();
+  });
 });
