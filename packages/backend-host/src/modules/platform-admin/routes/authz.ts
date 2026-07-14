@@ -24,7 +24,7 @@ import {
   Permission,
   EvaluationContext,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
-import { AUTHZ_RESOURCE_TYPES } from '@enterpriseglue/shared/authz/permission-actions.js';
+import { EffectiveAccessEvaluateRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { registerConfigBundleRoutes } from './authz/config-bundles.js';
 import { registerEngineSetRoutes } from './authz/engine-sets.js';
 import { registerMachineRoutes } from './authz/machines.js';
@@ -41,8 +41,6 @@ import { registerSsoEngineAssignmentRoutes } from './authz/sso-engine-assignment
 import { registerSsoGroupMappingRoutes } from './authz/sso-group-mappings.js';
 
 // Validation schemas
-const authzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
-
 const authzCheckSchema = z.object({
   action: z.string().min(1),
   resourceType: z.string().optional(),
@@ -55,28 +53,6 @@ const authzCheckBatchSchema = z.object({
   checks: z.array(authzCheckSchema).min(1),
 });
 const idParamSchema = z.object({ id: z.string().uuid() });
-
-const authzEvaluateSchema = z.object({
-  userId: z.string().uuid(),
-  permission: z.string().min(1),
-  resourceType: authzResourceTypeSchema.optional(),
-  resourceId: z.string().optional(),
-  runtimeResource: z.object({
-    engineId: z.string().min(1),
-    resourceKind: z.enum(['process_definition', 'decision_definition']),
-    resourceKey: z.string().min(1),
-    runtimeTenantId: z.string().max(255).optional(),
-  }).optional(),
-}).superRefine((value, ctx) => {
-  if (value.runtimeResource && value.resourceType !== 'engine_runtime_resource') {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['runtimeResource'], message: 'Runtime resource selector requires resourceType engine_runtime_resource' });
-  }
-  if (value.resourceType === 'engine_runtime_resource' && !value.resourceId && !value.runtimeResource) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['runtimeResource'], message: 'Runtime resource ID or selector is required' });
-  }
-});
-
-
 
 const router = Router();
 
@@ -234,7 +210,7 @@ router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(as
  * POST /api/platform-admin/authz/evaluate
  * Explain effective access for a user/resource/permission.
  */
-router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformAction('platform.authz.evaluate'), validateBody(authzEvaluateSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformAction('platform.authz.evaluate'), validateBody(EffectiveAccessEvaluateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { userId, permission, resourceType, resourceId, runtimeResource } = req.body;
     if (!new Set<string>(Object.values(AllPermissions)).has(permission)) {
