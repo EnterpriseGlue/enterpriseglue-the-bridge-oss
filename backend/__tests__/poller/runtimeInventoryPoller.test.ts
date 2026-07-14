@@ -31,32 +31,45 @@ describe('runtimeInventoryPoller', () => {
     vi.useRealTimers();
   });
 
-  it('reconciles only active resource-aware engines in the selected tenant scope', async () => {
+  it('reconciles only active engines with an enabled discovery lane in the selected tenant scope', async () => {
     engineRepo.find.mockResolvedValue([
       { id: 'central-a', tenantId: 'tenant-a', runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active' },
-      { id: 'distributed-a', tenantId: 'tenant-a', runtimeAccessScope: 'engine_wide', lifecycleStatus: 'active' },
+      { id: 'distributed-a', tenantId: 'tenant-a', runtimeAccessScope: 'engine_wide', lifecycleStatus: 'active', deploymentDiscoveryEnabled: false },
       { id: 'inactive-a', tenantId: 'tenant-a', runtimeAccessScope: 'resource_aware', lifecycleStatus: 'decommissioned' },
-      { id: 'discovery-disabled', tenantId: 'tenant-a', runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active', metadataDiscoveryEnabled: false },
+      { id: 'discovery-disabled', tenantId: 'tenant-a', runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active', metadataDiscoveryEnabled: false, deploymentDiscoveryEnabled: false },
       { id: 'central-b', tenantId: 'tenant-b', runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active' },
     ]);
 
     await expect(runScheduledRuntimeInventoryReconciliationOnce({ tenantIds: ['tenant-a'] })).resolves.toEqual([
       { engineId: 'central-a', tenantId: 'tenant-a', status: 'reconciled', created: 0, updated: 1, deactivated: 0, materializedSets: 2, deploymentsCreated: 0, deploymentsUpdated: 0, deploymentArtifactsCreated: 0 },
     ]);
-    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('central-a', 'tenant-a');
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('central-a', 'tenant-a', { runtimeMetadataDiscoveryEnabled: true, deploymentDiscoveryEnabled: true });
   });
 
   it('only reconciles engines whose configured cadence is due', async () => {
     const now = Date.now();
     engineRepo.find.mockResolvedValue([
       { id: 'not-due', tenantId: null, runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active', reconciliationIntervalSeconds: 600, lastMetadataReconciledAt: now - 30_000 },
-      { id: 'due', tenantId: null, runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active', reconciliationIntervalSeconds: 60, lastMetadataReconciledAt: now - 61_000 },
+      { id: 'due', tenantId: null, runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active', deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 60, lastMetadataReconciledAt: now - 61_000 },
     ]);
 
     await runScheduledRuntimeInventoryReconciliationOnce();
 
     expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledTimes(1);
-    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('due', null);
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('due', null, { runtimeMetadataDiscoveryEnabled: true, deploymentDiscoveryEnabled: false });
+  });
+
+  it('runs deployment discovery independently for an engine-wide engine', async () => {
+    engineRepo.find.mockResolvedValue([
+      { id: 'deployment-only', tenantId: null, runtimeAccessScope: 'engine_wide', lifecycleStatus: 'active', metadataDiscoveryEnabled: false, deploymentDiscoveryEnabled: true },
+    ]);
+
+    await runScheduledRuntimeInventoryReconciliationOnce();
+
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('deployment-only', null, {
+      runtimeMetadataDiscoveryEnabled: false,
+      deploymentDiscoveryEnabled: true,
+    });
   });
 
   it('isolates one engine failure so the remaining inventory is reconciled', async () => {

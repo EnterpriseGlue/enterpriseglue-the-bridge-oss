@@ -74,6 +74,33 @@ interface DeploymentResponseData {
   [key: string]: unknown;
 }
 
+type DeploymentLineageReadiness = 'bridge_ready' | 'version_resolution_required' | 'validation_required' | 'inventory_only' | 'incomplete';
+
+function deploymentLineageDiagnostics(row: EngineDeployment, artifacts: EngineDeploymentArtifact[]) {
+  const linkedArtifacts = artifacts.filter((artifact) => Boolean(artifact.projectId && artifact.fileId));
+  const versionedArtifacts = linkedArtifacts.filter((artifact) => Boolean(artifact.fileGitCommitId || artifact.fileUpdatedAt));
+  const issues: string[] = [];
+  if (!row.projectId) issues.push('missing_project_lineage');
+  if (!artifacts.length) issues.push('no_artifacts_recorded');
+  else if (!linkedArtifacts.length) issues.push('artifacts_missing_file_lineage');
+  if (row.lineageQuality === 'reported' && !row.reportingPrincipalId) issues.push('missing_reporting_principal');
+  if (row.lineageQuality === 'inferred') issues.push('inference_not_validated');
+
+  let readiness: DeploymentLineageReadiness = 'incomplete';
+  if (row.lineageQuality === 'discovered') readiness = 'inventory_only';
+  else if (row.lineageQuality === 'inferred') readiness = 'validation_required';
+  else if (row.lineageQuality === 'reported' && row.projectId && linkedArtifacts.length) readiness = 'version_resolution_required';
+  else if (row.lineageQuality === 'complete' && row.projectId && linkedArtifacts.length) readiness = 'bridge_ready';
+
+  return {
+    lineageReadiness: readiness,
+    lineageIssues: issues,
+    artifactCount: artifacts.length,
+    linkedArtifactCount: linkedArtifacts.length,
+    versionedArtifactCount: versionedArtifacts.length,
+  };
+}
+
 const r = Router()
 
 // Helpers - now imported from deployment-utils.ts
@@ -783,16 +810,27 @@ r.get('/engines-api/engines/:engineId/deployment-receipts', apiLimiter, requireA
 r.get('/engines-api/engines/:engineId/deployment-history', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const rawLimit = Number(req.query.limit || 100)
   const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 100
-  const rows = await (await getDataSource()).getRepository(EngineDeployment).find({
+  const dataSource = await getDataSource()
+  const rows = await dataSource.getRepository(EngineDeployment).find({
     where: { engineId: String(req.params.engineId) },
     order: { deployedAt: 'DESC', id: 'DESC' },
     take: limit,
   })
+  const artifacts = rows.length ? await dataSource.getRepository(EngineDeploymentArtifact).find({
+    where: { engineDeploymentId: In(rows.map((row) => row.id)) },
+  }) : []
+  const artifactsByDeployment = new Map<string, EngineDeploymentArtifact[]>()
+  for (const artifact of artifacts) {
+    const grouped = artifactsByDeployment.get(artifact.engineDeploymentId) || []
+    grouped.push(artifact)
+    artifactsByDeployment.set(artifact.engineDeploymentId, grouped)
+  }
   res.json(rows.map((row) => ({
     id: row.id, engineId: row.engineId, engineDeploymentId: row.camundaDeploymentId, deploymentName: row.camundaDeploymentName,
     deploymentTime: row.camundaDeploymentTime, projectId: row.projectId, ingestionSource: row.ingestionSource,
     lineageQuality: row.lineageQuality, reportingPrincipalId: row.reportingPrincipalId, deployedAt: row.deployedAt,
     reconciledAt: row.reconciledAt, resourceCount: row.resourceCount, status: row.status,
+    ...deploymentLineageDiagnostics(row, artifactsByDeployment.get(row.id) || []),
   })))
 }))
 

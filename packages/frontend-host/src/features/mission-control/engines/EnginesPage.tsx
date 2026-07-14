@@ -384,6 +384,11 @@ type DeploymentHistoryView = {
   reconciledAt: number | null
   resourceCount: number
   status: string
+  lineageReadiness: 'bridge_ready' | 'version_resolution_required' | 'validation_required' | 'inventory_only' | 'incomplete'
+  lineageIssues: string[]
+  artifactCount: number
+  linkedArtifactCount: number
+  versionedArtifactCount: number
 }
 
 type EngineAccessMember = {
@@ -601,6 +606,23 @@ function getDeploymentLineageTagType(value: DeploymentHistoryView['lineageQualit
   return 'gray'
 }
 
+function formatDeploymentLineageReadiness(value: DeploymentHistoryView['lineageReadiness']): string {
+  if (value === 'bridge_ready') return 'Bridge ready'
+  if (value === 'version_resolution_required') return 'Version resolution required'
+  if (value === 'validation_required') return 'Validation required'
+  if (value === 'inventory_only') return 'Inventory only'
+  return 'Incomplete lineage'
+}
+
+function formatDeploymentLineageIssue(value: string): string {
+  if (value === 'missing_project_lineage') return 'Project lineage is missing.'
+  if (value === 'no_artifacts_recorded') return 'No deployment artifacts were recorded.'
+  if (value === 'artifacts_missing_file_lineage') return 'Artifacts are not linked to project files.'
+  if (value === 'missing_reporting_principal') return 'The reporting principal is missing.'
+  if (value === 'inference_not_validated') return 'Inferred lineage has not been validated.'
+  return formatEngineRegistrationStatus(value)
+}
+
 function EngineRegistrationDetail({ label, value, tagValue }: { label: string; value: React.ReactNode; tagValue?: unknown }) {
   return (
     <div style={{ minWidth: 0 }}>
@@ -717,7 +739,11 @@ function EngineDeploymentSection({
       <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-4)', display: 'grid', gap: 'var(--spacing-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
           <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Deployment history</h4>
-          <Tag type="blue" size="sm">{history.length} records</Tag>
+          <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
+            <Tag type="green" size="sm">{history.filter((item) => item.lineageReadiness === 'bridge_ready').length} bridge ready</Tag>
+            <Tag type="purple" size="sm">{history.filter((item) => item.lineageReadiness === 'inventory_only').length} inventory only</Tag>
+            <Tag type="blue" size="sm">{history.length} records</Tag>
+          </div>
         </div>
         {historyLoading ? <InlineLoading description="Loading deployment history" /> : historyError ? (
           <InlineNotification lowContrast kind="error" title="Failed to load deployment history" subtitle={getUiErrorMessage(historyError, 'Failed to load deployment history')} hideCloseButton />
@@ -733,13 +759,15 @@ function EngineDeploymentSection({
                     {deployment.projectId ? `Project ${deployment.projectId}` : 'No project lineage'} | {deployment.resourceCount} resources
                   </div>
                   {deployment.reportingPrincipalId ? <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>Reported by {deployment.reportingPrincipalId}</div> : null}
-                  {deployment.lineageQuality === 'discovered' && !deployment.projectId ? <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Engine-discovered metadata only; project navigation is unavailable.</div> : null}
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{deployment.linkedArtifactCount || 0}/{deployment.artifactCount || 0} artifacts linked to project files</div>
+                  {(deployment.lineageIssues || []).map((issue) => <div key={issue} style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{formatDeploymentLineageIssue(issue)}</div>)}
                   <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
                     {deployment.reconciledAt ? `Reconciled ${formatEngineTimestamp(deployment.reconciledAt)}` : `Recorded ${formatEngineTimestamp(deployment.deployedAt)}`}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <Tag type={getDeploymentLineageTagType(deployment.lineageQuality)} size="sm">{deployment.lineageQuality}</Tag>
+                  <Tag type={deployment.lineageReadiness === 'bridge_ready' ? 'green' : deployment.lineageReadiness === 'inventory_only' ? 'purple' : 'magenta'} size="sm">{formatDeploymentLineageReadiness(deployment.lineageReadiness)}</Tag>
                   <Tag type={formatEngineRegistrationStatus(deployment.ingestionSource) === 'Config-managed' ? 'cyan' : 'gray'} size="sm">{deployment.ingestionSource}</Tag>
                 </div>
               </div>
@@ -1030,7 +1058,8 @@ function EngineRegistrationSection({ engine }: { engine: any }) {
         <EngineRegistrationDetail label="Connection mode" value={engine.connectionMode === 'customer_sidecar' ? 'Customer sidecar' : 'Direct'} />
         <EngineRegistrationDetail label="Endpoint authentication" value={formatEngineAuthentication(engine)} />
         <EngineRegistrationDetail label="Deployment integration" value={engine.deploymentIntegration === 'direct_engine' ? 'Direct engine deployment' : 'EnterpriseGlue proxy'} />
-        <EngineRegistrationDetail label="Metadata discovery" value={engine.metadataDiscoveryEnabled === false ? 'Disabled' : 'Enabled'} />
+        <EngineRegistrationDetail label="Runtime metadata discovery" value={engine.metadataDiscoveryEnabled === false ? 'Disabled' : 'Enabled'} />
+        <EngineRegistrationDetail label="Deployment discovery" value={engine.deploymentDiscoveryEnabled === false ? 'Disabled' : 'Enabled'} />
         <EngineRegistrationDetail label="Discovery cadence" value={`${engine.reconciliationIntervalSeconds || 300} seconds`} />
         <EngineRegistrationDetail label="Last discovery" value={formatEngineTimestamp(engine.lastMetadataReconciledAt)} />
         <EngineRegistrationDetail label="Discovery status" value={formatEngineRegistrationStatus(engine.lastMetadataReconciliationStatus)} tagValue={engine.lastMetadataReconciliationStatus || undefined} />
@@ -1132,6 +1161,7 @@ export default function Engines() {
     runtimeAccessScope: 'engine_wide' as RuntimeAccessScope,
     deploymentIntegration: 'enterpriseglue_proxy' as DeploymentIntegration,
     metadataDiscoveryEnabled: true,
+    deploymentDiscoveryEnabled: true,
     reconciliationIntervalSeconds: 300,
     pipelineReceiptEnabled: true,
   })
@@ -1247,6 +1277,7 @@ export default function Engines() {
       runtimeAccessScope: 'engine_wide',
       deploymentIntegration: 'enterpriseglue_proxy',
       metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
       reconciliationIntervalSeconds: 300,
       pipelineReceiptEnabled: true,
     })
@@ -1372,6 +1403,7 @@ export default function Engines() {
       runtimeAccessScope: row.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide',
       deploymentIntegration: row.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy',
       metadataDiscoveryEnabled: row.metadataDiscoveryEnabled !== false,
+      deploymentDiscoveryEnabled: row.deploymentDiscoveryEnabled !== false,
       reconciliationIntervalSeconds: row.reconciliationIntervalSeconds || 300,
       pipelineReceiptEnabled: row.pipelineReceiptEnabled !== false,
     })
@@ -1971,11 +2003,20 @@ export default function Engines() {
         )}
         <Toggle
           id="eng-metadata-discovery"
-          labelText="Metadata discovery"
+          labelText="Runtime metadata discovery"
           labelA="Disabled"
           labelB="Enabled"
           toggled={form.metadataDiscoveryEnabled}
           onToggle={(checked) => setForm((f: any) => ({ ...f, metadataDiscoveryEnabled: checked }))}
+          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+        />
+        <Toggle
+          id="eng-deployment-discovery"
+          labelText="Deployment history discovery"
+          labelA="Disabled"
+          labelB="Enabled"
+          toggled={form.deploymentDiscoveryEnabled}
+          onToggle={(checked) => setForm((f: any) => ({ ...f, deploymentDiscoveryEnabled: checked }))}
           disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
         <TextInput

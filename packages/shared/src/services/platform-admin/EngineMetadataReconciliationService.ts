@@ -8,17 +8,25 @@ export interface EngineMetadataReconciliationResult {
   updated: number;
   deactivated: number;
   materializedSets: number;
+  runtimeSkipped?: boolean;
   deployments: DeploymentDiscoveryResult;
 }
 
 /** One reconciliation boundary for both scheduled and explicitly requested discovery. */
 class EngineMetadataReconciliationService {
-  async reconcileEngine(engineId: string, tenantId?: string | null): Promise<EngineMetadataReconciliationResult> {
+  async reconcileEngine(engineId: string, tenantId?: string | null, options: { runtimeMetadataDiscoveryEnabled?: boolean; deploymentDiscoveryEnabled?: boolean } = {}): Promise<EngineMetadataReconciliationResult> {
     const engineRepo = (await getDataSource()).getRepository(Engine);
+    const deploymentDiscoveryEnabled = options.deploymentDiscoveryEnabled === undefined
+      ? (await engineRepo.findOne({ where: { id: engineId } }))?.deploymentDiscoveryEnabled !== false
+      : options.deploymentDiscoveryEnabled;
     const attemptedAt = Date.now();
     try {
-      const runtime = await runtimeResourceInventoryService.reconcileEngine(engineId, tenantId);
-      const deployments = await deploymentDiscoveryService.reconcileEngine(engineId, tenantId);
+      const runtime = options.runtimeMetadataDiscoveryEnabled === false
+        ? { created: 0, updated: 0, deactivated: 0, materializedSets: 0, runtimeSkipped: true }
+        : await runtimeResourceInventoryService.reconcileEngine(engineId, tenantId);
+      const deployments = !deploymentDiscoveryEnabled
+        ? { created: 0, updated: 0, artifactsCreated: 0, skipped: true }
+        : await deploymentDiscoveryService.reconcileEngine(engineId, tenantId);
       await engineRepo.update({ id: engineId }, {
         lastMetadataReconciledAt: attemptedAt,
         lastMetadataReconciliationStatus: 'succeeded',

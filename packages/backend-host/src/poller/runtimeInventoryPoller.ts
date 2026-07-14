@@ -20,6 +20,7 @@ export interface RuntimeInventoryReconciliationResult {
   updated?: number;
   deactivated?: number;
   materializedSets?: number;
+  runtimeSkipped?: boolean;
   deploymentsCreated?: number;
   deploymentsUpdated?: number;
   deploymentArtifactsCreated?: number;
@@ -47,19 +48,18 @@ function readOptionsFromEnv(): Required<RuntimeInventoryPollerOptions> {
 }
 
 /**
- * Reconciles central/resource-aware engines only. Distributed engine-wide
- * engines do not require this inventory for authorization and are excluded to
- * keep the scheduled work bounded.
+ * Runtime definition discovery remains limited to resource-aware engines.
+ * Deployment-history discovery is independent and may run for any active engine.
  */
 export async function runScheduledRuntimeInventoryReconciliationOnce(
   options: Pick<RuntimeInventoryPollerOptions, 'tenantIds'> = {},
 ): Promise<RuntimeInventoryReconciliationResult[]> {
   const tenantIds = options.tenantIds?.length ? options.tenantIds : [null];
   const engineRepo = (await getDataSource()).getRepository(Engine);
-  const engines = await engineRepo.find({ where: { runtimeAccessScope: 'resource_aware' } });
+  const engines = await engineRepo.find();
   const now = Date.now();
-  const candidates = engines.filter((engine) => engine.runtimeAccessScope === 'resource_aware'
-    && engine.metadataDiscoveryEnabled !== false
+  const candidates = engines.filter((engine) => ((engine.runtimeAccessScope === 'resource_aware' && engine.metadataDiscoveryEnabled !== false)
+      || engine.deploymentDiscoveryEnabled !== false)
     && tenantIds.includes(engine.tenantId || null)
     && (engine.lifecycleStatus || 'active') === 'active'
     && (!engine.lastMetadataReconciledAt
@@ -69,7 +69,10 @@ export async function runScheduledRuntimeInventoryReconciliationOnce(
   for (const engine of candidates) {
     const tenantId = engine.tenantId || null;
     try {
-      const { deployments, ...result } = await engineMetadataReconciliationService.reconcileEngine(engine.id, tenantId);
+      const { deployments, ...result } = await engineMetadataReconciliationService.reconcileEngine(engine.id, tenantId, {
+        runtimeMetadataDiscoveryEnabled: engine.runtimeAccessScope === 'resource_aware' && engine.metadataDiscoveryEnabled !== false,
+        deploymentDiscoveryEnabled: engine.deploymentDiscoveryEnabled !== false,
+      });
       results.push({ engineId: engine.id, tenantId, status: 'reconciled', ...result,
         deploymentsCreated: deployments.created, deploymentsUpdated: deployments.updated, deploymentArtifactsCreated: deployments.artifactsCreated });
     } catch (error) {

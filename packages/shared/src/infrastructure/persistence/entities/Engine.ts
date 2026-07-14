@@ -108,6 +108,10 @@ export class Engine extends AppBaseEntity {
   @Column({ name: 'metadata_discovery_enabled', type: 'boolean', default: true })
   metadataDiscoveryEnabled!: boolean;
 
+  /** Controls ingestion of engine-observed deployment history independently of runtime definitions. */
+  @Column({ name: 'deployment_discovery_enabled', type: 'boolean', default: true })
+  deploymentDiscoveryEnabled!: boolean;
+
   @Column({ name: 'reconciliation_interval_seconds', type: 'integer', default: 300 })
   reconciliationIntervalSeconds!: number;
 

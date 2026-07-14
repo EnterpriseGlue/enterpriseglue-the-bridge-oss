@@ -465,6 +465,7 @@ The current v1 UI/API deliberately uses a smaller mutually exclusive `deployment
   "directApiEnabled": true,
   "pipelineReceiptEnabled": true,
   "metadataDiscoveryEnabled": true,
+  "deploymentDiscoveryEnabled": true,
   "reconciliationIntervalSeconds": 300
 }
 ```
@@ -499,7 +500,8 @@ Rules:
 - `proxyEnabled` allows an authorized human or machine principal to deploy through EnterpriseGlue after project, engine, target-mode, policy, and capability checks pass.
 - `directApiEnabled` documents that customer pipelines may deploy directly to the process engine. It does not grant EnterpriseGlue deployment permission.
 - `pipelineReceiptEnabled` enables a machine-authenticated callback that records project, file, commit, tenant, deployment, process, and decision lineage after a direct deployment.
-- `metadataDiscoveryEnabled` controls scheduled engine deployment/process/decision metadata reconciliation. It defaults to enabled for proxy and direct deployment paths; administrators can disable the per-engine scheduler through the Engine Detail or JSON configuration while retaining explicit manual reconciliation.
+- `metadataDiscoveryEnabled` controls the scheduled process/decision metadata lane. It defaults to enabled for proxy and direct deployment paths; administrators can disable that lane through the Engine Detail or JSON configuration while retaining explicit manual reconciliation and independently scheduled deployment discovery.
+- `deploymentDiscoveryEnabled` independently controls whether reconciliation ingests engine-observed deployment history. Runtime process/decision inventory can continue while this switch is disabled.
 - Existing project-engine target flags still decide whether `manual`, `ci`, `api`, and `import` use is eligible. Deployment integration settings do not replace target eligibility.
 
 Persist one deployment record per `engineId + engineDeploymentId` and merge richer observations into that record. Record lineage quality as:
@@ -2354,7 +2356,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add a compact, permission-gated Engine Detail runtime-resource summary for `resource_aware` central engines. It shows bounded sanitized inventory only to administrators with runtime inventory read permission.
 - [x] ✅ Add per-engine runtime access scope controls to manual create/edit and engine detail. The API rejects unsafe downgrade to engine-wide access while resource-scoped assignments exist.
 - [x] ✅ Add per-engine v1 deployment integration controls to manual create/edit and engine detail. `enterpriseglue_proxy` permits EnterpriseGlue deployment; `direct_engine` rejects proxy deployment and accepts machine-authenticated pipeline receipts.
-- [ ] ⬜ Add independent deployment ingestion switches, discovery/reconciliation scheduling, and remaining lineage diagnostics. Per-engine `metadataDiscoveryEnabled`, `reconciliationIntervalSeconds`, last-attempt time/status diagnostics, and `pipelineReceiptEnabled` are complete across persistence, engine API, JSON bundle apply/export, Engine Detail UI, manual reconciliation, and the disabled-by-default scheduler. Machine receipt ingestion rejects disabled engines. Separate deployment discovery ingestion controls and richer lineage-quality diagnostics remain pending.
+- [x] ✅ Add independent deployment ingestion switches, discovery/reconciliation scheduling, and lineage diagnostics. Per-engine `metadataDiscoveryEnabled`, `deploymentDiscoveryEnabled`, `pipelineReceiptEnabled`, and `reconciliationIntervalSeconds` are complete across persistence, engine API, JSON bundle apply/export, Engine Detail UI, manual reconciliation, and the disabled-by-default scheduler. Machine receipt ingestion rejects disabled engines; deployment reconciliation skips history ingestion when its independent switch is disabled. Sanitized deployment-history diagnostics expose bridge readiness, bounded lineage issue codes, and linked/versioned artifact counts without returning raw lineage JSON.
 - [x] ✅ Add Mission Control filters and empty states that explain when the user can see the engine but has no visible runtime resources. Process definitions, decisions, filtered process instances, batch history, and migration source/target selectors use consistent authorization-aware explanations; Dashboard separately labels resource-scoped engine access.
 - [x] ✅ Ensure dashboard and Mission Control counters are based on authorized runtime subsets. Resource-aware task and process-instance preview counts fan out only across authorized process-definition keys, and Dashboard KPIs derive from the filtered process-instance collection rather than whole-engine totals.
 - [x] ✅ Show `Customer-managed engine authentication` for customer-sidecar engines and `No EnterpriseGlue-managed credentials` for credentialless direct/legacy records instead of implying missing security. Engine Details also labels the connection mode explicitly.

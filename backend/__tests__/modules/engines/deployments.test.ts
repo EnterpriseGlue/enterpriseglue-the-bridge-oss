@@ -84,6 +84,7 @@ describe('engines deployments routes', () => {
   let app: express.Application;
   let engineDeploymentInserts: any[];
   let artifactInserts: any[];
+  let deploymentArtifactRows: any[];
   let deploymentHistoryRows: any[];
   let mockEngine: any;
 
@@ -133,6 +134,7 @@ describe('engines deployments routes', () => {
     });
     engineDeploymentInserts = [];
     artifactInserts = [];
+    deploymentArtifactRows = [];
     deploymentHistoryRows = [];
 
     mockEngine = {
@@ -192,7 +194,7 @@ describe('engines deployments routes', () => {
         }
         if (entityName === 'EngineDeploymentArtifact') {
           return {
-            find: vi.fn().mockResolvedValue([]),
+            find: vi.fn().mockImplementation(() => Promise.resolve(deploymentArtifactRows)),
             insert: vi.fn().mockImplementation((rows) => {
               artifactInserts.push(...rows);
               return Promise.resolve({});
@@ -261,13 +263,29 @@ describe('engines deployments routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([expect.objectContaining({
-      id: 'history-1', engineDeploymentId: 'camunda-1', lineageQuality: 'discovered', resourceCount: 2,
+      id: 'history-1', engineDeploymentId: 'camunda-1', lineageQuality: 'discovered', lineageReadiness: 'inventory_only',
+      lineageIssues: ['missing_project_lineage', 'no_artifacts_recorded'], artifactCount: 0, linkedArtifactCount: 0, resourceCount: 2,
     })]);
     expect(response.body[0]).not.toHaveProperty('rawResponse');
     expect(response.body[0]).not.toHaveProperty('lineageJson');
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:deploy:view', expect.objectContaining({
       userId: 'user-1', resourceType: 'engine', resourceId: 'e1',
     }));
+  });
+
+  it('reports bridge-ready diagnostics only for complete linked lineage', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'engine:deploy:view');
+    deploymentHistoryRows = [{
+      id: 'history-1', engineId: 'e1', camundaDeploymentId: 'camunda-1', camundaDeploymentName: 'Payments release', camundaDeploymentTime: null,
+      projectId: 'project-1', ingestionSource: 'enterpriseglue_proxy', lineageQuality: 'complete', reportingPrincipalId: null,
+      deployedAt: 1700000000000, reconciledAt: 1700000001000, resourceCount: 1, status: 'success',
+    }];
+    deploymentArtifactRows = [{ engineDeploymentId: 'history-1', projectId: 'project-1', fileId: 'file-1', fileGitCommitId: 'commit-1', fileUpdatedAt: 1700000000000 }];
+
+    const response = await request(app).get('/engines-api/engines/e1/deployment-history');
+
+    expect(response.status).toBe(200);
+    expect(response.body[0]).toMatchObject({ lineageReadiness: 'bridge_ready', lineageIssues: [], artifactCount: 1, linkedArtifactCount: 1, versionedArtifactCount: 1 });
   });
 
   it('gets deployment by id through action metadata permission', async () => {

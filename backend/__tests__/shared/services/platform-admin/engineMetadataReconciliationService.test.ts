@@ -17,7 +17,7 @@ describe('EngineMetadataReconciliationService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getDataSource).mockResolvedValue({ getRepository: () => ({ update }) } as any);
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue({ id: 'engine-1', deploymentDiscoveryEnabled: true }), update }) } as any);
     vi.mocked(runtimeResourceInventoryService.reconcileEngine).mockResolvedValue({ created: 1, updated: 2, deactivated: 3, materializedSets: 4 });
     vi.mocked(deploymentDiscoveryService.reconcileEngine).mockResolvedValue({ created: 5, updated: 6, artifactsCreated: 7 });
   });
@@ -41,5 +41,23 @@ describe('EngineMetadataReconciliationService', () => {
     expect(update).toHaveBeenCalledWith({ id: 'engine-1' }, expect.objectContaining({
       lastMetadataReconciliationStatus: 'failed',
     }));
+  });
+
+  it('skips deployment ingestion when the engine disables it', async () => {
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue({ id: 'engine-1', deploymentDiscoveryEnabled: false }), update }) } as any);
+
+    await expect(engineMetadataReconciliationService.reconcileEngine('engine-1', null)).resolves.toEqual(expect.objectContaining({
+      deployments: { created: 0, updated: 0, artifactsCreated: 0, skipped: true },
+    }));
+    expect(deploymentDiscoveryService.reconcileEngine).not.toHaveBeenCalled();
+  });
+
+  it('can run deployment discovery without runtime metadata ingestion', async () => {
+    await expect(engineMetadataReconciliationService.reconcileEngine('engine-1', null, {
+      runtimeMetadataDiscoveryEnabled: false,
+      deploymentDiscoveryEnabled: true,
+    })).resolves.toEqual(expect.objectContaining({ runtimeSkipped: true, deployments: { created: 5, updated: 6, artifactsCreated: 7 } }));
+    expect(runtimeResourceInventoryService.reconcileEngine).not.toHaveBeenCalled();
+    expect(deploymentDiscoveryService.reconcileEngine).toHaveBeenCalledWith('engine-1', null);
   });
 });

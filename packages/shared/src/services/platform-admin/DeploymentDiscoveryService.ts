@@ -6,7 +6,7 @@ import { getDeployments } from '@enterpriseglue/shared/services/bpmn-engine-clie
 import type { Deployment } from '@enterpriseglue/shared/types/bpmn-engine-api.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 
-export interface DeploymentDiscoveryResult { created: number; updated: number; artifactsCreated: number; }
+export interface DeploymentDiscoveryResult { created: number; updated: number; artifactsCreated: number; skipped?: boolean; }
 
 /** Records engine-observed deployment metadata without ever guessing project/file lineage. */
 class DeploymentDiscoveryService {
