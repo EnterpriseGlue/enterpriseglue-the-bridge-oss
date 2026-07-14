@@ -400,6 +400,11 @@ describe('configBundleApplyService', () => {
       source: 'config',
       ownershipMode: 'config_warn',
     }));
+    const insertedAssignment = assignmentRepo.insert.mock.calls[0][0];
+    expect(insertedAssignment).not.toHaveProperty('userId');
+    expect(insertedAssignment).not.toHaveProperty('resourceType');
+    expect(insertedAssignment).not.toHaveProperty('resourceId');
+    expect(insertedAssignment).not.toHaveProperty('sourceMappingId');
     expect(assignmentOverrideRepo.delete).toHaveBeenCalledWith({
       assignmentKey: expect.any(String),
       sourceRef: 'config_bundle:acme.authz',

@@ -637,7 +637,7 @@ class ConfigBundleApplyService {
         const existing = await assignmentRepo.findOne({ where: { assignmentKey } });
         if (!existing) {
           const assignmentId = generateId();
-          await assignmentRepo.insert({ id: assignmentId, tenantId, userId: null, principalType: 'group', principalId: group.id, assignmentKey, roleId: role.id, resourceType: null, resourceId: null, scopeType: assignment.scope.type, scopeId: scopeId || null, source: 'config', sourceMappingId: null, sourceRef, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', expiresAt: assignment.expiresAt || null, lastSeenAt: now, createdById: input.actorId, createdAt: now, updatedAt: now });
+          await assignmentRepo.insert({ id: assignmentId, tenantId, principalType: 'group', principalId: group.id, assignmentKey, roleId: role.id, scopeType: assignment.scope.type, scopeId: scopeId || null, source: 'config', sourceRef, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', expiresAt: assignment.expiresAt || null, lastSeenAt: now, createdById: input.actorId, createdAt: now, updatedAt: now });
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.assignment.create', resourceType: 'role_assignment', resourceId: assignmentId, details: { bundleKey: manifest.metadata.key, roleKey: assignment.roleKey, principalGroupKey: assignment.principal.key, scopeType: assignment.scope.type, canonicalHash: diff.canonicalHash } });
           created += 1;
         } else if (existing.expiresAt !== (assignment.expiresAt || null) || existing.ownershipMode !== (assignment.ownershipMode || 'config_locked')) {
