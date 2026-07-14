@@ -143,6 +143,24 @@ describe('legacyIdentityProviderMigrationService', () => {
     } finally { delete process.env.READY_MIGRATION_SECRET; }
   });
 
+  it('requires a direct SAML replacement and its signing certificate reference for legacy SAML cutover', async () => {
+    const legacyProvider = { id: 'legacy-saml', name: 'Legacy SAML', type: 'saml', defaultRole: 'user', enabled: true, updatedAt: 1 };
+    const targetProvider = { id: 'target-saml', key: 'migrated-saml', tenantId: 'tenant-1', protocol: 'saml', authenticationMode: 'direct', isEnabled: true, configurationJson: JSON.stringify({ signingCertificateRef: 'env://MISSING_SAML_CERTIFICATE' }) };
+    const getRepository = (entity: unknown) => {
+      if (entity === SsoProvider) return { findOneBy: vi.fn().mockResolvedValue(legacyProvider), save: vi.fn() };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(targetProvider) };
+      if (entity === IdentityEntitlementMapping) return { count: vi.fn().mockResolvedValue(1) };
+      throw new Error('Unexpected repository');
+    };
+    (getDataSource as any).mockResolvedValue({ getRepository });
+
+    const readiness = await legacyIdentityProviderMigrationService.getReadiness({ legacyProviderId: 'legacy-saml', targetProviderKey: 'migrated-saml', tenantId: 'tenant-1' });
+
+    expect(readiness.checks.directLoginProtocol).toBe(true);
+    expect(readiness.checks.directOidc).toBe(false);
+    expect(readiness.blockers).toContain('secret_reference_unavailable');
+  });
+
   it('disables a persisted legacy provider only after the replacement passes readiness checks', async () => {
     process.env.READY_MIGRATION_SECRET = 'test-secret';
     const legacyProvider = { id: 'legacy-google', name: 'Google Workspace', type: 'google', enabled: true, updatedAt: 1 };
@@ -165,6 +183,25 @@ describe('legacyIdentityProviderMigrationService', () => {
     } finally {
       delete process.env.READY_MIGRATION_SECRET;
     }
+  });
+
+  it('disables a legacy SAML provider after its direct SAML replacement passes readiness', async () => {
+    process.env.READY_SAML_CERTIFICATE = '-----BEGIN CERTIFICATE-----test-----END CERTIFICATE-----';
+    const legacyProvider = { id: 'legacy-saml', name: 'Legacy SAML', type: 'saml', defaultRole: 'user', enabled: true, updatedAt: 1 };
+    const targetProvider = { id: 'target-saml', key: 'migrated-saml', tenantId: 'tenant-1', protocol: 'saml', authenticationMode: 'direct', isEnabled: true, configurationJson: JSON.stringify({ signingCertificateRef: 'env://READY_SAML_CERTIFICATE' }) };
+    const save = vi.fn();
+    const getRepository = (entity: unknown) => {
+      if (entity === SsoProvider) return { findOneBy: vi.fn().mockResolvedValue(legacyProvider), save };
+      if (entity === IdentityProvider) return { findOne: vi.fn().mockResolvedValue(targetProvider) };
+      if (entity === IdentityEntitlementMapping) return { count: vi.fn().mockResolvedValue(1) };
+      throw new Error('Unexpected repository');
+    };
+    (getDataSource as any).mockResolvedValue({ transaction: (callback: any) => callback({ getRepository }) });
+    try {
+      const result = await legacyIdentityProviderMigrationService.cutover({ legacyProviderId: 'legacy-saml', targetProviderKey: 'migrated-saml', tenantId: 'tenant-1' });
+      expect(result).toEqual(expect.objectContaining({ legacyProvider: expect.objectContaining({ type: 'saml' }), legacyProviderDisabled: true }));
+      expect(save).toHaveBeenCalledWith(legacyProvider);
+    } finally { delete process.env.READY_SAML_CERTIFICATE; }
   });
 
   it('refuses cutover when only unrelated identity mappings exist', async () => {

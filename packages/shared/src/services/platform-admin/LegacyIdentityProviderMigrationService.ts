@@ -70,14 +70,16 @@ export interface LegacyIdentityProviderMigrationReadiness {
   activeMappingCount: number;
   checks: {
     targetExists: boolean;
+    /** Retained for API compatibility; use directLoginProtocol for new callers. */
     directOidc: boolean;
+    directLoginProtocol: boolean;
     enabled: boolean;
     secretReferenceConfigured: boolean;
     secretReferenceAvailable: boolean;
     activeMappingsConfigured: boolean;
     defaultRoleMappingConfigured: boolean | null;
   };
-  blockers: Array<'target_not_found' | 'target_not_direct_oidc' | 'target_disabled' | 'secret_reference_missing' | 'secret_reference_unavailable' | 'identity_mappings_missing' | 'legacy_provider_not_found' | 'default_role_mapping_missing'>;
+  blockers: Array<'target_not_found' | 'target_not_direct_oidc' | 'target_protocol_mismatch' | 'target_disabled' | 'secret_reference_missing' | 'secret_reference_unavailable' | 'identity_mappings_missing' | 'legacy_provider_not_found' | 'default_role_mapping_missing'>;
 }
 
 export interface LegacyIdentityProviderCutoverResult {
@@ -267,17 +269,26 @@ class LegacyIdentityProviderMigrationServiceClass {
     const key = input.targetProviderKey.trim();
     const tenantId = input.tenantId?.trim() || null;
     const legacyProviderId = input.legacyProviderId?.trim() || null;
+    const legacyProvider = legacyProviderId
+      ? await manager.getRepository(SsoProvider).findOneBy({ id: legacyProviderId })
+      : null;
+    const expectedProtocol = legacyProvider?.type === 'saml' ? 'saml' : 'oidc';
     const provider = await manager.getRepository(IdentityProvider).findOne({ where: tenantId ? { key, tenantId } : { key, tenantId: IsNull() } });
     if (!provider) {
-      return { ready: false, targetProviderKey: key, legacyProviderId, requiredDefaultGroupId: null, activeMappingCount: 0, checks: { targetExists: false, directOidc: false, enabled: false, secretReferenceConfigured: false, secretReferenceAvailable: false, activeMappingsConfigured: false, defaultRoleMappingConfigured: null }, blockers: ['target_not_found'] };
+      return { ready: false, targetProviderKey: key, legacyProviderId, requiredDefaultGroupId: null, activeMappingCount: 0, checks: { targetExists: false, directOidc: false, directLoginProtocol: false, enabled: false, secretReferenceConfigured: false, secretReferenceAvailable: false, activeMappingsConfigured: false, defaultRoleMappingConfigured: null }, blockers: ['target_not_found'] };
     }
     let rawConfiguration: Record<string, unknown> = {};
     try { rawConfiguration = JSON.parse(provider.configurationJson); } catch { rawConfiguration = {}; }
-    const secretReference = typeof rawConfiguration.clientSecretRef === 'string' ? rawConfiguration.clientSecretRef.trim() : '';
+    const secretReference = typeof (expectedProtocol === 'saml' ? rawConfiguration.signingCertificateRef : rawConfiguration.clientSecretRef) === 'string'
+      ? String(expectedProtocol === 'saml' ? rawConfiguration.signingCertificateRef : rawConfiguration.clientSecretRef).trim()
+      : '';
     const secretAvailability = secretReference ? secretResolver.checkExternalReference(secretReference.startsWith('ref:') ? secretReference.slice(4) : secretReference) : { available: false };
     const activeMappingCount = await manager.getRepository(IdentityEntitlementMapping).count({ where: { tenantId: tenantId || IsNull(), providerId: provider.id, isActive: true } as any });
     const blockers: LegacyIdentityProviderMigrationReadiness['blockers'] = [];
-    if (provider.protocol !== 'oidc' || provider.authenticationMode !== 'direct') blockers.push('target_not_direct_oidc');
+    const directLoginProtocol = provider.protocol === expectedProtocol && provider.authenticationMode === 'direct';
+    if (!directLoginProtocol) {
+      blockers.push(expectedProtocol === 'oidc' ? 'target_not_direct_oidc' : 'target_protocol_mismatch');
+    }
     if (!provider.isEnabled) blockers.push('target_disabled');
     if (!secretReference) blockers.push('secret_reference_missing');
     else if (!secretAvailability.available) blockers.push('secret_reference_unavailable');
@@ -285,7 +296,6 @@ class LegacyIdentityProviderMigrationServiceClass {
     let requiredDefaultGroupId: string | null = null;
     let defaultRoleMappingConfigured: boolean | null = null;
     if (legacyProviderId) {
-      const legacyProvider = await manager.getRepository(SsoProvider).findOneBy({ id: legacyProviderId });
       if (!legacyProvider) {
         blockers.push('legacy_provider_not_found');
       } else {
@@ -305,7 +315,7 @@ class LegacyIdentityProviderMigrationServiceClass {
       legacyProviderId,
       requiredDefaultGroupId,
       activeMappingCount,
-      checks: { targetExists: true, directOidc: provider.protocol === 'oidc' && provider.authenticationMode === 'direct', enabled: provider.isEnabled, secretReferenceConfigured: Boolean(secretReference), secretReferenceAvailable: Boolean(secretAvailability.available), activeMappingsConfigured: activeMappingCount > 0, defaultRoleMappingConfigured },
+      checks: { targetExists: true, directOidc: provider.protocol === 'oidc' && provider.authenticationMode === 'direct', directLoginProtocol, enabled: provider.isEnabled, secretReferenceConfigured: Boolean(secretReference), secretReferenceAvailable: Boolean(secretAvailability.available), activeMappingsConfigured: activeMappingCount > 0, defaultRoleMappingConfigured },
       blockers,
     };
   }
@@ -330,8 +340,8 @@ class LegacyIdentityProviderMigrationServiceClass {
     return dataSource.transaction(async (manager) => {
       const legacyProvider = await manager.getRepository(SsoProvider).findOneBy({ id: legacyProviderId });
       if (!legacyProvider) throw Errors.notFound('Legacy SSO provider not found');
-      if (!['microsoft', 'google', 'oidc'].includes(legacyProvider.type)) {
-        throw Errors.validation('Only legacy Microsoft, Google, and OIDC providers can be cut over to provider-neutral OIDC');
+      if (!['microsoft', 'google', 'oidc', 'saml'].includes(legacyProvider.type)) {
+        throw Errors.validation('Only legacy Microsoft, Google, OIDC, and SAML providers can be cut over to provider-neutral sign-in');
       }
 
       const readiness = await this.getReadinessInStore(manager, { legacyProviderId, targetProviderKey, tenantId: input.tenantId });
