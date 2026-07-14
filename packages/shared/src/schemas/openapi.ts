@@ -2273,26 +2273,15 @@ registry.registerPath({
   responses: { 204: { description: 'Identity provider archived' }, 404: { description: 'Identity provider not found' } },
 });
 
-const IdentityMappingRequestSchema = z.object({
-  providerKey: z.string().min(1).max(160),
-  targetGroupKey: z.string().min(1).max(160),
-  entitlementType: z.enum(['group', 'role', 'attribute', 'authenticated']),
-  externalId: z.string().min(1).max(2000).nullable().optional(),
-  matchOperator: z.enum(['exact', 'contains', 'exists']),
-  syncMode: z.enum(['additive', 'authoritative']).optional(),
-});
-const IdentityMappingResponseSchema = IdentityMappingRequestSchema.extend({
-  id: z.string(), providerId: z.string(), targetGroupId: z.string(), isActive: z.boolean(), configKey: z.string().nullable(), sourceRef: z.string().nullable(),
-});
-const IdentityMappingTestRequestSchema = IdentityMappingRequestSchema.omit({ targetGroupKey: true }).extend({ claims: z.record(z.string(), z.unknown()) });
-registry.register('IdentityMapping', IdentityMappingResponseSchema);
-registry.registerPath({ method: 'get', path: '/api/identity/mappings', ...authzExtension('platform.sso.group-mappings.read', 'GET', '/api/identity/mappings'), responses: { 200: { description: 'List provider-neutral identity mappings', content: { 'application/json': { schema: z.array(IdentityMappingResponseSchema) } } } } });
-registry.registerPath({ method: 'post', path: '/api/identity/mappings', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings'), request: { body: { content: { 'application/json': { schema: IdentityMappingRequestSchema } } } }, responses: { 201: { description: 'Identity mapping created', content: { 'application/json': { schema: IdentityMappingResponseSchema } } } } });
-registry.registerPath({ method: 'post', path: '/api/identity/mappings/provision-access', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings/provision-access'), request: { body: { content: { 'application/json': { schema: IdentityMappingRequestSchema.omit({ targetGroupKey: true }).extend({ targetGroupKey: z.string().min(1).max(160).optional(), newGroup: z.object({ key: z.string().min(1).max(255), name: z.string().min(1).max(255), description: z.string().max(2000).nullable().optional() }).optional(), roleId: z.string(), resourceType: z.enum(['platform', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set']), resourceId: z.string().optional() }).superRefine((value, context) => { if (Boolean(value.targetGroupKey) === Boolean(value.newGroup)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide exactly one of targetGroupKey or newGroup' }); if (value.resourceType !== 'platform' && !value.resourceId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'resourceId is required for non-platform access', path: ['resourceId'] }); }) } } } }, responses: { 201: { description: 'Identity mapping, optional new group, and scoped group access provisioned atomically', content: { 'application/json': { schema: z.object({ mapping: IdentityMappingResponseSchema, assignment: z.object({ id: z.string(), warnings: z.array(z.string()) }), createdGroup: z.object({ id: z.string() }).nullable() }) } } } } });
-registry.registerPath({ method: 'put', path: '/api/identity/mappings/{id}', ...authzExtension('platform.sso.group-mappings.manage', 'PUT', '/api/identity/mappings/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: IdentityMappingRequestSchema.partial().extend({ isActive: z.boolean().optional() }) } } } }, responses: { 200: { description: 'Identity mapping updated', content: { 'application/json': { schema: IdentityMappingResponseSchema } } } } });
+const identityMappingSchemas = await import('./platform-admin/authz.js');
+registry.register('IdentityMapping', identityMappingSchemas.IdentityMappingResponseSchema);
+registry.registerPath({ method: 'get', path: '/api/identity/mappings', ...authzExtension('platform.sso.group-mappings.read', 'GET', '/api/identity/mappings'), responses: { 200: { description: 'List provider-neutral identity mappings', content: { 'application/json': { schema: z.array(identityMappingSchemas.IdentityMappingResponseSchema) } } } } });
+registry.registerPath({ method: 'post', path: '/api/identity/mappings', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings'), request: { body: { content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingRequestSchema } } } }, responses: { 201: { description: 'Identity mapping created', content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/identity/mappings/provision-access', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings/provision-access'), request: { body: { content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingProvisionAccessRequestSchema } } } }, responses: { 201: { description: 'Identity mapping, optional new group, and scoped group access provisioned atomically', content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingProvisionAccessResponseSchema } } } } });
+registry.registerPath({ method: 'put', path: '/api/identity/mappings/{id}', ...authzExtension('platform.sso.group-mappings.manage', 'PUT', '/api/identity/mappings/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingUpdateSchema } } } }, responses: { 200: { description: 'Identity mapping updated', content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingResponseSchema } } } } });
 registry.registerPath({ method: 'delete', path: '/api/identity/mappings/{id}', ...authzExtension('platform.sso.group-mappings.manage', 'DELETE', '/api/identity/mappings/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Identity mapping removed' } } });
-registry.registerPath({ method: 'post', path: '/api/identity/mappings/test', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings/test'), request: { body: { content: { 'application/json': { schema: IdentityMappingTestRequestSchema } } } }, responses: { 200: { description: 'Identity mapping test result', content: { 'application/json': { schema: z.object({ matches: z.boolean(), entitlements: z.array(z.object({ type: z.string(), externalId: z.string() })) }) } } } } });
-registry.registerPath({ method: 'post', path: '/api/identity/mappings/stored-snapshot-preview', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings/stored-snapshot-preview'), request: { body: { content: { 'application/json': { schema: IdentityMappingRequestSchema.omit({ targetGroupKey: true }).extend({ limit: z.number().int().min(1).max(5000).optional() }) } } } }, responses: { 200: { description: 'Aggregate proposed mapping matches from stored normalized identity snapshots', content: { 'application/json': { schema: z.object({ scanned: z.number(), matches: z.number(), nonMatches: z.number(), failed: z.number(), truncated: z.boolean(), latestSnapshotAt: z.number().nullable(), warnings: z.array(z.string()) }) } } } } });
+registry.registerPath({ method: 'post', path: '/api/identity/mappings/test', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings/test'), request: { body: { content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingTestRequestSchema } } } }, responses: { 200: { description: 'Identity mapping test result', content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingTestResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/identity/mappings/stored-snapshot-preview', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings/stored-snapshot-preview'), request: { body: { content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingStoredSnapshotPreviewRequestSchema } } } }, responses: { 200: { description: 'Aggregate proposed mapping matches from stored normalized identity snapshots', content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingStoredSnapshotPreviewResponseSchema } } } } });
 
 // -----------------------------
 // Project Members API
@@ -3389,6 +3378,15 @@ const {
   ExternalEngineSystemCreateSchema,
   ExternalEngineSystemSchema,
   ExternalEngineSystemUpdateSchema,
+  IdentityMappingProvisionAccessRequestSchema,
+  IdentityMappingProvisionAccessResponseSchema,
+  IdentityMappingRequestSchema,
+  IdentityMappingResponseSchema,
+  IdentityMappingStoredSnapshotPreviewRequestSchema,
+  IdentityMappingStoredSnapshotPreviewResponseSchema,
+  IdentityMappingTestRequestSchema,
+  IdentityMappingTestResponseSchema,
+  IdentityMappingUpdateSchema,
   PermissionCatalogEntrySchema,
   ProjectEngineTargetCreateSchema,
   ProjectEngineTargetSchema,

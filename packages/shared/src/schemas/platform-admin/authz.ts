@@ -964,6 +964,88 @@ export const RuntimeResourceSetMaterializationResultSchema = z.object({
   removed: z.number().int().nonnegative(),
 });
 
+/** Provider-neutral identity-mapping contracts. Claim payloads remain untrusted inputs. */
+export const IdentityMappingRequestSchema = z.object({
+  providerKey: z.string().min(1).max(160),
+  targetGroupKey: z.string().min(1).max(160),
+  entitlementType: z.enum(['group', 'role', 'attribute', 'authenticated']),
+  externalId: z.string().min(1).max(2000).nullable().optional(),
+  matchOperator: z.enum(['exact', 'contains', 'exists']),
+  syncMode: z.enum(['additive', 'authoritative']).optional(),
+});
+
+export const IdentityMappingResponseSchema = IdentityMappingRequestSchema.extend({
+  id: z.string(),
+  providerId: z.string(),
+  targetGroupId: z.string(),
+  isActive: z.boolean(),
+  configKey: z.string().nullable(),
+  sourceRef: z.string().nullable(),
+});
+
+export const IdentityMappingUpdateSchema = IdentityMappingRequestSchema.partial().extend({
+  isActive: z.boolean().optional(),
+});
+
+export const IdentityMappingTestRequestSchema = IdentityMappingRequestSchema
+  .omit({ targetGroupKey: true })
+  .extend({ claims: z.record(z.string(), z.unknown()) });
+
+export const IdentityMappingTestResponseSchema = z.object({
+  matches: z.boolean(),
+  entitlements: z.array(z.object({
+    type: z.string(),
+    externalId: z.string(),
+  })),
+});
+
+export const IdentityMappingStoredSnapshotPreviewRequestSchema = IdentityMappingRequestSchema
+  .omit({ targetGroupKey: true })
+  .extend({ limit: z.number().int().min(1).max(5000).optional() });
+
+export const IdentityMappingStoredSnapshotPreviewResponseSchema = z.object({
+  scanned: z.number(),
+  matches: z.number(),
+  nonMatches: z.number(),
+  failed: z.number(),
+  truncated: z.boolean(),
+  latestSnapshotAt: z.number().nullable(),
+  warnings: z.array(z.string()),
+});
+
+export const IdentityMappingProvisionAccessRequestSchema = IdentityMappingRequestSchema
+  .omit({ targetGroupKey: true })
+  .extend({
+    targetGroupKey: z.string().min(1).max(160).optional(),
+    newGroup: z.object({
+      key: z.string().min(1).max(255),
+      name: z.string().min(1).max(255),
+      description: z.string().max(2000).nullable().optional(),
+    }).optional(),
+    roleId: z.string().min(1).max(160),
+    resourceType: z.enum(['platform', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set']),
+    resourceId: z.string().min(1).max(160).optional(),
+  }).superRefine((value, context) => {
+    if (value.targetGroupKey && value.newGroup) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide either targetGroupKey or newGroup, not both', path: ['targetGroupKey'] });
+    }
+    if (!value.targetGroupKey && !value.newGroup) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'targetGroupKey or newGroup is required', path: ['targetGroupKey'] });
+    }
+    if (value.resourceType !== 'platform' && !value.resourceId) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'resourceId is required for non-platform access', path: ['resourceId'] });
+    }
+  });
+
+export const IdentityMappingProvisionAccessResponseSchema = z.object({
+  mapping: IdentityMappingResponseSchema,
+  assignment: z.object({
+    id: z.string(),
+    warnings: z.array(z.string()),
+  }),
+  createdGroup: z.object({ id: z.string() }).nullable(),
+});
+
 export const SsoAssignmentMappingSchema = z.object({
   id: z.string(),
   tenantId: z.string().nullable().optional(),
@@ -1180,6 +1262,8 @@ export type DeploymentEligibilityEvaluateRequest = z.infer<typeof DeploymentElig
 export type DeploymentEligibilityEvaluateResponse = z.infer<typeof DeploymentEligibilityEvaluateResponseSchema>;
 export type EffectiveAccessEvaluateRequest = z.infer<typeof EffectiveAccessEvaluateRequestSchema>;
 export type EffectiveAccessEvaluateResponse = z.infer<typeof EffectiveAccessEvaluateResponseSchema>;
+export type IdentityMappingRequest = z.infer<typeof IdentityMappingRequestSchema>;
+export type IdentityMappingResponse = z.infer<typeof IdentityMappingResponseSchema>;
 export type RuntimeResource = z.infer<typeof RuntimeResourceSchema>;
 export type RuntimeResourceSet = z.infer<typeof RuntimeResourceSetSchema>;
 export type SsoAssignmentMapping = z.infer<typeof SsoAssignmentMappingSchema>;
