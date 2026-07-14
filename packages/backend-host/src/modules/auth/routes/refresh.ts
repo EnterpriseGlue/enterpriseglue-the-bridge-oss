@@ -32,6 +32,12 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     throw Errors.unauthorized('Invalid token type');
   }
 
+  const principalType = payload.principalType ?? 'user';
+  const principalId = payload.principalId ?? payload.userId;
+  if (principalType !== 'user' || principalId !== payload.userId) {
+    throw Errors.unauthorized('Invalid user principal');
+  }
+
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
   const refreshTokenRepo = dataSource.getRepository(RefreshToken);
@@ -41,6 +47,9 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
 
   if (!user) {
     throw Errors.validation('User not found or inactive');
+  }
+  if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
+    throw Errors.unauthorized('Session has been revoked');
   }
 
   // Verify refresh token exists and is not revoked
