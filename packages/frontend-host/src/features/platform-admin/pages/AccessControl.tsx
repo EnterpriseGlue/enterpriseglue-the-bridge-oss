@@ -60,7 +60,7 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
-import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, canSubmitAssignment, getAssignableRolesForPrincipal, useAssignmentFormState, withAssignmentPrincipalType, withAssignmentResourceType, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
+import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, canSubmitAssignment, getAssignableRolesForPrincipal, useAssignmentFormState, useAssignmentRuntimeOptions, withAssignmentPrincipalType, withAssignmentResourceType, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -2449,16 +2449,7 @@ function RoleAssignmentsPanel({
   const selectedServiceAccount = activeServiceAccounts.find((account) => account.id === form.principalId) || null;
   const selectedExternalSystem = activeExternalSystems.find((system) => system.id === form.resourceId) || null;
   const selectedRuntimeEngine = runtimeEngines.find((engine) => engine.id === form.runtimeEngineId) || null;
-  const runtimeResourcesQ = useQuery({
-    queryKey: ['assignment-runtime-resources', form.runtimeEngineId],
-    enabled: form.resourceType === 'engine_runtime_resource' && Boolean(form.runtimeEngineId),
-    queryFn: () => apiClient.get<RuntimeResourceInventoryRow[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(form.runtimeEngineId)}`),
-  });
-  const runtimeSetsQ = useQuery({
-    queryKey: ['assignment-runtime-resource-sets', form.runtimeEngineId],
-    enabled: form.resourceType === 'engine_runtime_resource_set' && Boolean(form.runtimeEngineId),
-    queryFn: () => apiClient.get<Array<{ id: string; key: string; name: string; resourceKind: string }>>(`/api/authz/runtime-resource-sets?engineId=${encodeURIComponent(form.runtimeEngineId)}`),
-  });
+  const { runtimeResourcesQ, runtimeSetsQ } = useAssignmentRuntimeOptions(form);
   const selectedRuntimeResource = (runtimeResourcesQ.data || []).find((resource) => resource.id === form.resourceId) || null;
   const selectedRuntimeSet = (runtimeSetsQ.data || []).find((set) => set.id === form.resourceId) || null;
   const resourceTypeItems = assignmentResourceTypeOptions(form.principalType);

@@ -1,4 +1,6 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '../../../../shared/api/client';
 import type { RoleSummary } from '../../hooks/useAuthzApi';
 import type { CoreAssignmentResourceType } from './effectiveAccessPresentation';
 
@@ -41,6 +43,11 @@ export function canSubmitAssignment(state: AssignmentFormValues, pending: boolea
 export function useAssignmentFormState() {
   const [form, setForm] = React.useState<AssignmentFormState>(DEFAULT_ASSIGNMENT_FORM_STATE);
   return { form, setForm };
+}
+export function useAssignmentRuntimeOptions(form: AssignmentFormState) {
+  const runtimeResourcesQ = useQuery({ queryKey: ['assignment-runtime-resources', form.runtimeEngineId], enabled: form.resourceType === 'engine_runtime_resource' && Boolean(form.runtimeEngineId), queryFn: () => apiClient.get<Array<{ id: string; resourceKind: 'process_definition' | 'decision_definition'; resourceKey: string }>>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(form.runtimeEngineId)}`) });
+  const runtimeSetsQ = useQuery({ queryKey: ['assignment-runtime-resource-sets', form.runtimeEngineId], enabled: form.resourceType === 'engine_runtime_resource_set' && Boolean(form.runtimeEngineId), queryFn: () => apiClient.get<Array<{ id: string; key: string; name: string; resourceKind: string }>>(`/api/authz/runtime-resource-sets?engineId=${encodeURIComponent(form.runtimeEngineId)}`) });
+  return { runtimeResourcesQ, runtimeSetsQ };
 }
 
 const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([
