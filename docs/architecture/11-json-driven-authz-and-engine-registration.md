@@ -1713,7 +1713,7 @@ interface RuntimeAuthorizationFilterService {
 - [ ] ⬜ Resolve detail/mutation objects live from the engine or verified inventory before evaluation; never trust a client-supplied process key for an instance/job/incident id.
 - [ ] ⬜ For batch/migration requests, resolve and evaluate every affected stable parent resource before invoking the engine.
 - [ ] ⬜ Return sanitized per-row action decisions only for rows already visible to the principal.
-- [ ] ⬜ Keep `GET /api/authz/me/permissions` limited to platform, project, and engine navigation snapshots; do not serialize all runtime keys into the session snapshot.
+- [x] ✅ Keep `GET /api/authz/me/permissions` limited to platform, project, and engine navigation snapshots; the route explicitly serializes only platform, project, and engine permissions and regression coverage proves runtime-resource keys and tenant lineage cannot enter the client snapshot.
 - [ ] ⬜ Invalidate runtime materialization/filter caches on deployment, discovery, receipt, tenant/key change, assignment, role, mapping, policy, and engine lifecycle changes.
 
 ### UI Impact
