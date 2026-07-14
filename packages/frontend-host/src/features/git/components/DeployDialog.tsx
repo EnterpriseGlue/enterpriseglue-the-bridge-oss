@@ -26,53 +26,9 @@ import { EnginePermission, ProjectPermission } from '../../../shared/auth/permis
 import { WhyUnavailableLink } from '../../../shared/auth/guards';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import type { DeployRequest } from '../types/git';
-
-interface ConnectedEngine {
-  engineId: string;
-  engineName: string;
-  baseUrl?: string;
-  deploymentIntegration?: 'enterpriseglue_proxy' | 'direct_engine';
-  environment?: { name: string; color: string } | null;
-  health?: { status: string; latencyMs?: number } | null;
-  deploymentTarget?: {
-    id: string;
-    status: string;
-    source: string;
-    sourceRef: string | null;
-    allowManualDeploy: boolean;
-    allowCiDeploy: boolean;
-    allowApiDeploy: boolean;
-    allowImport: boolean;
-    lastSeenAt: number | null;
-    createdAt: number;
-    updatedAt: number;
-  };
-  manualDeployAllowed?: boolean;
-  manualDeployDeniedReasons?: string[];
-  ciDeployAllowed?: boolean;
-  ciDeployDeniedReasons?: string[];
-  deploymentEligibility?: {
-    diagnosticsVisible?: boolean;
-    manual?: {
-      allowed: boolean;
-      reasons: string[];
-      checks?: Array<{ id: string; allowed: boolean; reason: string; remediation?: string }>;
-    };
-    ci?: {
-      allowed: boolean;
-      reasons: string[];
-      checks?: Array<{ id: string; allowed: boolean; reason: string; remediation?: string }>;
-    };
-  };
-}
+import type { ConnectedEngine, ProjectEngineAccessData } from '../../starbase/utils/deployEligibility';
 
 type DeploymentMode = 'manual' | 'ci';
-
-interface EngineAccessData {
-  accessedEngines: ConnectedEngine[];
-  pendingRequests: any[];
-  availableEngines: any[];
-}
 
 interface DeployDialogProps {
   projectId: string;
@@ -205,7 +161,7 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
   // Fetch connected engines for this project
   const enginesQuery = useQuery({
     queryKey: ['project', 'engine-access', projectId],
-    queryFn: () => apiClient.get<EngineAccessData>(
+    queryFn: () => apiClient.get<ProjectEngineAccessData>(
       `/starbase-api/projects/${projectId}/engine-access`
     ),
     staleTime: 30000,

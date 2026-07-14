@@ -1,7 +1,8 @@
-type ConnectedEngine = {
+export type ConnectedEngine = {
   engineId: string
   engineName: string
   baseUrl?: string
+  deploymentIntegration?: 'enterpriseglue_proxy' | 'direct_engine'
   environment?: { name: string; color: string }
   health?: { status: string; latencyMs?: number }
   deploymentTarget?: {
