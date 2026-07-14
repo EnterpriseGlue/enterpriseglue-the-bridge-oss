@@ -263,6 +263,42 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
+  it('ignores a client-supplied definition key and authorizes the key resolved live from the engine', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    camundaGet.mockResolvedValue({ id: 'definition-1', key: 'payments', tenantId: null });
+
+    const response = await request(app)
+      .get(`/runtime-definitions/definition-1?engineId=${engineId}&key=hr-untrusted`);
+
+    expect(response.status).toBe(200);
+    expect(runtimeResourceFindOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ resourceKey: 'payments', runtimeTenantId: '' }),
+    }));
+    expect(runtimeResourceFindOne).not.toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ resourceKey: 'hr-untrusted' }),
+    }));
+  });
+
+  it('denies a live-resolved runtime resource from another tenant before resource permission evaluation', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-a', runtimeAccessScope: 'resource_aware' });
+    runtimeResourceFindOne.mockResolvedValue({ id: 'runtime-resource-tenant-b', tenantId: 'tenant-b' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    camundaGet.mockResolvedValue({ id: 'definition-1', key: 'payments', tenantId: 'runtime-tenant-a' });
+
+    const response = await request(app)
+      .get(`/runtime-definitions/definition-1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(403);
+    expect(runtimeResourceFindOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ resourceKey: 'payments', runtimeTenantId: 'runtime-tenant-a' }),
+    }));
+    expect(permissionService.hasPermission).toHaveBeenCalledTimes(1);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      resourceType: 'engine', resourceId: engineId, tenantId: 'tenant-a',
+    }));
+  });
+
   it('does not call the engine when a broad engine grant already permits definition access', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
