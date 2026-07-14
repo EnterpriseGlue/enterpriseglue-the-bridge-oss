@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import IdentityProvidersSettingsTab from '@src/features/platform-admin/components/IdentityProvidersSettingsTab';
+import IdentityProvidersSettingsTab, { isConfigLockedIdentityProvider, isConfigWarnIdentityProvider } from '@src/features/platform-admin/components/IdentityProvidersSettingsTab';
 import type { CurrentUserPermissions } from '@src/shared/types/auth';
 import { server } from '../../../../../test/mocks/server';
 import { identityApiFailureHandlers } from '../../../../../test/mocks/handlers';
@@ -70,5 +70,35 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.getByLabelText('Email attribute')).toHaveValue('email');
     expect(screen.getByLabelText('Group attribute')).toHaveValue('groups');
     expect(screen.getByLabelText('Allow verified email account linking')).not.toBeChecked();
+  });
+
+  it('distinguishes config-locked and config-warning provider ownership', () => {
+    expect(isConfigLockedIdentityProvider({ ownershipMode: 'config_locked' })).toBe(true);
+    expect(isConfigLockedIdentityProvider({ ownershipMode: 'config_warn' })).toBe(false);
+    expect(isConfigWarnIdentityProvider({ ownershipMode: 'config_warn' })).toBe(true);
+    expect(isConfigWarnIdentityProvider({ ownershipMode: 'manual' })).toBe(false);
+  });
+
+  it('disables local edit and archive for config-locked providers', async () => {
+    server.use(http.get('/api/identity/providers', () => HttpResponse.json([{
+      id: 'provider-config',
+      key: 'config-oidc',
+      protocol: 'oidc',
+      isEnabled: true,
+      authenticationMode: 'direct',
+      directoryTenantId: null,
+      configurationJson: '{}',
+      syncJson: '{}',
+      ownershipMode: 'config_locked',
+      sourceRef: 'config_bundle:acme.authz',
+    }])));
+    renderTab();
+
+    expect(await screen.findByText('config-oidc')).toBeInTheDocument();
+    expect(screen.getByText('Managed by config')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Provider actions' }));
+    expect((await screen.findByText('Edit')).closest('button')).toBeDisabled();
+    const archiveMenuLabel = screen.getAllByText('Archive').find((element) => element.classList.contains('cds--overflow-menu-options__option-content'));
+    expect(archiveMenuLabel?.closest('button')).toBeDisabled();
   });
 });

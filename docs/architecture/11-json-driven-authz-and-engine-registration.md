@@ -2360,7 +2360,7 @@ Phase 0 exit criteria:
 - [x] ✅ Show `Customer-managed engine authentication` for customer-sidecar engines and `No EnterpriseGlue-managed credentials` for credentialless direct/legacy records instead of implying missing security. Engine Details also labels the connection mode explicitly.
 - [x] ✅ Complete generic config ownership modes for currently configurable resources. Roles, groups, Engine Sets, project-engine targets, and scoped role assignments persist ownership/provenance through config diff/apply/export. Removing a `config_warn` assignment writes a durable source-scoped tombstone; a matching config apply restores the assignment and clears only that override. Memberships remain source-owned.
 - [ ] ⬜ Add duplicate-system-role-to-config-role flow in the UI export/import path.
-- [ ] ⬜ Add disabled/editable field behavior for config-owned objects.
+- [x] ✅ Add disabled/editable field behavior for config-owned objects. Config-locked roles, groups, engines, Engine Sets, runtime-resource sets, project-engine targets, scoped assignments, and identity providers are read-only for local mutation while retaining operational/diagnostic actions. `config_warn` objects remain editable with visible provenance, and identity-provider edits preserve that ownership mode.
 - [x] ✅ Add effective-access links from config diff rows. Persisted engine, Engine Set, runtime-resource-set, and project-engine-target changes link directly to the Effective Access evaluator with validated resource context; create-only and unsupported rows omit the link. The Access Control page now honors the `effective-access` tab query and pre-fills the evaluator.
 
 ### Phase 7: CI/CD Tooling

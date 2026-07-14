@@ -23,6 +23,14 @@ interface IdentityProvider {
   ownershipMode: string;
   sourceRef: string | null;
 }
+
+export function isConfigLockedIdentityProvider(provider: { ownershipMode?: string | null } | null | undefined): boolean {
+  return provider?.ownershipMode === 'config_locked';
+}
+
+export function isConfigWarnIdentityProvider(provider: { ownershipMode?: string | null } | null | undefined): boolean {
+  return provider?.ownershipMode === 'config_warn';
+}
 interface LegacySsoProvider {
   id: string;
   name: string;
@@ -107,10 +115,11 @@ export default function IdentityProvidersSettingsTab() {
 
   const save = useMutation({
     mutationFn: (payload: FormState) => {
+      if (isConfigLockedIdentityProvider(editing)) throw new Error('Config-locked identity providers must be changed through their configuration bundle.');
       if (payload.protocol === 'ldap' && (!Number.isInteger(Number(payload.ldapPageSize)) || Number(payload.ldapPageSize) < 1 || Number(payload.ldapPageSize) > 1000)) throw new Error('LDAP directory page size must be between 1 and 1000.');
       if (payload.protocol === 'ldap' && payload.syncScheduled && (!Number.isInteger(Number(payload.syncIntervalSeconds)) || Number(payload.syncIntervalSeconds) < 60)) throw new Error('Scheduled LDAP reconciliation interval must be at least 60 seconds.');
       const scheduled = payload.protocol === 'ldap' && payload.syncScheduled;
-      const body = { ...(editing ? {} : { key: payload.key.trim() }), ...(editing ? {} : { protocol: payload.protocol }), isEnabled: payload.isEnabled, authenticationMode: payload.authenticationMode, directoryTenantId: payload.directoryTenantId.trim() || null, configuration: configuration(payload), sync: { triggers: scheduled ? ['login', 'scheduled'] : ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: payload.protocol === 'ldap' ? 'ldap_directory' : 'claim_only', scheduled, ...(scheduled ? { intervalSeconds: Number(payload.syncIntervalSeconds) } : {}) }, ownershipMode: 'manual' };
+      const body = { ...(editing ? {} : { key: payload.key.trim() }), ...(editing ? {} : { protocol: payload.protocol }), isEnabled: payload.isEnabled, authenticationMode: payload.authenticationMode, directoryTenantId: payload.directoryTenantId.trim() || null, configuration: configuration(payload), sync: { triggers: scheduled ? ['login', 'scheduled'] : ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: payload.protocol === 'ldap' ? 'ldap_directory' : 'claim_only', scheduled, ...(scheduled ? { intervalSeconds: Number(payload.syncIntervalSeconds) } : {}) }, ownershipMode: isConfigWarnIdentityProvider(editing) ? 'config_warn' : 'manual' };
       return editing ? apiClient.put(`/api/identity/providers/${encodeURIComponent(editing.key)}`, body) : apiClient.post('/api/identity/providers', body);
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-providers'] }); setOpen(false); setEditing(null); setError(null); },
@@ -203,6 +212,7 @@ export default function IdentityProvidersSettingsTab() {
               })}</TableRow></TableHead>
               <TableBody>{tableRows.map((row) => {
                 const provider = rows.find((item) => item.id === row.id)!;
+                const configLocked = isConfigLockedIdentityProvider(provider);
                 const { key, ...rowProps } = getRowProps({ row });
                 return <TableRow key={key} {...rowProps}>
                   <TableCell>{provider.key}</TableCell>
@@ -210,16 +220,16 @@ export default function IdentityProvidersSettingsTab() {
                   <TableCell>{provider.authenticationMode === 'direct' ? 'Direct sign-in' : 'Claims only'}</TableCell>
                   <TableCell>{provider.protocol === 'ldap' && parseSync(provider).scheduled === true ? <Tag type="blue">Scheduled</Tag> : 'Login only'}</TableCell>
                   <TableCell><Tag type={provider.isEnabled ? 'green' : 'gray'}>{provider.isEnabled ? 'Enabled' : 'Archived'}</Tag></TableCell>
-                  <TableCell>{provider.sourceRef ? 'Managed by config' : 'Manual'}</TableCell>
+                  <TableCell>{provider.sourceRef ? <Tag type={isConfigWarnIdentityProvider(provider) ? 'warm-gray' : 'purple'}>{isConfigWarnIdentityProvider(provider) ? 'Config warning' : 'Managed by config'}</Tag> : 'Manual'}</TableCell>
                   <TableCell><GuardedOverflowMenu size="sm" iconDescription="Provider actions">
-                    <GuardedOverflowMenuItem decision={manage} itemText="Edit" onClick={() => startEdit(provider)} />
+                    <GuardedOverflowMenuItem decision={manage} itemText="Edit" disabled={configLocked} unavailableReason={configLocked ? 'Config-locked providers must be changed through their configuration bundle.' : undefined} onClick={() => startEdit(provider)} />
                     <GuardedOverflowMenuItem decision={read} itemText="View sync history" onClick={() => setHistoryProvider(provider)} />
                     <GuardedOverflowMenuItem decision={manage} itemText="Test connection" disabled={!provider.isEnabled || testConnection.isPending} onClick={() => testConnection.mutate(provider.key)} />
                     {provider.protocol === 'oidc' && <GuardedOverflowMenuItem decision={manage} itemText="Check migration readiness" disabled={checkMigrationReadiness.isPending} onClick={() => checkMigrationReadiness.mutate({ key: provider.key, legacyProviderId: legacyProviderId || undefined })} />}
                     {provider.protocol === 'ldap' && <GuardedOverflowMenuItem decision={manage} itemText="Reconcile directory" disabled={!provider.isEnabled || reconcile.isPending} onClick={() => reconcile.mutate(provider.key)} />}
                     <GuardedOverflowMenuItem decision={manage} itemText={previewCursors[provider.key] ? 'Continue membership preview' : 'Preview membership changes'} disabled={!provider.isEnabled || previewMemberships.isPending} onClick={() => previewMemberships.mutate({ key: provider.key, cursor: previewCursors[provider.key] })} />
                     <GuardedOverflowMenuItem decision={manage} itemText={replayCursors[provider.key] ? 'Continue membership replay' : 'Replay stored memberships'} disabled={!provider.isEnabled || replayMemberships.isPending} onClick={() => replayMemberships.mutate({ key: provider.key, cursor: replayCursors[provider.key] })} />
-                    <GuardedOverflowMenuItem decision={manage} itemText="Archive" isDelete onClick={() => setArchiveTarget(provider)} />
+                    <GuardedOverflowMenuItem decision={manage} itemText="Archive" isDelete disabled={configLocked} unavailableReason={configLocked ? 'Config-locked providers must be removed through their authoritative configuration bundle.' : undefined} onClick={() => setArchiveTarget(provider)} />
                   </GuardedOverflowMenu></TableCell>
                 </TableRow>;
               })}</TableBody>
