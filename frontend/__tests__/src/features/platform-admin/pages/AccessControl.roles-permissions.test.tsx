@@ -28,7 +28,7 @@ const {
   getSsoTargetRoleOptions,
 } = await import('@src/features/platform-admin/pages/AccessControl');
 const { RoleAssignmentsTable } = await import('@src/features/platform-admin/pages/access-control/RoleAssignmentsTable');
-const { withAssignmentPrincipalType, withAssignmentResourceType } = await import('@src/features/platform-admin/pages/access-control/assignmentFormOptions');
+const { canSubmitAssignment, withAssignmentPrincipalType, withAssignmentResourceType } = await import('@src/features/platform-admin/pages/access-control/assignmentFormOptions');
 import {
   resetAccessControlMocks,
   ssoAssignmentTestState,
@@ -99,6 +99,13 @@ describe('AccessControl roles and permissions', () => {
 
   it('clears role and platform resource state when changing assignment scope', () => {
     expect(withAssignmentResourceType({ principalType: 'user', principalId: 'user-1', roleId: 'role-1', resourceType: 'engine', resourceId: 'engine-1', runtimeEngineId: 'engine-1' }, 'platform')).toMatchObject({ resourceType: 'platform', resourceId: '', runtimeEngineId: '', roleId: '' });
+  });
+
+  it('enables assignment submission only for a complete non-pending scope', () => {
+    const complete = { principalType: 'user' as const, principalId: 'user-1', roleId: 'role-1', resourceType: 'engine' as const, resourceId: 'engine-1' };
+    expect(canSubmitAssignment(complete, false)).toBe(true);
+    expect(canSubmitAssignment({ ...complete, resourceId: '' }, false)).toBe(false);
+    expect(canSubmitAssignment(complete, true)).toBe(false);
   });
 
   it('renders role and permission catalog data', () => {
