@@ -38,8 +38,9 @@ interface LegacySsoProvider {
   enabled: boolean;
 }
 type LegacyMigrationDraft = {
-  legacyProvider: { id: string; name: string; type: 'microsoft' | 'google' | 'oidc'; enabled: boolean; clientSecretConfigured: boolean };
-  provider: { key: string; protocol: 'oidc'; isEnabled: false; authenticationMode: 'direct'; directoryTenantId: string | null; configuration: { issuerUrl: string; clientId: string; callbackUrl: string; scopes: string[]; clientSecretRef?: string } };
+  legacyProvider: { id: string; name: string; type: 'microsoft' | 'google' | 'oidc' | 'saml'; enabled: boolean; clientSecretConfigured?: boolean; signingCertificateConfigured?: boolean };
+  provider: { key: string; protocol: 'oidc'; isEnabled: false; authenticationMode: 'direct'; directoryTenantId: string | null; configuration: { issuerUrl: string; clientId: string; callbackUrl: string; scopes: string[]; clientSecretRef?: string } }
+    | { key: string; protocol: 'saml'; isEnabled: false; authenticationMode: 'direct'; directoryTenantId: null; configuration: { entityId: string; callbackUrl: string; ssoUrl: string; signingCertificateRef: string; signatureAlgorithm: 'sha256' | 'sha512' } };
   requirements: string[];
   warnings: string[];
 };
@@ -146,7 +147,9 @@ export default function IdentityProvidersSettingsTab() {
   });
   const openMigrationDraft = (draft: LegacyMigrationDraft) => {
     setEditing(null);
-    setForm({ ...emptyForm(), key: draft.provider.key, protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: draft.provider.directoryTenantId || '', issuerUrl: draft.provider.configuration.issuerUrl, clientId: draft.provider.configuration.clientId, clientSecretRef: draft.provider.configuration.clientSecretRef || '', callbackUrl: draft.provider.configuration.callbackUrl, scopes: draft.provider.configuration.scopes.join(' ') });
+    setForm(draft.provider.protocol === 'saml'
+      ? { ...emptyForm(), key: draft.provider.key, protocol: 'saml', isEnabled: false, authenticationMode: 'direct', entityId: draft.provider.configuration.entityId, callbackUrl: draft.provider.configuration.callbackUrl, ssoUrl: draft.provider.configuration.ssoUrl, signingCertificateRef: draft.provider.configuration.signingCertificateRef, signatureAlgorithm: draft.provider.configuration.signatureAlgorithm }
+      : { ...emptyForm(), key: draft.provider.key, protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: draft.provider.directoryTenantId || '', issuerUrl: draft.provider.configuration.issuerUrl, clientId: draft.provider.configuration.clientId, clientSecretRef: draft.provider.configuration.clientSecretRef || '', callbackUrl: draft.provider.configuration.callbackUrl, scopes: draft.provider.configuration.scopes.join(' ') });
     setMigrationDraft(draft);
     setError(null);
     setSaveError(null);
@@ -167,7 +170,7 @@ export default function IdentityProvidersSettingsTab() {
   if (providersQuery.error) return <InlineNotification kind="error" title="Identity providers could not be loaded" subtitle={parseApiError(providersQuery.error, 'Request failed').message} hideCloseButton />;
 
   const rows = providersQuery.data || [];
-  const legacyMigratableProviders = (legacyProvidersQuery.data || []).filter((provider) => provider.type === 'microsoft' || provider.type === 'google' || provider.type === 'oidc');
+  const legacyMigratableProviders = (legacyProvidersQuery.data || []).filter((provider) => provider.type === 'microsoft' || provider.type === 'google' || provider.type === 'oidc' || provider.type === 'saml');
   const selectedLegacyProvider = legacyMigratableProviders.find((provider) => provider.id === legacyProviderId) || null;
   const environmentMigrationDrafts = environmentMigrationDraftsQuery.data || [];
   return <>
@@ -196,7 +199,7 @@ export default function IdentityProvidersSettingsTab() {
           <Button kind="secondary" size="sm" disabled={!legacyProviderId || prepareLegacyMigration.isPending} onClick={() => prepareLegacyMigration.mutate(legacyProviderId)}>Prepare migration</Button>
           <Button kind="danger" size="sm" disabled={!selectedLegacyProvider || !migrationReadiness?.ready || migrationReadiness.legacyProviderId !== selectedLegacyProvider.id} onClick={() => selectedLegacyProvider && migrationReadiness && setCutoverTarget({ legacyProvider: selectedLegacyProvider, targetProviderKey: migrationReadiness.targetProviderKey })}>Disable legacy provider</Button>
         </div>
-        <p style={{ margin: 'var(--spacing-3) 0 0', color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>Run migration readiness from the replacement OIDC provider before disabling the selected legacy provider. Environment-managed legacy authentication is changed through deployment configuration.</p>
+          <p style={{ margin: 'var(--spacing-3) 0 0', color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>Prepare a disabled provider-neutral replacement, configure its secret reference and mappings, then run migration readiness before disabling the selected legacy provider. Environment-managed legacy authentication is changed through deployment configuration.</p>
       </div>}
       {manage.allowed && environmentMigrationDrafts.length > 0 && <div style={{ borderTop: '1px solid var(--cds-border-subtle)', paddingTop: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}>
         <h4 style={{ margin: 0, fontSize: '0.875rem' }}>Migrate environment configuration</h4>
@@ -250,7 +253,7 @@ export default function IdentityProvidersSettingsTab() {
     </Tile>
     <Modal open={open} modalHeading={editing ? 'Edit identity provider' : 'Add identity provider'} primaryButtonText={editing ? 'Save' : 'Add'} secondaryButtonText="Cancel" primaryButtonDisabled={!manage.allowed || save.isPending} onRequestClose={() => setOpen(false)} onRequestSubmit={() => save.mutate(form)}>
       {saveError && <InlineNotification kind="error" title="Provider not saved" subtitle={saveError} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
-      {migrationDraft && <InlineNotification kind="info" title={`Migration draft for ${migrationDraft.legacyProvider.name}`} subtitle={`This provider remains disabled. ${migrationDraft.requirements.includes('client_secret_reference') ? 'Add a client secret reference, ' : 'Confirm the environment-backed client secret reference, '}update the identity-provider redirect URI, configure identity mappings, test sign-in, then complete the legacy cutover. ${migrationDraft.warnings[0] || ''}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+      {migrationDraft && <InlineNotification kind="info" title={`Migration draft for ${migrationDraft.legacyProvider.name}`} subtitle={`This provider remains disabled. ${migrationDraft.requirements.includes('signing_certificate_reference') ? 'Replace the SAML signing-certificate reference, ' : migrationDraft.requirements.includes('client_secret_reference') ? 'Add a client secret reference, ' : 'Confirm the environment-backed client secret reference, '}update the identity-provider redirect URI, configure identity mappings, test sign-in, then complete the legacy cutover. ${migrationDraft.warnings[0] || ''}`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       <TextInput id="identity-provider-key" labelText="Provider key" value={form.key} disabled={Boolean(editing)} onChange={(event) => update('key', event.target.value)} helperText="Stable key used by JSON configuration and sign-in links." />
       <Select id="identity-provider-protocol" labelText="Protocol" value={form.protocol} disabled={Boolean(editing)} onChange={(event) => update('protocol', event.target.value as Protocol)}><SelectItem value="oidc" text="OpenID Connect" /><SelectItem value="saml" text="SAML 2.0" /><SelectItem value="ldap" text="LDAP" /></Select>
       <Select id="identity-provider-mode" labelText="Authentication mode" value={form.authenticationMode} onChange={(event) => update('authenticationMode', event.target.value as AuthenticationMode)}><SelectItem value="claims_only" text="Claims only" /><SelectItem value="direct" text="Direct sign-in" /></Select>

@@ -9,18 +9,24 @@ import { secretResolver } from './SecretResolver.js';
 import { IsNull } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 
-type LegacyMigratableProviderType = 'microsoft' | 'google' | 'oidc';
+type LegacyMigratableProviderType = 'microsoft' | 'google' | 'oidc' | 'saml';
 type EnvironmentMigratableProviderType = 'microsoft' | 'google';
 type RepositoryManager = Pick<EntityManager, 'getRepository'>;
 
-export interface LegacyIdentityProviderMigrationDraft {
+interface LegacyIdentityProviderMigrationDraftBase {
   legacyProvider: {
     id: string;
     name: string;
     type: LegacyMigratableProviderType;
     enabled: boolean;
-    clientSecretConfigured: boolean;
+    clientSecretConfigured?: boolean;
+    signingCertificateConfigured?: boolean;
   };
+  requirements: Array<'client_secret_reference' | 'signing_certificate_reference' | 'identity_provider_redirect_uri' | 'identity_mappings' | 'legacy_provider_cutover'>;
+  warnings: string[];
+}
+
+interface LegacyOidcIdentityProviderMigrationDraft extends LegacyIdentityProviderMigrationDraftBase {
   provider: {
     key: string;
     protocol: 'oidc';
@@ -35,9 +41,26 @@ export interface LegacyIdentityProviderMigrationDraft {
       clientSecretRef?: string;
     };
   };
-  requirements: Array<'client_secret_reference' | 'identity_provider_redirect_uri' | 'identity_mappings' | 'legacy_provider_cutover'>;
-  warnings: string[];
 }
+
+interface LegacySamlIdentityProviderMigrationDraft extends LegacyIdentityProviderMigrationDraftBase {
+  provider: {
+    key: string;
+    protocol: 'saml';
+    isEnabled: false;
+    authenticationMode: 'direct';
+    directoryTenantId: null;
+    configuration: {
+      entityId: string;
+      callbackUrl: string;
+      ssoUrl: string;
+      signingCertificateRef: string;
+      signatureAlgorithm: 'sha256' | 'sha512';
+    };
+  };
+}
+
+export type LegacyIdentityProviderMigrationDraft = LegacyOidcIdentityProviderMigrationDraft | LegacySamlIdentityProviderMigrationDraft;
 
 export interface LegacyIdentityProviderMigrationReadiness {
   ready: boolean;
@@ -92,6 +115,10 @@ function callbackUrl(): string {
   return new URL('/api/auth/identity/callback', `${config.frontendUrl.replace(/\/$/, '')}/`).toString();
 }
 
+function samlCallbackUrl(): string {
+  return new URL('/api/auth/providers/saml/callback', `${config.frontendUrl.replace(/\/$/, '')}/`).toString();
+}
+
 class LegacyIdentityProviderMigrationServiceClass {
   /**
    * Builds a non-persistent draft. Legacy ciphertext is deliberately never
@@ -100,8 +127,44 @@ class LegacyIdentityProviderMigrationServiceClass {
   async createDraft(legacyProviderId: string): Promise<LegacyIdentityProviderMigrationDraft> {
     const provider = await (await getDataSource()).getRepository(SsoProvider).findOneBy({ id: legacyProviderId.trim() });
     if (!provider) throw Errors.notFound('Legacy SSO provider not found');
-    if (!['microsoft', 'google', 'oidc'].includes(provider.type)) {
-      throw Errors.validation('Only legacy Microsoft, Google, and OIDC providers can be migrated to provider-neutral OIDC');
+    if (!['microsoft', 'google', 'oidc', 'saml'].includes(provider.type)) {
+      throw Errors.validation('Only legacy Microsoft, Google, OIDC, and SAML providers can be migrated to provider-neutral sign-in');
+    }
+    if (provider.type === 'saml') {
+      if (!provider.entityId?.trim() || !provider.ssoUrl?.trim()) {
+        throw Errors.validation('The legacy SAML provider requires entity id and SSO URL to produce a migration draft');
+      }
+      return {
+        legacyProvider: {
+          id: provider.id,
+          name: provider.name,
+          type: 'saml',
+          enabled: provider.enabled,
+          signingCertificateConfigured: Boolean(provider.certificateEnc),
+        },
+        provider: {
+          key: `legacy-saml-${provider.id}`,
+          protocol: 'saml',
+          isEnabled: false,
+          authenticationMode: 'direct',
+          directoryTenantId: null,
+          configuration: {
+            entityId: provider.entityId.trim(),
+            callbackUrl: samlCallbackUrl(),
+            ssoUrl: provider.ssoUrl.trim(),
+            // Legacy ciphertext is intentionally never copied or resolved.
+            signingCertificateRef: 'env://REPLACE_WITH_SAML_SIGNING_CERTIFICATE',
+            signatureAlgorithm: provider.signatureAlgorithm === 'sha512' ? 'sha512' : 'sha256',
+          },
+        },
+        requirements: ['signing_certificate_reference', 'identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'],
+        warnings: [
+          'The generated provider is disabled to avoid two active login paths during migration.',
+          'The legacy signing certificate is not copied. Replace the placeholder with an external certificate reference before enabling the new provider.',
+          'Update the identity provider application reply URL to the generated SAML callback URL before cutover.',
+          'Configure provider-neutral identity mappings before disabling the legacy provider.',
+        ],
+      };
     }
     if (!provider.clientId?.trim()) {
       throw Errors.validation('The legacy provider has no client id and cannot produce an OIDC migration draft');

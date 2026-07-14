@@ -62,14 +62,27 @@ describe('legacyIdentityProviderMigrationService', () => {
 
     const draft = await legacyIdentityProviderMigrationService.createDraft('legacy-entra');
 
+    expect(draft.provider.protocol).toBe('oidc');
+    if (draft.provider.protocol !== 'oidc') throw new Error('Expected an OIDC migration draft');
     expect(draft.provider.directoryTenantId).toBe('directory-tenant');
     expect(draft.provider.configuration.issuerUrl).toBe('https://login.microsoftonline.com/directory-tenant/v2.0');
     expect(draft.provider.configuration.scopes).toEqual(['openid', 'profile', 'email']);
   });
 
+  it('creates a disabled SAML draft without reading or returning legacy certificate ciphertext', async () => {
+    findOneBy.mockResolvedValueOnce({ id: 'legacy-saml', name: 'Legacy SAML', type: 'saml', enabled: true, entityId: 'https://sp.example.test/metadata', ssoUrl: 'https://idp.example.test/sso', certificateEnc: 'enc:must-not-leak', signatureAlgorithm: 'sha512' });
+    const draft = await legacyIdentityProviderMigrationService.createDraft('legacy-saml');
+    expect(draft).toEqual(expect.objectContaining({
+      legacyProvider: expect.objectContaining({ type: 'saml', signingCertificateConfigured: true }),
+      provider: expect.objectContaining({ protocol: 'saml', configuration: expect.objectContaining({ callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback', signingCertificateRef: 'env://REPLACE_WITH_SAML_SIGNING_CERTIFICATE', signatureAlgorithm: 'sha512' }) }),
+    }));
+    expect(draft.requirements).toContain('signing_certificate_reference');
+    expect(JSON.stringify(draft)).not.toContain('must-not-leak');
+  });
+
   it('rejects unsupported legacy provider types and incomplete OIDC records', async () => {
-    findOneBy.mockResolvedValueOnce({ id: 'legacy-saml', type: 'saml' });
-    await expect(legacyIdentityProviderMigrationService.createDraft('legacy-saml')).rejects.toThrow('Only legacy Microsoft, Google, and OIDC providers');
+    findOneBy.mockResolvedValueOnce({ id: 'legacy-ldap', type: 'ldap' });
+    await expect(legacyIdentityProviderMigrationService.createDraft('legacy-ldap')).rejects.toThrow('Only legacy Microsoft, Google, OIDC, and SAML providers');
 
     findOneBy.mockResolvedValueOnce({ id: 'legacy-oidc', type: 'oidc', clientId: 'client', issuerUrl: null });
     await expect(legacyIdentityProviderMigrationService.createDraft('legacy-oidc')).rejects.toThrow('no issuer URL');
