@@ -65,6 +65,7 @@ import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './acc
 import { PermissionsTable } from './access-control/PermissionsTable';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
+import { groupPermissionsForRoleMatrix } from './access-control/rolePermissionPresentation';
 import { RolesTable } from './access-control/RolesTable';
 import { ROLE_SCOPE_FILTERS, type RoleScopeFilter } from './access-control/roleScopePresentation';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
@@ -1909,28 +1910,10 @@ function RolePermissionMatrix({
     });
     return details;
   }, [roleDetailQueries]);
-  const groupedPermissions = React.useMemo(() => {
-    const groups = new Map<string, { id: string; label: string; scope: AuthzResourceType; permissions: PermissionCatalogEntry[] }>();
-    visiblePermissions.forEach((permission) => {
-      const category = permission.category || 'General';
-      const id = `${permission.scope}:${category}`;
-      const existing = groups.get(id);
-      if (existing) {
-        existing.permissions.push(permission);
-        return;
-      }
-      groups.set(id, {
-        id,
-        label: category,
-        scope: permission.scope,
-        permissions: [permission],
-      });
-    });
-    return Array.from(groups.values()).map((group) => ({
-      ...group,
-      permissions: group.permissions.sort((left, right) => left.label.localeCompare(right.label)),
-    }));
-  }, [visiblePermissions]);
+  const groupedPermissions = React.useMemo(
+    () => groupPermissionsForRoleMatrix(visiblePermissions),
+    [visiblePermissions],
+  );
 
   const isRoleEditableInMatrix = (role: RoleSummary) => (
     canManage && role.kind === 'custom' && role.isEditable && !role.isArchived && savingRoleId !== role.id
