@@ -646,8 +646,63 @@ export interface EffectiveAccessResult {
       targetGroupId: string;
       syncMode: string;
     } | null;
+    shadowedRuntimeAssignmentIds?: string[];
     permission?: string;
   }>;
+}
+
+export type RuntimeResourceKind = 'process_definition' | 'decision_definition';
+
+export interface RuntimeResource {
+  id: string;
+  tenantId: string | null;
+  engineId: string;
+  resourceKind: RuntimeResourceKind;
+  resourceKey: string;
+  runtimeTenantId: string;
+  engineResourceId: string | null;
+  deploymentId: string | null;
+  projectId: string | null;
+  fileId: string | null;
+  version: number | null;
+  labelsJson: string;
+  lineageJson: string;
+  source: string;
+  sourceRef: string | null;
+  observedAt: number;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface RuntimeResourceSet {
+  id: string;
+  tenantId: string | null;
+  key: string;
+  name: string;
+  description: string | null;
+  engineId: string;
+  resourceKind: RuntimeResourceKind;
+  selectorJson: string;
+  selectorFingerprint: string;
+  runtimeTenantId: string | null;
+  source: string;
+  sourceRef: string | null;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
+  isArchived: boolean;
+  createdById: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface RuntimeResourceSetMaterializationResult {
+  runtimeResourceSetId: string;
+  matched: number;
+  created: number;
+  updated: number;
+  removed: number;
 }
 
 export interface PolicyCondition {
@@ -895,6 +950,8 @@ export const authzQueryKeys = {
   externalEngineAudit: (id?: string, params?: ExternalEngineAuditParams) => ['platform-admin', 'authz', 'external-engines', id, 'audit', params] as const,
   engineSets: (params?: Record<string, any>) => ['platform-admin', 'authz', 'engine-sets', params] as const,
   engineSet: (id?: string) => ['platform-admin', 'authz', 'engine-sets', id] as const,
+  runtimeResources: (engineId?: string, options?: { resourceKind?: RuntimeResourceKind; includeInactive?: boolean }) => ['platform-admin', 'authz', 'runtime-resources', engineId, options] as const,
+  runtimeResourceSets: (engineId?: string, options?: { includeArchived?: boolean }) => ['platform-admin', 'authz', 'runtime-resource-sets', engineId, options] as const,
   projectEngineTargets: (params?: Record<string, any>) => ['platform-admin', 'authz', 'project-engine-targets', params] as const,
   projectEngineTarget: (id?: string) => ['platform-admin', 'authz', 'project-engine-targets', id] as const,
   policies: ['platform-admin', 'authz', 'policies'] as const,
@@ -1323,6 +1380,39 @@ export function useArchiveEngineSet() {
       qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'engine-sets'] });
       qc.invalidateQueries({ queryKey: authzQueryKeys.engineSet(id) });
     },
+  });
+}
+
+export function useRuntimeResources(engineId?: string, options: { resourceKind?: RuntimeResourceKind; includeInactive?: boolean; enabled?: boolean } = {}) {
+  const searchParams = new URLSearchParams();
+  if (engineId) searchParams.set('engineId', engineId);
+  if (options.resourceKind) searchParams.set('resourceKind', options.resourceKind);
+  if (options.includeInactive) searchParams.set('includeInactive', 'true');
+  const queryString = searchParams.toString();
+  return useQuery({
+    queryKey: authzQueryKeys.runtimeResources(engineId, options),
+    queryFn: () => apiClient.get<RuntimeResource[]>(`/api/authz/runtime-resources?${queryString}`),
+    enabled: (options.enabled ?? true) && Boolean(engineId),
+  });
+}
+
+export function useRuntimeResourceSets(engineId?: string, options: { includeArchived?: boolean; enabled?: boolean } = {}) {
+  const searchParams = new URLSearchParams();
+  if (engineId) searchParams.set('engineId', engineId);
+  if (options.includeArchived) searchParams.set('includeArchived', 'true');
+  const queryString = searchParams.toString();
+  return useQuery({
+    queryKey: authzQueryKeys.runtimeResourceSets(engineId, options),
+    queryFn: () => apiClient.get<RuntimeResourceSet[]>(`/api/authz/runtime-resource-sets${queryString ? `?${queryString}` : ''}`),
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function useMaterializeRuntimeResourceSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<RuntimeResourceSetMaterializationResult>(`/api/authz/runtime-resource-sets/${encodeURIComponent(id)}/materialize`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'runtime-resource-sets'] }),
   });
 }
 

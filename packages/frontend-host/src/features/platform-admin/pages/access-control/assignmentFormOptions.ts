@@ -1,7 +1,5 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../../../../shared/api/client';
-import type { RoleSummary } from '../../hooks/useAuthzApi';
+import { useRuntimeResources, useRuntimeResourceSets, type RoleSummary } from '../../hooks/useAuthzApi';
 import type { CoreAssignmentResourceType } from './effectiveAccessPresentation';
 
 export type AssignmentPrincipalType = 'user' | 'group' | 'api_client' | 'service_account';
@@ -45,8 +43,8 @@ export function useAssignmentFormState() {
   return { form, setForm };
 }
 export function useAssignmentRuntimeOptions(form: AssignmentFormState) {
-  const runtimeResourcesQ = useQuery({ queryKey: ['assignment-runtime-resources', form.runtimeEngineId], enabled: form.resourceType === 'engine_runtime_resource' && Boolean(form.runtimeEngineId), queryFn: () => apiClient.get<Array<{ id: string; resourceKind: 'process_definition' | 'decision_definition'; resourceKey: string }>>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(form.runtimeEngineId)}`) });
-  const runtimeSetsQ = useQuery({ queryKey: ['assignment-runtime-resource-sets', form.runtimeEngineId], enabled: form.resourceType === 'engine_runtime_resource_set' && Boolean(form.runtimeEngineId), queryFn: () => apiClient.get<Array<{ id: string; key: string; name: string; resourceKind: string }>>(`/api/authz/runtime-resource-sets?engineId=${encodeURIComponent(form.runtimeEngineId)}`) });
+  const runtimeResourcesQ = useRuntimeResources(form.runtimeEngineId, { enabled: form.resourceType === 'engine_runtime_resource' });
+  const runtimeSetsQ = useRuntimeResourceSets(form.runtimeEngineId, { enabled: form.resourceType === 'engine_runtime_resource_set' });
   return { runtimeResourcesQ, runtimeSetsQ };
 }
 
