@@ -1807,7 +1807,7 @@ Rules:
 - [x] ✅ UI edits to config-owned fields are disabled for `config_locked` ownership or explicitly show the `config_warn` drift mode.
 - [x] ✅ CI/CD/API config apply reconciles drift according to bundle mode: additive bundles preserve absent config-owned rows, authoritative bundles preview and acknowledgement-gate removal of only same-bundle config-owned rows, and both `config_locked` and `config_warn` objects are restored to the reviewed desired state with `driftStatus = in_sync`. The apply service is shared by UI and CI callers, so these rules do not diverge by caller surface.
 - [x] ✅ Manual edits are preserved by config apply unless ownership is explicitly transferred; authoritative removal is restricted to matching config-owned source lineage and is previewed before apply.
-- [ ] ⬜ Config apply must record audit entries with before/after summaries and redacted secrets.
+- [x] ✅ Config apply records per-object audit entries plus one transaction-bound apply-run audit summary. The summary records stable object keys, operation, safe before/after state, and bounded change counts; it deliberately omits submitted config payloads and secret-reference fields/values. Tests cover a password-reference engine apply and assert that neither the reference nor `passwordRef` reaches the audit record.
 
 ## Schema, Persistence, And File Impact
 

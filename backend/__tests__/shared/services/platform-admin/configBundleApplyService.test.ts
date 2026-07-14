@@ -172,7 +172,15 @@ describe('configBundleApplyService', () => {
       driftStatus: 'in_sync',
     }));
     expect(permissionInsert).toHaveBeenCalledWith([expect.objectContaining({ permissionId: 'engine:deploy' })]);
-    expect(auditInsert).toHaveBeenCalledTimes(2);
+    expect(auditInsert).toHaveBeenCalledTimes(3);
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.config_bundle.apply',
+      resourceType: 'config_bundle_apply_run',
+      details: expect.stringContaining('"redaction":"Config payload and secret references omitted"'),
+    }));
+    expect(auditInsert).not.toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.stringContaining('CENTRAL_PASSWORD'),
+    }));
     expect(configRunRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       bundleApiVersion: 'enterpriseglue.ai/v1alpha1',
     }));
@@ -596,7 +604,7 @@ describe('configBundleApplyService', () => {
   });
 
   it('applies a config-managed engine with opaque secret references and runtime defaults', async () => {
-    const { engineInsert } = setupDataSource();
+    const { engineInsert, auditInsert } = setupDataSource();
     const engineBundle = { ...bundle, imports: ['./engines.json'] };
     const engineFiles = {
       './engines.json': {
@@ -626,6 +634,11 @@ describe('configBundleApplyService', () => {
     expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a', engineSetIds: [], runtimeResourceSetIds: [], engineIds: [expect.any(String)],
     }));
+    const applyAudit = auditInsert.mock.calls.map(([entry]: [{ details: string; action: string }]) => entry).find((entry) => entry.action === 'authz.config_bundle.apply');
+    expect(applyAudit).toBeDefined();
+    expect(applyAudit!.details).toContain('"before":{"state":"absent"}');
+    expect(applyAudit!.details).not.toContain('PAYMENTS_ENGINE_PASSWORD');
+    expect(applyAudit!.details).not.toContain('passwordRef');
   });
 
   it.each([

@@ -198,6 +198,22 @@ function errorSummary(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 2000) : String(error).slice(0, 2000);
 }
 
+function auditApplyChangeSummary(change: ConfigBundleDiffChange): Record<string, unknown> {
+  const beforeState = change.operation === 'create' ? 'absent' : change.operation === 'archive' ? 'config_owned_active' : 'persisted';
+  const afterState = change.operation === 'archive' ? 'archived' : change.operation === 'create' ? 'config_owned_active' : 'config_reconciled';
+  return {
+    objectType: change.objectType,
+    key: change.key,
+    operation: change.operation,
+    ...(change.currentId ? { currentId: change.currentId } : {}),
+    before: { state: beforeState },
+    after: { state: afterState },
+    ...(change.permissionChanges ? { permissionChangeSummary: { additions: change.permissionChanges.additions.length, removals: change.permissionChanges.removals.length } } : {}),
+    ...(change.affectedAssignmentCount !== undefined ? { affectedAssignmentCount: change.affectedAssignmentCount } : {}),
+    ...(change.runtimeResourceChanges ? { runtimeResourceSummary: { matched: change.runtimeResourceChanges.matchedCount, currentlyMaterialized: change.runtimeResourceChanges.currentlyMaterialized.length, unmatchedSelectors: change.runtimeResourceChanges.unmatchedSelectors.length } } : {}),
+  };
+}
+
 function replayExistingApplyRun(run: ConfigBundleApplyRun, canonicalHash: string, bundleKey: string): ConfigBundleApplyResult {
   if (run.canonicalHash !== canonicalHash || run.bundleKey !== bundleKey) {
     return fail('Idempotency key is already associated with a different configuration bundle', 409);
@@ -756,6 +772,20 @@ class ConfigBundleApplyService {
           replayProviderIds.push(mapping.providerId);
         }
       }
+      await writeAudit(manager, {
+        tenantId,
+        actorId: input.actorId,
+        action: 'authz.config_bundle.apply',
+        resourceType: 'config_bundle_apply_run',
+        resourceId: applyRunId!,
+        details: {
+          bundleKey: manifest.metadata.key,
+          mode: manifest.mode,
+          canonicalHash: diff.canonicalHash,
+          changes: diff.changes.filter((change) => change.operation !== 'noop').map(auditApplyChangeSummary),
+          redaction: 'Config payload and secret references omitted',
+        },
+      });
     });
       const runtimeCounts = {
         engineSetCount: materializeIds.length,
