@@ -162,15 +162,6 @@ describe('authorization route inventory validation', () => {
           ['POST', '/api/authz/roles'],
           ['PUT', '/api/authz/roles/{id}'],
           ['DELETE', '/api/authz/roles/{id}'],
-          ['POST', '/api/authz/config-bundles/preview'],
-          ['POST', '/api/authz/config-bundles/validate-secret-refs'],
-          ['POST', '/api/authz/config-bundles/import-zip'],
-          ['POST', '/api/authz/config-bundles/diff'],
-          ['POST', '/api/authz/config-bundles/apply'],
-          ['GET', '/api/authz/config-bundles/runs'],
-          ['GET', '/api/authz/config-bundles/runs/{id}'],
-          ['GET', '/api/authz/config-bundles/runs/{id}/identity-replay-tasks'],
-          ['GET', '/api/authz/config-bundles/export'],
         ],
       },
       {
@@ -201,6 +192,44 @@ describe('authorization route inventory validation', () => {
         risk: 'high',
         audit: true,
         category: 'Access Control',
+      });
+      expect(action?.routes).toEqual(expected.routes.map(([method, route]) => expect.objectContaining({
+        method,
+        route,
+        resourceResolver: 'platform.self',
+      })));
+    }
+  });
+
+  it('splits configuration bundle lifecycle permissions by capability', () => {
+    const expectedActions = [
+      {
+        actionId: 'platform.config-bundles.view', permissionId: 'platform:config-bundles:view', operation: 'read', risk: 'low', audit: false,
+        routes: [['GET', '/api/authz/config-bundles/runs'], ['GET', '/api/authz/config-bundles/runs/{id}'], ['GET', '/api/authz/config-bundles/runs/{id}/identity-replay-tasks']],
+      },
+      {
+        actionId: 'platform.config-bundles.preview', permissionId: 'platform:config-bundles:preview', operation: 'read', risk: 'medium', audit: true,
+        routes: [['POST', '/api/authz/config-bundles/preview'], ['POST', '/api/authz/config-bundles/validate-secret-refs'], ['POST', '/api/authz/config-bundles/import-zip'], ['POST', '/api/authz/config-bundles/diff']],
+      },
+      {
+        actionId: 'platform.config-bundles.apply', permissionId: 'platform:config-bundles:apply', operation: 'manage', risk: 'high', audit: true,
+        routes: [['POST', '/api/authz/config-bundles/apply']],
+      },
+      {
+        actionId: 'platform.config-bundles.export', permissionId: 'platform:config-bundles:export', operation: 'read', risk: 'medium', audit: true,
+        routes: [['GET', '/api/authz/config-bundles/export']],
+      },
+    ];
+
+    for (const expected of expectedActions) {
+      const action = getAuthzActionDefinition(expected.actionId);
+      expect(action).toMatchObject({
+        permissionId: expected.permissionId,
+        resourceType: 'platform',
+        operation: expected.operation,
+        risk: expected.risk,
+        audit: expected.audit,
+        category: 'Configuration Bundles',
       });
       expect(action?.routes).toEqual(expected.routes.map(([method, route]) => expect.objectContaining({
         method,

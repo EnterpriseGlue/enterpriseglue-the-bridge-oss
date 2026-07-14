@@ -4,7 +4,7 @@
  * Provides authorization check endpoint and policy management for admins.
  */
 
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { z } from 'zod';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
@@ -93,18 +93,17 @@ function hasApiClientBearerToken(req: Request): boolean {
  * Config bundles can be changed by an interactive platform administrator or
  * by an explicitly scoped API client that also holds the matching RBAC action.
  */
-function requireConfigBundleAccess(req: Request, res: Response, next: NextFunction) {
-  if (hasApiClientBearerToken(req)) {
-    return requireApiClientAction(
-      ApiClientScopes.CONFIG_BUNDLE_MANAGE,
-      'platform.authz.roles.manage',
-    )(req, res, next);
-  }
+function requireConfigBundleAccess(actionId: string): RequestHandler {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (hasApiClientBearerToken(req)) {
+      return requireApiClientAction(ApiClientScopes.CONFIG_BUNDLE_MANAGE, actionId)(req, res, next);
+    }
 
-  return requireAuth(req, res, (error?: unknown) => {
-    if (error) return next(error);
-    return requirePlatformAction('platform.authz.roles.manage')(req, res, next);
-  });
+    return requireAuth(req, res, (error?: unknown) => {
+      if (error) return next(error);
+      return requirePlatformAction(actionId)(req, res, next);
+    });
+  };
 }
 
 function bundleRequestsTargetOwnershipTransfer(value: unknown): boolean {

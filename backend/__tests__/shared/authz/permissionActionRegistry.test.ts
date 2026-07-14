@@ -23,7 +23,10 @@ describe('authorization action registry', () => {
   it('keeps identity mapping, configuration bundle, and deployment receipt actions registered with real resolvers', () => {
     for (const actionId of [
       'platform.sso.group-mappings.manage',
-      'platform.authz.roles.manage',
+      'platform.config-bundles.view',
+      'platform.config-bundles.preview',
+      'platform.config-bundles.apply',
+      'platform.config-bundles.export',
       'engine.deployment-receipts.create',
     ]) {
       const action = getAuthzActionDefinition(actionId);

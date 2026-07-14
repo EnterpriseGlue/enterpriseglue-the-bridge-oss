@@ -151,6 +151,12 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     PlatformPermission.SSO_PROVIDERS_VIEW,
     PlatformPermission.SSO_PROVIDERS_MANAGE,
   ]);
+  const canViewConfiguration = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [
+    PlatformPermission.CONFIG_BUNDLES_VIEW,
+    PlatformPermission.CONFIG_BUNDLES_PREVIEW,
+    PlatformPermission.CONFIG_BUNDLES_APPLY,
+    PlatformPermission.CONFIG_BUNDLES_EXPORT,
+  ]);
   const canViewAuthzPolicies = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [PlatformPermission.AUTHZ_ROLES_MANAGE]);
   const canViewAudit = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [PlatformPermission.AUDIT_VIEW]);
   const settingsReadUnavailableReason = hasPermissionSnapshot && !settingsReadDecision.allowed ? settingsReadDecision.reason : null;
@@ -538,7 +544,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     { id: 'sso', label: 'SSO', visible: canReadSettings, render: renderSso },
     { id: 'identity-providers', label: 'Identity Providers', visible: canViewIdentityProviders, render: renderIdentityProviders },
     { id: 'identity-mappings', label: 'Identity Mappings', visible: canViewSsoMappings, render: renderIdentityMappings },
-    { id: 'configuration', label: 'Configuration', visible: canViewAuthzPolicies, render: renderConfiguration },
+    { id: 'configuration', label: 'Configuration', visible: canViewConfiguration, render: renderConfiguration },
     { id: 'role-library', label: 'Role Library', visible: canViewAccessControl, render: renderRoleLibrary },
     { id: 'access-control', label: 'Access Control', visible: canViewAccessControl, render: renderAccessControl },
     { id: 'sso-mappings', label: 'SSO Role Mappings', visible: canViewSsoMappings, render: renderSsoMappings },

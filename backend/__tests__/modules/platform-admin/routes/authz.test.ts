@@ -2373,11 +2373,30 @@ describe('platform-admin authz routes', () => {
     expect(response.status).toBe(200);
     expect(apiClientAuthMock.requireApiClientAction).toHaveBeenCalledWith(
       'config:bundle:manage',
-      'platform.authz.roles.manage',
+      'platform.config-bundles.apply',
     );
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       actorId: 'user-1',
     }), expect.objectContaining({ credentiallessCustomerSidecarsEnabled: false }));
+  });
+
+  it('allows configuration-scoped API clients to preview bundles from CI', async () => {
+    const response = await request(app)
+      .post('/api/authz/config-bundles/preview')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        bundle: {
+          apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle', metadata: { key: 'acme.authz', owner: 'platform' },
+          tenantKey: 'acme', mode: 'preview_only', settings: {}, imports: ['./groups.json'],
+        },
+        files: { './groups.json': { groups: [] } },
+      });
+
+    expect(response.status).toBe(200);
+    expect(apiClientAuthMock.requireApiClientAction).toHaveBeenCalledWith(
+      'config:bundle:manage',
+      'platform.config-bundles.preview',
+    );
   });
 
   it('updates, tests, and deletes SSO engine assignment mappings', async () => {

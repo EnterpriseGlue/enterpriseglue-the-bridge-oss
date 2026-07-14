@@ -1365,6 +1365,10 @@ describe('permissionService', () => {
         PlatformPermissions.AUTHZ_ROLES_VIEW,
         PlatformPermissions.AUTHZ_ROLES_MANAGE,
         PlatformPermissions.AUTHZ_CHECK,
+        PlatformPermissions.CONFIG_BUNDLES_VIEW,
+        PlatformPermissions.CONFIG_BUNDLES_PREVIEW,
+        PlatformPermissions.CONFIG_BUNDLES_APPLY,
+        PlatformPermissions.CONFIG_BUNDLES_EXPORT,
         PlatformPermissions.AUDIT_VIEW,
       ],
     });

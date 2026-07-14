@@ -1946,11 +1946,11 @@ The implementation should extend existing packages rather than introduce an auth
 
 Authorization:
 
-- [ ] ⬜ Add `platform:config-bundles:view`.
-- [ ] ⬜ Add `platform:config-bundles:preview`.
-- [ ] ⬜ Add `platform:config-bundles:apply`.
-- [ ] ⬜ Add `platform:config-bundles:export`.
-- [ ] ⬜ Allow scoped API clients to call preview/apply from CI/CD.
+- [x] ✅ Add `platform:config-bundles:view` for apply history and durable replay receipts.
+- [x] ✅ Add `platform:config-bundles:preview` for ZIP import, validation, preview, secret-reference preflight, and diff.
+- [x] ✅ Add `platform:config-bundles:apply` for hash-bound configuration mutation.
+- [x] ✅ Add `platform:config-bundles:export` for configuration-managed bundle state.
+- [x] ✅ Allow `config:bundle:manage` scoped API clients to call preview and apply from CI/CD, with the matching RBAC action enforced for each request.
 - [x] ✅ Record OpenAPI `x-enterpriseglue-authz` metadata for every configuration lifecycle route; all are action-backed and validated against the aggregate registry by the strict inventory guard.
 
 Config transport and response rules:
