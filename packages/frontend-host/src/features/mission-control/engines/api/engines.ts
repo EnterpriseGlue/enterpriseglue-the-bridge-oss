@@ -1,4 +1,5 @@
 import { apiClient } from '../../../../shared/api/client'
+import type { DeploymentHistoryView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 
 // Types
 export type Engine = {
@@ -112,4 +113,20 @@ export async function updateEngineMemberRole(engineId: string, memberId: string,
 
 export async function removeEngineMember(engineId: string, memberId: string): Promise<void> {
   return apiClient.delete(`/api/engines/${engineId}/members/${memberId}`, { credentials: 'include' })
+}
+
+export async function getEngineDeploymentReceipts(engineId: string): Promise<DeploymentReceiptView[]> {
+  return apiClient.get<DeploymentReceiptView[]>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/deployment-receipts`,
+    undefined,
+    { credentials: 'include' },
+  )
+}
+
+export async function getEngineDeploymentHistory(engineId: string): Promise<DeploymentHistoryView[]> {
+  return apiClient.get<DeploymentHistoryView[]>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/deployment-history`,
+    undefined,
+    { credentials: 'include' },
+  )
 }

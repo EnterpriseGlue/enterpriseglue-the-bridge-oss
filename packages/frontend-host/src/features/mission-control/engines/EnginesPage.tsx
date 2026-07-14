@@ -38,6 +38,7 @@ import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, u
 import type { AccessAuthorityMode, EngineOnboardingMode } from '../../../api/platform-admin'
 import type { DeploymentHistoryView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
+import { getEngineDeploymentHistory, getEngineDeploymentReceipts } from './api/engines'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -1482,20 +1483,12 @@ export default function Engines() {
   const deploymentReceiptsQ = useQuery({
     queryKey: ['engines', editing?.id, 'deployment-receipts'],
     enabled: Boolean(engineModal.isOpen && editing?.id && canViewEditingDeployments),
-    queryFn: () => apiClient.get<DeploymentReceiptView[]>(
-      `/engines-api/engines/${encodeURIComponent(String(editing?.id))}/deployment-receipts`,
-      undefined,
-      { credentials: 'include' }
-    ),
+    queryFn: () => getEngineDeploymentReceipts(String(editing!.id)),
   })
   const deploymentHistoryQ = useQuery({
     queryKey: ['engines', editing?.id, 'deployment-history'],
     enabled: Boolean(engineModal.isOpen && editing?.id && canViewEditingDeployments),
-    queryFn: () => apiClient.get<DeploymentHistoryView[]>(
-      `/engines-api/engines/${encodeURIComponent(String(editing?.id))}/deployment-history`,
-      undefined,
-      { credentials: 'include' }
-    ),
+    queryFn: () => getEngineDeploymentHistory(String(editing!.id)),
   })
   const runtimeResourcesQ = useRuntimeResources(editing?.id ? String(editing.id) : undefined, {
     includeInactive: true,
