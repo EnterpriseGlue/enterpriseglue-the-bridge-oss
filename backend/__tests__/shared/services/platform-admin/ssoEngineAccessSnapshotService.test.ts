@@ -173,6 +173,7 @@ describe('ssoEngineAccessSnapshotService', () => {
       resourceId: 'engine-1',
       source: 'sso',
       sourceMappingId: 'mapping-1',
+      sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
     } as RbacRoleAssignment, {
       status: 'removed_by_sso',
       cleanupReason: 'authoritative_claim_no_longer_matches',
@@ -184,6 +185,7 @@ describe('ssoEngineAccessSnapshotService', () => {
       removedAt: 2000,
       lastSyncedAt: 2000,
     }));
+    expect(snapshotQb.where).toHaveBeenCalledWith('snapshot.mappingId = :mappingId', { mappingId: 'mapping-1' });
 
     await ssoEngineAccessSnapshotService.markAssignmentRemoved(store, {
       id: 'manual-1',
@@ -220,6 +222,7 @@ describe('ssoEngineAccessSnapshotService', () => {
       resourceId: 'engine-1',
       source: 'sso',
       sourceMappingId: 'mapping-1',
+      sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
     } as RbacRoleAssignment;
     const manualQb = qb([manualAssignment]);
     const ssoQb = qb([ssoAssignment]);

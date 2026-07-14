@@ -327,7 +327,7 @@ export class SsoEngineAccessSnapshotService {
   }
 
   async markAssignmentRemoved(store: SnapshotStore, assignment: RbacRoleAssignment, input: SsoSnapshotRemovalInput): Promise<void> {
-    const mappingId = assignment.sourceRef || assignment.sourceMappingId;
+    const mappingId = assignment.sourceMappingId || assignment.sourceRef;
     if (assignment.source !== 'sso' || !mappingId || !assignment.principalId) return;
     const snapshotRepo = store.getRepository(SsoEngineAccessSnapshot);
     const engineIds = await resolveAssignmentEngineIds(store, assignment);
@@ -512,7 +512,7 @@ export class SsoEngineAccessSnapshotService {
         if (manualPrincipalType !== ssoPrincipalType || manualPrincipalId !== ssoPrincipalId) continue;
         if (!roleAssignmentMatchesEngine(ssoAssignment, engineId, materializedEngineSetIds)) continue;
 
-        const ssoMappingId = ssoAssignment.sourceRef || ssoAssignment.sourceMappingId;
+        const ssoMappingId = ssoAssignment.sourceMappingId || ssoAssignment.sourceRef;
         const snapshot = ssoMappingId
           ? snapshotByPrincipalMapping.get(`${ssoPrincipalType}:${ssoPrincipalId}:${ssoMappingId}`)
           : null;
