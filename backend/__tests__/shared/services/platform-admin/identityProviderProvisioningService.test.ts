@@ -71,6 +71,17 @@ describe('IdentityProviderProvisioningService', () => {
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({ userId: 'local-user-1' }));
   });
 
+  it('never uses an unverified OIDC email for an account link, even when the provider enables verified-email linking', async () => {
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: JSON.stringify({ allowVerifiedEmailLinking: true }) } as any;
+
+    await expect(identityProviderProvisioningService.provisionOidcUser(provider, {
+      sub: 'subject-1', email: 'person@example.test', email_verified: false,
+    } as any)).rejects.toThrow('email must be verified');
+
+    expect(stores.user.findOneBy).not.toHaveBeenCalled();
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
+  });
+
   it('rejects a linked provider subject when its verified email belongs to another user', async () => {
     stores.externalIdentity.findOne.mockResolvedValueOnce({ userId: 'linked-user-1' });
     const linkedUser = { id: 'linked-user-1', email: 'before@example.test', isEmailVerified: true };
