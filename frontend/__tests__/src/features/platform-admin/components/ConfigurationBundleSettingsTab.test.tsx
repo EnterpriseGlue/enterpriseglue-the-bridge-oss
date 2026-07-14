@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import ConfigurationBundleSettingsTab from '@src/features/platform-admin/components/ConfigurationBundleSettingsTab';
+import { authzQueryKeys } from '@src/features/platform-admin/hooks/useAuthzApi';
 import type { CurrentUserPermissions } from '@src/shared/types/auth';
 import { server } from '../../../../../test/mocks/server';
 
@@ -13,18 +14,20 @@ const authState = vi.hoisted(() => ({
     platform: ['platform:authz:roles:manage'],
     projects: [], engines: [], generatedAt: 1,
   } as CurrentUserPermissions,
+  refreshPermissions: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: () => authState }));
 
 function renderTab() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={queryClient}><ConfigurationBundleSettingsTab /></QueryClientProvider>);
+  return { queryClient, ...render(<QueryClientProvider client={queryClient}><ConfigurationBundleSettingsTab /></QueryClientProvider>) };
 }
 
 describe('ConfigurationBundleSettingsTab', () => {
   beforeEach(() => {
     authState.permissions = { userId: 'admin-1', platform: ['platform:authz:roles:manage'], projects: [], engines: [], generatedAt: 1 };
+    authState.refreshPermissions.mockClear();
   });
 
   it('previews then applies the exact reviewed configuration hash', async () => {
@@ -46,7 +49,8 @@ describe('ConfigurationBundleSettingsTab', () => {
       }),
       http.get('/api/authz/config-bundles/runs', () => HttpResponse.json([])),
     );
-    renderTab();
+    const { queryClient } = renderTab();
+    queryClient.setQueryData(authzQueryKeys.roles, []);
 
     fireEvent.click(screen.getByRole('button', { name: 'Preview changes' }));
     expect(await screen.findByText('Preview valid')).toBeInTheDocument();
@@ -56,6 +60,8 @@ describe('ConfigurationBundleSettingsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply exact preview' }));
     expect(await screen.findByText('Configuration applied')).toBeInTheDocument();
     await waitFor(() => expect(applyBody).not.toBeNull());
+    await waitFor(() => expect(authState.refreshPermissions).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(queryClient.getQueryState(authzQueryKeys.roles)?.isInvalidated).toBe(true));
     expect(applyBody).toMatchObject({ expectedPreviewHash: 'preview-hash-1', identityReconciliationMode: 'apply' });
     expect(applyBody?.idempotencyKey).toEqual(expect.any(String));
   });

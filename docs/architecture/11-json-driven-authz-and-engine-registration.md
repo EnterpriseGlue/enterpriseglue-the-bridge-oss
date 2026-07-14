@@ -2290,15 +2290,15 @@ Phase 0 exit criteria:
 - [x] ✅ Upsert provider-neutral identity providers and entitlement mappings with secret-reference-only provider configuration, source ownership, audit events, and source-scoped authoritative disable/archive behavior. Adapter execution and secret-reference availability checks remain pending.
 - [x] ✅ Upsert config-managed engines using the current engine field shape, opaque secret references, provenance, and central/distributed runtime settings.
 - [x] ✅ Persist engine runtime access scope and deployment integration settings.
-- [ ] ⬜ Refresh Engine Set materializations and authorization snapshots when config apply changes engine labels.
+- [x] ✅ Refresh Engine Set materializations and authorization snapshots when config apply changes engine labels. Engine changes materialize matching Engine Sets and runtime-resource sets after commit; the configuration-apply UI refreshes the Auth context snapshot and invalidates authorization queries after a successful apply.
 - [ ] ⬜ Resolve secret refs and write encrypted engine credential fields.
-- [ ] ⬜ Upsert config-managed Engine Sets and materialize them.
+- [x] ✅ Upsert config-managed Engine Sets and materialize them.
 - [x] ✅ Upsert config-managed runtime resource sets with tenant-scoped keys, config source ownership, engine-key resolution, audit events, authoritative archival, and post-apply materialization against the persisted runtime inventory. Engine discovery/reconciliation remains pending.
 - [x] ✅ Upsert config-managed group role assignments for platform, engine, Engine Set, exact runtime-resource, and Runtime Resource Set scopes using canonical assignment keys and source-scoped authoritative cleanup. User/API/service-account and project scopes remain pending.
 - [x] ✅ Upsert config-managed provider-neutral identity entitlement mappings by provider config key and internal group key, with source-scoped authoritative disablement. Provider creation from bundles is implemented.
 - [x] ✅ Upsert config-managed project-engine targets by explicit `projectRef.id` and config engine key, with source-scoped authoritative archival. Project-key resolution remains pending until projects have deterministic config keys.
-- [ ] ⬜ Refresh authorization version and frontend permission snapshot invalidation.
-- [ ] ⬜ Record audit events and run diagnostics.
+- [x] ✅ Refresh authorization version and frontend permission snapshot invalidation. The effective-permissions version derives from authorization records updated by apply; a successful apply refreshes guard state and invalidates all authorization query consumers.
+- [x] ✅ Record audit events and run diagnostics. Apply records object-level audit events and a persisted run receipt with materialization and identity-reconciliation diagnostics.
 
 ### Phase 4: Runtime Integration
 

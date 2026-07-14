@@ -1,9 +1,11 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Button, Checkbox, InlineNotification, Select, SelectItem, Tag, TextArea, TextInput, Tile } from '@carbon/react';
 import { Checkmark, Download, Play, Time, Upload, View } from '@carbon/icons-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
+import { useAuth } from '../../../shared/hooks/useAuth';
 import {
   filterConfigBundleChanges,
   formatConfigBundleObjectType,
@@ -40,6 +42,8 @@ function identitySnapshotMessage(snapshot: IdentitySnapshot): string {
 }
 
 export default function ConfigurationBundleSettingsTab() {
+  const queryClient = useQueryClient();
+  const { refreshPermissions } = useAuth();
   const resource = useMemo(() => ({ type: 'platform' as const }), []);
   const manage = useActionDecision('platform.authz.roles.manage', resource);
   const [source, setSource] = useState(placeholder);
@@ -75,7 +79,19 @@ export default function ConfigurationBundleSettingsTab() {
   const applyBundle = async () => {
     if (!preview?.valid || !preview.canonicalHash) return;
     setBusy('apply'); setError(null);
-    try { const input = parse(); setApplyResult(await apiClient.post<ApplyResult>('/api/authz/config-bundles/apply', { ...input, expectedPreviewHash: preview.canonicalHash, ...(secretPreflight?.valid && secretPreflight.available && secretPreflight.canonicalHash === preview.canonicalHash && secretPreflight.availabilityHash ? { expectedSecretPreflightHash: secretPreflight.availabilityHash } : {}), acknowledgements, idempotencyKey: applyIdempotencyKey || crypto.randomUUID(), identityReconciliationMode })); await loadRuns(); await previewBundle(); }
+    try {
+      const input = parse();
+      const result = await apiClient.post<ApplyResult>('/api/authz/config-bundles/apply', { ...input, expectedPreviewHash: preview.canonicalHash, ...(secretPreflight?.valid && secretPreflight.available && secretPreflight.canonicalHash === preview.canonicalHash && secretPreflight.availabilityHash ? { expectedSecretPreflightHash: secretPreflight.availabilityHash } : {}), acknowledgements, idempotencyKey: applyIdempotencyKey || crypto.randomUUID(), identityReconciliationMode });
+      setApplyResult(result);
+      // Bundles can change any authorization-managed object. Refresh the
+      // context snapshot used by guards and invalidate all query consumers.
+      await Promise.all([
+        refreshPermissions(),
+        queryClient.invalidateQueries({ queryKey: ['platform-admin', 'authz'] }),
+      ]);
+      await loadRuns();
+      await previewBundle();
+    }
     catch (value) { setError(parseApiError(value, 'Configuration apply failed').message); }
     finally { setBusy(null); }
   };
