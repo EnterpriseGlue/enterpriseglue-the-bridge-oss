@@ -7,4 +7,5 @@ export { SsoSyncDiagnosticsPanel } from './SsoSyncDiagnosticsPanel';
 export { EffectiveAccessPanel } from './EffectiveAccessPanel';
 export { PolicyInspectionTable } from './PolicyInspectionTable';
 export { RoleAssignmentsTable } from './RoleAssignmentsTable';
+export { RoleAssignmentForm } from './RoleAssignmentForm';
 export { AssignmentSourceTag } from './AssignmentSourceTag';
