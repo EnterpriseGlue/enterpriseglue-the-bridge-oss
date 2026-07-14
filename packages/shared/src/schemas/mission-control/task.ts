@@ -67,8 +67,8 @@ export const TaskQueryParams = z.object({
   taskDefinitionKeyIn: z.array(z.string()).optional(),
   sortBy: z.enum(['instanceId', 'dueDate', 'executionId', 'assignee', 'created', 'description', 'id', 'name', 'priority']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.number().optional(),
-  maxResults: z.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 export const ClaimTaskRequest = z.object({

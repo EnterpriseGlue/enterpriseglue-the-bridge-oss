@@ -23,6 +23,7 @@ import {
   CompleteTaskRequest,
   TaskVariablesRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/task.js';
+import { getBoundedRuntimeResourceQuery } from './runtime-resource-filter.js';
 
 const r = Router();
 
@@ -44,9 +45,10 @@ r.get('/mission-control-api/tasks', requireRuntimeCollectionAction('engine.runti
   const keys = req.authorizedRuntimeResourceKeys;
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
+  const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   const data = visibleKeys
-    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listTasks(engineId, { ...req.query, processDefinitionKey })))).flat()
-    : await listTasks(engineId, req.query);
+    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listTasks(engineId, { ...query, processDefinitionKey })))).flat()
+    : await listTasks(engineId, query);
   res.json(data);
 }));
 
