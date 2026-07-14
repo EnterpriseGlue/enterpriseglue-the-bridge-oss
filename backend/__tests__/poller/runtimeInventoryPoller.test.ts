@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
-import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
+import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
 import {
   runScheduledRuntimeInventoryReconciliationOnce,
   startRuntimeInventoryPollerIfEnabled,
@@ -9,11 +8,8 @@ import {
 } from '../../../packages/backend-host/src/poller/runtimeInventoryPoller.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
-vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
-  runtimeResourceInventoryService: { reconcileEngine: vi.fn() },
-}));
-vi.mock('@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js', () => ({
-  deploymentDiscoveryService: { reconcileEngine: vi.fn() },
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js', () => ({
+  engineMetadataReconciliationService: { reconcileEngine: vi.fn() },
 }));
 
 describe('runtimeInventoryPoller', () => {
@@ -27,8 +23,7 @@ describe('runtimeInventoryPoller', () => {
     delete process.env.RUNTIME_INVENTORY_RECONCILIATION_RUN_ON_START;
     stopRuntimeInventoryPoller();
     vi.mocked(getDataSource).mockResolvedValue({ getRepository: () => engineRepo } as any);
-    vi.mocked(runtimeResourceInventoryService.reconcileEngine).mockResolvedValue({ created: 0, updated: 1, deactivated: 0, materializedSets: 2 });
-    vi.mocked(deploymentDiscoveryService.reconcileEngine).mockResolvedValue({ created: 0, updated: 0, artifactsCreated: 0 });
+    vi.mocked(engineMetadataReconciliationService.reconcileEngine).mockResolvedValue({ created: 0, updated: 1, deactivated: 0, materializedSets: 2, deployments: { created: 0, updated: 0, artifactsCreated: 0 } });
   });
 
   afterEach(() => {
@@ -48,7 +43,20 @@ describe('runtimeInventoryPoller', () => {
     await expect(runScheduledRuntimeInventoryReconciliationOnce({ tenantIds: ['tenant-a'] })).resolves.toEqual([
       { engineId: 'central-a', tenantId: 'tenant-a', status: 'reconciled', created: 0, updated: 1, deactivated: 0, materializedSets: 2, deploymentsCreated: 0, deploymentsUpdated: 0, deploymentArtifactsCreated: 0 },
     ]);
-    expect(runtimeResourceInventoryService.reconcileEngine).toHaveBeenCalledWith('central-a', 'tenant-a');
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('central-a', 'tenant-a');
+  });
+
+  it('only reconciles engines whose configured cadence is due', async () => {
+    const now = Date.now();
+    engineRepo.find.mockResolvedValue([
+      { id: 'not-due', tenantId: null, runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active', reconciliationIntervalSeconds: 600, lastMetadataReconciledAt: now - 30_000 },
+      { id: 'due', tenantId: null, runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active', reconciliationIntervalSeconds: 60, lastMetadataReconciledAt: now - 61_000 },
+    ]);
+
+    await runScheduledRuntimeInventoryReconciliationOnce();
+
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledTimes(1);
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('due', null);
   });
 
   it('isolates one engine failure so the remaining inventory is reconciled', async () => {
@@ -56,9 +64,9 @@ describe('runtimeInventoryPoller', () => {
       { id: 'fails', tenantId: null, runtimeAccessScope: 'resource_aware', lifecycleStatus: null },
       { id: 'works', tenantId: null, runtimeAccessScope: 'resource_aware', lifecycleStatus: 'active' },
     ]);
-    vi.mocked(runtimeResourceInventoryService.reconcileEngine)
+    vi.mocked(engineMetadataReconciliationService.reconcileEngine)
       .mockRejectedValueOnce(new Error('unavailable'))
-      .mockResolvedValueOnce({ created: 1, updated: 0, deactivated: 0, materializedSets: 0 });
+      .mockResolvedValueOnce({ created: 1, updated: 0, deactivated: 0, materializedSets: 0, deployments: { created: 0, updated: 0, artifactsCreated: 0 } });
 
     await expect(runScheduledRuntimeInventoryReconciliationOnce()).resolves.toEqual([
       { engineId: 'fails', tenantId: null, status: 'failed' },

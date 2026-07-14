@@ -10,7 +10,7 @@ import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persisten
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { engineSetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
-import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
+import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
 
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
 const runtimeResourceQuerySchema = z.object({
@@ -148,8 +148,6 @@ export function registerEngineSetRoutes(router: Router, { requirePlatformAction 
   router.post('/api/authz/runtime-resources/:id/reconcile', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
     const engineId = String(req.params.id);
     const tenantId = req.tenant?.tenantId || null;
-    const result = await runtimeResourceInventoryService.reconcileEngine(engineId, tenantId);
-    const deployments = await deploymentDiscoveryService.reconcileEngine(engineId, tenantId);
-    res.json({ ...result, deployments });
+    res.json(await engineMetadataReconciliationService.reconcileEngine(engineId, tenantId));
   }));
 }

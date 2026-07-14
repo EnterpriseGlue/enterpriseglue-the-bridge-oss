@@ -56,6 +56,7 @@ export * from './ConfigBundleIdentityReplayTaskService.js';
 export * from './ConfigBundleExportService.js';
 export * from './ConfigBundleArchiveService.js';
 export * from './RuntimeResourceInventoryService.js';
+export * from './EngineMetadataReconciliationService.js';
 export * from './DeploymentReceiptService.js';
 export * from './DeploymentDiscoveryService.js';
 export * from './SecretResolver.js';

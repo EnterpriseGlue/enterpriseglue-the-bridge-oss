@@ -1,7 +1,6 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
-import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
-import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
+import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -58,17 +57,19 @@ export async function runScheduledRuntimeInventoryReconciliationOnce(
   const tenantIds = options.tenantIds?.length ? options.tenantIds : [null];
   const engineRepo = (await getDataSource()).getRepository(Engine);
   const engines = await engineRepo.find({ where: { runtimeAccessScope: 'resource_aware' } });
+  const now = Date.now();
   const candidates = engines.filter((engine) => engine.runtimeAccessScope === 'resource_aware'
     && engine.metadataDiscoveryEnabled !== false
     && tenantIds.includes(engine.tenantId || null)
-    && (engine.lifecycleStatus || 'active') === 'active');
+    && (engine.lifecycleStatus || 'active') === 'active'
+    && (!engine.lastMetadataReconciledAt
+      || now - Number(engine.lastMetadataReconciledAt) >= Number(engine.reconciliationIntervalSeconds || 300) * 1000));
   const results: RuntimeInventoryReconciliationResult[] = [];
 
   for (const engine of candidates) {
     const tenantId = engine.tenantId || null;
     try {
-      const result = await runtimeResourceInventoryService.reconcileEngine(engine.id, tenantId);
-      const deployments = await deploymentDiscoveryService.reconcileEngine(engine.id, tenantId);
+      const { deployments, ...result } = await engineMetadataReconciliationService.reconcileEngine(engine.id, tenantId);
       results.push({ engineId: engine.id, tenantId, status: 'reconciled', ...result,
         deploymentsCreated: deployments.created, deploymentsUpdated: deployments.updated, deploymentArtifactsCreated: deployments.artifactsCreated });
     } catch (error) {

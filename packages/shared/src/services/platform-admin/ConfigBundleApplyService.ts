@@ -474,7 +474,7 @@ class ConfigBundleApplyService {
               lastExternalSyncAt: null, capabilitiesJson: null, capabilityStatus: null, externalUpdatedAt: null,
               ...engineCredentialFields(desired.auth), version: desired.version || null, ownerId: null, delegateId: null,
               environmentTagId: desired.environmentTagId || null, environmentLocked: false,
-              runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, metadataDiscoveryEnabled: desired.metadataDiscoveryEnabled, pipelineReceiptEnabled: desired.pipelineReceiptEnabled, connectionMode: desired.connectionMode,
+              runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, metadataDiscoveryEnabled: desired.metadataDiscoveryEnabled, reconciliationIntervalSeconds: desired.reconciliationIntervalSeconds, lastMetadataReconciledAt: null, lastMetadataReconciliationStatus: null, pipelineReceiptEnabled: desired.pipelineReceiptEnabled, connectionMode: desired.connectionMode,
               createdAt: now, updatedAt: now,
             });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.create', resourceType: 'engine', resourceId: engineId, details: { bundleKey: manifest.metadata.key, engineKey: desired.key, canonicalHash: diff.canonicalHash } });
@@ -486,7 +486,7 @@ class ConfigBundleApplyService {
               labelsJson: JSON.stringify(desired.labels || {}), sourceHash, lastAppliedAt: now,
               ownershipMode: desired.ownershipMode || 'config_locked', lifecycleStatus: 'active', driftStatus: 'in_sync',
               ...engineCredentialFields(desired.auth), version: desired.version || null, environmentTagId: desired.environmentTagId || null,
-              runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, metadataDiscoveryEnabled: desired.metadataDiscoveryEnabled, pipelineReceiptEnabled: desired.pipelineReceiptEnabled, connectionMode: desired.connectionMode, updatedAt: now,
+              runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, metadataDiscoveryEnabled: desired.metadataDiscoveryEnabled, reconciliationIntervalSeconds: desired.reconciliationIntervalSeconds, pipelineReceiptEnabled: desired.pipelineReceiptEnabled, connectionMode: desired.connectionMode, updatedAt: now,
             });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.update', resourceType: 'engine', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, engineKey: desired.key, canonicalHash: diff.canonicalHash } });
             changedEngineIds.push(change.currentId);

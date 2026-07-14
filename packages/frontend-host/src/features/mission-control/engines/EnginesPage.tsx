@@ -1031,6 +1031,9 @@ function EngineRegistrationSection({ engine }: { engine: any }) {
         <EngineRegistrationDetail label="Endpoint authentication" value={formatEngineAuthentication(engine)} />
         <EngineRegistrationDetail label="Deployment integration" value={engine.deploymentIntegration === 'direct_engine' ? 'Direct engine deployment' : 'EnterpriseGlue proxy'} />
         <EngineRegistrationDetail label="Metadata discovery" value={engine.metadataDiscoveryEnabled === false ? 'Disabled' : 'Enabled'} />
+        <EngineRegistrationDetail label="Discovery cadence" value={`${engine.reconciliationIntervalSeconds || 300} seconds`} />
+        <EngineRegistrationDetail label="Last discovery" value={formatEngineTimestamp(engine.lastMetadataReconciledAt)} />
+        <EngineRegistrationDetail label="Discovery status" value={formatEngineRegistrationStatus(engine.lastMetadataReconciliationStatus)} tagValue={engine.lastMetadataReconciliationStatus || undefined} />
         <EngineRegistrationDetail label="Pipeline receipts" value={engine.pipelineReceiptEnabled === false ? 'Disabled' : 'Enabled'} />
         <EngineRegistrationDetail label="Lifecycle" value={formatEngineRegistrationStatus(engine.lifecycleStatus || 'active')} tagValue={engine.lifecycleStatus || 'active'} />
         <EngineRegistrationDetail label="Drift" value={formatEngineRegistrationStatus(engine.driftStatus)} tagValue={engine.driftStatus || undefined} />
@@ -1129,6 +1132,7 @@ export default function Engines() {
     runtimeAccessScope: 'engine_wide' as RuntimeAccessScope,
     deploymentIntegration: 'enterpriseglue_proxy' as DeploymentIntegration,
     metadataDiscoveryEnabled: true,
+    reconciliationIntervalSeconds: 300,
     pipelineReceiptEnabled: true,
   })
   const [searchQuery, setSearchQuery] = React.useState('')
@@ -1243,6 +1247,7 @@ export default function Engines() {
       runtimeAccessScope: 'engine_wide',
       deploymentIntegration: 'enterpriseglue_proxy',
       metadataDiscoveryEnabled: true,
+      reconciliationIntervalSeconds: 300,
       pipelineReceiptEnabled: true,
     })
     engineModal.openModal()
@@ -1367,6 +1372,7 @@ export default function Engines() {
       runtimeAccessScope: row.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide',
       deploymentIntegration: row.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy',
       metadataDiscoveryEnabled: row.metadataDiscoveryEnabled !== false,
+      reconciliationIntervalSeconds: row.reconciliationIntervalSeconds || 300,
       pipelineReceiptEnabled: row.pipelineReceiptEnabled !== false,
     })
     engineModal.openModal()
@@ -1971,6 +1977,17 @@ export default function Engines() {
           toggled={form.metadataDiscoveryEnabled}
           onToggle={(checked) => setForm((f: any) => ({ ...f, metadataDiscoveryEnabled: checked }))}
           disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+        />
+        <TextInput
+          id="eng-reconciliation-interval"
+          type="number"
+          min={60}
+          max={86400}
+          step={60}
+          labelText="Discovery interval (seconds)"
+          value={form.reconciliationIntervalSeconds}
+          onChange={(event) => setForm((f: any) => ({ ...f, reconciliationIntervalSeconds: Number(event.target.value) }))}
+          disabled={!form.metadataDiscoveryEnabled || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
         <Toggle id="eng-pipeline-receipts" labelText="Pipeline receipts" labelA="Disabled" labelB="Enabled" toggled={form.pipelineReceiptEnabled} onToggle={(checked) => setForm((f: any) => ({ ...f, pipelineReceiptEnabled: checked }))} disabled={form.deploymentIntegration !== 'direct_engine' || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable} />
         <Dropdown

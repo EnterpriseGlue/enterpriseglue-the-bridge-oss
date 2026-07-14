@@ -315,6 +315,7 @@ class ConfigBundleDiffService {
         existing.externalId !== (engine.externalId || null) || existing.labelsJson !== JSON.stringify(engine.labels || {}) ||
         existing.runtimeAccessScope !== engine.runtimeAccessScope || existing.deploymentIntegration !== engine.deploymentIntegration ||
         (existing.metadataDiscoveryEnabled !== false) !== engine.metadataDiscoveryEnabled ||
+        Number(existing.reconciliationIntervalSeconds || 300) !== engine.reconciliationIntervalSeconds ||
         (existing.pipelineReceiptEnabled !== false) !== engine.pipelineReceiptEnabled ||
         existing.connectionMode !== engine.connectionMode || existing.ownershipMode !== (engine.ownershipMode || 'config_locked') ||
         existing.lifecycleStatus === 'decommissioned'

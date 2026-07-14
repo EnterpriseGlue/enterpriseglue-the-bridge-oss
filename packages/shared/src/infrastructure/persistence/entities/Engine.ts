@@ -108,6 +108,15 @@ export class Engine extends AppBaseEntity {
   @Column({ name: 'metadata_discovery_enabled', type: 'boolean', default: true })
   metadataDiscoveryEnabled!: boolean;
 
+  @Column({ name: 'reconciliation_interval_seconds', type: 'integer', default: 300 })
+  reconciliationIntervalSeconds!: number;
+
+  @Column({ name: 'last_metadata_reconciled_at', type: 'bigint', nullable: true })
+  lastMetadataReconciledAt!: number | null;
+
+  @Column({ name: 'last_metadata_reconciliation_status', type: 'text', nullable: true })
+  lastMetadataReconciliationStatus!: string | null;
+
   @Column({ name: 'pipeline_receipt_enabled', type: 'boolean', default: true })
   pipelineReceiptEnabled!: boolean;
 

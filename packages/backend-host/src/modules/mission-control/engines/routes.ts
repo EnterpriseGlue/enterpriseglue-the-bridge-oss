@@ -21,7 +21,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js'
 import { apiLimiter, engineLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
 import { engineService, engineSetService, platformSettingsService, projectEngineTargetService, ApiClientScopes } from '@enterpriseglue/shared/services/platform-admin/index.js'
-import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
+import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
 import { buildEngineCredentialHeaders, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
@@ -197,6 +197,7 @@ const createEngineBodySchema = z.object({
   runtimeAccessScope: runtimeAccessScopeSchema.optional(),
   deploymentIntegration: deploymentIntegrationSchema.optional(),
   metadataDiscoveryEnabled: z.boolean().optional(),
+  reconciliationIntervalSeconds: z.number().int().min(60).max(86400).optional(),
   pipelineReceiptEnabled: z.boolean().optional(),
 })
 
@@ -217,6 +218,7 @@ const updateEngineBodySchema = z.object({
   runtimeAccessScope: runtimeAccessScopeSchema.optional(),
   deploymentIntegration: deploymentIntegrationSchema.optional(),
   metadataDiscoveryEnabled: z.boolean().optional(),
+  reconciliationIntervalSeconds: z.number().int().min(60).max(86400).optional(),
   pipelineReceiptEnabled: z.boolean().optional(),
 })
 
@@ -248,6 +250,7 @@ const ENGINE_UPDATE_FIELD_GROUPS: Record<string, string> = {
   runtimeAccessScope: 'metadata',
   deploymentIntegration: 'metadata',
   metadataDiscoveryEnabled: 'metadata',
+  reconciliationIntervalSeconds: 'metadata',
   pipelineReceiptEnabled: 'metadata',
 }
 
@@ -268,6 +271,7 @@ const EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD: Record<string, string> = {
   runtimeAccessScope: 'runtimeAccessScope',
   deploymentIntegration: 'deploymentIntegration',
   metadataDiscoveryEnabled: 'metadataDiscoveryEnabled',
+  reconciliationIntervalSeconds: 'reconciliationIntervalSeconds',
   pipelineReceiptEnabled: 'pipelineReceiptEnabled',
 }
 
@@ -802,8 +806,8 @@ async function refreshEngineSetMaterializationsForEngine(engineId: string, tenan
 }
 
 function scheduleRuntimeInventoryReconciliation(engineId: string, tenantId?: string | null): void {
-  void runtimeResourceInventoryService.reconcileEngine(engineId, tenantId)
-    .catch((error: unknown) => logger.warn('Failed to reconcile runtime resource inventory after engine change', { engineId, error }))
+  void engineMetadataReconciliationService.reconcileEngine(engineId, tenantId)
+    .catch((error: unknown) => logger.warn('Failed to reconcile engine metadata after engine change', { engineId, error }))
 }
 
 /**
@@ -948,6 +952,9 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine
     runtimeAccessScope: req.body.runtimeAccessScope || 'engine_wide',
     deploymentIntegration: req.body.deploymentIntegration || 'enterpriseglue_proxy',
     metadataDiscoveryEnabled: req.body.metadataDiscoveryEnabled ?? true,
+    reconciliationIntervalSeconds: req.body.reconciliationIntervalSeconds ?? 300,
+    lastMetadataReconciledAt: null,
+    lastMetadataReconciliationStatus: null,
     pipelineReceiptEnabled: req.body.pipelineReceiptEnabled ?? true,
     tenantId,
     createdAt: now,
@@ -1038,6 +1045,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     runtimeAccessScope: req.body.runtimeAccessScope,
     deploymentIntegration: req.body.deploymentIntegration,
     metadataDiscoveryEnabled: req.body.metadataDiscoveryEnabled,
+    reconciliationIntervalSeconds: req.body.reconciliationIntervalSeconds,
     pipelineReceiptEnabled: req.body.pipelineReceiptEnabled,
     updatedAt: now,
   }
@@ -1447,6 +1455,7 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
     runtimeAccessScope: req.body.runtimeAccessScope,
     deploymentIntegration: req.body.deploymentIntegration,
     metadataDiscoveryEnabled: req.body.metadataDiscoveryEnabled,
+    reconciliationIntervalSeconds: req.body.reconciliationIntervalSeconds,
     pipelineReceiptEnabled: req.body.pipelineReceiptEnabled,
     driftStatus: isConfigWarnUpdate(existing, req.body) ? 'manual_override' : undefined,
     updatedAt: now,
