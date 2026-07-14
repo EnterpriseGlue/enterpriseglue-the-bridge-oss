@@ -67,4 +67,27 @@ describe('ConfigurationBundleSettingsTab', () => {
     expect(applyBody).toMatchObject({ expectedPreviewHash: 'preview-hash-1', identityReconciliationMode: 'apply' });
     expect(applyBody?.idempotencyKey).toEqual(expect.any(String));
   });
+
+  it('exports the current source-owned bundle for GitOps bootstrap', async () => {
+    let exportUrl: URL | null = null;
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const createObjectUrl = vi.fn().mockReturnValue('blob:config-bundle');
+    const revokeObjectUrl = vi.fn();
+    Object.assign(URL, { createObjectURL: createObjectUrl, revokeObjectURL: revokeObjectUrl });
+    server.use(http.get('/api/authz/config-bundles/export', ({ request }) => {
+      exportUrl = new URL(request.url);
+      return HttpResponse.json({ bundle: { metadata: { key: 'example.authz' } }, files: {} });
+    }));
+
+    renderTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }));
+
+    await waitFor(() => expect(exportUrl).not.toBeNull());
+    expect(exportUrl?.searchParams.get('bundleKey')).toBe('example.authz');
+    expect(exportUrl?.searchParams.get('tenantKey')).toBe('default');
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:config-bundle');
+    click.mockRestore();
+  });
 });

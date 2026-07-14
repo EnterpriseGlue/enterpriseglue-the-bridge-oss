@@ -1979,7 +1979,7 @@ UI capabilities:
 - [x] ✅ Show and require acknowledgement for all-engine/any-label selectors, broad identity-mapping operators, and destructive authoritative removals. Regex mappings are not part of the current config schema; external-only mode and secret-reference diagnostics remain pending.
 - [x] ✅ Require an exact preview hash to prevent time-of-check/time-of-use drift, and require an expected tenant scope for CLI/CI applies so target credentials cannot apply to a different tenant.
 - [ ] ⬜ Show config-managed badges in Engine Detail, Access Control roles/groups/mappings, Engine Sets, and project deployment target views.
-- [ ] ⬜ Provide export current config button for backup and GitOps bootstrap.
+- [x] ✅ Provide an export-current-config button for backup and GitOps bootstrap. It requests the current source-owned bundle by bundle and tenant key, then downloads a JSON envelope.
 - [x] ✅ Provide copyable CI command examples after a successful UI preview, including the required expected-tenant scope and secret placeholders.
 
 ### Role Management UI Pattern
