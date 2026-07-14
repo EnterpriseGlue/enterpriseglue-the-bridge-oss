@@ -8,6 +8,7 @@ import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/per
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, type EntityManager } from 'typeorm';
+import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 
 export type IdentityProviderProtocol = 'oidc' | 'saml' | 'ldap';
 export type IdentityProviderAuthenticationMode = 'direct' | 'claims_only';
@@ -94,7 +95,7 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
   const tenantScope = provider.tenantId ? { tenantId: provider.tenantId } : { tenantId: IsNull() };
   const mappingRepo = manager.getRepository(IdentityEntitlementMapping);
   const mappings = await mappingRepo.find({ where: { ...tenantScope, providerId: provider.id } as any });
-  const mappingRefs = mappings.map((mapping) => `identity_mapping:${mapping.id}`);
+  const mappingRefs = mappings.flatMap((mapping) => identityProviderMembershipSourceRefs(provider.id, mapping.id));
 
   const memberships = mappingRefs.length
     ? await manager.getRepository(AuthzGroupMembership).delete({

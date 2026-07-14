@@ -121,7 +121,7 @@ describe('externalIdentityService', () => {
         findOne: vi.fn().mockResolvedValue({ id: 'identity-a', userId: 'user-1', providerId: 'oidc-a' }),
         update: identityUpdate,
       };
-      if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue([{ id: 'mapping-a' }]) };
+      if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue([{ id: 'mapping-a', providerId: 'oidc-a' }]) };
       if (entity === AuthzGroupMembership) return { delete: membershipDelete };
       if (entity === SsoNormalizedIdentity) return { update: normalizedUpdate };
       if (entity === RefreshToken) return { update: refreshUpdate };
@@ -145,6 +145,9 @@ describe('externalIdentityService', () => {
       userId: 'user-1',
       source: 'identity_provider',
     }));
+    expect(membershipDelete.mock.calls[0][0].sourceRef.value).toEqual([
+      'identity_provider:oidc-a:mapping:mapping-a', 'identity_mapping:mapping-a',
+    ]);
     expect(normalizedUpdate).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a', providerId: 'oidc-a', providerSubject: 'subject-a', userId: 'user-1',
     }), expect.objectContaining({ providerStatus: 'unlinked' }));

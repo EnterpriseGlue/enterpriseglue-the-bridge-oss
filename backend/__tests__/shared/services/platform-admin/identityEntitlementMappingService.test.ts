@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchesIdentityEntitlement, identityEntitlementMappingService } from '@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js';
+import { identityProviderMembershipSourceRef, matchesIdentityEntitlement, identityEntitlementMappingService } from '@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
 import { vi, type Mock } from 'vitest';
@@ -34,7 +34,7 @@ describe('identity entitlement mapping', () => {
     const membershipRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn().mockResolvedValue(undefined), delete: vi.fn() };
     (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo : entity === AuthzGroupMembership ? membershipRepo : {} });
     await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', identity)).resolves.toEqual({ created: 1, removed: 0 });
-    expect(membershipRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', groupId: 'group-1', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' }));
+    expect(membershipRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', groupId: 'group-1', source: 'identity_provider', sourceRef: identityProviderMembershipSourceRef('entra', 'mapping-1') }));
   });
 
   it('preserves additive, cross-provider, and manual memberships while authoritative sync removes only its stale row', async () => {
@@ -88,12 +88,15 @@ describe('identity entitlement mapping', () => {
   });
 
   it('removes only memberships created by a manually managed mapping', async () => {
-    const mappingRepo = { findOne: vi.fn().mockResolvedValue({ id: 'mapping-1', sourceRef: null }), delete: vi.fn().mockResolvedValue(undefined) };
+    const mappingRepo = { findOne: vi.fn().mockResolvedValue({ id: 'mapping-1', providerId: 'provider-1', sourceRef: null }), delete: vi.fn().mockResolvedValue(undefined) };
     const membershipRepo = { delete: vi.fn().mockResolvedValue(undefined) };
     const repositories = (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo : entity === AuthzGroupMembership ? membershipRepo : {};
     (getDataSource as unknown as Mock).mockResolvedValue({ transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })) });
     await identityEntitlementMappingService.remove('mapping-1', 'tenant-a');
-    expect(membershipRepo.delete).toHaveBeenCalledWith({ tenantId: 'tenant-a', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
+    expect(membershipRepo.delete).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-a', source: 'identity_provider' }));
+    expect(membershipRepo.delete.mock.calls[0][0].sourceRef.value).toEqual([
+      identityProviderMembershipSourceRef('provider-1', 'mapping-1'), 'identity_mapping:mapping-1',
+    ]);
     expect(mappingRepo.delete).toHaveBeenCalledWith({ id: 'mapping-1' });
   });
 
@@ -128,7 +131,31 @@ describe('identity entitlement mapping', () => {
 
     await identityEntitlementMappingService.update('mapping-1', { isActive: false }, 'tenant-a');
 
-    expect(membershipRepo.delete).toHaveBeenCalledWith({ tenantId: 'tenant-a', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
+    expect(membershipRepo.delete).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-a', source: 'identity_provider' }));
+    expect(membershipRepo.delete.mock.calls[0][0].sourceRef.value).toEqual([
+      identityProviderMembershipSourceRef('provider-1', 'mapping-1'), 'identity_mapping:mapping-1',
+    ]);
     expect(mappingRepo.update).toHaveBeenCalledWith({ id: 'mapping-1' }, expect.objectContaining({ isActive: false }));
+  });
+
+  it('normalizes a legacy mapping-only membership reference after the matching provider sync', async () => {
+    const mappingRepo = { find: vi.fn().mockResolvedValue([{
+      id: 'mapping-1', providerId: 'provider-1', entitlementType: 'group', externalId: 'group-prod', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'authoritative', isActive: true,
+    }]) };
+    const legacyMembership = { id: 'membership-1', userId: 'user-1', groupId: 'group-1', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' };
+    const membershipRepo = {
+      findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(legacyMembership),
+      insert: vi.fn(), update: vi.fn().mockResolvedValue(undefined), delete: vi.fn(),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo : entity === AuthzGroupMembership ? membershipRepo : {} });
+
+    await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', {
+      ...identity, providerKey: 'provider-1',
+    })).resolves.toEqual({ created: 0, removed: 0 });
+
+    expect(membershipRepo.insert).not.toHaveBeenCalled();
+    expect(membershipRepo.update).toHaveBeenCalledWith({ id: 'membership-1' }, expect.objectContaining({
+      sourceRef: identityProviderMembershipSourceRef('provider-1', 'mapping-1'),
+    }));
   });
 });

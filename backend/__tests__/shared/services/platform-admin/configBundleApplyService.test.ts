@@ -770,7 +770,7 @@ describe('configBundleApplyService', () => {
   it('cleans only the source-owned memberships when an authoritative bundle disables an identity mapping', async () => {
     const { identityMappingRepo, groupMembershipRepo } = setupDataSource();
     identityMappingRepo.find.mockResolvedValue([{
-      id: 'mapping-1', tenantId: 'tenant-a', configKey: 'mapping.removed', sourceRef: 'config_bundle:acme.authz', isActive: true,
+      id: 'mapping-1', tenantId: 'tenant-a', providerId: 'provider-1', configKey: 'mapping.removed', sourceRef: 'config_bundle:acme.authz', isActive: true,
     }]);
     const mappingBundle = { ...bundle, imports: ['./identity-mappings.json'] };
     const mappingFiles = { './identity-mappings.json': { identityMappings: [] } };
@@ -785,7 +785,10 @@ describe('configBundleApplyService', () => {
       actorId: 'admin-1',
     });
 
-    expect(groupMembershipRepo.delete).toHaveBeenCalledWith({ tenantId: 'tenant-a', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' });
+    expect(groupMembershipRepo.delete).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-a', source: 'identity_provider' }));
+    expect(groupMembershipRepo.delete.mock.calls[0][0].sourceRef.value).toEqual([
+      'identity_provider:provider-1:mapping:mapping-1', 'identity_mapping:mapping-1',
+    ]);
     expect(identityMappingRepo.update).toHaveBeenCalledWith({ id: 'mapping-1' }, expect.objectContaining({ isActive: false }));
   });
 

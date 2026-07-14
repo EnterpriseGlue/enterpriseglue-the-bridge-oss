@@ -6,6 +6,7 @@ import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructur
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 
 type ExternalIdentityStore = DataSource | EntityManager;
 type ExternalIdentityUpdate = Pick<ExternalIdentity,
@@ -120,9 +121,9 @@ class ExternalIdentityService {
     const tenantScope = tenantId ? { tenantId } : { tenantId: IsNull() };
     const mappings = await store.getRepository(IdentityEntitlementMapping).find({
       where: { ...tenantScope, providerId } as any,
-      select: ['id'],
+      select: ['id', 'providerId'],
     });
-    const sourceRefs = mappings.map((mapping) => `identity_mapping:${mapping.id}`);
+    const sourceRefs = mappings.flatMap((mapping) => identityProviderMembershipSourceRefs(mapping.providerId, mapping.id));
     const memberships = sourceRefs.length > 0
       ? await store.getRepository(AuthzGroupMembership).delete({
         ...tenantScope,

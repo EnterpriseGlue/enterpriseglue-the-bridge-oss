@@ -1,4 +1,4 @@
-import { IsNull, type DataSource, type EntityManager } from 'typeorm';
+import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
@@ -36,6 +36,18 @@ export interface ManagedIdentityEntitlementMapping {
   isActive: boolean;
   configKey: string | null;
   sourceRef: string | null;
+}
+
+/**
+ * Provider-managed memberships must retain both parts of their derivation.
+ * The legacy mapping-only form remains readable during the staged migration.
+ */
+export function identityProviderMembershipSourceRef(providerId: string, mappingId: string): string {
+  return `identity_provider:${providerId}:mapping:${mappingId}`;
+}
+
+export function identityProviderMembershipSourceRefs(providerId: string, mappingId: string): string[] {
+  return [identityProviderMembershipSourceRef(providerId, mappingId), `identity_mapping:${mappingId}`];
 }
 
 export function matchesIdentityEntitlement(mapping: IdentityEntitlementMappingMatch, identity: NormalizedExternalIdentity): boolean {
@@ -166,7 +178,7 @@ class IdentityEntitlementMappingService {
         await manager.getRepository(AuthzGroupMembership).delete({
           ...tenantWhere(tenantId),
           source: 'identity_provider',
-          sourceRef: `identity_mapping:${existing.id}`,
+          sourceRef: In(identityProviderMembershipSourceRefs(existing.providerId, existing.id)),
         } as any);
       }
       await manager.getRepository(IdentityEntitlementMapping).update({ id }, values);
@@ -181,7 +193,9 @@ class IdentityEntitlementMappingService {
       const mapping = await repo.findOne({ where: { ...tenantWhere(tenantId), id } as any });
       if (!mapping) throw Errors.notFound('Identity mapping not found');
       if (mapping.sourceRef) throw Errors.forbidden('This identity mapping is managed by configuration');
-      await manager.getRepository(AuthzGroupMembership).delete({ ...tenantWhere(tenantId), source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` } as any);
+      await manager.getRepository(AuthzGroupMembership).delete({
+        ...tenantWhere(tenantId), source: 'identity_provider', sourceRef: In(identityProviderMembershipSourceRefs(mapping.providerId, mapping.id)),
+      } as any);
       await repo.delete({ id: mapping.id });
     });
   }
@@ -209,16 +223,20 @@ class IdentityEntitlementMappingService {
     const now = Date.now();
 
     for (const mapping of mappings) {
-      const sourceRef = `identity_mapping:${mapping.id}`;
+      const sourceRef = identityProviderMembershipSourceRef(mapping.providerId, mapping.id);
       const matches = matchesIdentityEntitlement({
         entitlementType: mapping.entitlementType as ExternalEntitlement['type'],
         externalId: mapping.externalId,
         matchOperator: mapping.matchOperator as IdentityEntitlementMatchOperator,
       }, identity);
-      const existing = await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef } });
+      const existing = await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef } })
+        || await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` } });
       if (matches && !existing) {
         await membershipRepo.insert({ id: generateId(), tenantId: tenantId || null, userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef, expiresAt: null, createdById: null, createdAt: now, updatedAt: now });
         created += 1;
+      }
+      if (matches && existing && existing.sourceRef !== sourceRef) {
+        await membershipRepo.update({ id: existing.id }, { sourceRef, updatedAt: now });
       }
       if (!matches && mapping.syncMode === 'authoritative' && existing) {
         await membershipRepo.delete({ id: existing.id });
