@@ -17,7 +17,7 @@ import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/pers
 import { engineSetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { getExternalEngineCapabilityDiagnostics, getExternalEngineMaterializationDiagnostics, parseExternalEngineCapabilities } from './external-engine-diagnostics.js';
 import { parseExternalEngineFieldOwnership } from './external-engine-ownership.js';
-import { parseExternalEngineJson, parseExternalEngineLabels } from './external-engine-serialization.js';
+import { parseExternalEngineJson, parseExternalEngineLabels, redactExternalEngineAuditDetails } from './external-engine-serialization.js';
 import { isExternalEngineTenantVisible } from './external-engine-tenant.js';
 
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
@@ -120,7 +120,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
       });
       res.json(entries.map((entry) => ({
         id: entry.id, userId: entry.userId, action: entry.action, resourceType: entry.resourceType, resourceId: entry.resourceId,
-        ipAddress: entry.ipAddress, userAgent: entry.userAgent, details: parseExternalEngineJson(entry.details), createdAt: entry.createdAt,
+        ipAddress: entry.ipAddress, userAgent: entry.userAgent, details: redactExternalEngineAuditDetails(parseExternalEngineJson(entry.details)), createdAt: entry.createdAt,
       })));
     } catch (error: any) {
       if (error.statusCode) throw error;
