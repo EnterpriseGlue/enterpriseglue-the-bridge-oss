@@ -38,6 +38,37 @@ describe('configBundleExportService', () => {
     expect(JSON.stringify(result.files)).not.toContain('ref:PROD_ENGINE_PASSWORD');
   });
 
+  it('round-trips every UI-supported engine auth mode and operational labels', async () => {
+    const common = {
+      tenantId: null, externalId: null, version: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy',
+      metadataDiscoveryEnabled: true, deploymentDiscoveryEnabled: true, reconciliationIntervalSeconds: 300, pipelineReceiptEnabled: true,
+      ownershipMode: 'config_locked', lifecycleStatus: 'active', sourceRef: 'config_bundle:acme.authz',
+    };
+    const engines = [
+      { ...common, id: 'engine-basic', configKey: 'engine.basic', name: 'Basic', baseUrl: 'https://basic.example.test/engine-rest', type: 'operaton', labelsJson: '{"environment":"prod"}', authType: 'basic', username: 'engine-user', passwordEnc: 'ref:ENGINE_BASIC_PASSWORD', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null, connectionMode: 'direct' },
+      { ...common, id: 'engine-bearer', configKey: 'engine.bearer', name: 'Bearer', baseUrl: 'https://bearer.example.test/engine-rest', type: 'camunda7', labelsJson: '{"region":"eu"}', authType: 'bearer', username: null, passwordEnc: 'ref:ENGINE_BEARER_TOKEN', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null, connectionMode: 'direct' },
+      { ...common, id: 'engine-none', configKey: 'engine.none', name: 'Sidecar', baseUrl: 'https://sidecar.example.test/engine-rest', type: 'ion', labelsJson: '{"businessUnit":"payments"}', authType: 'none', username: null, passwordEnc: null, oauthTokenUrl: null, oauthScopes: null, oauthAudience: null, connectionMode: 'customer_sidecar' },
+      { ...common, id: 'engine-oauth', configKey: 'engine.oauth', name: 'OAuth', baseUrl: 'https://oauth.example.test/engine-rest', type: 'ion', labelsJson: '{"customer_segment":"enterprise"}', authType: 'oauth2-client-credentials', username: 'engine-client', passwordEnc: 'ref:ENGINE_OAUTH_SECRET', oauthTokenUrl: 'https://identity.example.test/oauth/token', oauthScopes: 'engine.read engine.write', oauthAudience: 'engine-api', connectionMode: 'direct' },
+    ];
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository(entity: unknown) {
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue(engines) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const result = await configBundleExportService.exportBundle({ bundleKey: 'acme.authz' });
+    const exported = (result.files['./engines.json'] as any).engines;
+    expect(exported).toEqual([
+      expect.objectContaining({ key: 'engine.basic', labels: { environment: 'prod' }, auth: { type: 'basic', username: 'engine-user', passwordRef: 'ENGINE_BASIC_PASSWORD' } }),
+      expect.objectContaining({ key: 'engine.bearer', labels: { region: 'eu' }, auth: { type: 'bearer', tokenRef: 'ENGINE_BEARER_TOKEN' } }),
+      expect.objectContaining({ key: 'engine.none', labels: { businessUnit: 'payments' }, connectionMode: 'customer_sidecar', auth: { type: 'none' } }),
+      expect.objectContaining({ key: 'engine.oauth', labels: { customer_segment: 'enterprise' }, auth: { type: 'oauth2-client-credentials', username: 'engine-client', passwordRef: 'ENGINE_OAUTH_SECRET', tokenUrl: 'https://identity.example.test/oauth/token', scopes: 'engine.read engine.write', audience: 'engine-api' } }),
+    ]);
+    expect(configBundlePreviewService.preview(result, { credentiallessCustomerSidecarsEnabled: true })).toMatchObject({ valid: true, errors: [] });
+  });
+
   it('exports all apply-supported config families with stable references', async () => {
     const configRole = { id: 'role-config', tenantId: null, key: 'custom.engine.reader', name: 'Reader', description: null, scope: 'engine', sourceRef: 'config_bundle:acme.authz', isArchived: false };
     const systemRole = { id: 'role-system', tenantId: null, key: 'system.platform.user', name: 'Platform User', description: null, scope: 'platform', sourceRef: null, isArchived: false };

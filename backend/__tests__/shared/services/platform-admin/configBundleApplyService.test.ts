@@ -617,6 +617,62 @@ describe('configBundleApplyService', () => {
     expect(materializeForEngine).toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      name: 'credentialless customer sidecar', type: 'ion', connectionMode: 'customer_sidecar', auth: { type: 'none' },
+      expected: { authType: 'none', username: null, passwordEnc: null, oauthTokenUrl: null, oauthScopes: null, oauthAudience: null },
+    },
+    {
+      name: 'basic authentication', type: 'operaton', connectionMode: 'direct', auth: { type: 'basic', username: 'engine-user', passwordRef: 'ENGINE_BASIC_PASSWORD' },
+      expected: { authType: 'basic', username: 'engine-user', passwordEnc: 'ref:ENGINE_BASIC_PASSWORD', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null },
+    },
+    {
+      name: 'bearer authentication', type: 'camunda7', connectionMode: 'direct', auth: { type: 'bearer', tokenRef: 'ENGINE_BEARER_TOKEN' },
+      expected: { authType: 'bearer', username: null, passwordEnc: 'ref:ENGINE_BEARER_TOKEN', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null },
+    },
+    {
+      name: 'OAuth2 client credentials', type: 'ion', connectionMode: 'direct',
+      auth: { type: 'oauth2-client-credentials', username: 'engine-client', passwordRef: 'ENGINE_OAUTH_SECRET', tokenUrl: 'https://identity.example.test/oauth/token', scopes: 'engine.read engine.write', audience: 'engine-api' },
+      expected: { authType: 'oauth2-client-credentials', username: 'engine-client', passwordEnc: 'ref:ENGINE_OAUTH_SECRET', oauthTokenUrl: 'https://identity.example.test/oauth/token', oauthScopes: 'engine.read engine.write', oauthAudience: 'engine-api' },
+    },
+  ] as const)('imports $name and operational labels into the engine model', async ({ type, connectionMode, auth, expected }) => {
+    const { engineInsert } = setupDataSource();
+    const engineBundle = { ...bundle, imports: ['./engines.json'] };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{
+          key: `engine.${auth.type}`,
+          name: `Imported ${auth.type}`,
+          type,
+          baseUrl: `https://${auth.type}.example.test/engine-rest`,
+          connectionMode,
+          labels: { environment: 'prod', region: 'eu', businessUnit: 'payments', customer_segment: 'enterprise' },
+          auth,
+        }],
+      },
+    };
+    const policy = { credentiallessCustomerSidecarsEnabled: true };
+    const preview = configBundlePreviewService.preview({ bundle: engineBundle, files: engineFiles }, policy);
+
+    const result = await configBundleApplyService.apply({
+      bundle: engineBundle,
+      files: engineFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    }, policy);
+
+    expect(result.created).toBe(1);
+    expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
+      ...expected,
+      type,
+      connectionMode,
+      labelsJson: JSON.stringify({ environment: 'prod', region: 'eu', businessUnit: 'payments', customer_segment: 'enterprise' }),
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+    }));
+  });
+
   it('creates a config-owned project-engine target for an existing config engine', async () => {
     const { engineRepo, projectRepo, targetRepo } = setupDataSource();
     const engine = {

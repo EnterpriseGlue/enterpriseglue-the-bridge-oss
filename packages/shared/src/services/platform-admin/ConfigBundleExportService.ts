@@ -73,7 +73,7 @@ class ConfigBundleExportService {
           : engine.authType === 'bearer'
             ? { type: 'bearer', tokenRef: externalReference(engine.passwordEnc) || undefined }
             : engine.authType === 'oauth2-client-credentials'
-              ? { type: 'oauth2-client-credentials', username: engine.username || '', passwordRef: externalReference(engine.passwordEnc) || undefined, tokenUrl: engine.oauthTokenUrl || '', scopes: engine.oauthScopes ? engine.oauthScopes.split(/\s+/).filter(Boolean) : undefined, audience: engine.oauthAudience || undefined }
+              ? { type: 'oauth2-client-credentials', username: engine.username || '', passwordRef: externalReference(engine.passwordEnc) || undefined, tokenUrl: engine.oauthTokenUrl || '', scopes: engine.oauthScopes || undefined, audience: engine.oauthAudience || undefined }
               : { type: 'none' };
         return { key: engine.configKey, name: engine.name, baseUrl: engine.baseUrl, type: engine.type, externalId: engine.externalId || undefined, labels: json(engine.labelsJson), auth, version: engine.version || undefined, runtimeAccessScope: engine.runtimeAccessScope, deploymentIntegration: engine.deploymentIntegration, metadataDiscoveryEnabled: engine.metadataDiscoveryEnabled !== false, deploymentDiscoveryEnabled: engine.deploymentDiscoveryEnabled !== false, reconciliationIntervalSeconds: Number(engine.reconciliationIntervalSeconds || 300), pipelineReceiptEnabled: engine.pipelineReceiptEnabled !== false, connectionMode: engine.connectionMode, ownershipMode: engine.ownershipMode };
       }) };
