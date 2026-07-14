@@ -1706,12 +1706,12 @@ interface RuntimeAuthorizationFilterService {
 }
 ```
 
-- [ ] ⬜ For `engine_wide`, use the existing engine-permission fast path without runtime materialization.
+- [x] ✅ For `engine_wide`, use the existing engine-permission fast path without runtime materialization; the runtime action middleware evaluates the engine permission directly and only resolves runtime inventory for a non-broad `resource_aware` request.
 - [ ] ⬜ For `resource_aware`, push allowed keys/tenant ids into the engine query when the engine API supports it.
 - [ ] ⬜ Add engine-adapter query capability metadata for process keys, decision keys, tenant filters, instance lineage, history, jobs, incidents, batches, and counts.
 - [x] ✅ Permit bounded post-filtering only with an explicit result/page cap; otherwise fail closed with `runtime_filter_not_supported` rather than fetching an unbounded central-engine collection. Resource-aware jobs, job definitions, external-task queries, and fetch-and-lock use a server-enforced 100-item bound; jobs/job definitions also push process-definition keys into engine queries.
-- [ ] ⬜ Resolve detail/mutation objects live from the engine or verified inventory before evaluation; never trust a client-supplied process key for an instance/job/incident id.
-- [ ] ⬜ For batch/migration requests, resolve and evaluate every affected stable parent resource before invoking the engine.
+- [x] ✅ Resolve detail/mutation objects live from the engine or verified inventory before evaluation; runtime definition guards fetch the object by id or key, resolve its authoritative process/decision lineage, require an active tenant-visible inventory row, and then evaluate that resource rather than trusting a client-supplied key.
+- [x] ✅ For batch/migration requests, resolve and evaluate every affected stable parent resource before invoking the engine. Instance-selection guards fetch each selected instance and its process-definition lineage; migration guards resolve both source and target definitions and validate any selected instances against the resolved source.
 - [ ] ⬜ Return sanitized per-row action decisions only for rows already visible to the principal.
 - [x] ✅ Keep `GET /api/authz/me/permissions` limited to platform, project, and engine navigation snapshots; the route explicitly serializes only platform, project, and engine permissions and regression coverage proves runtime-resource keys and tenant lineage cannot enter the client snapshot.
 - [ ] ⬜ Invalidate runtime materialization/filter caches on deployment, discovery, receipt, tenant/key change, assignment, role, mapping, policy, and engine lifecycle changes.
