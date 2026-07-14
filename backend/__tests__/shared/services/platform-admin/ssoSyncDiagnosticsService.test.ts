@@ -800,17 +800,13 @@ describe('ssoSyncDiagnosticsService', () => {
       {
         id: 'assignment-decommissioned',
         tenantId: 'tenant-a',
-        userId: 'user-2',
         principalType: 'user',
         principalId: 'user-2',
         roleId: 'system.engine.deployer',
-        resourceType: 'engine',
-        resourceId: 'engine-decommissioned',
         scopeType: 'engine',
         scopeId: 'engine-decommissioned',
         source: 'sso',
-        sourceMappingId: 'assignment-mapping-engine',
-        sourceRef: null,
+        sourceRef: 'legacy_sso:microsoft:mapping:assignment-mapping-engine',
       },
     ];
     const engines = [

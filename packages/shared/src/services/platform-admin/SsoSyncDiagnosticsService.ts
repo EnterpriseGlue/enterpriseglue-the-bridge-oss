@@ -226,7 +226,26 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
 }
 
 function sourceMappingId(sourceMappingId: string | null | undefined, sourceRef: string | null | undefined): string | null {
-  return sourceMappingId || sourceRef || null;
+  if (sourceMappingId) return sourceMappingId;
+  const normalizedSourceRef = sourceRef || '';
+  const marker = ':mapping:';
+  const markerIndex = normalizedSourceRef.lastIndexOf(marker);
+  return markerIndex >= 0
+    ? normalizedSourceRef.slice(markerIndex + marker.length) || null
+    : normalizedSourceRef || null;
+}
+
+function assignmentUserId(assignment: Pick<RbacRoleAssignment, 'principalType' | 'principalId' | 'userId'>): string | null {
+  return assignment.principalType === 'user'
+    ? assignment.principalId || assignment.userId
+    : assignment.userId;
+}
+
+function assignmentScope(assignment: Pick<RbacRoleAssignment, 'scopeType' | 'scopeId' | 'resourceType' | 'resourceId'>): { type: string | null; id: string | null } {
+  return {
+    type: assignment.scopeType || assignment.resourceType,
+    id: assignment.scopeId ?? assignment.resourceId,
+  };
 }
 
 function parseClaimsSnapshot(claimsJson: string | null | undefined): SsoClaims | null {
@@ -1159,6 +1178,8 @@ class SsoSyncDiagnosticsServiceClass {
       for (const assignment of assignments) {
         const mappingId = sourceMappingId(assignment.sourceMappingId, assignment.sourceRef);
         const mapping = mappingId ? assignmentMappingById.get(mappingId) : null;
+        const userId = assignmentUserId(assignment);
+        const scope = assignmentScope(assignment);
         if (providerId && mapping && !providerMatches(providerId, mapping.providerId)) continue;
         if (providerId && !mapping) continue;
 
@@ -1170,7 +1191,7 @@ class SsoSyncDiagnosticsServiceClass {
             mappingId,
             resourceType: 'role_assignment',
             resourceId: assignment.id,
-            userId: assignment.userId,
+            userId,
             message: 'SSO-managed role assignment no longer has a matching source mapping.',
             details: { roleId: assignment.roleId, sourceMappingId: assignment.sourceMappingId, sourceRef: assignment.sourceRef },
           });
@@ -1182,14 +1203,14 @@ class SsoSyncDiagnosticsServiceClass {
             mappingId,
             resourceType: 'role_assignment',
             resourceId: assignment.id,
-            userId: assignment.userId,
+            userId,
             message: 'SSO-managed role assignment was created by an inactive source mapping.',
             details: { roleId: assignment.roleId },
           });
         }
 
-        if (assignment.resourceType === 'engine' && assignment.resourceId) {
-          const engine = engineById.get(assignment.resourceId);
+        if (scope.type === 'engine' && scope.id) {
+          const engine = engineById.get(scope.id);
           if (!engine) {
             await recordDiagnosticEvent({
               severity: 'warning',
@@ -1197,8 +1218,8 @@ class SsoSyncDiagnosticsServiceClass {
               mappingType: 'sso_assignment_mapping',
               mappingId,
               resourceType: 'engine',
-              resourceId: assignment.resourceId,
-              userId: assignment.userId,
+              resourceId: scope.id,
+              userId,
               message: 'SSO-managed role assignment references a missing engine.',
               details: { roleId: assignment.roleId, assignmentId: assignment.id },
             });
@@ -1209,8 +1230,8 @@ class SsoSyncDiagnosticsServiceClass {
               mappingType: 'sso_assignment_mapping',
               mappingId,
               resourceType: 'engine',
-              resourceId: assignment.resourceId,
-              userId: assignment.userId,
+              resourceId: scope.id,
+              userId,
               message: 'SSO-managed role assignment references a decommissioned engine.',
               details: { roleId: assignment.roleId, assignmentId: assignment.id },
             });
@@ -1219,15 +1240,15 @@ class SsoSyncDiagnosticsServiceClass {
 
         if (mapping?.isActive) {
           const expectedTargets = assignmentTargetsByMappingId.get(mapping.id) || resolveAssignmentTargetIds(mapping);
-          if (expectedTargets.size > 0 && !expectedTargets.has(assignment.resourceId || null)) {
+          if (expectedTargets.size > 0 && !expectedTargets.has(scope.id)) {
             await recordDiagnosticEvent({
               severity: 'warning',
               type: 'sso_assignment.target_no_longer_matches',
               mappingType: 'sso_assignment_mapping',
               mappingId: mapping.id,
-              resourceType: assignment.resourceType || null,
-              resourceId: assignment.resourceId,
-              userId: assignment.userId,
+              resourceType: scope.type,
+              resourceId: scope.id,
+              userId,
               message: 'SSO-managed role assignment no longer matches its source mapping target selector.',
               details: {
                 roleId: assignment.roleId,
@@ -1446,6 +1467,8 @@ class SsoSyncDiagnosticsServiceClass {
       for (const assignment of assignments) {
         const mappingId = sourceMappingId(assignment.sourceMappingId, assignment.sourceRef);
         const mapping = mappingId ? assignmentMappingById.get(mappingId) : null;
+        const userId = assignmentUserId(assignment);
+        const scope = assignmentScope(assignment);
         if (providerId && !mapping) continue;
 
         let reason: string | null = null;
@@ -1455,7 +1478,7 @@ class SsoSyncDiagnosticsServiceClass {
         } else if (!mapping.isActive) {
           reason = 'mapping_inactive';
         } else {
-          reason = providerStatusReason(mapping.providerId, assignment.userId);
+          reason = providerStatusReason(mapping.providerId, userId);
         }
         if (!reason && mapping?.isActive) {
           disabledRiskReasons = await getDisabledRiskReasons(mapping);
@@ -1463,8 +1486,8 @@ class SsoSyncDiagnosticsServiceClass {
             reason = 'platform_setting_disabled';
           }
         }
-        if (!reason && mapping?.isActive && assignment.resourceType === 'engine' && assignment.resourceId) {
-          const engine = engineById.get(assignment.resourceId);
+        if (!reason && mapping?.isActive && scope.type === 'engine' && scope.id) {
+          const engine = engineById.get(scope.id);
           if (!engine) {
             reason = 'engine_missing';
           } else if (isDecommissionedEngine(engine)) {
@@ -1472,7 +1495,7 @@ class SsoSyncDiagnosticsServiceClass {
           } else if (mapping.syncMode === 'authoritative') {
             const expectedTargets = expectedTargetsByMappingId.get(mapping.id) || resolveAssignmentTargetIds(mapping);
             expectedTargetsByMappingId.set(mapping.id, expectedTargets);
-            if (!expectedTargets.has(assignment.resourceId || null)) {
+            if (!expectedTargets.has(scope.id)) {
               reason = 'target_no_longer_matches';
             }
           }
@@ -1506,13 +1529,13 @@ class SsoSyncDiagnosticsServiceClass {
           mappingId,
           resourceType: 'role_assignment',
           resourceId: assignment.id,
-          userId: assignment.userId,
+          userId,
           message: 'Removed stale SSO-managed role assignment.',
           details: {
             reason,
             roleId: assignment.roleId,
-            assignmentResourceType: assignment.resourceType,
-            assignmentResourceId: assignment.resourceId,
+            assignmentResourceType: scope.type,
+            assignmentResourceId: scope.id,
             sourceMappingId: assignment.sourceMappingId,
             sourceRef: assignment.sourceRef,
             disabledRiskReasons,

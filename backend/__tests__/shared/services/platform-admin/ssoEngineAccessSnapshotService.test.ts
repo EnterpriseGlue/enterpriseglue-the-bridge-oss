@@ -150,7 +150,7 @@ describe('ssoEngineAccessSnapshotService', () => {
     expect(insert).not.toHaveBeenCalled();
   });
 
-  it('marks SSO snapshots removed without touching non-SSO assignments', async () => {
+  it('marks canonical SSO snapshots removed without touching non-SSO assignments', async () => {
     const update = vi.fn().mockResolvedValue(undefined);
     const snapshotQb = qb(snapshotRow());
     const store = {
@@ -169,10 +169,9 @@ describe('ssoEngineAccessSnapshotService', () => {
       principalType: 'user',
       principalId: 'user-1',
       roleId: 'system.engine.operator',
-      resourceType: 'engine',
-      resourceId: 'engine-1',
+      scopeType: 'engine',
+      scopeId: 'engine-1',
       source: 'sso',
-      sourceMappingId: 'mapping-1',
       sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
     } as RbacRoleAssignment, {
       status: 'removed_by_sso',

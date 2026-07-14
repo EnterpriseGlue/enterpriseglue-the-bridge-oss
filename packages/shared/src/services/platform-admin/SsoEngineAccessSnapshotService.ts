@@ -191,9 +191,6 @@ function extractProviderAppRoleIds(claims: SsoClaims | null | undefined): string
 }
 
 async function resolveAssignmentEngineIds(store: SnapshotStore, assignment: Pick<RbacRoleAssignment, 'resourceId' | 'scopeType' | 'scopeId'>): Promise<string[]> {
-  if (assignment.resourceId) {
-    return [assignment.resourceId];
-  }
   if (assignment.scopeType === 'engine' && assignment.scopeId) {
     return [assignment.scopeId];
   }
@@ -204,15 +201,24 @@ async function resolveAssignmentEngineIds(store: SnapshotStore, assignment: Pick
     });
     return rows.map((row) => row.engineId).sort();
   }
+  if (assignment.resourceId) {
+    return [assignment.resourceId];
+  }
   return [];
 }
 
+function assignmentMappingId(assignment: Pick<RbacRoleAssignment, 'sourceMappingId' | 'sourceRef'>): string | null {
+  if (assignment.sourceMappingId) return assignment.sourceMappingId;
+  const sourceRef = assignment.sourceRef || '';
+  const marker = ':mapping:';
+  const markerIndex = sourceRef.lastIndexOf(marker);
+  return markerIndex >= 0 ? sourceRef.slice(markerIndex + marker.length) || null : sourceRef || null;
+}
+
 function roleAssignmentMatchesEngine(assignment: RbacRoleAssignment, engineId: string, materializedEngineSetIds: Set<string>): boolean {
-  // Transition diagnostics must inspect pre-canonical rows while local data
-  // migrations are still in progress. Authorization never uses this fallback.
-  if (assignment.resourceType === 'engine' && assignment.resourceId === engineId) return true;
   if (assignment.scopeType === 'engine' && assignment.scopeId === engineId) return true;
-  return assignment.scopeType === 'engine_set' && Boolean(assignment.scopeId && materializedEngineSetIds.has(assignment.scopeId));
+  if (assignment.scopeType === 'engine_set' && assignment.scopeId && materializedEngineSetIds.has(assignment.scopeId)) return true;
+  return assignment.resourceType === 'engine' && assignment.resourceId === engineId;
 }
 
 export class SsoEngineAccessSnapshotService {
@@ -327,7 +333,7 @@ export class SsoEngineAccessSnapshotService {
   }
 
   async markAssignmentRemoved(store: SnapshotStore, assignment: RbacRoleAssignment, input: SsoSnapshotRemovalInput): Promise<void> {
-    const mappingId = assignment.sourceMappingId || assignment.sourceRef;
+    const mappingId = assignmentMappingId(assignment);
     if (assignment.source !== 'sso' || !mappingId || !assignment.principalId) return;
     const snapshotRepo = store.getRepository(SsoEngineAccessSnapshot);
     const engineIds = await resolveAssignmentEngineIds(store, assignment);
