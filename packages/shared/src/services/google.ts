@@ -14,6 +14,9 @@ import { authzGroupService } from './platform-admin/AuthzGroupService.js';
 import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIdentityService.js';
 import { ssoProviderService } from './platform-admin/SsoProviderService.js';
 import { ssoSyncDiagnosticsService, type SsoSyncCounts } from './platform-admin/SsoSyncDiagnosticsService.js';
+import { externalIdentityService } from './platform-admin/ExternalIdentityService.js';
+
+const LEGACY_GOOGLE_EXTERNAL_PROVIDER_ID = 'legacy:google';
 
 /**
  * Google user info from ID token
@@ -231,16 +234,32 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo) {
   try {
     const result = await dataSource.transaction(async (manager) => {
       const userRepo = manager.getRepository(User);
-      const existingByGoogleId = await userRepo.findOneBy({ googleId: userInfo.sub });
+      const linkedUserId = await externalIdentityService.getActiveLinkedUserIdWithManager(manager, {
+        providerId: LEGACY_GOOGLE_EXTERNAL_PROVIDER_ID,
+        subjectId: userInfo.sub,
+      });
+      const existingByExternalIdentity = linkedUserId ? await userRepo.findOneBy({ id: linkedUserId }) : null;
+      if (linkedUserId && !existingByExternalIdentity) throw new Error('External identity references a missing user account');
+      const existingByGoogleId = existingByExternalIdentity ? null : await userRepo.findOneBy({ googleId: userInfo.sub });
+      const existingUser = existingByExternalIdentity || existingByGoogleId;
 
-      if (existingByGoogleId) {
-        const user = existingByGoogleId;
+      if (existingUser) {
+        const user = existingUser;
         await userRepo.update({ id: user.id }, {
           email: userInfo.email,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
           lastLoginAt: now,
           updatedAt: now,
+        });
+        await externalIdentityService.upsertWithManager(manager, {
+          providerId: LEGACY_GOOGLE_EXTERNAL_PROVIDER_ID,
+          providerType: 'google',
+          subjectId: userInfo.sub,
+          directoryTenantId: userInfo.hd || null,
+          userId: user.id,
+          emailHint: userInfo.email,
+          now,
         });
         syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole);
         return { ...user, email: userInfo.email, firstName: userInfo.given_name || user.firstName, lastName: userInfo.family_name || user.lastName };
@@ -250,23 +269,41 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo) {
       if (existingByEmail) {
         const user = existingByEmail;
         await userRepo.update({ id: user.id }, {
-          authProvider: 'google', googleId: userInfo.sub,
+          authProvider: 'google',
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
           lastLoginAt: now, updatedAt: now,
           mustResetPassword: false, failedLoginAttempts: 0, lockedUntil: null,
         });
+        await externalIdentityService.upsertWithManager(manager, {
+          providerId: LEGACY_GOOGLE_EXTERNAL_PROVIDER_ID,
+          providerType: 'google',
+          subjectId: userInfo.sub,
+          directoryTenantId: userInfo.hd || null,
+          userId: user.id,
+          emailHint: userInfo.email,
+          now,
+        });
         syncCounts = await syncGoogleAuthorizationForUser(manager, user.id, userInfo, ssoClaims, resolvedRole);
-        return { ...user, authProvider: 'google', googleId: userInfo.sub, firstName: userInfo.given_name || user.firstName, lastName: userInfo.family_name || user.lastName };
+        return { ...user, authProvider: 'google', firstName: userInfo.given_name || user.firstName, lastName: userInfo.family_name || user.lastName };
       }
 
       const userId = generateId();
       await userRepo.insert({
-        id: userId, email: userInfo.email, authProvider: 'google', passwordHash: null, googleId: userInfo.sub,
+        id: userId, email: userInfo.email, authProvider: 'google', passwordHash: null, googleId: null,
         firstName: userInfo.given_name || null, lastName: userInfo.family_name || null, platformRole: 'user',
         isActive: true, mustResetPassword: false, failedLoginAttempts: 0, createdAt: now, updatedAt: now, lastLoginAt: now,
       });
       const newUser = await userRepo.findOneBy({ id: userId });
+      await externalIdentityService.upsertWithManager(manager, {
+        providerId: LEGACY_GOOGLE_EXTERNAL_PROVIDER_ID,
+        providerType: 'google',
+        subjectId: userInfo.sub,
+        directoryTenantId: userInfo.hd || null,
+        userId,
+        emailHint: userInfo.email,
+        now,
+      });
       syncCounts = await syncGoogleAuthorizationForUser(manager, userId, userInfo, ssoClaims, resolvedRole);
       return newUser;
     });

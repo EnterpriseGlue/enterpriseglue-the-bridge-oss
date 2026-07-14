@@ -6,8 +6,10 @@ import { authzGroupService } from '@enterpriseglue/shared/services/platform-admi
 const normalizedIdentityService = vi.hoisted(() => ({ upsertIdentityWithManager: vi.fn() }));
 const syncDiagnosticsService = vi.hoisted(() => ({ startRun: vi.fn(), completeRun: vi.fn(), failRun: vi.fn() }));
 const claimsMappingService = vi.hoisted(() => ({ resolveRoleFromClaims: vi.fn() }));
+const externalIdentityService = vi.hoisted(() => ({ getActiveLinkedUserIdWithManager: vi.fn(), upsertWithManager: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js', () => ({ externalIdentityService }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoProviderService.js', () => ({
   ssoProviderService: {
@@ -43,6 +45,8 @@ describe('google service', () => {
     syncDiagnosticsService.startRun.mockResolvedValue('sync-run-1');
     syncDiagnosticsService.completeRun.mockResolvedValue(undefined);
     syncDiagnosticsService.failRun.mockResolvedValue(undefined);
+    externalIdentityService.getActiveLinkedUserIdWithManager.mockResolvedValue(null);
+    externalIdentityService.upsertWithManager.mockResolvedValue({ id: 'external-identity-1', created: true });
   });
 
   it('returns false when Google auth not configured', async () => {
@@ -71,6 +75,9 @@ describe('google service', () => {
       { id: 'user-1' },
       expect.not.objectContaining({ platformRole: expect.anything() })
     );
+    expect(externalIdentityService.upsertWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
+      providerId: 'legacy:google', providerType: 'google', subjectId: 'google-subject-1', userId: 'user-1',
+    }));
     expect(syncDiagnosticsService.completeRun).toHaveBeenCalledWith('sync-run-1', expect.objectContaining({ groupMembershipsCreated: 3, groupMembershipsRemoved: 1 }));
   });
 });
