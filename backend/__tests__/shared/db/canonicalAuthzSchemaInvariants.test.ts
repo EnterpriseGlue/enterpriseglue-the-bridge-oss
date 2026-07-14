@@ -17,6 +17,7 @@ import { AddRuntimeResourceSets1700000000054 } from '@enterpriseglue/shared/db/m
 import { AddRuntimeResourceInventory1700000000055 } from '@enterpriseglue/shared/db/migrations/1700000000055-add-runtime-resource-inventory.js';
 import { AddDeploymentHistoryLineage1700000000058 } from '@enterpriseglue/shared/db/migrations/1700000000058-add-deployment-history-lineage.js';
 import { RequireCanonicalRoleAssignmentShape1700000000084 } from '@enterpriseglue/shared/db/migrations/1700000000084-require-canonical-role-assignment-shape.js';
+import { AddRoleAssignmentSourceRefIndex1700000000085 } from '@enterpriseglue/shared/db/migrations/1700000000085-add-role-assignment-source-ref-index.js';
 import { externalIdentityKey } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
 
 function column(target: Function, propertyName: string) {
@@ -49,6 +50,7 @@ describe('canonical authorization persistence schema invariants', () => {
 
   it('requires canonical assignment shape only after a fail-closed backfill', () => {
     expect(new RequireCanonicalRoleAssignmentShape1700000000084().name).toBe('RequireCanonicalRoleAssignmentShape1700000000084');
+    expect(new AddRoleAssignmentSourceRefIndex1700000000085().name).toBe('AddRoleAssignmentSourceRefIndex1700000000085');
   });
 
   it('scopes custom role key uniqueness by canonical tenant identity', () => {

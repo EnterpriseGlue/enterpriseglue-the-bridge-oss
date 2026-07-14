@@ -9,6 +9,7 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_role_assignments_resource', ['resourceType', 'resourceId'])
 @Index('idx_role_assignments_scope', ['scopeType', 'scopeId'])
 @Index('idx_role_assignments_source', ['source', 'sourceMappingId'])
+@Index('idx_role_assignments_source_ref', ['source', 'sourceRef'])
 export class RbacRoleAssignment extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true })
   tenantId!: string | null;
