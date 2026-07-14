@@ -324,6 +324,7 @@ export const CustomRoleUpdateSchema = CustomRoleAllowOnlyGuard.pipe(z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().max(2000).nullable().optional(),
   permissionIds: z.array(z.string().min(1)).min(1).optional(),
+  isAssignable: z.boolean().optional(),
   isArchived: z.boolean().optional(),
 }));
 

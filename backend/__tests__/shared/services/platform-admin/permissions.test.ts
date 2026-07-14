@@ -2322,6 +2322,35 @@ describe('permissionService', () => {
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ details: expect.stringContaining('drifted') }));
   });
 
+  it('updates custom role assignability without allowing archived roles to become assignable', async () => {
+    const roleUpdate = vi.fn();
+    const auditInsert = vi.fn();
+    const role = {
+      id: 'role-assignable', tenantId: null, name: 'Operators', scope: 'engine', kind: 'custom', isEditable: true,
+      source: 'manual', ownershipMode: 'manual', isArchived: false, isAssignable: true,
+    };
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { update: roleUpdate };
+        if (entity === AuditLog) return { insert: auditInsert };
+        throw new Error('Unexpected repository');
+      },
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { findOne: vi.fn().mockResolvedValue(role) };
+        throw new Error('Unexpected repository');
+      },
+      transaction: async (callback: any) => callback(manager),
+    });
+
+    await permissionService.updateCustomRole('role-assignable', { isAssignable: false, updatedById: 'admin-1' });
+    expect(roleUpdate).toHaveBeenCalledWith('role-assignable', expect.objectContaining({ isAssignable: false }));
+
+    await permissionService.updateCustomRole('role-assignable', { isArchived: true, isAssignable: true, updatedById: 'admin-1' });
+    expect(roleUpdate).toHaveBeenLastCalledWith('role-assignable', expect.objectContaining({ isArchived: true, isAssignable: false }));
+  });
+
   it('writes audit records for custom role lifecycle changes', async () => {
     const roleInsert = vi.fn().mockResolvedValue(undefined);
     const roleUpdate = vi.fn().mockResolvedValue(undefined);

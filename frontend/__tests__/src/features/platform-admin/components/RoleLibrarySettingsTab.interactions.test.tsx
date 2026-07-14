@@ -14,9 +14,9 @@ vi.mock('@src/shared/api/client', () => ({ apiClient: { get: vi.fn(), post: vi.f
 vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: () => authState }));
 
 const roles = [
-  { id: 'role-system', key: 'system.engine.operator', name: 'System Operator', description: 'Default operator', scope: 'engine', kind: 'system', isEditable: false, isArchived: false, permissionCount: 1 },
-  { id: 'role-custom', key: 'custom.engine.operator', name: 'Custom Operator', description: 'Editable role', scope: 'engine', kind: 'custom', isEditable: true, isArchived: false, permissionCount: 1 },
-  { id: 'role-config', key: 'custom.engine.locked', name: 'Config Locked Operator', description: 'Bundle-owned role', scope: 'engine', kind: 'custom', isEditable: true, isArchived: false, source: 'config', ownershipMode: 'config_locked', permissionCount: 1 },
+  { id: 'role-system', key: 'system.engine.operator', name: 'System Operator', description: 'Default operator', scope: 'engine', kind: 'system', isEditable: false, isAssignable: true, isArchived: false, permissionCount: 1 },
+  { id: 'role-custom', key: 'custom.engine.operator', name: 'Custom Operator', description: 'Editable role', scope: 'engine', kind: 'custom', isEditable: true, isAssignable: true, isArchived: false, permissionCount: 1 },
+  { id: 'role-config', key: 'custom.engine.locked', name: 'Config Locked Operator', description: 'Bundle-owned role', scope: 'engine', kind: 'custom', isEditable: true, isAssignable: true, isArchived: false, source: 'config', ownershipMode: 'config_locked', permissionCount: 1 },
 ];
 const permissions = [
   { key: 'engine:instance:view', scope: 'engine', category: 'Runtime', label: 'View instances', description: 'View runtime instances' },
@@ -66,9 +66,10 @@ describe('RoleLibrarySettingsTab interactions', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
     fireEvent.change(document.getElementById('role-library-edit-name')!, { target: { value: 'Production operator' } });
     fireEvent.change(document.getElementById('role-library-edit-description')!, { target: { value: 'Editable metadata' } });
+    fireEvent.click(screen.getByLabelText('Assignable to principals'));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith('/api/authz/roles/role-custom', {
-      name: 'Production operator', description: 'Editable metadata', permissionIds: ['engine:instance:view', 'engine:members:manage'],
+      name: 'Production operator', description: 'Editable metadata', permissionIds: ['engine:instance:view', 'engine:members:manage'], isAssignable: false,
     }));
   });
 

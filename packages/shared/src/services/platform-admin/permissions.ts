@@ -302,6 +302,7 @@ export interface UpdateCustomRoleInput {
   name?: string;
   description?: string | null;
   permissionIds?: Permission[];
+  isAssignable?: boolean;
   isArchived?: boolean;
   updatedById?: string;
 }
@@ -2008,7 +2009,9 @@ class PermissionServiceClass {
     }
     if (input.isArchived !== undefined) {
       updates.isArchived = input.isArchived;
-      updates.isAssignable = !input.isArchived;
+      updates.isAssignable = input.isArchived ? false : input.isAssignable ?? role.isAssignable;
+    } else if (input.isAssignable !== undefined) {
+      updates.isAssignable = input.isAssignable;
     }
     const permissionIds = input.permissionIds !== undefined
       ? await this.validateRolePermissions(role.scope as RoleScope, input.permissionIds)

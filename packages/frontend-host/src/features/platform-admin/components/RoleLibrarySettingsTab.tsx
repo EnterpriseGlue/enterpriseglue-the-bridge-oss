@@ -14,7 +14,7 @@ import {
 } from './configRoleTemplate';
 
 type Scope = 'platform' | 'project' | 'engine' | 'engine_runtime_resource';
-interface Role { id: string; key: string; name: string; description: string | null; scope: Scope; kind: 'system' | 'custom'; isEditable: boolean; isArchived: boolean; source?: string; sourceRef?: string | null; ownershipMode?: 'manual' | 'config_locked' | 'config_warn'; driftStatus?: string | null; permissionCount: number; }
+interface Role { id: string; key: string; name: string; description: string | null; scope: Scope; kind: 'system' | 'custom'; isEditable: boolean; isAssignable: boolean; isArchived: boolean; source?: string; sourceRef?: string | null; ownershipMode?: 'manual' | 'config_locked' | 'config_warn'; driftStatus?: string | null; permissionCount: number; }
 interface RoleDetail extends Role { permissions: string[]; }
 export interface RoleLibraryPermission { key: string; scope: Scope; category: string; label: string; description: string; }
 
@@ -113,7 +113,7 @@ export default function RoleLibrarySettingsTab() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [roleSearch, setRoleSearch] = useState('');
   const [draft, setDraft] = useState<string[]>([]);
-  const [metadataDraft, setMetadataDraft] = useState({ name: '', description: '' });
+  const [metadataDraft, setMetadataDraft] = useState({ name: '', description: '', isAssignable: true });
   const [createOpen, setCreateOpen] = useState(false);
   const [createTarget, setCreateTarget] = useState<'manual' | 'config'>('manual');
   const [archiveConfirmation, setArchiveConfirmation] = useState(false);
@@ -128,8 +128,8 @@ export default function RoleLibrarySettingsTab() {
 
   useEffect(() => {
     setDraft(detail?.permissions || []);
-    setMetadataDraft({ name: detail?.name || '', description: detail?.description || '' });
-  }, [detail?.id, detail?.permissions?.join('|'), detail?.name, detail?.description]);
+    setMetadataDraft({ name: detail?.name || '', description: detail?.description || '', isAssignable: detail?.isAssignable ?? true });
+  }, [detail?.id, detail?.permissions?.join('|'), detail?.name, detail?.description, detail?.isAssignable]);
 
   const visibleRoles = roles.filter((role) => `${role.name} ${role.key}`.toLowerCase().includes(roleSearch.toLowerCase()));
   const selectedRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === selected?.scope);
@@ -140,12 +140,13 @@ export default function RoleLibrarySettingsTab() {
   const hasUnsavedRoleChanges = Boolean(detail && (
     metadataDraft.name !== detail.name
     || metadataDraft.description !== (detail.description || '')
+    || metadataDraft.isAssignable !== (detail.isAssignable ?? true)
     || draft.length !== detail.permissions.length
     || draft.some((permission) => !detail.permissions.includes(permission))
   ));
   const toggle = (key: string, checked: boolean) => setDraft((current) => checked ? [...new Set([...current, key])] : current.filter((item) => item !== key));
   const save = useMutation({
-    mutationFn: () => apiClient.put(`/api/authz/roles/${selected!.id}`, { name: metadataDraft.name.trim(), description: metadataDraft.description.trim() || null, permissionIds: draft }),
+    mutationFn: () => apiClient.put(`/api/authz/roles/${selected!.id}`, { name: metadataDraft.name.trim(), description: metadataDraft.description.trim() || null, permissionIds: draft, isAssignable: metadataDraft.isAssignable }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rbac-role', selected?.id] });
       queryClient.invalidateQueries({ queryKey: ['rbac-roles'] });
@@ -224,7 +225,7 @@ export default function RoleLibrarySettingsTab() {
       <div>{selected && detail ? <>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-4)', alignItems: 'start', flexWrap: 'wrap' }}><div><h4 style={{ margin: 0 }}>{selected.name}</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{selected.description || 'No description'} · {selected.permissionCount} permissions</p></div><div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>{selected.kind === 'system' && <><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={() => startCreate(true)}>Duplicate</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Download} onClick={() => startCreate(true, 'config')}>Export config role</Button></GuardedAction></>}</div></div>
         {selected.source === 'config' && <InlineNotification kind={configWarnEditable ? 'warning' : 'info'} title={configWarnEditable ? 'Configuration warning mode' : 'Managed by configuration'} subtitle={configWarnEditable ? 'Local edits are allowed and will be marked as drift until the configuration bundle is reconciled.' : 'Update this role in its configuration bundle.'} hideCloseButton lowContrast style={{ marginTop: 'var(--spacing-4)' }} />}
-        {editable && <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}><TextInput id="role-library-edit-name" labelText="Role name" value={metadataDraft.name} onChange={(event) => setMetadataDraft((current) => ({ ...current, name: event.target.value }))} /><TextArea id="role-library-edit-description" labelText="Description" value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} rows={2} /></div><div style={{ position: 'sticky', top: 'var(--spacing-3)', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', marginTop: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => { setDraft(detail.permissions); setMetadataDraft({ name: detail.name, description: detail.description || '' }); }}>Reset</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button aria-label="Archive custom role" kind="danger--tertiary" size="sm" disabled={archive.isPending} onClick={() => setArchiveConfirmation(true)}>Archive</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={!hasUnsavedRoleChanges || save.isPending || !metadataDraft.name.trim()} onClick={() => save.mutate()}>Save</Button></GuardedAction></div></>}
+        {editable && <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}><TextInput id="role-library-edit-name" labelText="Role name" value={metadataDraft.name} onChange={(event) => setMetadataDraft((current) => ({ ...current, name: event.target.value }))} /><TextArea id="role-library-edit-description" labelText="Description" value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} rows={2} /></div><Checkbox id="role-library-edit-assignable" labelText="Assignable to principals" checked={metadataDraft.isAssignable} onChange={(_event, { checked }) => setMetadataDraft((current) => ({ ...current, isAssignable: Boolean(checked) }))} /><div style={{ position: 'sticky', top: 'var(--spacing-3)', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', marginTop: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => { setDraft(detail.permissions); setMetadataDraft({ name: detail.name, description: detail.description || '', isAssignable: detail.isAssignable ?? true }); }}>Reset</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button aria-label="Archive custom role" kind="danger--tertiary" size="sm" disabled={archive.isPending} onClick={() => setArchiveConfirmation(true)}>Archive</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={!hasUnsavedRoleChanges || save.isPending || !metadataDraft.name.trim()} onClick={() => save.mutate()}>Save</Button></GuardedAction></div></>}
         <div style={{ marginTop: 'var(--spacing-5)' }}><PermissionPicker permissions={selectedRolePermissions} draft={draft} editable={editable && manage.allowed} idPrefix="role-library" onToggle={toggle} /></div>
       </> : <InlineNotification kind="info" title="Select a role" subtitle="Choose a role from the library to inspect its permissions." hideCloseButton lowContrast />}</div>
     </div>

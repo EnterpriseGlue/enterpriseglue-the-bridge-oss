@@ -1993,9 +1993,9 @@ Use a two-state role workspace inside the existing Access Control `Roles` tab:
 
 Editor behavior:
 
-- [ ] ⬜ Keep system roles read-only and expose `Duplicate as custom role` as the primary action.
-- [ ] ⬜ Allow custom role name, description, scope-compatible permissions, assignability, and archive state to be edited according to exact actions.
-- [ ] ⬜ Keep scope immutable after creation; changing scope requires duplication because permission and assignment semantics change.
+- [x] ✅ Keep system roles read-only and expose `Duplicate as custom role` as the primary action.
+- [x] ✅ Allow custom role name, description, scope-compatible permissions, assignability, and archive state to be edited according to exact actions. Archiving always makes the role unavailable for new assignments.
+- [x] ✅ Keep scope immutable after creation; changing scope requires duplication because permission and assignment semantics change.
 - [ ] ⬜ Add search, category filter, risk filter, `Selected only` toggle, selected permission count, and unsaved-change protection.
 - [ ] ⬜ Show permission key, plain-language description, risk tag, and implications without requiring a separate Permissions tab lookup.
 - [ ] ⬜ Require the existing acknowledgement flow for sensitive permissions before save.

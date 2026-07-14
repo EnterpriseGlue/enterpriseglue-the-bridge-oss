@@ -810,6 +810,18 @@ describe('platform-admin authz routes', () => {
     expect(response.body.id).toBe('00000000-0000-4000-8000-000000000010');
   });
 
+  it('updates custom role assignability', async () => {
+    const response = await request(app)
+      .put('/api/authz/roles/custom.engine.operator-lite')
+      .send({ isAssignable: false });
+
+    expect(response.status).toBe(200);
+    expect(permissionService.updateCustomRole).toHaveBeenCalledWith('custom.engine.operator-lite', expect.objectContaining({
+      isAssignable: false,
+      updatedById: 'user-1',
+    }));
+  });
+
   it('rejects deny fields on custom role creation', async () => {
     const response = await request(app)
       .post('/api/authz/roles')
