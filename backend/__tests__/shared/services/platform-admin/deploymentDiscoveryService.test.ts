@@ -52,4 +52,26 @@ describe('deploymentDiscoveryService', () => {
     expect(deploymentRepo.update).toHaveBeenCalledWith('history-1', expect.objectContaining({ camundaDeploymentName: 'new' }));
     expect(deploymentRepo.insert).not.toHaveBeenCalled();
   });
+
+  it('does not duplicate discovered history or artifacts when a deployment is replayed', async () => {
+    const { deploymentRepo, artifactRepo, resourceRepo } = setup();
+    deploymentRepo.find.mockResolvedValue([{
+      id: 'history-1', camundaDeploymentId: 'camunda-1', camundaDeploymentName: 'payment release',
+      camundaDeploymentTime: '2026-07-13T10:00:00.000Z', lineageQuality: 'discovered',
+    }]);
+    artifactRepo.find.mockResolvedValue([{
+      engineDeploymentId: 'history-1', artifactKind: 'process', artifactKey: 'payment-order', artifactVersion: 2, tenantId: null,
+    }]);
+    vi.mocked(getDeployments).mockResolvedValue([{ id: 'camunda-1', name: 'payment release', deploymentTime: '2026-07-13T10:00:00.000Z' }]);
+    resourceRepo.find.mockResolvedValue([{
+      resourceKind: 'process_definition', resourceKey: 'payment-order', engineResourceId: 'process:1', version: 2,
+      runtimeTenantId: '', deploymentId: 'camunda-1', tenantId: 'tenant-a',
+    }]);
+
+    await expect(deploymentDiscoveryService.reconcileEngine('engine-1', 'tenant-a')).resolves.toEqual({
+      created: 0, updated: 1, artifactsCreated: 0,
+    });
+    expect(deploymentRepo.insert).not.toHaveBeenCalled();
+    expect(artifactRepo.insert).not.toHaveBeenCalled();
+  });
 });
