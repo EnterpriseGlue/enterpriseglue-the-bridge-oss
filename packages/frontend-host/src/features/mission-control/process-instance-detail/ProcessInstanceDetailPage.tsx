@@ -149,13 +149,16 @@ export default function ProcessInstanceDetailPage() {
     // the authoritative route decide instead of suppressing a valid scoped
     // request client-side.
     historyProcessInstanceEnabled: true,
-    variablesEnabled: variablesReadDecision.allowed,
-    historicVariablesEnabled: historicVariablesReadDecision.allowed,
-    activityTreeEnabled: activityTreeReadDecision.allowed,
-    activityHistoryEnabled: activityHistoryReadDecision.allowed,
-    incidentsEnabled: incidentsReadDecision.allowed,
-    jobsEnabled: jobsReadDecision.allowed,
-    externalTasksEnabled: externalTasksReadDecision.allowed,
+    // These reads are independently authorized by the backend against the
+    // resolved runtime resource. Do not turn an intentionally incomplete
+    // engine-level browser snapshot into a client-side denial.
+    variablesEnabled: true,
+    historicVariablesEnabled: true,
+    activityTreeEnabled: true,
+    activityHistoryEnabled: true,
+    incidentsEnabled: true,
+    jobsEnabled: true,
+    externalTasksEnabled: true,
   })
   const {
     histQ,
