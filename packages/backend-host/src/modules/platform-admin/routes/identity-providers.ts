@@ -19,14 +19,14 @@ import { identityAdminJsonPayloadLimit } from '@enterpriseglue/shared/middleware
 import {
   IdentityProviderMembershipReplayRequestSchema,
   IdentityProviderMigrationReadinessQuerySchema,
+  IdentityProviderRequestSchema,
   IdentityProviderSyncEventsQuerySchema,
   IdentityProviderSyncRunsQuerySchema,
+  IdentityProviderUpdateSchema,
   LegacyIdentityProviderCutoverRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const router = Router();
-const schema = z.object({ key: z.string().min(1).max(128), protocol: z.enum(['oidc', 'saml', 'ldap']), isEnabled: z.boolean().optional(), authenticationMode: z.enum(['direct', 'claims_only']).optional(), directoryTenantId: z.string().optional().nullable(), configuration: z.record(z.string(), z.unknown()), sync: z.record(z.string(), z.unknown()).optional(), ownershipMode: z.string().max(64).optional(), sourceRef: z.string().optional().nullable() });
-
 const providerKeySchema = z.string().min(1).max(128);
 const legacyProviderIdSchema = z.string().min(1).max(128);
 
@@ -118,7 +118,7 @@ router.post('/api/identity/providers/:key/test-connection', requireAuth, identit
   await logAudit({ action: 'identity.provider.connection_test', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, ...result } });
   res.json(result);
 }));
-router.post('/api/identity/providers', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.manage'), identityAdminJsonPayloadLimit, validateBody(schema), asyncHandler(async (req, res) => {
+router.post('/api/identity/providers', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.manage'), identityAdminJsonPayloadLimit, validateBody(IdentityProviderRequestSchema), asyncHandler(async (req, res) => {
   const provider = await identityProviderService.upsert({ ...req.body, tenantId: req.tenant?.tenantId || null });
   await logAudit({
     action: 'identity.provider.create', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id,
@@ -126,7 +126,7 @@ router.post('/api/identity/providers', requireAuth, identityAdminLimiter, requir
   });
   res.status(201).json(provider);
 }));
-router.put('/api/identity/providers/:key', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.manage'), identityAdminJsonPayloadLimit, validateBody(schema.omit({ key: true }).partial()), asyncHandler(async (req, res) => {
+router.put('/api/identity/providers/:key', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.manage'), identityAdminJsonPayloadLimit, validateBody(IdentityProviderUpdateSchema), asyncHandler(async (req, res) => {
   const key = providerKeySchema.parse(req.params.key);
   const existing = await identityProviderService.getByKey(key, req.tenant?.tenantId || null);
   if (!existing) throw Errors.notFound('Identity provider not found');

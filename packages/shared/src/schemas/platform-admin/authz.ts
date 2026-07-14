@@ -1212,6 +1212,41 @@ export const IdentityProviderMigrationReadinessResponseSchema = z.object({
   ])),
 });
 
+export const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);
+export const IdentityProviderConfigurationSchema = z.record(z.string(), z.unknown());
+
+/** Configuration contains opaque secret references only; resolved values are never an API contract. */
+export const IdentityProviderRequestSchema = z.object({
+  key: z.string().min(1).max(128),
+  protocol: IdentityProviderProtocolSchema,
+  isEnabled: z.boolean().optional(),
+  authenticationMode: z.enum(['direct', 'claims_only']).optional(),
+  directoryTenantId: z.string().nullable().optional(),
+  configuration: IdentityProviderConfigurationSchema,
+  sync: z.record(z.string(), z.unknown()).optional(),
+  ownershipMode: z.string().max(64).optional(),
+  sourceRef: z.string().nullable().optional(),
+});
+
+export const IdentityProviderUpdateSchema = IdentityProviderRequestSchema.omit({ key: true }).partial();
+
+export const IdentityProviderResponseSchema = IdentityProviderRequestSchema.extend({
+  id: z.string(),
+  tenantId: z.string().nullable(),
+  isEnabled: z.boolean(),
+  authenticationMode: z.enum(['direct', 'claims_only']),
+  configurationJson: z.string(),
+  syncJson: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+}).omit({ configuration: true, sync: true });
+
+export const IdentityProviderConnectionTestResponseSchema = z.discriminatedUnion('protocol', [
+  z.object({ status: z.literal('connected'), protocol: z.literal('oidc'), issuer: z.string() }),
+  z.object({ status: z.literal('connected'), protocol: z.literal('saml'), entityDescriptorCount: z.number().int().nonnegative() }),
+  z.object({ status: z.literal('connected'), protocol: z.literal('ldap'), sampledIdentities: z.number().int().nonnegative() }),
+]);
+
 export const SsoAssignmentMappingSchema = z.object({
   id: z.string(),
   tenantId: z.string().nullable().optional(),

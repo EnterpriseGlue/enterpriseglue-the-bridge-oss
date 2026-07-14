@@ -2110,36 +2110,13 @@ registry.registerPath({
 
 // Provider-neutral identity providers. Configuration holds only references to
 // secrets; the values behind those references are never returned by this API.
-const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);
-const IdentityProviderConfigurationSchema = z.record(z.string(), z.unknown());
-const IdentityProviderRequestSchema = z.object({
-  key: z.string().min(1).max(128),
-  protocol: IdentityProviderProtocolSchema,
-  isEnabled: z.boolean().optional(),
-  authenticationMode: z.enum(['direct', 'claims_only']).optional(),
-  directoryTenantId: z.string().nullable().optional(),
-  configuration: IdentityProviderConfigurationSchema,
-  sync: z.record(z.string(), z.unknown()).optional(),
-  ownershipMode: z.string().max(64).optional(),
-  sourceRef: z.string().nullable().optional(),
-});
-const IdentityProviderResponseSchema = IdentityProviderRequestSchema.extend({
-  id: z.string(),
-  tenantId: z.string().nullable(),
-  isEnabled: z.boolean(),
-  authenticationMode: z.enum(['direct', 'claims_only']),
-  configurationJson: z.string(),
-  syncJson: z.string(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-}).omit({ configuration: true, sync: true });
-registry.register('IdentityProvider', IdentityProviderResponseSchema);
 const identityProviderMigrationSchemas = await import('./platform-admin/authz.js');
+registry.register('IdentityProvider', identityProviderMigrationSchemas.IdentityProviderResponseSchema);
 registry.registerPath({
   method: 'get',
   path: '/api/identity/providers',
   ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers'),
-  responses: { 200: { description: 'List identity providers', content: { 'application/json': { schema: z.array(IdentityProviderResponseSchema) } } } },
+  responses: { 200: { description: 'List identity providers', content: { 'application/json': { schema: z.array(identityProviderMigrationSchemas.IdentityProviderResponseSchema) } } } },
 });
 const LegacyIdentityProviderMigrationDraftSchema = z.object({
   legacyProvider: z.object({ id: z.string(), name: z.string(), type: z.enum(['microsoft', 'google', 'oidc', 'saml']), enabled: z.boolean(), clientSecretConfigured: z.boolean().optional(), signingCertificateConfigured: z.boolean().optional() }),
@@ -2188,7 +2165,7 @@ registry.registerPath({
   path: '/api/identity/providers/{key}',
   ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers/{key}'),
   request: { params: z.object({ key: z.string() }) },
-  responses: { 200: { description: 'Identity provider', content: { 'application/json': { schema: IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found' } },
+  responses: { 200: { description: 'Identity provider', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found' } },
 });
 const identityProviderDiagnosticSchemas = await import('./platform-admin/authz.js');
 registry.registerPath({
@@ -2209,15 +2186,15 @@ registry.registerPath({
   method: 'post',
   path: '/api/identity/providers',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers'),
-  request: { body: { content: { 'application/json': { schema: IdentityProviderRequestSchema } } } },
-  responses: { 201: { description: 'Identity provider created', content: { 'application/json': { schema: IdentityProviderResponseSchema } } } },
+  request: { body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderRequestSchema } } } },
+  responses: { 201: { description: 'Identity provider created', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } } },
 });
 registry.registerPath({
   method: 'put',
   path: '/api/identity/providers/{key}',
   ...authzExtension('platform.sso.providers.manage', 'PUT', '/api/identity/providers/{key}'),
-  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: IdentityProviderRequestSchema.omit({ key: true }).partial() } } } },
-  responses: { 200: { description: 'Identity provider updated', content: { 'application/json': { schema: IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found' } },
+  request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderUpdateSchema } } } },
+  responses: { 200: { description: 'Identity provider updated', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found' } },
 });
 registry.registerPath({
   method: 'post',
@@ -2257,7 +2234,7 @@ registry.registerPath({
   path: '/api/identity/providers/{key}/test-connection',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/test-connection'),
   request: { params: z.object({ key: z.string() }) },
-  responses: { 200: { description: 'Protocol-specific identity provider connection result', content: { 'application/json': { schema: z.object({ status: z.literal('connected'), protocol: z.enum(['oidc', 'saml', 'ldap']), issuer: z.string().optional(), sampledIdentities: z.number().int().nonnegative().optional(), entityDescriptorCount: z.number().int().nonnegative().optional() }) } } }, 404: { description: 'Identity provider not found' } },
+  responses: { 200: { description: 'Protocol-specific identity provider connection result', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderConnectionTestResponseSchema } } }, 404: { description: 'Identity provider not found' } },
 });
 registry.registerPath({
   method: 'delete',
