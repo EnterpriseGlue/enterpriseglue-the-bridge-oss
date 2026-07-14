@@ -1152,7 +1152,7 @@ LDAP may be used in either of two ways:
 - [x] ✅ Make an existing `(tenant, provider, subject)` external-identity link immutable. Refreshes may update seen metadata, but cannot reassign the subject to another user.
 - [x] ✅ Add a bounded replay of sanitized normalized identity snapshots for selected providers, exposed as audited `POST /api/identity/providers/:key/replay-memberships` and invoked after config-managed mapping changes. It never contacts the provider, reports truncation/failures in the config-apply receipt, and lets mapping changes repair known provider-managed memberships without waiting for another login.
 - [x] ✅ Fail provider-neutral login closed when authoritative entitlement normalization or persistence fails. OIDC group-overage markers (`hasgroups`, group-overage flags, or `_claim_names.groups`) are rejected before any user, entitlement snapshot, or membership write; v1 does not silently preserve stale browser-login access for an incomplete claim set.
-- [ ] ⬜ Keep additive and authoritative modes per mapping.
+- [x] ✅ Keep additive and authoritative modes per mapping. Each provider-neutral mapping persists its selected mode; additive reconciliation never removes an unmatched membership, while authoritative reconciliation removes only the exact provider-and-mapping-owned row. Snapshot previews report the same planned removals without writing state.
 - [ ] ⬜ Keep `scope` entitlements restricted to API/machine use unless a product use case explicitly approves human mapping.
 
 Supported mapping operators for v1 are `exact`, `contains`, and `exists`. Prefix and regex operators remain advanced and must use the existing high-risk preview and platform-setting guardrails.
@@ -2149,7 +2149,7 @@ Fixtures should include at least:
 - [ ] ⬜ Export the applied source-owned state, re-preview it, and receive a deterministic no-op diff.
 - [ ] ⬜ Reject missing provider/group/role/engine references, duplicate keys, wrong-scope permissions, plaintext secrets, and test fixture imports.
 - [ ] ⬜ Prove UI-created manual objects survive authoritative config apply unless ownership is explicitly transferred.
-- [ ] ⬜ Prove a config-managed mapping change can request asynchronous reconciliation without holding the apply transaction open.
+- [x] ✅ Prove a config-managed mapping change can request asynchronous reconciliation without holding the apply transaction open. Apply commits its ownership and mapping writes first, then queues provider-scoped identity continuation pages and leased runtime materialization tasks under the persisted apply-run receipt; focused service, route, poller, and bootstrap tests cover the bounded background and startup-drain paths.
 - [x] ✅ Prove stale preview hashes and changed secret-ref availability fail safely. Applies may bind an optional availability-only preflight hash; conflicting concurrent applies remain covered by idempotency and ownership checks.
 
 ### Test Harness Files And Commands
