@@ -184,17 +184,12 @@ r.post('/mission-control-api/process-instances/preview-count', requireRuntimeCol
   try {
     const engineId = (req as any).engineId as string
     const keys = req.authorizedRuntimeResourceKeys
-    const requestedKey = typeof req.body?.processDefinitionKey === 'string' ? req.body.processDefinitionKey : null
-    const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null
-    if (!visibleKeys) {
+    if (!keys) {
       return res.json(await previewProcessInstanceCount(engineId, req.body || {}))
     }
-    const counts = await Promise.all(visibleKeys.map((processDefinitionKey) => previewProcessInstanceCount(engineId, {
-      ...(req.body || {}),
-      processDefinitionKey,
-    })));
-    res.json({ count: counts.reduce((total, result) => total + (Number(result?.count) || 0), 0) })
+    throw Errors.forbidden('Resource-aware process-instance preview counts are not supported')
   } catch (e: any) {
+    if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to preview count')
   }
 }))

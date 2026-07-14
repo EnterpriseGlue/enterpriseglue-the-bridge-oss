@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import missionControlRouter from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission_control.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
@@ -102,6 +103,7 @@ describe('mission-control shared mission_control routes', () => {
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(missionControlRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -140,7 +142,7 @@ describe('mission-control shared mission_control routes', () => {
     expect(getActiveActivityCounts).toHaveBeenCalledWith('engine-77', 'pd-1');
   });
 
-  it('sums preview counts only across authorized process definitions on resource-aware engines', async () => {
+  it('fails closed for resource-aware process-instance preview counts because aggregate responses cannot be post-filtered', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
         ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
@@ -151,20 +153,13 @@ describe('mission-control shared mission_control routes', () => {
       { resourceKey: 'payments' },
       { resourceKey: 'invoices' },
     ]);
-    vi.mocked(previewProcessInstanceCount).mockImplementation(async (_engineId, body: any) => ({
-      count: body.processDefinitionKey === 'payments' ? 4 : 1,
-    }));
-
     const response = await request(app)
       .post('/mission-control-api/process-instances/preview-count')
       .send({ engineId: 'engine-77', active: true });
 
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ count: 5 });
-    expect(previewProcessInstanceCount).toHaveBeenCalledTimes(2);
-    expect(previewProcessInstanceCount).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'payments' }));
-    expect(previewProcessInstanceCount).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'invoices' }));
-    expect(previewProcessInstanceCount).not.toHaveBeenCalledWith('engine-77', expect.not.objectContaining({ processDefinitionKey: expect.any(String) }));
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Resource-aware process-instance preview counts are not supported');
+    expect(previewProcessInstanceCount).not.toHaveBeenCalled();
   });
 
   it('bounds compatibility process-definition and instance collections for resource-aware engines', async () => {
