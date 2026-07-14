@@ -57,12 +57,13 @@ export function generateRefreshToken(user: User | any): string {
   });
 }
 
-export function generateOnboardingToken(payload: { userId: string; email: string; invitationId: string; tenantSlug: string }): string {
+export function generateOnboardingToken(payload: { userId: string; email: string; invitationId: string; tenantSlug: string; authSessionVersion?: number }): string {
   const tokenPayload: JwtPayload = {
     userId: payload.userId,
     email: payload.email,
     principalType: 'user',
     principalId: payload.userId,
+    authSessionVersion: Number.isInteger(payload.authSessionVersion) ? payload.authSessionVersion : 0,
     type: 'onboarding',
     invitationId: payload.invitationId,
     tenantSlug: payload.tenantSlug,

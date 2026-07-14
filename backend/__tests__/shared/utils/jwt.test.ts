@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateAccessToken, generateOnboardingToken, generateRefreshToken, verifyToken, decodeToken } from '@enterpriseglue/shared/utils/jwt.js';
 
-const user = { id: 'user-1', email: 'user@example.com', platformRole: 'admin' };
+const user = { id: 'user-1', email: 'user@example.com', platformRole: 'admin', authSessionVersion: 3 };
 
 describe('jwt utils', () => {
   it('generates and verifies access tokens', () => {
@@ -12,7 +12,7 @@ describe('jwt utils', () => {
     expect(payload.platformRole).toBeUndefined();
     expect(payload.principalType).toBe('user');
     expect(payload.principalId).toBe(user.id);
-    expect(payload.authSessionVersion).toBe(0);
+    expect(payload.authSessionVersion).toBe(user.authSessionVersion);
     expect(payload.type).toBe('access');
   });
 
@@ -28,10 +28,14 @@ describe('jwt utils', () => {
       email: user.email,
       invitationId: 'invite-1',
       tenantSlug: 'default',
+      authSessionVersion: user.authSessionVersion,
     }));
 
     expect(payload.type).toBe('onboarding');
     expect(payload.platformRole).toBeUndefined();
+    expect(payload.principalType).toBe('user');
+    expect(payload.principalId).toBe(user.id);
+    expect(payload.authSessionVersion).toBe(3);
   });
 
   it('decodeToken returns payload without verification', () => {

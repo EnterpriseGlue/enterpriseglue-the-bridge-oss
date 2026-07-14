@@ -41,12 +41,14 @@ function setOnboardingCookie(res: ExpressResponse, payload: {
   email: string;
   invitationId: string;
   tenantSlug: string;
+  authSessionVersion?: number;
 }) {
   const onboardingToken = generateOnboardingToken({
     userId: payload.userId,
     email: payload.email,
     invitationId: payload.invitationId,
     tenantSlug: payload.tenantSlug,
+    authSessionVersion: payload.authSessionVersion,
   });
 
   res.cookie('onboardingToken', onboardingToken, {
@@ -179,6 +181,7 @@ router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerif
     email: user.email,
     invitationId: verified.invitationId,
     tenantSlug: verified.tenantSlug,
+    authSessionVersion: user.authSessionVersion,
   });
 
   await logAudit({
@@ -216,6 +219,7 @@ router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLim
     email: user.email,
     invitationId: verified.invitationId,
     tenantSlug: verified.tenantSlug,
+    authSessionVersion: user.authSessionVersion,
   });
 
   await logAudit({
