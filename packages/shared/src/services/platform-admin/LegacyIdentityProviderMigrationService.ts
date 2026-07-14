@@ -121,6 +121,16 @@ function samlCallbackUrl(): string {
   return new URL('/api/auth/providers/saml/callback', `${config.frontendUrl.replace(/\/$/, '')}/`).toString();
 }
 
+function httpsUrl(value: string, field: string): string {
+  try {
+    const parsed = new URL(value.trim());
+    if (parsed.protocol !== 'https:') throw new Error('not https');
+    return parsed.toString();
+  } catch {
+    throw Errors.validation(`The legacy SAML provider ${field} must be an HTTPS URL before it can produce a provider-neutral migration draft`);
+  }
+}
+
 class LegacyIdentityProviderMigrationServiceClass {
   /**
    * Builds a non-persistent draft. Legacy ciphertext is deliberately never
@@ -153,7 +163,7 @@ class LegacyIdentityProviderMigrationServiceClass {
           configuration: {
             entityId: provider.entityId.trim(),
             callbackUrl: samlCallbackUrl(),
-            ssoUrl: provider.ssoUrl.trim(),
+            ssoUrl: httpsUrl(provider.ssoUrl, 'SSO URL'),
             // Legacy ciphertext is intentionally never copied or resolved.
             signingCertificateRef: 'env://REPLACE_WITH_SAML_SIGNING_CERTIFICATE',
             signatureAlgorithm: provider.signatureAlgorithm === 'sha512' ? 'sha512' : 'sha256',

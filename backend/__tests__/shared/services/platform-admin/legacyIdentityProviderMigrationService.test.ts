@@ -80,6 +80,11 @@ describe('legacyIdentityProviderMigrationService', () => {
     expect(JSON.stringify(draft)).not.toContain('must-not-leak');
   });
 
+  it('refuses a SAML draft whose legacy IdP endpoint cannot satisfy direct-SAML HTTPS requirements', async () => {
+    findOneBy.mockResolvedValueOnce({ id: 'legacy-saml', name: 'Legacy SAML', type: 'saml', enabled: true, entityId: 'https://sp.example.test/metadata', ssoUrl: 'http://idp.example.test/sso', certificateEnc: 'enc:opaque' });
+    await expect(legacyIdentityProviderMigrationService.createDraft('legacy-saml')).rejects.toThrow('SSO URL must be an HTTPS URL');
+  });
+
   it('rejects unsupported legacy provider types and incomplete OIDC records', async () => {
     findOneBy.mockResolvedValueOnce({ id: 'legacy-ldap', type: 'ldap' });
     await expect(legacyIdentityProviderMigrationService.createDraft('legacy-ldap')).rejects.toThrow('Only legacy Microsoft, Google, OIDC, and SAML providers');
