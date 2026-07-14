@@ -63,6 +63,7 @@ import {
 } from './access-control';
 import { effectiveAccessSourceHeaders, isEffectiveAccessTabRequested, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
 import { getAssignableRolesForPrincipal, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
+import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './access-control/dataTablePrimitives';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -841,34 +842,6 @@ const DEFAULT_SSO_GROUP_MAPPING_FORM: SsoGroupMappingFormState = {
   priority: 0,
   isActive: true,
 };
-
-function DataTableHeaderCell({
-  header,
-  getHeaderProps,
-}: {
-  header: any;
-  getHeaderProps: (args: { header: any }) => Record<string, any>;
-}) {
-  const { key, ...headerProps } = getHeaderProps({ header });
-  return <TableHeader key={key || dataTableHeaderKey(header)} {...headerProps}>{header.header}</TableHeader>;
-}
-
-function dataTableHeaderKey(header: any): React.Key {
-  return String(header.key || header.header || 'header');
-}
-
-function DataTableDataRow({
-  row,
-  getRowProps,
-  children,
-}: {
-  row: any;
-  getRowProps: (args: { row: any }) => Record<string, any>;
-  children: React.ReactNode;
-}) {
-  const { key, ...rowProps } = getRowProps({ row });
-  return <TableRow key={key || row.id} {...rowProps}>{children}</TableRow>;
-}
 
 function scopeTag(scope: string) {
   if (scope === 'platform') return <Tag type="purple">Platform</Tag>;
