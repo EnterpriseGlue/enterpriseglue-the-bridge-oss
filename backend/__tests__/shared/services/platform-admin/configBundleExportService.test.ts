@@ -38,6 +38,23 @@ describe('configBundleExportService', () => {
     expect(JSON.stringify(result.files)).not.toContain('ref:PROD_ENGINE_PASSWORD');
   });
 
+  it('refuses to export stored engine credentials that are not secret references', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository(entity: unknown) {
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([{
+          id: 'engine-1', configKey: 'engine.sidecar', name: 'Sidecar', baseUrl: 'https://sidecar.example.test/engine-rest', type: 'ion', externalId: null,
+          labelsJson: '{}', authType: 'basic', username: 'eg', passwordEnc: 'v2:encrypted-downstream-token', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null,
+          version: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, pipelineReceiptEnabled: true, connectionMode: 'customer_sidecar', ownershipMode: 'config_locked',
+        }]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(configBundleExportService.exportBundle({ bundleKey: 'acme.authz' }))
+      .rejects.toThrow('credentials must be replaced with a secret reference before export');
+  });
+
   it('round-trips every UI-supported engine auth mode and operational labels', async () => {
     const common = {
       tenantId: null, externalId: null, version: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy',

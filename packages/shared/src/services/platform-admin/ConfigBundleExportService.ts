@@ -68,12 +68,16 @@ class ConfigBundleExportService {
       .filter((engine): engine is Engine & { configKey: string } => Boolean(engine.configKey))
       .sort((left, right) => left.configKey.localeCompare(right.configKey))
       .map((engine) => {
+        const credentialRef = externalReference(engine.passwordEnc)
+        if (engine.passwordEnc && !credentialRef) {
+          throw new Error(`Cannot export engine ${engine.configKey}: credentials must be replaced with a secret reference before export`)
+        }
         const auth = engine.authType === 'basic'
-          ? { type: 'basic', username: engine.username || '', passwordRef: externalReference(engine.passwordEnc) || undefined }
+          ? { type: 'basic', username: engine.username || '', passwordRef: credentialRef || undefined }
           : engine.authType === 'bearer'
-            ? { type: 'bearer', tokenRef: externalReference(engine.passwordEnc) || undefined }
+            ? { type: 'bearer', tokenRef: credentialRef || undefined }
             : engine.authType === 'oauth2-client-credentials'
-              ? { type: 'oauth2-client-credentials', username: engine.username || '', passwordRef: externalReference(engine.passwordEnc) || undefined, tokenUrl: engine.oauthTokenUrl || '', scopes: engine.oauthScopes || undefined, audience: engine.oauthAudience || undefined }
+              ? { type: 'oauth2-client-credentials', username: engine.username || '', passwordRef: credentialRef || undefined, tokenUrl: engine.oauthTokenUrl || '', scopes: engine.oauthScopes || undefined, audience: engine.oauthAudience || undefined }
               : { type: 'none' };
         return { key: engine.configKey, name: engine.name, baseUrl: engine.baseUrl, type: engine.type, externalId: engine.externalId || undefined, labels: json(engine.labelsJson), auth, version: engine.version || undefined, runtimeAccessScope: engine.runtimeAccessScope, deploymentIntegration: engine.deploymentIntegration, metadataDiscoveryEnabled: engine.metadataDiscoveryEnabled !== false, deploymentDiscoveryEnabled: engine.deploymentDiscoveryEnabled !== false, reconciliationIntervalSeconds: Number(engine.reconciliationIntervalSeconds || 300), pipelineReceiptEnabled: engine.pipelineReceiptEnabled !== false, connectionMode: engine.connectionMode, ownershipMode: engine.ownershipMode };
       }) };
