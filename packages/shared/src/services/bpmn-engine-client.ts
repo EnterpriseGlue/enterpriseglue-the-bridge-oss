@@ -126,6 +126,14 @@ async function boundEngineResponseBody(
   response: Awaited<ReturnType<typeof fetch>>,
   input: { method: string; path: string; connectionMode: 'direct' | 'customer_sidecar' },
 ): Promise<Awaited<ReturnType<typeof fetch>>> {
+  const declaredResponseBytes = Number(response.headers?.get?.('content-length'))
+  if (Number.isSafeInteger(declaredResponseBytes) && declaredResponseBytes > MAX_ENGINE_RESPONSE_BYTES) {
+    await response.body?.cancel().catch(() => undefined)
+    throw new BpmnEngineResponseTooLargeError({
+      ...input,
+      maxResponseBytes: MAX_ENGINE_RESPONSE_BYTES,
+    })
+  }
   const body = response.body
   if (!body) return response
   const reader = body.getReader()
@@ -343,7 +351,11 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
     throw Errors.authFailed(`Engine OAuth2 token request failed with status ${response.status}`)
   }
 
-  const payload = await response.json() as { access_token?: string; expires_in?: number }
+  const payload = await (await boundEngineResponseBody(response, {
+    method: 'POST',
+    path: '/oauth2/token',
+    connectionMode: cfg.connectionMode,
+  })).json() as { access_token?: string; expires_in?: number }
   if (!payload.access_token) throw Errors.authFailed('Engine OAuth2 token response did not include an access token')
 
   const expiresInMs = Math.max(60, Number(payload.expires_in || 300)) * 1000
@@ -431,16 +443,6 @@ export async function fetchBpmnEngineEndpoint(
       })
     }
 
-    const declaredResponseBytes = Number(response.headers?.get?.('content-length'))
-    if (Number.isSafeInteger(declaredResponseBytes) && declaredResponseBytes > MAX_ENGINE_RESPONSE_BYTES) {
-      await response.body?.cancel().catch(() => undefined)
-      throw new BpmnEngineResponseTooLargeError({
-        method,
-        path: request.path || '',
-        maxResponseBytes: MAX_ENGINE_RESPONSE_BYTES,
-        connectionMode: connection.diagnostics.connectionMode,
-      })
-    }
     if (attempt < maxAttempts && TRANSIENT_ENGINE_STATUSES.has(response.status)) {
       await response.body?.cancel().catch(() => undefined)
       continue

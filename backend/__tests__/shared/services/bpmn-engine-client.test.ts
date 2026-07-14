@@ -362,6 +362,32 @@ describe('bpmn-engine-client', () => {
     });
   });
 
+  it('bounds OAuth2 client-credentials token responses before decoding JSON', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    (fetch as unknown as Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: vi.fn((name: string) => name === 'content-length' ? String(MAX_ENGINE_RESPONSE_BYTES + 1) : 'application/json') },
+      body: { cancel },
+    });
+
+    await expect(resolveBpmnEngineConnection({
+      id: 'engine-oauth-too-large',
+      baseUrl: 'https://engine.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'oauth2-client-credentials',
+      username: 'client-id',
+      passwordEnc: 'client-secret',
+      oauthTokenUrl: 'https://identity.example.com/oauth/token',
+    }, { engineId: 'engine-oauth-too-large', method: 'GET', path: '/version' })).rejects.toMatchObject({
+      code: 'ENGINE_RESPONSE_TOO_LARGE',
+      statusCode: 502,
+      details: { maxResponseBytes: MAX_ENGINE_RESPONSE_BYTES, connectionMode: 'customer_sidecar' },
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects OAuth2 token endpoint URLs with embedded credentials before an outbound request', async () => {
     const engineRepo = {
       findOneBy: vi.fn().mockResolvedValue({
