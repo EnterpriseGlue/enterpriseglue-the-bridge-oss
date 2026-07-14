@@ -305,14 +305,15 @@ describe('requireAction project resource resolvers', () => {
     }));
   });
 
-  it('does not call the engine when a broad engine grant already permits definition access', async () => {
-    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+  it('authorizes engine-wide runtime access without resolving runtime inventory', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'engine_wide' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
     const response = await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`);
 
     expect(response.status).toBe(200);
     expect(camundaGet).not.toHaveBeenCalled();
+    expect(runtimeResourceFindOne).not.toHaveBeenCalled();
     expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
   });
 

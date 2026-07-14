@@ -784,8 +784,15 @@ async function refreshEngineSetMaterializationsForEngine(engineId: string, tenan
   }
 }
 
-function scheduleRuntimeInventoryReconciliation(engineId: string, tenantId: string | null | undefined, deploymentDiscoveryEnabled: boolean): void {
-  void engineMetadataReconciliationService.reconcileEngine(engineId, tenantId, { deploymentDiscoveryEnabled })
+function scheduleRuntimeInventoryReconciliation(
+  engineId: string,
+  tenantId: string | null | undefined,
+  options: { runtimeAccessScope?: string | null; metadataDiscoveryEnabled?: boolean | null; deploymentDiscoveryEnabled: boolean },
+): void {
+  void engineMetadataReconciliationService.reconcileEngine(engineId, tenantId, {
+    runtimeMetadataDiscoveryEnabled: options.runtimeAccessScope === 'resource_aware' && options.metadataDiscoveryEnabled !== false,
+    deploymentDiscoveryEnabled: options.deploymentDiscoveryEnabled,
+  })
     .catch((error: unknown) => logger.warn('Failed to reconcile engine metadata after engine change', { engineId, error }))
 }
 
@@ -967,7 +974,11 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, engineRegistrationLim
     })
   }
   await refreshEngineSetMaterializationsForEngine(id, tenantId)
-  scheduleRuntimeInventoryReconciliation(id, tenantId, payload.deploymentDiscoveryEnabled)
+  scheduleRuntimeInventoryReconciliation(id, tenantId, {
+    runtimeAccessScope: payload.runtimeAccessScope,
+    metadataDiscoveryEnabled: payload.metadataDiscoveryEnabled,
+    deploymentDiscoveryEnabled: payload.deploymentDiscoveryEnabled,
+  })
   res.status(201).json(withEngineCapabilities(serializeEngine(payload)))
 }))
 
@@ -1074,7 +1085,11 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
       now,
     })
     await refreshEngineSetMaterializationsForEngine(String(existing.id), tenantId)
-    scheduleRuntimeInventoryReconciliation(String(existing.id), tenantId, updatePayload.deploymentDiscoveryEnabled ?? (existing.deploymentDiscoveryEnabled !== false))
+    scheduleRuntimeInventoryReconciliation(String(existing.id), tenantId, {
+      runtimeAccessScope: (updatePayload.runtimeAccessScope as string | undefined) ?? existing.runtimeAccessScope,
+      metadataDiscoveryEnabled: (updatePayload.metadataDiscoveryEnabled as boolean | undefined) ?? existing.metadataDiscoveryEnabled,
+      deploymentDiscoveryEnabled: (updatePayload.deploymentDiscoveryEnabled as boolean | undefined) ?? (existing.deploymentDiscoveryEnabled !== false),
+    })
     const updated = await engineRepo.findOneBy({ id: existing.id })
     if (!updated) throw Errors.notFound('Engine')
     const health = req.body.testConnection ? await testEngineConnectionAndRecord(dataSource, updated) : null
@@ -1131,7 +1146,11 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     now,
   })
   await refreshEngineSetMaterializationsForEngine(id, tenantId)
-  scheduleRuntimeInventoryReconciliation(id, tenantId, payload.deploymentDiscoveryEnabled !== false)
+  scheduleRuntimeInventoryReconciliation(id, tenantId, {
+    runtimeAccessScope: payload.runtimeAccessScope || 'engine_wide',
+    metadataDiscoveryEnabled: payload.metadataDiscoveryEnabled,
+    deploymentDiscoveryEnabled: payload.deploymentDiscoveryEnabled !== false,
+  })
   const health = req.body.testConnection ? await testEngineConnectionAndRecord(dataSource, created) : null
   await logAudit({
     tenantId: tenantId || undefined,
@@ -1477,10 +1496,18 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, engineRegistration
   }
   if (req.body.externalId !== undefined || req.body.labels !== undefined) {
     await refreshEngineSetMaterializationsForEngine(engineId, existing.tenantId)
-    scheduleRuntimeInventoryReconciliation(engineId, existing.tenantId, updates.deploymentDiscoveryEnabled ?? (existing.deploymentDiscoveryEnabled !== false))
+    scheduleRuntimeInventoryReconciliation(engineId, existing.tenantId, {
+      runtimeAccessScope: updates.runtimeAccessScope ?? existing.runtimeAccessScope,
+      metadataDiscoveryEnabled: updates.metadataDiscoveryEnabled ?? existing.metadataDiscoveryEnabled,
+      deploymentDiscoveryEnabled: updates.deploymentDiscoveryEnabled ?? (existing.deploymentDiscoveryEnabled !== false),
+    })
   }
   if (req.body.runtimeAccessScope === 'resource_aware' && existing.runtimeAccessScope !== 'resource_aware') {
-    scheduleRuntimeInventoryReconciliation(engineId, existing.tenantId, updates.deploymentDiscoveryEnabled ?? (existing.deploymentDiscoveryEnabled !== false))
+    scheduleRuntimeInventoryReconciliation(engineId, existing.tenantId, {
+      runtimeAccessScope: updates.runtimeAccessScope ?? existing.runtimeAccessScope,
+      metadataDiscoveryEnabled: updates.metadataDiscoveryEnabled ?? existing.metadataDiscoveryEnabled,
+      deploymentDiscoveryEnabled: updates.deploymentDiscoveryEnabled ?? (existing.deploymentDiscoveryEnabled !== false),
+    })
   }
   const updated = await engineRepo.findOneBy({ id: engineId })
   if (!updated) throw Errors.notFound('Engine')

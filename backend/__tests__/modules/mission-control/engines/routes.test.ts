@@ -4,6 +4,7 @@ import express from 'express';
 import { existsSync } from 'fs';
 import enginesRouter from '../../../../../packages/backend-host/src/modules/mission-control/engines/routes.js';
 import { engineService, projectEngineTargetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
@@ -113,6 +114,18 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
     createTarget: vi.fn(),
     getTarget: vi.fn(),
     archiveTarget: vi.fn(),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js', () => ({
+  engineMetadataReconciliationService: {
+    reconcileEngine: vi.fn().mockResolvedValue({
+      created: 0,
+      updated: 0,
+      deactivated: 0,
+      materializedSets: 0,
+      deployments: { created: 0, updated: 0, artifactsCreated: 0 },
+    }),
   },
 }));
 
@@ -1034,6 +1047,23 @@ describe('mission-control engines routes', () => {
       expect.any(Object),
     );
     expect(permissionServiceMock.syncLegacyRoleAssignments).not.toHaveBeenCalled();
+  });
+
+  it('defaults distributed engines to engine-wide access without runtime inventory reconciliation', async () => {
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ insert }) });
+
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({ name: 'Distributed engine', baseUrl: 'https://distributed.example.com/engine-rest' });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ runtimeAccessScope: 'engine_wide' });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ runtimeAccessScope: 'engine_wide' }));
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith(expect.any(String), null, {
+      runtimeMetadataDiscoveryEnabled: false,
+      deploymentDiscoveryEnabled: true,
+    });
   });
 
   it('rejects credentialless authentication for a direct engine endpoint', async () => {
