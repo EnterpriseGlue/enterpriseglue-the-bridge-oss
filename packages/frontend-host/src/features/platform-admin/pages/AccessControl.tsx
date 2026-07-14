@@ -53,8 +53,6 @@ import {
   DEFAULT_AUTHZ_AUDIT_FILTER,
   EffectiveAccessPanel,
   PolicyInspectionTable,
-  RoleAssignmentForm,
-  RoleAssignmentsTable,
   SsoAssignmentDiagnosticsPanel,
   SsoEngineAccessSnapshotsPanel,
   SsoSyncDiagnosticsPanel,
@@ -62,10 +60,11 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, isEffectiveAccessTabRequested, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
-import { getAssignableRolesForPrincipal, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
+import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './access-control/dataTablePrimitives';
 import { PermissionsTable } from './access-control/PermissionsTable';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
+import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
 import { RolesTable } from './access-control/RolesTable';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
@@ -2124,62 +2123,6 @@ function RolePermissionMatrix({
         </div>
       )}
     </TableContainer>
-  );
-}
-
-function RoleAssignmentsPanel({
-  roles,
-  assignments,
-  apiClients,
-  groups,
-  serviceAccounts,
-  externalSystems,
-  runtimeEngines,
-  loading,
-  onAssign,
-  onRemove,
-  pending,
-  canCreate,
-  canDelete,
-}: {
-  roles: RoleSummary[];
-  assignments: RoleAssignment[];
-  apiClients: ApiClient[];
-  groups: AuthzGroup[];
-  serviceAccounts: ServiceAccount[];
-  externalSystems: ExternalEngineSystem[];
-  runtimeEngines: RuntimeResourceEngineOption[];
-  loading: boolean;
-  onAssign: (form: AssignmentFormValues) => void;
-  onRemove: (assignmentId: string) => void;
-  pending: boolean;
-  canCreate: boolean;
-  canDelete: boolean;
-}) {
-  return (
-    <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
-      <RoleAssignmentForm
-        roles={roles}
-        apiClients={apiClients}
-        groups={groups}
-        serviceAccounts={serviceAccounts}
-        externalSystems={externalSystems}
-        runtimeEngines={runtimeEngines}
-        onAssign={onAssign}
-        pending={pending}
-        canCreate={canCreate}
-      />
-      <RoleAssignmentsTable
-        assignments={assignments}
-        apiClients={apiClients}
-        groups={groups}
-        serviceAccounts={serviceAccounts}
-        externalSystems={externalSystems}
-        loading={loading}
-        canDelete={canDelete}
-        onRemove={onRemove}
-      />
-    </div>
   );
 }
 
