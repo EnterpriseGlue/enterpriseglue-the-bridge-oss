@@ -1,3 +1,4 @@
+import React from 'react';
 import type { RoleSummary } from '../../hooks/useAuthzApi';
 import type { CoreAssignmentResourceType } from './effectiveAccessPresentation';
 
@@ -36,6 +37,10 @@ export function withAssignmentResourceType(state: AssignmentFormState, resourceT
 }
 export function canSubmitAssignment(state: AssignmentFormValues, pending: boolean) {
   return Boolean(state.principalId && state.roleId && (state.resourceType === 'platform' || state.resourceId) && !pending);
+}
+export function useAssignmentFormState() {
+  const [form, setForm] = React.useState<AssignmentFormState>(DEFAULT_ASSIGNMENT_FORM_STATE);
+  return { form, setForm };
 }
 
 const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([

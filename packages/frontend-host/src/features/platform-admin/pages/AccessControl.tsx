@@ -60,7 +60,7 @@ import {
   type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
-import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, canSubmitAssignment, DEFAULT_ASSIGNMENT_FORM_STATE, getAssignableRolesForPrincipal, withAssignmentPrincipalType, withAssignmentResourceType, type AssignmentFormState, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
+import { ASSIGNMENT_PRINCIPAL_OPTIONS, assignmentResourceTypeOptions, canSubmitAssignment, getAssignableRolesForPrincipal, useAssignmentFormState, withAssignmentPrincipalType, withAssignmentResourceType, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -2439,7 +2439,7 @@ function RoleAssignmentsPanel({
   canCreate: boolean;
   canDelete: boolean;
 }) {
-  const [form, setForm] = React.useState<AssignmentFormState>(DEFAULT_ASSIGNMENT_FORM_STATE);
+  const { form, setForm } = useAssignmentFormState();
   const activeApiClients = apiClients.filter((client) => client.isActive);
   const activeGroups = groups.filter((group) => !group.isArchived);
   const activeServiceAccounts = serviceAccounts.filter((account) => account.isActive);
