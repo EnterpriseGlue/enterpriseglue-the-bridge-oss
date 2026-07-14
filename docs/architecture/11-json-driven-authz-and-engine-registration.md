@@ -1247,6 +1247,7 @@ ExternalIdentity
 - [x] ✅ Provider deactivation removes provider-managed memberships and marks provider identity records as disabled without deleting manual, API, automation, or other-provider access.
 - [x] ✅ Add provider-scoped refresh-session lineage and revocation for provider-neutral OIDC, SAML, and LDAP sessions. Provider archival revokes only refresh sessions issued by that provider; existing access JWTs remain valid only until their short normal expiry.
 - [ ] ⬜ Add immediate access-JWT revocation for a deactivated or unlinked provider when the normal short access-token expiry is insufficient.
+- [x] ✅ Provider archive/deactivation also advances the linked users’ session versions after marking links disabled and revoking provider refresh tokens, immediately invalidating their access JWTs.
 - [x] ✅ Add immediate unlink-driven session invalidation: JWT access and refresh tokens carry a persisted user session version, authentication requires an exact match, and `ExternalIdentity.unlink` increments the version in the same transaction as provider refresh-token revocation.
 - [x] ✅ Persist only allowlisted normalized identity attributes and entitlement ids; raw JWTs, SAML assertions, LDAP responses, unrestricted claims, and unrelated profile attributes are not stored in identity snapshots. SAML and legacy OAuth callback errors are logged and redirected only as allowlisted reason codes, never as raw parser, assertion, or provider text. Groups, roles, and scopes are normalized deterministically for reconciliation.
 

@@ -6,6 +6,7 @@ import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructur
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { identityProviderKeyIdentity, identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -52,15 +53,16 @@ describe('identityProviderService', () => {
     const mappingFind = vi.fn().mockResolvedValue([{ id: 'mapping-1' }]);
     const membershipDelete = vi.fn().mockResolvedValue({ affected: 2 });
     const normalizedUpdate = vi.fn().mockResolvedValue({ affected: 1 });
-    const externalUpdate = vi.fn().mockResolvedValue({ affected: 1 });
+    const externalUpdate = vi.fn().mockResolvedValue({ affected: 1 }); const externalFind = vi.fn().mockResolvedValue([{ userId: 'user-1' }]);
     const refreshUpdate = vi.fn().mockResolvedValue({ affected: 3 });
     const providerUpdate = vi.fn().mockResolvedValue({ affected: 1 });
     const manager = { getRepository: (entity: unknown) => {
       if (entity === IdentityEntitlementMapping) return { find: mappingFind };
       if (entity === AuthzGroupMembership) return { delete: membershipDelete };
       if (entity === SsoNormalizedIdentity) return { update: normalizedUpdate };
-      if (entity === ExternalIdentity) return { update: externalUpdate };
+      if (entity === ExternalIdentity) return { update: externalUpdate, find: externalFind };
       if (entity === RefreshToken) return { update: refreshUpdate };
+      if (entity === User) return { find: vi.fn().mockResolvedValue([{ id: 'user-1', authSessionVersion: 3 }]), update: vi.fn() };
       if (entity === IdentityProvider) return { update: providerUpdate };
       throw new Error('Unexpected archive repository');
     }};
@@ -72,7 +74,7 @@ describe('identityProviderService', () => {
     }, transaction });
 
     await expect(identityProviderService.archive('entra', 'tenant-1')).resolves.toEqual({
-      providerId: 'provider-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, externalIdentitiesMarked: 1, providerRefreshSessionsRevoked: 3,
+      providerId: 'provider-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, externalIdentitiesMarked: 1, providerRefreshSessionsRevoked: 3, providerUserSessionsInvalidated: 1,
     });
 
     expect(membershipDelete).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-1', source: 'identity_provider' }));

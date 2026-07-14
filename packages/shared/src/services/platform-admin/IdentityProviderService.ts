@@ -5,6 +5,7 @@ import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructur
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, type EntityManager } from 'typeorm';
@@ -34,6 +35,7 @@ export interface IdentityProviderArchiveResult {
   normalizedIdentitiesMarked: number;
   externalIdentitiesMarked: number;
   providerRefreshSessionsRevoked: number;
+  providerUserSessionsInvalidated: number;
 }
 
 function normalized(value?: string | null): string | null { return value?.trim() || null; }
@@ -111,7 +113,9 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
     { ...tenantScope, providerId: provider.id } as any,
     { providerStatus: 'provider_disabled', lastProviderCheckAt: now, updatedAt: now },
   );
-  const externalIdentities = await manager.getRepository(ExternalIdentity).update(
+  const externalIdentityRepo = manager.getRepository(ExternalIdentity);
+  const linkedIdentities = await externalIdentityRepo.find({ where: { ...tenantScope, providerId: provider.id } as any, select: ['userId'] });
+  const externalIdentities = await externalIdentityRepo.update(
     { ...tenantScope, providerId: provider.id } as any,
     { status: 'provider_disabled', updatedAt: now },
   );
@@ -119,6 +123,16 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
     { identityProviderId: provider.id, revokedAt: IsNull() },
     { revokedAt: now },
   );
+  const linkedUserIds = Array.from(new Set(linkedIdentities.map((identity) => identity.userId)));
+  let providerUserSessionsInvalidated = 0;
+  if (linkedUserIds.length) {
+    const userRepo = manager.getRepository(User);
+    const users = await userRepo.find({ where: { id: In(linkedUserIds) } as any, select: ['id', 'authSessionVersion'] });
+    for (const user of users) {
+      await userRepo.update({ id: user.id }, { authSessionVersion: (user.authSessionVersion || 0) + 1 });
+      providerUserSessionsInvalidated += 1;
+    }
+  }
   await manager.getRepository(IdentityProvider).update({ id: provider.id }, { isEnabled: false, updatedAt: now });
 
   return {
@@ -127,6 +141,7 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
     normalizedIdentitiesMarked: normalizedIdentities.affected || 0,
     externalIdentitiesMarked: externalIdentities.affected || 0,
     providerRefreshSessionsRevoked: refreshSessions.affected || 0,
+    providerUserSessionsInvalidated,
   };
 }
 
