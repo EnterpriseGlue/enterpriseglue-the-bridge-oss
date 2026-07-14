@@ -1,11 +1,9 @@
-import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
-import { configBundleArchiveService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleArchiveService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
+import { readConfigBundleFile } from './configBundleFileIngress.js';
 
 export type ConfigBootstrapStatus = {
   mode: 'disabled' | 'validate' | 'apply';
@@ -30,16 +28,9 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
   if (!config.configBundlePath) throw new Error('EG_CONFIG_BUNDLE_PATH is required when configuration bootstrap is enabled');
 
   try {
-    const metadata = await stat(config.configBundlePath);
-    if (!metadata.isFile()) throw new Error('EG_CONFIG_BUNDLE_PATH must point to a JSON file or folder-style ZIP archive');
-    if (metadata.size > config.configMaxBytes) throw new Error(`Configuration bundle exceeds EG_CONFIG_MAX_BYTES (${config.configMaxBytes})`);
-    const source = await readFile(config.configBundlePath);
-    const hash = createHash('sha256').update(source).digest('hex');
+    const { payload, sha256: hash } = await readConfigBundleFile(config.configBundlePath, config.configMaxBytes);
     status = { ...status, hash };
     if (config.configExpectedSha256 && hash !== config.configExpectedSha256.toLowerCase()) throw new Error('Configuration bundle SHA-256 does not match EG_CONFIG_EXPECTED_SHA256');
-    const payload = config.configBundlePath.toLowerCase().endsWith('.zip')
-      ? configBundleArchiveService.readZip(source, config.configMaxBytes)
-      : JSON.parse(source.toString('utf8')) as { bundle: unknown; files: Record<string, unknown> };
     const settings = await platformSettingsService.get();
     const preview = configBundlePreviewService.preview(payload, settings);
     if (!preview.valid || !preview.canonicalHash) throw new Error(`Configuration bundle validation failed: ${preview.errors.map((item) => item.message).join('; ')}`);
