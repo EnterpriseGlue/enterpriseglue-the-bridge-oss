@@ -29,21 +29,20 @@ import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/S
 import { config } from '@enterpriseglue/shared/config/index.js'
 import { logAudit } from '@enterpriseglue/shared/services/audit.js'
 import { logger } from '@enterpriseglue/shared/utils/logger.js'
+import {
+  CreateEngineRequestSchema,
+  EndpointAuthenticationPolicyMessages,
+  ExternalEngineRegistrationRequestSchema,
+  UpdateEngineRequestSchema,
+} from '@enterpriseglue/shared/schemas/mission-control/engine.js'
 
 type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[] }
 
 // Validation schemas
 const engineIdParamSchema = z.object({ id: z.string().min(1) })
-const engineTypeSchema = z.enum(['ion', 'operaton', 'camunda7'])
-const engineAuthTypeSchema = z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials'])
-const engineConnectionModeSchema = z.enum(['direct', 'customer_sidecar'])
-const runtimeAccessScopeSchema = z.enum(['engine_wide', 'resource_aware'])
-const deploymentIntegrationSchema = z.enum(['enterpriseglue_proxy', 'direct_engine'])
-const engineLabelsSchema = z.record(z.string().min(1).max(128), z.string().max(512))
 const engineManagementModeSchema = z.enum(['external_managed', 'hybrid'])
 const engineLifecycleStatusSchema = z.enum(['active', 'disabled', 'stale', 'decommissioned'])
 const engineFieldOwnerSchema = z.enum(['manual', 'external'])
-const engineFieldOwnershipSchema = z.record(z.string().min(1).max(128), engineFieldOwnerSchema)
 const externalEngineCapabilitiesSchema = z.object({
   operations: z.array(z.enum(ENGINE_OPERATION_CAPABILITIES)).optional(),
   supportLevel: z.string().max(128).nullable().optional(),
@@ -181,50 +180,12 @@ const externalRegistrationUrlSchema = baseUrlSchema.superRefine((url, ctx) => {
   }
 })
 
-const createEngineBodySchema = z.object({
-  name: z.string().min(1).max(255),
+const createEngineBodySchema = CreateEngineRequestSchema.extend({
   baseUrl: baseUrlSchema,
-  type: engineTypeSchema.default('ion'),
-  externalId: z.string().min(1).max(255).nullable().optional(),
-  labels: engineLabelsSchema.optional(),
-  authType: engineAuthTypeSchema.optional(),
-  connectionMode: engineConnectionModeSchema.default('direct'),
-  username: z.string().nullable().optional(),
-  passwordEnc: z.string().nullable().optional(),
-  oauthTokenUrl: z.string().url().nullable().optional(),
-  oauthScopes: z.string().nullable().optional(),
-  oauthAudience: z.string().nullable().optional(),
-  version: z.string().nullable().optional(),
-  environmentTagId: z.string().nullable().optional(),
-  runtimeAccessScope: runtimeAccessScopeSchema.optional(),
-  deploymentIntegration: deploymentIntegrationSchema.optional(),
-  metadataDiscoveryEnabled: z.boolean().optional(),
-  deploymentDiscoveryEnabled: z.boolean().optional(),
-  reconciliationIntervalSeconds: z.number().int().min(60).max(86400).optional(),
-  pipelineReceiptEnabled: z.boolean().optional(),
 })
 
-const updateEngineBodySchema = z.object({
-  name: z.string().min(1).max(255).optional(),
+const updateEngineBodySchema = UpdateEngineRequestSchema.extend({
   baseUrl: baseUrlSchema.optional(),
-  type: engineTypeSchema.optional(),
-  externalId: z.string().min(1).max(255).nullable().optional(),
-  labels: engineLabelsSchema.optional(),
-  authType: engineAuthTypeSchema.optional(),
-  connectionMode: engineConnectionModeSchema.optional(),
-  username: z.string().nullable().optional(),
-  passwordEnc: z.string().nullable().optional(),
-  oauthTokenUrl: z.string().url().nullable().optional(),
-  oauthScopes: z.string().nullable().optional(),
-  oauthAudience: z.string().nullable().optional(),
-  version: z.string().nullable().optional(),
-  environmentTagId: z.string().nullable().optional(),
-  runtimeAccessScope: runtimeAccessScopeSchema.optional(),
-  deploymentIntegration: deploymentIntegrationSchema.optional(),
-  metadataDiscoveryEnabled: z.boolean().optional(),
-  deploymentDiscoveryEnabled: z.boolean().optional(),
-  reconciliationIntervalSeconds: z.number().int().min(60).max(86400).optional(),
-  pipelineReceiptEnabled: z.boolean().optional(),
 })
 
 const DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP: EngineFieldOwnership = {
@@ -293,16 +254,10 @@ const ENGINE_SECRET_UPDATE_FIELDS = [
   'oauthAudience',
 ] as const
 
-const externalRegisterEngineBodySchema = createEngineBodySchema.extend({
+const externalRegisterEngineBodySchema = ExternalEngineRegistrationRequestSchema.extend({
   baseUrl: externalRegistrationUrlSchema,
-  externalId: z.string().min(1).max(255),
   oauthTokenUrl: externalRegistrationUrlSchema.nullable().optional(),
-  externalSystemId: z.string().min(1).nullable().optional(),
-  managementMode: engineManagementModeSchema.optional(),
-  fieldOwnership: engineFieldOwnershipSchema.optional(),
-  lifecycleStatus: engineLifecycleStatusSchema.exclude(['decommissioned']).optional(),
   capabilities: externalEngineCapabilitiesSchema.optional(),
-  testConnection: z.boolean().optional(),
 })
 
 const decommissionExternalEngineBodySchema = z.object({
@@ -424,10 +379,10 @@ function assertEndpointAuthenticationPolicy(
 ): void {
   if (authType !== 'none') return
   if (connectionMode !== 'customer_sidecar') {
-    throw Errors.validation('Credentialless endpoint authentication is allowed only for customer-sidecar engines')
+    throw Errors.validation(EndpointAuthenticationPolicyMessages[0])
   }
   if (!credentiallessCustomerSidecarsEnabled) {
-    throw Errors.validation('Credentialless customer-sidecar endpoints are disabled by platform policy')
+    throw Errors.validation(EndpointAuthenticationPolicyMessages[1])
   }
 }
 

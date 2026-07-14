@@ -30,6 +30,12 @@ const {
 const {
   EngineSchema,
   EngineSchemaRaw,
+  EngineConnectionModeSchema,
+  EngineTransportDiagnosticsSchema,
+  EndpointAuthenticationPolicyErrorSchema,
+  CreateEngineRequestSchema,
+  UpdateEngineRequestSchema,
+  ExternalEngineRegistrationRequestSchema,
   SavedFilterSchema,
   SavedFilterSchemaRaw,
   BatchSchema,
@@ -825,15 +831,12 @@ registry.registerPath({
 // Engines API: Engines & Saved Filters
 // -----------------------------
 registry.register('Engine', EngineSchema)
-
-const EngineTransportDiagnosticsSchema = z.object({
-  connectionMode: z.enum(['direct', 'customer_sidecar']),
-  endpointAuthentication: z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials']),
-  downstreamAuthentication: z.enum(['not_applicable', 'customer_managed']),
-  attempts: z.number().int().min(1).max(2).optional(),
-  timeoutMs: z.number().int().min(100).max(60_000).optional(),
-})
+registry.register('EngineConnectionMode', EngineConnectionModeSchema)
 registry.register('EngineTransportDiagnostics', EngineTransportDiagnosticsSchema)
+registry.register('EndpointAuthenticationPolicyError', EndpointAuthenticationPolicyErrorSchema)
+registry.register('CreateEngineRequest', CreateEngineRequestSchema)
+registry.register('UpdateEngineRequest', UpdateEngineRequestSchema)
+registry.register('ExternalEngineRegistrationRequest', ExternalEngineRegistrationRequestSchema)
 
 const ExternalRegistrationHealthSchema = z.object({
   status: z.enum(['connected','disconnected','unknown']),
@@ -843,6 +846,12 @@ const ExternalRegistrationHealthSchema = z.object({
   checkedAt: z.number(),
   transport: EngineTransportDiagnosticsSchema.optional(),
 })
+const ExternalEngineRegistrationResponseSchema = z.object({
+  created: z.boolean(),
+  engine: EngineSchema,
+  health: ExternalRegistrationHealthSchema.nullable().optional(),
+})
+registry.register('ExternalEngineRegistrationResponse', ExternalEngineRegistrationResponseSchema)
 const ExternalProjectEngineTargetModeFlagsSchema = z.object({
   allowManualDeploy: z.boolean().optional(),
   allowCiDeploy: z.boolean().optional(),
@@ -883,8 +892,11 @@ registry.registerPath({
   method: 'post',
   path: '/engines-api/engines',
   ...authzExtension('engine.inventory.create', 'POST', '/engines-api/engines'),
-  request: { body: { content: { 'application/json': { schema: EngineSchemaRaw.partial({ id: true, createdAt: true, updatedAt: true }) } } } },
-  responses: { 201: { description: 'Created', content: { 'application/json': { schema: EngineSchema } } } },
+  request: { body: { content: { 'application/json': { schema: CreateEngineRequestSchema } } } },
+  responses: {
+    201: { description: 'Created', content: { 'application/json': { schema: EngineSchema } } },
+    400: { description: 'Endpoint authentication policy rejected the engine registration', content: { 'application/json': { schema: EndpointAuthenticationPolicyErrorSchema } } },
+  },
 })
 
 registry.registerPath({
@@ -895,27 +907,15 @@ registry.registerPath({
     body: {
       content: {
         'application/json': {
-          schema: EngineSchemaRaw.partial({ id: true, createdAt: true, updatedAt: true }).extend({
-            externalId: z.string(),
-            labels: z.record(z.string(), z.string()).optional(),
-            externalSystemId: z.string().nullable().optional(),
-            managementMode: z.enum(['external_managed', 'hybrid']).optional(),
-            fieldOwnership: z.record(z.string(), z.enum(['manual', 'external'])).optional(),
-            lifecycleStatus: z.enum(['active', 'disabled', 'stale']).optional(),
-            capabilities: z.object({
-              operations: z.array(z.string()).optional(),
-              supportLevel: z.string().nullable().optional(),
-              compatibilityProfile: z.string().nullable().optional(),
-            }).passthrough().optional(),
-            testConnection: z.boolean().optional(),
-          }),
+          schema: ExternalEngineRegistrationRequestSchema,
         },
       },
     },
   },
   responses: {
-    201: { description: 'External engine registered', content: { 'application/json': { schema: z.object({ created: z.boolean(), engine: EngineSchema, health: ExternalRegistrationHealthSchema.nullable().optional() }) } } },
-    200: { description: 'External engine updated', content: { 'application/json': { schema: z.object({ created: z.boolean(), engine: EngineSchema, health: ExternalRegistrationHealthSchema.nullable().optional() }) } } },
+    201: { description: 'External engine registered', content: { 'application/json': { schema: ExternalEngineRegistrationResponseSchema } } },
+    200: { description: 'External engine updated', content: { 'application/json': { schema: ExternalEngineRegistrationResponseSchema } } },
+    400: { description: 'Endpoint authentication policy rejected the external registration', content: { 'application/json': { schema: EndpointAuthenticationPolicyErrorSchema } } },
   },
 })
 
@@ -995,8 +995,11 @@ registry.registerPath({
   method: 'put',
   path: '/engines-api/engines/{id}',
   ...authzExtension('engine.inventory.update', 'PUT', '/engines-api/engines/{id}'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: EngineSchemaRaw.partial() } } } },
-  responses: { 200: { description: 'Updated', content: { 'application/json': { schema: EngineSchema } } } },
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: UpdateEngineRequestSchema } } } },
+  responses: {
+    200: { description: 'Updated', content: { 'application/json': { schema: EngineSchema } } },
+    400: { description: 'Endpoint authentication policy rejected the engine update', content: { 'application/json': { schema: EndpointAuthenticationPolicyErrorSchema } } },
+  },
 })
 
 registry.registerPath({
@@ -1746,6 +1749,7 @@ const {
   EngineRuntimeAuthorizationModeSchema,
   UnsupportedEngineRuntimeAuthorizationModeErrorSchema,
   EnterpriseGlueConfigBundleSchema,
+  ConfigEngineSchema,
   ConfigAssignmentsFileSchema,
   ConfigEnginesFileSchema,
   ConfigEngineSetsFileSchema,
@@ -3612,6 +3616,7 @@ const ConfigBundleFilesOpenApiSchema = z.object({
   './identity-providers.json': ConfigIdentityProvidersFileSchema.optional(),
   './identity-mappings.json': ConfigIdentityMappingsFileSchema.optional(),
 }).strict();
+registry.register('ConfigEngineRegistration', ConfigEngineSchema);
 
 const ConfigBundleRequestOpenApiSchema = z.object({
   bundle: EnterpriseGlueConfigBundleSchema,

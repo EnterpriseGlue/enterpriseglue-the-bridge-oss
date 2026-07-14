@@ -66,6 +66,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
           const capabilityDiagnostics = getExternalEngineCapabilityDiagnostics(engine.type, capabilities);
           return {
             id: engine.id, registrationId: registration.id, name: engine.name, baseUrl: engine.baseUrl, type: engine.type,
+            connectionMode: engine.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct',
             externalId: registration.externalId, labels: parseExternalEngineLabels(registration.labelsJson),
             registrationSource: registration.registrationSource, apiClientId: registration.apiClientId,
             externalSystemId: registration.externalSystemId,
@@ -92,6 +93,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
         const capabilityDiagnostics = getExternalEngineCapabilityDiagnostics(engine.type, capabilities);
         return {
           id: engine.id, name: engine.name, baseUrl: engine.baseUrl, type: engine.type, externalId: engine.externalId,
+          connectionMode: engine.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct',
           labels: parseExternalEngineLabels(engine.labelsJson), registrationSource: engine.registrationSource, apiClientId: null,
           externalSystemId: engine.externalSystemId,
           externalSystemName: engine.externalSystemId ? systemsById.get(engine.externalSystemId)?.name || null : null,

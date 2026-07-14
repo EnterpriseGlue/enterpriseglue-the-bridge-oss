@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { EngineSchema } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
+import {
+  CreateEngineRequestSchema,
+  EndpointAuthenticationPolicyErrorSchema,
+  EndpointAuthenticationPolicyMessages,
+  EngineSchema,
+  ExternalEngineRegistrationRequestSchema,
+  UpdateEngineRequestSchema,
+} from '@enterpriseglue/shared/schemas/mission-control/engine.js';
+import { ConfigEngineSchema } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
 describe('EngineSchema', () => {
   it('exposes persisted configuration ownership and central-engine defaults safely', () => {
@@ -41,5 +49,36 @@ describe('EngineSchema', () => {
       active: true, version: null, createdAt: 1, updatedAt: 2, metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false,
     });
     expect(engine).toMatchObject({ metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false });
+  });
+
+  it('keeps manual, external, and config registration connection modes aligned', () => {
+    expect(CreateEngineRequestSchema.parse({
+      name: 'Manual', baseUrl: 'https://manual.example.test/engine-rest',
+    })).toMatchObject({ type: 'ion', connectionMode: 'direct' });
+    expect(ExternalEngineRegistrationRequestSchema.parse({
+      name: 'External', baseUrl: 'https://external.example.test/engine-rest', externalId: 'external-1',
+      connectionMode: 'customer_sidecar',
+    }).connectionMode).toBe('customer_sidecar');
+    expect(ConfigEngineSchema.parse({
+      key: 'engine.config', name: 'Config', type: 'operaton', baseUrl: 'https://config.example.test/engine-rest',
+      connectionMode: 'customer_sidecar', auth: { type: 'none' },
+    }).connectionMode).toBe('customer_sidecar');
+
+    expect(CreateEngineRequestSchema.safeParse({
+      name: 'Invalid', baseUrl: 'https://invalid.example.test', connectionMode: 'engine_proxy',
+    }).success).toBe(false);
+    expect(ExternalEngineRegistrationRequestSchema.safeParse({
+      name: 'Invalid', baseUrl: 'https://invalid.example.test', externalId: 'external-2', connectionMode: 'engine_proxy',
+    }).success).toBe(false);
+  });
+
+  it('keeps update requests partial and publishes the exact endpoint-policy error shape', () => {
+    expect(UpdateEngineRequestSchema.parse({ name: 'Renamed' })).toEqual({ name: 'Renamed' });
+    for (const error of EndpointAuthenticationPolicyMessages) {
+      expect(EndpointAuthenticationPolicyErrorSchema.parse({
+        error,
+        code: 'VALIDATION_ERROR',
+      })).toEqual({ error, code: 'VALIDATION_ERROR' });
+    }
   });
 });

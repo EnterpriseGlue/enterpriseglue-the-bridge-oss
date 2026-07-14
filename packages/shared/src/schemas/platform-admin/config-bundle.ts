@@ -5,6 +5,7 @@ import {
   EngineRuntimeAuthorizationModeSchema,
   ProjectEngineTargetPolicyModeSchema,
 } from './platform-settings.js';
+import { EngineConnectionModeSchema } from '../mission-control/engine.js';
 
 export const ENTERPRISEGLUE_CONFIG_API_VERSION = 'enterpriseglue.ai/v1alpha1' as const;
 export const ENTERPRISEGLUE_CONFIG_KIND = 'EnterpriseGlueConfigBundle' as const;
@@ -168,7 +169,7 @@ export const ConfigEngineSchema = z.object({
   externalId: z.string().min(1).max(255).optional(),
   labels: LabelSchema.default({}),
   auth: ConfigEngineAuthSchema,
-  connectionMode: z.enum(['direct', 'customer_sidecar']).default('direct'),
+  connectionMode: EngineConnectionModeSchema.default('direct'),
   runtimeAccessScope: z.enum(['engine_wide', 'resource_aware']).default('engine_wide'),
   deploymentIntegration: z.enum(['enterpriseglue_proxy', 'direct_engine']).default('enterpriseglue_proxy'),
   metadataDiscoveryEnabled: z.boolean().default(true),

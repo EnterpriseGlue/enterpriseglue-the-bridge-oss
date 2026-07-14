@@ -10,6 +10,7 @@ import {
   AUTHZ_OPENAPI_EXEMPTION_KEY,
   AUTHZ_ROUTE_EXEMPTION_KINDS,
 } from '../../authz/route-exemptions.js';
+import { EngineConnectionModeSchema } from '../mission-control/engine.js';
 
 export const AuthzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
 export const AuthzPrincipalTypeSchema = z.enum(AUTHZ_PRINCIPAL_TYPES);
@@ -543,6 +544,7 @@ export const ExternalEngineRegistrationSchema = z.object({
   name: z.string(),
   baseUrl: z.string(),
   type: z.string().nullable(),
+  connectionMode: EngineConnectionModeSchema,
   externalId: z.string().nullable(),
   labels: z.record(z.string(), z.string()),
   registrationSource: z.string().nullable(),

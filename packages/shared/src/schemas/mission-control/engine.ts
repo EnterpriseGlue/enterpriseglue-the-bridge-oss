@@ -5,8 +5,28 @@ export const EngineTypeSchema = z.enum(['ion', 'operaton', 'camunda7']);
 export type EngineType = z.infer<typeof EngineTypeSchema>;
 export const EngineAuthTypeSchema = z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials']);
 export type EngineAuthType = z.infer<typeof EngineAuthTypeSchema>;
+export const EngineConnectionModeSchema = z.enum(['direct', 'customer_sidecar']);
+export type EngineConnectionMode = z.infer<typeof EngineConnectionModeSchema>;
 export const EngineCapabilityStatusSchema = z.enum(['unknown', 'in_sync', 'mismatch']);
 export type EngineCapabilityStatus = z.infer<typeof EngineCapabilityStatusSchema>;
+
+export const EndpointAuthenticationPolicyMessages = [
+  'Credentialless endpoint authentication is allowed only for customer-sidecar engines',
+  'Credentialless customer-sidecar endpoints are disabled by platform policy',
+] as const;
+
+export const EndpointAuthenticationPolicyErrorSchema = z.object({
+  error: z.enum(EndpointAuthenticationPolicyMessages),
+  code: z.literal('VALIDATION_ERROR'),
+});
+
+export const EngineTransportDiagnosticsSchema = z.object({
+  connectionMode: EngineConnectionModeSchema,
+  endpointAuthentication: EngineAuthTypeSchema,
+  downstreamAuthentication: z.enum(['not_applicable', 'customer_managed']),
+  attempts: z.number().int().min(1).max(2).optional(),
+  timeoutMs: z.number().int().min(100).max(60_000).optional(),
+});
 
 export const ExternalEngineCapabilitiesSchema = z.object({
   operations: z.array(z.string()).optional(),
@@ -14,6 +34,46 @@ export const ExternalEngineCapabilitiesSchema = z.object({
   compatibilityProfile: z.string().nullable().optional(),
 }).passthrough();
 export type ExternalEngineCapabilities = z.infer<typeof ExternalEngineCapabilitiesSchema>;
+
+const EngineRegistrationFieldsSchema = z.object({
+  name: z.string().min(1).max(255),
+  baseUrl: z.string().min(1).url(),
+  type: EngineTypeSchema,
+  externalId: z.string().min(1).max(255).nullable().optional(),
+  labels: z.record(z.string().min(1).max(128), z.string().max(512)).optional(),
+  authType: EngineAuthTypeSchema.optional(),
+  connectionMode: EngineConnectionModeSchema,
+  username: z.string().nullable().optional(),
+  passwordEnc: z.string().nullable().optional(),
+  oauthTokenUrl: z.string().url().nullable().optional(),
+  oauthScopes: z.string().nullable().optional(),
+  oauthAudience: z.string().nullable().optional(),
+  version: z.string().nullable().optional(),
+  environmentTagId: z.string().nullable().optional(),
+  runtimeAccessScope: z.enum(['engine_wide', 'resource_aware']).optional(),
+  deploymentIntegration: z.enum(['enterpriseglue_proxy', 'direct_engine']).optional(),
+  metadataDiscoveryEnabled: z.boolean().optional(),
+  deploymentDiscoveryEnabled: z.boolean().optional(),
+  reconciliationIntervalSeconds: z.number().int().min(60).max(86400).optional(),
+  pipelineReceiptEnabled: z.boolean().optional(),
+});
+
+export const CreateEngineRequestSchema = EngineRegistrationFieldsSchema.extend({
+  type: EngineTypeSchema.default('ion'),
+  connectionMode: EngineConnectionModeSchema.default('direct'),
+});
+export const UpdateEngineRequestSchema = EngineRegistrationFieldsSchema.partial();
+export const ExternalEngineRegistrationRequestSchema = EngineRegistrationFieldsSchema.extend({
+  type: EngineTypeSchema.default('ion'),
+  connectionMode: EngineConnectionModeSchema.default('direct'),
+  externalId: z.string().min(1).max(255),
+  externalSystemId: z.string().min(1).nullable().optional(),
+  managementMode: z.enum(['external_managed', 'hybrid']).optional(),
+  fieldOwnership: z.record(z.string().min(1).max(128), z.enum(['manual', 'external'])).optional(),
+  lifecycleStatus: z.enum(['active', 'disabled', 'stale']).optional(),
+  capabilities: ExternalEngineCapabilitiesSchema.optional(),
+  testConnection: z.boolean().optional(),
+});
 
 export const ExternalEngineCapabilityDiagnosticsSchema = z.object({
   status: EngineCapabilityStatusSchema,
@@ -127,7 +187,7 @@ export const EngineSchemaRaw = z.object({
   lastMetadataReconciledAt: z.number().nullable().optional(),
   lastMetadataReconciliationStatus: z.enum(['succeeded', 'failed']).nullable().optional(),
   pipelineReceiptEnabled: z.boolean().optional(),
-  connectionMode: z.enum(['direct', 'customer_sidecar']).optional(),
+  connectionMode: EngineConnectionModeSchema.optional(),
   externalUpdatedAt: z.number().nullable().optional(),
   active: z.boolean().nullable(),
   version: z.string().nullable(),
@@ -191,7 +251,7 @@ export const EngineInsertSchema = z.object({
   baseUrl: z.string().url(),
   type: EngineTypeSchema.optional(),
   authType: EngineAuthTypeSchema.optional(),
-  connectionMode: z.enum(['direct', 'customer_sidecar']).optional(),
+  connectionMode: EngineConnectionModeSchema.optional(),
   username: z.string().optional(),
   passwordEnc: z.string().optional(),
   oauthTokenUrl: z.string().url().optional(),

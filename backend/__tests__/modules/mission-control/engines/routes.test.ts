@@ -1014,7 +1014,10 @@ describe('mission-control engines routes', () => {
       });
 
     expect(response.status).toBe(400);
-    expect(response.body.error).toContain('only for customer-sidecar engines');
+    expect(response.body).toEqual({
+      error: 'Credentialless endpoint authentication is allowed only for customer-sidecar engines',
+      code: 'VALIDATION_ERROR',
+    });
   });
 
   it('rejects a credentialless customer sidecar when platform policy is disabled', async () => {
@@ -1028,7 +1031,10 @@ describe('mission-control engines routes', () => {
       });
 
     expect(response.status).toBe(400);
-    expect(response.body.error).toContain('disabled by platform policy');
+    expect(response.body).toEqual({
+      error: 'Credentialless customer-sidecar endpoints are disabled by platform policy',
+      code: 'VALIDATION_ERROR',
+    });
   });
 
   it('persists a credentialless customer sidecar when platform policy permits it', async () => {
