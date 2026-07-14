@@ -7,6 +7,13 @@ metadata:
     app.kubernetes.io/part-of: enterpriseglue
 spec:
   replicas: 1
+  # Keep the currently ready ReplicaSet serving while a new image, bundle hash,
+  # or secret-resource-version rollout is waiting on the fail-closed /ready gate.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: enterpriseglue-backend
