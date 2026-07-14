@@ -426,6 +426,12 @@ export interface RoleAssignmentFilters {
   resourceId?: string | null;
   scopeType?: ResourceType;
   scopeId?: string | null;
+  /**
+   * Restricts the result to assignments targeting runtime resources or
+   * runtime-resource sets that belong to one engine. This deliberately does
+   * not include engine-wide assignments.
+   */
+  runtimeEngineId?: string;
 }
 
 export interface CreateRoleAssignmentInput {
@@ -2101,6 +2107,22 @@ class PermissionServiceClass {
       } else {
         qb.andWhere('assignment.scopeId IS NULL');
       }
+    }
+    if (filters.runtimeEngineId) {
+      qb
+        .leftJoin(
+          RuntimeResource,
+          'runtimeResource',
+          "runtimeResource.id = COALESCE(assignment.scopeId, assignment.resourceId) AND (assignment.scopeType = 'engine_runtime_resource' OR (assignment.scopeType IS NULL AND assignment.resourceType = 'engine_runtime_resource'))"
+        )
+        .leftJoin(
+          RuntimeResourceSet,
+          'runtimeResourceSet',
+          "runtimeResourceSet.id = COALESCE(assignment.scopeId, assignment.resourceId) AND (assignment.scopeType = 'engine_runtime_resource_set' OR (assignment.scopeType IS NULL AND assignment.resourceType = 'engine_runtime_resource_set'))"
+        )
+        .andWhere('(runtimeResource.engineId = :runtimeEngineId OR runtimeResourceSet.engineId = :runtimeEngineId)', {
+          runtimeEngineId: filters.runtimeEngineId,
+        });
     }
 
     const assignments = await qb.getMany();

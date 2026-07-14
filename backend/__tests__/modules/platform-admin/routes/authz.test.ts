@@ -870,6 +870,29 @@ describe('platform-admin authz routes', () => {
     expect(deleteResponse.status).toBe(204);
   });
 
+  it('lists exact runtime grants only through the platform-authorized engine filter', async () => {
+    const response = await request(app)
+      .get('/api/authz/role-assignments?engineId=engine-1');
+
+    expect(response.status).toBe(200);
+    expect(permissionService.listRoleAssignments).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: null,
+      runtimeEngineId: 'engine-1',
+    }));
+  });
+
+  it('does not let an engine member manager enumerate runtime grants through the engine filter', async () => {
+    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
+      permission === 'engine:members:manage'
+    );
+
+    const response = await request(app)
+      .get('/api/authz/role-assignments?engineId=engine-1');
+
+    expect(response.status).toBe(403);
+    expect(permissionService.listRoleAssignments).not.toHaveBeenCalled();
+  });
+
   it('allows scoped resource managers to list assignable custom roles for their resource scope', async () => {
     vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
       permission === 'engine:members:manage'

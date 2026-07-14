@@ -29,6 +29,7 @@ const roleAssignmentQuerySchema = z.object({
   resourceId: z.string().optional(),
   scopeType: authzResourceTypeSchema.optional(),
   scopeId: z.string().optional(),
+  engineId: z.string().min(1).optional(),
 });
 const roleAssignmentCreateSchema = z.object({
   principalType: authzPrincipalTypeSchema,
@@ -182,7 +183,10 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
   router.get('/api/authz/role-assignments', apiLimiter, requireAuth, validateQuery(roleAssignmentQuerySchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const resource = toScopedAssignmentResource(req.query.resourceType, req.query.resourceId);
-      await assertCanViewRoleAssignments(req, resource);
+      // Runtime-resource scopes cannot be delegated through the engine-member
+      // manager path. Requiring the platform-level assignment permission keeps
+      // this cross-resource inventory view from exposing unrelated grants.
+      await assertCanViewRoleAssignments(req, req.query.engineId ? null : resource);
       const assignments = await permissionService.listRoleAssignments({
         tenantId: req.tenant?.tenantId || null,
         principalType: typeof req.query.principalType === 'string' ? req.query.principalType as any : undefined,
@@ -191,6 +195,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
         resourceId: typeof req.query.resourceId === 'string' ? req.query.resourceId : undefined,
         scopeType: typeof req.query.scopeType === 'string' ? req.query.scopeType as any : undefined,
         scopeId: typeof req.query.scopeId === 'string' ? req.query.scopeId : undefined,
+        runtimeEngineId: typeof req.query.engineId === 'string' ? req.query.engineId : undefined,
       });
       res.json(assignments);
     } catch (error: any) {

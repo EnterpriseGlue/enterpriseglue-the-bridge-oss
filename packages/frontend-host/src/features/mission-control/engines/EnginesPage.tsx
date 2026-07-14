@@ -134,7 +134,7 @@ export function resolveEngineDetailSections(options: {
 }): EngineDetailSectionId[] {
   const sections: EngineDetailSectionId[] = []
   if (options.isEditing) sections.push('registration')
-  if (options.canViewMembers) sections.push('access')
+  if (options.canViewMembers || options.canViewRuntimeResources) sections.push('access')
   if (options.canViewProjectAccess || options.canViewDeployments) sections.push('deployment')
   if (options.canViewRuntimeResources) sections.push('runtime')
   return sections
@@ -397,6 +397,31 @@ type EngineRoleAssignment = {
   lastSeenAt?: number | null
   createdAt?: number | null
   updatedAt?: number | null
+}
+
+type RuntimeResourceAccessInventory = {
+  id: string
+  resourceKind: 'process_definition' | 'decision_definition'
+  resourceKey: string
+  runtimeTenantId?: string | null
+  projectId?: string | null
+  source: string
+  sourceRef?: string | null
+  observedAt: number
+  isActive?: boolean
+}
+
+type RuntimeResourceSetAccessInventory = {
+  id: string
+  key: string
+  name: string
+  resourceKind: 'process_definition' | 'decision_definition'
+  selectorJson?: string
+  runtimeTenantId?: string | null
+  source: string
+  sourceRef?: string | null
+  lastAppliedAt?: number | null
+  isArchived?: boolean
 }
 
 type SsoEngineAccessSnapshot = {
@@ -776,13 +801,124 @@ function EngineDeploymentSection({
   )
 }
 
-function EngineRuntimeResourcesSection({ resources, loading, error }: { resources: Array<{ id: string; resourceKind: string; resourceKey: string; runtimeTenantId?: string; source: string; observedAt: number }>; loading: boolean; error: unknown }) {
+function EngineRuntimeResourcesSection({ resources, loading, error }: { resources: Array<{ id: string; resourceKind: string; resourceKey: string; runtimeTenantId?: string | null; source: string; observedAt: number }>; loading: boolean; error: unknown }) {
   const processes = resources.filter((resource) => resource.resourceKind === 'process_definition').length
   const decisions = resources.filter((resource) => resource.resourceKind === 'decision_definition').length
   return <section aria-label="Runtime resources" style={{ border: '1px solid var(--color-border-primary)', borderRadius: 8, padding: 'var(--spacing-4)', background: 'var(--color-bg-secondary)', display: 'grid', gap: 'var(--spacing-3)' }}>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}><h3 style={{ margin: 0, fontSize: 16 }}>Runtime resources</h3><div style={{ display: 'flex', gap: 'var(--spacing-2)' }}><Tag type="blue" size="sm">{processes} processes</Tag><Tag type="purple" size="sm">{decisions} decisions</Tag></div></div>
     {loading ? <InlineLoading description="Loading runtime resources" /> : error ? <InlineNotification lowContrast kind="error" title="Runtime resources could not be loaded" subtitle={getUiErrorMessage(error, 'Request failed')} hideCloseButton /> : resources.length === 0 ? <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>No runtime resources have been recorded for this resource-aware engine.</div> : <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>{resources.slice(0, 8).map((resource) => <div key={resource.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-3)', padding: 'var(--spacing-2) 0', borderBottom: '1px solid var(--color-border-subtle)' }}><div style={{ minWidth: 0 }}><div style={{ overflowWrap: 'anywhere', fontSize: 13 }}>{resource.resourceKey}</div><div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{resource.runtimeTenantId || 'No runtime tenant'} | {resource.source}</div></div><Tag type={resource.resourceKind === 'process_definition' ? 'blue' : 'purple'} size="sm">{resource.resourceKind === 'process_definition' ? 'Process' : 'Decision'}</Tag></div>)}{resources.length > 8 && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Additional inventory is available in Access Control.</div>}</div>}
   </section>
+}
+
+function EngineRuntimeAccessSection({
+  resources,
+  resourcesError,
+  resourcesLoading,
+  resourceSets,
+  resourceSetsError,
+  resourceSetsLoading,
+  assignments,
+  assignmentsError,
+  assignmentsLoading,
+  canViewAssignments,
+}: {
+  resources: RuntimeResourceAccessInventory[]
+  resourcesError: unknown
+  resourcesLoading: boolean
+  resourceSets: RuntimeResourceSetAccessInventory[]
+  resourceSetsError: unknown
+  resourceSetsLoading: boolean
+  assignments: EngineRoleAssignment[]
+  assignmentsError: unknown
+  assignmentsLoading: boolean
+  canViewAssignments: boolean
+}) {
+  const resourceById = React.useMemo(() => new Map(resources.map((resource) => [resource.id, resource])), [resources])
+  const resourceSetById = React.useMemo(() => new Map(resourceSets.map((set) => [set.id, set])), [resourceSets])
+  const targetForAssignment = (assignment: EngineRoleAssignment): string => {
+    const scopeType = assignment.scopeType || assignment.resourceType
+    const scopeId = assignment.scopeId || assignment.resourceId
+    if (scopeType === 'engine_runtime_resource') {
+      const resource = scopeId ? resourceById.get(scopeId) : null
+      return resource ? `${resource.resourceKind === 'process_definition' ? 'Process' : 'Decision'}: ${resource.resourceKey}` : 'Runtime resource (inactive or removed)'
+    }
+    if (scopeType === 'engine_runtime_resource_set') {
+      const set = scopeId ? resourceSetById.get(scopeId) : null
+      return set ? `Resource set: ${set.name} (${set.key})` : 'Runtime resource set (archived or removed)'
+    }
+    return 'Runtime access target unavailable'
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 'var(--spacing-3)', borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>Runtime resource access</div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Sanitized inventory, resource-set selectors, and grant lineage for this resource-aware engine.</div>
+        </div>
+        <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
+          <Tag type="blue" size="sm">{resources.length} resources</Tag>
+          <Tag type="purple" size="sm">{resourceSets.length} sets</Tag>
+          {canViewAssignments && <Tag type="cyan" size="sm">{assignments.length} direct grants</Tag>}
+        </div>
+      </div>
+
+      {resourcesLoading || resourceSetsLoading ? <InlineLoading description="Loading runtime access inventory" /> : resourcesError || resourceSetsError ? (
+        <InlineNotification lowContrast kind="error" title="Runtime access inventory could not be loaded" subtitle={getUiErrorMessage(resourcesError || resourceSetsError, 'Request failed')} hideCloseButton />
+      ) : (
+        <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+          <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>Runtime resources</div>
+            {resources.length === 0 ? <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>No runtime resources have been recorded.</div> : resources.slice(0, 8).map((resource) => (
+              <div key={resource.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 'var(--spacing-3)', alignItems: 'start', borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-2)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, overflowWrap: 'anywhere' }}>{resource.resourceKey}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>Tenant: {resource.runtimeTenantId || 'none'} · Source: {resource.source}{resource.sourceRef ? ` (${resource.sourceRef})` : ''}</div>
+                </div>
+                <Tag type={resource.resourceKind === 'process_definition' ? 'blue' : 'purple'} size="sm">{resource.resourceKind === 'process_definition' ? 'Process' : 'Decision'}</Tag>
+              </div>
+            ))}
+            {resources.length > 8 && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>+{resources.length - 8} additional runtime resources</div>}
+          </div>
+
+          <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>Resource sets</div>
+            {resourceSets.length === 0 ? <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>No runtime resource sets are configured.</div> : resourceSets.slice(0, 8).map((set) => (
+              <div key={set.id} style={{ display: 'grid', gap: 4, borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 13, overflowWrap: 'anywhere' }}>{set.name} <span style={{ color: 'var(--color-text-secondary)' }}>({set.key})</span></div>
+                  <Tag type={set.resourceKind === 'process_definition' ? 'blue' : 'purple'} size="sm">{set.resourceKind === 'process_definition' ? 'Process' : 'Decision'}</Tag>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>Source: {set.source}{set.sourceRef ? ` (${set.sourceRef})` : ''}{set.selectorJson ? ` · Selector: ${set.selectorJson}` : ''}</div>
+              </div>
+            ))}
+            {resourceSets.length > 8 && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>+{resourceSets.length - 8} additional resource sets</div>}
+          </div>
+
+          {!canViewAssignments ? <InlineNotification lowContrast kind="info" title="Exact runtime grants unavailable" subtitle="Viewing direct runtime-resource grants requires authorization-assignment read permission." hideCloseButton /> : assignmentsLoading ? <InlineLoading description="Loading exact runtime grants" /> : assignmentsError ? <InlineNotification lowContrast kind="error" title="Exact runtime grants could not be loaded" subtitle={getUiErrorMessage(assignmentsError, 'Request failed')} hideCloseButton /> : (
+            <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>Exact grants</div>
+              {assignments.length === 0 ? <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>No direct runtime-resource or resource-set grants are configured.</div> : assignments.slice(0, 8).map((assignment) => (
+                <div key={assignment.id} style={{ display: 'grid', gap: 4, borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-2)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 13, overflowWrap: 'anywhere' }}>{formatEngineAccessPrincipal(assignment)}</div>
+                    <Tag type={assignment.source === 'manual' ? 'blue' : assignment.source === 'sso' ? 'purple' : 'gray'} size="sm">{formatEngineRegistrationStatus(assignment.source)}</Tag>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--spacing-3)' }}>
+                    <EngineRegistrationDetail label="Role" value={assignment.roleName || formatEngineAccessRole(assignment.roleId)} />
+                    <EngineRegistrationDetail label="Target" value={targetForAssignment(assignment)} />
+                    <EngineRegistrationDetail label="Lineage" value={formatEngineAccessSourceLineage(assignment)} />
+                    <EngineRegistrationDetail label="Expires" value={formatEngineTimestamp(assignment.expiresAt)} />
+                  </div>
+                </div>
+              ))}
+              {assignments.length > 8 && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>+{assignments.length - 8} additional direct grants</div>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function EngineAccessSection({
@@ -796,6 +932,17 @@ function EngineAccessSection({
   snapshots,
   snapshotsError,
   snapshotsLoading,
+  canViewRuntimeResources,
+  runtimeResources,
+  runtimeResourcesError,
+  runtimeResourcesLoading,
+  runtimeResourceSets,
+  runtimeResourceSetsError,
+  runtimeResourceSetsLoading,
+  runtimeAssignments,
+  runtimeAssignmentsError,
+  runtimeAssignmentsLoading,
+  canViewRuntimeAssignments,
 }: {
   assignments: EngineRoleAssignment[]
   assignmentsError: unknown
@@ -807,6 +954,17 @@ function EngineAccessSection({
   snapshots: SsoEngineAccessSnapshot[]
   snapshotsError: unknown
   snapshotsLoading: boolean
+  canViewRuntimeResources: boolean
+  runtimeResources: RuntimeResourceAccessInventory[]
+  runtimeResourcesError: unknown
+  runtimeResourcesLoading: boolean
+  runtimeResourceSets: RuntimeResourceSetAccessInventory[]
+  runtimeResourceSetsError: unknown
+  runtimeResourceSetsLoading: boolean
+  runtimeAssignments: EngineRoleAssignment[]
+  runtimeAssignmentsError: unknown
+  runtimeAssignmentsLoading: boolean
+  canViewRuntimeAssignments: boolean
 }) {
   const members = Array.isArray(membersResponse?.members) ? membersResponse!.members! : []
   const pendingInvites = Array.isArray(membersResponse?.pendingInvites) ? membersResponse!.pendingInvites! : []
@@ -996,6 +1154,21 @@ function EngineAccessSection({
           )}
         </div>
       )}
+
+      {canViewRuntimeResources && (
+        <EngineRuntimeAccessSection
+          resources={runtimeResources}
+          resourcesError={runtimeResourcesError}
+          resourcesLoading={runtimeResourcesLoading}
+          resourceSets={runtimeResourceSets}
+          resourceSetsError={runtimeResourceSetsError}
+          resourceSetsLoading={runtimeResourceSetsLoading}
+          assignments={runtimeAssignments}
+          assignmentsError={runtimeAssignmentsError}
+          assignmentsLoading={runtimeAssignmentsLoading}
+          canViewAssignments={canViewRuntimeAssignments}
+        />
+      )}
     </section>
   )
 }
@@ -1104,6 +1277,7 @@ export default function Engines() {
   const { refreshUser, hasEnginePermission, permissions } = useAuth()
   const createEngineDecision = useActionDecision('engine.inventory.create', { type: 'platform' })
   const runtimeResourcesReadDecision = useActionDecision('platform.engine-sets.read', { type: 'platform' })
+  const assignmentReadDecision = useActionDecision('platform.authz.assignments.read', { type: 'platform' })
   const platformSettingsQ = useQuery({
     queryKey: ['platform', 'sync-settings'],
     queryFn: () => apiClient.get<{ engineOnboardingMode?: EngineOnboardingMode; engineAccessAuthority?: AccessAuthorityMode; credentiallessCustomerSidecarsEnabled?: boolean }>('/api/auth/platform-settings', undefined, { credentials: 'include' }),
@@ -1325,7 +1499,17 @@ export default function Engines() {
   const runtimeResourcesQ = useQuery({
     queryKey: ['engines', editing?.id, 'runtime-resources'],
     enabled: Boolean(engineModal.isOpen && editing?.id && editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed),
-    queryFn: () => apiClient.get<Array<{ id: string; resourceKind: string; resourceKey: string; runtimeTenantId?: string; source: string; observedAt: number }>>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(String(editing?.id))}`, undefined, { credentials: 'include' }),
+    queryFn: () => apiClient.get<RuntimeResourceAccessInventory[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(String(editing?.id))}&includeInactive=true`, undefined, { credentials: 'include' }),
+  })
+  const runtimeResourceSetsQ = useQuery({
+    queryKey: ['engines', editing?.id, 'runtime-resource-sets'],
+    enabled: Boolean(engineModal.isOpen && editing?.id && editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed),
+    queryFn: () => apiClient.get<RuntimeResourceSetAccessInventory[]>(`/api/authz/runtime-resource-sets?engineId=${encodeURIComponent(String(editing?.id))}&includeArchived=true`, undefined, { credentials: 'include' }),
+  })
+  const runtimeAssignmentsQ = useQuery({
+    queryKey: ['engines', editing?.id, 'runtime-role-assignments'],
+    enabled: Boolean(engineModal.isOpen && editing?.id && editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed && assignmentReadDecision.allowed),
+    queryFn: () => apiClient.get<EngineRoleAssignment[]>('/api/authz/role-assignments', { engineId: String(editing?.id) }, { credentials: 'include' }),
   })
   const accessMembersQ = useQuery({
     queryKey: ['engines', editing?.id, 'access-members'],
@@ -1847,6 +2031,17 @@ export default function Engines() {
             snapshots={accessSnapshotsQ.data || []}
             snapshotsError={accessSnapshotsQ.error}
             snapshotsLoading={accessSnapshotsQ.isLoading}
+            canViewRuntimeResources={Boolean(editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed)}
+            runtimeResources={runtimeResourcesQ.data || []}
+            runtimeResourcesError={runtimeResourcesQ.error}
+            runtimeResourcesLoading={runtimeResourcesQ.isLoading}
+            runtimeResourceSets={runtimeResourceSetsQ.data || []}
+            runtimeResourceSetsError={runtimeResourceSetsQ.error}
+            runtimeResourceSetsLoading={runtimeResourceSetsQ.isLoading}
+            runtimeAssignments={runtimeAssignmentsQ.data || []}
+            runtimeAssignmentsError={runtimeAssignmentsQ.error}
+            runtimeAssignmentsLoading={runtimeAssignmentsQ.isLoading}
+            canViewRuntimeAssignments={assignmentReadDecision.allowed}
           />
         )}
         {editing && engineDetailSections.includes('deployment') && (

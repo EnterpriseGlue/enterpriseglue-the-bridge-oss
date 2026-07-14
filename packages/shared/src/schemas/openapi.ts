@@ -3838,6 +3838,7 @@ registry.registerPath({
       resourceId: z.string().optional(),
       scopeType: AuthzResourceTypeSchema.optional(),
       scopeId: z.string().optional(),
+      engineId: z.string().optional(),
     }),
   },
   responses: { 200: { description: 'List role assignments', content: { 'application/json': { schema: z.array(RoleAssignmentSchema) } } } },
