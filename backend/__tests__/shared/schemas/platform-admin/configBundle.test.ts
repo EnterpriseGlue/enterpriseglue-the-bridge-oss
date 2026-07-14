@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ConfigEnginesFileSchema,
   ConfigIdentityProvidersFileSchema,
+  ConfigProjectEngineTargetsFileSchema,
   ConfigRolesFileSchema,
   EnterpriseGlueConfigBundleSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
@@ -66,6 +67,19 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
         scope: 'engine',
         permissions: ['engine:view'],
       }],
+    }).success).toBe(false);
+  });
+
+  it('requires immutable project IDs in project-engine target references', () => {
+    const target = {
+      engineRef: { engineKey: 'engine-prod-payments' },
+      allowCiDeploy: true,
+    };
+    expect(ConfigProjectEngineTargetsFileSchema.safeParse({
+      projectEngineTargets: [{ ...target, projectRef: { id: '00000000-0000-4000-8000-000000000001' } }],
+    }).success).toBe(true);
+    expect(ConfigProjectEngineTargetsFileSchema.safeParse({
+      projectEngineTargets: [{ ...target, projectRef: { key: 'project.payments' } }],
     }).success).toBe(false);
   });
 

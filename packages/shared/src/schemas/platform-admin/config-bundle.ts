@@ -20,10 +20,10 @@ export const ConfigEngineReferenceSchema = z.object({ engineKey: ReferenceKeySch
 export const ConfigEngineSetReferenceSchema = z.object({ engineSetKey: ReferenceKeySchema }).strict();
 export const ConfigGroupReferenceSchema = z.object({ groupKey: ReferenceKeySchema.regex(/^group\./) }).strict();
 export const ConfigRoleReferenceSchema = z.object({ roleKey: ReferenceKeySchema }).strict();
+/** Projects do not yet have a stable config key, so bundles use immutable IDs. */
 export const ConfigProjectReferenceSchema = z.object({
-  id: z.string().uuid().optional(),
-  key: ReferenceKeySchema.optional(),
-}).strict().refine((ref) => Boolean(ref.id || ref.key), 'A project reference requires id or key');
+  id: z.string().uuid(),
+}).strict();
 const SecretReferenceSchema = z.string()
   .min(1)
   .max(512)

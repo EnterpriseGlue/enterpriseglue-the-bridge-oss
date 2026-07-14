@@ -581,7 +581,7 @@ class ConfigBundleDiffService {
       for (const assignment of desiredAssignments.filter((candidate) => candidate.principal.type === 'group' && candidate.scope.type === 'engine' && candidate.scope.engineKey === target.engineRef.engineKey)) {
         if ((rolePermissionsByKey.get(assignment.roleKey) || []).includes(EnginePermissions.DEPLOY)) {
           warnings.push({
-            id: `config.pipeline_target_human_deployer:${target.key || target.projectRef.id || target.projectRef.key}:${assignment.principal.key}:${assignment.roleKey}`,
+            id: `config.pipeline_target_human_deployer:${target.key || target.projectRef.id}:${assignment.principal.key}:${assignment.roleKey}`,
             message: `Pipeline-only target ${target.key || target.engineRef.engineKey} has a group deployment assignment for ${assignment.principal.key}; manual deployment remains disabled but this role can deploy where another target permits it.`,
           });
         }
