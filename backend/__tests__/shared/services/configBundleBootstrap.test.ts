@@ -63,6 +63,17 @@ describe('configBundleBootstrap', () => {
     updateApplyRun.mockResolvedValue({ affected: 1 });
   });
 
+  it('keeps a no-bundle startup ready without touching filesystem ingress', async () => {
+    config.configBootstrapMode = 'disabled';
+    config.configBundlePath = undefined;
+
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ mode: 'disabled', status: 'disabled', hash: null });
+
+    expect(stat).not.toHaveBeenCalled();
+    expect(readFile).not.toHaveBeenCalled();
+    expect(preview).not.toHaveBeenCalled();
+  });
+
   it('rejects a bootstrap apply without an explicit expected tenant scope', async () => {
     await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle target scope is required');
 
@@ -95,6 +106,40 @@ describe('configBundleBootstrap', () => {
       expect.objectContaining({ expectedPreviewHash: 'preview-hash', expectedTenantScope: 'tenant-a' }),
       expect.objectContaining({ credentiallessCustomerSidecarsEnabled: false }),
     );
+  });
+
+  it('rejects a mounted bundle when its image-bound hash does not match', async () => {
+    config.configExpectedSha256 = 'a'.repeat(64);
+    readFile.mockResolvedValue(Buffer.from('{"bundle":{},"files":{}}'));
+
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle hash verification failed');
+
+    expect(preview).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+    expect(getConfigBootstrapStatus()).toMatchObject({ status: 'failed', issueCode: 'hash_mismatch' });
+  });
+
+  it('rejects an invalid mounted bundle before apply and keeps its diagnostics safe', async () => {
+    config.configExpectedTenantScope = 'tenant-a';
+    preview.mockReturnValue({ valid: false, canonicalHash: undefined, errors: [{ message: 'invalid' }] });
+
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle validation failed');
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(getConfigBootstrapStatus()).toMatchObject({ status: 'failed', issueCode: 'validation_failed', hash: expect.any(String) });
+  });
+
+  it('reuses the same bootstrap idempotency key after a mounted-bundle restart', async () => {
+    config.configExpectedTenantScope = 'tenant-a';
+    apply.mockResolvedValue({ canonicalHash: 'preview-hash' });
+
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'applied' });
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'applied' });
+
+    const idempotencyKeys = apply.mock.calls.map(([input]) => input.idempotencyKey);
+    expect(idempotencyKeys).toHaveLength(2);
+    expect(idempotencyKeys[0]).toMatch(/^bootstrap:[a-f0-9]{64}$/);
+    expect(idempotencyKeys[1]).toBe(idempotencyKeys[0]);
   });
 
   it('requires available secret references when bootstrap preflight is enabled', async () => {

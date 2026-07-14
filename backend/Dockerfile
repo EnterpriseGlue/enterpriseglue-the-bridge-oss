@@ -16,7 +16,9 @@ COPY --chown=node:node frontend/package.json frontend/
 
 RUN apk upgrade --no-cache zlib \
     && pnpm install --frozen-lockfile \
-    && chown -R node:node /repo/node_modules
+    && chown -R node:node /repo/node_modules \
+    && mkdir -p /etc/enterpriseglue/config /var/run/secrets/enterpriseglue \
+    && chown -R node:node /etc/enterpriseglue /var/run/secrets/enterpriseglue
 
 COPY --chown=node:node backend backend
 
