@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { requireAuth, requireAdmin, requireOnboarding, optionalAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireOnboarding as requireOnboardingFromInterfaces } from '@enterpriseglue/shared/interfaces/middleware/auth.js';
 import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -255,6 +256,22 @@ describe('auth middleware', () => {
       const error = (next as any).mock.calls[0][0];
       expect(error).toBeInstanceOf(AppError);
       expect(error?.message).toContain('Invalid user principal');
+    });
+
+    it('keeps the interfaces compatibility export on the canonical validation path', () => {
+      req.cookies = { onboardingToken: TEST_COOKIE_TOKEN };
+      (jwt.verifyToken as any).mockReturnValue({
+        userId: 'user-1',
+        email: 'user@example.com',
+        invitationId: 'invitation-1',
+        principalType: 'user',
+        principalId: 'other-user',
+        type: 'onboarding',
+      });
+
+      requireOnboardingFromInterfaces(req as Request, res as Response, next);
+
+      expect((next as any).mock.calls[0][0]?.message).toContain('Invalid user principal');
     });
   });
 
