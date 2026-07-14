@@ -53,7 +53,9 @@ const createProviderSchema = z.object({
 
   // Provisioning
   autoProvision: z.boolean().optional(),
-  defaultRole: z.enum(['admin', 'user']).optional(),
+  // Legacy defaults can be inspected and converted, but never changed through
+  // the provider CRUD API.
+  defaultRole: z.never().optional(),
 });
 
 const updateProviderSchema = createProviderSchema.partial();
@@ -65,13 +67,11 @@ const migrateDefaultRoleSchema = z.object({ providerKey: z.string().min(1).max(1
 
 type SsoProviderRiskInput = {
   enabled?: boolean;
-  defaultRole?: 'admin' | 'user';
   riskAcknowledged?: boolean;
 };
 
 type SsoProviderRiskExisting = {
   enabled?: boolean;
-  defaultRole?: string;
 };
 
 function getProviderRiskReasons(input: SsoProviderRiskInput, existing?: SsoProviderRiskExisting): string[] {
@@ -79,10 +79,6 @@ function getProviderRiskReasons(input: SsoProviderRiskInput, existing?: SsoProvi
 
   if (input.enabled === true && existing?.enabled !== true) {
     reasons.push('provider_enable');
-  }
-
-  if (input.defaultRole === 'admin' && existing?.defaultRole !== 'admin') {
-    reasons.push('platform_admin_default_role');
   }
 
   return reasons;
@@ -208,7 +204,6 @@ router.post(
             name: req.body.name,
             type: req.body.type,
             enabled: req.body.enabled === true,
-            defaultRole: req.body.defaultRole || 'user',
           },
           riskReasons
         ),

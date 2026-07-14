@@ -146,7 +146,7 @@ The 2026-07-12 codebase review found that the implemented RBAC foundation is a u
 - [x] ✅ Keep runtime permissions in the engine permission namespace and allow an engine-scoped role to be assigned to an engine, Engine Set, exact runtime resource, or runtime resource set.
 - [x] ✅ Model runtime tenant as a runtime resource kind, not a third top-level assignment resource type.
 - [x] ✅ Keep navigation permission snapshots coarse; runtime-resource visibility is server-filtered.
-- [ ] ⬜ Complete group-first default access: provider-neutral mappings can use `exists` to target an internal group, but legacy provider `defaultRole` mutation and its platform-role fallback have not yet been removed.
+- [ ] ⬜ Complete group-first default access: provider-neutral mappings can use `exists` to target an internal group. Legacy provider `defaultRole` is now read-only for migration/cutover compatibility, but the legacy SAML platform-role fallback has not yet been removed.
 - [x] ✅ Treat the current SSO platform-role and direct-engine mapping models as migration inputs, not parallel target models. Product wizards may create a managed internal group plus scoped assignment, but runtime lineage stays entitlement -> group -> assignment.
 - [x] ✅ Require exact provider-id-bound login and reconciliation for every protocol. Microsoft/Google compatibility routes now bind selected provider configuration, callback state, account-link promotion, normalized identity, mapping, diagnostics, hook context, and audit to the same record; provider-API reconciliation remains a separate pending capability.
 - [x] ✅ Require a real secret resolver/encryption service before config bundle apply can handle provider or engine credentials.

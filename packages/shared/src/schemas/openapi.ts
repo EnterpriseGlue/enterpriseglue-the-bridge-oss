@@ -2032,7 +2032,6 @@ const SsoProviderCreateRequestSchema = z.object({
   buttonColor: z.string().optional(),
   displayOrder: z.number().int().optional(),
   autoProvision: z.boolean().optional(),
-  defaultRole: z.enum(['admin', 'user']).optional(),
 });
 const SsoProviderUpdateRequestSchema = SsoProviderCreateRequestSchema.partial();
 const SsoProviderToggleRequestSchema = z.object({

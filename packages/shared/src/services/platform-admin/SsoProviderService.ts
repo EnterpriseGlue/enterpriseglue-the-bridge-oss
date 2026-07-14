@@ -6,7 +6,7 @@
  */
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import type { LegacyPlatformRole, PlatformRole as SharedPlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
+import type { PlatformRole as SharedPlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
 import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
@@ -56,7 +56,6 @@ export interface CreateSsoProviderInput {
   
   // Provisioning
   autoProvision?: boolean;
-  defaultRole?: LegacyPlatformRole;
 }
 
 export interface UpdateSsoProviderInput extends Partial<CreateSsoProviderInput> {
@@ -270,7 +269,9 @@ class SsoProviderServiceClass {
       
       // Provisioning
       autoProvision: input.autoProvision ?? true,
-      defaultRole: normalizeRoleValue(input.defaultRole || 'user'),
+      // New providers always start with the non-privileged legacy value. Existing
+      // values remain readable only until their provider-neutral migration/cutover.
+      defaultRole: 'user',
       
       createdAt: now,
       updatedAt: now,
@@ -346,7 +347,6 @@ class SsoProviderServiceClass {
     
     // Provisioning
     if (input.autoProvision !== undefined) updates.autoProvision = input.autoProvision;
-    if (input.defaultRole !== undefined) updates.defaultRole = normalizeRoleValue(input.defaultRole);
 
     await providerRepo.update({ id }, updates);
   }

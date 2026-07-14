@@ -170,7 +170,6 @@ export const SsoProviderInsertSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1),
   type: z.enum(['microsoft', 'google', 'saml', 'oidc']),
-  defaultRole: z.enum(['admin', 'user']).optional(),
 });
 
 // Raw schema - matches TypeORM SsoClaimsMapping entity

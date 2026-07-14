@@ -86,29 +86,17 @@ describe('platform-admin sso-providers routes', () => {
     expect(ssoProviderServiceMock.createProvider).not.toHaveBeenCalled();
   });
 
-  it('audits risk acknowledgement when creating a provider with admin default role', async () => {
+  it('rejects creating a provider with a mutable legacy default role', async () => {
     const response = await request(app)
       .post('/api/sso/providers')
       .send({
         name: 'Admin SSO',
         type: 'microsoft',
         defaultRole: 'admin',
-        riskAcknowledged: true,
       });
 
-    expect(response.status).toBe(201);
-    expect(ssoProviderServiceMock.createProvider).toHaveBeenCalledWith(
-      expect.objectContaining({ defaultRole: 'admin', riskAcknowledged: true }),
-      'admin-1',
-    );
-    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'sso.provider.create',
-      details: expect.objectContaining({
-        defaultRole: 'admin',
-        riskAcknowledged: true,
-        riskReasons: ['platform_admin_default_role'],
-      }),
-    }));
+    expect(response.status).toBe(400);
+    expect(ssoProviderServiceMock.createProvider).not.toHaveBeenCalled();
   });
 
   it('never copies provider credentials into API responses or audit details', async () => {
@@ -144,7 +132,7 @@ describe('platform-admin sso-providers routes', () => {
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'sso.provider.default_role_migrate' }));
   });
 
-  it('rejects updating a provider to admin default role without risk acknowledgement', async () => {
+  it('rejects updating a provider with a mutable legacy default role', async () => {
     ssoProviderServiceMock.getProvider.mockResolvedValue({
       id: 'provider-1',
       name: 'Microsoft Entra',
@@ -158,7 +146,6 @@ describe('platform-admin sso-providers routes', () => {
       .send({ defaultRole: 'admin' });
 
     expect(response.status).toBe(400);
-    expect(response.body.details.riskReasons).toEqual(['platform_admin_default_role']);
     expect(ssoProviderServiceMock.updateProvider).not.toHaveBeenCalled();
   });
 

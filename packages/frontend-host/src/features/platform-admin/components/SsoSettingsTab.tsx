@@ -166,7 +166,6 @@ export default function SsoSettingsTab() {
     ssoUrl: '',
     certificate: '',
     buttonLabel: '',
-    defaultRole: 'user',
   });
   const [providerRiskAcknowledged, setProviderRiskAcknowledged] = useState(false);
 
@@ -378,7 +377,6 @@ export default function SsoSettingsTab() {
       ssoUrl: '',
       certificate: '',
       buttonLabel: '',
-      defaultRole: 'user',
     });
     setProviderModalOpen(true);
   };
@@ -400,7 +398,6 @@ export default function SsoSettingsTab() {
       ssoUrl: '',
       certificate: '',
       buttonLabel: provider.buttonLabel || '',
-      defaultRole: provider.defaultRole,
     });
     setProviderModalOpen(true);
   };
@@ -501,7 +498,7 @@ export default function SsoSettingsTab() {
   };
 
   const providerRequiresRiskAcknowledgement =
-    (providerForm.enabled && !editingProvider?.enabled) || providerForm.defaultRole === 'admin';
+    providerForm.enabled && !editingProvider?.enabled;
 
   const handleSaveProvider = () => {
     setProviderFormError(null);
@@ -533,7 +530,6 @@ export default function SsoSettingsTab() {
       issuerUrl: providerForm.issuerUrl || undefined,
       buttonLabel: providerForm.buttonLabel || undefined,
       autoProvision: true,
-      defaultRole: providerForm.defaultRole,
       ...(providerRequiresRiskAcknowledgement ? { riskAcknowledged: providerRiskAcknowledged } : {}),
     };
 
@@ -1445,19 +1441,6 @@ export default function SsoSettingsTab() {
             onChange={(e) => setProviderForm({ ...providerForm, buttonLabel: e.target.value })}
           />
 
-          <Select
-            id="provider-default-role"
-            labelText="Default Role"
-            value={providerForm.defaultRole}
-            onChange={(e) => {
-              setProviderRiskAcknowledged(false);
-              setProviderForm({ ...providerForm, defaultRole: e.target.value });
-            }}
-          >
-            <SelectItem value="user" text="Standard User" />
-            <SelectItem value="admin" text="Platform Admin" />
-          </Select>
-
           <Toggle
             id="provider-enabled"
             labelText="Enable Provider"
@@ -1475,9 +1458,7 @@ export default function SsoSettingsTab() {
               <InlineNotification
                 kind="warning"
                 title="High-risk SSO provider change"
-                subtitle={providerForm.defaultRole === 'admin'
-                  ? 'Users without a more specific matching rule can receive Platform Admin when this provider provisions them.'
-                  : 'Enabling a provider allows SSO login and provisioning according to configured mappings.'}
+                subtitle="Enabling a provider allows SSO login and provisioning according to configured mappings."
                 lowContrast
               />
               <Toggle

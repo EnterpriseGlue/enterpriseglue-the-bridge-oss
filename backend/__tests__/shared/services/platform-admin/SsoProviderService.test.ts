@@ -115,6 +115,23 @@ describe('SsoProviderService', () => {
     expect(JSON.stringify(publicProviders)).not.toContain(persisted.certificateEnc);
   });
 
+  it('always creates new legacy providers with the non-privileged default role', async () => {
+    const insert = vi.fn();
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({ insert }),
+    });
+
+    await ssoProviderService.createProvider({
+      name: 'Legacy provider',
+      type: 'oidc',
+      // Simulates an outdated direct caller; the public input type no longer
+      // permits this field.
+      defaultRole: 'admin',
+    } as never);
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ defaultRole: 'user' }));
+  });
+
   it('rejects SHA-1 for legacy SAML provider create and update paths', async () => {
     const insert = vi.fn();
     const findOneBy = vi.fn().mockResolvedValue({
