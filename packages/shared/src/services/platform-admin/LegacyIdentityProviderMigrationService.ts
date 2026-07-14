@@ -118,7 +118,10 @@ function callbackUrl(): string {
 }
 
 function samlCallbackUrl(): string {
-  return new URL('/api/auth/providers/saml/callback', `${config.frontendUrl.replace(/\/$/, '')}/`).toString();
+  return httpsUrl(
+    new URL('/api/auth/providers/saml/callback', `${config.frontendUrl.replace(/\/$/, '')}/`).toString(),
+    'callback URL',
+  );
 }
 
 function httpsUrl(value: string, field: string): string {

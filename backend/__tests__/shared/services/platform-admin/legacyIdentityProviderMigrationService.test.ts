@@ -85,6 +85,16 @@ describe('legacyIdentityProviderMigrationService', () => {
     await expect(legacyIdentityProviderMigrationService.createDraft('legacy-saml')).rejects.toThrow('SSO URL must be an HTTPS URL');
   });
 
+  it('refuses a SAML draft when the configured EnterpriseGlue callback is not HTTPS', async () => {
+    testConfig.frontendUrl = 'http://localhost:5173';
+    findOneBy.mockResolvedValueOnce({ id: 'legacy-saml', name: 'Legacy SAML', type: 'saml', enabled: true, entityId: 'https://sp.example.test/metadata', ssoUrl: 'https://idp.example.test/sso', certificateEnc: 'enc:opaque' });
+    try {
+      await expect(legacyIdentityProviderMigrationService.createDraft('legacy-saml')).rejects.toThrow('callback URL must be an HTTPS URL');
+    } finally {
+      testConfig.frontendUrl = 'https://app.example.test';
+    }
+  });
+
   it('rejects unsupported legacy provider types and incomplete OIDC records', async () => {
     findOneBy.mockResolvedValueOnce({ id: 'legacy-ldap', type: 'ldap' });
     await expect(legacyIdentityProviderMigrationService.createDraft('legacy-ldap')).rejects.toThrow('Only legacy Microsoft, Google, OIDC, and SAML providers');
