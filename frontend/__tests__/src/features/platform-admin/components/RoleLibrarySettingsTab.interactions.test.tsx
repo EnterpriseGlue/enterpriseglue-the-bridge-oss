@@ -64,6 +64,12 @@ describe('RoleLibrarySettingsTab interactions', () => {
     fireEvent.click(category('Access (1)'));
     fireEvent.click(document.getElementById('role-library-engine:members:manage')!);
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    fireEvent.change(document.getElementById('role-library-edit-name')!, { target: { value: 'Production operator' } });
+    fireEvent.change(document.getElementById('role-library-edit-description')!, { target: { value: 'Editable metadata' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith('/api/authz/roles/role-custom', {
+      name: 'Production operator', description: 'Editable metadata', permissionIds: ['engine:instance:view', 'engine:members:manage'],
+    }));
   });
 
   it('requires acknowledgement before creating a role with a sensitive permission and duplicates system roles', async () => {
