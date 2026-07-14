@@ -62,7 +62,14 @@ describe('RoleLibrarySettingsTab interactions', () => {
 
     expect(await screen.findByRole('button', { name: 'Save' })).toBeDisabled();
     fireEvent.click(category('Access (1)'));
+    expect(screen.getAllByText('engine:members:manage')).not.toHaveLength(0);
+    expect(screen.getAllByText('Change engine membership')).not.toHaveLength(0);
+    expect(screen.getAllByText('Access control')).not.toHaveLength(0);
+    expect(screen.getAllByText('Can change who has access to resources.')).not.toHaveLength(0);
     fireEvent.click(document.getElementById('role-library-engine:members:manage')!);
+    expect(screen.getByText('Sensitive permissions added')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText('I understand these changes add sensitive permissions.'));
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
     fireEvent.change(document.getElementById('role-library-edit-name')!, { target: { value: 'Production operator' } });
     fireEvent.change(document.getElementById('role-library-edit-description')!, { target: { value: 'Editable metadata' } });

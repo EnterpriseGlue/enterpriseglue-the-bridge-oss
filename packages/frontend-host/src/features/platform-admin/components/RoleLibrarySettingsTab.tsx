@@ -32,6 +32,7 @@ export function filterRoleLibraryPermissions(
   search: string,
   selectedOnly: boolean,
   sensitiveOnly = false,
+  category = '',
 ): RoleLibraryPermission[] {
   const query = search.trim().toLowerCase();
   const selected = new Set(selectedPermissionIds);
@@ -40,7 +41,8 @@ export function filterRoleLibraryPermissions(
       .some((value) => value.toLowerCase().includes(query));
     return matchesSearch
       && (!selectedOnly || selected.has(permission.key))
-      && (!sensitiveOnly || Boolean(getPermissionRiskForKey(permission.key)));
+      && (!sensitiveOnly || Boolean(getPermissionRiskForKey(permission.key)))
+      && (!category || permission.category === category);
   });
 }
 
@@ -60,7 +62,9 @@ function PermissionPicker({
   const [search, setSearch] = useState('');
   const [selectedOnly, setSelectedOnly] = useState(false);
   const [sensitiveOnly, setSensitiveOnly] = useState(false);
-  const visiblePermissions = filterRoleLibraryPermissions(permissions, draft, search, selectedOnly, sensitiveOnly);
+  const [category, setCategory] = useState('');
+  const categoryOptions = [...new Set(permissions.map((permission) => permission.category))].sort();
+  const visiblePermissions = filterRoleLibraryPermissions(permissions, draft, search, selectedOnly, sensitiveOnly, category);
   const categories = visiblePermissions.reduce<Record<string, RoleLibraryPermission[]>>((result, permission) => {
     result[permission.category] = [...(result[permission.category] || []), permission];
     return result;
@@ -74,26 +78,36 @@ function PermissionPicker({
         </div>
         <Checkbox id={`${idPrefix}-selected-only`} labelText="Selected only" checked={selectedOnly} onChange={(_event, { checked }) => setSelectedOnly(Boolean(checked))} />
         <Checkbox id={`${idPrefix}-sensitive-only`} labelText="Sensitive only" checked={sensitiveOnly} onChange={(_event, { checked }) => setSensitiveOnly(Boolean(checked))} />
+        <Select id={`${idPrefix}-permission-category`} labelText="Category" value={category} onChange={(event) => setCategory(event.target.value)}>
+          <SelectItem value="" text="All categories" />
+          {categoryOptions.map((option) => <SelectItem key={option} value={option} text={option} />)}
+        </Select>
         <Tag type="cool-gray">{draft.length} selected</Tag>
       </div>
       {Object.keys(categories).length === 0 ? (
         <InlineNotification kind="info" title="No permissions match the current filters" hideCloseButton lowContrast />
       ) : (
         <Accordion>
-          {Object.entries(categories).map(([category, entries]) => (
-            <AccordionItem key={category} title={`${category} (${entries.length})`}>
+          {Object.entries(categories).map(([categoryName, entries]) => (
+            <AccordionItem key={categoryName} title={`${categoryName} (${entries.length})`}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(15rem, 1fr))', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-3)' }}>
-                {entries.map((permission) => (
-                  <Checkbox
-                    key={permission.key}
-                    id={`${idPrefix}-${permission.key}`}
-                    labelText={permission.label}
-                    checked={draft.includes(permission.key)}
-                    disabled={!editable}
-                    onChange={(_event, { checked }) => onToggle(permission.key, Boolean(checked))}
-                    title={permission.description}
-                  />
-                ))}
+                {entries.map((permission) => {
+                  const risk = getPermissionRiskForKey(permission.key);
+                  return <div key={permission.key} style={{ padding: 'var(--spacing-3)', border: '1px solid var(--cds-border-subtle)' }}>
+                    <Checkbox
+                      id={`${idPrefix}-${permission.key}`}
+                      labelText={permission.label}
+                      checked={draft.includes(permission.key)}
+                      disabled={!editable}
+                      onChange={(_event, { checked }) => onToggle(permission.key, Boolean(checked))}
+                    />
+                    <div style={{ display: 'grid', gap: 'var(--spacing-2)', marginLeft: 'var(--spacing-6)', color: 'var(--cds-text-secondary)' }}>
+                      <code>{permission.key}</code>
+                      <span>{permission.description}</span>
+                      {risk && <><Tag type="red">{risk.label}</Tag><span>{risk.description}</span></>}
+                    </div>
+                  </div>;
+                })}
               </div>
             </AccordionItem>
           ))}
@@ -118,6 +132,7 @@ export default function RoleLibrarySettingsTab() {
   const [createTarget, setCreateTarget] = useState<'manual' | 'config'>('manual');
   const [archiveConfirmation, setArchiveConfirmation] = useState(false);
   const [createRiskAcknowledged, setCreateRiskAcknowledged] = useState(false);
+  const [editRiskAcknowledged, setEditRiskAcknowledged] = useState(false);
   const [form, setForm] = useState(blank);
   const [configForm, setConfigForm] = useState(blankConfig);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +150,12 @@ export default function RoleLibrarySettingsTab() {
   const selectedRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === selected?.scope);
   const createRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === form.scope);
   const createSelectedRiskyPermissions = createRolePermissions.filter((permission) => draft.includes(permission.key) && getPermissionRiskForKey(permission.key));
+  const newlySelectedSensitivePermissionIds = detail
+    ? selectedRolePermissions
+      .filter((permission) => draft.includes(permission.key) && !detail.permissions.includes(permission.key) && getPermissionRiskForKey(permission.key))
+      .map((permission) => permission.key)
+    : [];
+  const newlySelectedSensitivePermissionKey = newlySelectedSensitivePermissionIds.join('|');
   const configWarnEditable = selected?.source === 'config' && selected.ownershipMode === 'config_warn';
   const editable = Boolean(selected?.kind === 'custom' && selected.isEditable && !selected.isArchived && (selected.source !== 'config' || configWarnEditable));
   const hasUnsavedRoleChanges = Boolean(detail && (
@@ -144,6 +165,9 @@ export default function RoleLibrarySettingsTab() {
     || draft.length !== detail.permissions.length
     || draft.some((permission) => !detail.permissions.includes(permission))
   ));
+  useEffect(() => {
+    setEditRiskAcknowledged(false);
+  }, [detail?.id, newlySelectedSensitivePermissionKey]);
   const toggle = (key: string, checked: boolean) => setDraft((current) => checked ? [...new Set([...current, key])] : current.filter((item) => item !== key));
   const save = useMutation({
     mutationFn: () => apiClient.put(`/api/authz/roles/${selected!.id}`, { name: metadataDraft.name.trim(), description: metadataDraft.description.trim() || null, permissionIds: draft, isAssignable: metadataDraft.isAssignable }),
@@ -225,7 +249,22 @@ export default function RoleLibrarySettingsTab() {
       <div>{selected && detail ? <>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-4)', alignItems: 'start', flexWrap: 'wrap' }}><div><h4 style={{ margin: 0 }}>{selected.name}</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{selected.description || 'No description'} · {selected.permissionCount} permissions</p></div><div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>{selected.kind === 'system' && <><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={() => startCreate(true)}>Duplicate</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Download} onClick={() => startCreate(true, 'config')}>Export config role</Button></GuardedAction></>}</div></div>
         {selected.source === 'config' && <InlineNotification kind={configWarnEditable ? 'warning' : 'info'} title={configWarnEditable ? 'Configuration warning mode' : 'Managed by configuration'} subtitle={configWarnEditable ? 'Local edits are allowed and will be marked as drift until the configuration bundle is reconciled.' : 'Update this role in its configuration bundle.'} hideCloseButton lowContrast style={{ marginTop: 'var(--spacing-4)' }} />}
-        {editable && <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}><TextInput id="role-library-edit-name" labelText="Role name" value={metadataDraft.name} onChange={(event) => setMetadataDraft((current) => ({ ...current, name: event.target.value }))} /><TextArea id="role-library-edit-description" labelText="Description" value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} rows={2} /></div><Checkbox id="role-library-edit-assignable" labelText="Assignable to principals" checked={metadataDraft.isAssignable} onChange={(_event, { checked }) => setMetadataDraft((current) => ({ ...current, isAssignable: Boolean(checked) }))} /><div style={{ position: 'sticky', top: 'var(--spacing-3)', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', marginTop: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => { setDraft(detail.permissions); setMetadataDraft({ name: detail.name, description: detail.description || '', isAssignable: detail.isAssignable ?? true }); }}>Reset</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button aria-label="Archive custom role" kind="danger--tertiary" size="sm" disabled={archive.isPending} onClick={() => setArchiveConfirmation(true)}>Archive</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={!hasUnsavedRoleChanges || save.isPending || !metadataDraft.name.trim()} onClick={() => save.mutate()}>Save</Button></GuardedAction></div></>}
+        {editable && <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}>
+            <TextInput id="role-library-edit-name" labelText="Role name" value={metadataDraft.name} onChange={(event) => setMetadataDraft((current) => ({ ...current, name: event.target.value }))} />
+            <TextArea id="role-library-edit-description" labelText="Description" value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} rows={2} />
+          </div>
+          <Checkbox id="role-library-edit-assignable" labelText="Assignable to principals" checked={metadataDraft.isAssignable} onChange={(_event, { checked }) => setMetadataDraft((current) => ({ ...current, isAssignable: Boolean(checked) }))} />
+          {newlySelectedSensitivePermissionIds.length > 0 && <div style={{ display: 'grid', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}>
+            <InlineNotification kind="warning" title="Sensitive permissions added" subtitle={newlySelectedSensitivePermissionIds.join(', ')} hideCloseButton lowContrast />
+            <Checkbox id="role-library-edit-risk-acknowledged" labelText="I understand these changes add sensitive permissions." checked={editRiskAcknowledged} onChange={(_event, { checked }) => setEditRiskAcknowledged(Boolean(checked))} />
+          </div>}
+          <div style={{ position: 'sticky', top: 'var(--spacing-3)', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', marginTop: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}>
+            <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => { setDraft(detail.permissions); setMetadataDraft({ name: detail.name, description: detail.description || '', isAssignable: detail.isAssignable ?? true }); }}>Cancel</Button></GuardedAction>
+            <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button aria-label="Archive custom role" kind="danger--tertiary" size="sm" disabled={archive.isPending} onClick={() => setArchiveConfirmation(true)}>Archive</Button></GuardedAction>
+            <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={!hasUnsavedRoleChanges || save.isPending || !metadataDraft.name.trim() || (newlySelectedSensitivePermissionIds.length > 0 && !editRiskAcknowledged)} onClick={() => save.mutate()}>Save</Button></GuardedAction>
+          </div>
+        </>}
         <div style={{ marginTop: 'var(--spacing-5)' }}><PermissionPicker permissions={selectedRolePermissions} draft={draft} editable={editable && manage.allowed} idPrefix="role-library" onToggle={toggle} /></div>
       </> : <InlineNotification kind="info" title="Select a role" subtitle="Choose a role from the library to inspect its permissions." hideCloseButton lowContrast />}</div>
     </div>

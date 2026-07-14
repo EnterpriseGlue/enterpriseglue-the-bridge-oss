@@ -1996,11 +1996,11 @@ Editor behavior:
 - [x] ✅ Keep system roles read-only and expose `Duplicate as custom role` as the primary action.
 - [x] ✅ Allow custom role name, description, scope-compatible permissions, assignability, and archive state to be edited according to exact actions. Archiving always makes the role unavailable for new assignments.
 - [x] ✅ Keep scope immutable after creation; changing scope requires duplication because permission and assignment semantics change.
-- [ ] ⬜ Add search, category filter, risk filter, `Selected only` toggle, selected permission count, and unsaved-change protection.
-- [ ] ⬜ Show permission key, plain-language description, risk tag, and implications without requiring a separate Permissions tab lookup.
-- [ ] ⬜ Require the existing acknowledgement flow for sensitive permissions before save.
+- [x] ✅ Add search, category filter, risk filter, `Selected only` toggle, selected permission count, and unsaved-change protection.
+- [x] ✅ Show permission key, plain-language description, risk tag, and implications without requiring a separate Permissions tab lookup.
+- [x] ✅ Require the existing acknowledgement flow for sensitive permissions before save.
 - [x] ✅ Show role config ownership: `config_locked` is read-only; `config_warn` permits edits and visibly marks local drift; manual roles remain editable. The Groups Access Control surface follows the same ownership behavior.
-- [ ] ⬜ Use a sticky Carbon action bar with Save and Cancel; do not put a save button in every permission row.
+- [x] ✅ Use a sticky Carbon action bar with Save and Cancel; do not put a save button in every permission row.
 - [x] ✅ Remove the unbounded role-permission matrix from the primary Roles workflow. Custom roles are edited in the focused scoped editor; system roles are duplicated before mutation. A bounded role-comparison view remains optional future work.
 - [ ] ⬜ Verify no page-level horizontal overflow at supported desktop and tablet widths and ensure long permission labels wrap inside their category.
 
@@ -2365,7 +2365,7 @@ Phase 0 exit criteria:
 - [x] ✅ Add JSON export of the current editor payload.
 - [x] ✅ Complete managed-by-config badges across Access Control and Engine UI surfaces. Engine inventory and registration detail show configuration ownership/provenance; config-locked engines are read-only and config-warn edits are marked as drift. Access Control roles, identity mappings, groups, memberships, role assignments, Engine Sets, and Engine Set assignment usage show `Managed by config`. Config-sourced groups/memberships, custom roles, project targets, and all non-manual Engine Sets reject manual mutation at the shared service boundary.
 - [x] ✅ Add the Role Library and single-role editor; it avoids page-level horizontal scrolling for normal role management. Legacy Access Control matrix removal remains pending.
-- [x] ✅ Complete role-editor sticky save/reset controls. Grouped permission accordions, shared sensitive-permission filtering, permission search, selected-only filtering, responsive checkboxes, system-role duplication, config ownership states, and permission selection during new-role creation are complete.
+- [x] ✅ Complete role-editor sticky save/cancel controls. Grouped permission accordions, shared sensitive-permission filtering, permission search, selected-only filtering, responsive checkboxes, system-role duplication, config ownership states, and permission selection during new-role creation are complete.
 - [x] ✅ Add provider-neutral Identity Provider and Identity Mapping labels/forms while retaining protocol-specific OIDC/SAML/LDAP fields inside provider setup. Direct SAML setup now requires its ACS URL, IdP SSO URL, signing-certificate reference, signature algorithm, and configurable subject/email/group attributes. Direct LDAPS configuration includes bind identity, secret reference, user/group base DNs, user filter, and membership lookup fields. The provider overflow menu exposes bounded stored-membership replay separately from LDAP directory reconciliation; replay persists an SSO synchronization run for diagnostics and the on-demand provider history panel reads `GET /api/identity/providers/:key/sync-runs`. The connection-test action performs LDAP bind/search, OIDC discovery, and bounded HTTPS SAML metadata entity-descriptor validation.
 - [x] ✅ Show engine labels such as country, domain, environment, and region in engine detail and expose the inventory's discovered `key=value` metadata labels as exact filters.
 - [x] ✅ Show the active `enterpriseglue_authoritative` runtime authorization mode in Platform Settings with explanatory copy. Unsupported later modes remain rejected by settings validation.

@@ -36,6 +36,10 @@ describe('RoleLibrarySettingsTab permission filters', () => {
 
     expect(filterRoleLibraryPermissions(withSensitivePermission, [], '', false, true)).toEqual([withSensitivePermission[3]]);
   });
+
+  it('limits results to an explicit permission category', () => {
+    expect(filterRoleLibraryPermissions(permissions, [], '', false, false, 'Deployments')).toEqual([permissions[1]]);
+  });
 });
 
 describe('system role configuration export', () => {
