@@ -2484,6 +2484,40 @@ describe('permissionService', () => {
     expect(auditRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ details: expect.stringContaining('configOverride') }));
   });
 
+  it('lists canonical user assignments while preserving the legacy user-id fallback', async () => {
+    const assignmentQb = {
+      orderBy: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([{
+        id: 'assignment-sso-1', tenantId: 'tenant-a', userId: null, principalType: 'user', principalId: 'user-1',
+        roleId: 'system.engine.operator', scopeType: 'engine', scopeId: 'engine-1', source: 'sso',
+        sourceMappingId: 'mapping-1', sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
+        ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
+        expiresAt: null, lastSeenAt: null, createdById: null, createdAt: 10, updatedAt: 11,
+      }]),
+    };
+    const assignmentRepo = { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRoleAssignment) return assignmentRepo;
+        if (entity === RbacRole) return { find: vi.fn().mockResolvedValue([{ id: 'system.engine.operator', key: 'system.engine.operator', name: 'Operator', scope: 'engine' }]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const assignments = await permissionService.listRoleAssignments({ userId: 'user-1', tenantId: 'tenant-a' });
+
+    expect(assignmentQb.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('assignment.principalId = :userId'),
+      { userPrincipalType: 'user', userId: 'user-1' }
+    );
+    expect(assignments).toEqual([expect.objectContaining({
+      userId: 'user-1',
+      sourceMappingId: 'mapping-1',
+      sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
+    })]);
+  });
+
   it('syncs legacy project and engine memberships into source=legacy role assignments', async () => {
     const assignmentFind = vi.fn().mockResolvedValue([
       { id: 'legacy:project:project-1:stale-user:system.project.viewer' },

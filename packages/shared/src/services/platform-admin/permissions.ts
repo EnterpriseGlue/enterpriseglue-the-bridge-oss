@@ -2058,7 +2058,10 @@ class PermissionServiceClass {
 
     addTenantScopeFilter(qb, 'assignment', filters.tenantId);
     if (filters.userId) {
-      qb.andWhere('assignment.userId = :userId', { userId: filters.userId });
+      qb.andWhere(
+        '((assignment.principalType = :userPrincipalType AND assignment.principalId = :userId) OR (assignment.principalType IS NULL AND assignment.userId = :userId))',
+        { userPrincipalType: 'user', userId: filters.userId }
+      );
     }
     if (filters.principalType) {
       qb.andWhere('assignment.principalType = :principalType', { principalType: filters.principalType });
@@ -2111,7 +2114,7 @@ class PermissionServiceClass {
         scopeType: assignment.scopeType as ResourceType | null,
         scopeId: assignment.scopeId,
         source: assignment.source as RoleAssignmentSource,
-        sourceMappingId: assignment.sourceRef || null,
+        sourceMappingId: assignment.sourceMappingId || assignment.sourceRef || null,
         sourceRef: assignment.sourceRef,
         ownershipMode: (assignment.ownershipMode || (assignment.source === 'config' ? 'config_locked' : 'manual')) as ConfigOwnershipMode,
         sourceHash: assignment.sourceHash || null,
