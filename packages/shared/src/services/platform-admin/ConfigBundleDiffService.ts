@@ -36,8 +36,10 @@ export interface ConfigBundleDiffChange {
   runtimeResourceChanges?: {
     matchedCount: number;
     unmatchedCount: number;
+    currentlyMaterialized: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
     newlyMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
     noLongerMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
+    unmatchedSelectors: string[];
     detailsTruncated: boolean;
   };
   identitySnapshotPreview?: {
@@ -111,26 +113,40 @@ function runtimeResourceReference(resource: RuntimeResource): { resourceKind: st
   return { resourceKind: resource.resourceKind, resourceKey: resource.resourceKey, runtimeTenantId: resource.runtimeTenantId || null };
 }
 
+function unmatchedRuntimeResourceSelectorTerms(selector: RuntimeResourceSetSelector, matchingResources: RuntimeResource[]): string[] {
+  if (selector.mode === 'keys') {
+    const matchedKeys = new Set(matchingResources.map((resource) => resource.resourceKey));
+    return selector.keys.filter((key) => !matchedKeys.has(key));
+  }
+  if (matchingResources.length > 0) return [];
+  if (selector.mode === 'prefix') return [`prefix:${selector.prefix}`];
+  if (selector.mode === 'labels') return [`labels:${JSON.stringify(selector.labels)} (${selector.labelMatch || 'all'})`];
+  return [`project_lineage:${selector.projectRef.key || selector.projectRef.id || 'unresolved'}`];
+}
+
 function runtimeResourceChangeSummary(
   resources: RuntimeResource[],
   existingMaterializations: Array<{ runtimeResourceId: string }>,
+  resourcesById: Map<string, RuntimeResource>,
   selector: RuntimeResourceSetSelector,
 ): NonNullable<ConfigBundleDiffChange['runtimeResourceChanges']> {
   const matchingResources = resources.filter((resource) => Boolean(matchRuntimeResourceSetSelector(resource, selector)));
   const matchingIds = new Set(matchingResources.map((resource) => resource.id));
   const existingIds = new Set(existingMaterializations.map((row) => row.runtimeResourceId));
-  const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
-  const newlyMatched = matchingResources.filter((resource) => !existingIds.has(resource.id));
-  const noLongerMatched = Array.from(existingIds)
-    .filter((resourceId) => !matchingIds.has(resourceId))
-    .map((resourceId) => resourceById.get(resourceId))
+  const currentlyMaterialized = Array.from(existingIds)
+    .map((resourceId) => resourcesById.get(resourceId))
     .filter((resource): resource is RuntimeResource => Boolean(resource));
+  const newlyMatched = matchingResources.filter((resource) => !existingIds.has(resource.id));
+  const noLongerMatched = currentlyMaterialized.filter((resource) => !matchingIds.has(resource.id));
+  const unmatchedSelectors = unmatchedRuntimeResourceSelectorTerms(selector, matchingResources);
   return {
     matchedCount: matchingResources.length,
     unmatchedCount: resources.length - matchingResources.length,
+    currentlyMaterialized: currentlyMaterialized.slice(0, RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT).map(runtimeResourceReference),
     newlyMatched: newlyMatched.slice(0, RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT).map(runtimeResourceReference),
     noLongerMatched: noLongerMatched.slice(0, RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT).map(runtimeResourceReference),
-    detailsTruncated: newlyMatched.length > RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT || noLongerMatched.length > RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT,
+    unmatchedSelectors: unmatchedSelectors.slice(0, RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT),
+    detailsTruncated: currentlyMaterialized.length > RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT || newlyMatched.length > RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT || noLongerMatched.length > RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT || unmatchedSelectors.length > RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT,
   };
 }
 
@@ -233,6 +249,7 @@ class ConfigBundleDiffService {
     const assignmentCountByRoleId = new Map<string, number>();
     for (const assignment of tenantAssignments) assignmentCountByRoleId.set(assignment.roleId, (assignmentCountByRoleId.get(assignment.roleId) || 0) + 1);
     const tenantRuntimeResources = runtimeResources.filter((resource) => (resource.tenantId || null) === normalizedTenantId);
+    const runtimeResourcesById = new Map(tenantRuntimeResources.map((resource) => [resource.id, resource]));
     const runtimeResourcesByIdentity = new Map(tenantRuntimeResources.map((resource) => [`${resource.engineId}:${resource.resourceKind}:${resource.resourceKey}:${resource.runtimeTenantId || ''}`, resource]));
     const runtimeResourcesByEngineAndKind = new Map<string, RuntimeResource[]>();
     for (const resource of tenantRuntimeResources) {
@@ -338,11 +355,11 @@ class ConfigBundleDiffService {
     for (const set of desiredRuntimeResourceSets) {
       const existing = runtimeResourceSetsByKey.get(set.key);
       const engine = enginesByConfigKey.get(set.engineRef.engineKey);
-      const resourceScopeChanged = !existing || existing.engineId !== engine?.id || existing.resourceKind !== set.resourceKind || existing.selectorJson !== JSON.stringify(set.selector);
-      const runtimeResourceChanges = engine && resourceScopeChanged
+      const runtimeResourceChanges = engine
         ? runtimeResourceChangeSummary(
           runtimeResourcesByEngineAndKind.get(`${engine.id}:${set.resourceKind}`) || [],
           existing ? runtimeResourceSetMaterializationsBySetId.get(existing.id) || [] : [],
+          runtimeResourcesById,
           set.selector as RuntimeResourceSetSelector,
         )
         : undefined;

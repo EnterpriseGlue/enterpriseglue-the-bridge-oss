@@ -225,9 +225,37 @@ describe('configBundleDiffService', () => {
       objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'update',
       runtimeResourceChanges: {
         matchedCount: 1, unmatchedCount: 1, detailsTruncated: false,
+        currentlyMaterialized: [{ resourceKind: 'process_definition', resourceKey: 'payments-v1', runtimeTenantId: null }],
         newlyMatched: [{ resourceKind: 'process_definition', resourceKey: 'orders-v1', runtimeTenantId: null }],
         noLongerMatched: [{ resourceKind: 'process_definition', resourceKey: 'payments-v1', runtimeTenantId: null }],
+        unmatchedSelectors: [],
       },
+    }));
+  });
+
+  it('reports unmaterialized key selector terms in the runtime-set preview', async () => {
+    mockDataSource([], [], [], [{
+      id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz',
+      name: 'Central', baseUrl: 'https://central.example.com/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}', runtimeAccessScope: 'resource_aware', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, pipelineReceiptEnabled: true, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active',
+    }], [], [], [], [], [
+      { id: 'resource-orders', tenantId: 'tenant-a', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'orders-v1', runtimeTenantId: '', isActive: true, labelsJson: '{}' },
+    ]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json', './runtime-resource-sets.json'] },
+      files: {
+        './engines.json': { engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' }, runtimeAccessScope: 'resource_aware' }] },
+        './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.orders', name: 'Orders processes', engineRef: { engineKey: 'engine.central' }, resourceKind: 'process_definition', selector: { mode: 'keys', keys: ['orders-v1', 'payments-v1'] } }] },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'runtime_resource_set', key: 'runtime.orders', operation: 'create',
+      runtimeResourceChanges: expect.objectContaining({
+        currentlyMaterialized: [],
+        newlyMatched: [{ resourceKind: 'process_definition', resourceKey: 'orders-v1', runtimeTenantId: null }],
+        unmatchedSelectors: ['payments-v1'],
+      }),
     }));
   });
 

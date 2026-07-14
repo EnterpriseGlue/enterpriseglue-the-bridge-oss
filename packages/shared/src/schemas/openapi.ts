@@ -3689,8 +3689,10 @@ const ConfigBundleDiffChangeOpenApiSchema = z.object({
   runtimeResourceChanges: z.object({
     matchedCount: z.number().int().nonnegative(),
     unmatchedCount: z.number().int().nonnegative(),
+    currentlyMaterialized: z.array(z.object({ resourceKind: z.string(), resourceKey: z.string(), runtimeTenantId: z.string().nullable() })),
     newlyMatched: z.array(z.object({ resourceKind: z.string(), resourceKey: z.string(), runtimeTenantId: z.string().nullable() })),
     noLongerMatched: z.array(z.object({ resourceKind: z.string(), resourceKey: z.string(), runtimeTenantId: z.string().nullable() })),
+    unmatchedSelectors: z.array(z.string()),
     detailsTruncated: z.boolean(),
   }).optional(),
   identitySnapshotPreview: z.object({ scanned: z.number().int().nonnegative(), matches: z.number().int().nonnegative(), nonMatches: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), truncated: z.boolean(), latestSnapshotAt: z.number().nullable(), warnings: z.array(z.string()) }).optional(),

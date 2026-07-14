@@ -13,8 +13,10 @@ export type ConfigBundleDiffChange = {
   runtimeResourceChanges?: {
     matchedCount: number;
     unmatchedCount: number;
+    currentlyMaterialized: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
     newlyMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
     noLongerMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
+    unmatchedSelectors: string[];
     detailsTruncated: boolean;
   };
   identitySnapshotPreview?: { scanned: number; matches: number; nonMatches: number; failed: number; truncated: boolean; latestSnapshotAt: number | null; warnings: string[] };

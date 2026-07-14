@@ -1745,7 +1745,7 @@ Required UI changes:
 - [x] ✅ Bulk actions show partial-denial diagnostics when selected rows span allowed and denied resources. Process-instance list rows now receive server-evaluated runtime action decisions; selected-row eligibility summarizes the first generic denial, disables the unsafe bulk operation, and provides the existing Effective Access diagnostic link before a batch mutation is opened.
 - [x] ✅ Engine Detail > Access now adds a `Runtime resource access` section for resource-aware engines. It shows sanitized process/decision inventory, active and inactive resource sets with selectors and source references, and—when the principal also has assignment-read access—exact direct resource/set grants with their target and assignment lineage. The new engine-filtered assignment query is platform-authorized and never lets a scoped engine manager enumerate runtime grants.
 - [x] ✅ Access Control Effective Access supports `engine_runtime_resource` with engine, resource kind, definition key, and optional runtime tenant inputs. The backend resolves the selector against active tenant-owned runtime inventory before evaluating; it never trusts a frontend-supplied inventory ID.
-- [ ] ⬜ Config import preview shows which process/decision keys a runtime resource set currently materializes, plus unmatched selectors.
+- [x] ✅ Config import preview now shows each Runtime Resource Set's bounded currently-materialized process/decision keys, planned additions/removals, and unmatched selector terms. This diagnostic is included even for a no-op set so reviewers can verify the existing materialization before applying an otherwise unchanged bundle.
 
 ### Deployment And Starbase Bridge Impact
 
