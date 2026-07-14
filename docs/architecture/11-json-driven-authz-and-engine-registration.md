@@ -623,11 +623,11 @@ Security requirements:
 - [ ] ⬜ Sidecar endpoints should be private and network-restricted. Prefer mTLS, API-key references, or OAuth client credentials for the EnterpriseGlue-to-sidecar hop when the customer endpoint supports them.
 - [ ] ⬜ The downstream peer-to-peer token and its rotation lifecycle remain customer-owned and must never appear in config bundles, engine APIs, logs, audits, UI fields, or support diagnostics.
 - [ ] ⬜ EnterpriseGlue audit must still record the effective user, action, project, engine, and request lineage.
-- [ ] ⬜ Health checks and version reads should work through the sidecar.
-- [ ] ⬜ UI should label this as `Customer-managed engine authentication` or `No EnterpriseGlue-managed credentials`.
+- [x] ✅ Health checks and version reads work through the same shared connection resolver for sidecar endpoints.
+- [x] ✅ UI labels customer-sidecar endpoint authentication as `Customer-managed engine authentication` and makes clear that EnterpriseGlue authorization remains active.
 - [x] ✅ Config preview rejects `auth.type = "none"` unless the first-class `connectionMode` is `customer_sidecar` and the relevant platform policy allows it; secret preflight, diff, apply, and bootstrap use the same policy context.
 - [ ] ⬜ SSRF controls, allowed protocols/hosts, TLS verification, redirect handling, timeouts, and response-size limits apply equally to direct engine and sidecar endpoints.
-- [ ] ⬜ A transport failure or sidecar denial must fail closed and be distinguishable from an EnterpriseGlue authorization denial in diagnostics.
+- [x] ✅ A transport failure or sidecar denial fails closed and is distinguishable from an EnterpriseGlue authorization denial: transport failures return sanitized `ENGINE_TRANSPORT_UNAVAILABLE` diagnostics, while an upstream rejection returns sanitized `ENGINE_OPERATION_REJECTED` diagnostics.
 
 Future optional expanded connection schema, if the flattened v1 fields become insufficient:
 
@@ -648,18 +648,18 @@ For v1, add the first-class flattened `connectionMode` field to the existing eng
 
 UI impact:
 
-- [ ] ⬜ Engine create/edit and JSON preview show `Direct engine` or `Customer sidecar/gateway` as the connection path.
-- [ ] ⬜ Selecting customer sidecar changes credential copy to `EnterpriseGlue-to-sidecar authentication` and allows the policy-controlled no-credential option.
-- [ ] ⬜ Engine detail shows `Customer-managed downstream engine authentication`; it never implies that EnterpriseGlue authorization is disabled.
+- [x] ✅ Engine create/edit and JSON preview show `Direct engine` or `Customer sidecar/gateway` as the connection path.
+- [x] ✅ Selecting customer sidecar changes credential copy to customer-managed endpoint authentication and allows the policy-controlled no-credential option.
+- [x] ✅ Engine detail shows `Customer-managed engine authentication`; it never implies that EnterpriseGlue authorization is disabled.
 - [ ] ⬜ Connection tests identify the failing hop as `EnterpriseGlue -> sidecar`; they do not request or display the customer's downstream peer token.
 - [ ] ⬜ Effective Access, Mission Control, deployment eligibility, Dashboard filtering, and bridge decisions behave identically for direct and sidecar-backed engines.
 
 Required tests:
 
 - [ ] ⬜ Mock sidecar forwards successful metadata/runtime responses while injecting an opaque customer-owned downstream token that EnterpriseGlue cannot observe.
-- [ ] ⬜ Direct engine plus `auth.type = "none"` is rejected.
+- [x] ✅ Direct engine plus `auth.type = "none"` is rejected by the shared engine and config-bundle schemas.
 - [x] ✅ Customer-sidecar plus disallowed credentialless policy is rejected.
-- [ ] ⬜ EnterpriseGlue authorization denial prevents any sidecar request.
+- [x] ✅ EnterpriseGlue authorization denial prevents any sidecar request; the composite deployment eligibility test proves the outbound transport is not invoked.
 - [ ] ⬜ Sidecar timeout, TLS failure, malformed response, and downstream denial fail closed with transport-specific diagnostics and sanitized audit data.
 - [ ] ⬜ No config export, OpenAPI response, UI model, log, or audit event contains the downstream peer token.
 
