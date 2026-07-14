@@ -8,6 +8,7 @@ import { apiClient } from '../../../../shared/api/client'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../../shared/components/PageLayout'
 import BatchDetailModal from './BatchDetailModal'
 import { EngineAccessError, isEngineAccessError } from '../../shared/components/EngineAccessError'
+import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeCollectionEmptyState'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { AuthContext } from '../../../../contexts/AuthContext'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, WhyUnavailableLink } from '../../../../shared/auth/guards'
@@ -184,7 +185,7 @@ export default function BatchesList() {
                   {dataRows.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={headers.length}>
-                        <InlineNotification lowContrast kind="info" title="No batches" />
+                        <RuntimeCollectionEmptyState kind="batches" />
                       </TableCell>
                     </TableRow>
                   )}

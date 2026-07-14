@@ -27,6 +27,7 @@ import type { BadgeConfig } from '../../../shared/components/viewer/BpmnViewerWi
 import styles from './MigrationWizard.module.css'
 import { useMigrationData } from '../hooks'
 import { typeCategory, toHumanName, parseActivities, normalizeName } from '../utils'
+import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeCollectionEmptyState'
 
 const MIGRATION_SESSION_KEY = 'migration-wizard-state'
 
@@ -89,6 +90,7 @@ export default function MigrationWizard() {
   // Use extracted data hook
   const migrationData = useMigrationData({ instanceIds, preselectedKey, preselectedVersion })
   const {
+    defsQ,
     sourceXmlQ,
     targetXmlQ,
     activeCountsQ,
@@ -369,6 +371,10 @@ export default function MigrationWizard() {
           />
         )}
       </div>
+
+      {defsQ.isSuccess && processItems.length === 0 && (
+        <RuntimeCollectionEmptyState kind="migration_definitions" />
+      )}
 
       <div style={{ background: 'var(--color-bg-primary)', border: '1px solid var(--color-border-primary)', padding: 'var(--spacing-2)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 'var(--spacing-2)', alignItems: 'stretch', height: 400 }}>

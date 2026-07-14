@@ -26,6 +26,7 @@ import {
 } from './hooks'
 import { createSavedProcessFilter, deleteSavedProcessFilter, listSavedProcessFilters } from './api/processDefinitions'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
+import { RuntimeCollectionEmptyState } from '../shared/components/RuntimeCollectionEmptyState'
 import { apiClient } from '../../../shared/api/client'
 import { evaluateMissionControlStarbaseBridge } from '../../../shared/api/bridgeAuthz'
 import { useSelectedEngine } from '../../../components/EngineSelector'
@@ -1140,14 +1141,7 @@ export default function ProcessesOverviewPage() {
         )}
       </BreadcrumbBar>
       {defsQ.isSuccess && selectedEngineId && defItems.length === 0 && (
-        <InlineNotification
-          kind="info"
-          lowContrast
-          hideCloseButton
-          title="No visible process definitions"
-          subtitle="This engine may have no deployments, or your access is limited to a different runtime resource set."
-          style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }}
-        />
+        <RuntimeCollectionEmptyState kind="process_definitions" style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }} />
       )}
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
@@ -1404,6 +1398,9 @@ export default function ProcessesOverviewPage() {
 
           {/* Data Table (scrollable) */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            {instQ.isSuccess && selectedEngineId && defItems.length > 0 && (instQ.data || []).length === 0 && (
+              <RuntimeCollectionEmptyState kind="process_instances" />
+            )}
             <ProcessesDataTable
               data={instQ.data || []}
               onTerminate={(id) => {

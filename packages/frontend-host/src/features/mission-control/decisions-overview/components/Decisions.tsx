@@ -16,6 +16,7 @@ import { DecisionsDataTable } from './DecisionsDataTable'
 import { PageLoader } from '../../../../shared/components/PageLoader'
 import { useDecisionsFilterStore } from '../../shared/stores/decisionsFilterStore'
 import { EngineAccessError, isEngineAccessError } from '../../shared/components/EngineAccessError'
+import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeCollectionEmptyState'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../../stores/engineSelectorStore'
 import { apiClient } from '../../../../shared/api/client'
@@ -491,14 +492,7 @@ export default function Decisions() {
         )}
       </BreadcrumbBar>
       {defsQ.isSuccess && selectedEngineId && defItems.length === 0 && (
-        <InlineNotification
-          kind="info"
-          lowContrast
-          hideCloseButton
-          title="No visible decision definitions"
-          subtitle="This engine may have no deployed decisions, or your access is limited to a different runtime resource set."
-          style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }}
-        />
+        <RuntimeCollectionEmptyState kind="decision_definitions" style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }} />
       )}
       {bridgeError && (
         <InlineNotification

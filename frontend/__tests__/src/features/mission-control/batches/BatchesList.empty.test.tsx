@@ -64,7 +64,8 @@ describe('BatchesList empty state', () => {
     renderWithProviders();
 
     await waitFor(() => {
-      expect(screen.getByText('No batches')).toBeInTheDocument();
+      expect(screen.getByText('No visible batches')).toBeInTheDocument();
+      expect(screen.getByText(/authorized runtime resources/i)).toBeInTheDocument();
     });
   });
 });
