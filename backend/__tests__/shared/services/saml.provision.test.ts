@@ -9,9 +9,12 @@ import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/pl
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
+const externalIdentityService = vi.hoisted(() => ({ getActiveLinkedUserIdWithManager: vi.fn(), upsertWithManager: vi.fn() }));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js', () => ({ externalIdentityService }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoProviderService.js', () => ({
   ssoProviderService: {
@@ -66,6 +69,8 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsServic
 describe('saml service - provisionSamlUser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    externalIdentityService.getActiveLinkedUserIdWithManager.mockResolvedValue(null);
+    externalIdentityService.upsertWithManager.mockResolvedValue({ id: 'external-identity-1', created: true });
   });
 
   it('returns authProvider as saml when user exists by entraId', async () => {
@@ -121,6 +126,9 @@ describe('saml service - provisionSamlUser', () => {
       details: expect.objectContaining({ email: 'saml-user@example.com' }),
     }));
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(externalIdentityService.upsertWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
+      tenantId: 'tenant-a', providerId: 'provider-saml-1', providerType: 'saml', subjectId: 'oid-123', userId: 'user-1',
+    }));
     expect(userRepo.update).toHaveBeenCalledWith(
       { id: 'user-1' },
       expect.objectContaining({ authProvider: 'saml', email: 'saml-user@example.com' })
@@ -201,5 +209,22 @@ describe('saml service - provisionSamlUser', () => {
     }));
     expect(ssoSyncDiagnosticsService.failRun).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({ authProvider: 'saml' }));
+  });
+
+  it('prefers an exact SAML provider link before the staged legacy namespace or Entra column', async () => {
+    const userRepo = { findOneBy: vi.fn().mockResolvedValue({ id: 'user-linked', email: 'before@example.test', firstName: null, lastName: null, platformRole: 'user' }), update: vi.fn(), insert: vi.fn() };
+    const manager = { getRepository: vi.fn().mockReturnValue(userRepo) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: (callback: any) => callback(manager) });
+    (ssoProviderService.getProvider as unknown as Mock).mockResolvedValue({ id: 'provider-saml-1', defaultRole: 'user', tenantId: 'tenant-a' });
+    (ssoClaimsMappingService.resolveRoleFromClaims as unknown as Mock).mockResolvedValue('user');
+    externalIdentityService.getActiveLinkedUserIdWithManager.mockResolvedValue('user-linked');
+
+    await provisionSamlUser({ email: 'person@example.test', oid: 'oid-linked', groups: [], roles: [], customClaims: {} }, 'provider-saml-1');
+
+    expect(userRepo.findOneBy).toHaveBeenCalledWith({ id: 'user-linked' });
+    expect(userRepo.findOneBy).not.toHaveBeenCalledWith({ entraId: 'oid-linked' });
+    expect(externalIdentityService.upsertWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
+      tenantId: 'tenant-a', providerId: 'provider-saml-1', subjectId: 'oid-linked', userId: 'user-linked',
+    }));
   });
 });

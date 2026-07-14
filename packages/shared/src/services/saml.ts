@@ -11,6 +11,9 @@ import { ssoGroupMappingService } from './platform-admin/SsoGroupMappingService.
 import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIdentityService.js';
 import { ssoProviderService } from './platform-admin/SsoProviderService.js';
 import { ssoSyncDiagnosticsService, type SsoSyncCounts } from './platform-admin/SsoSyncDiagnosticsService.js';
+import { externalIdentityService } from './platform-admin/ExternalIdentityService.js';
+
+const LEGACY_SAML_EXTERNAL_PROVIDER_ID = 'legacy:saml';
 
 const require = createRequire(import.meta.url);
 const nodeSaml = require('@node-saml/node-saml');
@@ -446,10 +449,23 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
   try {
     const result = await dataSource.transaction(async (manager) => {
       const userRepo = manager.getRepository(User);
-      const existingByEntraId = userInfo.oid ? await userRepo.findOneBy({ entraId: userInfo.oid }) : null;
+      const subject = samlSubject(userInfo).subject;
+      const providerLinkedUserId = await externalIdentityService.getActiveLinkedUserIdWithManager(manager, {
+        tenantId, providerId, subjectId: subject,
+      });
+      const legacyLinkedUserId = !providerLinkedUserId && userInfo.oid
+        ? await externalIdentityService.getActiveLinkedUserIdWithManager(manager, {
+          providerId: LEGACY_SAML_EXTERNAL_PROVIDER_ID, subjectId: userInfo.oid,
+        })
+        : null;
+      const linkedUserId = providerLinkedUserId || legacyLinkedUserId;
+      const existingByExternalIdentity = linkedUserId ? await userRepo.findOneBy({ id: linkedUserId }) : null;
+      if (linkedUserId && !existingByExternalIdentity) throw new Error('External identity references a missing user account');
+      const existingByEntraId = existingByExternalIdentity || !userInfo.oid ? null : await userRepo.findOneBy({ entraId: userInfo.oid });
+      const existingUser = existingByExternalIdentity || existingByEntraId;
 
-      if (existingByEntraId) {
-        const user = existingByEntraId;
+      if (existingUser) {
+        const user = existingUser;
         await userRepo.update({ id: user.id }, {
           email: userInfo.email,
           authProvider: 'saml',
@@ -458,6 +474,10 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
           lastName: userInfo.family_name || user.lastName,
           lastLoginAt: now,
           updatedAt: now,
+        });
+        await externalIdentityService.upsertWithManager(manager, {
+          tenantId, providerId, providerType: 'saml', subjectId: subject,
+          directoryTenantId: userInfo.tid || null, userId: user.id, emailHint: userInfo.email, now,
         });
 
         syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims, resolvedRole);
@@ -477,7 +497,6 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
         const user = existingByEmail;
         await userRepo.update({ id: user.id }, {
           authProvider: 'saml',
-          entraId: userInfo.oid || user.entraId,
           entraEmail: userInfo.email,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
@@ -487,13 +506,16 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
           failedLoginAttempts: 0,
           lockedUntil: null,
         });
+        await externalIdentityService.upsertWithManager(manager, {
+          tenantId, providerId, providerType: 'saml', subjectId: subject,
+          directoryTenantId: userInfo.tid || null, userId: user.id, emailHint: userInfo.email, now,
+        });
 
         syncCounts = await syncSamlAuthorizationForUser(manager, user.id, userInfo, providerId, tenantId, ssoClaims, resolvedRole);
 
         return {
           ...user,
           authProvider: 'saml',
-          entraId: userInfo.oid || user.entraId,
           firstName: userInfo.given_name || user.firstName,
           lastName: userInfo.family_name || user.lastName,
         };
@@ -506,8 +528,8 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
         email: userInfo.email,
         authProvider: 'saml',
         passwordHash: null,
-        entraId: userInfo.oid || null,
-        entraEmail: userInfo.email,
+        entraId: null,
+        entraEmail: null,
         firstName: userInfo.given_name || null,
         lastName: userInfo.family_name || null,
         platformRole: 'user',
@@ -519,6 +541,10 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
         lastLoginAt: now,
       });
 
+      await externalIdentityService.upsertWithManager(manager, {
+        tenantId, providerId, providerType: 'saml', subjectId: subject,
+        directoryTenantId: userInfo.tid || null, userId, emailHint: userInfo.email, now,
+      });
       syncCounts = await syncSamlAuthorizationForUser(manager, userId, userInfo, providerId, tenantId, ssoClaims, resolvedRole);
       const newUser = await userRepo.findOneBy({ id: userId });
       return newUser;
