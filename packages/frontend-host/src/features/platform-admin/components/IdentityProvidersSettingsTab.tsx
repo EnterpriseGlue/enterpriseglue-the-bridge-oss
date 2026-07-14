@@ -190,7 +190,7 @@ export default function IdentityProvidersSettingsTab() {
       {cutoverResult && <InlineNotification kind="success" title="Legacy provider cut over" subtitle={`${cutoverResult.legacyProvider.name} was ${cutoverResult.alreadyDisabled ? 'already disabled' : 'disabled'} after ${cutoverResult.targetProviderKey} passed provider-neutral migration readiness.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {manage.allowed && legacyMigratableProviders.length > 0 && <div style={{ borderTop: '1px solid var(--cds-border-subtle)', paddingTop: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}>
         <h4 style={{ margin: 0, fontSize: '0.875rem' }}>Migrate legacy provider</h4>
-        <p style={{ margin: 'var(--spacing-2) 0 var(--spacing-3)', color: 'var(--cds-text-secondary)' }}>Prepare a disabled OIDC draft from a legacy Microsoft, Google, or OIDC provider. The existing secret is not copied.</p>
+        <p style={{ margin: 'var(--spacing-2) 0 var(--spacing-3)', color: 'var(--cds-text-secondary)' }}>Prepare a disabled OIDC or SAML draft from a legacy provider. Existing client secrets and signing certificates are not copied.</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'end', gap: 'var(--spacing-3)' }}>
           <Select id="legacy-identity-provider" labelText="Legacy provider" value={legacyProviderId} onChange={(event) => { setLegacyProviderId(event.target.value); setMigrationReadiness(null); }} style={{ minWidth: '18rem' }}>
             <SelectItem value="" text="Select a legacy provider" />

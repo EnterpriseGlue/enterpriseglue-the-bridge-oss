@@ -126,6 +126,35 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.getByLabelText('Allow verified email account linking')).not.toBeChecked();
   });
 
+  it('prepares a legacy SAML draft with a certificate reference placeholder', async () => {
+    server.use(
+      http.get('/api/sso/providers', () => HttpResponse.json([{
+        id: 'legacy-saml-1', name: 'Legacy SAML', type: 'saml', enabled: true,
+      }])),
+      http.get('/api/identity/providers/legacy-migration-draft/:id', ({ params }) => {
+        expect(params.id).toBe('legacy-saml-1');
+        return HttpResponse.json({
+          legacyProvider: { id: 'legacy-saml-1', name: 'Legacy SAML', type: 'saml', enabled: true, signingCertificateConfigured: true },
+          provider: {
+            key: 'legacy-saml-legacy-saml-1', protocol: 'saml', isEnabled: false, authenticationMode: 'direct', directoryTenantId: null,
+            configuration: { entityId: 'https://sp.example.test/metadata', callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback', ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'env://REPLACE_WITH_SAML_SIGNING_CERTIFICATE', signatureAlgorithm: 'sha256' },
+          },
+          requirements: ['signing_certificate_reference', 'identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'],
+          warnings: ['The generated provider is disabled.'],
+        });
+      }),
+    );
+    renderTab();
+    await screen.findByText('Migrate legacy provider');
+    fireEvent.change(screen.getByLabelText('Legacy provider'), { target: { value: 'legacy-saml-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare migration' }));
+
+    expect(await screen.findByText('Migration draft for Legacy SAML')).toBeInTheDocument();
+    expect(screen.getByLabelText('Protocol')).toHaveValue('saml');
+    expect(screen.getByLabelText('Identity provider signing certificate reference')).toHaveValue('env://REPLACE_WITH_SAML_SIGNING_CERTIFICATE');
+    expect(screen.getByLabelText('Identity provider SSO URL')).toHaveValue('https://idp.example.test/sso');
+  });
+
   it('distinguishes config-locked and config-warning provider ownership', () => {
     expect(isConfigLockedIdentityProvider({ ownershipMode: 'config_locked' })).toBe(true);
     expect(isConfigLockedIdentityProvider({ ownershipMode: 'config_warn' })).toBe(false);
