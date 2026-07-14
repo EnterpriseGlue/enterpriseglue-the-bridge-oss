@@ -103,6 +103,57 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     }).success).toBe(false);
   });
 
+  it('forbids plaintext credential fields across engine and identity-provider bundle contracts', () => {
+    const engine = {
+      key: 'engine-prod-payments',
+      name: 'Payments',
+      type: 'operaton',
+      baseUrl: 'https://engine.example.com/engine-rest',
+    };
+
+    for (const auth of [
+      { type: 'basic', username: 'eg-client', password: 'engine-basic-secret-sentinel' },
+      { type: 'bearer', token: 'engine-bearer-secret-sentinel' },
+      { type: 'oauth2-client-credentials', username: 'eg-client', password: 'engine-oauth-secret-sentinel', tokenUrl: 'https://identity.example.com/token' },
+    ]) {
+      expect(ConfigEnginesFileSchema.safeParse({ engines: [{ ...engine, auth }] }).success).toBe(false);
+    }
+
+    const provider = {
+      key: 'customer-oidc',
+      type: 'oidc',
+      sync: { triggers: ['login'] },
+      oidc: {
+        issuerUrl: 'https://login.example.com',
+        clientId: 'client-id',
+        callbackUrl: 'https://enterpriseglue.ai/auth/callback',
+        scopes: ['openid'],
+      },
+    };
+    expect(ConfigIdentityProvidersFileSchema.safeParse({
+      identityProviders: [{ ...provider, oidc: { ...provider.oidc, clientSecret: 'oidc-secret-sentinel' } }],
+    }).success).toBe(false);
+    expect(ConfigIdentityProvidersFileSchema.safeParse({
+      identityProviders: [{
+        key: 'customer-ldap', type: 'ldap', sync: { triggers: ['login'] },
+        ldap: {
+          url: 'ldaps://directory.example.com:636', bindDn: 'CN=EnterpriseGlue,DC=example,DC=com', bindPassword: 'ldap-secret-sentinel',
+          userBaseDn: 'OU=Users,DC=example,DC=com', userSearchFilter: '(uid={{username}})', groupBaseDn: 'OU=Groups,DC=example,DC=com',
+          groupIdAttribute: 'entryUUID', membershipMode: 'memberOf',
+        },
+      }],
+    }).success).toBe(false);
+    expect(ConfigIdentityProvidersFileSchema.safeParse({
+      identityProviders: [{
+        key: 'customer-saml', type: 'saml', sync: { triggers: ['login'] },
+        saml: {
+          entityId: 'enterpriseglue-ai', callbackUrl: 'https://app.example.test/callback', ssoUrl: 'https://idp.example.test/sso',
+          signingCertificate: 'saml-certificate-sentinel', nameIdAttribute: 'nameID',
+        },
+      }],
+    }).success).toBe(false);
+  });
+
   it('accepts stable engine metadata labels and rejects display-oriented keys', () => {
     expect(ConfigEnginesFileSchema.safeParse({
       engines: [{ key: 'engine-prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://engine.example.com/engine-rest', labels: { country: 'TR', businessUnit: 'payments', customer_segment: 'enterprise' }, auth: { type: 'bearer', tokenRef: 'EG_ENGINE_TOKEN' } }],

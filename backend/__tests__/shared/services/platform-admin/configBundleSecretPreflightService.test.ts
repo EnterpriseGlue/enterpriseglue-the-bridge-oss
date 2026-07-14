@@ -64,4 +64,22 @@ describe('configBundleSecretPreflightService', () => {
     expect(result).toMatchObject({ valid: false, available: false });
     expect(result.references).toEqual([]);
   });
+
+  it('rejects raw secret fields without echoing their values in preflight output', () => {
+    const plaintext = 'forbidden-plaintext-secret-sentinel';
+    const result = configBundleSecretPreflightService.check({
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest',
+            auth: { type: 'basic', username: 'eg', password: plaintext },
+          }],
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ valid: false, available: false, references: [] });
+    expect(JSON.stringify(result)).not.toContain(plaintext);
+  });
 });
