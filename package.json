@@ -44,7 +44,7 @@
     "test:ci": "pnpm run test:unit && pnpm run test:integration && pnpm run test:e2e && pnpm --filter webmodeler-backend run db:cleanup-test-data",
     "test:ci:pr": "pnpm run test:unit && pnpm run test:integration && pnpm run test:e2e:smoke && pnpm --filter webmodeler-backend run db:cleanup-test-data",
     "guard:oss-ee-boundary": "bash ./scripts/check-oss-ee-boundary.sh",
-    "guard:authz-route-inventory": "pnpm --filter ./packages/shared run build && node ./scripts/check-authz-route-inventory.mjs --strict-action-routes --strict-backend-routes",
+    "guard:authz-route-inventory": "pnpm --filter ./packages/shared run build && node ./scripts/check-authz-route-inventory.mjs --strict-action-routes --strict-openapi-classification --strict-backend-routes",
     "guard:backend-authz": "node ./scripts/check-backend-authz-guards.mjs",
     "guard:authz-test-coverage": "pnpm --filter ./packages/shared run build && node ./scripts/check-authz-test-coverage.mjs",
     "guard:frontend-authz-coverage": "pnpm --filter ./packages/shared run build && node ./scripts/check-frontend-authz-coverage.mjs",

@@ -16,10 +16,51 @@ describe('authorization route inventory validation', () => {
   });
 
   it('validates every public action route in strict OpenAPI mode', () => {
-    const result = validateAuthzRouteInventory(generateOpenApi(), { requireOpenApiForActionRoutes: true });
+    const result = validateAuthzRouteInventory(generateOpenApi(), {
+      requireOpenApiForActionRoutes: true,
+      requireAuthzClassificationForOpenApiOperations: true,
+    });
 
     expect(result.issues).toEqual([]);
     expect(result.valid).toBe(true);
+  });
+
+  it('requires every documented operation to declare an action or explicit exemption', () => {
+    const openApi = generateOpenApi();
+    delete openApi.paths['/mission-control-api/process-definitions'].get[AUTHZ_OPENAPI_EXTENSION_KEY];
+
+    const result = validateAuthzRouteInventory(openApi, {
+      requireAuthzClassificationForOpenApiOperations: true,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'openapi.missing-authz-classification',
+        method: 'GET',
+        openApiPath: '/mission-control-api/process-definitions',
+      }),
+    ]));
+  });
+
+  it('classifies every Mission Control operation and omits stale engine routes', () => {
+    const openApi = generateOpenApi();
+    const operations = Object.entries(openApi.paths)
+      .filter(([path]) => path.startsWith('/mission-control-api') || path.startsWith('/engines-api'))
+      .flatMap(([path, pathItem]: [string, any]) => Object.entries(pathItem)
+        .filter(([method]) => ['get', 'post', 'put', 'patch', 'delete'].includes(method))
+        .map(([method, operation]: [string, any]) => ({ path, method, operation })));
+
+    expect(operations.length).toBeGreaterThan(100);
+    for (const { operation } of operations) {
+      const classifications = [
+        operation[AUTHZ_OPENAPI_EXTENSION_KEY],
+        operation[AUTHZ_OPENAPI_EXEMPTION_KEY],
+      ].filter(Boolean);
+      expect(classifications).toHaveLength(1);
+    }
+    expect(openApi.paths['/engines-api/engines/active']).toBeUndefined();
+    expect(openApi.paths['/engines-api/engines/{id}/activate']).toBeUndefined();
   });
 
   it('documents typed configuration bundle lifecycle contracts', () => {

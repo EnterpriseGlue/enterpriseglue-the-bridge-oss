@@ -31,7 +31,8 @@ export type AuthzRouteInventoryIssueCode =
   | 'openapi.extension-mismatch'
   | 'openapi.unknown-exemption'
   | 'openapi.exemption-mismatch'
-  | 'openapi.authz-conflict';
+  | 'openapi.authz-conflict'
+  | 'openapi.missing-authz-classification';
 
 export interface AuthzRouteInventoryIssue {
   code: AuthzRouteInventoryIssueCode;
@@ -52,6 +53,8 @@ export interface AuthzRouteInventoryValidationOptions {
    * action-registry routes that do not have OpenAPI operations yet.
    */
   requireOpenApiForActionRoutes?: boolean;
+  /** Require every documented operation to declare either an action or an explicit exemption. */
+  requireAuthzClassificationForOpenApiOperations?: boolean;
 }
 
 export interface AuthzRouteInventoryValidationResult {
@@ -303,6 +306,15 @@ export function validateAuthzRouteInventory(
         code: 'openapi.authz-conflict',
         message: `OpenAPI operation cannot declare both authz action metadata and authz exemption metadata: ${method} ${openApiPath}`,
         actionId: String(extension.actionId || ''),
+        method,
+        openApiPath,
+      });
+    }
+
+    if (options.requireAuthzClassificationForOpenApiOperations && !extension && !exemptionExtension) {
+      issues.push({
+        code: 'openapi.missing-authz-classification',
+        message: `OpenAPI operation has neither authorization action metadata nor an explicit exemption: ${method} ${openApiPath}`,
         method,
         openApiPath,
       });

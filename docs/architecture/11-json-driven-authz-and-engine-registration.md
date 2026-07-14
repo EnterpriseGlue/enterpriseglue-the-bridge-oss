@@ -1818,7 +1818,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Extend `packages/shared/src/schemas/platform-admin/platform-settings.ts` with `engineRuntimeAuthorizationMode`; `runtimeAccessScope` remains per engine rather than platform-wide.
 - [ ] ⬜ Extend `packages/shared/src/authz/permission-actions.ts` with `engine_runtime_resource` and `engine_runtime_resource_set` plus identity/config/deployment-receipt actions; runtime tenant is a resource kind, not a top-level type.
 - [ ] ⬜ Separate role permission scope from assignment target type so engine roles can target engines, Engine Sets, exact runtime resources, and runtime resource sets.
-- [ ] ⬜ Extend `packages/shared/src/schemas/openapi.ts` and generated OpenAPI output for every new and changed route.
+- [x] ✅ Extend `packages/shared/src/schemas/openapi.ts` and generated OpenAPI output for every new and changed action route. Strict inventory validation requires every registered action route to have a matching documented operation and every documented operation to declare either action metadata or an explicit exemption.
 
 ### Persistence And Migrations
 
@@ -1870,7 +1870,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Update auth start/callback routes and provider services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit.
 - [ ] ⬜ Complete authorized-subset filtering and inherited runtime-resource resolvers across every Mission Control route family. Process, process-instance, decision, batch, migration, job, incident, history, variable, and the legacy compatibility process-instance router now use runtime-aware guards; metrics remain intentionally engine-wide-only and fail closed for resource-only grants. Final route-family audit remains pending.
 - [ ] ⬜ Update deployment query services and `edit-target-resolution.ts` for nullable project lineage and remove authorization through file-key fallback.
-- [ ] ⬜ Register every route in OpenAPI with `x-enterpriseglue-authz`, collection filter mode, lineage requirements, and audit risk.
+- [x] ✅ Register every Mission Control route in OpenAPI with action-derived `x-enterpriseglue-authz` metadata or an explicit exemption. The metadata carries the permission, resource resolver (including collection and live runtime-resource resolvers), additional checks, risk, audit behavior, and UI behavior; strict generated-document coverage prevents unclassified operations.
 
 ### Frontend Host
 
@@ -1935,7 +1935,7 @@ Authorization:
 - [ ] ⬜ Add `platform:config-bundles:apply`.
 - [ ] ⬜ Add `platform:config-bundles:export`.
 - [ ] ⬜ Allow scoped API clients to call preview/apply from CI/CD.
-- [ ] ⬜ Record OpenAPI `x-enterpriseglue-authz` metadata for every route.
+- [x] ✅ Record OpenAPI `x-enterpriseglue-authz` metadata for every configuration lifecycle route; all are action-backed and validated against the aggregate registry by the strict inventory guard.
 
 Config transport and response rules:
 
@@ -2332,9 +2332,9 @@ Phase 0 exit criteria:
 - [x] ✅ Add OpenAPI schemas for every config object. The config-bundle lifecycle now has typed manifest, imported-file schemas, preview, diff, hash-bound apply, apply-history, and export contracts.
 - [x] ✅ Add OpenAPI schemas for runtime authorization mode and unsupported-mode validation errors. The named `EngineRuntimeAuthorizationMode` component exposes the sole v1 literal, while `UnsupportedEngineRuntimeAuthorizationModeError` documents the settings update `400` response and its stable issue shape.
 - [x] ✅ Add OpenAPI schemas for engine `connectionMode`, endpoint-auth policy errors, sanitized transport diagnostics, and manual/external/config registration parity. Named create/update/external/config request components share the two-value mode contract; manual, update, and external registration document the exact policy-error response, and health diagnostics expose only bounded enum/timing metadata.
-- [ ] ⬜ Add OpenAPI `x-enterpriseglue-authz` metadata.
-- [ ] ⬜ Add OpenAPI `x-enterpriseglue-authz` metadata for every Mission Control route, including collection filter mode and runtime resource resolver.
-- [ ] ⬜ Add route inventory entries and tests.
+- [x] ✅ Add OpenAPI `x-enterpriseglue-authz` metadata. The generated document now classifies all 469 operations: 401 action-backed operations and 68 explicit public/auth-only exemptions, with no unclassified route.
+- [x] ✅ Add OpenAPI `x-enterpriseglue-authz` metadata for every Mission Control route, including collection filter mode and runtime resource resolver. Stale active-engine operations with no runtime route were removed instead of being assigned misleading metadata.
+- [x] ✅ Add route inventory entries and tests. CI now enforces strict action-route presence, strict OpenAPI classification, metadata parity, exemption parity, and 100% authenticated backend-route coverage; a regression test proves missing Mission Control metadata fails closed.
 - [x] ✅ Add the API-client-only `config:bundle:manage` scope for CI/CD configuration lifecycle routes. It is enforced together with a platform-scoped `platform:authz:roles:manage` RBAC assignment; deployment service accounts intentionally remain deployment-only.
 - [ ] ⬜ Add rate limits and payload size limits.
 

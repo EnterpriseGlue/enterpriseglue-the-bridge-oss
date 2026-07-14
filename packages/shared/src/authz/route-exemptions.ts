@@ -21,7 +21,47 @@ export interface AuthzOpenApiExemption {
   owner: string;
 }
 
+function publicRoute(method: string, route: string, risk: AuthzActionRisk, owner: string, reason: string): AuthzRouteExemption {
+  return { method, route, kind: 'public', risk, owner, reason };
+}
+
+function tokenAuthenticatedRoute(method: string, route: string, risk: AuthzActionRisk, reason: string): AuthzRouteExemption {
+  return { method, route, kind: 'auth-only', risk, owner: 'platform-auth', reason };
+}
+
 export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
+  publicRoute('GET', '/health', 'low', 'platform-runtime', 'Unauthenticated health probes expose only a static service readiness status.'),
+  publicRoute('GET', '/api/sso/providers/enabled', 'low', 'platform-auth', 'The login page needs the sanitized enabled-provider catalog before a user session exists.'),
+  publicRoute('POST', '/api/auth/login', 'high', 'platform-auth', 'Credential login must be reachable before a session exists and is protected by authentication rate limits.'),
+  tokenAuthenticatedRoute('POST', '/api/auth/complete-onboarding', 'high', 'A one-time onboarding token authorizes completion before the normal user session is issued.'),
+  tokenAuthenticatedRoute('POST', '/api/auth/refresh', 'medium', 'The refresh cookie authenticates session renewal when the access token is unavailable or expired.'),
+  publicRoute('POST', '/api/auth/forgot-password', 'medium', 'platform-auth', 'Password recovery initiation must be reachable before authentication and returns a non-enumerating response.'),
+  publicRoute('POST', '/api/auth/reset-password-with-token', 'high', 'platform-auth', 'A single-use reset token authorizes password replacement before a session exists.'),
+  publicRoute('GET', '/api/auth/verify-reset-token', 'low', 'platform-auth', 'The recovery UI may validate an opaque reset token without exposing account details.'),
+  publicRoute('POST', '/api/auth/resend-verification', 'medium', 'platform-auth', 'Email verification delivery must be available before login and uses a non-enumerating response.'),
+  publicRoute('GET', '/api/auth/verify-email', 'medium', 'platform-auth', 'An opaque verification token authorizes email verification before login.'),
+  publicRoute('GET', '/api/auth/branding', 'low', 'platform-auth', 'The unauthenticated login screen needs non-secret platform branding.'),
+  publicRoute('GET', '/api/auth/google/start', 'medium', 'platform-auth', 'Starts a state-bound Google login flow before a local session exists.'),
+  publicRoute('GET', '/api/auth/google', 'medium', 'platform-auth', 'Starts the legacy state-bound Google login flow before a local session exists.'),
+  publicRoute('GET', '/api/auth/google/callback', 'high', 'platform-auth', 'Completes a state-bound Google identity callback before issuing a local session.'),
+  publicRoute('GET', '/api/auth/google/status', 'low', 'platform-auth', 'The login page reads only whether Google login is enabled.'),
+  publicRoute('GET', '/api/auth/microsoft/start', 'medium', 'platform-auth', 'Starts a state-bound Microsoft login flow before a local session exists.'),
+  publicRoute('GET', '/api/auth/microsoft', 'medium', 'platform-auth', 'Starts the legacy state-bound Microsoft login flow before a local session exists.'),
+  publicRoute('GET', '/api/auth/microsoft/callback', 'high', 'platform-auth', 'Completes a state-bound Microsoft identity callback before issuing a local session.'),
+  publicRoute('GET', '/api/auth/microsoft/status', 'low', 'platform-auth', 'The login page reads only whether Microsoft login is enabled.'),
+  publicRoute('GET', '/api/auth/saml/start', 'medium', 'platform-auth', 'Starts a state-bound SAML login flow before a local session exists.'),
+  publicRoute('GET', '/api/auth/saml', 'medium', 'platform-auth', 'Starts the legacy state-bound SAML login flow before a local session exists.'),
+  publicRoute('POST', '/api/auth/saml/callback', 'high', 'platform-auth', 'Consumes a signed SAML assertion and state before issuing a local session.'),
+  publicRoute('GET', '/api/auth/saml/metadata', 'low', 'platform-auth', 'Identity providers require public non-secret service-provider metadata.'),
+  publicRoute('GET', '/api/auth/saml/status', 'low', 'platform-auth', 'The login page reads only whether SAML login is enabled.'),
+  publicRoute('GET', '/api/auth/identity/:key/start', 'medium', 'platform-auth', 'Starts a state-bound provider-neutral OIDC login flow before a local session exists.'),
+  publicRoute('GET', '/api/auth/identity/callback', 'high', 'platform-auth', 'Completes a state-bound provider-neutral OIDC callback before issuing a local session.'),
+  publicRoute('POST', '/api/auth/identity/:key/ldap/login', 'high', 'platform-auth', 'Direct directory login validates credentials before issuing a local session and is rate limited.'),
+  publicRoute('GET', '/api/auth/providers/enabled', 'low', 'platform-auth', 'The login page needs sanitized provider-neutral login options before authentication.'),
+  publicRoute('GET', '/api/auth/providers/:providerId/start', 'medium', 'platform-auth', 'Starts a state-bound provider-neutral redirect login before a local session exists.'),
+  publicRoute('POST', '/api/auth/providers/:providerId/login', 'high', 'platform-auth', 'Provider-neutral directory login validates credentials before issuing a local session and is rate limited.'),
+  publicRoute('POST', '/api/auth/providers/saml/callback', 'high', 'platform-auth', 'Consumes a signed provider-neutral SAML assertion and state before issuing a local session.'),
+  publicRoute('GET', '/api/t/:tenantSlug/auth/sso-config', 'low', 'platform-auth', 'Tenant login discovery exposes only sanitized SSO configuration before authentication.'),
   {
     method: 'POST',
     route: '/api/auth/logout',

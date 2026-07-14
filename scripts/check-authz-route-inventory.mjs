@@ -7,9 +7,11 @@ import { scanBackendAuthzRoutes } from '../packages/shared/dist/authz/backend-ro
 import { validateAuthzRouteInventory } from '../packages/shared/dist/authz/route-inventory.js';
 
 const requireOpenApiForActionRoutes = process.argv.includes('--strict-action-routes');
+const requireAuthzClassificationForOpenApiOperations = process.argv.includes('--strict-openapi-classification');
 const strictBackendRoutes = process.argv.includes('--strict-backend-routes');
 const result = validateAuthzRouteInventory(generateOpenApi(), {
   requireOpenApiForActionRoutes,
+  requireAuthzClassificationForOpenApiOperations,
 });
 
 function readTsFiles(dir) {
@@ -44,7 +46,7 @@ if (!result.valid) {
   process.exit(1);
 }
 
-console.log(`[authz-route-inventory] OK (${requireOpenApiForActionRoutes ? 'strict' : 'migrated-route'} mode)`);
+console.log(`[authz-route-inventory] OK (${requireOpenApiForActionRoutes ? 'strict action routes' : 'migrated routes'}, ${requireAuthzClassificationForOpenApiOperations ? 'strict OpenAPI classification' : 'partial OpenAPI classification'})`);
 
 const backendSourceDir = path.join(process.cwd(), 'packages', 'backend-host', 'src');
 const sources = readTsFiles(backendSourceDir).map((filePath) => ({
