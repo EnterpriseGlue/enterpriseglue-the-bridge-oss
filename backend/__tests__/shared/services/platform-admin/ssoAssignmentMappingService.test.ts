@@ -690,6 +690,7 @@ describe('ssoAssignmentMappingService', () => {
     await ssoAssignmentMappingService.createMapping({
       actorUserId: 'admin-1',
       tenantId: 'tenant-a',
+      providerId: 'provider-1',
       claimType: 'group',
       claimKey: 'groups',
       claimValue: 'Operators',
@@ -707,7 +708,7 @@ describe('ssoAssignmentMappingService', () => {
       tenantId: 'tenant-a',
       engineSetKeyIdentity: expect.stringMatching(/^tenant-a:/),
       source: 'sso',
-      sourceRef: expect.any(String),
+      sourceRef: expect.stringMatching(/^legacy_sso:provider-1:mapping:/),
       selectorJson: expect.stringContaining('"mode":"all"'),
     }));
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
@@ -1431,7 +1432,7 @@ describe('ssoAssignmentMappingService', () => {
       engineSetId,
       engineId: 'engine-prod',
       source: 'sso',
-      sourceRef: 'mapping-scheduled-label',
+      sourceRef: 'legacy_sso:microsoft:mapping:mapping-scheduled-label',
       lineageJson: expect.stringContaining('"region":"eu"'),
     }));
     expect(assignmentInsert).toHaveBeenCalledWith(expect.objectContaining({
@@ -1513,7 +1514,10 @@ describe('ssoAssignmentMappingService', () => {
         const dynamicRepo = dynamicMocks.getRepository(entity);
         if (dynamicRepo) return dynamicRepo;
         if (entity === RbacRoleAssignment) return { find: findAssignments, delete: deleteAssignment };
-        if (entity === SsoAssignmentMapping) return { delete: deleteMapping };
+        if (entity === SsoAssignmentMapping) return {
+          findOneBy: vi.fn().mockResolvedValue({ id: 'mapping-1', providerId: null }),
+          delete: deleteMapping,
+        };
         if (entity === AuditLog) return { insert: auditInsert };
         throw new Error('Unexpected repository');
       },

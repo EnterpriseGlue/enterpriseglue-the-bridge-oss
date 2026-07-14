@@ -492,6 +492,7 @@ class SsoAssignmentMappingServiceClass {
       await this.reconcileDynamicEngineSetForMapping(dataSource, {
         id,
         tenantId: normalizeTenantId(input.tenantId),
+        providerId: input.providerId || null,
         targetSelectorType: input.targetSelectorType,
         targetLabelKey: input.targetLabelKey || null,
         targetLabelValue: input.targetLabelValue || null,
@@ -565,11 +566,15 @@ class SsoAssignmentMappingServiceClass {
       changedFields: Object.keys(updates).filter((field) => !['actorUserId', 'riskAcknowledged', 'tenantId'].includes(field)),
     });
     if (merged.isActive === false) {
-      await this.archiveDynamicEngineSetForMapping(dataSource, id, merged.tenantId);
+      await this.archiveDynamicEngineSetForMapping(dataSource, {
+        id,
+        providerId: merged.providerId || null,
+      }, merged.tenantId);
     } else {
       await this.reconcileDynamicEngineSetForMapping(dataSource, {
         id,
         tenantId: normalizeTenantId(merged.tenantId),
+        providerId: merged.providerId || null,
         targetSelectorType: merged.targetSelectorType,
         targetLabelKey: merged.targetLabelKey || null,
         targetLabelValue: merged.targetLabelValue || null,
@@ -579,8 +584,11 @@ class SsoAssignmentMappingServiceClass {
 
   async deleteMapping(id: string, actorUserId?: string | null): Promise<void> {
     const dataSource = await getDataSource();
+    const mapping = await dataSource.getRepository(SsoAssignmentMapping).findOneBy({ id });
     await this.deleteAssignmentsForMapping(dataSource, id);
-    await this.archiveDynamicEngineSetForMapping(dataSource, id);
+    if (mapping) {
+      await this.archiveDynamicEngineSetForMapping(dataSource, mapping);
+    }
     await dataSource.getRepository(SsoAssignmentMapping).delete({ id });
     await recordSsoAssignmentMappingAudit(dataSource, {
       action: 'authz.sso_assignment_mapping.delete',
@@ -861,7 +869,7 @@ class SsoAssignmentMappingServiceClass {
 
   private async resolveAssignmentTargets(
     dataSource: SsoAssignmentMappingStore,
-    mapping: Pick<SsoAssignmentMapping, 'id' | 'tenantId' | 'targetSelectorType' | 'targetEngineId' | 'targetExternalEngineId' | 'targetLabelKey' | 'targetLabelValue'>,
+    mapping: Pick<SsoAssignmentMapping, 'id' | 'tenantId' | 'providerId' | 'targetSelectorType' | 'targetEngineId' | 'targetExternalEngineId' | 'targetLabelKey' | 'targetLabelValue'>,
     tenantId?: string | null
   ): Promise<ResolvedAssignmentTarget[]> {
     if (mapping.targetSelectorType === 'all_engines' || mapping.targetSelectorType === 'engine_label') {
@@ -958,24 +966,26 @@ class SsoAssignmentMappingServiceClass {
 
   private async reconcileDynamicEngineSetForMapping(
     dataSource: SsoAssignmentMappingStore,
-    mapping: Pick<SsoAssignmentMapping, 'id' | 'tenantId' | 'targetSelectorType' | 'targetLabelKey' | 'targetLabelValue'>,
+    mapping: Pick<SsoAssignmentMapping, 'id' | 'tenantId' | 'providerId' | 'targetSelectorType' | 'targetLabelKey' | 'targetLabelValue'>,
     tenantId?: string | null
   ): Promise<string | null> {
     const selector = dynamicEngineSetSelectorForMapping(mapping);
     if (!selector) {
-      await this.archiveDynamicEngineSetForMapping(dataSource, mapping.id, tenantId ?? mapping.tenantId);
+      await this.archiveDynamicEngineSetForMapping(dataSource, mapping, tenantId ?? mapping.tenantId);
       return null;
     }
 
     const normalizedTenantId = normalizeTenantId(tenantId ?? mapping.tenantId);
+    const sourceRef = legacyAssignmentSourceRef(mapping);
+    const sourceRefCriteria = assignmentSourceRefCriteria(sourceRef, mapping.id);
     const now = Date.now();
     const fingerprint = selectorFingerprint(selector);
     const selectorJson = stableJson(selector);
     const engineSetRepo = dataSource.getRepository(EngineSet);
     const existing = await engineSetRepo.findOne({
       where: normalizedTenantId
-        ? { tenantId: normalizedTenantId, source: 'sso', sourceRef: mapping.id }
-        : { tenantId: IsNull(), source: 'sso', sourceRef: mapping.id },
+        ? { tenantId: normalizedTenantId, source: 'sso', sourceRef: sourceRefCriteria }
+        : { tenantId: IsNull(), source: 'sso', sourceRef: sourceRefCriteria },
     });
     const engineSetId = existing?.id || generateId();
     const key = existing?.key || keyFromMappingId(mapping.id);
@@ -990,6 +1000,7 @@ class SsoAssignmentMappingServiceClass {
         description: 'Managed by SSO engine assignment mapping.',
         selectorJson,
         selectorFingerprint: fingerprint,
+        sourceRef,
         isArchived: false,
         materializationStatus: 'pending',
         materializationError: null,
@@ -1006,7 +1017,7 @@ class SsoAssignmentMappingServiceClass {
         selectorJson,
         selectorFingerprint: fingerprint,
         source: 'sso',
-        sourceRef: mapping.id,
+        sourceRef,
         isArchived: false,
         createdById: null,
         lastMaterializedAt: null,
@@ -1023,22 +1034,24 @@ class SsoAssignmentMappingServiceClass {
       key,
       selector,
       selectorFingerprint: fingerprint,
-      sourceRef: mapping.id,
+      sourceRef,
     });
     return engineSetId;
   }
 
   private async archiveDynamicEngineSetForMapping(
     dataSource: SsoAssignmentMappingStore,
-    mappingId: string,
+    mapping: Pick<SsoAssignmentMapping, 'id' | 'providerId'>,
     tenantId?: string | null
   ): Promise<void> {
     const normalizedTenantId = normalizeTenantId(tenantId);
+    const sourceRef = legacyAssignmentSourceRef(mapping);
+    const sourceRefCriteria = assignmentSourceRefCriteria(sourceRef, mapping.id);
     const engineSetRepo = dataSource.getRepository(EngineSet);
     const engineSet = await engineSetRepo.findOne({
       where: normalizedTenantId
-        ? { tenantId: normalizedTenantId, source: 'sso', sourceRef: mappingId }
-        : { source: 'sso', sourceRef: mappingId },
+        ? { tenantId: normalizedTenantId, source: 'sso', sourceRef: sourceRefCriteria }
+        : { source: 'sso', sourceRef: sourceRefCriteria },
     });
     if (!engineSet) return;
     await engineSetRepo.update({ id: engineSet.id }, {
