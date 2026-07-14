@@ -2203,7 +2203,7 @@ This phase is required because the current implementation still carries compatib
 - [x] ✅ Extract the role-assignment results table into `pages/access-control/RoleAssignmentsTable.tsx`; source/ownership badges use explicit Manual, SSO, identity-provider, config, API, and system labels. Only manual and locally overridable config assignments expose removal, while SSO-managed rows remain diagnostic-only. The assignment form stays with the tab container.
 - [x] ✅ Isolate the Role Assignment form state, principal/scope transitions, eligible-role rules, static selector options, submit rule, and runtime-resource queries in `pages/access-control/assignmentFormOptions.ts`; the final Carbon form JSX move remains a mechanical component-boundary follow-up.
 - [x] ✅ Split external registration and all SSO mapping/diagnostic families into focused routers. Roles/permissions, assignments/groups, project-engine targets/bridges, engine sets/runtime resources, policies, machines, configuration bundles, audit, external registration, and SSO mappings are now isolated; the parent router retains only shared evaluation and module mounting.
-- [ ] ⬜ Split action and OpenAPI registrations into domain modules with aggregate validation exports so strict inventory guards remain authoritative.
+- [x] ✅ Split action and OpenAPI registrations into domain modules with aggregate validation exports so strict inventory guards remain authoritative. Platform, engine/runtime, and project catalogs now compose through the existing compatibility export; duplicate action/resolver ids, missing UI surfaces, and unknown route resolvers fail aggregate validation.
 - [ ] ⬜ Keep shared types generated/imported from shared schemas instead of duplicating hand-maintained frontend interfaces.
 
 Phase 0 exit criteria:
@@ -2246,8 +2246,8 @@ Phase 0 exit criteria:
 ### Phase 2: Preview Service
 
 - [x] ✅ Add `ConfigBundlePreviewService` for strict, side-effect-free schema and staged-object reference validation.
-- [ ] ⬜ Load multi-file folder bundle and single-file bundle.
-- [ ] ⬜ Resolve imports with path traversal protection.
+- [x] ✅ Load multi-file folder/ZIP bundles and single-file request envelopes through the same preview/diff/apply contract.
+- [x] ✅ Resolve archive imports with root-only allowlisted paths, traversal rejection, entry/size limits, duplicate-path checks, and duplicate JSON-key rejection.
 - [x] ✅ Resolve all apply-supported references against current database state and staged objects in the same bundle; unresolved external providers, groups, roles, engines, and runtime resources fail closed during preview.
 - [x] ✅ Extend the implemented role/group/engine create/update/archive/no-op diff to Engine Sets, Runtime Resource Sets, config-owned identity mappings, config-owned project-engine targets, and supported config-owned group assignments.
 - [x] ✅ Produce role permission diffs with additions, removals, expanded template permissions, and affected-assignment counts. The details are returned on the same object-level diff records and retained in apply receipts.
@@ -2255,10 +2255,10 @@ Phase 0 exit criteria:
 - [x] ✅ Validate identity provider references and preview aggregate normalized entitlement matches from stored snapshots without contacting providers or changing memberships.
 - [x] ✅ Warn when the same group/role has both engine-wide and narrower runtime-resource-set assignments, when a Runtime Resource Set is attached to an `engine_wide` engine, and when a group deployment role is configured for a CI/API-only target. These are advisory warnings only; display-name and regex identity matching remain unsupported by the config schema.
 - [ ] ⬜ Preview deployment integration and lineage schema changes, including direct-engine deployments that cannot resolve project/file origin.
-- [ ] ⬜ Detect destructive authoritative removals.
-- [ ] ⬜ Detect drift between config-owned object hash and live object state.
-- [ ] ⬜ Compute affected engines, groups, users, and deployment targets where possible.
-- [ ] ⬜ Return warnings and required acknowledgements.
+- [x] ✅ Detect destructive authoritative removals across supported config-owned objects and require per-object archive acknowledgements.
+- [x] ✅ Detect persisted-state drift for config-owned objects by comparing live fields, permissions, selectors, ownership, ingestion controls, and archive state with the desired compiled bundle; apply persists source hashes and resets drift state.
+- [x] ✅ Compute affected resources, assignment counts, runtime-resource materialization changes, groups, users, identity mappings, and deployment targets where available.
+- [x] ✅ Return warnings and required acknowledgements for authoritative removals and broad Engine Set or identity-mapping selectors.
 
 ### Phase 3: Apply Service
 
