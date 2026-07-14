@@ -30,6 +30,7 @@ vi.mock('undici', () => ({
     json: vi.fn().mockResolvedValue({}),
     text: vi.fn().mockResolvedValue(''),
   }),
+  Response: globalThis.Response,
 }));
 
 describe('bpmn-engine-client', () => {
@@ -170,6 +171,34 @@ describe('bpmn-engine-client', () => {
     });
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects oversized chunked engine responses while streaming their body', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const releaseLock = vi.fn();
+    const read = vi.fn()
+      .mockResolvedValueOnce({ done: false, value: new Uint8Array(MAX_ENGINE_RESPONSE_BYTES) })
+      .mockResolvedValueOnce({ done: false, value: new Uint8Array(1) });
+    (fetch as unknown as Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: vi.fn().mockReturnValue(null) },
+      body: { getReader: () => ({ read, cancel, releaseLock }) },
+    });
+
+    await expect(fetchBpmnEngineEndpoint({
+      id: 'engine-sidecar',
+      baseUrl: 'https://sidecar.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+    }, { engineId: 'engine-sidecar', method: 'GET', path: '/version' })).rejects.toMatchObject({
+      code: 'ENGINE_RESPONSE_TOO_LARGE',
+      statusCode: 502,
+      details: { operationClass: 'engine.read', maxResponseBytes: MAX_ENGINE_RESPONSE_BYTES, connectionMode: 'customer_sidecar' },
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(releaseLock).toHaveBeenCalledTimes(1);
   });
 
   it('infers mutating operation classes for sidecar policy checks', async () => {

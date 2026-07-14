@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { fetch } from 'undici'
+import { fetch, Response } from 'undici'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
 import { AppError, Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js'
@@ -121,6 +121,39 @@ const DEFAULT_ENGINE_REQUEST_TIMEOUT_MS = 10_000
 const MAX_ENGINE_REQUEST_TIMEOUT_MS = 60_000
 export const MAX_ENGINE_RESPONSE_BYTES = 5 * 1024 * 1024
 const TRANSIENT_ENGINE_STATUSES = new Set([429, 502, 503, 504])
+
+async function boundEngineResponseBody(
+  response: Awaited<ReturnType<typeof fetch>>,
+  input: { method: string; path: string; connectionMode: 'direct' | 'customer_sidecar' },
+): Promise<Awaited<ReturnType<typeof fetch>>> {
+  const body = response.body
+  if (!body) return response
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let receivedBytes = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      receivedBytes += value.byteLength
+      if (receivedBytes > MAX_ENGINE_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined)
+        throw new BpmnEngineResponseTooLargeError({
+          ...input,
+          maxResponseBytes: MAX_ENGINE_RESPONSE_BYTES,
+        })
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return new Response(Buffer.concat(chunks), {
+    status: response.status,
+    statusText: response.statusText,
+    headers: Object.fromEntries(response.headers.entries()),
+  })
+}
 
 function boundedTimeoutMs(value?: number): number {
   if (!Number.isFinite(value)) return DEFAULT_ENGINE_REQUEST_TIMEOUT_MS
@@ -413,7 +446,11 @@ export async function fetchBpmnEngineEndpoint(
       continue
     }
     return {
-      response,
+      response: await boundEngineResponseBody(response, {
+        method,
+        path: request.path || '',
+        connectionMode: connection.diagnostics.connectionMode,
+      }),
       diagnostics: { ...connection.diagnostics, attempts: attempt, timeoutMs },
     }
   }
