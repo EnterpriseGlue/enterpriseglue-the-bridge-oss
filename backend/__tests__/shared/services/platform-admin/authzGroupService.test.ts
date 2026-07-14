@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import {
   DEFAULT_PLATFORM_GROUPS,
   DEFAULT_PLATFORM_GROUP_IDS,
+  authzGroupKeyIdentity,
   authzGroupService,
 } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 import { SYSTEM_ROLE_IDS } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
@@ -58,6 +59,7 @@ describe('authzGroupService', () => {
         expect.objectContaining({
           id: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
           key: 'platform-administrators',
+          groupKeyIdentity: 'platform:platform-administrators',
           name: 'Platform Administrators',
           source: 'system',
           isSystem: true,
@@ -115,17 +117,21 @@ describe('authzGroupService', () => {
       createQueryBuilder: vi.fn().mockReturnValue(chainableQueryBuilder()),
       insert: vi.fn(),
       update: vi.fn(),
-      findOneBy: vi.fn().mockResolvedValue({
-        id: 'group-1',
-        tenantId: 'tenant-a',
-        key: 'operators',
-        name: 'Operators',
-        description: null,
-        source: 'manual',
-        sourceRef: null,
-        isSystem: false,
-        isArchived: false,
-      }),
+      findOneBy: vi.fn().mockImplementation((where: Record<string, unknown>) => Promise.resolve(
+        'groupKeyIdentity' in where
+          ? null
+          : {
+            id: 'group-1',
+            tenantId: 'tenant-a',
+            key: 'operators',
+            name: 'Operators',
+            description: null,
+            source: 'manual',
+            sourceRef: null,
+            isSystem: false,
+            isArchived: false,
+          }
+      )),
     };
     const membershipRepo = {
       createQueryBuilder: vi.fn().mockReturnValue(chainableQueryBuilder()),
@@ -183,6 +189,11 @@ describe('authzGroupService', () => {
 
     expect(group.id).toBeTruthy();
     expect(membership.id).toBeTruthy();
+    expect(groupRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      key: 'operators',
+      groupKeyIdentity: 'tenant-a:operators',
+    }));
     expect(auditRepo.insert.mock.calls.map(([entry]) => entry.action)).toEqual([
       'authz.group.create',
       'authz.group.update',
@@ -208,6 +219,11 @@ describe('authzGroupService', () => {
       resourceType: 'authz_group_membership',
       resourceId: 'membership-1',
     }));
+  });
+
+  it('uses a non-null canonical identity for global and tenant-scoped group keys', () => {
+    expect(authzGroupKeyIdentity(null, 'operators')).toBe('platform:operators');
+    expect(authzGroupKeyIdentity('tenant-a', 'operators')).toBe('tenant-a:operators');
   });
 
   it('creates the authenticated-user baseline once through the provisioning transaction manager', async () => {

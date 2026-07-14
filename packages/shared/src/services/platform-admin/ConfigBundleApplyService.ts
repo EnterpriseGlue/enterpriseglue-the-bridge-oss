@@ -29,6 +29,7 @@ import { configBundleSecretPreflightService } from './ConfigBundleSecretPrefligh
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
 import { archiveIdentityProviderInStore } from './IdentityProviderService.js';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
+import { authzGroupKeyIdentity } from './AuthzGroupService.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 
 export type ConfigBundleIdentityReconciliationMode = 'none' | 'preview' | 'apply';
@@ -418,6 +419,7 @@ class ConfigBundleApplyService {
               id: groupId,
               tenantId,
               key: desired.key,
+              groupKeyIdentity: authzGroupKeyIdentity(tenantId, desired.key),
               name: desired.name,
               description: desired.description || null,
               source: 'config',

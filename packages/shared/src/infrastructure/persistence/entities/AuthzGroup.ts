@@ -4,6 +4,7 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Entity({ name: 'authz_groups', schema: 'main' })
 @Index('idx_authz_groups_tenant', ['tenantId'])
 @Index('idx_authz_groups_tenant_key', ['tenantId', 'key'], { unique: true })
+@Index('uq_authz_groups_key_identity', ['groupKeyIdentity'], { unique: true })
 @Index('idx_authz_groups_source', ['source', 'sourceRef'])
 export class AuthzGroup extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true })
@@ -11,6 +12,9 @@ export class AuthzGroup extends AppBaseEntity {
 
   @Column({ type: 'text' })
   key!: string;
+
+  @Column({ name: 'group_key_identity', type: 'text' })
+  groupKeyIdentity!: string;
 
   @Column({ type: 'text' })
   name!: string;

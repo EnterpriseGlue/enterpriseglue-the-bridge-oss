@@ -194,7 +194,7 @@ describe('configBundleApplyService', () => {
     });
 
     expect(roleInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync' }));
-    expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync' }));
+    expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync', groupKeyIdentity: 'tenant-a:group.deployers' }));
   });
 
   it('restores drifted config-warning roles and groups to the previewed state', async () => {

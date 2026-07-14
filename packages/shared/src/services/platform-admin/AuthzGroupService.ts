@@ -14,6 +14,11 @@ import { In, type DataSource, type EntityManager } from 'typeorm';
 export type AuthzGroupSource = 'manual' | 'sso' | 'identity_provider' | 'api' | 'automation' | 'system' | 'config';
 export type AuthzGroupOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
 
+/** Canonical portable identity for a global or tenant-scoped authorization group key. */
+export function authzGroupKeyIdentity(tenantId: string | null | undefined, key: string): string {
+  return `${tenantId || 'platform'}:${key.trim()}`;
+}
+
 export interface AuthzGroupView {
   id: string;
   tenantId: string | null;
@@ -230,6 +235,7 @@ export class AuthzGroupService {
         id: group.id,
         tenantId: null,
         key: group.key,
+        groupKeyIdentity: authzGroupKeyIdentity(null, group.key),
         name: group.name,
         description: group.description,
         source: 'system',
@@ -308,14 +314,8 @@ export class AuthzGroupService {
     const tenantId = normalizeTenantId(input.tenantId);
     const dataSource = store || await getDataSource();
     const repo = dataSource.getRepository(AuthzGroup);
-    const duplicateQb = repo.createQueryBuilder('group')
-      .where('group.key = :key', { key });
-    if (tenantId) {
-      duplicateQb.andWhere('group.tenantId = :tenantId', { tenantId });
-    } else {
-      duplicateQb.andWhere('group.tenantId IS NULL');
-    }
-    if (await duplicateQb.getOne()) {
+    const groupKeyIdentity = authzGroupKeyIdentity(tenantId, key);
+    if (await repo.findOneBy({ groupKeyIdentity })) {
       throw Errors.conflict('Group key already exists');
     }
 
@@ -325,6 +325,7 @@ export class AuthzGroupService {
       id,
       tenantId,
       key,
+      groupKeyIdentity,
       name,
       description: input.description?.trim() || null,
       source: input.source || 'manual',
@@ -633,7 +634,8 @@ export class AuthzGroupService {
       DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
       userId,
       LEGACY_PLATFORM_ADMIN_SOURCE_REF,
-      'system'
+      'system',
+      'authz.group_membership.legacy_platform_admin_remove'
     );
   }
 
@@ -836,7 +838,8 @@ export class AuthzGroupService {
     groupId: string,
     userId: string,
     sourceRef: string,
-    source: Extract<AuthzGroupSource, 'manual' | 'sso' | 'system'>
+    source: Extract<AuthzGroupSource, 'manual' | 'sso' | 'system'>,
+    auditAction = 'authz.group_membership.remove'
   ): Promise<{ removed: boolean }> {
     const membershipRepo = manager.getRepository(AuthzGroupMembership);
     const membership = await membershipRepo.findOneBy({ groupId, userId, source, sourceRef });
@@ -846,7 +849,7 @@ export class AuthzGroupService {
     await recordGroupAudit(manager, {
       tenantId: null,
       userId: null,
-      action: 'authz.group_membership.remove',
+      action: auditAction,
       resourceType: 'authz_group_membership',
       resourceId: membership.id,
       details: { membershipId: membership.id, groupId, userId, source, sourceRef },
