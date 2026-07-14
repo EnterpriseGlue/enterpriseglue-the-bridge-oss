@@ -73,7 +73,7 @@ describe('runtimeResourceInventoryService', () => {
 
     expect(result).toEqual({ created: 2, updated: 0, deactivated: 0, materializedSets: 0 });
     expect(observe).toHaveBeenCalledWith('engine-1', 'tenant-a', expect.arrayContaining([
-      expect.objectContaining({ resourceKind: 'process_definition', resourceKey: 'payments-order', runtimeTenantId: 'runtime-a' }),
+      expect.objectContaining({ resourceKind: 'process_definition', resourceKey: 'payments-order', runtimeTenantId: 'runtime-a', deploymentId: 'deployment-1' }),
       expect.objectContaining({ resourceKind: 'decision_definition', resourceKey: 'payments-risk' }),
     ]));
     expect(materializeForEngine).toHaveBeenCalledWith('engine-1', 'tenant-a');

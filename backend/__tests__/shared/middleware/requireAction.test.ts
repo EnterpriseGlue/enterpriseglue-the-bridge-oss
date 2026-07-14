@@ -170,6 +170,12 @@ describe('requireAction project resource resolvers', () => {
     }), (req: any, res) => {
       res.json({ resource: req.authzResource, engineId: req.engineId });
     });
+    app.get('/runtime-decisions/:id', requireRuntimeDefinitionAction('engine.runtime.decisions.read', {
+      resourceKind: 'decision_definition',
+      definitionPath: 'decision-definition',
+    }), (req: any, res) => {
+      res.json({ resource: req.authzResource, engineId: req.engineId });
+    });
     app.get('/runtime-jobs/:id', requireRuntimeDefinitionAction('engine.runtime.jobs.read', {
       resourceKind: 'process_definition',
       definitionPath: 'job',
@@ -322,6 +328,26 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
+  it('resolves decision definitions by their live key and runtime tenant', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    camundaGet.mockResolvedValue({ id: 'decision-1', key: 'payments-risk', tenantId: 'runtime-tenant-a' });
+
+    const response = await request(app).get(`/runtime-decisions/decision-1?engineId=${engineId}`);
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).toHaveBeenCalledWith(engineId, '/decision-definition/decision-1');
+    expect(runtimeResourceFindOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        engineId,
+        resourceKind: 'decision_definition',
+        resourceKey: 'payments-risk',
+        runtimeTenantId: 'runtime-tenant-a',
+      }),
+    }));
+    expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
+  });
+
   it('resolves linked job authorization through its process definition', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
@@ -348,6 +374,13 @@ describe('requireAction project resource resolvers', () => {
 
     expect(response.status).toBe(200);
     expect(camundaGet).toHaveBeenCalledWith(engineId, '/process-instance/instance-1');
+    expect(runtimeResourceFindOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        engineId,
+        resourceKind: 'process_definition',
+        resourceKey: 'payments',
+      }),
+    }));
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
