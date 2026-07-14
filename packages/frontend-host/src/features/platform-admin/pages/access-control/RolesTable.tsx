@@ -18,6 +18,7 @@ import {
 import { Add } from '@carbon/icons-react';
 import type { RoleSummary } from '../../hooks/useAuthzApi';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
+import { ROLE_SCOPE_FILTERS, type RoleScopeFilter } from './roleScopePresentation';
 
 const rolesHeaders = [
   { key: 'name', header: 'Role' },
@@ -27,16 +28,6 @@ const rolesHeaders = [
   { key: 'assignable', header: 'Assignable' },
   { key: 'status', header: 'Status' },
   { key: 'actions', header: '' },
-];
-
-type RoleScopeFilter = 'all' | RoleSummary['scope'];
-
-const ROLE_SCOPE_FILTERS: Array<{ id: RoleScopeFilter; label: string }> = [
-  { id: 'all', label: 'All scopes' },
-  { id: 'platform', label: 'Platform' },
-  { id: 'project', label: 'Project' },
-  { id: 'engine', label: 'Engine' },
-  { id: 'external_engine_system', label: 'External system' },
 ];
 
 function scopeTag(scope: string) {

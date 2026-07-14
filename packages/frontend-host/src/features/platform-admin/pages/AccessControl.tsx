@@ -66,6 +66,7 @@ import { PermissionsTable } from './access-control/PermissionsTable';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
 import { RolesTable } from './access-control/RolesTable';
+import { ROLE_SCOPE_FILTERS, type RoleScopeFilter } from './access-control/roleScopePresentation';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
@@ -295,16 +296,6 @@ const SYNC_MODES = [
 function unavailableReason(decision: UiAuthzDecision, fallback: string): string | undefined {
   return decision.allowed ? undefined : decision.reason || fallback;
 }
-
-export type RoleScopeFilter = 'all' | RoleSummary['scope'];
-
-const ROLE_SCOPE_FILTERS: Array<{ id: RoleScopeFilter; label: string }> = [
-  { id: 'all', label: 'All scopes' },
-  { id: 'platform', label: 'Platform' },
-  { id: 'project', label: 'Project' },
-  { id: 'engine', label: 'Engine' },
-  { id: 'external_engine_system', label: 'External system' },
-];
 
 export type PermissionQuickFilter = 'all' | 'view' | 'editor' | 'operator' | 'deployment';
 
