@@ -16,6 +16,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
+import { generateOnboardingToken } from '@enterpriseglue/shared/utils/jwt.js';
 
 const authState = vi.hoisted(() => ({
   user: { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' } as any,
@@ -166,7 +167,7 @@ describe('invitation and onboarding routes', () => {
         andWhere: vi.fn().mockReturnThis(),
         getOne: vi.fn().mockResolvedValue(null),
       }),
-      findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', email: 'invitee@example.com', platformRole: 'user' }),
+      findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', email: 'invitee@example.com', platformRole: 'user', authSessionVersion: 4 }),
       findOneByOrFail: vi.fn().mockResolvedValue({ id: 'user-1', email: 'invitee@example.com', platformRole: 'user', isEmailVerified: true, mustResetPassword: false }),
       update: vi.fn().mockResolvedValue(undefined),
     };
@@ -419,6 +420,9 @@ describe('invitation and onboarding routes', () => {
     expect(response.headers['set-cookie']).toEqual(
       expect.arrayContaining([expect.stringContaining('onboardingToken=onboarding-token')]),
     );
+    expect(generateOnboardingToken).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1', invitationId: 'inv-1', authSessionVersion: 4,
+    }));
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
       action: 'auth.invitation.otp_verified',
       resourceType: 'invitation',
@@ -452,6 +456,9 @@ describe('invitation and onboarding routes', () => {
     expect(response.headers['set-cookie']).toEqual(
       expect.arrayContaining([expect.stringContaining('onboardingToken=onboarding-token')]),
     );
+    expect(generateOnboardingToken).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1', invitationId: 'inv-1', authSessionVersion: 4,
+    }));
     expect(invitationService.redeemEmailInvitation).toHaveBeenCalledWith('token-1');
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
       action: 'auth.invitation.email_redeemed',
