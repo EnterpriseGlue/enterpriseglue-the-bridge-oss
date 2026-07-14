@@ -4,7 +4,7 @@ Summary: Configure authentication, admin bootstrap, and SSO providers.
 
 Audience: Developers and architects.
 
-The instructions below describe the current provider-specific setup. The provider-neutral OIDC/SAML/LDAP, entitlement-to-group mapping, JSON bundle, and CI/CD target workflow is tracked in [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md). Do not use its planned APIs until implementation is complete.
+The instructions below cover both the legacy provider-specific setup and the implemented provider-neutral OIDC/SAML/LDAP model. For configuration-bundle schemas and entitlement-to-group assignments, see [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md).
 
 ## JWT and Admin Bootstrap
 Required variables:
@@ -134,6 +134,25 @@ the new login path has been validated in the intended environment.
 
 For the broader provider-neutral identity and group-mapping model, see
 [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md).
+
+## Configuration-Managed Identity Providers
+
+Configuration bundles may define provider-neutral providers and entitlement
+mappings using secret references only. Preview the bundle, verify every mapping
+targets an existing internal group, and use secret preflight before apply. Role
+access comes from that group's canonical assignments; provider-level default
+roles are not the target access model.
+
+When startup apply changes identity mappings, EnterpriseGlue drains the stored
+identity snapshots affected by that apply before `/ready` opens. The drain is
+bounded to 100 pages of 500 identities. Failure, cancellation, deferred retry,
+or budget exhaustion keeps readiness closed with a generic
+`identity_reconciliation_failed` issue code. Live directory synchronization and
+unrelated API applies continue to use their background workers.
+
+Provider credentials must remain in the configured environment or file secret
+provider. They are not copied into bundle JSON, health responses, logs, metrics,
+or apply receipts.
 
 ## Email (Optional)
 - Seed the default email configuration with `EMAIL_*` variables on first deploy so verification/reset flows work out of the box.

@@ -4,18 +4,25 @@ Summary: Minimum security steps before running in production.
 
 Audience: Developers and architects.
 
-The target config-bundle and customer-sidecar security controls, including secret references, config API scopes, SSRF/TLS policy, audit redaction, and downstream peer-token exclusion, are tracked in [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md) and [Configure Authorization, Identity, And Engines](../how-to/configure-authorization-and-engines.md).
+Implemented config-bundle controls and remaining customer-sidecar controls are documented in [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md) and [Configure Authorization, Identity, And Engines](../how-to/configure-authorization-and-engines.md).
 
 ## Secrets and Credentials
 - Set a strong `JWT_SECRET` (no dev defaults).
 - Use a strong `ADMIN_PASSWORD`.
 - Generate a secure `ENCRYPTION_KEY` (64-char hex).
 - Rotate any leaked credentials immediately.
+- Keep credentials out of configuration bundles. Use `env://` or approved
+  `file://` references and enable `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT=true` for
+  production bootstrap.
+- Mount bundle and file-secret projections separately and read-only. Do not bake
+  either into an image or commit local projection directories.
 
 ## Environment & Flags
 - Set `NODE_ENV=production`.
 - Ensure `IMPERSONATION_ENABLED` is **false** in production.
 - Disable unused feature flags.
+- Keep `EG_CONFIG_FAIL_CLOSED=true`, pin reviewed bundle content with
+  `EG_CONFIG_EXPECTED_SHA256`, and require the expected tenant scope for apply.
 
 ## Database
 - Use strong database credentials.
@@ -31,3 +38,9 @@ The target config-bundle and customer-sidecar security controls, including secre
 - Keep dependencies updated.
 - Back up databases regularly.
 - Monitor logs and health endpoints.
+- Route traffic on `/ready`, not `/health`. Monitor the bounded
+  `enterpriseglue_config_bootstrap_*` metrics and retain apply-run receipts for
+  deployment evidence. Metrics deliberately omit the bundle hash.
+- Treat the hash in health/readiness, logs, and receipts as configuration
+  metadata. Those surfaces use stable generic issue codes and must never be
+  changed to expose raw parser, provider, or secret-resolution exceptions.

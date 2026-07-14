@@ -4,7 +4,7 @@ Summary: Deploy EnterpriseGlue to OpenShift using the repo's Kustomize overlays 
 
 Audience: Developers and architects.
 
-The backend deployment projects optional configuration and secret volumes. The deployment script can create a bundle ConfigMap from `EG_CONFIG_BUNDLE_FILE` and annotates the pod template with its SHA-256 to trigger rollout. Post-apply reconciliation/readiness gating remains tracked in [Deploy Authorization Configuration](./deploy-authorization-config.md).
+The backend deployment projects optional configuration and secret volumes. The deployment script creates a bundle ConfigMap from `EG_CONFIG_BUNDLE_FILE`, verifies and annotates its SHA-256 to trigger rollout, and waits for the bootstrap readiness gate. The complete contract is documented in [Deploy Authorization Configuration](./deploy-authorization-config.md).
 
 ## Layout
 - Kustomize base: `infra/kubernetes/openshift/kustomize/base/`
@@ -144,3 +144,16 @@ OPENSHIFT_OVERLAY=staging pnpm run deploy:openshift
 ```bash
 SKIP_EXTERNAL_HEALTHCHECK=true pnpm run deploy:openshift
 ```
+
+Use that bypass only when the route is intentionally inaccessible from the
+deployment host; it does not bypass the pod readiness probe. During an `apply`
+bootstrap, `/ready` remains `503` until the configuration transaction,
+materialization, and bounded identity replay complete. Diagnose a failed rollout
+with the sanitized `/ready` response, backend log, metrics, and apply-run receipt;
+none contains resolved secret values.
+
+To roll back configuration, restore the previous reviewed bundle in
+`EG_CONFIG_BUNDLE_FILE` and rerun the deployment. The script computes a new
+annotation from that content and starts a normal rollout. Keep the previous
+ReplicaSet until the new pod is ready, and never delete or overwrite an
+External-Secrets-managed target as part of rollback.

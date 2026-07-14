@@ -122,6 +122,13 @@ EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run prod:images:p
 
 Paths containing spaces are supported when the environment assignment is quoted. The bundle is mounted read-only at `/etc/enterpriseglue/config/bundle.json`; optional file-backed secrets use a separate read-only directory selected with `EG_CONFIG_SECRETS_HOST_PATH`. The production backend image runs as UID/GID `65532`, owns the empty projection directories, and never copies a customer bundle into an image layer. Repository-local `.local/` and root `config/` directories are excluded from the Docker build context as an additional safeguard.
 
+After startup, check `/ready` rather than relying on container liveness alone. An
+`apply` bootstrap stays unready until its bounded identity replay completes. The
+response and backend log contain only the bundle hash, enum-backed state, and a
+generic issue code. `/metrics` exposes the same state without the hash. The final
+state is also stored on the configuration apply-run receipt and is visible in
+**Platform Settings → Configuration Bundles**.
+
 For standalone self-host Compose, download `docker-compose.config-bundle.yml` beside `docker-compose.selfhost.yml`, configure the disabled-by-default `EG_CONFIG_*` values in `.env`, and include both files:
 
 ```bash
@@ -155,6 +162,11 @@ pnpm run prod:images:oracle:down
 2. Set `IMAGE_TAG` to the previous known-good tag.
 3. Re-run the same start command (`pnpm run prod:images:postgres` or `pnpm run prod:images:oracle`).
 
+For a configuration rollback, restore the previous reviewed bundle, update
+`EG_CONFIG_EXPECTED_SHA256`, and rerun the same Compose command. Do not disable
+`EG_CONFIG_FAIL_CLOSED` to force an invalid bundle online. Authoritative removals
+still require the bundle's explicit archive acknowledgements.
+
 ## Volumes
 Docker creates persistent volumes for:
 - `postgres_data` (database)
@@ -171,6 +183,9 @@ Docker creates persistent volumes for:
 - **Wrong env file selected**: ensure `--env-file` and `EG_BACKEND_ENV_FILE` point to the same `.local/docker/env/images.*.env` file.
 - **Image pull errors**: verify registry access and image names (`BACKEND_IMAGE`, `FRONTEND_IMAGE`) and tag (`IMAGE_TAG`).
 - **Backend not reachable in image mode**: use frontend-proxied health (`http://localhost:8080/health`) when `EXPOSE_BACKEND=false`.
+- **Backend is healthy but not ready**: inspect `http://localhost:8080/ready`, the
+  `enterpriseglue_config_bootstrap_info` metric, and the matching apply-run
+  receipt. Resolve the reported issue code before restarting.
 
 ## Compose file layout
 - `infra/docker/compose/docker-compose.yml` (dev base)
