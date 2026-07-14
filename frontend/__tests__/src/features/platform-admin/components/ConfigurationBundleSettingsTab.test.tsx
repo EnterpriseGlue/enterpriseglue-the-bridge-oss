@@ -55,6 +55,8 @@ describe('ConfigurationBundleSettingsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Preview changes' }));
     expect(await screen.findByText('Preview valid')).toBeInTheDocument();
     expect(screen.getByText('Hash preview-hash-1')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'CI command example' })).toHaveTextContent('pnpm authz:config apply ./enterpriseglue-config.json');
+    expect(screen.getByRole('region', { name: 'CI command example' })).toHaveTextContent('ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE');
     expect(screen.getByRole('button', { name: 'Apply exact preview' })).toBeEnabled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Apply exact preview' }));

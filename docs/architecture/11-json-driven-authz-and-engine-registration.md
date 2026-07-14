@@ -1980,7 +1980,7 @@ UI capabilities:
 - [x] ✅ Require an exact preview hash to prevent time-of-check/time-of-use drift, and require an expected tenant scope for CLI/CI applies so target credentials cannot apply to a different tenant.
 - [ ] ⬜ Show config-managed badges in Engine Detail, Access Control roles/groups/mappings, Engine Sets, and project deployment target views.
 - [ ] ⬜ Provide export current config button for backup and GitOps bootstrap.
-- [ ] ⬜ Provide copyable CI command examples after a successful UI preview.
+- [x] ✅ Provide copyable CI command examples after a successful UI preview, including the required expected-tenant scope and secret placeholders.
 
 ### Role Management UI Pattern
 

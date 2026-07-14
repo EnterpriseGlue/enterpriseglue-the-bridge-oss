@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Button, Checkbox, InlineNotification, Select, SelectItem, Tag, TextArea, TextInput, Tile } from '@carbon/react';
-import { Checkmark, Download, Play, Time, Upload, View } from '@carbon/icons-react';
+import { Checkmark, Copy, Download, Play, Time, Upload, View } from '@carbon/icons-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
@@ -27,6 +27,7 @@ type IdentityReplayTask = { id: string; providerId: string; status: 'queued' | '
 type IdentitySnapshot = { mode: 'none' | 'preview' | 'apply'; status: 'not_needed' | 'skipped' | 'previewed' | 'completed' | 'truncated' | 'failed'; providerCount: number; scanned: number; created: number; removed: number; failed: number };
 type ApplyResult = { reconciliation: { engineSetCount: number; runtimeResourceSetCount: number; engineCount: number; identitySnapshot: IdentitySnapshot } };
 const placeholder = '{\n  "bundle": {\n    "apiVersion": "enterpriseglue.ai/v1alpha1",\n    "kind": "EnterpriseGlueConfigBundle",\n    "metadata": { "key": "example.authz", "owner": "platform" },\n    "tenantKey": "default",\n    "mode": "preview_only",\n    "settings": {},\n    "imports": ["./groups.json"]\n  },\n  "files": { "./groups.json": { "groups": [] } }\n}';
+const ciCommand = `export ENTERPRISEGLUE_API_URL="https://enterpriseglue.example"\nexport ENTERPRISEGLUE_API_TOKEN="$EG_CONFIG_TOKEN"\nexport ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE="<tenant-id>"\n\npnpm authz:config preview ./enterpriseglue-config.json\npnpm authz:config apply ./enterpriseglue-config.json`;
 
 function ConfigBundleEffectiveAccessLink({ change }: { change: ConfigBundleDiffChange }) {
   const href = getConfigBundleEffectiveAccessHref(change);
@@ -65,13 +66,14 @@ export default function ConfigurationBundleSettingsTab() {
   const [acknowledgements, setAcknowledgements] = useState<string[]>([]);
   const [applyIdempotencyKey, setApplyIdempotencyKey] = useState<string | null>(null);
   const [identityReconciliationMode, setIdentityReconciliationMode] = useState<IdentitySnapshot['mode']>('apply');
+  const [ciCommandCopied, setCiCommandCopied] = useState(false);
   const parse = (): { bundle: unknown; files: Record<string, unknown> } => {
     const value = JSON.parse(source) as { bundle: unknown; files: Record<string, unknown> };
     if (!value || !value.bundle || !value.files || typeof value.files !== 'object') throw new Error('Configuration must contain bundle and files objects.');
     return value;
   };
   const previewBundle = async () => {
-    setBusy('preview'); setError(null);
+    setBusy('preview'); setError(null); setCiCommandCopied(false);
     try { const input = parse(); const [nextPreview, nextDiff] = await Promise.all([apiClient.post<Preview>('/api/authz/config-bundles/preview', input), apiClient.post<Diff>('/api/authz/config-bundles/diff', input)]); setPreview(nextPreview); setDiff(nextDiff); setAcknowledgements([]); setApplyIdempotencyKey(nextPreview.valid ? crypto.randomUUID() : null); }
     catch (value) { setError(parseApiError(value, 'Configuration preview failed').message); setPreview(null); setDiff(null); }
     finally { setBusy(null); }
@@ -125,7 +127,7 @@ export default function ConfigurationBundleSettingsTab() {
       const input = isZip
         ? JSON.stringify(await apiClient.postRaw('/api/authz/config-bundles/import-zip', file, { headers: { 'content-type': 'application/zip' } }), null, 2)
         : await file.text();
-      setSource(input); setPreview(null); setDiff(null); setSecretPreflight(null); setApplyResult(null); setAcknowledgements([]); setApplyIdempotencyKey(null); setError(null);
+      setSource(input); setPreview(null); setDiff(null); setSecretPreflight(null); setApplyResult(null); setAcknowledgements([]); setApplyIdempotencyKey(null); setCiCommandCopied(false); setError(null);
     }
     catch { setError('The selected configuration file could not be read.'); }
     finally { event.target.value = ''; }
@@ -140,6 +142,15 @@ export default function ConfigurationBundleSettingsTab() {
     const blob = new Blob([output], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
     const anchor = document.createElement('a'); anchor.href = href; anchor.download = 'enterpriseglue-config-bundle.json'; anchor.click(); URL.revokeObjectURL(href);
+  };
+  const copyCiCommand = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(ciCommand);
+      setCiCommandCopied(true);
+    } catch {
+      setError('The CI command could not be copied. Select and copy it manually.');
+    }
   };
   const changeOperations = Array.from(new Set(diff?.changes.map((change) => change.operation) || [])).sort();
   const changeObjectTypes = Array.from(new Set(diff?.changes.map((change) => change.objectType) || [])).sort();
@@ -178,7 +189,7 @@ export default function ConfigurationBundleSettingsTab() {
     <input ref={uploadRef} type="file" accept="application/json,.json,application/zip,.zip" onChange={importJson} style={{ display: 'none' }} />
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}><Button kind="tertiary" renderIcon={Upload} disabled={busy !== null} onClick={() => uploadRef.current?.click()}>Import JSON or ZIP</Button><Button kind="tertiary" renderIcon={Download} disabled={busy !== null} onClick={exportJson}>Export JSON</Button><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="secondary" renderIcon={View} disabled={busy !== null} onClick={previewBundle}>Preview changes</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="secondary" renderIcon={Checkmark} disabled={busy !== null} onClick={preflightSecrets}>Check secret references</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="primary" renderIcon={Play} disabled={!preview?.valid || !preview.canonicalHash || busy !== null || missingAcknowledgements.length > 0 || checkedSecretsAreUnavailable} onClick={applyBundle}>Apply exact preview</Button></GuardedAction><Button kind="ghost" renderIcon={Time} disabled={busy !== null} onClick={loadRuns}>Refresh history</Button></div>
     {applyResult && <InlineNotification kind={applyResult.reconciliation.identitySnapshot.status === 'failed' ? 'error' : applyResult.reconciliation.identitySnapshot.status === 'truncated' ? 'warning' : 'success'} title="Configuration applied" subtitle={`Materialized ${applyResult.reconciliation.engineSetCount} Engine Sets, ${applyResult.reconciliation.runtimeResourceSetCount} runtime resource sets, and refreshed ${applyResult.reconciliation.engineCount} engines.${identitySnapshotMessage(applyResult.reconciliation.identitySnapshot)}`} hideCloseButton style={{ marginTop: 'var(--spacing-5)' }} />}
-    {preview && <div style={{ marginTop: 'var(--spacing-6)' }}><h4 style={{ margin: 0 }}>Preview</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{preview.valid ? `Hash ${preview.canonicalHash}` : 'Validation failed'}</p>{preview.errors.map((issue) => <InlineNotification key={`${issue.path}:${issue.message}`} kind="error" title={issue.objectKey ? `${issue.path} (${issue.objectKey})` : issue.path} subtitle={`${issue.message} ${issue.remediation}`} hideCloseButton style={{ marginBottom: 'var(--spacing-3)' }} />)}{Object.entries(preview.counts).map(([path, count]) => <Tag key={path} type="cool-gray" style={{ marginRight: 'var(--spacing-2)' }}>{path}: {count}</Tag>)}{preview.roleTemplateBaselines && Object.entries(preview.roleTemplateBaselines).map(([roleKey, baseline]) => <div key={roleKey} style={{ marginTop: 'var(--spacing-3)', color: 'var(--cds-text-secondary)' }}><strong>{roleKey}</strong> copies {baseline.copyFromRoleKey} ({baseline.permissions.length} baseline permissions, fingerprint {baseline.fingerprint.slice(0, 12)}).</div>)}</div>}
+    {preview && <div style={{ marginTop: 'var(--spacing-6)' }}><h4 style={{ margin: 0 }}>Preview</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{preview.valid ? `Hash ${preview.canonicalHash}` : 'Validation failed'}</p>{preview.errors.map((issue) => <InlineNotification key={`${issue.path}:${issue.message}`} kind="error" title={issue.objectKey ? `${issue.path} (${issue.objectKey})` : issue.path} subtitle={`${issue.message} ${issue.remediation}`} hideCloseButton style={{ marginBottom: 'var(--spacing-3)' }} />)}{Object.entries(preview.counts).map(([path, count]) => <Tag key={path} type="cool-gray" style={{ marginRight: 'var(--spacing-2)' }}>{path}: {count}</Tag>)}{preview.roleTemplateBaselines && Object.entries(preview.roleTemplateBaselines).map(([roleKey, baseline]) => <div key={roleKey} style={{ marginTop: 'var(--spacing-3)', color: 'var(--cds-text-secondary)' }}><strong>{roleKey}</strong> copies {baseline.copyFromRoleKey} ({baseline.permissions.length} baseline permissions, fingerprint {baseline.fingerprint.slice(0, 12)}).</div>)}{preview.valid && <section aria-label="CI command example" style={{ marginTop: 'var(--spacing-5)' }}><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}><div><h5 style={{ margin: 0 }}>CI command example</h5><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Set the tenant scope and CI secret before applying this reviewed bundle.</p></div><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={copyCiCommand}>{ciCommandCopied ? 'Copied' : 'Copy command'}</Button></div><pre style={{ margin: 'var(--spacing-3) 0 0', padding: 'var(--spacing-3)', overflowX: 'auto', background: 'var(--cds-layer-accent-01)', fontSize: '0.75rem' }}>{ciCommand}</pre></section>}</div>}
     {secretPreflight && <div style={{ marginTop: 'var(--spacing-5)' }}><h4 style={{ margin: 0 }}>Secret reference availability</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{secretPreflight.valid ? secretPreflight.available ? 'All configured secret references are available. Values are not returned.' : 'One or more configured secret references are unavailable. Values are not returned.' : 'The bundle must be valid before secret references can be checked.'}</p>{secretPreflight.errors.map((issue) => <InlineNotification key={`${issue.path}:${issue.message}`} kind="error" title={issue.objectKey ? `${issue.path} (${issue.objectKey})` : issue.path} subtitle={`${issue.message} ${issue.remediation}`} hideCloseButton style={{ marginBottom: 'var(--spacing-3)' }} />)}{secretPreflight.references.map((reference) => <div key={reference.reference} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-2)', borderBottom: '1px solid var(--cds-border-subtle)' }}><Tag type={reference.available ? 'green' : 'red'}>{reference.available ? 'available' : 'unavailable'}</Tag><strong>{reference.reference}</strong><span style={{ color: 'var(--cds-text-secondary)', flex: '1 1 16rem' }}>{reference.locations.join(', ')}</span>{reference.reason && <span style={{ color: 'var(--cds-text-secondary)' }}>{reference.reason.replace(/_/g, ' ')}</span>}</div>)}</div>}
     {diff?.affectedPrincipals && (diff.affectedPrincipals.affectedGroupCount > 0 || diff.affectedPrincipals.externalIdentityMappingChangeCount > 0) ? <div style={{ marginTop: 'var(--spacing-5)' }}><h4 style={{ margin: 0 }}>Known access impact</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{diff.affectedPrincipals.affectedUserCount} current group members across {diff.affectedPrincipals.affectedGroupCount} groups may be affected.{diff.affectedPrincipals.externalIdentityMappingChangeCount > 0 ? ` ${diff.affectedPrincipals.externalIdentityMappingChangeCount} identity mapping change${diff.affectedPrincipals.externalIdentityMappingChangeCount === 1 ? '' : 's'} may also affect externally managed identities.` : ''}</p></div> : null}
     {diff?.warnings?.length ? <div style={{ marginTop: 'var(--spacing-5)' }}>{diff.warnings.map((warning) => <div key={warning.id} style={{ marginBottom: 'var(--spacing-3)' }}><InlineNotification kind="warning" title="Configuration review required" subtitle={warning.message} hideCloseButton lowContrast />{warning.acknowledgementId ? <Checkbox id={`configuration-acknowledgement-${warning.id}`} labelText="I have reviewed and accept this configuration change." checked={acknowledgements.includes(warning.acknowledgementId)} onChange={(_, data) => toggleAcknowledgement(warning.acknowledgementId!, data.checked)} style={{ marginTop: 'var(--spacing-3)' }} /> : null}</div>)}</div> : null}
