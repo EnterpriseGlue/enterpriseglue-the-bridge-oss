@@ -68,10 +68,9 @@ import {
   filterPermissions,
   getPermissionImplications,
   getPermissionRisk,
-  groupPermissionsForRoleMatrix,
 } from './access-control/rolePermissionPresentation';
 import { RolesTable } from './access-control/RolesTable';
-import { ROLE_SCOPE_FILTERS, type RoleScopeFilter } from './access-control/roleScopePresentation';
+import type { RoleScopeFilter } from './access-control/roleScopePresentation';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 export { filterPermissions, getPermissionImplications, getPermissionRisk } from './access-control/rolePermissionPresentation';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
@@ -129,7 +128,6 @@ import {
   useMaterializeEngineSet,
   usePreviewEngineSetSelector,
   useProjectEngineTargets,
-  useRoleDetails,
   useRbacRoles,
   useReactivateExternalEngine,
   useReconcileExternalEngine,
@@ -190,7 +188,6 @@ import {
   type ProjectEngineTargetStatus,
   type PolicyCondition,
   type RoleAssignment,
-  type RoleDetail,
   type RoleSummary,
   type ServiceAccount,
   type SsoClaimsMapping,
@@ -1820,237 +1817,6 @@ export function getSsoTargetRoleOptions(
     (role.id === 'system.engine.delegate' && options.includeEngineDelegate)
   );
   return [...SYSTEM_SSO_TARGET_ROLES, ...governanceRoles, ...customEngineRoles];
-}
-
-function RolePermissionMatrix({
-  roles,
-  permissions,
-  loading,
-  canManage,
-  savingRoleId,
-  onEditRole,
-  onDuplicateRole,
-  onUpdateRolePermissions,
-}: {
-  roles: RoleSummary[];
-  permissions: PermissionCatalogEntry[];
-  loading: boolean;
-  canManage: boolean;
-  savingRoleId: string | null;
-  onEditRole: (role: RoleSummary) => void;
-  onDuplicateRole: (role: RoleSummary) => void;
-  onUpdateRolePermissions: (role: RoleSummary, permissionIds: string[]) => Promise<void>;
-}) {
-  const [scopeFilter, setScopeFilter] = React.useState<RoleScopeFilter>('engine');
-  const selectedScopeFilter = ROLE_SCOPE_FILTERS.find((item) => item.id === scopeFilter) || ROLE_SCOPE_FILTERS[0];
-  const visibleRoles = React.useMemo(
-    () => roles
-      .filter((role) => !role.isArchived)
-      .filter((role) => scopeFilter === 'all' || role.scope === scopeFilter),
-    [roles, scopeFilter],
-  );
-  const visiblePermissions = React.useMemo(
-    () => permissions
-      .filter((permission) => !permission.isArchived)
-      .filter((permission) => scopeFilter === 'all' || permission.scope === scopeFilter),
-    [permissions, scopeFilter],
-  );
-  const roleDetailQueries = useRoleDetails(visibleRoles.map((role) => role.id));
-  const roleDetailsById = React.useMemo(() => {
-    const details = new Map<string, RoleDetail>();
-    roleDetailQueries.forEach((query) => {
-      if (query.data) details.set(query.data.id, query.data);
-    });
-    return details;
-  }, [roleDetailQueries]);
-  const groupedPermissions = React.useMemo(
-    () => groupPermissionsForRoleMatrix(visiblePermissions),
-    [visiblePermissions],
-  );
-
-  const isRoleEditableInMatrix = (role: RoleSummary) => (
-    canManage && role.kind === 'custom' && role.isEditable && !role.isArchived && savingRoleId !== role.id
-  );
-
-  const getRolePermissionSet = (role: RoleSummary) => new Set(roleDetailsById.get(role.id)?.permissions || []);
-
-  const updateRolePermission = async (role: RoleSummary, permission: PermissionCatalogEntry, checked: boolean) => {
-    const current = getRolePermissionSet(role);
-    const next = checked
-      ? Array.from(new Set([...current, permission.key]))
-      : Array.from(current).filter((permissionId) => permissionId !== permission.key);
-    await onUpdateRolePermissions(role, next);
-  };
-
-  const updateRolePermissionGroup = async (
-    role: RoleSummary,
-    groupPermissions: PermissionCatalogEntry[],
-    checked: boolean,
-  ) => {
-    const current = getRolePermissionSet(role);
-    const groupPermissionIds = groupPermissions.map((permission) => permission.key);
-    const next = checked
-      ? Array.from(new Set([...current, ...groupPermissionIds]))
-      : Array.from(current).filter((permissionId) => !groupPermissionIds.includes(permissionId));
-    await onUpdateRolePermissions(role, next);
-  };
-
-  if (loading) {
-    return <DataTableSkeleton headers={[{ key: 'permission', header: 'Permission' }]} rowCount={8} />;
-  }
-
-  return (
-    <TableContainer
-      title="Role Permission Matrix"
-      description="Compare roles across fine-grained permissions. Default system roles are locked; duplicate one to customize permissions. Custom roles can be edited inline."
-    >
-      <TableToolbar>
-        <TableToolbarContent>
-          <Dropdown
-            id="role-permission-matrix-scope"
-            titleText="Scope"
-            label="Scope"
-            items={ROLE_SCOPE_FILTERS}
-            selectedItem={selectedScopeFilter}
-            itemToString={(item) => item?.label || ''}
-            onChange={({ selectedItem }) => setScopeFilter(selectedItem?.id || 'engine')}
-          />
-        </TableToolbarContent>
-      </TableToolbar>
-      {visibleRoles.length === 0 || visiblePermissions.length === 0 ? (
-        <InlineNotification
-          kind="info"
-          title="No matrix data"
-          subtitle="Create roles and permissions for this scope to compare access in a matrix."
-          lowContrast
-        />
-      ) : (
-        <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-          {visibleRoles.some((role) => role.kind === 'system') && (
-            <InlineNotification
-              kind="info"
-              title="Default roles are locked"
-              subtitle="Duplicate a default role to create an editable custom role, then assign that custom role to users, groups, projects, engines, or Engine Sets."
-              lowContrast
-              hideCloseButton
-            />
-          )}
-          <div style={{ overflow: 'auto', border: '1px solid var(--cds-border-subtle)', maxHeight: 620 }}>
-            <Table size="sm" useZebraStyles={false}>
-            <TableHead>
-              <TableRow>
-                <TableHeader style={{ minWidth: 300, position: 'sticky', left: 0, zIndex: 2, background: 'var(--cds-layer)' }}>
-                  Permission
-                </TableHeader>
-                {visibleRoles.map((role) => (
-                  <TableHeader key={role.id} style={{ minWidth: 180, verticalAlign: 'top' }}>
-                    <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
-                      <span>{role.name}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
-                        <Tag type={role.kind === 'custom' ? 'green' : 'gray'}>{role.kind}</Tag>
-                        {scopeTag(role.scope)}
-                      </div>
-                      {role.kind === 'custom' ? (
-                        <Button kind="ghost" size="sm" disabled={!canManage} title={canManage ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onEditRole(role)}>
-                          Edit
-                        </Button>
-                      ) : (
-                        <Button kind="ghost" size="sm" disabled={!canManage} title={canManage ? 'Create an editable custom role from this default role' : 'Missing permission platform:authz:roles:manage'} onClick={() => onDuplicateRole(role)}>
-                          Duplicate
-                        </Button>
-                      )}
-                    </div>
-                  </TableHeader>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {groupedPermissions.map((group) => (
-                <React.Fragment key={group.id}>
-                  <TableRow>
-                    <TableCell style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--cds-layer-accent)', fontWeight: 600 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
-                        <span>{group.label}</span>
-                        {scopeTag(group.scope)}
-                      </div>
-                    </TableCell>
-                    {visibleRoles.map((role) => {
-                      const permissionSet = getRolePermissionSet(role);
-                      const selectedCount = group.permissions.filter((permission) => permissionSet.has(permission.key)).length;
-                      const checked = selectedCount === group.permissions.length;
-                      const indeterminate = selectedCount > 0 && selectedCount < group.permissions.length;
-                      const roleEditable = isRoleEditableInMatrix(role);
-                      const missingRiskyPermission = group.permissions.some((permission) => !permissionSet.has(permission.key) && getPermissionRisk(permission));
-                      const disabled = !roleEditable || !roleDetailsById.has(role.id) || (missingRiskyPermission && !checked);
-                      return (
-                        <TableCell key={`${group.id}:${role.id}`} style={{ background: 'var(--cds-layer-accent)' }}>
-                          <Checkbox
-                            id={`role-matrix-group-${group.id}-${role.id}`}
-                            labelText=""
-                            hideLabel
-                            checked={checked}
-                            indeterminate={indeterminate}
-                            disabled={disabled}
-                            title={role.kind === 'system'
-                              ? 'Default system roles are locked. Duplicate this role to customize permissions.'
-                              : missingRiskyPermission && !checked
-                                ? 'Use the role editor to add sensitive permissions with acknowledgement'
-                                : undefined}
-                            onChange={(_event, { checked: nextChecked }) => updateRolePermissionGroup(role, group.permissions, Boolean(nextChecked))}
-                          />
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                  {group.permissions.map((permission) => {
-                    const risk = getPermissionRisk(permission);
-                    return (
-                      <TableRow key={permission.key}>
-                        <TableCell style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--cds-layer)' }}>
-                          <div style={{ display: 'grid', gap: 'var(--spacing-1)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
-                              <span>{permission.label}</span>
-                              {permission.kind === 'custom' && <Tag type="green">custom</Tag>}
-                              {risk && <Tag type="red" title={risk.description}>{risk.label}</Tag>}
-                            </div>
-                            <span style={{ color: 'var(--cds-text-secondary)', fontSize: '12px' }}>{permission.key}</span>
-                          </div>
-                        </TableCell>
-                        {visibleRoles.map((role) => {
-                          const permissionSet = getRolePermissionSet(role);
-                          const checked = permissionSet.has(permission.key);
-                          const roleEditable = isRoleEditableInMatrix(role);
-                          const disabled = !roleEditable || !roleDetailsById.has(role.id) || (!checked && Boolean(risk));
-                          return (
-                            <TableCell key={`${permission.key}:${role.id}`}>
-                              <Checkbox
-                                id={`role-matrix-permission-${permission.key}-${role.id}`}
-                                labelText=""
-                                hideLabel
-                                checked={checked}
-                                disabled={disabled}
-                                title={role.kind === 'system'
-                                  ? 'Default system roles are locked. Duplicate this role to customize permissions.'
-                                  : !checked && risk
-                                    ? 'Use the role editor to add sensitive permissions with acknowledgement'
-                                    : undefined}
-                                onChange={(_event, { checked: nextChecked }) => updateRolePermission(role, permission, Boolean(nextChecked))}
-                              />
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    );
-                  })}
-                </React.Fragment>
-              ))}
-            </TableBody>
-            </Table>
-          </div>
-        </div>
-      )}
-    </TableContainer>
-  );
 }
 
 function ByPrincipalPanel({
