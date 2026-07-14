@@ -115,7 +115,24 @@ describe('mission-control extended history routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(listHistoricTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments' });
+    expect(listHistoricTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100 });
+  });
+
+  it('rejects oversized historic task collection requests for resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/tasks')
+      .query({ engineId: 'engine-1', maxResults: 101 });
+
+    expect(response.status).toBe(403);
+    expect(listHistoricTasks).not.toHaveBeenCalled();
   });
 
   it('redacts historic variables after action authorization', async () => {

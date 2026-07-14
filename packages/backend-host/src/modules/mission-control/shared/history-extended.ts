@@ -18,6 +18,7 @@ import {
   HistoricDecisionQueryParams,
   UserOperationLogQueryParams,
 } from '@enterpriseglue/shared/schemas/mission-control/history.js';
+import { getBoundedRuntimeResourceQuery } from './runtime-resource-filter.js';
 
 const r = Router();
 
@@ -30,9 +31,10 @@ r.get('/mission-control-api/history/tasks', requireRuntimeCollectionAction('engi
   const keys = req.authorizedRuntimeResourceKeys;
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
+  const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   const data = visibleKeys
-    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listHistoricTasks(engineId, { ...req.query, processDefinitionKey })))).flat()
-    : await listHistoricTasks(engineId, req.query);
+    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listHistoricTasks(engineId, { ...query, processDefinitionKey })))).flat()
+    : await listHistoricTasks(engineId, query);
   res.json(data);
 }));
 
@@ -42,9 +44,10 @@ r.get('/mission-control-api/history/variables', requireRuntimeCollectionAction('
   const keys = req.authorizedRuntimeResourceKeys;
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
+  const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   const data = visibleKeys
-    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listHistoricVariables(engineId, { ...req.query, processDefinitionKey })))).flat()
-    : await listHistoricVariables(engineId, req.query);
+    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listHistoricVariables(engineId, { ...query, processDefinitionKey })))).flat()
+    : await listHistoricVariables(engineId, query);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
   res.json(redacted);
 }));
@@ -55,9 +58,10 @@ r.get('/mission-control-api/history/decisions', requireRuntimeCollectionAction('
   const keys = req.authorizedRuntimeResourceKeys;
   const requestedKey = typeof req.query.decisionDefinitionKey === 'string' ? req.query.decisionDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
+  const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   const data = visibleKeys
-    ? (await Promise.all(visibleKeys.map((decisionDefinitionKey) => listHistoricDecisions(engineId, { ...req.query, decisionDefinitionKey })))).flat()
-    : await listHistoricDecisions(engineId, req.query);
+    ? (await Promise.all(visibleKeys.map((decisionDefinitionKey) => listHistoricDecisions(engineId, { ...query, decisionDefinitionKey })))).flat()
+    : await listHistoricDecisions(engineId, query);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
   res.json(redacted);
 }));
@@ -94,9 +98,10 @@ r.get('/mission-control-api/history/user-operations', requireRuntimeCollectionAc
   const keys = req.authorizedRuntimeResourceKeys;
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
+  const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   const data = visibleKeys
-    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listUserOperations(engineId, { ...req.query, processDefinitionKey })))).flat()
-    : await listUserOperations(engineId, req.query);
+    ? (await Promise.all(visibleKeys.map((processDefinitionKey) => listUserOperations(engineId, { ...query, processDefinitionKey })))).flat()
+    : await listUserOperations(engineId, query);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
   res.json(redacted);
 }));

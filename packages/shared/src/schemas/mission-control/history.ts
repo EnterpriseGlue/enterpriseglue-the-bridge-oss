@@ -150,8 +150,8 @@ export const HistoricTaskQueryParams = z.object({
   withoutTenantId: z.boolean().optional(),
   sortBy: z.enum(['taskId', 'activityInstanceId', 'processDefinitionId', 'processInstanceId', 'executionId', 'duration', 'endTime', 'startTime', 'taskName', 'taskDescription', 'assignee', 'owner', 'dueDate', 'followUpDate', 'deleteReason', 'taskDefinitionKey', 'priority', 'tenantId']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.number().optional(),
-  maxResults: z.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 export const VariableHistoryEntrySchema = z.object({
@@ -192,8 +192,8 @@ export const HistoricVariableQueryParams = z.object({
   withoutTenantId: z.boolean().optional(),
   sortBy: z.enum(['instanceId', 'variableName', 'tenantId']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.number().optional(),
-  maxResults: z.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 export const HistoricDecisionQueryParams = z.object({
@@ -224,8 +224,8 @@ export const HistoricDecisionQueryParams = z.object({
   withoutTenantId: z.boolean().optional(),
   sortBy: z.enum(['evaluationTime', 'tenantId']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.coerce.number().optional(),
-  maxResults: z.coerce.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 export const UserOperationLogQueryParams = z.object({
@@ -254,8 +254,8 @@ export const UserOperationLogQueryParams = z.object({
   beforeTimestamp: z.string().optional(),
   sortBy: z.enum(['timestamp']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.number().optional(),
-  maxResults: z.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 // Types
