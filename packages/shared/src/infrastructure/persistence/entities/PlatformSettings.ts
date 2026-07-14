@@ -38,6 +38,9 @@ export class PlatformSettings {
   @Column({ name: 'engine_runtime_authorization_mode', type: 'text', default: 'enterpriseglue_authoritative' })
   engineRuntimeAuthorizationMode!: 'enterpriseglue_authoritative';
 
+  @Column({ name: 'credentialless_customer_sidecars_enabled', type: 'boolean', default: false })
+  credentiallessCustomerSidecarsEnabled!: boolean;
+
   @Column({ name: 'invite_allow_all_domains', type: 'boolean', default: true })
   inviteAllowAllDomains!: boolean;
 

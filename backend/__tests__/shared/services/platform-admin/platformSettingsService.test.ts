@@ -43,6 +43,7 @@ describe('PlatformSettingsService', () => {
     expect(settings.engineOnboardingMode).toBe('manual_allowed');
     expect(settings.projectEngineTargetMode).toBe('manual_allowed');
     expect(settings.engineRuntimeAuthorizationMode).toBe('enterpriseglue_authoritative');
+    expect(settings.credentiallessCustomerSidecarsEnabled).toBe(false);
     expect(settings.ssoAllEnginesAssignmentMappingsEnabled).toBe(true);
     expect(settings.ssoEngineOwnerAssignmentMappingsEnabled).toBe(false);
     expect(settings.ssoEngineDelegateAssignmentMappingsEnabled).toBe(false);
@@ -72,6 +73,7 @@ describe('PlatformSettingsService', () => {
       engineOnboardingMode: 'manual_allowed',
       projectEngineTargetMode: 'manual_allowed',
       engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+      credentiallessCustomerSidecarsEnabled: false,
       ssoAllEnginesAssignmentMappingsEnabled: true,
       ssoEngineOwnerAssignmentMappingsEnabled: false,
       ssoEngineDelegateAssignmentMappingsEnabled: false,
@@ -167,6 +169,28 @@ describe('PlatformSettingsService', () => {
 
     expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
       engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+      updatedById: 'admin-1',
+    }));
+  });
+
+  it('persists the credentialless customer-sidecar policy', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({ credentiallessCustomerSidecarsEnabled: true }, 'admin-1');
+
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      credentiallessCustomerSidecarsEnabled: true,
       updatedById: 'admin-1',
     }));
   });

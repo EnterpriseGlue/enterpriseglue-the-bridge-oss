@@ -36,6 +36,7 @@ type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[]
 const engineIdParamSchema = z.object({ id: z.string().min(1) })
 const engineTypeSchema = z.enum(['ion', 'operaton', 'camunda7'])
 const engineAuthTypeSchema = z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials'])
+const engineConnectionModeSchema = z.enum(['direct', 'customer_sidecar'])
 const runtimeAccessScopeSchema = z.enum(['engine_wide', 'resource_aware'])
 const deploymentIntegrationSchema = z.enum(['enterpriseglue_proxy', 'direct_engine'])
 const engineLabelsSchema = z.record(z.string().min(1).max(128), z.string().max(512))
@@ -187,6 +188,7 @@ const createEngineBodySchema = z.object({
   externalId: z.string().min(1).max(255).nullable().optional(),
   labels: engineLabelsSchema.optional(),
   authType: engineAuthTypeSchema.optional(),
+  connectionMode: engineConnectionModeSchema.default('direct'),
   username: z.string().nullable().optional(),
   passwordEnc: z.string().nullable().optional(),
   oauthTokenUrl: z.string().url().nullable().optional(),
@@ -209,6 +211,7 @@ const updateEngineBodySchema = z.object({
   externalId: z.string().min(1).max(255).nullable().optional(),
   labels: engineLabelsSchema.optional(),
   authType: engineAuthTypeSchema.optional(),
+  connectionMode: engineConnectionModeSchema.optional(),
   username: z.string().nullable().optional(),
   passwordEnc: z.string().nullable().optional(),
   oauthTokenUrl: z.string().url().nullable().optional(),
@@ -238,6 +241,7 @@ const DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP: EngineFieldOwnership = {
 const ENGINE_UPDATE_FIELD_GROUPS: Record<string, string> = {
   name: 'display',
   baseUrl: 'connection',
+  connectionMode: 'connection',
   type: 'metadata',
   externalId: 'identity',
   labels: 'labels',
@@ -260,6 +264,7 @@ const ENGINE_UPDATE_FIELD_GROUPS: Record<string, string> = {
 const EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD: Record<string, string> = {
   name: 'name',
   baseUrl: 'baseUrl',
+  connectionMode: 'connectionMode',
   type: 'type',
   externalId: 'externalId',
   labels: 'labelsJson',
@@ -410,6 +415,20 @@ function requestContainsAnyField(req: Request, fields: readonly string[]): boole
 
 async function getEngineOnboardingMode(): Promise<'manual_allowed' | 'external_only' | 'hybrid'> {
   return (await platformSettingsService.get()).engineOnboardingMode
+}
+
+function assertEndpointAuthenticationPolicy(
+  connectionMode: 'direct' | 'customer_sidecar',
+  authType: string,
+  credentiallessCustomerSidecarsEnabled: boolean,
+): void {
+  if (authType !== 'none') return
+  if (connectionMode !== 'customer_sidecar') {
+    throw Errors.validation('Credentialless endpoint authentication is allowed only for customer-sidecar engines')
+  }
+  if (!credentiallessCustomerSidecarsEnabled) {
+    throw Errors.validation('Credentialless customer-sidecar endpoints are disabled by platform policy')
+  }
 }
 
 const requireEngineInventoryReadById = requireAction('engine.inventory.read', {
@@ -910,6 +929,9 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine
   }
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
+  const settings = await platformSettingsService.get()
+  const authType = req.body.authType || 'basic'
+  assertEndpointAuthenticationPolicy(req.body.connectionMode, authType, settings.credentiallessCustomerSidecarsEnabled ?? false)
   const now = Date.now()
   const id = generateId()
   const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
@@ -942,7 +964,8 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine
     capabilitiesJson: null,
     capabilityStatus: null,
     externalUpdatedAt: null,
-    authType: req.body.authType || (req.body.username ? 'basic' : 'none'),
+    authType,
+    connectionMode: req.body.connectionMode,
     username: req.body.username ?? null,
     passwordEnc: secretResolver.normalizeForStorage(req.body.passwordEnc),
     oauthTokenUrl: req.body.oauthTokenUrl ?? null,
@@ -1000,6 +1023,9 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
 }), validateBody(externalRegisterEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
+  const settings = await platformSettingsService.get()
+  const authType = req.body.authType || 'basic'
+  assertEndpointAuthenticationPolicy(req.body.connectionMode, authType, settings.credentiallessCustomerSidecarsEnabled ?? false)
   const now = Date.now()
   const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
   if (dockerLoopbackError) {
@@ -1039,7 +1065,8 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     capabilitiesJson,
     capabilityStatus,
     externalUpdatedAt: now,
-    authType: req.body.authType || (req.body.username ? 'basic' : 'none'),
+    authType,
+    connectionMode: req.body.connectionMode,
     username: req.body.username ?? null,
     passwordEnc: secretResolver.normalizeForStorage(req.body.passwordEnc),
     oauthTokenUrl: req.body.oauthTokenUrl ?? null,
@@ -1438,6 +1465,10 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
   if (req.body.runtimeAccessScope === 'engine_wide' && existing.runtimeAccessScope === 'resource_aware') {
     await assertEngineCanUseEngineWideAccess(dataSource, engineId)
   }
+  const nextConnectionMode = req.body.connectionMode || existing.connectionMode || 'direct'
+  const nextAuthType = req.body.authType || existing.authType || 'basic'
+  const settings = await platformSettingsService.get()
+  assertEndpointAuthenticationPolicy(nextConnectionMode, nextAuthType, settings.credentiallessCustomerSidecarsEnabled ?? false)
   const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
   if (dockerLoopbackError) {
     return res.status(400).json({ error: dockerLoopbackError, field: 'baseUrl' })
@@ -1447,6 +1478,7 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, validateParams(eng
   const updates: any = {
     name: req.body.name,
     baseUrl: req.body.baseUrl,
+    connectionMode: req.body.connectionMode,
     type: req.body.type,
     externalId: req.body.externalId === undefined ? undefined : req.body.externalId?.trim() || null,
     labelsJson: req.body.labels === undefined ? undefined : labelsToJson(req.body.labels),

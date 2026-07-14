@@ -952,6 +952,60 @@ describe('mission-control engines routes', () => {
     expect(insert).toHaveBeenCalledTimes(3);
   });
 
+  it('rejects credentialless authentication for a direct engine endpoint', async () => {
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Direct credentialless engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        connectionMode: 'direct',
+        authType: 'none',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('only for customer-sidecar engines');
+  });
+
+  it('rejects a credentialless customer sidecar when platform policy is disabled', async () => {
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Credentialless sidecar',
+        baseUrl: 'https://sidecar.example.com/engine-rest',
+        connectionMode: 'customer_sidecar',
+        authType: 'none',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('disabled by platform policy');
+  });
+
+  it('persists a credentialless customer sidecar when platform policy permits it', async () => {
+    platformSettingsServiceMock.get.mockResolvedValue({
+      engineOnboardingMode: 'manual_allowed',
+      credentiallessCustomerSidecarsEnabled: true,
+    });
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({ insert }),
+    });
+
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Credentialless sidecar',
+        baseUrl: 'https://sidecar.example.com/engine-rest',
+        connectionMode: 'customer_sidecar',
+        authType: 'none',
+      });
+
+    expect(response.status).toBe(201);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+    }));
+  });
+
   it('defaults newly registered engines to ION and persists the requested runtime access scope', async () => {
     const insert = vi.fn().mockResolvedValue({});
     (getDataSource as any).mockResolvedValue({

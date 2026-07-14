@@ -367,6 +367,11 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     updateSettings.mutate({ projectAccessAuthority: mode });
   };
 
+  const handleCredentiallessCustomerSidecarsEnabledChange = (enabled: boolean) => {
+    if (!canManageSettings) return;
+    updateSettings.mutate({ credentiallessCustomerSidecarsEnabled: enabled });
+  };
+
   const sectionLabel = section ? PLATFORM_SETTINGS_SECTION_LABELS[section] : null;
   const headerTitle = sectionLabel || 'Platform Settings';
   const headerSubtitle = section
@@ -456,6 +461,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       onProjectEngineTargetModeChange={handleProjectEngineTargetModeChange}
       onEngineAccessAuthorityChange={handleEngineAccessAuthorityChange}
       onProjectAccessAuthorityChange={handleProjectAccessAuthorityChange}
+      onCredentiallessCustomerSidecarsEnabledChange={handleCredentiallessCustomerSidecarsEnabledChange}
       onDeployRoleToggle={handleDeployRoleToggle}
       envTags={envTags}
       envLoading={envLoading}

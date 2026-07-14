@@ -25,6 +25,7 @@ interface EnginesSettingsSectionProps {
   onProjectEngineTargetModeChange: (mode: ProjectEngineTargetPolicyMode) => void
   onEngineAccessAuthorityChange: (mode: AccessAuthorityMode) => void
   onProjectAccessAuthorityChange: (mode: AccessAuthorityMode) => void
+  onCredentiallessCustomerSidecarsEnabledChange: (enabled: boolean) => void
   onDeployRoleToggle: (role: string, checked: boolean) => void
   envTags: EnvironmentTag[] | undefined
   envLoading: boolean
@@ -116,6 +117,7 @@ export function EnginesSettingsSection({
   onProjectEngineTargetModeChange,
   onEngineAccessAuthorityChange,
   onProjectAccessAuthorityChange,
+  onCredentiallessCustomerSidecarsEnabledChange,
   onDeployRoleToggle,
   envTags,
   envLoading,
@@ -238,6 +240,17 @@ export function EnginesSettingsSection({
                   </span>
                 </div>
               </div>
+              <Checkbox
+                id="credentialless-customer-sidecars-enabled"
+                labelText="Allow credentialless customer-sidecar endpoints"
+                checked={settings?.credentiallessCustomerSidecarsEnabled === true}
+                onChange={(_event, { checked }) => onCredentiallessCustomerSidecarsEnabledChange(Boolean(checked))}
+                disabled={!canManageSettings}
+                title={!canManageSettings ? settingsDisabledReason : undefined}
+              />
+              <p style={{ margin: '-0.5rem 0 0 1.75rem', color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
+                Applies only to customer-managed sidecars or gateways. EnterpriseGlue remains authoritative for runtime authorization.
+              </p>
             </div>
           </Tile>
         </PlatformCol>

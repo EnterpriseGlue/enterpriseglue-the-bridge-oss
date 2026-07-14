@@ -1106,7 +1106,7 @@ export default function Engines() {
   const runtimeResourcesReadDecision = useActionDecision('platform.engine-sets.read', { type: 'platform' })
   const platformSettingsQ = useQuery({
     queryKey: ['platform', 'sync-settings'],
-    queryFn: () => apiClient.get<{ engineOnboardingMode?: EngineOnboardingMode; engineAccessAuthority?: AccessAuthorityMode }>('/api/auth/platform-settings', undefined, { credentials: 'include' }),
+    queryFn: () => apiClient.get<{ engineOnboardingMode?: EngineOnboardingMode; engineAccessAuthority?: AccessAuthorityMode; credentiallessCustomerSidecarsEnabled?: boolean }>('/api/auth/platform-settings', undefined, { credentials: 'include' }),
   })
   const engineOnboardingMode = platformSettingsQ.data?.engineOnboardingMode || 'manual_allowed'
   const engineAccessAuthority = platformSettingsQ.data?.engineAccessAuthority || 'manual'
@@ -1123,6 +1123,7 @@ export default function Engines() {
     baseUrl: '',
     type: 'ion',
     authType: 'basic',
+    connectionMode: 'direct',
     username: '',
     passwordEnc: '',
     oauthTokenUrl: '',
@@ -1153,6 +1154,10 @@ export default function Engines() {
     { id: 'basic', label: 'Basic Auth (Username/Password)' },
     { id: 'bearer', label: 'Bearer Token' },
     { id: 'oauth2-client-credentials', label: 'OAuth2 Client Credentials' },
+  ]), [])
+  const CONNECTION_MODE_ITEMS = React.useMemo(() => ([
+    { id: 'direct' as const, label: 'Direct engine endpoint' },
+    { id: 'customer_sidecar' as const, label: 'Customer-managed sidecar or gateway' },
   ]), [])
   const RUNTIME_ACCESS_SCOPE_ITEMS = React.useMemo(() => ([
     { id: 'engine_wide' as const, label: 'Engine-wide (distributed)' },
@@ -1239,6 +1244,7 @@ export default function Engines() {
       baseUrl: '',
       type: 'ion',
       authType: 'basic',
+      connectionMode: 'direct',
       username: '',
       passwordEnc: '',
       oauthTokenUrl: '',
@@ -1287,6 +1293,8 @@ export default function Engines() {
   const areAuthFieldsReadOnly = areSourceOwnedFieldsReadOnly || Boolean(editing && !canManageEditingSecrets)
   const isOAuth2ClientCredentialsIncomplete = form.authType === 'oauth2-client-credentials'
     && (!form.username || !form.passwordEnc || !form.oauthTokenUrl)
+  const isCredentiallessEndpointInvalid = form.authType === 'none'
+    && (form.connectionMode !== 'customer_sidecar' || platformSettingsQ.data?.credentiallessCustomerSidecarsEnabled !== true)
   const deploymentTargetsQ = useQuery({
     queryKey: ['engines', editing?.id, 'project-targets'],
     enabled: Boolean(engineModal.isOpen && editing?.id && canViewEditingProjectAccess),
@@ -1365,6 +1373,7 @@ export default function Engines() {
       baseUrl: row.baseUrl || '',
       type: normalizeEngineType(row.type),
       authType: row.authType || 'basic',
+      connectionMode: row.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct',
       username: row.username || '',
       passwordEnc: '',
       oauthTokenUrl: row.oauthTokenUrl || '',
@@ -1822,7 +1831,7 @@ export default function Engines() {
         title={editing ? (isEngineFormReadOnly ? 'Engine details' : isEngineEnvironmentOnlyEditable ? 'Edit engine environment' : 'Edit engine') : 'Add engine'}
         submitText={editing ? (isEngineFormReadOnly ? 'Close' : 'Save') : 'Create'}
         busy={createM.isPending || updateM.isPending || setEnvironmentM.isPending}
-        submitDisabled={isEngineFormReadOnly ? false : isEngineEnvironmentOnlyEditable ? setEnvironmentM.isPending : (!form.name || (!areSourceOwnedFieldsReadOnly && !form.baseUrl) || (!areAuthFieldsReadOnly && isOAuth2ClientCredentialsIncomplete) || (!editing && !canCreateEngine))}
+        submitDisabled={isEngineFormReadOnly ? false : isEngineEnvironmentOnlyEditable ? setEnvironmentM.isPending : (!form.name || (!areSourceOwnedFieldsReadOnly && !form.baseUrl) || (!areAuthFieldsReadOnly && (isOAuth2ClientCredentialsIncomplete || isCredentiallessEndpointInvalid)) || (!editing && !canCreateEngine))}
         size="lg"
       >
         {editing && engineDetailSections.includes('registration') && <EngineRegistrationSection engine={editing} />}
@@ -1935,6 +1944,25 @@ export default function Engines() {
           disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
         <Dropdown
+          id="eng-connection-mode"
+          titleText="Connection mode"
+          label="Select connection mode"
+          items={CONNECTION_MODE_ITEMS}
+          itemToString={(it: any) => it ? it.label : ''}
+          selectedItem={CONNECTION_MODE_ITEMS.find((item) => item.id === form.connectionMode)}
+          onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, connectionMode: selectedItem?.id || 'direct' }))}
+          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+        />
+        {form.connectionMode === 'customer_sidecar' && (
+          <InlineNotification
+            lowContrast
+            kind="info"
+            title="Customer-managed endpoint authentication"
+            subtitle="The base URL must point to the customer sidecar or gateway. EnterpriseGlue runtime authorization remains active."
+            hideCloseButton
+          />
+        )}
+        <Dropdown
           id="eng-runtime-access-scope"
           titleText="Runtime access"
           label="Select runtime access"
@@ -2012,6 +2040,19 @@ export default function Engines() {
           onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, authType: selectedItem?.id }))}
           disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
+        {form.authType === 'none' && (
+          <InlineNotification
+            lowContrast
+            kind={isCredentiallessEndpointInvalid ? 'warning' : 'info'}
+            title={isCredentiallessEndpointInvalid ? 'Credentialless endpoint not permitted' : 'Credentialless customer sidecar'}
+            subtitle={form.connectionMode !== 'customer_sidecar'
+              ? 'No EnterpriseGlue-managed endpoint credentials is valid only for a customer-managed sidecar or gateway.'
+              : platformSettingsQ.data?.credentiallessCustomerSidecarsEnabled !== true
+                ? 'A platform administrator must enable credentialless customer-sidecar endpoints before this engine can be saved.'
+                : 'EnterpriseGlue will not attach engine credentials to downstream requests; runtime authorization remains authoritative.'}
+            hideCloseButton
+          />
+        )}
         {/* Environment Tag - only show dropdown if multiple tags exist */}
         {hasMultipleTags && (
           <Dropdown

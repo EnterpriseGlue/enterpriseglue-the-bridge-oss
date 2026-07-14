@@ -191,6 +191,7 @@ export const EngineInsertSchema = z.object({
   baseUrl: z.string().url(),
   type: EngineTypeSchema.optional(),
   authType: EngineAuthTypeSchema.optional(),
+  connectionMode: z.enum(['direct', 'customer_sidecar']).optional(),
   username: z.string().optional(),
   passwordEnc: z.string().optional(),
   oauthTokenUrl: z.string().url().optional(),

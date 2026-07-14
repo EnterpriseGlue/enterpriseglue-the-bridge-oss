@@ -54,6 +54,7 @@ export interface PlatformSettingsData {
   engineAccessAuthority: AccessAuthorityMode;
   projectAccessAuthority: AccessAuthorityMode;
   engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationMode;
+  credentiallessCustomerSidecarsEnabled: boolean;
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
   ssoAutoRedirectSingleProvider: boolean;
@@ -101,6 +102,7 @@ export class PlatformSettingsService {
         engineAccessAuthority: DEFAULT_ACCESS_AUTHORITY_MODE,
         projectAccessAuthority: DEFAULT_ACCESS_AUTHORITY_MODE,
         engineRuntimeAuthorizationMode: DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE,
+        credentiallessCustomerSidecarsEnabled: false,
         inviteAllowAllDomains: true,
         inviteAllowedDomains: [],
         ssoAutoRedirectSingleProvider: false,
@@ -136,6 +138,7 @@ export class PlatformSettingsService {
       engineAccessAuthority: normalizeAccessAuthorityMode((settings as any).engineAccessAuthority),
       projectAccessAuthority: normalizeAccessAuthorityMode((settings as any).projectAccessAuthority),
       engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode((settings as any).engineRuntimeAuthorizationMode),
+      credentiallessCustomerSidecarsEnabled: (settings as any).credentiallessCustomerSidecarsEnabled ?? false,
       inviteAllowAllDomains: (settings as any).inviteAllowAllDomains ?? true,
       inviteAllowedDomains: (() => {
         try {
@@ -204,6 +207,7 @@ export class PlatformSettingsService {
       engineAccessAuthority: AccessAuthorityMode;
       projectAccessAuthority: AccessAuthorityMode;
       engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationMode;
+      credentiallessCustomerSidecarsEnabled: boolean;
       inviteAllowAllDomains: boolean;
       inviteAllowedDomains: string[];
       ssoAutoRedirectSingleProvider: boolean;
@@ -267,6 +271,9 @@ export class PlatformSettingsService {
     }
     if (data.engineRuntimeAuthorizationMode !== undefined) {
       updateData.engineRuntimeAuthorizationMode = data.engineRuntimeAuthorizationMode;
+    }
+    if (data.credentiallessCustomerSidecarsEnabled !== undefined) {
+      updateData.credentiallessCustomerSidecarsEnabled = data.credentiallessCustomerSidecarsEnabled;
     }
     if (data.inviteAllowAllDomains !== undefined) {
       updateData.inviteAllowAllDomains = data.inviteAllowAllDomains;
@@ -355,6 +362,7 @@ export class PlatformSettingsService {
         engineAccessAuthority: data.engineAccessAuthority ?? DEFAULT_ACCESS_AUTHORITY_MODE,
         projectAccessAuthority: data.projectAccessAuthority ?? DEFAULT_ACCESS_AUTHORITY_MODE,
         engineRuntimeAuthorizationMode: data.engineRuntimeAuthorizationMode ?? DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE,
+        credentiallessCustomerSidecarsEnabled: data.credentiallessCustomerSidecarsEnabled ?? false,
         inviteAllowAllDomains: data.inviteAllowAllDomains ?? true,
         inviteAllowedDomains: JSON.stringify(data.inviteAllowedDomains ?? []),
         ssoAutoRedirectSingleProvider: data.ssoAutoRedirectSingleProvider ?? false,

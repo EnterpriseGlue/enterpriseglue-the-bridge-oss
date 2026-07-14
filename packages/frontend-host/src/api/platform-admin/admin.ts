@@ -33,6 +33,7 @@ export interface PlatformSettings {
   engineAccessAuthority: AccessAuthorityMode;
   projectAccessAuthority: AccessAuthorityMode;
   engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationMode;
+  credentiallessCustomerSidecarsEnabled: boolean;
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
   ssoAutoRedirectSingleProvider: boolean;
