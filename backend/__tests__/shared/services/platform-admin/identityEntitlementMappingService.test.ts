@@ -37,6 +37,56 @@ describe('identity entitlement mapping', () => {
     expect(membershipRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', groupId: 'group-1', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-1' }));
   });
 
+  it('preserves additive, cross-provider, and manual memberships while authoritative sync removes only its stale row', async () => {
+    const mappings = [
+      { id: 'mapping-a-additive', providerId: 'provider-a', entitlementType: 'group', externalId: 'additive-group', matchOperator: 'exact', targetGroupId: 'group-shared', syncMode: 'additive', isActive: true },
+      { id: 'mapping-a-authoritative', providerId: 'provider-a', entitlementType: 'group', externalId: 'authoritative-group', matchOperator: 'exact', targetGroupId: 'group-shared', syncMode: 'authoritative', isActive: true },
+      { id: 'mapping-b-authoritative', providerId: 'provider-b', entitlementType: 'group', externalId: 'other-provider-group', matchOperator: 'exact', targetGroupId: 'group-shared', syncMode: 'authoritative', isActive: true },
+    ];
+    const memberships = [
+      { id: 'membership-a-additive', userId: 'user-1', groupId: 'group-shared', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-a-additive' },
+      { id: 'membership-a-authoritative', userId: 'user-1', groupId: 'group-shared', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-a-authoritative' },
+      { id: 'membership-b-authoritative', userId: 'user-1', groupId: 'group-shared', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-b-authoritative' },
+      { id: 'membership-manual', userId: 'user-1', groupId: 'group-shared', source: 'manual', sourceRef: null },
+    ];
+    const mappingRepo = { find: vi.fn().mockResolvedValue(mappings) };
+    const membershipRepo = {
+      findOne: vi.fn().mockImplementation(({ where }: any) => Promise.resolve(memberships.find((membership) =>
+        membership.userId === where.userId
+        && membership.groupId === where.groupId
+        && membership.source === where.source
+        && membership.sourceRef === where.sourceRef
+      ) || null)),
+      insert: vi.fn(),
+      delete: vi.fn().mockImplementation(({ id }: { id: string }) => {
+        const index = memberships.findIndex((membership) => membership.id === id);
+        if (index >= 0) memberships.splice(index, 1);
+        return Promise.resolve(undefined);
+      }),
+    };
+    const store = {
+      getRepository: (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo : entity === AuthzGroupMembership ? membershipRepo : {},
+    } as any;
+    const identityWithoutGroups = {
+      providerKey: 'provider-a', providerType: 'oidc' as const, subjectId: 'subject-1', observedAt: 1,
+      entitlements: [{ type: 'authenticated' as const, externalId: 'authenticated' }],
+    };
+
+    await expect(identityEntitlementMappingService.syncMembershipsInStore(store, 'user-1', 'tenant-a', identityWithoutGroups))
+      .resolves.toEqual({ created: 0, removed: 1 });
+
+    expect(membershipRepo.delete).toHaveBeenCalledOnce();
+    expect(membershipRepo.delete).toHaveBeenCalledWith({ id: 'membership-a-authoritative' });
+    expect(memberships.map((membership) => membership.id)).toEqual([
+      'membership-a-additive',
+      'membership-b-authoritative',
+      'membership-manual',
+    ]);
+    expect(membershipRepo.findOne).not.toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ sourceRef: 'identity_mapping:mapping-b-authoritative' }),
+    }));
+  });
+
   it('removes only memberships created by a manually managed mapping', async () => {
     const mappingRepo = { findOne: vi.fn().mockResolvedValue({ id: 'mapping-1', sourceRef: null }), delete: vi.fn().mockResolvedValue(undefined) };
     const membershipRepo = { delete: vi.fn().mockResolvedValue(undefined) };

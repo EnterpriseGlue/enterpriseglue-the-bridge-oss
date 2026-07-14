@@ -9,7 +9,7 @@ const provider = {
 describe('direct LDAP identity service', () => {
   afterEach(() => { setLdapClientFactoryForTest(); delete process.env.LDAP_BIND_SECRET; });
 
-  it('uses a service lookup then user bind and returns immutable group identifiers', async () => {
+  it('uses a service lookup then user bind and returns a stable user id with group DNs', async () => {
     process.env.LDAP_BIND_SECRET = 'service-password';
     const client = {
       bind: vi.fn().mockResolvedValue(undefined),
@@ -23,6 +23,41 @@ describe('direct LDAP identity service', () => {
     expect(client.bind).toHaveBeenNthCalledWith(2, 'uid=person,ou=users,dc=example,dc=test', 'user-password');
     expect(client.search).toHaveBeenCalledWith('ou=users,dc=example,dc=test', expect.objectContaining({ filter: '(mail=person@example.test)', sizeLimit: 2 }));
     expect(client.unbind).toHaveBeenCalled();
+  });
+
+  it('returns configured immutable group ids from reverse group search', async () => {
+    process.env.LDAP_BIND_SECRET = 'service-password';
+    const groupSearchProvider = {
+      ...provider,
+      configurationJson: JSON.stringify({
+        ...JSON.parse(provider.configurationJson),
+        groupIdAttribute: 'entryUUID',
+        membershipMode: 'group_search',
+      }),
+    };
+    const client = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn()
+        .mockResolvedValueOnce({ searchEntries: [{ dn: 'uid=person,ou=users,dc=example,dc=test', entryUUID: 'user-uuid-1', mail: 'person@example.test', cn: 'Person' }] })
+        .mockResolvedValueOnce({ searchEntries: [
+          { dn: 'cn=renamed-operations,ou=groups,dc=example,dc=test', entryUUID: 'group-uuid-1' },
+          { dn: 'cn=duplicate-alias,ou=groups,dc=example,dc=test', entryUUID: 'group-uuid-1' },
+          { dn: 'cn=payments,ou=groups,dc=example,dc=test', entryUUID: 'group-uuid-2' },
+        ] }),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => client);
+
+    const identity = await directLdapIdentityService.authenticate(groupSearchProvider, 'person@example.test', 'user-password');
+
+    expect(identity).toMatchObject({
+      subjectId: 'user-uuid-1',
+      groups: ['group-uuid-1', 'group-uuid-2'],
+    });
+    expect(client.search).toHaveBeenNthCalledWith(2, 'ou=groups,dc=example,dc=test', expect.objectContaining({
+      filter: '(member=uid=person,ou=users,dc=example,dc=test)',
+      attributes: ['entryUUID'],
+    }));
   });
 
   it('rejects an unsafe user filter without a username placeholder', async () => {
