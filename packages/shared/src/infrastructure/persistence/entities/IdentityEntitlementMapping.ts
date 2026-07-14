@@ -6,10 +6,12 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_identity_entitlement_mapping_provider', ['providerId'])
 @Index('idx_identity_entitlement_mapping_lookup', ['providerId', 'entitlementType', 'isActive'])
 @Index('idx_identity_entitlement_mapping_group', ['targetGroupId'])
+@Index('uq_identity_entitlement_mapping_config_key_identity', ['configKeyIdentity'], { unique: true })
 export class IdentityEntitlementMapping extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true }) tenantId!: string | null;
   @Column({ name: 'provider_id', type: 'text' }) providerId!: string;
   @Column({ name: 'config_key', type: 'text', nullable: true }) configKey!: string | null;
+  @Column({ name: 'config_key_identity', type: 'text', nullable: true }) configKeyIdentity!: string | null;
   @Column({ name: 'source_ref', type: 'text', nullable: true }) sourceRef!: string | null;
   @Column({ name: 'source_hash', type: 'text', nullable: true }) sourceHash!: string | null;
   @Column({ name: 'last_applied_at', type: 'bigint', nullable: true }) lastAppliedAt!: number | null;

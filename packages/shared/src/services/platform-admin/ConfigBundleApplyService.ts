@@ -87,6 +87,10 @@ function runtimeResourceSetKeyIdentity(tenantId: string | null, key: string): st
   return `${tenantId || 'platform'}:${key}`;
 }
 
+function identityMappingConfigKeyIdentity(tenantId: string | null, key: string): string {
+  return `${tenantId || 'platform'}:${key}`;
+}
+
 function selectorFingerprint(selector: unknown): string {
   return createHash('sha256').update(JSON.stringify(selector)).digest('hex');
 }
@@ -701,7 +705,7 @@ class ConfigBundleApplyService {
         if (!provider || !group) fail(`Identity mapping references an unresolved provider or group: ${mapping.key}`, 422);
         mappingKeys.add(mapping.key);
         const existing = await identityMappingRepo.findOne({ where: { tenantId, configKey: mapping.key } as any });
-        const values = { providerId: provider.id, configKey: mapping.key, sourceRef, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', entitlementType: mapping.source.type, externalId: mapping.source.externalId || null, matchOperator: mapping.source.operator, targetGroupId: group.id, syncMode: mapping.syncMode, isActive: true, updatedAt: now };
+        const values = { providerId: provider.id, configKey: mapping.key, configKeyIdentity: identityMappingConfigKeyIdentity(tenantId, mapping.key), sourceRef, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', entitlementType: mapping.source.type, externalId: mapping.source.externalId || null, matchOperator: mapping.source.operator, targetGroupId: group.id, syncMode: mapping.syncMode, isActive: true, updatedAt: now };
         if (!existing) {
           const mappingId = generateId();
           await identityMappingRepo.insert({ id: mappingId, tenantId, ...values, createdAt: now });

@@ -705,7 +705,7 @@ describe('configBundleApplyService', () => {
     };
     const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
     const result = await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
-    expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-1', configKey: 'mapping.operators', targetGroupId: 'group-1', sourceRef: 'config_bundle:acme.authz' }));
+    expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-1', configKey: 'mapping.operators', configKeyIdentity: 'tenant-a:mapping.operators', targetGroupId: 'group-1', sourceRef: 'config_bundle:acme.authz' }));
     expect(replayMemberships).toHaveBeenCalledWith({ tenantId: 'tenant-a', providerIds: ['provider-1'] });
     expect(result.reconciliation.identitySnapshot).toEqual({ mode: 'apply', status: 'completed', providerCount: 1, scanned: 0, created: 0, removed: 0, failed: 0 });
   });
