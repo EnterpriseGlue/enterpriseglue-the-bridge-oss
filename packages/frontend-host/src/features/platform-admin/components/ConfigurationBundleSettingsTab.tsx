@@ -6,12 +6,15 @@ import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { useAuth } from '../../../shared/hooks/useAuth';
+import {
+  useConfigBundleIdentityReplayTasks,
+  useConfigBundleRun,
+  useConfigBundleRuns,
+  useConfigBundleRuntimeReconciliationTasks,
+} from '../hooks/useAuthzApi';
 import type {
   ConfigBundleApplyResult,
-  ConfigBundleApplyRun,
-  ConfigBundleIdentityReplayTask,
   ConfigBundleIdentitySnapshot,
-  ConfigBundleRuntimeReconciliationTask,
 } from '../hooks/useAuthzApi';
 import {
   filterConfigBundleChanges,
@@ -72,11 +75,7 @@ export default function ConfigurationBundleSettingsTab() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'preview' | 'preflight' | 'apply' | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
-  const [runs, setRuns] = useState<ConfigBundleApplyRun[]>([]);
-  const [selectedRun, setSelectedRun] = useState<ConfigBundleApplyRun | null>(null);
-  const [identityReplayTasks, setIdentityReplayTasks] = useState<ConfigBundleIdentityReplayTask[]>([]);
-  const [runtimeReconciliationTasks, setRuntimeReconciliationTasks] = useState<ConfigBundleRuntimeReconciliationTask[]>([]);
-  const [runDetailBusy, setRunDetailBusy] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [changeQuery, setChangeQuery] = useState('');
   const [changeOperation, setChangeOperation] = useState('all');
   const [changeObjectType, setChangeObjectType] = useState('all');
@@ -85,6 +84,16 @@ export default function ConfigurationBundleSettingsTab() {
   const [applyIdempotencyKey, setApplyIdempotencyKey] = useState<string | null>(null);
   const [identityReconciliationMode, setIdentityReconciliationMode] = useState<ConfigBundleIdentitySnapshot['mode']>('apply');
   const [ciCommandCopied, setCiCommandCopied] = useState(false);
+  const runsQuery = useConfigBundleRuns({ limit: 10, enabled: view.allowed });
+  const selectedRunQuery = useConfigBundleRun(selectedRunId || undefined, { enabled: view.allowed });
+  const identityReplayTasksQuery = useConfigBundleIdentityReplayTasks(selectedRunId || undefined, { enabled: view.allowed });
+  const runtimeReconciliationTasksQuery = useConfigBundleRuntimeReconciliationTasks(selectedRunId || undefined, { enabled: view.allowed });
+  const runs = runsQuery.data || [];
+  const selectedRun = selectedRunQuery.data || null;
+  const identityReplayTasks = identityReplayTasksQuery.data || [];
+  const runtimeReconciliationTasks = runtimeReconciliationTasksQuery.data || [];
+  const runDetailBusy = selectedRunId && (selectedRunQuery.isFetching || identityReplayTasksQuery.isFetching || runtimeReconciliationTasksQuery.isFetching) ? selectedRunId : null;
+  const queryError = runsQuery.error || selectedRunQuery.error || identityReplayTasksQuery.error || runtimeReconciliationTasksQuery.error;
   const parse = (): { bundle: unknown; files: Record<string, unknown> } => {
     const value = JSON.parse(source) as { bundle: unknown; files: Record<string, unknown> };
     if (!value || !value.bundle || !value.files || typeof value.files !== 'object') throw new Error('Configuration must contain bundle and files objects.');
@@ -122,21 +131,12 @@ export default function ConfigurationBundleSettingsTab() {
     finally { setBusy(null); }
   };
   const loadRuns = async () => {
-    try { setRuns(await apiClient.get<ConfigBundleApplyRun[]>('/api/authz/config-bundles/runs?limit=10')); }
-    catch (value) { setError(parseApiError(value, 'Configuration history could not be loaded').message); }
+    const result = await runsQuery.refetch();
+    if (result.error) setError(parseApiError(result.error, 'Configuration history could not be loaded').message);
   };
-  const loadRunDetail = async (runId: string) => {
-    setRunDetailBusy(runId);
-    try {
-      const [run, tasks, runtimeTasks] = await Promise.all([
-        apiClient.get<ConfigBundleApplyRun>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId)}`),
-        apiClient.get<ConfigBundleIdentityReplayTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId)}/identity-replay-tasks`),
-        apiClient.get<ConfigBundleRuntimeReconciliationTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId)}/runtime-reconciliation-tasks`),
-      ]);
-      setSelectedRun(run); setIdentityReplayTasks(tasks); setRuntimeReconciliationTasks(runtimeTasks);
-    }
-    catch (value) { setError(parseApiError(value, 'Configuration run details could not be loaded').message); }
-    finally { setRunDetailBusy(null); }
+  const loadRunDetail = (runId: string) => {
+    setError(null);
+    setSelectedRunId(runId);
   };
   const importJson = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -203,7 +203,7 @@ export default function ConfigurationBundleSettingsTab() {
   }
   return <Tile>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}><div><h3 style={{ margin: 0, fontSize: '1rem' }}>Configuration Bundles</h3><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Validate, review, and apply JSON-managed authorization, identity, engine, and deployment-target configuration.</p></div>{preview?.valid && <Tag type="green">Preview valid</Tag>}</div>
-    {error && <InlineNotification kind="error" title="Configuration bundle" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+    {(error || queryError) && <InlineNotification kind="error" title="Configuration bundle" subtitle={error || parseApiError(queryError, 'Configuration history could not be loaded').message} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
     <TextArea id="configuration-bundle-json" labelText="Configuration bundle JSON" value={source} onChange={(event) => setSource(event.target.value)} rows={22} helperText="Use the same bundle and files shape as CI/CD. Folder-style ZIP archives must contain bundle.json. Secret references only; plaintext secrets are rejected." />
     <Select id="configuration-identity-reconciliation-mode" labelText="Stored identity snapshot replay" value={identityReconciliationMode} disabled={busy !== null} onChange={(event) => setIdentityReconciliationMode(event.target.value as ConfigBundleIdentitySnapshot['mode'])} helperText="Runs only after the configuration transaction commits. Preview does not replay snapshots; source-scoped mapping cleanup still applies.">
       <SelectItem value="apply" text="Apply bounded membership changes" />

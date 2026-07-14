@@ -1126,6 +1126,10 @@ export const authzQueryKeys = {
   engineSet: (id?: string) => ['platform-admin', 'authz', 'engine-sets', id] as const,
   runtimeResources: (engineId?: string, options?: { resourceKind?: RuntimeResourceKind; includeInactive?: boolean }) => ['platform-admin', 'authz', 'runtime-resources', engineId, options] as const,
   runtimeResourceSets: (engineId?: string, options?: { includeArchived?: boolean }) => ['platform-admin', 'authz', 'runtime-resource-sets', engineId, options] as const,
+  configBundleRuns: (limit = 25) => ['platform-admin', 'authz', 'config-bundles', 'runs', limit] as const,
+  configBundleRun: (id?: string) => ['platform-admin', 'authz', 'config-bundles', 'runs', id] as const,
+  configBundleIdentityReplayTasks: (runId?: string) => ['platform-admin', 'authz', 'config-bundles', 'runs', runId, 'identity-replay-tasks'] as const,
+  configBundleRuntimeReconciliationTasks: (runId?: string) => ['platform-admin', 'authz', 'config-bundles', 'runs', runId, 'runtime-reconciliation-tasks'] as const,
   projectEngineTargets: (params?: Record<string, any>) => ['platform-admin', 'authz', 'project-engine-targets', params] as const,
   projectEngineTarget: (id?: string) => ['platform-admin', 'authz', 'project-engine-targets', id] as const,
   policies: ['platform-admin', 'authz', 'policies'] as const,
@@ -1598,6 +1602,39 @@ export function useReconcileRuntimeResources() {
       qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'runtime-resources', engineId] });
       qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'runtime-resource-sets'] });
     },
+  });
+}
+
+export function useConfigBundleRuns(options: { limit?: number; enabled?: boolean } = {}) {
+  const limit = options.limit ?? 25;
+  return useQuery({
+    queryKey: authzQueryKeys.configBundleRuns(limit),
+    queryFn: () => apiClient.get<ConfigBundleApplyRun[]>(`/api/authz/config-bundles/runs?limit=${limit}`),
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function useConfigBundleRun(id?: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: authzQueryKeys.configBundleRun(id),
+    queryFn: () => apiClient.get<ConfigBundleApplyRun>(`/api/authz/config-bundles/runs/${encodeURIComponent(id!)}`),
+    enabled: (options.enabled ?? true) && Boolean(id),
+  });
+}
+
+export function useConfigBundleIdentityReplayTasks(runId?: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: authzQueryKeys.configBundleIdentityReplayTasks(runId),
+    queryFn: () => apiClient.get<ConfigBundleIdentityReplayTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId!)}/identity-replay-tasks`),
+    enabled: (options.enabled ?? true) && Boolean(runId),
+  });
+}
+
+export function useConfigBundleRuntimeReconciliationTasks(runId?: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: authzQueryKeys.configBundleRuntimeReconciliationTasks(runId),
+    queryFn: () => apiClient.get<ConfigBundleRuntimeReconciliationTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId!)}/runtime-reconciliation-tasks`),
+    enabled: (options.enabled ?? true) && Boolean(runId),
   });
 }
 
