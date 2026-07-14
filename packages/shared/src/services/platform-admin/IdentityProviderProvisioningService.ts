@@ -1,7 +1,7 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
-import { externalIdentityKey } from './ExternalIdentityService.js';
+import { externalIdentityKey, externalIdentityService } from './ExternalIdentityService.js';
 import { authzGroupService } from './AuthzGroupService.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
@@ -90,32 +90,16 @@ class IdentityProviderProvisioningService {
         await userRepo.update({ id: user.id }, { email: emailVerified ? email : user.email, authProvider, firstName: input.firstName || user.firstName, lastName: input.lastName || user.lastName, isEmailVerified: Boolean(user.isEmailVerified || emailVerified), lastLoginAt: now, updatedAt: now });
         user = { ...user, email: emailVerified ? email : user.email } as User;
       }
-      if (!externalIdentity) {
-        await externalIdentityRepo.insert({
-          id: generateId(),
-          identityKey,
-          tenantId: provider.tenantId,
-          providerId: provider.id,
-          providerType: input.providerType,
-          subjectId: input.subjectId,
-          directoryTenantId: input.directoryTenantId || provider.directoryTenantId || null,
-          userId: user.id,
-          emailHint: email,
-          status: 'active',
-          linkedAt: now,
-          lastSeenAt: now,
-          createdAt: now,
-          updatedAt: now,
-        });
-      } else {
-        await externalIdentityRepo.update({ id: externalIdentity.id }, {
-          directoryTenantId: input.directoryTenantId || provider.directoryTenantId || null,
-          emailHint: email,
-          status: 'active',
-          lastSeenAt: now,
-          updatedAt: now,
-        });
-      }
+      await externalIdentityService.upsertWithManager(manager, {
+        tenantId: provider.tenantId,
+        providerId: provider.id,
+        providerType: input.providerType,
+        subjectId: input.subjectId,
+        directoryTenantId: input.directoryTenantId || provider.directoryTenantId || null,
+        userId: user.id,
+        emailHint: email,
+        now,
+      });
       await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
         tenantId: provider.tenantId, providerId: provider.id, providerType: input.providerType, providerSubject: input.subjectId, subjectClaim: input.providerType === 'ldap' ? 'directory_id' : 'sub', providerTenantId: input.directoryTenantId || provider.directoryTenantId, userId: user.id, email, displayName: input.displayName || null, firstName: input.firstName || null, lastName: input.lastName || null, claims: input.claims, authorizationAttributeKeys: authorizationAttributeKeys(provider), now,
       });
