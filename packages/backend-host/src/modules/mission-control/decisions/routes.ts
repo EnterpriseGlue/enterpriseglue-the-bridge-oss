@@ -20,7 +20,7 @@ import {
   DecisionDefinitionQueryParams,
   EvaluateDecisionRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/decision.js';
-import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js';
+import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js';
 
 const r = Router();
 
@@ -196,7 +196,7 @@ r.get('/mission-control-api/decision-definitions', requireRuntimeCollectionActio
   const collections = await Promise.all(visibleKeys.map(async (decisionDefinitionKey) => {
     const definitions = await listDecisionDefinitions(engineId, { ...query, key: decisionDefinitionKey });
     // Keep the local boundary authoritative if the engine ignores the query.
-    return definitions.filter((definition: any) => String(definition?.key || '') === decisionDefinitionKey);
+    return filterRuntimeItemsByResourceKey(definitions, [decisionDefinitionKey], 'key');
   }));
   res.json(collections.flat());
 }));

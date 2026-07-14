@@ -101,7 +101,7 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
     const query = getBoundedRuntimeResourceQuery(req.query)
     const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
       const definitions = await listProcessDefinitions(engineId, { ...query, key: processDefinitionKey })
-      return definitions.filter((definition) => String(definition?.key || '') === processDefinitionKey)
+      return filterRuntimeItemsByResourceKey(definitions, [processDefinitionKey], 'key')
     }))
     res.json(collections.flat())
   } catch (e: any) {

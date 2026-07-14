@@ -52,7 +52,7 @@ export function getBoundedRuntimeFetchAndLockRequest<T extends Record<string, un
  * Some engine collections already carry the stable authorization key. Check
  * that key locally instead of relying solely on the upstream query filter.
  */
-export function filterRuntimeItemsByResourceKey<T extends Record<string, unknown>>(
+export function filterRuntimeItemsByResourceKey<T extends object>(
   items: T[],
   authorizedKeys: string[] | undefined,
   keyField: string,
@@ -63,7 +63,7 @@ export function filterRuntimeItemsByResourceKey<T extends Record<string, unknown
   }
   const allowedKeys = new Set(authorizedKeys)
   return items.filter((item) => {
-    const key = item[keyField]
+    const key = (item as Record<string, unknown>)[keyField]
     return typeof key === 'string' && allowedKeys.has(key)
   })
 }
