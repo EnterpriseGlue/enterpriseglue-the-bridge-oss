@@ -29,6 +29,22 @@ describe('identity entitlement mapping', () => {
     expect(result).not.toHaveProperty('identities');
   });
 
+  it('rejects OAuth scopes as a human identity-mapping source before inspecting snapshots', async () => {
+    await expect(identityEntitlementMappingService.previewStoredSnapshots({
+      providerKey: 'identity.oidc.main', entitlementType: 'scope', externalId: 'engines.read', matchOperator: 'exact',
+    }, 'tenant-a')).rejects.toThrow('OAuth scopes cannot be used for human identity mappings');
+  });
+
+  it('removes legacy scope-derived memberships regardless of their prior sync mode', async () => {
+    const mappingRepo = { find: vi.fn().mockResolvedValue([{ id: 'legacy-scope', providerId: 'entra', entitlementType: 'scope', externalId: 'engines.read', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'additive', isActive: true }]) };
+    const membershipRepo = { findOne: vi.fn().mockResolvedValue({ id: 'membership-1', userId: 'user-1', groupId: 'group-1', source: 'identity_provider', sourceRef: identityProviderMembershipSourceRef('entra', 'legacy-scope') }), insert: vi.fn(), delete: vi.fn().mockResolvedValue(undefined) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo : entity === AuthzGroupMembership ? membershipRepo : {} });
+
+    await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', identity)).resolves.toEqual({ created: 0, removed: 1 });
+    expect(membershipRepo.insert).not.toHaveBeenCalled();
+    expect(membershipRepo.delete).toHaveBeenCalledWith({ id: 'membership-1' });
+  });
+
   it('reconciles only provider-owned memberships for the matching mapping', async () => {
     const mappingRepo = { find: vi.fn().mockResolvedValue([{ id: 'mapping-1', providerId: 'entra', entitlementType: 'group', externalId: 'group-prod', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'authoritative', isActive: true }]) };
     const membershipRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn().mockResolvedValue(undefined), delete: vi.fn() };

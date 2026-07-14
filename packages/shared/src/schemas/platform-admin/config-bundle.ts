@@ -340,11 +340,13 @@ export const ConfigIdentityProvidersFileSchema = z.object({
 }).strict().superRefine((file, ctx) => uniqueKeys(file.identityProviders, ctx, 'identityProviders'));
 
 export const ExternalEntitlementTypeSchema = z.enum(['group', 'role', 'scope', 'attribute', 'authenticated']);
+/** OAuth scopes are valid in test fixtures but cannot grant interactive human access. */
+export const HumanIdentityEntitlementTypeSchema = z.enum(['group', 'role', 'attribute', 'authenticated']);
 export const ConfigIdentityMappingSchema = z.object({
   key: ConfigKeySchema,
   providerKey: ReferenceKeySchema,
   source: z.object({
-    type: ExternalEntitlementTypeSchema,
+    type: HumanIdentityEntitlementTypeSchema,
     externalId: z.string().min(1).max(2000).optional(),
     operator: z.enum(['exact', 'contains', 'exists']).default('exact'),
   }).strict(),

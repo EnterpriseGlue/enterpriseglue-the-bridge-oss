@@ -14,6 +14,25 @@ describe('configBundlePreviewService', () => {
     expect(configBundlePreviewService.preview({ bundle, files: { './roles.json': { roles: [] } } })).toMatchObject({ valid: false });
   });
 
+  it('rejects OAuth scopes as config-managed human identity mappings', () => {
+    const result = configBundlePreviewService.preview({
+      bundle: { ...bundle, imports: ['./identity-mappings.json'] },
+      files: {
+        './identity-mappings.json': {
+          identityMappings: [{
+            key: 'mapping.delegated-scope', providerKey: 'identity.oidc.main',
+            source: { type: 'scope', externalId: 'engines.read', operator: 'exact' }, targetGroupKey: 'group.operators',
+          }],
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ valid: false });
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: './identity-mappings.json.identityMappings.0.source.type' }),
+    ]));
+  });
+
   it('rejects credentialless sidecars unless platform policy explicitly permits them', () => {
     const input = {
       bundle: { ...bundle, imports: ['./engines.json'] },

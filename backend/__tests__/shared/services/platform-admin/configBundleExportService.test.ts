@@ -69,6 +69,21 @@ describe('configBundleExportService', () => {
     expect(configBundlePreviewService.preview(result, { credentiallessCustomerSidecarsEnabled: true })).toMatchObject({ valid: true, errors: [] });
   });
 
+  it('refuses to export legacy scope mappings as a human-access configuration bundle', async () => {
+    const legacyScopeMapping = { id: 'mapping-scope', tenantId: null, configKey: 'mapping.scope', providerId: 'provider-1', targetGroupId: 'group-1', entitlementType: 'scope', externalId: 'engines.read', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, sourceRef: 'config_bundle:acme.authz' };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository(entity: unknown) {
+        if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([{ id: 'group-1', key: 'group.operators' }]) };
+        if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue([{ id: 'provider-1', key: 'identity.oidc.main' }]) };
+        if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue([legacyScopeMapping]) };
+        if ([RbacRole, RbacRolePermission, Engine, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(configBundleExportService.exportBundle({ bundleKey: 'acme.authz' })).rejects.toThrow('OAuth scopes cannot grant human access');
+  });
+
   it('exports all apply-supported config families with stable references', async () => {
     const configRole = { id: 'role-config', tenantId: null, key: 'custom.engine.reader', name: 'Reader', description: null, scope: 'engine', sourceRef: 'config_bundle:acme.authz', isArchived: false };
     const systemRole = { id: 'role-system', tenantId: null, key: 'system.platform.user', name: 'Platform User', description: null, scope: 'platform', sourceRef: null, isArchived: false };

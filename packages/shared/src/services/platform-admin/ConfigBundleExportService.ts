@@ -108,6 +108,7 @@ class ConfigBundleExportService {
       const providerKey = providerKeyById.get(mapping.providerId);
       const targetGroupKey = groupKeyById.get(mapping.targetGroupId);
       if (!providerKey || !targetGroupKey) throw new Error(`Cannot export identity mapping ${mapping.key}: its provider or group is not config-owned by this bundle`);
+      if (mapping.entitlementType === 'scope') throw new Error(`Cannot export identity mapping ${mapping.key}: OAuth scopes cannot grant human access; retire or replace this legacy mapping first`);
       return { key: mapping.key, providerKey, source: { type: mapping.entitlementType, externalId: mapping.externalId || undefined, operator: mapping.matchOperator }, targetGroupKey, syncMode: mapping.syncMode, ownershipMode: 'config_locked' };
     }) };
 

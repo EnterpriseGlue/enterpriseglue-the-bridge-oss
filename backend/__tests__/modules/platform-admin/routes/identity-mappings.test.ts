@@ -38,6 +38,11 @@ describe('identity mapping routes', () => {
     const response = await request(app).post('/api/identity/mappings').send({ providerKey: 'identity.oidc.main', targetGroupKey: 'authenticated-users', entitlementType: 'authenticated', externalId: 'authenticated', matchOperator: 'exact' });
     expect(response.status).toBe(201); expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ entitlementType: 'authenticated', externalId: 'authenticated' }), 'tenant-1');
   });
+  it('rejects OAuth scopes as human identity-mapping sources', async () => {
+    const response = await request(app).post('/api/identity/mappings').send({ providerKey: 'identity.oidc.main', targetGroupKey: 'group.operators', entitlementType: 'scope', externalId: 'engines.read', matchOperator: 'exact' });
+    expect(response.status).toBe(400);
+    expect(service.create).not.toHaveBeenCalled();
+  });
   it('atomically provisions a new group, mapping, and scoped assignment', async () => {
     const response = await request(app).post('/api/identity/mappings/provision-access').send({ providerKey: 'identity.oidc.main', newGroup: { key: 'group.operators', name: 'Operators' }, entitlementType: 'group', externalId: 'ops', matchOperator: 'exact', roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1' });
     expect(response.status).toBe(201);

@@ -12,8 +12,9 @@ const matchesIdentityEntitlement = vi.hoisted(() => vi.fn((mapping: { entitlemen
   if (mapping.matchOperator === 'exists') return candidates.length > 0;
   return candidates.some((candidate) => mapping.matchOperator === 'exact' ? candidate.externalId === mapping.externalId : candidate.externalId.includes(mapping.externalId || ''));
 }));
+const isHumanIdentityEntitlementType = vi.hoisted(() => (value: string) => ['group', 'role', 'attribute', 'authenticated'].includes(value));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js', () => ({
-  identityEntitlementMappingService: { syncMembershipsInStore }, matchesIdentityEntitlement,
+  identityEntitlementMappingService: { syncMembershipsInStore }, isHumanIdentityEntitlementType, matchesIdentityEntitlement,
 }));
 
 describe('ssoNormalizedIdentityService', () => {

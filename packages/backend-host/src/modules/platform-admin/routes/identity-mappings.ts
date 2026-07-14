@@ -15,7 +15,7 @@ import { identityAdminJsonPayloadLimit } from '@enterpriseglue/shared/middleware
 const router = Router();
 const mappingSchema = z.object({
   providerKey: z.string().min(1).max(160), targetGroupKey: z.string().min(1).max(160),
-  entitlementType: z.enum(['group', 'role', 'scope', 'attribute', 'authenticated']), externalId: z.string().min(1).max(2000).nullable().optional(),
+  entitlementType: z.enum(['group', 'role', 'attribute', 'authenticated']), externalId: z.string().min(1).max(2000).nullable().optional(),
   matchOperator: z.enum(['exact', 'contains', 'exists']), syncMode: z.enum(['additive', 'authoritative']).optional(),
 });
 const mappingUpdateSchema = mappingSchema.partial().extend({ isActive: z.boolean().optional() });

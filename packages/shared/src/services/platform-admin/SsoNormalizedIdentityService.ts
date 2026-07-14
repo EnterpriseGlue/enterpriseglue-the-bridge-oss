@@ -6,7 +6,7 @@ import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/per
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { externalIdentityService } from './ExternalIdentityService.js';
 import { getIdentityProviderAdapter, type IdentityProviderType } from './IdentityProviderAdapter.js';
-import { identityEntitlementMappingService, matchesIdentityEntitlement, type IdentityEntitlementMatchOperator } from './IdentityEntitlementMappingService.js';
+import { identityEntitlementMappingService, isHumanIdentityEntitlementType, matchesIdentityEntitlement, type IdentityEntitlementMatchOperator } from './IdentityEntitlementMappingService.js';
 import type { SsoClaims } from './SsoClaimsMappingService.js';
 
 type SsoNormalizedIdentityStore = DataSource | EntityManager;
@@ -299,15 +299,15 @@ class SsoNormalizedIdentityServiceClass {
           const sourceRef = `identity_mapping:${mapping.id}`;
           const membershipKey = `${identity.userId}:${mapping.targetGroupId}:${sourceRef}`;
           const existing = membershipKeys.has(membershipKey);
-          const matches = matchesIdentityEntitlement({
-            entitlementType: mapping.entitlementType as 'group' | 'role' | 'scope' | 'attribute' | 'authenticated',
+          const matches = isHumanIdentityEntitlementType(mapping.entitlementType) && matchesIdentityEntitlement({
+            entitlementType: mapping.entitlementType,
             externalId: mapping.externalId,
             matchOperator: mapping.matchOperator as IdentityEntitlementMatchOperator,
           }, normalized);
           if (matches && !existing) {
             result.additions += 1;
             summary.additions += 1;
-          } else if (!matches && mapping.syncMode === 'authoritative' && existing) {
+          } else if (!matches && (mapping.syncMode === 'authoritative' || !isHumanIdentityEntitlementType(mapping.entitlementType)) && existing) {
             result.removals += 1;
             summary.removals += 1;
           } else if (existing) {

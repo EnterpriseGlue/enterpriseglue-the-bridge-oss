@@ -11,6 +11,17 @@ import { ExternalEntitlement, NormalizedExternalIdentity } from './IdentityProvi
 
 export type IdentityEntitlementMatchOperator = 'exact' | 'contains' | 'exists';
 
+/**
+ * OAuth scopes describe API delegation. They are normalized with other external
+ * entitlements, but must not grant access to an interactive human identity.
+ */
+export const humanIdentityEntitlementTypes = ['group', 'role', 'attribute', 'authenticated'] as const;
+export type HumanIdentityEntitlementType = typeof humanIdentityEntitlementTypes[number];
+
+export function isHumanIdentityEntitlementType(value: string): value is HumanIdentityEntitlementType {
+  return (humanIdentityEntitlementTypes as readonly string[]).includes(value);
+}
+
 export interface IdentityEntitlementMappingMatch {
   entitlementType: ExternalEntitlement['type'];
   externalId?: string | null;
@@ -75,7 +86,7 @@ function normalized(value: string, field: string): string {
 function validateInput(input: IdentityEntitlementMappingInput): void {
   normalized(input.providerKey, 'providerKey');
   normalized(input.targetGroupKey, 'targetGroupKey');
-  if (!['group', 'role', 'scope', 'attribute', 'authenticated'].includes(input.entitlementType)) throw Errors.validation('Unsupported entitlement type');
+  if (!isHumanIdentityEntitlementType(input.entitlementType)) throw Errors.validation('OAuth scopes cannot be used for human identity mappings');
   if (!['exact', 'contains', 'exists'].includes(input.matchOperator)) throw Errors.validation('Unsupported entitlement match operator');
   if (input.matchOperator === 'exists' && input.externalId) throw Errors.validation('externalId is not allowed for exists mappings');
   if (input.matchOperator !== 'exists' && !input.externalId?.trim()) throw Errors.validation('externalId is required for exact and contains mappings');
@@ -152,6 +163,18 @@ class IdentityEntitlementMappingService {
     if (existing.sourceRef) throw Errors.forbidden('This identity mapping is managed by configuration');
     const current = (await this.list(tenantId)).find((mapping) => mapping.id === id);
     if (!current) throw Errors.notFound('Identity mapping references a missing provider or group');
+    if (current.entitlementType === 'scope' && input.entitlementType === undefined) {
+      const attemptedChange = input.providerKey !== undefined || input.targetGroupKey !== undefined || input.externalId !== undefined
+        || input.matchOperator !== undefined || input.syncMode !== undefined;
+      if (attemptedChange || input.isActive !== false) throw Errors.validation('Legacy OAuth scope mappings cannot grant human access; replace or deactivate the mapping');
+      await dataSource.transaction(async (manager) => {
+        await manager.getRepository(AuthzGroupMembership).delete({
+          ...tenantWhere(tenantId), source: 'identity_provider', sourceRef: In(identityProviderMembershipSourceRefs(existing.providerId, existing.id)),
+        } as any);
+        await manager.getRepository(IdentityEntitlementMapping).update({ id }, { isActive: false, updatedAt: Date.now() });
+      });
+      return { ...current, isActive: false };
+    }
     const merged: IdentityEntitlementMappingInput = {
       providerKey: input.providerKey ?? current.providerKey, targetGroupKey: input.targetGroupKey ?? current.targetGroupKey,
       entitlementType: input.entitlementType ?? current.entitlementType, externalId: input.externalId === undefined ? current.externalId : input.externalId,
@@ -224,13 +247,20 @@ class IdentityEntitlementMappingService {
 
     for (const mapping of mappings) {
       const sourceRef = identityProviderMembershipSourceRef(mapping.providerId, mapping.id);
+      const existing = await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef } })
+        || await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` } });
+      if (!isHumanIdentityEntitlementType(mapping.entitlementType)) {
+        if (existing) {
+          await membershipRepo.delete({ id: existing.id });
+          removed += 1;
+        }
+        continue;
+      }
       const matches = matchesIdentityEntitlement({
-        entitlementType: mapping.entitlementType as ExternalEntitlement['type'],
+        entitlementType: mapping.entitlementType,
         externalId: mapping.externalId,
         matchOperator: mapping.matchOperator as IdentityEntitlementMatchOperator,
       }, identity);
-      const existing = await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef } })
-        || await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` } });
       if (matches && !existing) {
         await membershipRepo.insert({ id: generateId(), tenantId: tenantId || null, userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef, expiresAt: null, createdById: null, createdAt: now, updatedAt: now });
         created += 1;
