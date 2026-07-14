@@ -118,6 +118,27 @@ describe('mission-control extended history routes', () => {
     expect(listHistoricTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100 });
   });
 
+  it('drops historic rows outside the authorized process definition key', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+    (listHistoricTasks as unknown as Mock).mockResolvedValueOnce([
+      { id: 'task-allowed', processDefinitionKey: 'payments' },
+      { id: 'task-forbidden', processDefinitionKey: 'benefits' },
+    ]);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/tasks')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'task-allowed', processDefinitionKey: 'payments' }]);
+  });
+
   it('rejects oversized historic task collection requests for resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine

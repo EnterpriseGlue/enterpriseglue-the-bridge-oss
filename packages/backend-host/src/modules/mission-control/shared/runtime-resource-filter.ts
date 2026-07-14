@@ -49,6 +49,26 @@ export function getBoundedRuntimeFetchAndLockRequest<T extends Record<string, un
 }
 
 /**
+ * Some engine collections already carry the stable authorization key. Check
+ * that key locally instead of relying solely on the upstream query filter.
+ */
+export function filterRuntimeItemsByResourceKey<T extends Record<string, unknown>>(
+  items: T[],
+  authorizedKeys: string[] | undefined,
+  keyField: string,
+): T[] {
+  if (!authorizedKeys) return items
+  if (items.length > MAX_RUNTIME_RESOURCE_PAGE_SIZE) {
+    throw runtimeFilterNotSupported('The engine returned an unbounded runtime collection for a resource-aware request')
+  }
+  const allowedKeys = new Set(authorizedKeys)
+  return items.filter((item) => {
+    const key = item[keyField]
+    return typeof key === 'string' && allowedKeys.has(key)
+  })
+}
+
+/**
  * Runtime APIs such as jobs and external tasks expose a process definition id
  * rather than its stable authorization key. This helper resolves that lineage
  * server-side and drops entries that cannot be connected to an allowed key.
