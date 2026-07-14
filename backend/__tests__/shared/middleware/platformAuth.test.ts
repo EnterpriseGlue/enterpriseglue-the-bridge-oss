@@ -6,6 +6,7 @@ import {
   checkPlatformAdmin,
   isPlatformAdmin,
 } from '@enterpriseglue/shared/middleware/platformAuth.js';
+import { requirePlatformRole as requirePlatformRoleFromInterfaces } from '@enterpriseglue/shared/interfaces/middleware/platformAuth.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
@@ -91,6 +92,15 @@ describe('platformAuth middleware', () => {
     const middleware = requirePlatformRole('admin', 'user');
     await middleware(req as Request, res as Response, next);
     expect(next).toHaveBeenCalled();
+  });
+
+  it('keeps the interfaces compatibility export permission-backed', async () => {
+    (permissionService.hasPermission as any).mockResolvedValue(false);
+    req.user = { userId: 'user-1', platformRole: 'admin' };
+
+    await requirePlatformRoleFromInterfaces('admin')(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Insufficient platform permissions' }));
   });
 
   it('sets isPlatformAdmin flag from permissions', async () => {
