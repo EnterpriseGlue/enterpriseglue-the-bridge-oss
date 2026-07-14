@@ -9,6 +9,7 @@ import {
   MAX_ENGINE_RESPONSE_BYTES,
   resolveBpmnEngineConnection,
   resolveBpmnEngineRequestUrl,
+  validateBpmnEngineEndpointUrl,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   runWithBpmnEngineRequestContext,
@@ -293,6 +294,51 @@ describe('bpmn-engine-client', () => {
       .toThrow('Engine request path must be relative to the configured endpoint');
   });
 
+  it('enforces the configured endpoint host allowlist before outbound engine requests', () => {
+    const previousEnforcement = process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+    const previousAllowedHosts = process.env.EG_ENGINE_ALLOWED_HOSTS;
+    process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = 'true';
+    process.env.EG_ENGINE_ALLOWED_HOSTS = 'sidecar.example.test,*.trusted.internal';
+
+    try {
+      expect(resolveBpmnEngineRequestUrl('https://sidecar.example.test/engine-rest', '/version'))
+        .toBe('https://sidecar.example.test/engine-rest/version');
+      expect(resolveBpmnEngineRequestUrl('https://worker.trusted.internal/engine-rest', '/version'))
+        .toBe('https://worker.trusted.internal/engine-rest/version');
+      expect(() => resolveBpmnEngineRequestUrl('https://metadata.example.test/latest', '/version'))
+        .toThrow('Engine endpoint URL host is not permitted by endpoint policy');
+    } finally {
+      if (previousEnforcement === undefined) delete process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+      else process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = previousEnforcement;
+      if (previousAllowedHosts === undefined) delete process.env.EG_ENGINE_ALLOWED_HOSTS;
+      else process.env.EG_ENGINE_ALLOWED_HOSTS = previousAllowedHosts;
+    }
+  });
+
+  it('requires HTTPS whenever endpoint policy is enforced unless explicitly overridden', () => {
+    const previousEnforcement = process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+    const previousAllowedHosts = process.env.EG_ENGINE_ALLOWED_HOSTS;
+    const previousInsecureHttp = process.env.EG_ALLOW_INSECURE_ENGINE_HTTP;
+    process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = 'true';
+    process.env.EG_ENGINE_ALLOWED_HOSTS = 'sidecar.example.test';
+    delete process.env.EG_ALLOW_INSECURE_ENGINE_HTTP;
+
+    try {
+      expect(() => validateBpmnEngineEndpointUrl('http://sidecar.example.test/engine-rest'))
+        .toThrow('Engine endpoint URL must use HTTPS when endpoint policy is enforced');
+      process.env.EG_ALLOW_INSECURE_ENGINE_HTTP = 'true';
+      expect(validateBpmnEngineEndpointUrl('http://sidecar.example.test/engine-rest').toString())
+        .toBe('http://sidecar.example.test/engine-rest');
+    } finally {
+      if (previousEnforcement === undefined) delete process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+      else process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = previousEnforcement;
+      if (previousAllowedHosts === undefined) delete process.env.EG_ENGINE_ALLOWED_HOSTS;
+      else process.env.EG_ENGINE_ALLOWED_HOSTS = previousAllowedHosts;
+      if (previousInsecureHttp === undefined) delete process.env.EG_ALLOW_INSECURE_ENGINE_HTTP;
+      else process.env.EG_ALLOW_INSECURE_ENGINE_HTTP = previousInsecureHttp;
+    }
+  });
+
   it('obtains OAuth2 client credentials tokens server-side before calling the engine', async () => {
     const engineRepo = {
       findOneBy: vi.fn().mockResolvedValue({
@@ -409,6 +455,33 @@ describe('bpmn-engine-client', () => {
 
     await expect(camundaGet('engine-1', '/version')).rejects.toThrow('OAuth2 token URL must not include embedded credentials');
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('applies the endpoint host policy to OAuth2 token URLs before an outbound request', async () => {
+    const previousEnforcement = process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+    const previousAllowedHosts = process.env.EG_ENGINE_ALLOWED_HOSTS;
+    process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = 'true';
+    process.env.EG_ENGINE_ALLOWED_HOSTS = 'engine.example.test';
+
+    try {
+      await expect(resolveBpmnEngineConnection({
+        id: 'engine-oauth-host-policy',
+        baseUrl: 'https://engine.example.test/engine-rest',
+        connectionMode: 'customer_sidecar',
+        authType: 'oauth2-client-credentials',
+        username: 'client-id',
+        passwordEnc: 'client-secret',
+        oauthTokenUrl: 'https://identity.example.test/oauth/token',
+      }, { engineId: 'engine-oauth-host-policy', method: 'GET', path: '/version' })).rejects.toThrow(
+        'OAuth2 token URL host is not permitted by endpoint policy',
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      if (previousEnforcement === undefined) delete process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+      else process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = previousEnforcement;
+      if (previousAllowedHosts === undefined) delete process.env.EG_ENGINE_ALLOWED_HOSTS;
+      else process.env.EG_ENGINE_ALLOWED_HOSTS = previousAllowedHosts;
+    }
   });
 
   it('sanitizes OAuth token endpoint failures', async () => {

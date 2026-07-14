@@ -626,7 +626,7 @@ Security requirements:
 - [x] ✅ Health checks and version reads work through the same shared connection resolver for sidecar endpoints.
 - [x] ✅ UI labels customer-sidecar endpoint authentication as `Customer-managed engine authentication` and makes clear that EnterpriseGlue authorization remains active.
 - [x] ✅ Config preview rejects `auth.type = "none"` unless the first-class `connectionMode` is `customer_sidecar` and the relevant platform policy allows it; secret preflight, diff, apply, and bootstrap use the same policy context.
-- [ ] ⬜ SSRF controls, allowed protocols/hosts, TLS verification, redirect handling, timeouts, and response-size limits apply equally to direct engine and sidecar endpoints.
+- [x] ✅ SSRF controls, allowed protocols/hosts, TLS verification, redirect handling, timeouts, and response-size limits apply equally to direct engine and sidecar endpoints. Production outbound engine and OAuth token traffic requires HTTPS and a configured exact/wildcard host allowlist; redirects are rejected, certificates use normal runtime verification, requests are bounded by timeout, and response bodies are capped before decoding.
 - [x] ✅ A transport failure or sidecar denial fails closed and is distinguishable from an EnterpriseGlue authorization denial: transport failures return sanitized `ENGINE_TRANSPORT_UNAVAILABLE` diagnostics, while an upstream rejection returns sanitized `ENGINE_OPERATION_REJECTED` diagnostics.
 
 Future optional expanded connection schema, if the flattened v1 fields become insufficient:

@@ -24,7 +24,7 @@ import { engineService, engineSetService, platformSettingsService, projectEngine
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
-import { describeBpmnEngineTransport, fetchBpmnEngineEndpoint, resolveBpmnEngineRequestUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { describeBpmnEngineTransport, fetchBpmnEngineEndpoint, resolveBpmnEngineRequestUrl, validateBpmnEngineEndpointUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js'
 import { config } from '@enterpriseglue/shared/config/index.js'
 import { logAudit } from '@enterpriseglue/shared/services/audit.js'
@@ -188,6 +188,11 @@ const createEngineBodySchema = CreateEngineRequestSchema.extend({
 const updateEngineBodySchema = UpdateEngineRequestSchema.extend({
   baseUrl: baseUrlSchema.optional(),
 })
+
+function assertEngineEndpointPolicy(baseUrl: string, oauthTokenUrl?: string | null): void {
+  validateBpmnEngineEndpointUrl(baseUrl, 'Engine base URL')
+  if (oauthTokenUrl) validateBpmnEngineEndpointUrl(oauthTokenUrl, 'OAuth2 token URL')
+}
 
 const DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP: EngineFieldOwnership = {
   identity: 'external',
@@ -897,6 +902,7 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, engineRegistrationLim
   const settings = await platformSettingsService.get()
   const authType = req.body.authType || 'basic'
   assertEndpointAuthenticationPolicy(req.body.connectionMode, authType, settings.credentiallessCustomerSidecarsEnabled ?? false)
+  assertEngineEndpointPolicy(req.body.baseUrl, req.body.oauthTokenUrl)
   const now = Date.now()
   const id = generateId()
   const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
@@ -993,6 +999,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
   const settings = await platformSettingsService.get()
   const authType = req.body.authType || 'basic'
   assertEndpointAuthenticationPolicy(req.body.connectionMode, authType, settings.credentiallessCustomerSidecarsEnabled ?? false)
+  assertEngineEndpointPolicy(req.body.baseUrl, req.body.oauthTokenUrl)
   const now = Date.now()
   const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
   if (dockerLoopbackError) {
@@ -1442,6 +1449,12 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, engineRegistration
   const nextAuthType = req.body.authType || existing.authType || 'basic'
   const settings = await platformSettingsService.get()
   assertEndpointAuthenticationPolicy(nextConnectionMode, nextAuthType, settings.credentiallessCustomerSidecarsEnabled ?? false)
+  if (req.body.baseUrl !== undefined) {
+    assertEngineEndpointPolicy(req.body.baseUrl)
+  }
+  if (req.body.oauthTokenUrl) {
+    validateBpmnEngineEndpointUrl(req.body.oauthTokenUrl, 'OAuth2 token URL')
+  }
   const dockerLoopbackError = getDockerLoopbackEngineError(req.body.baseUrl)
   if (dockerLoopbackError) {
     return res.status(400).json({ error: dockerLoopbackError, field: 'baseUrl' })

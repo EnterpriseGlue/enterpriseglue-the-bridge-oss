@@ -87,6 +87,9 @@ This matrix lists current executable settings; see [Deploy Authorization Configu
 | EMAIL_SMTP_SECURE | No | SMTP TLS flag when `EMAIL_PROVIDER=smtp` |
 | EMAIL_SMTP_USER | No | SMTP username when `EMAIL_PROVIDER=smtp` |
 | CAMUNDA_BASE_URL | No | External Camunda engine |
+| EG_ENGINE_ALLOWED_HOSTS | Required for production engine traffic | unset | Comma-separated exact host names or `*.suffix` patterns allowed for direct engines, sidecars, and OAuth token endpoints |
+| EG_ENFORCE_ENGINE_ENDPOINT_POLICY | No | true in production | Enforce HTTPS and `EG_ENGINE_ALLOWED_HOSTS`; set `true` to exercise the production policy outside production |
+| EG_ALLOW_INSECURE_ENGINE_HTTP | No | false | Explicit temporary migration override for HTTP endpoints when endpoint policy is enforced |
 | CAMUNDA_USERNAME | No | Camunda auth |
 | CAMUNDA_PASSWORD | No | Camunda auth |
 | MICROSOFT_CLIENT_ID | No | Microsoft Entra ID |

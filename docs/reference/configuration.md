@@ -98,6 +98,14 @@ OpenShift ConfigMap projection to mount the non-secret JSON payload.
 - `EG_CONFIG_SECRET_PROVIDER`: `env` or `file`; defaults to `env`.
 - `EG_CONFIG_SECRET_FILE_ROOT`: Required root directory for `file://` secret references when the provider is `file`.
 
+### Engine endpoint policy
+
+Production outbound engine traffic fails closed unless `EG_ENGINE_ALLOWED_HOSTS` contains the endpoint host. Use comma-separated exact host names or narrowly scoped `*.suffix` patterns. The policy covers direct engine, customer-sidecar, and OAuth client-credentials token URLs; redirects remain disabled and TLS certificates use the runtime's normal verification.
+
+- `EG_ENGINE_ALLOWED_HOSTS`: Required for production engine traffic.
+- `EG_ENFORCE_ENGINE_ENDPOINT_POLICY`: Defaults to `true` in production; set `true` to test the policy in another environment.
+- `EG_ALLOW_INSECURE_ENGINE_HTTP`: Defaults to `false`; an explicit temporary migration override for a reviewed private-network HTTP endpoint. Prefer HTTPS and remove this override after migration.
+
 `/health` exposes sanitized bootstrap state for diagnostics. `/ready` returns
 `503` after a non-fail-closed bootstrap error. Successful apply receipts report
 Engine Set and runtime-resource materialization counts; identity-provider

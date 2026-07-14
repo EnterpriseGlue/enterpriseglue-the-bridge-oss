@@ -122,6 +122,41 @@ const MAX_ENGINE_REQUEST_TIMEOUT_MS = 60_000
 export const MAX_ENGINE_RESPONSE_BYTES = 5 * 1024 * 1024
 const TRANSIENT_ENGINE_STATUSES = new Set([429, 502, 503, 504])
 
+/**
+ * Production engine connections are an SSRF-sensitive outbound boundary. The
+ * allowlist intentionally contains host names only: ports and paths remain
+ * engine-specific, while an exact host or `*.suffix` entry gives operations a
+ * small, reviewable network policy. Development and test installations retain
+ * their existing local-engine ergonomics unless enforcement is opted in.
+ */
+function isEngineEndpointPolicyEnforced(): boolean {
+  if (process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY === 'true') return true
+  if (process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY === 'false') return false
+  return process.env.NODE_ENV === 'production'
+}
+
+function isInsecureEngineHttpAllowed(): boolean {
+  return process.env.EG_ALLOW_INSECURE_ENGINE_HTTP === 'true'
+}
+
+function engineEndpointAllowedHosts(): string[] {
+  return (process.env.EG_ENGINE_ALLOWED_HOSTS || '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase().replace(/\.$/, ''))
+    .filter(Boolean)
+}
+
+function isAllowedEngineEndpointHost(host: string, allowedHosts: string[]): boolean {
+  const normalizedHost = host.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+  return allowedHosts.some((pattern) => {
+    if (pattern.startsWith('*.')) {
+      const suffix = pattern.slice(2)
+      return suffix.length > 0 && normalizedHost.endsWith(`.${suffix}`)
+    }
+    return normalizedHost === pattern
+  })
+}
+
 async function boundEngineResponseBody(
   response: Awaited<ReturnType<typeof fetch>>,
   input: { method: string; path: string; connectionMode: 'direct' | 'customer_sidecar' },
@@ -221,7 +256,7 @@ function shouldRewriteDockerLoopbackEngineUrls(): boolean {
   return isDockerRuntime()
 }
 
-function parseBpmnEngineEndpointUrl(rawUrl: string, label: string): URL {
+export function validateBpmnEngineEndpointUrl(rawUrl: string, label = 'Engine endpoint URL'): URL {
   let parsed: URL
   try {
     parsed = new URL(rawUrl)
@@ -234,6 +269,15 @@ function parseBpmnEngineEndpointUrl(rawUrl: string, label: string): URL {
   if (parsed.username || parsed.password) {
     throw Errors.validation(`${label} must not include embedded credentials`)
   }
+  if (isEngineEndpointPolicyEnforced()) {
+    if (parsed.protocol !== 'https:' && !isInsecureEngineHttpAllowed()) {
+      throw Errors.validation(`${label} must use HTTPS when endpoint policy is enforced`)
+    }
+    const allowedHosts = engineEndpointAllowedHosts()
+    if (!isAllowedEngineEndpointHost(parsed.hostname, allowedHosts)) {
+      throw Errors.validation(`${label} host is not permitted by endpoint policy`)
+    }
+  }
   return parsed
 }
 
@@ -242,7 +286,7 @@ export function resolveBpmnEngineRequestUrl(baseUrl: string, path = ''): string 
     throw Errors.validation('Engine request path must be relative to the configured endpoint')
   }
   const rawUrl = baseUrl.replace(/\/$/, '') + path
-  const parsed = parseBpmnEngineEndpointUrl(rawUrl, 'Engine endpoint URL')
+  const parsed = validateBpmnEngineEndpointUrl(rawUrl, 'Engine endpoint URL')
   if (!shouldRewriteDockerLoopbackEngineUrls() || !isLoopbackEngineHost(rawUrl)) return rawUrl
 
   parsed.hostname = 'host.docker.internal'
@@ -332,7 +376,7 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
   body.set('client_secret', password)
   if (cfg.oauthScopes) body.set('scope', cfg.oauthScopes)
   if (cfg.oauthAudience) body.set('audience', cfg.oauthAudience)
-  const tokenUrl = parseBpmnEngineEndpointUrl(cfg.oauthTokenUrl, 'OAuth2 token URL').toString()
+  const tokenUrl = validateBpmnEngineEndpointUrl(cfg.oauthTokenUrl, 'OAuth2 token URL').toString()
 
   let response: Awaited<ReturnType<typeof fetch>>
   try {
