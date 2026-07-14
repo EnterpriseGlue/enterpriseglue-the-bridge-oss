@@ -571,7 +571,7 @@ class ConfigBundleApplyService {
           } : null;
           if (change.operation === 'create' && desired && values) {
             const id = generateId();
-            await providerRepo.insert({ id, tenantId, key: desired.key, ...values, createdAt: now });
+            await providerRepo.insert({ id, tenantId, key: desired.key, providerKeyIdentity: `${tenantId || 'platform'}:${desired.key}`, ...values, createdAt: now });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.create', resourceType: 'identity_provider', resourceId: id, details: { bundleKey: manifest.metadata.key, providerKey: desired.key, canonicalHash: diff.canonicalHash } });
             created += 1;
           } else if (change.operation === 'update' && change.currentId && values) {

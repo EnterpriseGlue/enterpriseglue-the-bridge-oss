@@ -38,6 +38,9 @@ export interface IdentityProviderArchiveResult {
 
 function normalized(value?: string | null): string | null { return value?.trim() || null; }
 function json(value: Record<string, unknown> | undefined): string { return JSON.stringify(value || {}); }
+export function identityProviderKeyIdentity(tenantId: string | null | undefined, key: string): string {
+  return `${tenantId || 'platform'}:${key.trim()}`;
+}
 function ensureAuthorizationAttributeKeys(configuration: Record<string, unknown>): void {
   const keys = configuration.authorizationAttributeKeys;
   if (keys === undefined) return;
@@ -133,7 +136,7 @@ class IdentityProviderServiceClass {
     return repo.find({ where: normalized(tenantId) ? { tenantId: normalized(tenantId)! } : { tenantId: IsNull() }, order: { key: 'ASC' } });
   }
   async getByKey(key: string, tenantId?: string | null): Promise<IdentityProvider | null> {
-    return (await getDataSource()).getRepository(IdentityProvider).findOne({ where: normalized(tenantId) ? { key: key.trim(), tenantId: normalized(tenantId)! } : { key: key.trim(), tenantId: IsNull() } });
+    return (await getDataSource()).getRepository(IdentityProvider).findOne({ where: { providerKeyIdentity: identityProviderKeyIdentity(normalized(tenantId), key) } });
   }
   async getById(id: string, tenantId?: string | null): Promise<IdentityProvider | null> {
     return (await getDataSource()).getRepository(IdentityProvider).findOne({ where: normalized(tenantId) ? { id: id.trim(), tenantId: normalized(tenantId)! } : { id: id.trim(), tenantId: IsNull() } });
@@ -147,10 +150,11 @@ class IdentityProviderServiceClass {
     ensureConfig(input.protocol, input.configuration);
     ensureSync(input.sync);
     const repo = (await getDataSource()).getRepository(IdentityProvider); const now = Date.now();
-    const existing = await repo.findOne({ where: tenantId ? { tenantId, key } : { tenantId: IsNull(), key } });
+    const providerKeyIdentity = identityProviderKeyIdentity(tenantId, key);
+    const existing = await repo.findOne({ where: { providerKeyIdentity } });
     const values = { protocol: input.protocol, isEnabled: input.isEnabled ?? false, authenticationMode: input.authenticationMode ?? 'claims_only', directoryTenantId: normalized(input.directoryTenantId), configurationJson: json(input.configuration), syncJson: json(input.sync), ownershipMode: input.ownershipMode || 'manual', sourceRef: normalized(input.sourceRef), updatedAt: now };
     if (existing) { await repo.update({ id: existing.id }, values); return { ...existing, ...values } as IdentityProvider; }
-    const provider = { id: generateId(), tenantId, key, ...values, createdAt: now } as unknown as IdentityProvider;
+    const provider = { id: generateId(), tenantId, key, providerKeyIdentity, ...values, createdAt: now } as unknown as IdentityProvider;
     await repo.insert(provider); return provider;
   }
   async archive(key: string, tenantId?: string | null): Promise<IdentityProviderArchiveResult> {

@@ -6,7 +6,7 @@ import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructur
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
-import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
+import { identityProviderKeyIdentity, identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
@@ -22,7 +22,13 @@ describe('identityProviderService', () => {
   it('creates OIDC providers with secret references only', async () => {
     const provider = await identityProviderService.upsert({ key: 'entra', protocol: 'oidc', configuration: { issuerUrl: 'https://login.example.test', clientId: 'client', clientSecretRef: 'EG_ENTRA_SECRET' } });
     expect(provider.key).toBe('entra');
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'oidc', configurationJson: expect.stringContaining('clientSecretRef') }));
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'oidc', providerKeyIdentity: 'platform:entra', configurationJson: expect.stringContaining('clientSecretRef') }));
+  });
+  it('uses a non-null tenant-plus-key identity for provider lookup and writes', async () => {
+    await identityProviderService.upsert({ tenantId: 'tenant-a', key: 'identity.main', protocol: 'oidc', configuration: { issuerUrl: 'https://login.example.test', clientId: 'client' } });
+    expect(findOne).toHaveBeenCalledWith({ where: { providerKeyIdentity: 'tenant-a:identity.main' } });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ providerKeyIdentity: 'tenant-a:identity.main' }));
+    expect(identityProviderKeyIdentity(null, 'identity.main')).toBe('platform:identity.main');
   });
   it('rejects raw secrets and non-LDAPS LDAP endpoints', async () => {
     await expect(identityProviderService.upsert({ key: 'bad', protocol: 'oidc', configuration: { issuerUrl: 'https://idp.test', clientId: 'x', clientSecret: 'raw' } })).rejects.toThrow('secret references');
