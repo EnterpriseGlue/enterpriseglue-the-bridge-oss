@@ -179,13 +179,23 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   return next();
 }
 
-export function requireOnboarding(req: Request, res: Response, next: NextFunction) {
+export async function requireOnboarding(req: Request, res: Response, next: NextFunction) {
   try {
     const token = typeof req.cookies?.onboardingToken === 'string' ? req.cookies.onboardingToken : '';
     const payload = normalizeUserPrincipal(verifyToken(token));
 
     if (payload.type !== 'onboarding' || typeof payload.invitationId !== 'string' || payload.invitationId.trim().length === 0) {
       return next(Errors.unauthorized('Invalid onboarding token'));
+    }
+
+    // New onboarding tokens are session-bound; retain compatibility for
+    // short-lived pre-refactor tokens that did not carry this claim.
+    if (payload.authSessionVersion !== undefined) {
+      const user = await (await getDataSource()).getRepository(User).findOneBy({ id: payload.userId, isActive: true });
+      if (!user) return next(Errors.unauthorized('User not found or inactive'));
+      if (payload.authSessionVersion !== (user.authSessionVersion ?? 0)) {
+        return next(Errors.unauthorized('Session has been revoked'));
+      }
     }
 
     req.onboarding = payload;

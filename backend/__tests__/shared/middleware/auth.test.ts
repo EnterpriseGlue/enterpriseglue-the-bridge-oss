@@ -221,7 +221,7 @@ describe('auth middleware', () => {
   });
 
   describe('requireOnboarding', () => {
-    it('accepts a compatible legacy onboarding token without principal fields', () => {
+    it('accepts a compatible legacy onboarding token without principal fields', async () => {
       req.cookies = { onboardingToken: TEST_COOKIE_TOKEN };
       (jwt.verifyToken as any).mockReturnValue({
         userId: 'user-1',
@@ -230,7 +230,7 @@ describe('auth middleware', () => {
         type: 'onboarding',
       });
 
-      requireOnboarding(req as Request, res as Response, next);
+      await requireOnboarding(req as Request, res as Response, next);
 
       expect(req.onboarding).toMatchObject({
         userId: 'user-1',
@@ -240,7 +240,7 @@ describe('auth middleware', () => {
       expect(next).toHaveBeenCalledWith();
     });
 
-    it('rejects an onboarding token whose explicit principal does not match its user', () => {
+    it('rejects an onboarding token whose explicit principal does not match its user', async () => {
       req.cookies = { onboardingToken: TEST_COOKIE_TOKEN };
       (jwt.verifyToken as any).mockReturnValue({
         userId: 'user-1',
@@ -251,14 +251,14 @@ describe('auth middleware', () => {
         type: 'onboarding',
       });
 
-      requireOnboarding(req as Request, res as Response, next);
+      await requireOnboarding(req as Request, res as Response, next);
 
       const error = (next as any).mock.calls[0][0];
       expect(error).toBeInstanceOf(AppError);
       expect(error?.message).toContain('Invalid user principal');
     });
 
-    it('keeps the interfaces compatibility export on the canonical validation path', () => {
+    it('keeps the interfaces compatibility export on the canonical validation path', async () => {
       req.cookies = { onboardingToken: TEST_COOKIE_TOKEN };
       (jwt.verifyToken as any).mockReturnValue({
         userId: 'user-1',
@@ -269,9 +269,19 @@ describe('auth middleware', () => {
         type: 'onboarding',
       });
 
-      requireOnboardingFromInterfaces(req as Request, res as Response, next);
+      await requireOnboardingFromInterfaces(req as Request, res as Response, next);
 
       expect((next as any).mock.calls[0][0]?.message).toContain('Invalid user principal');
+    });
+
+    it('rejects a versioned onboarding token after its session is revoked', async () => {
+      req.cookies = { onboardingToken: TEST_COOKIE_TOKEN };
+      (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', email: 'user@example.com', invitationId: 'invitation-1', type: 'onboarding', authSessionVersion: 0 });
+      (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', isActive: true, authSessionVersion: 1 }) }) });
+
+      await requireOnboarding(req as Request, res as Response, next);
+
+      expect((next as any).mock.calls[0][0]?.message).toContain('Session has been revoked');
     });
   });
 
