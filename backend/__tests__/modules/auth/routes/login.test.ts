@@ -10,6 +10,7 @@ import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { verifyPassword } from '@enterpriseglue/shared/utils/password.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { getDatabaseType } from '@enterpriseglue/shared/db/adapters/QueryHelpers.js';
+import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -25,6 +26,12 @@ vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
   getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({
+  authzGroupService: {
+    ensureAuthenticatedUserMembershipWithManager: vi.fn().mockResolvedValue({ id: 'membership-1', created: true }),
+  },
 }));
 
 vi.mock('@enterpriseglue/shared/db/adapters/QueryHelpers.js', () => ({
@@ -93,13 +100,16 @@ describe('auth login routes', () => {
       insert: vi.fn(),
     };
 
+    const getRepository = (entity: unknown) => {
+      if (entity === User) return userRepo;
+      if (entity === SsoProvider) return ssoProviderRepo;
+      if (entity === IdentityProvider) return identityProviderRepo;
+      return refreshTokenRepo;
+    };
+    const manager = { getRepository };
     (getDataSource as unknown as Mock).mockResolvedValue({
-      getRepository: (entity: unknown) => {
-        if (entity === User) return userRepo;
-        if (entity === SsoProvider) return ssoProviderRepo;
-        if (entity === IdentityProvider) return identityProviderRepo;
-        return refreshTokenRepo;
-      },
+      getRepository,
+      transaction: vi.fn(async (callback: (providedManager: typeof manager) => unknown) => callback(manager)),
     });
   });
 
@@ -195,6 +205,10 @@ describe('auth login routes', () => {
     expect(userRepo.update).toHaveBeenCalledWith(
       { id: 'user-1' },
       expect.objectContaining({ failedLoginAttempts: 0, lockedUntil: null })
+    );
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(
+      expect.objectContaining({ getRepository: expect.any(Function) }),
+      'user-1',
     );
     expect(refreshTokenRepo.insert).toHaveBeenCalled();
     expect(buildUserCapabilities as unknown as Mock).toHaveBeenCalledWith(

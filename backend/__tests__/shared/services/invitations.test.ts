@@ -426,6 +426,9 @@ describe('InvitationService', () => {
       }),
     );
     expect(projectMemberService.addMember).toHaveBeenCalledWith('project-1', 'user-1', ['delegate', 'viewer'], 'admin-1');
+    expect((projectMemberService.addMember as Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      managerInvitationRepo.update.mock.invocationCallOrder[0],
+    );
     expect(engineService.addEngineMember).not.toHaveBeenCalled();
     expect(managerInvitationRepo.update).toHaveBeenCalledWith(
       { id: 'inv-1' },
@@ -437,5 +440,57 @@ describe('InvitationService', () => {
     expect(result.tenantSlug).toBe('default');
     expect(result.user.mustResetPassword).toBe(false);
     expect(result.user.isEmailVerified).toBe(true);
+  });
+
+  it('creates the engine assignment before completing engine invitation onboarding', async () => {
+    invitationRepo.findOneBy.mockResolvedValue({
+      id: 'inv-1',
+      userId: 'user-1',
+      email: 'invitee@example.com',
+      tenantSlug: 'default',
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+      resourceRole: 'deployer',
+      resourceRolesJson: null,
+      createdByUserId: 'admin-1',
+      status: 'otp_verified',
+      otpVerifiedAt: now - 1000,
+      revokedAt: null,
+      completedAt: null,
+    });
+    userRepo.findOneBy.mockResolvedValue({
+      id: 'user-1',
+      email: 'invitee@example.com',
+      firstName: null,
+      lastName: null,
+      platformRole: 'user',
+      isActive: true,
+      isEmailVerified: false,
+      mustResetPassword: true,
+      createdAt: now - 10_000,
+      lastLoginAt: null,
+      createdByUserId: 'admin-1',
+    });
+    userRepo.findOneByOrFail.mockResolvedValue({
+      id: 'user-1',
+      email: 'invitee@example.com',
+      firstName: null,
+      lastName: null,
+      platformRole: 'user',
+      isActive: true,
+      isEmailVerified: true,
+      mustResetPassword: false,
+      createdAt: now - 10_000,
+      lastLoginAt: null,
+    });
+    (hashPassword as unknown as Mock).mockResolvedValue('new-password-hash');
+
+    await service.completeInvitation('inv-1', 'StrongPass!123');
+
+    expect(engineService.addEngineMember).toHaveBeenCalledWith('engine-1', 'user-1', 'deployer', 'admin-1');
+    expect((engineService.addEngineMember as Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      managerInvitationRepo.update.mock.invocationCallOrder[0],
+    );
+    expect(projectMemberService.addMember).not.toHaveBeenCalled();
   });
 });

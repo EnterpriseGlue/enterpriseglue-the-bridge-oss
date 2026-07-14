@@ -946,9 +946,7 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, engineRegistrationLim
     createdAt: now,
     updatedAt: now,
   }
-  await engineRepo.insert(payload)
-  await permissionService.syncLegacyRoleAssignments({ engineIds: [id] })
-    .catch((error) => logger.warn('Failed to sync legacy engine role assignments', { engineId: id, error }))
+  await engineService.createEngineWithGovernanceAssignments(payload, dataSource)
   if (externalId) {
     await syncExternalEngineRegistration(dataSource, {
       engineId: id,
@@ -1114,9 +1112,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     tenantId,
     createdAt: now,
   }
-  await engineRepo.insert(created)
-  await permissionService.syncLegacyRoleAssignments({ engineIds: [id] })
-    .catch((error) => logger.warn('Failed to sync legacy engine role assignments', { engineId: id, error }))
+  await engineService.createEngineWithGovernanceAssignments(created, dataSource)
   await syncExternalEngineRegistration(dataSource, {
     engineId: id,
     externalId,

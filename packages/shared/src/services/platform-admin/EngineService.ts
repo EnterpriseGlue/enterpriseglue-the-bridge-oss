@@ -13,7 +13,7 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
-import { In, IsNull } from 'typeorm';
+import { In, IsNull, type EntityManager } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
@@ -283,6 +283,22 @@ export class EngineService {
   }
 
   /**
+   * Materialize the owner/delegate grants for a newly-created engine.
+   * Creation commands call this directly so authorization is available before
+   * the command returns instead of depending on a later legacy reconciliation.
+   */
+  async createEngineWithGovernanceAssignments(
+    engine: Pick<Engine, 'id' | 'ownerId' | 'delegateId' | 'tenantId' | 'createdAt' | 'updatedAt'>,
+    providedDataSource?: Awaited<ReturnType<typeof getDataSource>>
+  ): Promise<void> {
+    const dataSource = providedDataSource || await getDataSource();
+    await dataSource.transaction(async (manager) => {
+      await manager.getRepository(Engine).insert(engine);
+      await this.syncManagedEngineGovernanceAssignments(manager, engine);
+    });
+  }
+
+  /**
    * Add an operator or deployer to an engine
    */
   async addEngineMember(
@@ -457,7 +473,7 @@ export class EngineService {
   }
 
   private async syncManagedEngineGovernanceAssignments(
-    dataSource: Awaited<ReturnType<typeof getDataSource>>,
+    dataSource: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
     engine: Pick<Engine, 'id' | 'ownerId' | 'delegateId' | 'tenantId' | 'createdAt' | 'updatedAt'>
   ): Promise<void> {
     const now = Date.now();

@@ -103,6 +103,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
       { engine: { id: 'e1', name: 'Engine 1' }, role: 'admin' },
     ]),
     getEngineRole: vi.fn().mockResolvedValue('owner'),
+    createEngineWithGovernanceAssignments: vi.fn(async (engine: unknown, dataSource: any) => {
+      await dataSource.getRepository({ name: 'Engine' }).insert(engine);
+    }),
   },
   platformSettingsService: platformSettingsServiceMock,
   projectEngineTargetService: {
@@ -1002,6 +1005,12 @@ describe('mission-control engines routes', () => {
     }
 
     expect(insert).toHaveBeenCalledTimes(3);
+    expect((engineService as any).createEngineWithGovernanceAssignments).toHaveBeenCalledTimes(3);
+    expect((engineService as any).createEngineWithGovernanceAssignments).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerId: 'user-1', delegateId: null }),
+      expect.any(Object),
+    );
+    expect(permissionServiceMock.syncLegacyRoleAssignments).not.toHaveBeenCalled();
   });
 
   it('rejects credentialless authentication for a direct engine endpoint', async () => {
@@ -1284,6 +1293,10 @@ describe('mission-control engines routes', () => {
       lastExternalSyncAt: expect.any(Number),
       ownerId: 'user-1',
     }));
+    expect((engineService as any).createEngineWithGovernanceAssignments).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerId: 'user-1', delegateId: null, registrationSource: 'external_api' }),
+      expect.any(Object),
+    );
     expect(registrationInsert).toHaveBeenCalledWith(expect.objectContaining({
       externalId: 'cluster-a/prod',
       registrationSource: 'external_api',

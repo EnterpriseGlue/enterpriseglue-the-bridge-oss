@@ -237,6 +237,49 @@ describe('EngineService', () => {
     expect(legacySyncSpy).not.toHaveBeenCalled();
   });
 
+  it('materializes a new engine owner assignment without legacy reconciliation', async () => {
+    const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
+    const assignmentRepo = {
+      find: vi.fn().mockResolvedValue([]),
+      delete: vi.fn().mockResolvedValue({ affected: 0 }),
+      update: vi.fn().mockResolvedValue({ affected: 0 }),
+      insert: vi.fn().mockResolvedValue({ identifiers: [] }),
+    };
+    const engineRepo = { insert: vi.fn().mockResolvedValue({ identifiers: [] }) };
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return engineRepo;
+        if (entity === RbacRoleAssignment) return assignmentRepo;
+        throw new Error('Unexpected repository');
+      },
+    };
+    const dataSource = {
+      transaction: (callback: (providedManager: typeof manager) => unknown) => callback(manager),
+    } as any;
+
+    await service.createEngineWithGovernanceAssignments({
+      id: 'engine-1',
+      ownerId: 'owner-1',
+      delegateId: null,
+      tenantId: 'tenant-1',
+      createdAt: 100,
+      updatedAt: 100,
+    }, dataSource);
+
+    expect(engineRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ id: 'engine-1', ownerId: 'owner-1' }));
+    expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'system:engine:engine-1:owner:owner-1',
+      principalType: 'user',
+      principalId: 'owner-1',
+      roleId: 'system.engine.owner',
+      scopeType: 'engine',
+      scopeId: 'engine-1',
+      source: 'system',
+      sourceRef: 'engine:engine-1:governance-owner',
+    }));
+    expect(legacySyncSpy).not.toHaveBeenCalled();
+  });
+
   it('mirrors ownership transfer as accountable owner metadata plus managed owner assignment', async () => {
     const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
     const engineRepo = {

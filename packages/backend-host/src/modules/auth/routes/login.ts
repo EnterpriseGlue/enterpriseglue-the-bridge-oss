@@ -19,6 +19,7 @@ import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilit
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
 const router = Router();
 
@@ -147,12 +148,16 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
     throw Errors.unauthorized('Invalid email or password');
   }
 
-  // Password is correct - reset failed attempts and update last login
-  await userRepo.update({ id: user.id }, {
-    failedLoginAttempts: 0,
-    lockedUntil: null,
-    lastLoginAt: Date.now(),
-    updatedAt: Date.now()
+  // Password is correct: update login state and ensure the canonical baseline
+  // assignment at the same command boundary.
+  await dataSource.transaction(async (manager) => {
+    await manager.getRepository(User).update({ id: user.id }, {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      lastLoginAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, user.id);
   });
 
   // Log successful login
