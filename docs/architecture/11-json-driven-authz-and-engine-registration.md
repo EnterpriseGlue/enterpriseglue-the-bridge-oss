@@ -1805,7 +1805,7 @@ Rules:
 
 - [x] ✅ UI must show a `Managed by config` badge for config-owned engines, roles, groups, mappings, targets, and Engine Sets.
 - [x] ✅ UI edits to config-owned fields are disabled for `config_locked` ownership or explicitly show the `config_warn` drift mode.
-- [ ] ⬜ CI/CD apply should reconcile drift according to bundle mode.
+- [x] ✅ CI/CD/API config apply reconciles drift according to bundle mode: additive bundles preserve absent config-owned rows, authoritative bundles preview and acknowledgement-gate removal of only same-bundle config-owned rows, and both `config_locked` and `config_warn` objects are restored to the reviewed desired state with `driftStatus = in_sync`. The apply service is shared by UI and CI callers, so these rules do not diverge by caller surface.
 - [x] ✅ Manual edits are preserved by config apply unless ownership is explicitly transferred; authoritative removal is restricted to matching config-owned source lineage and is previewed before apply.
 - [ ] ⬜ Config apply must record audit entries with before/after summaries and redacted secrets.
 
