@@ -16,6 +16,7 @@ import {
   getProcessDefinitionStatistics,
   startProcessInstance,
 } from './service.js'
+import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
 
 const r = Router()
 
@@ -24,6 +25,12 @@ const editTargetQuerySchema = z.object({
   key: z.string().min(1),
   version: z.coerce.number().int().positive(),
   processDefinitionId: z.string().min(1).optional(),
+})
+const processDefinitionListQuerySchema = z.object({
+  key: z.string().min(1).optional(),
+  nameLike: z.string().min(1).optional(),
+  latest: z.enum(['true', 'false', '1', '0']).optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 })
 
 function projectPermissionContext(req: Request, projectId: string) {
@@ -63,15 +70,17 @@ const requireProcessDefinitionKeyAction = (actionId: string, engineIdFrom: 'quer
 })
 
 // List process definitions
-r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
-  const { key, nameLike, latest } = req.query as { key?: string; nameLike?: string; latest?: string }
+r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' }), validateQuery(processDefinitionListQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  const { key, nameLike, latest, maxResults } = req.query as { key?: string; nameLike?: string; latest?: string; maxResults?: number }
   const engineId = (req as any).engineId as string
-  const data = await listProcessDefinitions(engineId, {
+  const baseQuery = {
     key,
     nameLike,
     latestVersion: latest === 'true' || latest === '1',
-  })
+    maxResults,
+  }
   const keys = req.authorizedRuntimeResourceKeys
+  const data = await listProcessDefinitions(engineId, keys ? getBoundedRuntimeResourceQuery(baseQuery) : baseQuery)
   res.json(keys ? data.filter((definition: any) => keys.includes(String(definition?.key || ''))) : data)
 }))
 

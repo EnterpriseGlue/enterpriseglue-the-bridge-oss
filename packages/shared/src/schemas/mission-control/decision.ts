@@ -46,8 +46,8 @@ export const DecisionDefinitionQueryParams = z.object({
   versionTagLike: z.string().optional(),
   sortBy: z.enum(['category', 'key', 'id', 'name', 'version', 'deploymentId', 'tenantId', 'decisionRequirementsDefinitionKey']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.number().optional(),
-  maxResults: z.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 export const EvaluateDecisionRequest = z.object({

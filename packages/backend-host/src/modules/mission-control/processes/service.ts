@@ -13,6 +13,7 @@ export interface ProcessDefinitionListParams {
   key?: string
   nameLike?: string
   latestVersion?: boolean
+  maxResults?: number
 }
 
 export async function listProcessDefinitions(engineId: string, params: ProcessDefinitionListParams = {}): Promise<ProcessDefinition[]> {
@@ -20,6 +21,7 @@ export async function listProcessDefinitions(engineId: string, params: ProcessDe
   if (params.key) queryParams.key = params.key
   if (params.nameLike) queryParams.nameLike = params.nameLike
   if (params.latestVersion !== undefined) queryParams.latestVersion = params.latestVersion
+  if (params.maxResults !== undefined) queryParams.maxResults = params.maxResults
   return camundaGet<ProcessDefinition[]>(engineId, '/process-definition', queryParams)
 }
 

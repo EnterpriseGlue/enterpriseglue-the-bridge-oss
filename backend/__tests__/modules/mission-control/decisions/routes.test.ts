@@ -256,6 +256,24 @@ describe('mission-control decisions routes', () => {
     expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'central-engine', resourceKind: 'decision_definition', permission: 'engine:instance:view', userId: 'hr-user',
     }));
+    expect(listDecisionDefinitions).toHaveBeenCalledWith('central-engine', expect.objectContaining({ maxResults: 100 }));
+  });
+
+  it('rejects oversized decision-definition collection requests for resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'credit-decision' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/decision-definitions')
+      .query({ engineId: 'central-engine', maxResults: 101 });
+
+    expect(response.status).toBe(403);
+    expect(listDecisionDefinitions).not.toHaveBeenCalled();
   });
 
   it('does not infer a Starbase edit target from a matching decision key without deployment lineage', async () => {

@@ -20,6 +20,7 @@ import {
   DecisionDefinitionQueryParams,
   EvaluateDecisionRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/decision.js';
+import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js';
 
 const r = Router();
 
@@ -184,8 +185,8 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
 // List decision definitions
 r.get('/mission-control-api/decision-definitions', requireRuntimeCollectionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition' }), validateQuery(DecisionDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await listDecisionDefinitions(engineId, req.query);
   const keys = req.authorizedRuntimeResourceKeys;
+  const data = await listDecisionDefinitions(engineId, keys ? getBoundedRuntimeResourceQuery(req.query) : req.query);
   res.json(keys ? data.filter((definition: any) => keys.includes(String(definition?.key || ''))) : data);
 }));
 

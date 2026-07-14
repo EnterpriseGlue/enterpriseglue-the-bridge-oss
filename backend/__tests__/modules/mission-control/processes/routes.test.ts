@@ -242,6 +242,26 @@ describe('mission-control processes routes', () => {
     expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'central-engine', resourceKind: 'process_definition', permission: 'engine:instance:view', userId: 'hr-user',
     }));
+    expect(listProcessDefinitions).toHaveBeenCalledWith('central-engine', {
+      key: undefined, nameLike: undefined, latestVersion: false, maxResults: 100,
+    });
+  });
+
+  it('rejects oversized process-definition collection requests for resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        : { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments-order' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions')
+      .query({ engineId: 'central-engine', maxResults: 101 });
+
+    expect(response.status).toBe(403);
+    expect(listProcessDefinitions).not.toHaveBeenCalled();
   });
 
   it('validates edit-target query params', async () => {
