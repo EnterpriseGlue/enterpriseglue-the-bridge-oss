@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   DataTable,
@@ -26,7 +27,8 @@ import {
   formatEffectiveAccessScope,
 } from '../accessControlPresentation';
 import { AuditReferenceLinks, findEffectiveAccessSourceAuditEntries, formatAuditReferences } from './auditReferences';
-import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './effectiveAccessPresentation';
+import { effectiveAccessDefaultsFromSearchParams, effectiveAccessSourceHeaders } from './effectiveAccessPresentation';
+import type { AuthzResourceType } from '@enterpriseglue/shared/authz/permission-actions.js';
 
 export function EffectiveAccessPanel({
   permissions,
@@ -38,20 +40,26 @@ export function EffectiveAccessPanel({
   onOpenAuditReference?: (entry: AuthzAuditEntry) => void;
 }) {
   const evaluateM = useEvaluateAccess();
+  const [searchParams] = useSearchParams();
+  const deepLinkDefaults = React.useMemo(() => effectiveAccessDefaultsFromSearchParams(searchParams), [searchParams]);
   const [userId, setUserId] = React.useState('');
-  const [resourceType, setResourceType] = React.useState<CoreAssignmentResourceType>('platform');
-  const [resourceId, setResourceId] = React.useState('');
+  const [resourceType, setResourceType] = React.useState<AuthzResourceType>(deepLinkDefaults.resourceType);
+  const [resourceId, setResourceId] = React.useState(deepLinkDefaults.resourceId);
   const [runtimeEngineId, setRuntimeEngineId] = React.useState('');
   const [runtimeResourceKind, setRuntimeResourceKind] = React.useState<'process_definition' | 'decision_definition'>('process_definition');
   const [runtimeResourceKey, setRuntimeResourceKey] = React.useState('');
   const [runtimeTenantId, setRuntimeTenantId] = React.useState('');
-  const [permission, setPermission] = React.useState<string>('');
+  const [permission, setPermission] = React.useState<string>(deepLinkDefaults.permission);
   const selectedPermission = permissions.find((item) => item.key === permission) || null;
-  const resourceTypeItems: Array<{ id: CoreAssignmentResourceType; label: string }> = [
+  const resourceTypeItems: Array<{ id: AuthzResourceType; label: string }> = [
     { id: 'platform', label: 'Platform' },
     { id: 'project', label: 'Project' },
     { id: 'engine', label: 'Engine' },
+    { id: 'engine_set', label: 'Engine Set' },
     { id: 'engine_runtime_resource', label: 'Runtime resource' },
+    { id: 'engine_runtime_resource_set', label: 'Runtime resource set' },
+    { id: 'project_engine_target', label: 'Project-engine target' },
+    { id: 'external_engine_system', label: 'External engine system' },
   ];
   const isRuntimeResource = resourceType === 'engine_runtime_resource';
   const canEvaluate = Boolean(
@@ -103,7 +111,7 @@ export function EffectiveAccessPanel({
           itemToString={(item) => item?.label || ''}
           selectedItem={resourceTypeItems.find((item) => item.id === resourceType) || resourceTypeItems[0]}
           onChange={({ selectedItem }) => {
-            const nextResourceType = (selectedItem?.id || 'platform') as CoreAssignmentResourceType;
+            const nextResourceType = (selectedItem?.id || 'platform') as AuthzResourceType;
             setResourceType(nextResourceType);
             setResourceId('');
             if (nextResourceType !== 'engine_runtime_resource') {

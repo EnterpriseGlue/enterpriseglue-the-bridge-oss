@@ -3,6 +3,7 @@ export type ConfigBundleDiffChange = {
   key: string;
   operation: string;
   reason: string;
+  currentId?: string;
   permissionChanges?: {
     additions: string[];
     removals: string[];
@@ -18,6 +19,20 @@ export type ConfigBundleDiffChange = {
   };
   identitySnapshotPreview?: { scanned: number; matches: number; nonMatches: number; failed: number; truncated: boolean; latestSnapshotAt: number | null; warnings: string[] };
 };
+
+const effectiveAccessResourceTypes: Record<string, string> = {
+  engine: 'engine',
+  engine_set: 'engine_set',
+  project_engine_target: 'project_engine_target',
+  runtime_resource_set: 'engine_runtime_resource_set',
+};
+
+export function getConfigBundleEffectiveAccessHref(change: ConfigBundleDiffChange): string | null {
+  const resourceType = effectiveAccessResourceTypes[change.objectType];
+  if (!resourceType || !change.currentId) return null;
+  const params = new URLSearchParams({ tab: 'effective-access', resourceType, resourceId: change.currentId });
+  return `/admin/access-control?${params.toString()}`;
+}
 
 export type ConfigBundleChangeRisk = 'requires_attention' | 'review' | 'informational';
 

@@ -1,3 +1,5 @@
+import type { AuthzResourceType } from '@enterpriseglue/shared/authz/permission-actions.js';
+
 export type CoreAssignmentResourceType =
   | 'platform'
   | 'project'
@@ -14,3 +16,31 @@ export const effectiveAccessSourceHeaders = [
   { key: 'lineage', header: 'Lineage' },
   { key: 'audit', header: 'Audit' },
 ];
+
+const effectiveAccessResourceTypes = new Set<AuthzResourceType>([
+  'platform',
+  'project',
+  'engine',
+  'engine_set',
+  'engine_runtime_resource',
+  'engine_runtime_resource_set',
+  'project_engine_target',
+  'external_engine_system',
+]);
+
+export function isEffectiveAccessTabRequested(searchParams: URLSearchParams): boolean {
+  return searchParams.get('tab')?.replace('-', '_') === 'effective_access';
+}
+
+export function effectiveAccessDefaultsFromSearchParams(searchParams: URLSearchParams): {
+  permission: string;
+  resourceType: AuthzResourceType;
+  resourceId: string;
+} {
+  const requestedResourceType = searchParams.get('resourceType') as AuthzResourceType | null;
+  return {
+    permission: searchParams.get('permissionId') || '',
+    resourceType: requestedResourceType && effectiveAccessResourceTypes.has(requestedResourceType) ? requestedResourceType : 'platform',
+    resourceId: searchParams.get('resourceId') || '',
+  };
+}

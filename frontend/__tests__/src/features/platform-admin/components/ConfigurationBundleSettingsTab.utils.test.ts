@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   filterConfigBundleChanges,
   formatConfigBundleObjectType,
+  getConfigBundleEffectiveAccessHref,
   getConfigBundleChangeRisk,
   groupConfigBundleChanges,
 } from '@src/features/platform-admin/components/configBundleDiff';
@@ -39,5 +40,20 @@ describe('ConfigurationBundleSettingsTab diff helpers', () => {
     expect(formatConfigBundleObjectType('assignment')).toBe('Scoped role assignment');
     expect(formatConfigBundleObjectType('project_engine_target')).toBe('Project-engine target');
     expect(formatConfigBundleObjectType('identity_mapping')).toBe('Identity mapping');
+  });
+
+  it('links persisted authorization resources to Effective Access and omits create-only rows', () => {
+    expect(getConfigBundleEffectiveAccessHref({
+      objectType: 'engine', key: 'engine.shared', operation: 'update', reason: 'Changed labels', currentId: 'engine-1',
+    })).toBe('/admin/access-control?tab=effective-access&resourceType=engine&resourceId=engine-1');
+    expect(getConfigBundleEffectiveAccessHref({
+      objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'archive', reason: 'Removed', currentId: 'set-1',
+    })).toBe('/admin/access-control?tab=effective-access&resourceType=engine_runtime_resource_set&resourceId=set-1');
+    expect(getConfigBundleEffectiveAccessHref({
+      objectType: 'engine', key: 'engine.new', operation: 'create', reason: 'New engine',
+    })).toBeNull();
+    expect(getConfigBundleEffectiveAccessHref({
+      objectType: 'role', key: 'role.ops', operation: 'update', reason: 'Changed permissions', currentId: 'role-1',
+    })).toBeNull();
   });
 });

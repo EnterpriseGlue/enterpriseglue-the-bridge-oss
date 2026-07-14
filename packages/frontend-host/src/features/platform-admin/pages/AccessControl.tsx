@@ -1,5 +1,6 @@
 import React from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   Checkbox,
@@ -60,7 +61,7 @@ import {
   type AuthzAuditFilterState,
   type SsoAssignmentDiagnostics,
 } from './access-control';
-import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
+import { effectiveAccessSourceHeaders, isEffectiveAccessTabRequested, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
 import { getAssignableRolesForPrincipal, type AssignmentFormValues, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
@@ -5044,6 +5045,7 @@ function ApiClientsPanel({
 }
 
 export default function AccessControl() {
+  const [searchParams] = useSearchParams();
   const rolesQ = useRbacRoles();
   const permissionsQ = usePermissionCatalog();
   const assignmentsQ = useRoleAssignments();
@@ -5338,7 +5340,9 @@ export default function AccessControl() {
     auditReadDecision.allowed,
     showExternalRegistrationTab,
   ]);
-  const [selectedTabId, setSelectedTabId] = React.useState<AccessControlTabId>('roles');
+  const [selectedTabId, setSelectedTabId] = React.useState<AccessControlTabId>(() => (
+    isEffectiveAccessTabRequested(searchParams) ? 'effective_access' : 'roles'
+  ));
   const selectedTabIndex = Math.max(0, visibleTabIds.indexOf(selectedTabId));
 
   React.useEffect(() => {
