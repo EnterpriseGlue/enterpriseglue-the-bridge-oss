@@ -1705,11 +1705,13 @@ describe('permissionService', () => {
     });
 
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      // Legacy resource aliases stay unset; scopeType is the authoritative
-      // assignment target while the role itself retains its engine scope.
-      resourceType: null, resourceId: null,
       scopeType: 'engine_runtime_resource_set', scopeId: 'runtime-set-1',
     }));
+    const insertedAssignment = insertAssignment.mock.calls[0][0];
+    expect(insertedAssignment).not.toHaveProperty('userId');
+    expect(insertedAssignment).not.toHaveProperty('resourceType');
+    expect(insertedAssignment).not.toHaveProperty('resourceId');
+    expect(insertedAssignment).not.toHaveProperty('sourceMappingId');
   });
 
   it('warns when an Engine Set grant already provides the runtime permission', async () => {
@@ -1783,12 +1785,9 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: null,
       principalType: 'api_client',
       principalId: 'api-client-1',
       roleId: SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
-      resourceType: null,
-      resourceId: null,
       scopeType: 'project',
       scopeId: 'project-1',
     }));
@@ -1836,12 +1835,9 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: null,
       principalType: 'api_client',
       principalId: 'api-client-1',
       roleId: SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
-      resourceType: null,
-      resourceId: null,
       scopeType: 'platform',
       scopeId: null,
     }));
@@ -1890,12 +1886,9 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: null,
       principalType: 'api_client',
       principalId: 'api-client-1',
       roleId: SYSTEM_ROLE_IDS.API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR,
-      resourceType: null,
-      resourceId: null,
       scopeType: 'external_engine_system',
       scopeId: 'system-1',
     }));
@@ -1944,12 +1937,9 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: null,
       principalType: 'api_client',
       principalId: 'api-client-1',
       roleId: SYSTEM_ROLE_IDS.API_PROJECT_ENGINE_TARGET_REGISTRAR,
-      resourceType: null,
-      resourceId: null,
       scopeType: 'external_engine_system',
       scopeId: 'system-1',
     }));
@@ -2054,12 +2044,9 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: null,
       principalType: 'group',
       principalId: 'group-1',
       roleId: SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
-      resourceType: null,
-      resourceId: null,
       scopeType: 'project',
       scopeId: 'project-1',
     }));
@@ -2198,12 +2185,9 @@ describe('permissionService', () => {
 
     expect(result.id).toBeTruthy();
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
-      userId: null,
       principalType: 'service_account',
       principalId: 'service-account-1',
       roleId: SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
-      resourceType: null,
-      resourceId: null,
       scopeType: 'project',
       scopeId: 'project-1',
     }));
