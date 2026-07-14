@@ -379,6 +379,36 @@ describe('EnginesPage', () => {
     expect(screen.getByLabelText('Name')).toBeDisabled();
   });
 
+  it('shows config ownership badges and locks configuration-owned engine fields', async () => {
+    authState.permissions = {
+      userId: 'user-1',
+      platform: [],
+      projects: [],
+      engines: [{ resourceId: 'engine-config', permissions: [EnginePermission.ENGINE_EDIT] }],
+      generatedAt: 1,
+    };
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/api/auth/platform-settings') return { engineOnboardingMode: 'manual_allowed', projectEngineTargetMode: 'manual_allowed' };
+      if (url === '/engines-api/environment-tags') return [];
+      if (url === '/engines-api/engines') return [{
+        id: 'engine-config', name: 'Config engine', baseUrl: 'https://config.example.com/engine-rest', type: 'operaton',
+        registrationSource: 'config', ownershipMode: 'config_locked', connectionMode: 'direct', authType: 'basic', lifecycleStatus: 'active',
+      }];
+      return [];
+    });
+    renderPage();
+
+    expect(await screen.findByText('Config engine')).toBeInTheDocument();
+    expect(screen.getByText('Managed by config')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /options/i }));
+    fireEvent.click((await screen.findByText('Edit')).closest('button')!);
+
+    expect(await screen.findByText('Managed by configuration')).toBeInTheDocument();
+    expect(screen.getByText(/This engine is config-locked/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toBeDisabled();
+    expect(screen.getByLabelText('Base URL')).toBeDisabled();
+  });
+
   it('uses explicit endpoint-authentication copy for direct and sidecar engines', () => {
     expect(formatEngineAuthentication({ connectionMode: 'customer_sidecar', authType: 'none' })).toBe('Customer-managed engine authentication');
     expect(formatEngineAuthentication({ connectionMode: 'direct', authType: 'none' })).toBe('No EnterpriseGlue-managed credentials');
