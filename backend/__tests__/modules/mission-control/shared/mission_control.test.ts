@@ -298,6 +298,8 @@ describe('mission-control shared mission_control routes', () => {
         suspension: { allowed: true },
         retry: { allowed: true },
         terminate: { allowed: true },
+        modify: { allowed: true },
+        variablesUpdate: { allowed: true },
       },
     });
   });

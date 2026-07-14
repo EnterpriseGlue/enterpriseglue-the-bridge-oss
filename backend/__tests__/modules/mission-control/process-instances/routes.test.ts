@@ -125,6 +125,8 @@ describe('mission-control process-instances routes', () => {
         suspension: { allowed: true },
         retry: { allowed: true },
         terminate: { allowed: true },
+        modify: { allowed: true },
+        variablesUpdate: { allowed: true },
       },
     });
   });

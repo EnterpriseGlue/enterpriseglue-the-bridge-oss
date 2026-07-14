@@ -10,12 +10,19 @@ export interface RuntimeProcessInstanceActionDecisions {
   suspension: RuntimeRowActionDecision
   retry: RuntimeRowActionDecision
   terminate: RuntimeRowActionDecision
+  modify?: RuntimeRowActionDecision
+  variablesUpdate?: RuntimeRowActionDecision
 }
 
 const ACTIONS = {
   suspension: 'engine.runtime.process-instances.suspension.update',
   retry: 'engine.runtime.process-instances.retry',
   terminate: 'engine.runtime.process-instances.delete',
+} as const
+
+const DETAIL_ACTIONS = {
+  modify: 'engine.runtime.process-instances.modify',
+  variablesUpdate: 'engine.runtime.process-instances.variables.update',
 } as const
 
 function processDefinitionKey(row: object): string {
@@ -42,8 +49,10 @@ export async function addRuntimeProcessInstanceActionDecisions<T extends object>
   engineId: string
   runtimeAccessScope: 'engine_wide' | 'resource_aware'
   rows: T[]
+  includeDetailActions?: boolean
 }): Promise<Array<T & { runtimeActionDecisions: RuntimeProcessInstanceActionDecisions }>> {
-  const entries = await Promise.all(Object.entries(ACTIONS).map(async ([name, actionId]) => {
+  const actions = input.includeDetailActions ? { ...ACTIONS, ...DETAIL_ACTIONS } : ACTIONS
+  const entries = await Promise.all(Object.entries(actions).map(async ([name, actionId]) => {
     const action = getAuthzActionDefinition(actionId)
     if (!action) throw new Error(`Unknown authorization action: ${actionId}`)
     const context = {
@@ -63,13 +72,13 @@ export async function addRuntimeProcessInstanceActionDecisions<T extends object>
           permission: action.permissionId,
           limit: 5_000,
         })).map((resource) => resource.resourceKey))
-    return [name as keyof typeof ACTIONS, broad, allowedKeys] as const
+    return [name, broad, allowedKeys] as const
   }))
 
   const decisionsByAction = new Map(entries.map(([name, broad, allowedKeys]) => [name, { broad, allowedKeys }]))
   return input.rows.map((row) => {
     const key = processDefinitionKey(row)
-    const decisionFor = (name: keyof typeof ACTIONS): RuntimeRowActionDecision => {
+    const decisionFor = (name: string): RuntimeRowActionDecision => {
       const decision = decisionsByAction.get(name)!
       if (decision.broad || (decision.allowedKeys?.has(key) ?? false)) return { allowed: true }
       return unavailable()
@@ -80,6 +89,10 @@ export async function addRuntimeProcessInstanceActionDecisions<T extends object>
         suspension: decisionFor('suspension'),
         retry: decisionFor('retry'),
         terminate: decisionFor('terminate'),
+        ...(input.includeDetailActions ? {
+          modify: decisionFor('modify'),
+          variablesUpdate: decisionFor('variablesUpdate'),
+        } : {}),
       },
     }
   })

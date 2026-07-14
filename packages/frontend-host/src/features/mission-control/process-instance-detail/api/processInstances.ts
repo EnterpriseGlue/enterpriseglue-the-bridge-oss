@@ -26,6 +26,8 @@ export type ProcessInstanceDetail = {
     suspension: { allowed: boolean; reason?: string }
     retry: { allowed: boolean; reason?: string }
     terminate: { allowed: boolean; reason?: string }
+    modify?: { allowed: boolean; reason?: string }
+    variablesUpdate?: { allowed: boolean; reason?: string }
   }
 }
 

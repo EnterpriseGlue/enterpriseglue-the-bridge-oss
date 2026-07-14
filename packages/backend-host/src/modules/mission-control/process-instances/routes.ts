@@ -80,6 +80,7 @@ r.get('/mission-control-api/process-instances/:id', requireProcessInstanceAction
     engineId,
     runtimeAccessScope: (req as Request & { runtimeAccessScope?: 'engine_wide' | 'resource_aware' }).runtimeAccessScope || 'engine_wide',
     rows: [data],
+    includeDetailActions: true,
   })
   res.json(withDecisions)
 }))

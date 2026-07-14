@@ -104,12 +104,12 @@ export default function ProcessInstanceDetailPage() {
   )
   const snapshotSuspensionDecision = useActionDecision('engine.runtime.process-instances.suspension.update', selectedEngineResource)
   const snapshotRetryDecision = useActionDecision('engine.runtime.process-instances.retry', selectedEngineResource)
-  const modifyDecision = useActionDecision('engine.runtime.process-instances.modify', selectedEngineResource)
+  const snapshotModifyDecision = useActionDecision('engine.runtime.process-instances.modify', selectedEngineResource)
   const snapshotTerminateDecision = useActionDecision('engine.runtime.process-instances.delete', selectedEngineResource)
   const variablesReadDecision = useActionDecision('engine.runtime.process-instances.variables.read', selectedEngineResource)
   const historicVariablesReadDecision = useActionDecision('engine.runtime.history.variables.read', selectedEngineResource)
   const variableHistoryReadDecision = useActionDecision('engine.runtime.process-instances.variable-history.read', selectedEngineResource)
-  const variablesUpdateDecision = useActionDecision('engine.runtime.process-instances.variables.update', selectedEngineResource)
+  const snapshotVariablesUpdateDecision = useActionDecision('engine.runtime.process-instances.variables.update', selectedEngineResource)
   const jobsReadDecision = useActionDecision('engine.runtime.jobs.read', selectedEngineResource)
   const externalTasksReadDecision = useActionDecision('engine.runtime.external-tasks.read', selectedEngineResource)
   const historyProcessInstanceReadDecision = useActionDecision('engine.runtime.history.process-instances.read', selectedEngineResource)
@@ -183,10 +183,14 @@ export default function ProcessInstanceDetailPage() {
     suspension?: { allowed: boolean; reason?: string }
     retry?: { allowed: boolean; reason?: string }
     terminate?: { allowed: boolean; reason?: string }
+    modify?: { allowed: boolean; reason?: string }
+    variablesUpdate?: { allowed: boolean; reason?: string }
   } } | undefined)?.runtimeActionDecisions
   const suspensionDecision = withRuntimeActionDecision(snapshotSuspensionDecision, runtimeActionDecisions?.suspension)
   const retryDecision = withRuntimeActionDecision(snapshotRetryDecision, runtimeActionDecisions?.retry)
   const terminateDecision = withRuntimeActionDecision(snapshotTerminateDecision, runtimeActionDecisions?.terminate)
+  const modifyDecision = withRuntimeActionDecision(snapshotModifyDecision, runtimeActionDecisions?.modify)
+  const variablesUpdateDecision = withRuntimeActionDecision(snapshotVariablesUpdateDecision, runtimeActionDecisions?.variablesUpdate)
 
   const showModifyAction = status === 'ACTIVE'
   const activityOverlayData = React.useMemo(() => {
