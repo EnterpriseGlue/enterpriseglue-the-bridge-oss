@@ -82,12 +82,9 @@ describe('authzGroupService', () => {
       expect.arrayContaining([
         expect.objectContaining({
           tenantId: null,
-          userId: null,
           principalType: 'group',
           principalId: DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
           roleId: SYSTEM_ROLE_IDS.PLATFORM_ADMIN,
-          resourceType: null,
-          resourceId: null,
           scopeType: 'platform',
           scopeId: null,
           source: 'bootstrap',
@@ -109,7 +106,8 @@ describe('authzGroupService', () => {
     );
     const assignmentRows = roleAssignmentRepo.upsert.mock.calls[0][0];
     expect(assignmentRows).toHaveLength(8);
-    expect(assignmentRows.every((row: any) => row.expiresAt === null && row.sourceMappingId === null)).toBe(true);
+    expect(assignmentRows.every((row: any) => row.expiresAt === null)).toBe(true);
+    expect(assignmentRows.every((row: any) => !Object.prototype.hasOwnProperty.call(row, 'userId') && !Object.prototype.hasOwnProperty.call(row, 'resourceType') && !Object.prototype.hasOwnProperty.call(row, 'resourceId') && !Object.prototype.hasOwnProperty.call(row, 'sourceMappingId'))).toBe(true);
   });
 
   it('records group and membership mutation audit events', async () => {
