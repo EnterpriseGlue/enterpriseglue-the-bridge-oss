@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
+import { authzQueryKeys, useIdentityProviders } from '../hooks/useAuthzApi';
 import type {
   IdentityProvider,
   IdentityProviderConnectionTestResult,
@@ -90,7 +91,7 @@ export default function IdentityProvidersSettingsTab() {
   const resource = useMemo(() => ({ type: 'platform' as const }), []);
   const read = useActionDecision('platform.sso.providers.read', resource);
   const manage = useActionDecision('platform.sso.providers.manage', resource);
-  const providersQuery = useQuery({ queryKey: ['identity-providers'], queryFn: () => apiClient.get<IdentityProvider[]>('/api/identity/providers'), enabled: read.allowed });
+  const providersQuery = useIdentityProviders({ enabled: read.allowed });
   const legacyProvidersQuery = useQuery({ queryKey: ['legacy-sso-providers-for-migration'], queryFn: () => apiClient.get<LegacySsoProvider[]>('/api/sso/providers'), enabled: manage.allowed });
   const environmentMigrationDraftsQuery = useQuery({ queryKey: ['environment-identity-provider-migration-drafts'], queryFn: () => apiClient.get<LegacyMigrationDraft[]>('/api/identity/providers/environment-migration-drafts'), enabled: manage.allowed });
   const [open, setOpen] = useState(false);
@@ -121,10 +122,10 @@ export default function IdentityProvidersSettingsTab() {
       const body = { ...(editing ? {} : { key: payload.key.trim() }), ...(editing ? {} : { protocol: payload.protocol }), isEnabled: payload.isEnabled, authenticationMode: payload.authenticationMode, directoryTenantId: payload.directoryTenantId.trim() || null, configuration: configuration(payload), sync: { triggers: scheduled ? ['login', 'scheduled'] : ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: payload.protocol === 'ldap' ? 'ldap_directory' : 'claim_only', scheduled, ...(scheduled ? { intervalSeconds: Number(payload.syncIntervalSeconds) } : {}) }, ownershipMode: isConfigWarnIdentityProvider(editing) ? 'config_warn' : 'manual' };
       return editing ? apiClient.put(`/api/identity/providers/${encodeURIComponent(editing.key)}`, body) : apiClient.post('/api/identity/providers', body);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-providers'] }); setOpen(false); setEditing(null); setError(null); setSaveError(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityProviders }); setOpen(false); setEditing(null); setError(null); setSaveError(null); },
     onError: (value: unknown) => setSaveError(parseApiError(value, 'Unable to save identity provider').message),
   });
-  const archive = useMutation({ mutationFn: (key: string) => apiClient.delete(`/api/identity/providers/${encodeURIComponent(key)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['identity-providers'] }); setArchiveTarget(null); } });
+  const archive = useMutation({ mutationFn: (key: string) => apiClient.delete(`/api/identity/providers/${encodeURIComponent(key)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityProviders }); setArchiveTarget(null); } });
   const reconcile = useMutation({ mutationFn: (key: string) => apiClient.post(`/api/identity/providers/${encodeURIComponent(key)}/reconcile`, {}), onError: (value: unknown) => setError(parseApiError(value, 'Unable to reconcile LDAP directory').message) });
   const previewMemberships = useMutation({ mutationFn: ({ key, cursor }: { key: string; cursor?: string }) => apiClient.post<MembershipPreviewResult>(`/api/identity/providers/${encodeURIComponent(key)}/reconciliation-preview`, cursor ? { cursor } : {}), onSuccess: (result, input) => { setPreviewResult({ providerKey: input.key, result }); setPreviewCursors((current) => ({ ...current, [input.key]: result.nextCursor || undefined })); setError(null); }, onError: (value: unknown) => setError(parseApiError(value, 'Unable to preview stored membership changes').message) });
   const replayMemberships = useMutation({ mutationFn: ({ key, cursor }: { key: string; cursor?: string }) => apiClient.post<MembershipReplayResult>(`/api/identity/providers/${encodeURIComponent(key)}/replay-memberships`, cursor ? { cursor } : {}), onSuccess: (result, input) => { setReplayResult({ providerKey: input.key, result }); setReplayCursors((current) => ({ ...current, [input.key]: result.nextCursor || undefined })); setError(null); }, onError: (value: unknown) => setError(parseApiError(value, 'Unable to replay stored memberships').message) });

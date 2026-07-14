@@ -5,13 +5,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
-import { authzQueryKeys, useIdentityEntitlementMappings, useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
+import { authzQueryKeys, useIdentityEntitlementMappings, useIdentityProviders, useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
 import type { HumanIdentityEntitlementType, IdentityEntitlementMapping } from '../hooks/useAuthzApi';
 
 type EntitlementType = HumanIdentityEntitlementType;
 type MatchOperator = 'exact' | 'contains' | 'exists';
 type Mapping = IdentityEntitlementMapping;
-interface Provider { id: string; key: string; protocol: string; isEnabled: boolean; }
 interface Group { id: string; key: string; name: string; isArchived: boolean; }
 interface Role { id: string; name: string; scope: string; isAssignable: boolean; isArchived: boolean; }
 interface Engine { id: string; name: string; lifecycleStatus?: string; }
@@ -32,7 +31,7 @@ export default function IdentityMappingsSettingsTab() {
   const mappingsQuery = useIdentityEntitlementMappings({ enabled: read.allowed });
   const legacyCoverageQuery = useQuery({ queryKey: ['legacy-mapping-coverage'], queryFn: () => apiClient.get<LegacyMappingCoverageItem[]>('/api/authz/legacy-mapping-coverage'), enabled: read.allowed });
   const retirementReadinessQuery = useQuery({ queryKey: ['legacy-mapping-retirement-readiness'], queryFn: () => apiClient.get<LegacyMappingRetirementReadiness>('/api/authz/legacy-mapping-retirement-readiness'), enabled: read.allowed });
-  const providersQuery = useQuery({ queryKey: ['identity-providers'], queryFn: () => apiClient.get<Provider[]>('/api/identity/providers'), enabled: manage.allowed });
+  const providersQuery = useIdentityProviders({ enabled: manage.allowed });
   const groupsQuery = useQuery({ queryKey: ['authz-groups'], queryFn: () => apiClient.get<Group[]>('/api/authz/groups'), enabled: manage.allowed });
   const rolesQuery = useQuery({ queryKey: ['authz-roles'], queryFn: () => apiClient.get<Role[]>('/api/authz/roles'), enabled: rolesManage.allowed });
   const enginesQuery = useQuery({ queryKey: ['identity-mapping-engines'], queryFn: () => apiClient.get<Engine[]>('/engines-api/engines'), enabled: rolesManage.allowed });

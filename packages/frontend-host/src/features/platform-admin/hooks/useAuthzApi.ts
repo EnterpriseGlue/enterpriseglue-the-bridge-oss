@@ -1111,6 +1111,7 @@ export const authzQueryKeys = {
   ssoEngineAccessSnapshots: (params?: SsoEngineAccessSnapshotParams) => ['platform-admin', 'authz', 'sso-engine-access-snapshots', params] as const,
   ssoEngineAccessSnapshotsForEngine: (engineId?: string) => ['platform-admin', 'authz', 'sso-engine-access-snapshots', 'engine', engineId] as const,
   ssoGroupMappings: ['platform-admin', 'authz', 'sso-group-mappings'] as const,
+  identityProviders: ['platform-admin', 'authz', 'identity-providers'] as const,
   identityEntitlementMappings: ['platform-admin', 'authz', 'identity-entitlement-mappings'] as const,
   ssoSyncRuns: (params?: SsoSyncRunParams) => ['platform-admin', 'authz', 'sso-sync-runs', params] as const,
   ssoSyncEvents: (runId?: string, params?: SsoSyncEventParams) => ['platform-admin', 'authz', 'sso-sync-runs', runId, 'events', params] as const,
@@ -1916,6 +1917,14 @@ export function useSsoGroupMappings() {
   return useQuery({
     queryKey: authzQueryKeys.ssoGroupMappings,
     queryFn: () => apiClient.get<SsoGroupMapping[]>('/api/authz/sso-group-mappings'),
+  });
+}
+
+export function useIdentityProviders(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: authzQueryKeys.identityProviders,
+    queryFn: () => apiClient.get<IdentityProvider[]>('/api/identity/providers'),
+    enabled: options.enabled ?? true,
   });
 }
 
