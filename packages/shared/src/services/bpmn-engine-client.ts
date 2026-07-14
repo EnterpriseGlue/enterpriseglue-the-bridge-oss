@@ -119,6 +119,7 @@ export type BpmnEngineFetchResult = {
 
 const DEFAULT_ENGINE_REQUEST_TIMEOUT_MS = 10_000
 const MAX_ENGINE_REQUEST_TIMEOUT_MS = 60_000
+export const MAX_ENGINE_RESPONSE_BYTES = 5 * 1024 * 1024
 const TRANSIENT_ENGINE_STATUSES = new Set([429, 502, 503, 504])
 
 function boundedTimeoutMs(value?: number): number {
@@ -374,25 +375,18 @@ export async function fetchBpmnEngineEndpoint(
   const connection = await resolveBpmnEngineConnection(input, { ...request, method })
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let response: Awaited<ReturnType<typeof fetch>>
     try {
       const timeoutSignal = AbortSignal.timeout(timeoutMs)
       const callerSignal = init?.signal
       const signal = callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal
-      const response = await fetch(connection.url, {
+      response = await fetch(connection.url, {
         ...init,
         method,
         redirect: init?.redirect || 'error',
         headers: { ...connection.headers, ...(init?.headers || {}) },
         signal,
       })
-      if (attempt < maxAttempts && TRANSIENT_ENGINE_STATUSES.has(response.status)) {
-        await response.body?.cancel().catch(() => undefined)
-        continue
-      }
-      return {
-        response,
-        diagnostics: { ...connection.diagnostics, attempts: attempt, timeoutMs },
-      }
     } catch {
       if (attempt < maxAttempts) continue
       throw new BpmnEngineTransportError({
@@ -402,6 +396,25 @@ export async function fetchBpmnEngineEndpoint(
         timeoutMs,
         connectionMode: connection.diagnostics.connectionMode,
       })
+    }
+
+    const declaredResponseBytes = Number(response.headers?.get?.('content-length'))
+    if (Number.isSafeInteger(declaredResponseBytes) && declaredResponseBytes > MAX_ENGINE_RESPONSE_BYTES) {
+      await response.body?.cancel().catch(() => undefined)
+      throw new BpmnEngineResponseTooLargeError({
+        method,
+        path: request.path || '',
+        maxResponseBytes: MAX_ENGINE_RESPONSE_BYTES,
+        connectionMode: connection.diagnostics.connectionMode,
+      })
+    }
+    if (attempt < maxAttempts && TRANSIENT_ENGINE_STATUSES.has(response.status)) {
+      await response.body?.cancel().catch(() => undefined)
+      continue
+    }
+    return {
+      response,
+      diagnostics: { ...connection.diagnostics, attempts: attempt, timeoutMs },
     }
   }
 
@@ -424,6 +437,21 @@ export class BpmnEngineTransportError extends AppError {
         operationClass: inferOperationClass(input.method, input.path),
         attempts: input.attempts,
         timeoutMs: input.timeoutMs,
+        connectionMode: input.connectionMode,
+      },
+    )
+  }
+}
+
+export class BpmnEngineResponseTooLargeError extends AppError {
+  constructor(input: { method: string; path: string; maxResponseBytes: number; connectionMode: 'direct' | 'customer_sidecar' }) {
+    super(
+      'ENGINE_RESPONSE_TOO_LARGE',
+      'The engine response exceeded the allowed size',
+      502,
+      {
+        operationClass: inferOperationClass(input.method, input.path),
+        maxResponseBytes: input.maxResponseBytes,
         connectionMode: input.connectionMode,
       },
     )

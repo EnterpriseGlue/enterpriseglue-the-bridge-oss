@@ -6,6 +6,7 @@ import {
   camundaGet,
   camundaPost,
   fetchBpmnEngineEndpoint,
+  MAX_ENGINE_RESPONSE_BYTES,
   resolveBpmnEngineConnection,
   resolveBpmnEngineRequestUrl,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
@@ -141,6 +142,33 @@ describe('bpmn-engine-client', () => {
         expect(JSON.stringify(error.toJSON())).not.toContain('secret-engine.example.com');
       },
     );
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects oversized declared engine responses before callers can read them', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    (fetch as unknown as Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: vi.fn((name: string) => name === 'content-length' ? String(MAX_ENGINE_RESPONSE_BYTES + 1) : 'application/json') },
+      body: { cancel },
+    });
+
+    await expect(fetchBpmnEngineEndpoint({
+      id: 'engine-sidecar',
+      baseUrl: 'https://sidecar.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+    }, { engineId: 'engine-sidecar', method: 'GET', path: '/version' })).rejects.toMatchObject({
+      code: 'ENGINE_RESPONSE_TOO_LARGE',
+      statusCode: 502,
+      details: {
+        operationClass: 'engine.read',
+        maxResponseBytes: MAX_ENGINE_RESPONSE_BYTES,
+        connectionMode: 'customer_sidecar',
+      },
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
