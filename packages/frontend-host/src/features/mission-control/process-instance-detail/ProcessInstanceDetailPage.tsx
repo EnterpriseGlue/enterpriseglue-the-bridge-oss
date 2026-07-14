@@ -63,7 +63,14 @@ function withRuntimeActionDecision(
   fallback: UiAuthzDecision,
   decision: { allowed: boolean; reason?: string } | undefined,
 ): UiAuthzDecision {
-  if (!decision) return fallback
+  if (!decision) {
+    return {
+      ...fallback,
+      allowed: false,
+      state: 'disabled',
+      reason: 'Action decision unavailable for this runtime resource',
+    }
+  }
   return {
     ...fallback,
     allowed: decision.allowed,
