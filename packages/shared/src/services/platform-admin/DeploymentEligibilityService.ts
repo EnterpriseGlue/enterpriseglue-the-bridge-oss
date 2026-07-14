@@ -194,7 +194,7 @@ export class DeploymentEligibilityService {
 
       const engine = await dataSource.getRepository(Engine).findOne({
         where: { id: input.engineId },
-        select: ['id', 'tenantId', 'type', 'baseUrl', 'environmentTagId', 'environmentLocked', 'deploymentIntegration'],
+        select: ['id', 'tenantId', 'type', 'baseUrl', 'connectionMode', 'authType', 'environmentTagId', 'environmentLocked', 'deploymentIntegration'],
       });
       if (!engine || !this.isTenantVisible(engine.tenantId, input.tenantId)) {
         checks.push({
@@ -322,6 +322,8 @@ export class DeploymentEligibilityService {
         engineRequiredCapability: requiredCapability,
         engineCapabilitySupported: hasRequiredCapability,
         engineType: engine.type ?? null,
+        engineConnectionMode: engine.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct',
+        engineEndpointAuthentication: engine.authType ?? 'none',
         environmentLocked: Boolean(engine.environmentLocked),
         environmentTagId: engine.environmentTagId ?? null,
         environmentName: environmentName ?? null,

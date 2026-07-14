@@ -616,7 +616,7 @@ EnterpriseGlue user action
 
 Security requirements:
 
-- [ ] ⬜ `auth.type = "none"` must never bypass EnterpriseGlue RBAC or deployment eligibility checks.
+- [x] ✅ `auth.type = "none"` never bypasses EnterpriseGlue RBAC or deployment eligibility checks. Credentialless sidecars use the normal composite authorization middleware, and denied requests are proven not to reach the outbound transport.
 - [x] ✅ `auth.type = "none"` is valid only when `connectionMode = "customer_sidecar"` and the platform policy explicitly permits credentialless private-sidecar endpoints.
 - [ ] ⬜ `baseUrl` should point to the customer sidecar or gateway, not a public unauthenticated engine endpoint.
 - [ ] ⬜ Sidecar endpoints should be private and network-restricted. Prefer mTLS, API-key references, or OAuth client credentials for the EnterpriseGlue-to-sidecar hop when the customer endpoint supports them.
@@ -2319,7 +2319,7 @@ Phase 0 exit criteria:
 - [x] ✅ Ensure engine-side rejection after EnterpriseGlue allow is reported as an operational engine rejection, not as an authorization fallback. The shared engine client returns a sanitized `ENGINE_OPERATION_REJECTED` 502 response with the upstream status and operation class; it never exposes upstream URLs or bodies.
 - [x] ✅ Route direct and customer-sidecar engines through one connection resolver so authorization, redaction, retries, timeouts, and audit behavior cannot drift by transport. The shared resolver covers endpoint authentication, request metadata, URL handling, health/version checks, deployments, and sanitized transport diagnostics. Requests use bounded 10-second attempts; safe GET reads retry once only for network failures, `429`, `502`, `503`, or `504`, while mutations and multipart uploads never retry automatically. OAuth token requests are likewise bounded and sanitize both response and network failures.
 - [ ] ⬜ Ensure effective-access explanations include config bundle lineage.
-- [ ] ⬜ Ensure `auth.type = "none"` engines still require normal EnterpriseGlue project, engine, target, mode, and policy authorization before calls are sent to the sidecar.
+- [x] ✅ Ensure `auth.type = "none"` engines still require normal EnterpriseGlue project, engine, target, mode, and policy authorization before calls are sent to the sidecar. Credentialless customer-sidecar deployment requests pass through the same composite eligibility evaluator as authenticated endpoints, including project and engine permissions, active project-engine target mode, environment controls, and project/engine policy gates; denial tests prove no outbound engine request occurs. Connection mode and endpoint-auth type are available as policy resource attributes without exposing credentials.
 - [x] ✅ Ensure health/version checks can run through customer sidecar base URLs without EnterpriseGlue-managed credentials.
 - [ ] ⬜ Ensure runtime never reads JSON files directly.
 

@@ -25,6 +25,8 @@ describe('deploymentEligibilityService', () => {
     environmentLocked?: boolean;
     manualDeployAllowed?: boolean;
     deploymentIntegration?: string;
+    connectionMode?: 'direct' | 'customer_sidecar';
+    authType?: string;
   } = {}) {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
@@ -35,6 +37,8 @@ describe('deploymentEligibilityService', () => {
             tenantId: null,
             baseUrl: options.baseUrl ?? 'https://engine.example.test',
             type: options.engineType ?? 'camunda7',
+            connectionMode: options.connectionMode ?? 'direct',
+            authType: options.authType ?? 'basic',
             environmentTagId: 'env-prod',
             environmentLocked: Boolean(options.environmentLocked),
             deploymentIntegration: options.deploymentIntegration ?? 'enterpriseglue_proxy',
@@ -218,6 +222,51 @@ describe('deploymentEligibilityService', () => {
     expect(result.checks).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'policy.project', allowed: false }),
     ]));
+  });
+
+  it('applies the complete deployment authorization chain to credentialless customer sidecars', async () => {
+    mockDataSource({ connectionMode: 'customer_sidecar', authType: 'none' });
+    vi.spyOn(permissionService, 'hasPermission').mockResolvedValue(true);
+    vi.spyOn(projectEngineTargetService, 'hasActiveTarget').mockResolvedValue(true);
+    (deploymentEligibilityService as any).evaluatePolicyGate.mockResolvedValueOnce({
+      decision: 'deny',
+      reason: 'policy:sidecar-release-freeze',
+      policyId: 'policy-sidecar',
+      policyName: 'sidecar-release-freeze',
+    });
+
+    const result = await deploymentEligibilityService.evaluate({
+      userId: 'user-1',
+      projectId: 'project-1',
+      engineId: 'engine-1',
+      mode: 'manual',
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'project.permission.deploy', allowed: true }),
+      expect.objectContaining({ id: 'engine.permission.deploy', allowed: true }),
+      expect.objectContaining({ id: 'project_engine_target.active', allowed: true }),
+      expect.objectContaining({ id: 'policy.project', allowed: false }),
+      expect.objectContaining({ id: 'policy.engine', allowed: true }),
+    ]));
+    expect(projectEngineTargetService.hasActiveTarget).toHaveBeenCalledWith(
+      'project-1',
+      'engine-1',
+      'manual',
+      undefined,
+    );
+    expect((deploymentEligibilityService as any).evaluatePolicyGate).toHaveBeenCalledWith(
+      'project:deploy',
+      expect.objectContaining({
+        resourceAttributes: expect.objectContaining({
+          deploymentMode: 'manual',
+          engineConnectionMode: 'customer_sidecar',
+          engineEndpointAuthentication: 'none',
+          projectEngineTargetActive: true,
+        }),
+      }),
+    );
   });
 
   it('does not let a passing policy gate replace missing base permissions', async () => {

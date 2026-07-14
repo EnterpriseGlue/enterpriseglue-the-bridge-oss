@@ -433,6 +433,8 @@ describe('engines deployments routes', () => {
 
   it('denies manual deployments before calling the engine when composite eligibility fails', async () => {
     const { fetch } = await import('undici');
+    mockEngine.connectionMode = 'customer_sidecar';
+    mockEngine.authType = 'none';
     (deploymentEligibilityService.evaluate as unknown as Mock).mockResolvedValueOnce({
       allowed: false,
       decision: 'deny',
@@ -460,6 +462,13 @@ describe('engines deployments routes', () => {
     expect(response.body).toMatchObject({
       error: 'Missing project deploy permission',
       reasons: ['Missing project deploy permission'],
+    });
+    expect(deploymentEligibilityService.evaluate).toHaveBeenCalledWith({
+      userId: 'user-1',
+      tenantId: null,
+      projectId: 'project-1',
+      engineId: 'e1',
+      mode: 'manual',
     });
     expect(fetch).not.toHaveBeenCalled();
     expect(engineDeploymentInserts).toEqual([]);

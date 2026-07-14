@@ -111,10 +111,14 @@ async function getEngineById(engineId: string): Promise<EngineConnectionInfo> {
   return {
     id: row.id,
     baseUrl: row.baseUrl,
+    connectionMode: row.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct',
     deploymentIntegration: row.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy',
     authType: row.authType ?? null,
     username: row.username ?? null,
     passwordEnc: row.passwordEnc ?? null,
+    oauthTokenUrl: row.oauthTokenUrl ?? null,
+    oauthScopes: row.oauthScopes ?? null,
+    oauthAudience: row.oauthAudience ?? null,
   }
 }
 
