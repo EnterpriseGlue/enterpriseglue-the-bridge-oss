@@ -1176,6 +1176,10 @@ class SsoSyncDiagnosticsServiceClass {
       }
 
       for (const assignment of assignments) {
+        // SSO diagnostics apply only to assignments materialized by the
+        // SSO mapping writer. Manual, API, automation, and bootstrap grants
+        // share this table but must never be inferred as stale SSO state.
+        if (assignment.source !== 'sso') continue;
         const mappingId = sourceMappingId(assignment.sourceMappingId, assignment.sourceRef);
         const mapping = mappingId ? assignmentMappingById.get(mappingId) : null;
         const userId = assignmentUserId(assignment);
@@ -1465,6 +1469,9 @@ class SsoSyncDiagnosticsServiceClass {
       };
 
       for (const assignment of assignments) {
+        // Cleanup is source-scoped: only assignments materialized by the SSO
+        // mapping writer can be removed by reconciliation.
+        if (assignment.source !== 'sso') continue;
         const mappingId = sourceMappingId(assignment.sourceMappingId, assignment.sourceRef);
         const mapping = mappingId ? assignmentMappingById.get(mappingId) : null;
         const userId = assignmentUserId(assignment);

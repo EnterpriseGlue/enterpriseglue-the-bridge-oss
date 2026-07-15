@@ -2136,7 +2136,7 @@ Fixtures should include at least:
 - [ ] ⬜ Group rename with stable immutable id keeps membership; reused display name with different id does not inherit access.
 - [ ] ⬜ Additive synchronization preserves previous provider-managed membership; authoritative synchronization removes stale rows owned by that mapping only.
 - [x] ✅ Mapping disable, delete, and meaningful manual mapping updates remove only memberships derived from that mapping. Manual, API, automation, and other-provider memberships remain untouched.
-- [ ] ⬜ Manual, API, automation, bootstrap, and other-provider assignments survive reconciliation.
+- [x] ✅ Manual, API, automation, bootstrap, and other-provider assignments survive reconciliation. The SSO diagnostics and cleanup passes are source-scoped and only inspect/delete assignments written with `source: 'sso'`; regression coverage proves those non-SSO sources plus additive and other-provider SSO assignments are retained while stale authoritative SSO rows still clean up.
 - [ ] ⬜ Concurrent login and scheduled reconciliation remain idempotent under the uniqueness constraints.
 - [ ] ⬜ Provider partial group result or group-overage state fails closed when authoritative completeness is required.
 - [ ] ⬜ Cross-tenant provider, group, mapping, principal, engine, and runtime-resource references are rejected.

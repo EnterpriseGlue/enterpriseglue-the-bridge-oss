@@ -1099,6 +1099,50 @@ describe('ssoSyncDiagnosticsService', () => {
         sourceMappingId: 'assignment-mapping-active-google',
         sourceRef: null,
       },
+      {
+        id: 'assignment-manual',
+        tenantId: 'tenant-a',
+        userId: 'user-manual',
+        roleId: 'system.engine.operator',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+        source: 'manual',
+        sourceMappingId: null,
+        sourceRef: null,
+      },
+      {
+        id: 'assignment-api',
+        tenantId: 'tenant-a',
+        userId: 'user-api',
+        roleId: 'system.engine.operator',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+        source: 'api',
+        sourceMappingId: null,
+        sourceRef: null,
+      },
+      {
+        id: 'assignment-automation',
+        tenantId: 'tenant-a',
+        userId: 'user-automation',
+        roleId: 'system.engine.operator',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+        source: 'automation',
+        sourceMappingId: null,
+        sourceRef: null,
+      },
+      {
+        id: 'assignment-bootstrap',
+        tenantId: 'tenant-a',
+        userId: 'user-bootstrap',
+        roleId: 'system.engine.operator',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+        source: 'bootstrap',
+        sourceMappingId: null,
+        sourceRef: null,
+      },
     ];
     const engines = [
       {
@@ -1167,7 +1211,7 @@ describe('ssoSyncDiagnosticsService', () => {
 
     expect(result).toMatchObject({
       scannedGroupMemberships: 4,
-      scannedAssignments: 7,
+      scannedAssignments: 11,
       groupMembershipsRemoved: 3,
       assignmentsRemoved: 5,
     });
@@ -1182,6 +1226,10 @@ describe('ssoSyncDiagnosticsService', () => {
     expect(assignmentDelete).toHaveBeenCalledWith({ id: 'assignment-provider-inactive' });
     expect(assignmentDelete).not.toHaveBeenCalledWith({ id: 'assignment-additive-history' });
     expect(assignmentDelete).not.toHaveBeenCalledWith({ id: 'assignment-other-provider' });
+    expect(assignmentDelete).not.toHaveBeenCalledWith({ id: 'assignment-manual' });
+    expect(assignmentDelete).not.toHaveBeenCalledWith({ id: 'assignment-api' });
+    expect(assignmentDelete).not.toHaveBeenCalledWith({ id: 'assignment-automation' });
+    expect(assignmentDelete).not.toHaveBeenCalledWith({ id: 'assignment-bootstrap' });
     expect(runUpdate).toHaveBeenCalledWith({ id: result.runId }, expect.objectContaining({
       status: 'success',
       groupMembershipsRemoved: 3,
