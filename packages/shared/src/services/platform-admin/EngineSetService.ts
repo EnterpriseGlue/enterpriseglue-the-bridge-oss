@@ -48,6 +48,12 @@ export interface EngineSetUpdateInput {
   description?: string | null;
   selector?: EngineSetSelector;
   isArchived?: boolean;
+  ownershipMode?: EngineSetOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
+  /** Reserved for the configuration bundle lifecycle, which is authoritative for config-owned sets. */
+  allowSourceOwnedMutation?: boolean;
   updatedById?: string | null;
   riskAcknowledged?: boolean;
 }
@@ -386,15 +392,15 @@ class EngineSetServiceClass {
     return { id };
   }
 
-  async updateEngineSet(id: string, input: EngineSetUpdateInput): Promise<void> {
-    const dataSource = await getDataSource();
+  async updateEngineSet(id: string, input: EngineSetUpdateInput, store?: DataSource | EntityManager, deferMaterialization = false): Promise<void> {
+    const dataSource = store || await getDataSource();
     const repo = dataSource.getRepository(EngineSet);
     const existing = await repo.findOneBy({ id });
     if (!existing || !this.isTenantVisible(existing.tenantId, input.tenantId)) {
       throw Errors.notFound('Engine Set');
     }
     const isConfigWarn = existing.source === 'config' && existing.ownershipMode === 'config_warn';
-    if (isSourceOwnedEngineSet(existing.source) && !isConfigWarn) {
+    if (isSourceOwnedEngineSet(existing.source) && !isConfigWarn && !input.allowSourceOwnedMutation) {
       throw Errors.conflict(engineSetOwnershipReason(existing.source, existing.sourceRef));
     }
 
@@ -409,18 +415,21 @@ class EngineSetServiceClass {
       selectorJson: stableJson(selector),
       selectorFingerprint: selectorFingerprint(selector),
       isArchived,
+      ownershipMode: input.ownershipMode ?? existing.ownershipMode,
+      sourceHash: input.sourceHash ?? existing.sourceHash,
+      lastAppliedAt: input.lastAppliedAt ?? existing.lastAppliedAt,
+      driftStatus: input.driftStatus ?? (isConfigWarn ? 'drifted' : existing.driftStatus),
       materializationStatus: isArchived ? 'archived' : 'pending',
       materializationError: null,
-      ...(isConfigWarn ? { driftStatus: 'drifted' } : {}),
       updatedAt: Date.now(),
     });
 
     if (isArchived) {
-      await dataSource.getRepository(EngineSetMaterialization).delete({ engineSetId: id });
+      if (!deferMaterialization) await dataSource.getRepository(EngineSetMaterialization).delete({ engineSetId: id });
       return;
     }
 
-    await this.materializeEngineSet(id, input.tenantId ?? existing.tenantId);
+    if (!deferMaterialization) await this.materializeEngineSet(id, input.tenantId ?? existing.tenantId);
   }
 
   async archiveEngineSet(id: string, tenantId?: string | null): Promise<void> {

@@ -21,7 +21,7 @@ import { configBundleApplyService } from '@enterpriseglue/shared/services/platfo
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 
-const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSetsForEngine, createEngineSet } = vi.hoisted(() => ({
+const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSetsForEngine, createEngineSet, updateEngineSet } = vi.hoisted(() => ({
   materializeRuntimeResourceSet: vi.fn().mockResolvedValue({ matched: 0, created: 0, updated: 0, removed: 0 }),
   materializeForEngine: vi.fn().mockResolvedValue([]),
   materializeEngineSetsForEngine: vi.fn().mockResolvedValue([]),
@@ -37,6 +37,19 @@ const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSe
     });
     return { id };
   }),
+  updateEngineSet: vi.fn(async (id: string, input: any, manager: any) => {
+    await manager.getRepository(EngineSet).update({ id }, {
+      name: input.name,
+      description: input.description,
+      selectorJson: JSON.stringify(input.selector),
+      isArchived: input.isArchived,
+      ownershipMode: input.ownershipMode,
+      sourceHash: input.sourceHash,
+      lastAppliedAt: input.lastAppliedAt,
+      driftStatus: input.driftStatus,
+      materializationStatus: input.isArchived ? 'archived' : 'pending',
+    });
+  }),
 }));
 const replayMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, created: 0, removed: 0, failed: 0, truncated: false }));
 const previewMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, additions: 0, removals: 0, unchanged: 0, failed: 0, truncated: false }));
@@ -46,7 +59,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventory
   runtimeResourceInventoryService: { materialize: materializeRuntimeResourceSet, materializeForEngine },
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/EngineSetService.js', () => ({
-  engineSetService: { materializeEngineSet: vi.fn().mockResolvedValue({}), materializeEngineSetsForEngine, createEngineSet },
+  engineSetService: { materializeEngineSet: vi.fn().mockResolvedValue({}), materializeEngineSetsForEngine, createEngineSet, updateEngineSet },
   engineSetKeyIdentity: (tenantId: string | null, key: string) => `${tenantId || 'platform'}:${key.trim()}`,
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({

@@ -147,6 +147,45 @@ describe('engineSetService', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('allows configuration apply to replace a config-owned Engine Set in its transaction without materializing mid-apply', async () => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    const store = {
+      getRepository(entity: unknown) {
+        if (entity === EngineSet) return {
+          findOneBy: vi.fn().mockResolvedValue({
+            id: 'set-config', tenantId: 'tenant-a', key: 'configured-engines', name: 'Before', description: null,
+            selectorJson: JSON.stringify({ mode: 'engine_ids', engineIds: ['engine-1'] }), selectorFingerprint: 'old',
+            source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_locked', sourceHash: 'old-hash',
+            lastAppliedAt: 1, driftStatus: 'in_sync', isArchived: false,
+          }),
+          update,
+        };
+        throw new Error('Unexpected repository');
+      },
+    };
+
+    await engineSetService.updateEngineSet('set-config', {
+      tenantId: 'tenant-a', name: 'After', selector: { mode: 'engine_ids', engineIds: ['engine-2'] },
+      ownershipMode: 'config_warn', sourceHash: 'new-hash', lastAppliedAt: 2, driftStatus: 'in_sync',
+      allowSourceOwnedMutation: true,
+    }, store as any, true);
+
+    expect(update).toHaveBeenCalledWith({ id: 'set-config' }, expect.objectContaining({
+      name: 'After', ownershipMode: 'config_warn', sourceHash: 'new-hash', lastAppliedAt: 2,
+      driftStatus: 'in_sync', materializationStatus: 'pending', selectorJson: '{"engineIds":["engine-2"],"mode":"engine_ids"}',
+    }));
+
+    await engineSetService.updateEngineSet('set-config', {
+      tenantId: 'tenant-a', isArchived: true, sourceHash: 'archive-hash', lastAppliedAt: 3,
+      driftStatus: 'in_sync', allowSourceOwnedMutation: true,
+    }, store as any, true);
+
+    expect(update).toHaveBeenLastCalledWith({ id: 'set-config' }, expect.objectContaining({
+      isArchived: true, sourceHash: 'archive-hash', lastAppliedAt: 3, materializationStatus: 'archived',
+    }));
+    expect(getDataSource).not.toHaveBeenCalled();
+  });
+
   it('allows config-warning Engine Set edits and marks drift', async () => {
     const update = vi.fn().mockResolvedValue(undefined);
     const materializationRepo = { delete: vi.fn() };
