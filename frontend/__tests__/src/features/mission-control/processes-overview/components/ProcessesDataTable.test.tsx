@@ -20,33 +20,37 @@ const deniedDecision = (actionId: string, permissionId: string) => ({
 function renderTable(
   searchValue: string,
   data?: ProcessesDataTableData,
-  actionDecisions?: React.ComponentProps<typeof ProcessesDataTable>['actionDecisions']
+  actionDecisions?: {
+    retry?: { allowed: boolean; reason?: string }
+    suspension?: { allowed: boolean; reason?: string }
+    terminate?: { allowed: boolean; reason?: string }
+  }
 ) {
   const onActivate = vi.fn(async () => undefined);
   const onSuspend = vi.fn(async () => undefined);
+  const rows = data || [
+    {
+      id: 'pi-1',
+      processDefinitionKey: 'invoice-receipt',
+      superProcessInstanceId: 'parent-123',
+      state: 'ACTIVE',
+    },
+    {
+      id: 'pi-2',
+      processDefinitionKey: 'order-process',
+      superProcessInstanceId: null,
+      state: 'ACTIVE',
+    },
+  ];
 
   render(
     <MemoryRouter>
       <ProcessesDataTable
-        data={data || [
-          {
-            id: 'pi-1',
-            processDefinitionKey: 'invoice-receipt',
-            superProcessInstanceId: 'parent-123',
-            state: 'ACTIVE',
-          },
-          {
-            id: 'pi-2',
-            processDefinitionKey: 'order-process',
-            superProcessInstanceId: null,
-            state: 'ACTIVE',
-          },
-        ]}
+        data={actionDecisions ? rows.map((row) => ({ ...row, runtimeActionDecisions: actionDecisions })) : rows}
         onTerminate={vi.fn()}
         onRetry={vi.fn()}
         onActivate={onActivate}
         onSuspend={onSuspend}
-        actionDecisions={actionDecisions}
         selectedMap={{}}
         setSelectedMap={vi.fn() as React.Dispatch<React.SetStateAction<Record<string, boolean>>>}
         retryingMap={{}}
@@ -124,5 +128,21 @@ describe('ProcessesDataTable', () => {
     expect(screen.getByLabelText('Suspend')).toHaveAttribute('title', 'Missing permission engine:process:modify');
     expect(screen.getByLabelText('Cancel')).toBeDisabled();
     expect(screen.getByLabelText('Cancel')).toHaveAttribute('title', 'Missing permission engine:instance:delete');
+  });
+
+  it('fails closed when a visible runtime row has no server action decision', () => {
+    renderTable('', [
+      {
+        id: 'pi-1',
+        processDefinitionKey: 'invoice-receipt',
+        state: 'ACTIVE',
+        hasIncident: true,
+      },
+    ]);
+
+    for (const action of ['Retry', 'Suspend', 'Cancel']) {
+      expect(screen.getByLabelText(action)).toBeDisabled();
+      expect(screen.getByLabelText(action)).toHaveAttribute('title', 'Action unavailable');
+    }
   });
 });
