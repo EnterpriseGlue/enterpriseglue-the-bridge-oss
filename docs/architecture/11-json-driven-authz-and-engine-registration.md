@@ -2132,7 +2132,7 @@ Fixtures should include at least:
 
 ### Mapping And Reconciliation Scenarios
 
-- [ ] ⬜ Exact group, role, scope, and attribute mapping; multiple mappings matching one identity; duplicate external entitlements; and no-match behavior.
+- [x] ✅ Exact group, role, scope, and attribute mapping; multiple mappings matching one identity; duplicate external entitlements; and no-match behavior. Human mappings cover exact/contains/exists semantics by entitlement type, reject OAuth scopes as human grants, and reconcile repeated group values into one membership per matching group/role/allowlisted-attribute mapping while leaving no-match targets untouched.
 - [ ] ⬜ Group rename with stable immutable id keeps membership; reused display name with different id does not inherit access.
 - [ ] ⬜ Additive synchronization preserves previous provider-managed membership; authoritative synchronization removes stale rows owned by that mapping only.
 - [x] ✅ Mapping disable, delete, and meaningful manual mapping updates remove only memberships derived from that mapping. Manual, API, automation, and other-provider memberships remain untouched.

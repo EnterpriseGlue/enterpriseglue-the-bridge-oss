@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { identityProviderMembershipSourceRef, matchesIdentityEntitlement, identityEntitlementMappingService } from '@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js';
+import { authorizationAttributeEntitlementId } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
 import { vi, type Mock } from 'vitest';
@@ -13,6 +14,33 @@ describe('identity entitlement mapping', () => {
     expect(matchesIdentityEntitlement({ entitlementType: 'group', externalId: 'prod', matchOperator: 'contains' }, identity)).toBe(true);
     expect(matchesIdentityEntitlement({ entitlementType: 'scope', matchOperator: 'exists' }, identity)).toBe(false);
     expect(matchesIdentityEntitlement({ entitlementType: 'authenticated', externalId: 'authenticated', matchOperator: 'exact' }, identity)).toBe(true);
+  });
+
+  it('matches duplicate normalized group, role, and allowlisted attribute entitlements without creating duplicate memberships', async () => {
+    const attributeId = authorizationAttributeEntitlementId('clearance', 'release');
+    const mappings = [
+      { id: 'group-mapping', providerId: 'entra', entitlementType: 'group', externalId: 'group-prod', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'authoritative', isActive: true },
+      { id: 'role-mapping', providerId: 'entra', entitlementType: 'role', externalId: 'operator', matchOperator: 'exact', targetGroupId: 'group-2', syncMode: 'authoritative', isActive: true },
+      { id: 'attribute-mapping', providerId: 'entra', entitlementType: 'attribute', externalId: attributeId, matchOperator: 'exact', targetGroupId: 'group-3', syncMode: 'authoritative', isActive: true },
+      { id: 'no-match', providerId: 'entra', entitlementType: 'group', externalId: 'not-present', matchOperator: 'exact', targetGroupId: 'group-4', syncMode: 'authoritative', isActive: true },
+    ];
+    const membershipRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn().mockResolvedValue(undefined), delete: vi.fn() };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === IdentityEntitlementMapping ? { find: vi.fn().mockResolvedValue(mappings) }
+        : entity === AuthzGroupMembership ? membershipRepo
+          : {},
+    });
+
+    await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', {
+      providerKey: 'entra', providerType: 'oidc', subjectId: 'subject-1', observedAt: 1,
+      entitlements: [
+        { type: 'group', externalId: 'group-prod' }, { type: 'group', externalId: 'group-prod' },
+        { type: 'role', externalId: 'operator' }, { type: 'attribute', externalId: attributeId },
+      ],
+    })).resolves.toEqual({ created: 3, removed: 0 });
+
+    expect(membershipRepo.insert).toHaveBeenCalledTimes(3);
+    expect(membershipRepo.insert).not.toHaveBeenCalledWith(expect.objectContaining({ groupId: 'group-4' }));
   });
 
   it('previews aggregate proposed mapping matches from stored snapshots only', async () => {
