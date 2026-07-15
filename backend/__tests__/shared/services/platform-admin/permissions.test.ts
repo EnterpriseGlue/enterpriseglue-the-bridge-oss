@@ -87,6 +87,35 @@ describe('permissionService', () => {
     expect(result[1]).not.toHaveProperty('shadowedRuntimeAssignmentIds');
   });
 
+  it('reads fresh runtime inventory on consecutive visibility evaluations', async () => {
+    const find = vi.fn()
+      .mockResolvedValueOnce([{ id: 'runtime-a', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'orders', isActive: true }])
+      .mockResolvedValueOnce([{ id: 'runtime-b', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'payments', isActive: true }]);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === RuntimeResource ? { find } : undefined,
+    });
+    const evaluation = vi.spyOn(permissionService, 'evaluatePermission').mockResolvedValue({
+      allowed: true,
+      reason: 'test',
+      sources: [],
+    });
+
+    const input = {
+      userId: 'user-1',
+      tenantId: null,
+      engineId: 'engine-1',
+      resourceKind: 'process_definition' as const,
+      permission: 'engine:instance:view',
+    };
+    const first = await permissionService.getVisibleRuntimeResources(input);
+    const second = await permissionService.getVisibleRuntimeResources(input);
+
+    expect(first.map((resource) => resource.id)).toEqual(['runtime-a']);
+    expect(second.map((resource) => resource.id)).toEqual(['runtime-b']);
+    expect(find).toHaveBeenCalledTimes(2);
+    evaluation.mockRestore();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
