@@ -55,6 +55,23 @@ export interface ManagedIdentityEntitlementMapping {
   sourceRef: string | null;
 }
 
+export interface ConfiguredIdentityEntitlementMappingUpdate {
+  providerId: string;
+  previousProviderId?: string;
+  configKey: string;
+  configKeyIdentity: string;
+  sourceRef: string;
+  sourceHash: string;
+  lastAppliedAt: number;
+  driftStatus: string;
+  entitlementType: ExternalEntitlement['type'];
+  externalId: string | null;
+  matchOperator: IdentityEntitlementMatchOperator;
+  targetGroupId: string;
+  syncMode: 'additive' | 'authoritative';
+  isActive: boolean;
+}
+
 /**
  * Provider-managed memberships must retain both parts of their derivation.
  * The legacy mapping-only form remains readable during the staged migration.
@@ -177,6 +194,39 @@ class IdentityEntitlementMappingService {
       updatedAt: now,
     });
     return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: input.entitlementType, externalId: input.externalId?.trim() || null, matchOperator: input.matchOperator, syncMode: input.syncMode || 'authoritative', isActive: true, configKey: input.configKey ?? null, sourceRef: input.sourceRef ?? null };
+  }
+
+  /** Applies an already-validated configuration mapping and clears only its prior derived memberships. */
+  async reconcileConfiguredMapping(id: string, input: ConfiguredIdentityEntitlementMappingUpdate, tenantId?: string | null, store?: MappingStore): Promise<void> {
+    const dataSource = store || await getDataSource();
+    await dataSource.getRepository(AuthzGroupMembership).delete({
+      ...tenantWhere(tenantId), source: 'identity_provider',
+      sourceRef: In(identityProviderMembershipSourceRefs(input.previousProviderId || input.providerId, id)),
+    } as any);
+    await dataSource.getRepository(IdentityEntitlementMapping).update({ id }, {
+      providerId: input.providerId,
+      configKey: input.configKey,
+      configKeyIdentity: input.configKeyIdentity,
+      sourceRef: input.sourceRef,
+      sourceHash: input.sourceHash,
+      lastAppliedAt: input.lastAppliedAt,
+      driftStatus: input.driftStatus,
+      entitlementType: input.entitlementType,
+      externalId: input.externalId,
+      matchOperator: input.matchOperator,
+      targetGroupId: input.targetGroupId,
+      syncMode: input.syncMode,
+      isActive: input.isActive,
+      updatedAt: Date.now(),
+    });
+  }
+
+  async disableConfiguredMapping(id: string, providerId: string, tenantId?: string | null, store?: MappingStore): Promise<void> {
+    const dataSource = store || await getDataSource();
+    await dataSource.getRepository(AuthzGroupMembership).delete({
+      ...tenantWhere(tenantId), source: 'identity_provider', sourceRef: In(identityProviderMembershipSourceRefs(providerId, id)),
+    } as any);
+    await dataSource.getRepository(IdentityEntitlementMapping).update({ id }, { isActive: false, updatedAt: Date.now() });
   }
 
   async update(id: string, input: Partial<IdentityEntitlementMappingInput> & { isActive?: boolean }, tenantId?: string | null): Promise<ManagedIdentityEntitlementMapping> {

@@ -1,4 +1,4 @@
-import { In, IsNull, type EntityManager } from 'typeorm';
+import { type EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
@@ -13,7 +13,6 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
-import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { engineSetKeyIdentity, engineSetService } from './EngineSetService.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
@@ -29,7 +28,7 @@ import { configBundleSecretPreflightService } from './ConfigBundleSecretPrefligh
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
 import { configBundleRuntimeReconciliationTaskService } from './ConfigBundleRuntimeReconciliationTaskService.js';
 import { archiveIdentityProviderInStore, identityProviderService } from './IdentityProviderService.js';
-import { identityEntitlementMappingService, identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
+import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
 import { authzGroupService } from './AuthzGroupService.js';
 import { runtimeResourceSetService } from './RuntimeResourceSetService.js';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
@@ -363,7 +362,6 @@ class ConfigBundleApplyService {
       const targetRepo = manager.getRepository(ProjectEngineTarget);
       const providerRepo = manager.getRepository(IdentityProvider);
       const identityMappingRepo = manager.getRepository(IdentityEntitlementMapping);
-      const groupMembershipRepo = manager.getRepository(AuthzGroupMembership);
       const rolePermissionRepo = manager.getRepository(RbacRolePermission);
 
       for (const change of diff.changes) {
@@ -757,8 +755,7 @@ class ConfigBundleApplyService {
             || existing.syncMode !== values.syncMode
             || !existing.isActive;
           if (mappingChanged) {
-            await groupMembershipRepo.delete({ tenantId: tenantId || IsNull(), source: 'identity_provider', sourceRef: In(identityProviderMembershipSourceRefs(existing.providerId, existing.id)) });
-            await identityMappingRepo.update({ id: existing.id }, values);
+            await identityEntitlementMappingService.reconcileConfiguredMapping(existing.id, { ...values, previousProviderId: existing.providerId }, tenantId, manager);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.update', resourceType: 'identity_entitlement_mapping', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, canonicalHash: diff.canonicalHash, membershipCleanup: 'source_scoped' } });
             updated += 1;
             replayProviderIds.push(provider.id);
@@ -769,8 +766,7 @@ class ConfigBundleApplyService {
         const existing = await identityMappingRepo.find({ where: { tenantId, sourceRef } as any });
         for (const mapping of existing) {
           if (mapping.configKey && mappingKeys.has(mapping.configKey)) continue;
-          await groupMembershipRepo.delete({ tenantId: tenantId || IsNull(), source: 'identity_provider', sourceRef: In(identityProviderMembershipSourceRefs(mapping.providerId, mapping.id)) });
-          await identityMappingRepo.update({ id: mapping.id }, { isActive: false, updatedAt: now });
+          await identityEntitlementMappingService.disableConfiguredMapping(mapping.id, mapping.providerId, tenantId, manager);
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.disable', resourceType: 'identity_entitlement_mapping', resourceId: mapping.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash, membershipCleanup: 'source_scoped' } });
           archived += 1;
           replayProviderIds.push(mapping.providerId);
