@@ -15,7 +15,7 @@ import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persiste
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
-import { engineSetKeyIdentity } from './EngineSetService.js';
+import { engineSetKeyIdentity, engineSetService } from './EngineSetService.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
 import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
@@ -520,10 +520,9 @@ class ConfigBundleApplyService {
           const engineRows = await engineRepo.find();
           const keyToId = new Map(engineRows.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine.id]));
           if (change.operation === 'create' && desired) {
-            const id = generateId();
             const selector = resolveConfigEngineSetSelector(desired.selector, keyToId);
-            await engineSetRepo.insert({ id, tenantId, key: desired.key, engineSetKeyIdentity: engineSetKeyIdentity(tenantId, desired.key), name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), selectorFingerprint: '', source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', isArchived: false, createdById: input.actorId, lastMaterializedAt: null, materializationStatus: 'pending', materializationError: null, createdAt: now, updatedAt: now });
-            materializeIds.push(id); created += 1;
+            const createdSet = await engineSetService.createEngineSet({ tenantId, key: desired.key, name: desired.name, description: desired.description || null, selector, source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', createdById: input.actorId, riskAcknowledged: true }, manager, true);
+            materializeIds.push(createdSet.id); created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
             const selector = resolveConfigEngineSetSelector(desired.selector, keyToId);
             await engineSetRepo.update({ id: change.currentId }, { name: desired.name, description: desired.description || null, selectorJson: JSON.stringify(selector), isArchived: false, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', materializationStatus: 'pending', updatedAt: now });

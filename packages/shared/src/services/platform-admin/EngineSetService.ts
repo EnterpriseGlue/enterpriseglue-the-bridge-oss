@@ -6,7 +6,7 @@ import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/
 import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { In, IsNull, type DataSource, type Repository } from 'typeorm';
+import { In, IsNull, type DataSource, type EntityManager, type Repository } from 'typeorm';
 
 export type EngineSetSource = 'manual' | 'sso' | 'api' | 'external' | 'system' | 'automation' | 'config';
 export type EngineSetOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
@@ -34,6 +34,10 @@ export interface EngineSetInput {
   selector: EngineSetSelector;
   source?: EngineSetSource;
   sourceRef?: string | null;
+  ownershipMode?: EngineSetOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
   createdById?: string | null;
   riskAcknowledged?: boolean;
 }
@@ -339,7 +343,7 @@ class EngineSetServiceClass {
     };
   }
 
-  async createEngineSet(input: EngineSetInput): Promise<{ id: string }> {
+  async createEngineSet(input: EngineSetInput, store?: DataSource | EntityManager, deferMaterialization = false): Promise<{ id: string }> {
     const name = input.name.trim();
     if (!name) throw Errors.validation('Engine Set name is required');
     const key = input.key?.trim() || keyFromName(name);
@@ -348,7 +352,7 @@ class EngineSetServiceClass {
     const selector = normalizeSelector(input.selector);
     requireEngineSetSelectorRiskAcknowledgement(selector, input.riskAcknowledged);
     const tenantId = normalizeTenantId(input.tenantId);
-    const dataSource = await getDataSource();
+    const dataSource = store || await getDataSource();
     const repo = dataSource.getRepository(EngineSet);
     await this.assertUniqueKey(repo, key, tenantId);
 
@@ -365,10 +369,10 @@ class EngineSetServiceClass {
       selectorFingerprint: selectorFingerprint(selector),
       source: input.source || 'manual',
       sourceRef: input.sourceRef || null,
-      ownershipMode: input.source === 'config' ? 'config_locked' : 'manual',
-      sourceHash: null,
-      lastAppliedAt: null,
-      driftStatus: null,
+      ownershipMode: input.ownershipMode || (input.source === 'config' ? 'config_locked' : 'manual'),
+      sourceHash: input.sourceHash || null,
+      lastAppliedAt: input.lastAppliedAt || null,
+      driftStatus: input.driftStatus || null,
       isArchived: false,
       createdById: input.createdById || null,
       lastMaterializedAt: null,
@@ -378,7 +382,7 @@ class EngineSetServiceClass {
       updatedAt: now,
     });
 
-    await this.materializeEngineSet(id, tenantId);
+    if (!deferMaterialization) await this.materializeEngineSet(id, tenantId);
     return { id };
   }
 
