@@ -6,6 +6,12 @@ legacy SSO mapping evaluator or removing a legacy provider compatibility path.
 It intentionally preserves every legacy mapping and provider until the
 representative sign-in and Effective Access evidence is recorded.
 
+Before the change window, copy the
+[cutover test-plan template](./legacy-identity-provider-cutover-test-plan-template.md)
+to the approved change record and fill it in. The template separates the
+operator inputs, representative-user matrix, execution ownership, and evidence
+index from this procedure. Do not commit a completed copy to this repository.
+
 ## Required environment and inputs
 
 Use an environment with the same identity-provider protocol, claim shape,
