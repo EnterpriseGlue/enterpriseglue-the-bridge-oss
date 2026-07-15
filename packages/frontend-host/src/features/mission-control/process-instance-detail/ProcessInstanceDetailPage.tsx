@@ -34,7 +34,7 @@ import { ProcessInstanceBottomPane } from './components/ProcessInstanceBottomPan
 import { ProcessInstanceModals } from './components/ProcessInstanceModals'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
 import { ApplyModificationsModal } from './components/modals/ApplyModificationsModal'
-import { useActionDecision, WhyUnavailableLink } from '../../../shared/auth/guards'
+import { useActionDecision } from '../../../shared/auth/guards'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import {
   SPLIT_PANE_STORAGE_KEY,
@@ -113,22 +113,7 @@ export default function ProcessInstanceDetailPage() {
   const snapshotRetryDecision = useActionDecision('engine.runtime.process-instances.retry', selectedEngineResource)
   const snapshotModifyDecision = useActionDecision('engine.runtime.process-instances.modify', selectedEngineResource)
   const snapshotTerminateDecision = useActionDecision('engine.runtime.process-instances.delete', selectedEngineResource)
-  const variablesReadDecision = useActionDecision('engine.runtime.process-instances.variables.read', selectedEngineResource)
-  const historicVariablesReadDecision = useActionDecision('engine.runtime.history.variables.read', selectedEngineResource)
-  const variableHistoryReadDecision = useActionDecision('engine.runtime.process-instances.variable-history.read', selectedEngineResource)
   const snapshotVariablesUpdateDecision = useActionDecision('engine.runtime.process-instances.variables.update', selectedEngineResource)
-  const jobsReadDecision = useActionDecision('engine.runtime.jobs.read', selectedEngineResource)
-  const externalTasksReadDecision = useActionDecision('engine.runtime.external-tasks.read', selectedEngineResource)
-  const historyProcessInstanceReadDecision = useActionDecision('engine.runtime.history.process-instances.read', selectedEngineResource)
-  const activityTreeReadDecision = useActionDecision('engine.runtime.process-instances.activity-tree.read', selectedEngineResource)
-  const activityHistoryReadDecision = useActionDecision('engine.runtime.process-instances.activity-history.read', selectedEngineResource)
-  const executionDetailsReadDecision = useActionDecision('engine.runtime.process-instances.execution-details.read', selectedEngineResource)
-  const incidentsReadDecision = useActionDecision('engine.runtime.process-instances.incidents.read', selectedEngineResource)
-  const historyDecisionsReadDecision = useActionDecision('engine.runtime.history.decisions.read', selectedEngineResource)
-  const decisionInputsReadDecision = useActionDecision('engine.runtime.history.decisions.inputs.read', selectedEngineResource)
-  const decisionOutputsReadDecision = useActionDecision('engine.runtime.history.decisions.outputs.read', selectedEngineResource)
-  const historyTasksReadDecision = useActionDecision('engine.runtime.history.tasks.read', selectedEngineResource)
-  const historyUserOperationsReadDecision = useActionDecision('engine.runtime.history.user-operations.read', selectedEngineResource)
   const notifyDeniedAction = React.useCallback((decision: UiAuthzDecision) => {
     if (decision.allowed) return false
     showAlert(decision.reason || 'Action unavailable', 'warning', 'Action unavailable')
@@ -298,16 +283,15 @@ export default function ProcessInstanceDetailPage() {
     submitVariableEdit()
   }, [notifyDeniedAction, submitVariableEdit, variablesUpdateDecision])
   const openVariableHistory = React.useCallback((target: VariableHistoryTarget) => {
-    if (notifyDeniedAction(variableHistoryReadDecision)) return
     setVariableHistoryTarget(target)
-  }, [notifyDeniedAction, variableHistoryReadDecision])
+  }, [])
   const closeVariableHistory = React.useCallback(() => {
     setVariableHistoryTarget(null)
   }, [])
   const variableHistoryQ = useQuery({
     queryKey: ['mission-control', 'variable-history', instanceId, selectedEngineId, variableHistoryTarget?.variableInstanceId],
     queryFn: () => getProcessInstanceVariableHistory(instanceId!, variableHistoryTarget!.variableInstanceId!, selectedEngineId),
-    enabled: variableHistoryReadDecision.allowed && !!instanceId && !!selectedEngineId && !!variableHistoryTarget?.variableInstanceId,
+    enabled: !!instanceId && !!selectedEngineId && !!variableHistoryTarget?.variableInstanceId,
     retry: false,
   })
 
@@ -661,7 +645,7 @@ export default function ProcessInstanceDetailPage() {
       if (!candidates || candidates.length === 0) return null
       return candidates[0]
     },
-    enabled: historyDecisionsReadDecision.allowed && !!instanceId && (!!selectedActivityId || !!selectedNodeMeta?.decisionRef || !!selectedActivityInstanceId),
+    enabled: !!instanceId && (!!selectedActivityId || !!selectedNodeMeta?.decisionRef || !!selectedActivityInstanceId),
   })
 
   const selectedDecisionInstance = selectedDecisionInstanceQ.data || null
@@ -670,13 +654,13 @@ export default function ProcessInstanceDetailPage() {
   const decisionInputsQ = useQuery<DecisionIo[]>({
     queryKey: ['mission-control', 'selected-decision-inputs', selectedDecisionInstance?.id],
     queryFn: () => apiClient.get<DecisionIo[]>(withEngineId(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/inputs`), undefined, { credentials: 'include' }),
-    enabled: decisionInputsReadDecision.allowed && !!selectedDecisionInstance?.id,
+    enabled: !!selectedDecisionInstance?.id,
   })
 
   const decisionOutputsQ = useQuery<DecisionIo[]>({
     queryKey: ['mission-control', 'selected-decision-outputs', selectedDecisionInstance?.id],
     queryFn: () => apiClient.get<DecisionIo[]>(withEngineId(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/outputs`), undefined, { credentials: 'include' }),
-    enabled: decisionOutputsReadDecision.allowed && !!selectedDecisionInstance?.id,
+    enabled: !!selectedDecisionInstance?.id,
   })
 
   // Hover highlight marker (Camunda-like): highlight BPMN element when hovering history list
@@ -961,23 +945,6 @@ export default function ProcessInstanceDetailPage() {
     return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
   }
 
-  if (selectedEngineId && !historyProcessInstanceReadDecision.allowed) {
-    return (
-      <div style={{ padding: 'var(--spacing-4)' }}>
-        <InlineNotification
-          lowContrast
-          kind="warning"
-          title="Process instance history unavailable"
-          subtitle={historyProcessInstanceReadDecision.reason || 'Missing permission to view process instance history on this engine.'}
-          hideCloseButton
-        />
-        <div style={{ marginTop: 'var(--spacing-2)', fontSize: 12 }}>
-          <WhyUnavailableLink decision={historyProcessInstanceReadDecision} />
-        </div>
-      </div>
-    )
-  }
-
   return (
     <PageLoader isLoading={isInitialLoading} skeletonType="instance-detail">
     <div className={styles.container}>
@@ -1145,16 +1112,7 @@ export default function ProcessInstanceDetailPage() {
             onBulkUploadVariables: () => {
               if (!notifyDeniedAction(variablesUpdateDecision)) openBulkUploadModal()
             },
-            variablesReadDecision,
-            historicVariablesReadDecision,
-            variableHistoryReadDecision,
             variablesUpdateDecision,
-            executionDetailsReadDecision,
-            historyTasksReadDecision,
-            historyUserOperationsReadDecision,
-            historyDecisionsReadDecision,
-            decisionInputsReadDecision,
-            decisionOutputsReadDecision,
             selectedDecisionInstance,
             decisionInputs: decisionInputsQ.data || [],
             decisionOutputs: decisionOutputsQ.data || [],
@@ -1211,7 +1169,6 @@ export default function ProcessInstanceDetailPage() {
         variableHistoryEntries={variableHistoryQ.data || []}
         variableHistoryLoading={variableHistoryQ.isLoading}
         variableHistoryError={variableHistoryError}
-        variableHistoryReadDecision={variableHistoryReadDecision}
         closeVariableHistory={closeVariableHistory}
         addVariableOpen={addVariableOpen}
         addVariableName={addVariableName}
