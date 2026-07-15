@@ -44,7 +44,7 @@ export function withAuthorizedRuntimeTenantQuery<T extends Record<string, unknow
   params: T,
   scopes: AuthorizedRuntimeResourceScope[] | undefined,
   resourceKey: string,
-): T & { tenantIdIn?: string[]; withoutTenantId?: boolean } {
+): Omit<T, 'tenantIdIn' | 'withoutTenantId'> & { tenantIdIn?: string[]; withoutTenantId?: boolean } {
   if (!scopes) return params
   const { tenantIdIn: _requestedTenantIdIn, withoutTenantId: _requestedWithoutTenantId, ...query } = params
   const runtimeTenantIds = scopes

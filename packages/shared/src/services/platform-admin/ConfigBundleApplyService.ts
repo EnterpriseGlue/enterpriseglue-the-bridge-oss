@@ -23,7 +23,6 @@ import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persis
 import { permissionService } from './permissions.js';
 import { engineService } from './EngineService.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { createHash } from 'node:crypto';
 import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBundleDiffService.js';
 import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
@@ -96,10 +95,6 @@ function runtimeResourceSetKeyIdentity(tenantId: string | null, key: string): st
 
 function identityMappingConfigKeyIdentity(tenantId: string | null, key: string): string {
   return `${tenantId || 'platform'}:${key}`;
-}
-
-function selectorFingerprint(selector: unknown): string {
-  return createHash('sha256').update(JSON.stringify(selector)).digest('hex');
 }
 
 function objectFingerprint(kind: string, key: string, value: unknown): string {
@@ -538,33 +533,19 @@ class ConfigBundleApplyService {
           const engineByConfigKey = new Map(engineRows.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine]));
           const engine = desired ? engineByConfigKey.get(desired.engineRef.engineKey) : null;
           if (desired && !engine) fail(`Runtime Resource Set ${desired.key} references an unresolved engine`, 422);
-          const values = desired && engine ? {
-            name: desired.name,
-            description: desired.description || null,
-            engineId: engine.id,
-            resourceKind: desired.resourceKind,
-            selectorJson: JSON.stringify(desired.selector),
-            selectorFingerprint: selectorFingerprint(desired.selector),
-            runtimeTenantId: desired.runtimeTenantId || null,
-            sourceHash,
-            lastAppliedAt: now,
-            driftStatus: 'in_sync',
-            isArchived: false,
-            updatedAt: now,
-          } : null;
-          if (change.operation === 'create' && desired && values) {
+          if (change.operation === 'create' && desired && engine) {
             const createdSet = await runtimeResourceSetService.create({ tenantId, key: desired.key, name: desired.name, description: desired.description || null, engineId: engine!.id, resourceKind: desired.resourceKind, selector: desired.selector, runtimeTenantId: desired.runtimeTenantId || null, source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', createdById: input.actorId }, manager);
             const id = createdSet.id;
             materializeRuntimeResourceSetIds.push(id);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.runtime_resource_set.create', resourceType: 'runtime_resource_set', resourceId: id, details: { bundleKey: manifest.metadata.key, runtimeResourceSetKey: desired.key, canonicalHash: diff.canonicalHash } });
             created += 1;
-          } else if (change.operation === 'update' && change.currentId && values) {
-            await runtimeResourceSetRepo.update({ id: change.currentId }, values);
+          } else if (change.operation === 'update' && desired && engine && change.currentId) {
+            await runtimeResourceSetService.update(change.currentId, { name: desired.name, description: desired.description || null, engineId: engine.id, resourceKind: desired.resourceKind, selector: desired.selector, runtimeTenantId: desired.runtimeTenantId || null, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', isArchived: false }, manager);
             materializeRuntimeResourceSetIds.push(change.currentId);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.runtime_resource_set.update', resourceType: 'runtime_resource_set', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, runtimeResourceSetKey: desired!.key, canonicalHash: diff.canonicalHash } });
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
-            await runtimeResourceSetRepo.update({ id: change.currentId }, { isArchived: true, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', updatedAt: now });
+            await runtimeResourceSetService.archive(change.currentId, { sourceHash, lastAppliedAt: now, driftStatus: 'in_sync' }, manager);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.runtime_resource_set.archive', resourceType: 'runtime_resource_set', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, runtimeResourceSetKey: change.key, canonicalHash: diff.canonicalHash } });
             archived += 1;
           }

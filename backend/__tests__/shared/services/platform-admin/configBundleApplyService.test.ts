@@ -648,7 +648,7 @@ describe('configBundleApplyService', () => {
     expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a', engineSetIds: [], runtimeResourceSetIds: [], engineIds: [expect.any(String)],
     }));
-    const applyAudit = auditInsert.mock.calls.map(([entry]: [{ details: string; action: string }]) => entry).find((entry) => entry.action === 'authz.config_bundle.apply');
+    const applyAudit = auditInsert.mock.calls.map((args) => args[0] as { details: string; action: string }).find((entry) => entry.action === 'authz.config_bundle.apply');
     expect(applyAudit).toBeDefined();
     expect(applyAudit!.details).toContain('"before":{"state":"absent"}');
     expect(applyAudit!.details).not.toContain('PAYMENTS_ENGINE_PASSWORD');

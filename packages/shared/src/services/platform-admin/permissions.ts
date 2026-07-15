@@ -2231,10 +2231,10 @@ class PermissionServiceClass {
       principalType: principal.principalType,
       principalId: principal.principalId,
       roleId: input.roleId,
-      scopeType: input.scopeType,
-      scopeId: input.scopeId,
-      source: input.source,
-      sourceRef: input.sourceRef,
+      scopeType,
+      scopeId,
+      source,
+      sourceRef,
     });
 
     const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
