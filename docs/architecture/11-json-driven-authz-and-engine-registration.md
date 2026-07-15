@@ -660,7 +660,7 @@ Required tests:
 - [x] ✅ Direct engine plus `auth.type = "none"` is rejected by the shared engine and config-bundle schemas.
 - [x] ✅ Customer-sidecar plus disallowed credentialless policy is rejected.
 - [x] ✅ EnterpriseGlue authorization denial prevents any sidecar request; the composite deployment eligibility test proves the outbound transport is not invoked.
-- [ ] ⬜ Sidecar timeout, TLS failure, malformed response, and downstream denial fail closed with transport-specific diagnostics and sanitized audit data.
+- [x] ✅ Sidecar timeout, TLS failure, malformed response, and downstream denial fail closed with sanitized transport diagnostics and audit outcomes. The bounded client records only stable operation/result classes (`ENGINE_TRANSPORT_UNAVAILABLE`, `ENGINE_MALFORMED_RESPONSE`, or `ENGINE_OPERATION_REJECTED`) plus canonical lineage; focused sidecar tests cover timeout, TLS, malformed JSON, and rejection paths while proving endpoint names, upstream bodies, and downstream-token-like values never enter the API diagnostics or audit payload.
 - [ ] ⬜ No config export, OpenAPI response, UI model, log, or audit event contains the downstream peer token.
 
 ### Example Engines

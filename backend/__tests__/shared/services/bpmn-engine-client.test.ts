@@ -204,32 +204,60 @@ describe('bpmn-engine-client', () => {
   });
 
   it('never retries mutations and sanitizes exhausted transport errors', async () => {
-    (fetch as unknown as Mock).mockRejectedValueOnce(new Error('connect ECONNREFUSED https://secret-engine.example.com'));
+    const engineRepo = { findOneBy: vi.fn().mockResolvedValue({
+      id: 'engine-sidecar', baseUrl: 'https://secret-engine.example.com/engine-rest', connectionMode: 'customer_sidecar', authType: 'none',
+    }) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : {} });
+    (fetch as unknown as Mock).mockRejectedValueOnce(new Error('request timed out https://secret-engine.example.com/downstream-secret-must-not-leak'));
 
-    await fetchBpmnEngineEndpoint({
-      id: 'engine-sidecar',
-      baseUrl: 'https://secret-engine.example.com/engine-rest',
-      connectionMode: 'customer_sidecar',
-      authType: 'none',
-    }, { engineId: 'engine-sidecar', method: 'POST', path: '/process-definition/key/order/start' }, { body: '{}' }).then(
-      () => { throw new Error('Expected transport failure'); },
-      (error: { code: string; statusCode: number; toJSON: () => unknown }) => {
-        expect(error.code).toBe('ENGINE_TRANSPORT_UNAVAILABLE');
-        expect(error.statusCode).toBe(502);
-        expect(error.toJSON()).toEqual({
-          error: 'The engine endpoint is unavailable',
-          code: 'ENGINE_TRANSPORT_UNAVAILABLE',
-          details: {
-            operationClass: 'engine.instance.mutate',
-            attempts: 1,
-            timeoutMs: 10_000,
-            connectionMode: 'customer_sidecar',
-          },
-        });
-        expect(JSON.stringify(error.toJSON())).not.toContain('secret-engine.example.com');
-      },
-    );
+    await runWithBpmnEngineRequestContext({ requestId: 'request-timeout', userId: 'user-1', tenantId: 'tenant-1', actionId: 'engine.runtime.instances.start' }, async () => {
+      await camundaPost('engine-sidecar', '/process-definition/key/order/start', {}).then(
+        () => { throw new Error('Expected transport failure'); },
+        (error: { code: string; statusCode: number; toJSON: () => unknown }) => {
+          expect(error.code).toBe('ENGINE_TRANSPORT_UNAVAILABLE');
+          expect(error.statusCode).toBe(502);
+          expect(error.toJSON()).toEqual({
+            error: 'The engine endpoint is unavailable',
+            code: 'ENGINE_TRANSPORT_UNAVAILABLE',
+            details: {
+              operationClass: 'engine.instance.mutate',
+              attempts: 1,
+              timeoutMs: 10_000,
+              connectionMode: 'customer_sidecar',
+            },
+          });
+          expect(JSON.stringify(error.toJSON())).not.toContain('secret-engine.example.com');
+          expect(JSON.stringify(error.toJSON())).not.toContain('downstream-secret-must-not-leak');
+        },
+      );
+    });
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ requestId: 'request-timeout', result: 'transport_unavailable', errorCode: 'ENGINE_TRANSPORT_UNAVAILABLE' }),
+    }));
+    expect(JSON.stringify((logAudit as unknown as Mock).mock.calls)).not.toContain('secret-engine.example.com');
+    expect(JSON.stringify((logAudit as unknown as Mock).mock.calls)).not.toContain('downstream-secret-must-not-leak');
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed and records a sanitized TLS transport outcome for a sidecar', async () => {
+    const engineRepo = { findOneBy: vi.fn().mockResolvedValue({
+      id: 'engine-sidecar', baseUrl: 'https://sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar', authType: 'none',
+    }) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : {} });
+    (fetch as unknown as Mock).mockRejectedValueOnce(new Error('TLS handshake failed for https://sidecar.example.test/engine-rest?peer=customer-downstream-token'));
+
+    await runWithBpmnEngineRequestContext({ requestId: 'request-tls', userId: 'user-1', tenantId: 'tenant-1', actionId: 'engine.runtime.instances.start' }, async () => {
+      await expect(camundaPost('engine-sidecar', '/process-definition/key/payments/start', {})).rejects.toMatchObject({
+        code: 'ENGINE_TRANSPORT_UNAVAILABLE',
+        details: { connectionMode: 'customer_sidecar', operationClass: 'engine.instance.mutate' },
+      });
+    });
+
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ requestId: 'request-tls', result: 'transport_unavailable', errorCode: 'ENGINE_TRANSPORT_UNAVAILABLE' }),
+    }));
+    expect(JSON.stringify((logAudit as unknown as Mock).mock.calls)).not.toContain('sidecar.example.test');
+    expect(JSON.stringify((logAudit as unknown as Mock).mock.calls)).not.toContain('customer-downstream-token');
   });
 
   it('rejects oversized declared engine responses before callers can read them', async () => {
@@ -637,22 +665,28 @@ describe('bpmn-engine-client', () => {
       json: vi.fn().mockRejectedValue(new SyntaxError('unexpected token from https://sidecar.example.test/private')),
     });
 
-    await camundaGet('engine-sidecar', '/version').then(
-      () => { throw new Error('Expected malformed response failure'); },
-      (error: { code: string; statusCode: number; toJSON: () => unknown }) => {
-        expect(error.code).toBe('ENGINE_MALFORMED_RESPONSE');
-        expect(error.statusCode).toBe(502);
-        expect(error.toJSON()).toEqual({
-          error: 'The engine returned a malformed response',
-          code: 'ENGINE_MALFORMED_RESPONSE',
-          details: {
-            operationClass: 'engine.read',
-            connectionMode: 'customer_sidecar',
-          },
-        });
-        expect(JSON.stringify(error.toJSON())).not.toContain('sidecar.example.test');
-      },
-    );
+    await runWithBpmnEngineRequestContext({ requestId: 'request-malformed', userId: 'user-1', tenantId: 'tenant-1', actionId: 'engine.runtime.process-definitions.read' }, async () => {
+      await camundaGet('engine-sidecar', '/version').then(
+        () => { throw new Error('Expected malformed response failure'); },
+        (error: { code: string; statusCode: number; toJSON: () => unknown }) => {
+          expect(error.code).toBe('ENGINE_MALFORMED_RESPONSE');
+          expect(error.statusCode).toBe(502);
+          expect(error.toJSON()).toEqual({
+            error: 'The engine returned a malformed response',
+            code: 'ENGINE_MALFORMED_RESPONSE',
+            details: {
+              operationClass: 'engine.read',
+              connectionMode: 'customer_sidecar',
+            },
+          });
+          expect(JSON.stringify(error.toJSON())).not.toContain('sidecar.example.test');
+        },
+      );
+    });
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ requestId: 'request-malformed', result: 'malformed_response', errorCode: 'ENGINE_MALFORMED_RESPONSE' }),
+    }));
+    expect(JSON.stringify((logAudit as unknown as Mock).mock.calls)).not.toContain('sidecar.example.test');
   });
 
   it('reports an engine rejection as an operational failure rather than local authorization denial', async () => {
