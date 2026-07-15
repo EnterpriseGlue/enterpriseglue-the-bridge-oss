@@ -7,7 +7,7 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persi
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import type { ProjectEngineTargetPolicyMode } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { In, type DataSource } from 'typeorm';
+import { In, type DataSource, type EntityManager } from 'typeorm';
 import {
   DEFAULT_PROJECT_ENGINE_TARGET_MODE,
   platformSettingsService,
@@ -59,6 +59,10 @@ export interface ProjectEngineTargetInput {
   approvedAt?: number | null;
   policyTags?: string[];
   diagnostics?: Record<string, unknown> | null;
+  ownershipMode?: ProjectEngineTargetOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
   allowSourceOwnedMutation?: boolean;
 }
 
@@ -287,15 +291,15 @@ export class ProjectEngineTargetService {
     return view || null;
   }
 
-  async createTarget(input: ProjectEngineTargetInput): Promise<{ id: string }> {
+  async createTarget(input: ProjectEngineTargetInput, store?: DataSource | EntityManager): Promise<{ id: string }> {
     if (input.engineId === '__env__') {
       throw Errors.validation('Project engine targets require a concrete engine id');
     }
     this.assertCanSetTargetSource(input.source, input.allowSourceOwnedMutation);
     await this.assertManualTargetManagementAllowed(input.allowSourceOwnedMutation);
-    const dataSource = await getDataSource();
-    await this.assertProjectAndEngineVisible(dataSource, input.projectId, input.engineId, input.tenantId);
-    const targetRepo = dataSource.getRepository(ProjectEngineTarget);
+    const dataStore = store || await getDataSource();
+    await this.assertProjectAndEngineVisible(dataStore, input.projectId, input.engineId, input.tenantId);
+    const targetRepo = dataStore.getRepository(ProjectEngineTarget);
     const existing = await targetRepo.findOne({ where: { projectId: input.projectId, engineId: input.engineId } });
     const now = Date.now();
 
@@ -344,10 +348,10 @@ export class ProjectEngineTargetService {
       status: input.status || 'active',
       source,
       sourceRef: input.sourceRef || null,
-      ownershipMode: source === 'config' ? 'config_locked' : 'manual',
-      sourceHash: null,
-      lastAppliedAt: null,
-      driftStatus: null,
+      ownershipMode: input.ownershipMode || (source === 'config' ? 'config_locked' : 'manual'),
+      sourceHash: input.sourceHash ?? null,
+      lastAppliedAt: input.lastAppliedAt ?? null,
+      driftStatus: input.driftStatus ?? null,
       externalSystemId: normalizeString(input.externalSystemId),
       externalProjectId: normalizeString(input.externalProjectId),
       externalEngineId: normalizeString(input.externalEngineId),
@@ -555,7 +559,7 @@ export class ProjectEngineTargetService {
   }
 
   private async assertProjectAndEngineVisible(
-    dataSource: DataSource,
+    dataSource: DataSource | EntityManager,
     projectId: string,
     engineId: string,
     tenantId?: string | null

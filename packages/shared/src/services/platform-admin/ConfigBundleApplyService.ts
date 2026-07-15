@@ -32,6 +32,7 @@ import { configBundleRuntimeReconciliationTaskService } from './ConfigBundleRunt
 import { archiveIdentityProviderInStore } from './IdentityProviderService.js';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 import { authzGroupService } from './AuthzGroupService.js';
+import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 
 export type ConfigBundleIdentityReconciliationMode = 'none' | 'preview' | 'apply';
@@ -677,9 +678,32 @@ class ConfigBundleApplyService {
           approvedById: null, approvalStatus: 'not_required', approvedAt: null, policyTagsJson: null, diagnosticsJson: null, lastSeenAt: now, updatedAt: now,
         };
         if (!existing) {
-          const targetId = generateId();
-          await targetRepo.insert({ id: targetId, tenantId, projectId: project.id, engineId: engine.id, ...values, createdById: input.actorId, createdAt: now });
-          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.project_engine_target.create', resourceType: 'project_engine_target', resourceId: targetId, details: { bundleKey: manifest.metadata.key, projectId: project.id, engineKey: target.engineRef.engineKey, canonicalHash: diff.canonicalHash } });
+          const createdTarget = await projectEngineTargetService.createTarget({
+            tenantId,
+            projectId: project.id,
+            engineId: engine.id,
+            status: target.status,
+            source: 'config',
+            sourceRef,
+            ownershipMode: target.ownershipMode || 'config_locked',
+            sourceHash,
+            lastAppliedAt: now,
+            driftStatus: 'in_sync',
+            externalSystemId: null,
+            externalProjectId: null,
+            externalEngineId: null,
+            externalTargetId: null,
+            allowManualDeploy: target.allowManualDeploy,
+            allowCiDeploy: target.allowCiDeploy,
+            allowApiDeploy: target.allowApiDeploy,
+            allowImport: target.allowImport,
+            approvedById: null,
+            approvalStatus: 'not_required',
+            approvedAt: null,
+            createdById: input.actorId,
+            allowSourceOwnedMutation: true,
+          }, manager);
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.project_engine_target.create', resourceType: 'project_engine_target', resourceId: createdTarget.id, details: { bundleKey: manifest.metadata.key, projectId: project.id, engineKey: target.engineRef.engineKey, canonicalHash: diff.canonicalHash } });
           created += 1;
         } else {
           const transfersOwnership = existing.source !== 'config' || existing.sourceRef !== sourceRef;

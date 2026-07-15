@@ -103,7 +103,7 @@ function setupDataSource() {
   const groupRepo = { find: vi.fn().mockResolvedValue([]), findOneBy: vi.fn().mockResolvedValue(null), insert: groupInsert, update: vi.fn() };
   const permissionRepo = { find: vi.fn().mockResolvedValue([]), insert: permissionInsert, delete: vi.fn() };
   const engineInsert = vi.fn().mockResolvedValue(undefined);
-  const engineRepo = { find: vi.fn().mockResolvedValue([]), insert: engineInsert, update: vi.fn() };
+  const engineRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a' }), insert: engineInsert, update: vi.fn() };
   const engineSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const runtimeResourceSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const runtimeResourceSetMaterializationRepo = { find: vi.fn().mockResolvedValue([]) };

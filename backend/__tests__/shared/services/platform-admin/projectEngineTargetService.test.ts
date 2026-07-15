@@ -97,6 +97,41 @@ describe('projectEngineTargetService', () => {
     }));
   });
 
+  it('persists config provenance through a supplied transaction manager', async () => {
+    const insert = vi.fn().mockResolvedValue(undefined);
+    const targetFindOne = vi.fn().mockResolvedValue(null);
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-1' }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-1' }) };
+        if (entity === ProjectEngineTarget) return { findOne: targetFindOne, insert };
+        throw new Error('Unexpected repository');
+      },
+    };
+
+    await projectEngineTargetService.createTarget({
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      engineId: 'engine-1',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_warn',
+      sourceHash: 'bundle-hash',
+      lastAppliedAt: 123,
+      driftStatus: 'in_sync',
+      allowSourceOwnedMutation: true,
+    }, manager as any);
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_warn',
+      sourceHash: 'bundle-hash',
+      lastAppliedAt: 123,
+      driftStatus: 'in_sync',
+    }));
+  });
+
   it('checks active targets by deployment mode', async () => {
     const targetFindOne = vi.fn().mockResolvedValue({
       id: 'target-1',
