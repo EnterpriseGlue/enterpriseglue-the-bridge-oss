@@ -76,6 +76,16 @@ export interface UpdateAuthzGroupInput {
   updatedById?: string | null;
 }
 
+export interface ConfiguredAuthzGroupUpdate {
+  name?: string;
+  description?: string | null;
+  isArchived?: boolean;
+  ownershipMode?: AuthzGroupOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
+}
+
 export interface AddAuthzGroupMembershipInput {
   tenantId?: string | null;
   groupId: string;
@@ -397,6 +407,20 @@ export class AuthzGroupService {
         driftStatus: isConfigWarn ? 'drifted' : group.driftStatus || null,
       },
     });
+  }
+
+  /** Configuration reconciliation write; bundle apply supplies the authoritative provenance and audit event. */
+  async updateConfiguredGroup(id: string, input: ConfiguredAuthzGroupUpdate, store?: DataSource | EntityManager): Promise<void> {
+    const repo = (store || await getDataSource()).getRepository(AuthzGroup);
+    const values: Record<string, unknown> = { updatedAt: Date.now() };
+    if (input.name !== undefined) values.name = input.name.trim();
+    if (input.description !== undefined) values.description = input.description || null;
+    if (input.isArchived !== undefined) values.isArchived = input.isArchived;
+    if (input.ownershipMode !== undefined) values.ownershipMode = input.ownershipMode;
+    if (input.sourceHash !== undefined) values.sourceHash = input.sourceHash;
+    if (input.lastAppliedAt !== undefined) values.lastAppliedAt = input.lastAppliedAt;
+    if (input.driftStatus !== undefined) values.driftStatus = input.driftStatus;
+    await repo.update({ id }, values);
   }
 
   async listMemberships(filters: { tenantId?: string | null; groupId?: string; userId?: string } = {}): Promise<AuthzGroupMembershipView[]> {
