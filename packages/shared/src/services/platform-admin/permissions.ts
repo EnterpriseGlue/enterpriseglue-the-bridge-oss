@@ -2227,14 +2227,14 @@ class PermissionServiceClass {
     const source = input.source ?? 'manual';
     const sourceRef = input.sourceRef ?? input.sourceMappingId ?? null;
     const assignmentKey = canonicalRoleAssignmentKey({
-      tenantId: normalizedTenantId,
+      tenantId: input.tenantId ?? null,
       principalType: principal.principalType,
       principalId: principal.principalId,
       roleId: input.roleId,
-      scopeType,
-      scopeId,
-      source,
-      sourceRef,
+      scopeType: input.scopeType,
+      scopeId: input.scopeId,
+      source: input.source,
+      sourceRef: input.sourceRef,
     });
 
     const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
@@ -2246,28 +2246,8 @@ class PermissionServiceClass {
       return { id: existing.id, warnings: store ? [] : await this.getRuntimeAssignmentWarnings(dataSource as DataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
     }
 
-    const id = generateId();
-    const now = Date.now();
-    await assignmentRepo.insert({
-      id,
-      tenantId: normalizedTenantId,
-      principalType: principal.principalType,
-      principalId: principal.principalId,
-      assignmentKey,
-      roleId: input.roleId,
-      scopeType,
-      scopeId,
-      source,
-      sourceRef,
-      ownershipMode: input.ownershipMode || (source === 'config' ? 'config_locked' : 'manual'),
-      sourceHash: input.sourceHash ?? null,
-      lastAppliedAt: input.lastAppliedAt ?? null,
-      driftStatus: input.driftStatus ?? null,
-      expiresAt: input.expiresAt ?? null,
-      lastSeenAt: null,
-      createdById: input.createdById,
-      createdAt: now,
-      updatedAt: now,
+    const id = await this.insertRoleAssignment(dataSource, assignmentKey, principal, {
+      ...input, tenantId: normalizedTenantId, scopeType, scopeId, source, sourceRef,
     });
     await recordAuthzAudit(dataSource, {
       tenantId: normalizedTenantId,
@@ -2292,6 +2272,33 @@ class PermissionServiceClass {
     });
 
     return { id, warnings: store ? [] : await this.getRuntimeAssignmentWarnings(dataSource as DataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
+  }
+
+  private async insertRoleAssignment(dataSource: DataSource | EntityManager, assignmentKey: string, principal: { principalType: PrincipalType; principalId: string }, input: CreateRoleAssignmentInput & { scopeType: ResourceType; scopeId: string | null; source: RoleAssignmentSource; sourceRef: string | null }): Promise<string> {
+    const id = generateId();
+    const now = Date.now();
+    await dataSource.getRepository(RbacRoleAssignment).insert({
+      id,
+      tenantId: input.tenantId ?? null,
+      principalType: principal.principalType,
+      principalId: principal.principalId,
+      assignmentKey,
+      roleId: input.roleId,
+      scopeType: input.scopeType,
+      scopeId: input.scopeId,
+      source: input.source,
+      sourceRef: input.sourceRef,
+      ownershipMode: input.ownershipMode || (input.source === 'config' ? 'config_locked' : 'manual'),
+      sourceHash: input.sourceHash ?? null,
+      lastAppliedAt: input.lastAppliedAt ?? null,
+      driftStatus: input.driftStatus ?? null,
+      expiresAt: input.expiresAt ?? null,
+      lastSeenAt: null,
+      createdById: input.createdById,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return id;
   }
 
   private async getRuntimeAssignmentWarnings(
