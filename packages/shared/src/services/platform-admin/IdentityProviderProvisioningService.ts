@@ -16,6 +16,11 @@ export interface ProvisionIdentityInput {
   providerType: IdentityProviderType; subjectId: string; email: string; emailVerified: boolean; displayName?: string | null;
   firstName?: string | null; lastName?: string | null; directoryTenantId?: string | null; claims: Record<string, unknown>;
 }
+interface ProvisioningResult {
+  user: ProvisionedIdentityUser;
+  groupMembershipsCreated: number;
+  groupMembershipsRemoved: number;
+}
 
 function requiredEmail(claims: OidcIdentityClaims): string {
   const email = typeof claims.email === 'string' ? claims.email.trim().toLowerCase() : typeof claims.preferred_username === 'string' ? claims.preferred_username.trim().toLowerCase() : '';
@@ -52,7 +57,7 @@ function isUniqueConstraintError(error: unknown): boolean {
 
 class IdentityProviderProvisioningService {
   async provisionOidcUser(provider: IdentityProvider, claims: OidcIdentityClaims): Promise<ProvisionedIdentityUser> {
-    return this.provision(provider, this.oidcInput(provider, claims));
+    return (await this.provision(provider, this.oidcInput(provider, claims))).user;
   }
 
   async reconcileOidcLogin(provider: IdentityProvider, claims: OidcIdentityClaims): Promise<ProvisionedIdentityUser> {
@@ -60,6 +65,10 @@ class IdentityProviderProvisioningService {
   }
 
   async provisionLdapUser(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>): Promise<ProvisionedIdentityUser> {
+    return (await this.provisionLdapUserForReconciliation(provider, input)).user;
+  }
+
+  async provisionLdapUserForReconciliation(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>): Promise<ProvisioningResult> {
     return this.provision(provider, { ...input, providerType: 'ldap', emailVerified: true });
   }
 
@@ -68,7 +77,7 @@ class IdentityProviderProvisioningService {
   }
 
   async provisionSamlUser(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>): Promise<ProvisionedIdentityUser> {
-    return this.provision(provider, { ...input, providerType: 'saml', emailVerified: true });
+    return (await this.provision(provider, { ...input, providerType: 'saml', emailVerified: true })).user;
   }
 
   async reconcileSamlLogin(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>): Promise<ProvisionedIdentityUser> {
@@ -84,16 +93,21 @@ class IdentityProviderProvisioningService {
     const details = { source: 'identity_provider_reconciliation', protocol: input.providerType, mode: 'login' };
     const runId = await ssoSyncDiagnosticsService.startRun({ tenantId: provider.tenantId, providerId: provider.id, trigger: 'login', details });
     try {
-      const user = await this.provision(provider, input);
-      await ssoSyncDiagnosticsService.completeRun(runId, { tenantId: provider.tenantId, providerId: provider.id, userId: user.id, details });
-      return user;
+      const reconciliation = await this.provision(provider, input);
+      await ssoSyncDiagnosticsService.completeRun(runId, {
+        tenantId: provider.tenantId, providerId: provider.id, userId: reconciliation.user.id,
+        groupMembershipsCreated: reconciliation.groupMembershipsCreated,
+        groupMembershipsRemoved: reconciliation.groupMembershipsRemoved,
+        details,
+      });
+      return reconciliation.user;
     } catch (error) {
       await ssoSyncDiagnosticsService.failRun(runId, error, { tenantId: provider.tenantId, providerId: provider.id, details });
       throw error;
     }
   }
 
-  private async provision(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisionedIdentityUser> {
+  private async provision(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisioningResult> {
     // A new subject can arrive through a direct login while a scheduled directory
     // page is creating the same link. Retry the full transaction once after the
     // database's unique constraint resolves that first-writer race.
@@ -108,7 +122,7 @@ class IdentityProviderProvisioningService {
     throw new Error('Identity provisioning retry exhausted');
   }
 
-  private async provisionOnce(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisionedIdentityUser> {
+  private async provisionOnce(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisioningResult> {
     // A group-overage marker means the provider did not supply a complete group
     // result. Reject it before creating or updating any local identity state so
     // an authoritative mapping can never interpret it as an empty entitlement set.
@@ -161,11 +175,15 @@ class IdentityProviderProvisioningService {
         emailHint: email,
         now,
       });
-      await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
+      const normalizedIdentity = await ssoNormalizedIdentityService.upsertIdentityWithManager(manager, {
         tenantId: provider.tenantId, providerId: provider.id, providerType: input.providerType, providerSubject: input.subjectId, subjectClaim: input.providerType === 'ldap' ? 'directory_id' : 'sub', providerTenantId: input.directoryTenantId || provider.directoryTenantId, userId: user.id, email, displayName: input.displayName || null, firstName: input.firstName || null, lastName: input.lastName || null, claims: input.claims, authorizationAttributeKeys: authorizationAttributeKeys(provider), now,
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, user.id);
-      return { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, isActive: user.isActive };
+      return {
+        user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, isActive: user.isActive },
+        groupMembershipsCreated: normalizedIdentity.groupMembershipsCreated || 0,
+        groupMembershipsRemoved: normalizedIdentity.groupMembershipsRemoved || 0,
+      };
     });
   }
 }

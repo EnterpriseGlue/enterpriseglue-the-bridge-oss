@@ -29,7 +29,7 @@ describe('IdentityProviderProvisioningService', () => {
     stores.externalIdentity.update.mockResolvedValue(undefined);
     stores.user.findOneBy.mockResolvedValue(null);
     stores.user.insert.mockResolvedValue(undefined);
-    ssoNormalizedIdentityService.upsertIdentityWithManager.mockResolvedValue({ id: 'snapshot-1', created: true });
+    ssoNormalizedIdentityService.upsertIdentityWithManager.mockResolvedValue({ id: 'snapshot-1', created: true, groupMembershipsCreated: 2, groupMembershipsRemoved: 1 });
     authzGroupService.ensureAuthenticatedUserMembershipWithManager.mockResolvedValue({ id: 'baseline-1', created: true });
     ssoSyncDiagnosticsService.startRun.mockResolvedValue('run-1');
     ssoSyncDiagnosticsService.completeRun.mockResolvedValue(undefined);
@@ -163,6 +163,7 @@ describe('IdentityProviderProvisioningService', () => {
     }));
     expect(ssoSyncDiagnosticsService.completeRun).toHaveBeenCalledWith('run-1', expect.objectContaining({
       tenantId: 'tenant-1', providerId: 'provider-1', userId: expect.any(String),
+      groupMembershipsCreated: 2, groupMembershipsRemoved: 1,
     }));
   });
 

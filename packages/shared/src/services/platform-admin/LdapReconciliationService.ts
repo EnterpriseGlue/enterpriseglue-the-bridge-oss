@@ -19,9 +19,15 @@ class LdapReconciliationService {
     const runId = await ssoSyncDiagnosticsService.startRun({ tenantId, providerId: provider.id, trigger, details: { source: 'ldap_reconciliation', cursor: lease.cursor } });
     try {
       const page = await directLdapIdentityService.listDirectoryPage(provider);
-      for (const identity of page.identities) await identityProviderProvisioningService.provisionLdapUser(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
+      let groupMembershipsCreated = 0;
+      let groupMembershipsRemoved = 0;
+      for (const identity of page.identities) {
+        const reconciliation = await identityProviderProvisioningService.provisionLdapUserForReconciliation(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
+        groupMembershipsCreated += reconciliation.groupMembershipsCreated;
+        groupMembershipsRemoved += reconciliation.groupMembershipsRemoved;
+      }
       await identityReconciliationCheckpointService.complete(provider.id, lease.leaseId, page.nextCursor);
-      await ssoSyncDiagnosticsService.completeRun(runId, { tenantId, providerId: provider.id, details: { source: 'ldap_reconciliation', processed: page.identities.length } });
+      await ssoSyncDiagnosticsService.completeRun(runId, { tenantId, providerId: provider.id, groupMembershipsCreated, groupMembershipsRemoved, details: { source: 'ldap_reconciliation', processed: page.identities.length } });
       return { processed: page.identities.length, runId };
     } catch (error) { await identityReconciliationCheckpointService.release(provider.id, lease.leaseId); await ssoSyncDiagnosticsService.failRun(runId, error, { tenantId, providerId: provider.id, details: { source: 'ldap_reconciliation' } }); throw error; }
   }
