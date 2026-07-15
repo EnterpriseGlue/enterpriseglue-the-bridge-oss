@@ -114,6 +114,20 @@ describe('IdentityProviderProvisioningService', () => {
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
   });
 
+  it('fails closed before identity writes when OIDC reports an incomplete group result', async () => {
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: '{}' } as any;
+
+    await expect(identityProviderProvisioningService.provisionOidcUser(provider, {
+      sub: 'subject-1', email: 'person@example.test', email_verified: true, hasgroups: true,
+    } as any)).rejects.toThrow('OIDC group claims are incomplete');
+
+    expect(stores.externalIdentity.findOne).not.toHaveBeenCalled();
+    expect(stores.user.findOneBy).not.toHaveBeenCalled();
+    expect(stores.user.insert).not.toHaveBeenCalled();
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
+  });
+
   it('rejects a linked provider subject when its verified email belongs to another user', async () => {
     stores.externalIdentity.findOne.mockResolvedValueOnce({ userId: 'linked-user-1' });
     const linkedUser = { id: 'linked-user-1', email: 'before@example.test', isEmailVerified: true };

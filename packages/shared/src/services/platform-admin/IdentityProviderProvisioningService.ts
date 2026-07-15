@@ -8,6 +8,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import type { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import type { OidcIdentityClaims } from './GenericOidcService.js';
 import type { IdentityProviderType } from './IdentityProviderAdapter.js';
+import { hasIncompleteOidcGroupClaims } from './IdentityProviderAdapter.js';
 import { ssoSyncDiagnosticsService } from './SsoSyncDiagnosticsService.js';
 
 export interface ProvisionedIdentityUser { id: string; email: string; firstName: string | null; lastName: string | null; isActive: boolean; }
@@ -108,6 +109,12 @@ class IdentityProviderProvisioningService {
   }
 
   private async provisionOnce(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisionedIdentityUser> {
+    // A group-overage marker means the provider did not supply a complete group
+    // result. Reject it before creating or updating any local identity state so
+    // an authoritative mapping can never interpret it as an empty entitlement set.
+    if (input.providerType === 'oidc' && hasIncompleteOidcGroupClaims(input.claims)) {
+      throw new Error('OIDC group claims are incomplete; resolve group overage before synchronizing authorization');
+    }
     const email = input.email.trim().toLowerCase();
     if (!email.includes('@')) throw new Error('Identity provider must return an email address');
     const emailVerified = input.emailVerified;
