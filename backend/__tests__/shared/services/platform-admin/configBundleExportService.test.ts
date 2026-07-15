@@ -66,7 +66,7 @@ describe('configBundleExportService', () => {
       getRepository(entity: unknown) {
         if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue([{
           id: 'provider-1', key: 'identity.oidc.legacy', protocol: 'oidc', isEnabled: true, authenticationMode: 'direct', directoryTenantId: null,
-          configurationJson: JSON.stringify({ issuerUrl: 'https://issuer.example.test', clientId: 'enterpriseglue', clientSecret: rawClientSecret }), syncJson: '{}', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz',
+          configurationJson: JSON.stringify({ issuerUrl: 'https://issuer.example.test', clientId: 'enterpriseglue', clientSecret: rawClientSecret, nested: { apiKey: rawClientSecret } }), syncJson: '{}', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz',
         }]) };
         if ([RbacRole, AuthzGroup, RbacRolePermission, Engine, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');

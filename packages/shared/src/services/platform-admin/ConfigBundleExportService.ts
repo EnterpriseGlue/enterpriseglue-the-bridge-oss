@@ -20,7 +20,7 @@ function externalReference(value: string | null | undefined): string | null {
   return value?.startsWith('ref:') ? value.slice(4) : null;
 }
 
-const resolvedSecretKey = /(?:secret|password|private.?key|certificate|token)$/i;
+const resolvedSecretKey = /(?:secret|password|private.?key|certificate|token|api.?key|credential)$/i;
 
 /** Export is a trust boundary for rows created before secret-reference validation existed. */
 function assertProviderConfigurationContainsOnlyReferences(value: unknown, path = 'configuration'): void {
