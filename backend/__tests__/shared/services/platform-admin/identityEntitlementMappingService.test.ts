@@ -66,6 +66,29 @@ describe('identity entitlement mapping', () => {
     }, 'tenant-a')).rejects.toThrow('OAuth scopes cannot be used for human identity mappings');
   });
 
+  it('rejects identity mappings that reference a provider or group outside the requested tenant', async () => {
+    const mappingRepo = { insert: vi.fn() };
+    const providerRepo = { findOne: vi.fn().mockResolvedValue(null) };
+    const groupRepo = { findOne: vi.fn().mockResolvedValue(null) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === IdentityProvider ? providerRepo
+        : entity === AuthzGroup ? groupRepo
+          : entity === IdentityEntitlementMapping ? mappingRepo
+            : {},
+    });
+
+    await expect(identityEntitlementMappingService.create({
+      providerKey: 'foreign-provider', targetGroupKey: 'foreign-group', entitlementType: 'group', externalId: 'operators', matchOperator: 'exact',
+    }, 'tenant-a')).rejects.toThrow('Identity provider not found');
+
+    for (const repo of [providerRepo, groupRepo]) {
+      expect(repo.findOne).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ tenantId: 'tenant-a' }),
+      }));
+    }
+    expect(mappingRepo.insert).not.toHaveBeenCalled();
+  });
+
   it('removes legacy scope-derived memberships regardless of their prior sync mode', async () => {
     const mappingRepo = { find: vi.fn().mockResolvedValue([{ id: 'legacy-scope', providerId: 'entra', entitlementType: 'scope', externalId: 'engines.read', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'additive', isActive: true }]) };
     const membershipRepo = { findOne: vi.fn().mockResolvedValue({ id: 'membership-1', userId: 'user-1', groupId: 'group-1', source: 'identity_provider', sourceRef: identityProviderMembershipSourceRef('entra', 'legacy-scope') }), insert: vi.fn(), delete: vi.fn().mockResolvedValue(undefined) };

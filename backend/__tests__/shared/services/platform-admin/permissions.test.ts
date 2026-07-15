@@ -1685,6 +1685,45 @@ describe('permissionService', () => {
     })).rejects.toThrow('Role is not assignable');
   });
 
+  it('rejects a role assignment that names a group from another tenant', async () => {
+    const groupRepo = { findOne: vi.fn().mockResolvedValue(null) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { findOne: vi.fn().mockResolvedValue({ id: 'custom.platform.viewer', scope: 'platform', kind: 'custom', tenantId: null, isArchived: false, isAssignable: true }) };
+        if (entity === AuthzGroup) return groupRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(permissionService.assignRole({
+      tenantId: 'tenant-a', principalType: 'group', principalId: 'foreign-group', roleId: 'custom.platform.viewer', createdById: 'admin-1',
+    })).rejects.toThrow('Group not found or archived');
+
+    expect(groupRepo.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.arrayContaining([expect.objectContaining({ id: 'foreign-group', tenantId: 'tenant-a' })]),
+    }));
+  });
+
+  it('rejects a role assignment that names an engine from another tenant', async () => {
+    const engineRepo = { findOne: vi.fn().mockResolvedValue(null) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { findOne: vi.fn().mockResolvedValue({ id: 'custom.engine.viewer', scope: 'engine', kind: 'custom', tenantId: null, isArchived: false, isAssignable: true }) };
+        if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue({ id: 'group-1', isArchived: false }) };
+        if (entity === Engine) return engineRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(permissionService.assignRole({
+      tenantId: 'tenant-a', principalType: 'group', principalId: 'group-1', roleId: 'custom.engine.viewer', resourceType: 'engine', resourceId: 'foreign-engine', createdById: 'admin-1',
+    })).rejects.toThrow('Engine not found');
+
+    expect(engineRepo.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.arrayContaining([expect.objectContaining({ id: 'foreign-engine', tenantId: 'tenant-a' })]),
+    }));
+  });
+
   it('rejects runtime-resource assignments when the containing engine is engine-wide', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {

@@ -2205,7 +2205,7 @@ class PermissionServiceClass {
         throw new Error('User not found');
       }
     }
-    await this.assertAssignablePrincipalExists(dataSource, principal);
+    await this.assertAssignablePrincipalExists(dataSource, principal, normalizedTenantId);
     await this.assertMachinePrincipalCanReceiveRole(dataSource, principal, role);
 
     const scope = role.scope as RoleScope;
@@ -2461,7 +2461,8 @@ class PermissionServiceClass {
 
   private async assertAssignablePrincipalExists(
     dataSource: DataSource | EntityManager,
-    principal: { principalType: PrincipalType; principalId: string }
+    principal: { principalType: PrincipalType; principalId: string },
+    tenantId?: string | null,
   ): Promise<void> {
     if (principal.principalType === 'api_client') {
       const client = await dataSource.getRepository(ApiClient).findOne({
@@ -2476,7 +2477,7 @@ class PermissionServiceClass {
 
     if (principal.principalType === 'group') {
       const group = await dataSource.getRepository(AuthzGroup).findOne({
-        where: { id: principal.principalId },
+        where: tenantScopedWhere({ id: principal.principalId, isArchived: false }, tenantId),
         select: ['id', 'isArchived'],
       });
       if (!group || group.isArchived) {
@@ -2575,7 +2576,7 @@ class PermissionServiceClass {
 
     if (resourceType === 'project') {
       const project = await dataSource.getRepository(Project).findOne({
-        where: { id: resourceId || '' },
+        where: tenantScopedWhere({ id: resourceId || '' }, tenantId),
         select: ['id'],
       });
       if (!project) {
@@ -2586,7 +2587,7 @@ class PermissionServiceClass {
 
     if (resourceType === 'engine') {
       const engine = await dataSource.getRepository(Engine).findOne({
-        where: { id: resourceId || '' },
+        where: tenantScopedWhere({ id: resourceId || '' }, tenantId),
         select: ['id'],
       });
       if (!engine) {
@@ -2597,7 +2598,7 @@ class PermissionServiceClass {
 
     if (resourceType === 'engine_set') {
       const engineSet = await dataSource.getRepository(EngineSet).findOne({
-        where: { id: resourceId || '' },
+        where: tenantScopedWhere({ id: resourceId || '' }, tenantId),
         select: ['id'],
       });
       if (!engineSet) {
@@ -2660,7 +2661,7 @@ class PermissionServiceClass {
     if (!runtimeScope) throw new Error('Runtime resource scope not found');
 
     const engine = await dataSource.getRepository(Engine).findOne({
-      where: { id: runtimeScope.engineId },
+      where: tenantScopedWhere({ id: runtimeScope.engineId }, tenantId),
       select: ['id', 'runtimeAccessScope'],
     });
     if (!engine) throw new Error('Runtime resource engine not found');
