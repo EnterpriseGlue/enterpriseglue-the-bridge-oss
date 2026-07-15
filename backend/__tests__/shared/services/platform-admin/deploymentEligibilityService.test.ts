@@ -269,6 +269,24 @@ describe('deploymentEligibilityService', () => {
     );
   });
 
+  it('keeps base deployment eligibility identical for direct and customer-sidecar transports', async () => {
+    vi.spyOn(permissionService, 'hasPermission').mockResolvedValue(true);
+    vi.spyOn(projectEngineTargetService, 'hasActiveTarget').mockResolvedValue(true);
+
+    mockDataSource({ connectionMode: 'direct', authType: 'basic' });
+    const direct = await deploymentEligibilityService.evaluate({
+      userId: 'user-1', projectId: 'project-1', engineId: 'engine-1', mode: 'manual',
+    });
+
+    mockDataSource({ connectionMode: 'customer_sidecar', authType: 'none' });
+    const sidecar = await deploymentEligibilityService.evaluate({
+      userId: 'user-1', projectId: 'project-1', engineId: 'engine-1', mode: 'manual',
+    });
+
+    expect(sidecar).toEqual(direct);
+    expect(sidecar).toMatchObject({ allowed: true, decision: 'allow' });
+  });
+
   it('does not let a passing policy gate replace missing base permissions', async () => {
     mockDataSource();
     vi.spyOn(permissionService, 'hasPermission').mockResolvedValue(false);
