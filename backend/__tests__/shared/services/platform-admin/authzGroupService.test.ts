@@ -165,6 +165,12 @@ describe('authzGroupService', () => {
       tenantId: 'tenant-a',
       key: 'operators',
       name: 'Operators',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_warn',
+      sourceHash: 'group-fingerprint',
+      lastAppliedAt: 123,
+      driftStatus: 'in_sync',
       createdById: 'admin-1',
     });
     await authzGroupService.updateGroup('group-1', {
@@ -191,6 +197,12 @@ describe('authzGroupService', () => {
       tenantId: 'tenant-a',
       key: 'operators',
       groupKeyIdentity: 'tenant-a:operators',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_warn',
+      sourceHash: 'group-fingerprint',
+      lastAppliedAt: 123,
+      driftStatus: 'in_sync',
     }));
     expect(auditRepo.insert.mock.calls.map(([entry]) => entry.action)).toEqual([
       'authz.group.create',

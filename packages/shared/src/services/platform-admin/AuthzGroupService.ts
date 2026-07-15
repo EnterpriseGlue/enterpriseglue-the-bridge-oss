@@ -60,6 +60,10 @@ export interface CreateAuthzGroupInput {
   description?: string | null;
   source?: AuthzGroupSource;
   sourceRef?: string | null;
+  ownershipMode?: AuthzGroupOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
   isSystem?: boolean;
   createdById?: string | null;
 }
@@ -326,10 +330,10 @@ export class AuthzGroupService {
       description: input.description?.trim() || null,
       source: input.source || 'manual',
       sourceRef: input.sourceRef || null,
-      ownershipMode: input.source === 'config' ? 'config_locked' : 'manual',
-      sourceHash: null,
-      lastAppliedAt: null,
-      driftStatus: null,
+      ownershipMode: input.ownershipMode || (input.source === 'config' ? 'config_locked' : 'manual'),
+      sourceHash: input.sourceHash || null,
+      lastAppliedAt: input.lastAppliedAt || null,
+      driftStatus: input.driftStatus || null,
       isSystem: Boolean(input.isSystem),
       isArchived: false,
       createdById: input.createdById || null,

@@ -88,7 +88,7 @@ function setupDataSource() {
   const permissionInsert = vi.fn().mockResolvedValue(undefined);
   const auditInsert = vi.fn().mockResolvedValue(undefined);
   const roleRepo = { find: vi.fn().mockResolvedValue([]), insert: roleInsert, update: vi.fn() };
-  const groupRepo = { find: vi.fn().mockResolvedValue([]), insert: groupInsert, update: vi.fn() };
+  const groupRepo = { find: vi.fn().mockResolvedValue([]), findOneBy: vi.fn().mockResolvedValue(null), insert: groupInsert, update: vi.fn() };
   const permissionRepo = { find: vi.fn().mockResolvedValue([]), insert: permissionInsert, delete: vi.fn() };
   const engineInsert = vi.fn().mockResolvedValue(undefined);
   const engineRepo = { find: vi.fn().mockResolvedValue([]), insert: engineInsert, update: vi.fn() };

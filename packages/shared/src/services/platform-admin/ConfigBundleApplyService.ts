@@ -29,7 +29,7 @@ import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityRep
 import { configBundleRuntimeReconciliationTaskService } from './ConfigBundleRuntimeReconciliationTaskService.js';
 import { archiveIdentityProviderInStore } from './IdentityProviderService.js';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
-import { authzGroupKeyIdentity } from './AuthzGroupService.js';
+import { authzGroupService } from './AuthzGroupService.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 
 export type ConfigBundleIdentityReconciliationMode = 'none' | 'preview' | 'apply';
@@ -454,12 +454,9 @@ class ConfigBundleApplyService {
           const desired = desiredGroups.get(change.key);
           const sourceHash = desired ? objectFingerprint('group', desired.key, desired) : objectFingerprint('group', change.key, { archived: true });
           if (change.operation === 'create' && desired) {
-            const groupId = generateId();
-            await groupRepo.insert({
-              id: groupId,
+            const { id: groupId } = await authzGroupService.createGroup({
               tenantId,
               key: desired.key,
-              groupKeyIdentity: authzGroupKeyIdentity(tenantId, desired.key),
               name: desired.name,
               description: desired.description || null,
               source: 'config',
@@ -469,12 +466,8 @@ class ConfigBundleApplyService {
               lastAppliedAt: now,
               driftStatus: 'in_sync',
               isSystem: false,
-              isArchived: false,
               createdById: input.actorId,
-              createdAt: now,
-              updatedAt: now,
-            });
-            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.group.create', resourceType: 'authz_group', resourceId: groupId, details: { bundleKey: manifest.metadata.key, groupKey: desired.key, canonicalHash: diff.canonicalHash } });
+            }, manager);
             created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
             await groupRepo.update({ id: change.currentId }, {
