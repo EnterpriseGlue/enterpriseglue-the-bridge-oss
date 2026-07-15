@@ -10,8 +10,7 @@ import BatchDetailModal from './BatchDetailModal'
 import { EngineAccessError, isEngineAccessError } from '../../shared/components/EngineAccessError'
 import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeCollectionEmptyState'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
-import { AuthContext } from '../../../../contexts/AuthContext'
-import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, WhyUnavailableLink } from '../../../../shared/auth/guards'
+import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 type RuntimeActionDecision = { allowed: boolean; reason?: string }
@@ -48,9 +47,6 @@ export default function BatchesList() {
   const { tenantNavigate } = useTenantNavigate()
   const { batchId } = useParams()
   const selectedEngineId = useSelectedEngine()
-  const authContext = React.useContext(AuthContext)
-  const engineResource = React.useMemo(() => ({ type: 'engine' as const, id: selectedEngineId ?? null }), [selectedEngineId])
-  const readDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'engine.runtime.batches.read', engineResource)
   const listQ = useQuery({
     queryKey: ['batches', 'list', selectedEngineId],
     queryFn: () => {
@@ -62,7 +58,9 @@ export default function BatchesList() {
       return apiClient.get<Batch[]>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
     },
     refetchInterval: 5000,
-    enabled: !!selectedEngineId && readDecision.allowed,
+    // The collection route applies the bounded runtime-resource filter. The
+    // client snapshot intentionally does not contain its resource lineage.
+    enabled: !!selectedEngineId,
   })
 
   const suspendMutation = useMutation({
@@ -135,23 +133,6 @@ export default function BatchesList() {
   const engineAccessError = isEngineAccessError(listQ.error)
   if (engineAccessError) {
     return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
-  }
-
-  if (selectedEngineId && !readDecision.allowed) {
-    return (
-      <div style={{ padding: 'var(--spacing-4)' }}>
-        <InlineNotification
-          lowContrast
-          kind="warning"
-          title="Batches unavailable"
-          subtitle={readDecision.reason || 'Missing permission to view batches on this engine.'}
-          hideCloseButton
-        />
-        <div style={{ marginTop: 'var(--spacing-2)', fontSize: 12 }}>
-          <WhyUnavailableLink decision={readDecision} />
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -243,7 +224,7 @@ export default function BatchesList() {
                                 <GuardedOverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
                                   <GuardedOverflowMenuItem
                                     itemText="Open"
-                                    decision={readDecision}
+                                    decision={rowDecision('engine.runtime.batches.read', { allowed: true })}
                                     onClick={() => tenantNavigate(`/mission-control/batches/${r.id}`)}
                                   />
                                   <GuardedOverflowMenuItem
