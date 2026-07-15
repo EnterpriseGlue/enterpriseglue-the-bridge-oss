@@ -90,20 +90,21 @@ Set the following when enabling Google OAuth:
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_REDIRECT_URI`
 
-## Migrate A Legacy Microsoft, Google, Or OIDC Provider
+## Migrate A Legacy Microsoft, Google, OIDC, Or SAML Provider
 
-Use this procedure to move from the legacy Microsoft/Google/OIDC flows above to
-an exact-provider-bound, provider-neutral OIDC provider. The migration assistant
-creates a disabled draft only. It never decrypts, copies, or displays a legacy
-client secret.
+Use this procedure to move from a legacy Microsoft, Google, OIDC, or SAML flow
+to an exact-provider-bound provider-neutral OIDC or SAML provider. The migration
+assistant creates a disabled draft only. It never decrypts, copies, or displays
+a legacy client secret or signing certificate.
 
 1. In **Platform Settings -> Identity Providers**, choose **Migrate legacy
    provider** or **Migrate environment configuration** and prepare the draft.
 2. Register the draft's callback URL with the identity provider. For OIDC this
    is normally `https://<your-app-domain>/api/auth/identity/callback`.
-3. Add a secret reference to the draft instead of entering a client secret in
-   EnterpriseGlue. A persisted legacy provider requires a newly managed secret
-   reference. An environment migration may temporarily reference
+3. Add a secret reference to the draft instead of entering an OIDC client
+   secret or SAML signing certificate in EnterpriseGlue. A persisted legacy
+   provider requires a newly managed secret reference. An environment migration
+   may temporarily reference
    `env://MICROSOFT_CLIENT_SECRET` or `env://GOOGLE_CLIENT_SECRET` while those
    variables remain available to the backend.
 4. Create active **Identity Mappings** from the provider's stable claims to
@@ -111,8 +112,8 @@ client secret.
    engine, or runtime-resource scope. Do not use a provider-level default role;
    an `exists` mapping to a normal internal group is the supported default-access
    mechanism.
-5. Save the new direct OIDC provider disabled, test its connection, then enable
-   it only for a controlled sign-in test. Provider-neutral login begins at
+5. Save the new direct OIDC or SAML provider disabled, test its connection, then
+   enable it only for a controlled sign-in test. Provider-neutral login begins at
    `/api/auth/identity/<provider-key>/start`.
 6. From the provider row menu, run **Check migration readiness**. Cut over only
    when it reports no blockers: the target must be a direct, enabled OIDC
@@ -122,10 +123,12 @@ client secret.
    membership, engine visibility, project access, and an authorization decision
    in Effective Access. Keep a local break-glass platform administrator usable
    throughout the transition.
-8. Disable the old provider only after the controlled test passes. This is a
-   manual administrative action today. EnterpriseGlue does not automatically
-   archive a legacy provider because legacy records are platform-global whereas
-   provider-neutral definitions may be tenant-scoped.
+8. Disable the old provider only after the controlled test passes. Use the
+   guarded cutover action and retain the evidence described in the
+   [legacy identity provider cutover runbook](./legacy-identity-provider-cutover-runbook.md).
+   EnterpriseGlue does not automatically archive a legacy provider because
+   legacy records are platform-global whereas provider-neutral definitions may
+   be tenant-scoped.
 
 When any direct SSO provider is enabled, password login remains disabled for
 ordinary local accounts. The break-glass exception is limited to an active local

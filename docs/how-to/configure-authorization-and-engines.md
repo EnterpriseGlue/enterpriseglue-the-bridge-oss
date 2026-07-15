@@ -156,8 +156,9 @@ row action. Readiness is non-mutating and fails until the provider exists, uses
 direct OIDC, is enabled, has an available secret reference, and has at least one
 active identity mapping. Automatic archival is deliberately unavailable because
 the legacy provider may be platform-global while the replacement is tenant
-scoped. See [Auth and SSO Setup](./auth-sso.md#migrate-a-legacy-microsoft-google-or-oidc-provider)
-for the controlled runbook and rollback sequence.
+scoped. See [Auth and SSO Setup](./auth-sso.md#migrate-a-legacy-microsoft-google-oidc-or-saml-provider)
+and the [deployed cutover runbook](./legacy-identity-provider-cutover-runbook.md)
+for the executable evidence and rollback sequence.
 
 ### LDAP
 
