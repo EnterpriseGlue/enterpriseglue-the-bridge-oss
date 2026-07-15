@@ -12,6 +12,8 @@ export interface ProcessInstance {
 
 export interface ProcessInstanceListParams {
   processDefinitionKey?: string
+  tenantIdIn?: string[]
+  withoutTenantId?: boolean
   active?: boolean
   suspended?: boolean
   maxResults?: number
@@ -20,6 +22,8 @@ export interface ProcessInstanceListParams {
 export async function listProcessInstances(engineId: string, params: ProcessInstanceListParams = {}): Promise<ProcessInstance[]> {
   const queryParams: Record<string, any> = {}
   if (params.processDefinitionKey) queryParams.processDefinitionKey = params.processDefinitionKey
+  if (params.tenantIdIn?.length) queryParams.tenantIdIn = params.tenantIdIn
+  if (params.withoutTenantId) queryParams.withoutTenantId = true
   if (params.active !== undefined) queryParams.active = params.active
   if (params.suspended !== undefined) queryParams.suspended = params.suspended
   if (params.maxResults !== undefined) queryParams.maxResults = params.maxResults

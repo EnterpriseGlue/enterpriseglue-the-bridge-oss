@@ -3,6 +3,12 @@ import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js'
 
 export const MAX_RUNTIME_RESOURCE_PAGE_SIZE = 100
 
+export type AuthorizedRuntimeResourceScope = {
+  resourceKey: string
+  /** Empty string is the persisted inventory identity for definitions without a runtime tenant. */
+  runtimeTenantId: string
+}
+
 function runtimeFilterNotSupported(message: string): AppError {
   return new AppError('runtime_filter_not_supported', message, 403)
 }
@@ -26,6 +32,31 @@ export function getBoundedRuntimeResourceQuery<T extends Record<string, unknown>
   }
 
   return { ...params, maxResults: maxResults ?? MAX_RUNTIME_RESOURCE_PAGE_SIZE }
+}
+
+/**
+ * Adds the authoritative runtime tenant scope for one stable definition key.
+ * Every current adapter follows the Camunda 7 REST profile, whose collection
+ * endpoints accept `tenantIdIn` and `withoutTenantId`; callers still perform
+ * their normal key/lineage verification after the engine responds.
+ */
+export function withAuthorizedRuntimeTenantQuery<T extends Record<string, unknown>>(
+  params: T,
+  scopes: AuthorizedRuntimeResourceScope[] | undefined,
+  resourceKey: string,
+): T & { tenantIdIn?: string[]; withoutTenantId?: boolean } {
+  if (!scopes) return params
+  const { tenantIdIn: _requestedTenantIdIn, withoutTenantId: _requestedWithoutTenantId, ...query } = params
+  const runtimeTenantIds = scopes
+    .filter((scope) => scope.resourceKey === resourceKey)
+    .map((scope) => scope.runtimeTenantId)
+  const tenantIdIn = [...new Set(runtimeTenantIds.filter(Boolean))]
+  const withoutTenantId = runtimeTenantIds.includes('')
+  return {
+    ...query,
+    ...(tenantIdIn.length ? { tenantIdIn } : {}),
+    ...(withoutTenantId ? { withoutTenantId: true } : {}),
+  }
 }
 
 /**
@@ -56,6 +87,7 @@ export function filterRuntimeItemsByResourceKey<T extends object>(
   items: T[],
   authorizedKeys: string[] | undefined,
   keyField: string,
+  scopes?: AuthorizedRuntimeResourceScope[],
 ): T[] {
   if (!authorizedKeys) return items
   if (items.length > MAX_RUNTIME_RESOURCE_PAGE_SIZE) {
@@ -64,7 +96,12 @@ export function filterRuntimeItemsByResourceKey<T extends object>(
   const allowedKeys = new Set(authorizedKeys)
   return items.filter((item) => {
     const key = (item as Record<string, unknown>)[keyField]
-    return typeof key === 'string' && allowedKeys.has(key)
+    if (typeof key !== 'string' || !allowedKeys.has(key)) return false
+    if (!scopes) return true
+    const runtimeTenantId = typeof (item as Record<string, unknown>).tenantId === 'string'
+      ? (item as Record<string, unknown>).tenantId as string
+      : ''
+    return scopes.some((scope) => scope.resourceKey === key && scope.runtimeTenantId === runtimeTenantId)
   })
 }
 
@@ -82,6 +119,7 @@ export async function filterRuntimeItemsByProcessDefinitionKeys<T extends {
   engineId: string,
   items: T[],
   authorizedDefinitionKeys?: string[],
+  scopes?: AuthorizedRuntimeResourceScope[],
 ): Promise<T[]> {
   if (!authorizedDefinitionKeys) return items
 
@@ -107,9 +145,21 @@ export async function filterRuntimeItemsByProcessDefinitionKeys<T extends {
     const directKey = typeof item.processDefinitionKey === 'string'
       ? item.processDefinitionKey
       : typeof item.definitionKey === 'string' ? item.definitionKey : ''
-    if (directKey) return allowedKeys.has(directKey)
+    const key = directKey || (() => {
+      const candidateDefinitionId = item.processDefinitionId ?? item.definitionId
+      const definitionId = typeof candidateDefinitionId === 'string' ? candidateDefinitionId : ''
+      return keyByDefinitionId.get(definitionId) || ''
+    })()
+    if (!key || !allowedKeys.has(key)) return false
+    if (!scopes) return true
+    const runtimeTenantId = typeof (item as Record<string, unknown>).tenantId === 'string'
+      ? (item as Record<string, unknown>).tenantId as string
+      : ''
+    if (scopes.some((scope) => scope.resourceKey === key && scope.runtimeTenantId === runtimeTenantId)) return true
     const candidateDefinitionId = item.processDefinitionId ?? item.definitionId
     const definitionId = typeof candidateDefinitionId === 'string' ? candidateDefinitionId : ''
-    return allowedKeys.has(keyByDefinitionId.get(definitionId) || '')
+    const definition = definitions.find(([id]) => id === definitionId)?.[1]
+    const definitionTenantId = typeof definition?.tenantId === 'string' ? definition.tenantId : ''
+    return scopes.some((scope) => scope.resourceKey === key && scope.runtimeTenantId === definitionTenantId)
   })
 }

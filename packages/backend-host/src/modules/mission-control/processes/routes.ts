@@ -11,7 +11,7 @@ import {
   getProcessDefinitionStatistics,
   startProcessInstance,
 } from './service.js'
-import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
+import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js'
 
 const r = Router()
@@ -56,6 +56,7 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
     maxResults,
   }
   const keys = req.authorizedRuntimeResourceKeys
+  const scopes = req.authorizedRuntimeResourceScopes
   if (!keys) {
     return res.json(await listProcessDefinitions(engineId, baseQuery))
   }
@@ -63,9 +64,9 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
   const visibleKeys = keys.filter((candidate) => !key || candidate === key)
   const query = getBoundedRuntimeResourceQuery(baseQuery)
   const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
-    const definitions = await listProcessDefinitions(engineId, { ...query, key: processDefinitionKey })
+    const definitions = await listProcessDefinitions(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), key: processDefinitionKey })
     // Do not trust an upstream key filter to be enforced consistently.
-    return filterRuntimeItemsByResourceKey(definitions, [processDefinitionKey], 'key')
+    return filterRuntimeItemsByResourceKey(definitions, [processDefinitionKey], 'key', scopes)
   }))
   res.json(collections.flat())
 }))

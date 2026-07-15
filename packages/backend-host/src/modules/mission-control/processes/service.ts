@@ -11,6 +11,8 @@ export interface ProcessDefinition {
 
 export interface ProcessDefinitionListParams {
   key?: string
+  tenantIdIn?: string[]
+  withoutTenantId?: boolean
   nameLike?: string
   latestVersion?: boolean
   maxResults?: number
@@ -19,6 +21,8 @@ export interface ProcessDefinitionListParams {
 export async function listProcessDefinitions(engineId: string, params: ProcessDefinitionListParams = {}): Promise<ProcessDefinition[]> {
   const queryParams: Record<string, any> = {}
   if (params.key) queryParams.key = params.key
+  if (params.tenantIdIn?.length) queryParams.tenantIdIn = params.tenantIdIn
+  if (params.withoutTenantId) queryParams.withoutTenantId = true
   if (params.nameLike) queryParams.nameLike = params.nameLike
   if (params.latestVersion !== undefined) queryParams.latestVersion = params.latestVersion
   if (params.maxResults !== undefined) queryParams.maxResults = params.maxResults

@@ -15,7 +15,7 @@ import {
   DecisionDefinitionQueryParams,
   EvaluateDecisionRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/decision.js';
-import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js';
+import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js';
 import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js';
 
 const r = Router();
@@ -62,6 +62,7 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
 r.get('/mission-control-api/decision-definitions', requireRuntimeCollectionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition' }), validateQuery(DecisionDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
   if (!keys) {
     return res.json(await listDecisionDefinitions(engineId, req.query));
   }
@@ -70,9 +71,9 @@ r.get('/mission-control-api/decision-definitions', requireRuntimeCollectionActio
   const visibleKeys = keys.filter((candidate) => !requestedKey || candidate === requestedKey);
   const query = getBoundedRuntimeResourceQuery(req.query);
   const collections = await Promise.all(visibleKeys.map(async (decisionDefinitionKey) => {
-    const definitions = await listDecisionDefinitions(engineId, { ...query, key: decisionDefinitionKey });
+    const definitions = await listDecisionDefinitions(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, decisionDefinitionKey), key: decisionDefinitionKey });
     // Keep the local boundary authoritative if the engine ignores the query.
-    return filterRuntimeItemsByResourceKey(definitions, [decisionDefinitionKey], 'key');
+    return filterRuntimeItemsByResourceKey(definitions, [decisionDefinitionKey], 'key', scopes);
   }));
   res.json(collections.flat());
 }));

@@ -196,6 +196,8 @@ declare global {
       authorizedProjectIds?: string[];
       authorizedEngineIds?: string[];
       authorizedRuntimeResourceKeys?: string[];
+      /** Stable runtime identities that must be retained when an upstream API supports tenant query filters. */
+      authorizedRuntimeResourceScopes?: Array<{ resourceKey: string; runtimeTenantId: string }>;
       runtimeAccessScope?: 'engine_wide' | 'resource_aware';
     }
   }
@@ -991,14 +993,17 @@ export function requireRuntimeCollectionAction(actionId: string, options: Requir
       const context = { userId: req.user.userId, tenantId, resourceType: 'engine' as const, resourceId: engineId };
       const broad = await permissionService.hasPermission(action.permissionId, context);
       let keys: string[] | undefined;
+      let scopes: Array<{ resourceKey: string; runtimeTenantId: string }> | undefined;
       if (!broad && engine.runtimeAccessScope === 'resource_aware') {
         const visible = await permissionService.getVisibleRuntimeResources({ userId: req.user.userId, tenantId, engineId, resourceKind: options.resourceKind, permission: action.permissionId });
         keys = visible.map((resource) => resource.resourceKey);
+        scopes = visible.map((resource) => ({ resourceKey: resource.resourceKey, runtimeTenantId: resource.runtimeTenantId || '' }));
         if (!keys.length) throw Errors.forbidden('No authorized runtime resources are available for this engine');
       } else if (!broad) throw Errors.forbidden('Engine runtime access is not allowed');
       req.authzAction = action;
       req.authzResource = { type: 'engine', id: engineId };
       req.authorizedRuntimeResourceKeys = keys;
+      req.authorizedRuntimeResourceScopes = scopes;
       req.runtimeAccessScope = engine.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide';
       (req as Request & { engineId?: string }).engineId = engineId;
       return next();

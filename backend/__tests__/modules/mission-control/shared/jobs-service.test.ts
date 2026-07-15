@@ -11,6 +11,7 @@ import {
 import {
   getBoundedRuntimeFetchAndLockRequest,
   getBoundedRuntimeResourceQuery,
+  withAuthorizedRuntimeTenantQuery,
   MAX_RUNTIME_RESOURCE_PAGE_SIZE,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/runtime-resource-filter.js';
 
@@ -101,6 +102,14 @@ describe('jobs-service', () => {
     expect(() => getBoundedRuntimeResourceQuery({ maxResults: MAX_RUNTIME_RESOURCE_PAGE_SIZE + 1 })).toThrow(
       'Resource-aware runtime queries require maxResults',
     );
+  });
+
+  it('overrides client tenant filters with the authorized runtime tenant for each definition key', () => {
+    expect(withAuthorizedRuntimeTenantQuery({ tenantIdIn: ['untrusted'], withoutTenantId: true }, [
+      { resourceKey: 'payments', runtimeTenantId: 'finance' },
+      { resourceKey: 'payments', runtimeTenantId: '' },
+      { resourceKey: 'hr', runtimeTenantId: 'people' },
+    ], 'payments')).toEqual({ tenantIdIn: ['finance'], withoutTenantId: true });
   });
 
   it('normalizes resource-aware fetch-and-lock limits and rejects unsafe limits', () => {

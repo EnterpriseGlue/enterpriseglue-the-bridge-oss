@@ -219,12 +219,12 @@ describe('mission-control processes routes', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockImplementation(async ({ userId }: { userId: string }) => (
       userId === 'payments-user'
-        ? [{ resourceKey: 'payments-order' }]
-        : [{ resourceKey: 'hr-onboard' }]
+        ? [{ resourceKey: 'payments-order', runtimeTenantId: 'finance' }]
+        : [{ resourceKey: 'hr-onboard', runtimeTenantId: 'people' }]
     ));
     (listProcessDefinitions as unknown as Mock).mockResolvedValue([
-      { id: 'payments:1', key: 'payments-order' },
-      { id: 'hr:1', key: 'hr-onboard' },
+      { id: 'payments:1', key: 'payments-order', tenantId: 'finance' },
+      { id: 'hr:1', key: 'hr-onboard', tenantId: 'people' },
     ]);
 
     const [paymentsResponse, hrResponse] = await Promise.all([
@@ -233,9 +233,9 @@ describe('mission-control processes routes', () => {
     ]);
 
     expect(paymentsResponse.status).toBe(200);
-    expect(paymentsResponse.body).toEqual([{ id: 'payments:1', key: 'payments-order' }]);
+    expect(paymentsResponse.body).toEqual([{ id: 'payments:1', key: 'payments-order', tenantId: 'finance' }]);
     expect(hrResponse.status).toBe(200);
-    expect(hrResponse.body).toEqual([{ id: 'hr:1', key: 'hr-onboard' }]);
+    expect(hrResponse.body).toEqual([{ id: 'hr:1', key: 'hr-onboard', tenantId: 'people' }]);
     expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'central-engine', resourceKind: 'process_definition', permission: 'engine:instance:view', userId: 'payments-user',
     }));
@@ -243,10 +243,10 @@ describe('mission-control processes routes', () => {
       engineId: 'central-engine', resourceKind: 'process_definition', permission: 'engine:instance:view', userId: 'hr-user',
     }));
     expect(listProcessDefinitions).toHaveBeenCalledWith('central-engine', {
-      key: 'payments-order', nameLike: undefined, latestVersion: false, maxResults: 100,
+      key: 'payments-order', nameLike: undefined, latestVersion: false, maxResults: 100, tenantIdIn: ['finance'],
     });
     expect(listProcessDefinitions).toHaveBeenCalledWith('central-engine', {
-      key: 'hr-onboard', nameLike: undefined, latestVersion: false, maxResults: 100,
+      key: 'hr-onboard', nameLike: undefined, latestVersion: false, maxResults: 100, tenantIdIn: ['people'],
     });
   });
 

@@ -12,7 +12,7 @@ import {
   deleteProcessInstance,
   modifyProcessInstanceVariables,
 } from './service.js'
-import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
+import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { addRuntimeProcessInstanceActionDecisions } from '../shared/runtime-row-action-decisions.js'
 
 const r = Router()
@@ -39,6 +39,7 @@ r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('
   const { processDefinitionKey, active, suspended, maxResults } = req.query as { processDefinitionKey?: string; active?: string; suspended?: string; maxResults?: number }
   const engineId = (req as any).engineId as string
   const keys = req.authorizedRuntimeResourceKeys
+  const scopes = req.authorizedRuntimeResourceScopes
   const visibleKeys = keys ? keys.filter((key) => !processDefinitionKey || key === processDefinitionKey) : null
   const baseQuery = {
     active: active === 'true' || active === '1',
@@ -49,10 +50,11 @@ r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('
     ? (await Promise.all(visibleKeys.map(async (key) => filterRuntimeItemsByProcessDefinitionKeys(
       engineId,
       await listProcessInstances(engineId, {
-        ...getBoundedRuntimeResourceQuery(baseQuery),
+        ...withAuthorizedRuntimeTenantQuery(getBoundedRuntimeResourceQuery(baseQuery), scopes, key),
         processDefinitionKey: key,
       }),
       [key],
+      scopes,
     )))).flat()
     : await listProcessInstances(engineId, {
       processDefinitionKey,
