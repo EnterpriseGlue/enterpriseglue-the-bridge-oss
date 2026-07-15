@@ -47,6 +47,7 @@ engine form, config bundle, API request, shell command, diagnostic, or ticket.
 Example configuration-bundle entry for the exceptional private credentialless
 case:
 
+<!-- enterpriseglue-config-schema: ConfigEngineSchema -->
 ```json
 {
   "key": "engine.payments-prod",
