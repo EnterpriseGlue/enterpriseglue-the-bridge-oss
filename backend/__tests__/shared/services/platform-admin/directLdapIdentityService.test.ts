@@ -73,6 +73,11 @@ describe('direct LDAP identity service', () => {
     await expect(directLdapIdentityService.authenticate(nestedProvider, 'person@example.test', 'user-password')).resolves.toMatchObject({ groups: ['group-operators', 'group-admins'] });
   });
 
+  it('fails closed when nested groups are requested with memberOf mode', async () => {
+    await expect(directLdapIdentityService.authenticate({ ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), nestedGroups: true }) }, 'person@example.test', 'user-password'))
+      .rejects.toThrow('Nested LDAP groups require group_search membership mode');
+  });
+
   it('rejects an unsafe user filter without a username placeholder', async () => {
     await expect(directLdapIdentityService.authenticate({ ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), userSearchFilter: '(objectClass=person)' }) }, 'person@example.test', 'password')).rejects.toThrow('{username}');
   });
