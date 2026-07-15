@@ -4,14 +4,19 @@ import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
+import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
+import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 import { configBundleExportService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleExportService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -102,30 +107,31 @@ describe('configBundleExportService', () => {
   });
 
   it('exports all apply-supported config families with stable references', async () => {
-    const configRole = { id: 'role-config', tenantId: null, key: 'custom.engine.reader', name: 'Reader', description: null, scope: 'engine', sourceRef: 'config_bundle:acme.authz', isArchived: false };
+    const configRole = { id: 'role-config', tenantId: null, key: 'custom.engine.reader', name: 'Reader', description: null, scope: 'engine', source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false };
     const systemRole = { id: 'role-system', tenantId: null, key: 'system.platform.user', name: 'Platform User', description: null, scope: 'platform', sourceRef: null, isArchived: false };
-    const group = { id: 'group-1', tenantId: null, key: 'group.operators', name: 'Operators', description: null, sourceRef: 'config_bundle:acme.authz', isArchived: false };
-    const engine = { id: 'engine-1', tenantId: null, configKey: 'engine.central', name: 'Central', baseUrl: 'https://central.example.test/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}', authType: 'basic', username: 'eg', passwordEnc: 'ref:CENTRAL_PASSWORD', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null, version: null, runtimeAccessScope: 'resource_aware', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, pipelineReceiptEnabled: true, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active', sourceRef: 'config_bundle:acme.authz' };
+    const group = { id: 'group-1', tenantId: null, key: 'group.operators', name: 'Operators', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false };
+    const engine = { id: 'engine-1', tenantId: null, configKey: 'engine.central', name: 'Central', baseUrl: 'https://central.example.test/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}', authType: 'basic', username: 'eg', passwordEnc: 'ref:CENTRAL_PASSWORD', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null, version: null, runtimeAccessScope: 'resource_aware', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, deploymentDiscoveryEnabled: true, reconciliationIntervalSeconds: 300, pipelineReceiptEnabled: true, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz' };
     const engineSet = { id: 'engine-set-1', tenantId: null, key: 'engines.central', name: 'Central engines', description: null, selectorJson: '{"mode":"engine_ids","engineKeys":["engine.central"]}', source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false };
     const runtimeResourceSet = { id: 'runtime-set-1', tenantId: null, key: 'runtime.payments', name: 'Payments', description: null, engineId: 'engine-1', resourceKind: 'process_definition', selectorJson: '{"mode":"prefix","prefix":"payments-"}', runtimeTenantId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false };
-    const configProvider = { id: 'provider-config', tenantId: null, key: 'identity.oidc.config', protocol: 'oidc', isEnabled: true, authenticationMode: 'claims_only', directoryTenantId: null, configurationJson: '{"issuerUrl":"https://issuer.example.test","clientId":"enterpriseglue","callbackUrl":"https://app.example.test/callback","scopes":["openid"],"allowVerifiedEmailLinking":true}', syncJson: '{"triggers":["login"],"requiredForLogin":true,"incompleteEntitlements":"fail_closed"}', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz' };
+    const configProvider = { id: 'provider-config', tenantId: null, key: 'identity.oidc.config', protocol: 'oidc', isEnabled: true, authenticationMode: 'claims_only', directoryTenantId: null, configurationJson: '{"issuerUrl":"https://issuer.example.test","clientId":"enterpriseglue","callbackUrl":"https://app.example.test/callback","scopes":["openid"],"allowVerifiedEmailLinking":true}', syncJson: '{"triggers":["login"],"requiredForLogin":true,"incompleteEntitlements":"fail_closed","connectorCapability":"claim_only","scheduled":false}', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz' };
     const externalProvider = { id: 'provider-external', tenantId: null, key: 'identity.ldap.external', protocol: 'ldap', isEnabled: true, authenticationMode: 'direct', directoryTenantId: null, configurationJson: '{}', syncJson: '{}', ownershipMode: 'manual', sourceRef: null };
     const identityMapping = { id: 'mapping-1', tenantId: null, configKey: 'mapping.operators', providerId: 'provider-external', targetGroupId: 'group-1', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, sourceRef: 'config_bundle:acme.authz' };
-    const assignment = { id: 'assignment-1', tenantId: null, assignmentKey: 'assignment-key', principalType: 'group', principalId: 'group-1', roleId: 'role-system', scopeType: 'platform', scopeId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', expiresAt: null };
+    const assignment = { id: 'assignment-1', tenantId: null, assignmentKey: canonicalRoleAssignmentKey({ tenantId: null, principalType: 'group', principalId: 'group-1', roleId: 'role-system', scopeType: 'platform', scopeId: null, source: 'config', sourceRef: 'config_bundle:acme.authz' }), principalType: 'group', principalId: 'group-1', roleId: 'role-system', scopeType: 'platform', scopeId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', expiresAt: null };
     const target = { id: 'target-1', tenantId: null, projectId: '00000000-0000-4000-8000-000000000001', engineId: 'engine-1', status: 'active', source: 'config', sourceRef: 'config_bundle:acme.authz', allowManualDeploy: false, allowCiDeploy: true, allowApiDeploy: false, allowImport: false };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository(entity: unknown) {
-        if (entity === RbacRole) return { find: vi.fn().mockImplementation(({ where }: any) => Promise.resolve(where?.sourceRef ? [configRole] : [configRole, systemRole])) };
+        if (entity === RbacRole) return { find: vi.fn().mockImplementation(({ where }: any = {}) => Promise.resolve(where?.sourceRef ? [configRole] : [configRole, systemRole])) };
         if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([group]) };
         if (entity === Engine) return { find: vi.fn().mockResolvedValue([engine]) };
         if (entity === EngineSet) return { find: vi.fn().mockResolvedValue([engineSet]) };
         if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue([runtimeResourceSet]) };
-        if (entity === RuntimeResource) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RuntimeResource, RuntimeResourceSetMaterialization, AuthzGroupMembership].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Project) return { find: vi.fn().mockResolvedValue([{ id: target.projectId, tenantId: null }]) };
         if (entity === RbacRolePermission) return { find: vi.fn().mockResolvedValue([{ roleId: 'role-config', permissionId: 'engine:deploy' }]) };
         if (entity === RbacRoleAssignment) return { find: vi.fn().mockResolvedValue([assignment]) };
         if (entity === ProjectEngineTarget) return { find: vi.fn().mockResolvedValue([target]) };
-        if (entity === IdentityProvider) return { find: vi.fn().mockImplementation(({ where }: any) => Promise.resolve(where?.sourceRef ? [configProvider] : [configProvider, externalProvider])) };
+        if (entity === IdentityProvider) return { find: vi.fn().mockImplementation(({ where }: any = {}) => Promise.resolve(where?.sourceRef ? [configProvider] : [configProvider, externalProvider])) };
         if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue([identityMapping]) };
         throw new Error('Unexpected repository');
       },
@@ -144,6 +150,20 @@ describe('configBundleExportService', () => {
     const preview = configBundlePreviewService.preview(result);
     expect(preview.errors).toEqual([]);
     expect(preview).toMatchObject({ valid: true });
+    const diff = await configBundleDiffService.diff(result);
+    expect(diff).toMatchObject({ valid: true, errors: [] });
+    expect(diff.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'role', key: 'custom.engine.reader', operation: 'noop' }),
+      expect.objectContaining({ objectType: 'group', key: 'group.operators', operation: 'noop' }),
+      expect.objectContaining({ objectType: 'engine', key: 'engine.central', operation: 'noop' }),
+      expect.objectContaining({ objectType: 'engine_set', key: 'engines.central', operation: 'noop' }),
+      expect.objectContaining({ objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'noop' }),
+      expect.objectContaining({ objectType: 'identity_provider', key: 'identity.oidc.config', operation: 'noop' }),
+      expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.operators', operation: 'noop' }),
+      expect.objectContaining({ objectType: 'assignment', operation: 'noop' }),
+      expect.objectContaining({ objectType: 'project_engine_target', key: '00000000-0000-4000-8000-000000000001:engine.central', operation: 'noop' }),
+    ]));
+    expect(diff.changes.every((change) => change.operation === 'noop')).toBe(true);
     const exportedProvider = (result.files['./identity-providers.json'] as any).identityProviders[0];
     expect(exportedProvider.allowVerifiedEmailLinking).toBe(true);
     expect(exportedProvider.oidc.allowVerifiedEmailLinking).toBeUndefined();

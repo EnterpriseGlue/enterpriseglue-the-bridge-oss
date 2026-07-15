@@ -2146,7 +2146,7 @@ Fixtures should include at least:
 ### JSON Bundle Round-Trip Scenarios
 
 - [x] ✅ Preview and apply a bundle containing providers, roles, groups, engines, engine sets, runtime resource sets, assignments, identity mappings, and project-engine targets. The all-resource apply regression exercises staged creates and their dependent references in one transaction, then verifies the exact runtime and identity reconciliation receipts.
-- [ ] ⬜ Export the applied source-owned state, re-preview it, and receive a deterministic no-op diff.
+- [x] ✅ Export the applied source-owned state, re-preview it, and receive a deterministic no-op diff. The round-trip fixture covers every apply-supported family, including canonical scoped-assignment identity and normalized identity-provider sync defaults, and asserts that every exported object re-diffs as a no-op.
 - [ ] ⬜ Reject missing provider/group/role/engine references, duplicate keys, wrong-scope permissions, plaintext secrets, and test fixture imports.
 - [ ] ⬜ Prove UI-created manual objects survive authoritative config apply unless ownership is explicitly transferred.
 - [x] ✅ Prove a config-managed mapping change can request asynchronous reconciliation without holding the apply transaction open. Apply commits its ownership and mapping writes first, then queues provider-scoped identity continuation pages and leased runtime materialization tasks under the persisted apply-run receipt; focused service, route, poller, and bootstrap tests cover the bounded background and startup-drain paths.
