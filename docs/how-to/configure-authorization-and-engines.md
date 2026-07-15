@@ -153,10 +153,11 @@ registration, a controlled sign-in test, and a manual legacy-provider cutover.
 
 Before disabling a compatibility provider, use its **Check migration readiness**
 row action. Readiness is non-mutating and fails until the provider exists, uses
-direct OIDC, is enabled, has an available secret reference, and has at least one
-active identity mapping. Automatic archival is deliberately unavailable because
-the legacy provider may be platform-global while the replacement is tenant
-scoped. See [Auth and SSO Setup](./auth-sso.md#migrate-a-legacy-microsoft-google-oidc-or-saml-provider)
+the expected direct protocol (OIDC for legacy Microsoft/Google/OIDC or SAML for
+legacy SAML), is enabled, has an available external secret/certificate reference,
+and has at least one active identity mapping. Automatic archival is deliberately
+unavailable because the legacy provider may be platform-global while the
+replacement is tenant scoped. See [Auth and SSO Setup](./auth-sso.md#migrate-a-legacy-microsoft-google-oidc-or-saml-provider)
 and the [deployed cutover runbook](./legacy-identity-provider-cutover-runbook.md)
 for the executable evidence and rollback sequence.
 

@@ -37,7 +37,7 @@ Set only local shell variables; do not commit their values:
 export EG_BASE_URL='https://enterpriseglue.example.com'
 export EG_AUTH_HEADER="Authorization: Bearer <short-lived-admin-token>"
 export LEGACY_PROVIDER_ID='<persisted-legacy-provider-id>'
-export TARGET_PROVIDER_KEY='<direct-oidc-provider-key>'
+export TARGET_PROVIDER_KEY='<direct-provider-key>'
 export EVIDENCE_DIR="./legacy-cutover-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$EVIDENCE_DIR"
 ```

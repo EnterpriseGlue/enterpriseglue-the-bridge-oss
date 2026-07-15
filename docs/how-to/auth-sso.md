@@ -116,9 +116,10 @@ a legacy client secret or signing certificate.
    enable it only for a controlled sign-in test. Provider-neutral login begins at
    `/api/auth/identity/<provider-key>/start`.
 6. From the provider row menu, run **Check migration readiness**. Cut over only
-   when it reports no blockers: the target must be a direct, enabled OIDC
-   provider with an available secret reference and at least one active identity
-   mapping.
+   when it reports no blockers: the target must be an enabled direct provider
+   with the protocol expected for the selected legacy source (OIDC for legacy
+   Microsoft, Google, or OIDC; SAML for legacy SAML), an available external
+   secret or certificate reference, and at least one active identity mapping.
 7. Validate a representative user end to end: sign-in, tenant redirect, group
    membership, engine visibility, project access, and an authorization decision
    in Effective Access. Keep a local break-glass platform administrator usable
