@@ -7,7 +7,6 @@ export { default as BatchesPage } from './BatchesPage'
 export * from './api/batches'
 
 export { default as BatchesList } from './components/BatchesList'
-export { default as BatchDetail } from './components/BatchDetail'
 export { default as BatchDetailModal } from './components/BatchDetailModal'
 export { default as BatchOperationForm } from './components/BatchOperationForm'
 export { default as NewDeleteBatch } from './components/NewDeleteBatch'
