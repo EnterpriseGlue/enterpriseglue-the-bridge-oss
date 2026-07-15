@@ -61,6 +61,18 @@ describe('direct LDAP identity service', () => {
     }));
   });
 
+  it('resolves bounded parent groups when group_search enables nested groups', async () => {
+    process.env.LDAP_BIND_SECRET = 'service-password';
+    const nestedProvider = { ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), groupIdAttribute: 'entryUUID', membershipMode: 'group_search', nestedGroups: true }) };
+    const client = { bind: vi.fn().mockResolvedValue(undefined), search: vi.fn()
+      .mockResolvedValueOnce({ searchEntries: [{ dn: 'uid=person,ou=users,dc=example,dc=test', entryUUID: 'user-1', mail: 'person@example.test' }] })
+      .mockResolvedValueOnce({ searchEntries: [{ dn: 'cn=operators,ou=groups,dc=example,dc=test', entryUUID: 'group-operators' }] })
+      .mockResolvedValueOnce({ searchEntries: [{ dn: 'cn=admins,ou=groups,dc=example,dc=test', entryUUID: 'group-admins' }] })
+      .mockResolvedValueOnce({ searchEntries: [] }), unbind: vi.fn().mockResolvedValue(undefined) };
+    setLdapClientFactoryForTest(() => client);
+    await expect(directLdapIdentityService.authenticate(nestedProvider, 'person@example.test', 'user-password')).resolves.toMatchObject({ groups: ['group-operators', 'group-admins'] });
+  });
+
   it('rejects an unsafe user filter without a username placeholder', async () => {
     await expect(directLdapIdentityService.authenticate({ ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), userSearchFilter: '(objectClass=person)' }) }, 'person@example.test', 'password')).rejects.toThrow('{username}');
   });

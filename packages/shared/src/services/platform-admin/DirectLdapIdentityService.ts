@@ -103,7 +103,7 @@ class DirectLdapIdentityService {
   async authenticate(provider: IdentityProvider, username: string, password: string): Promise<DirectLdapIdentity> {
     if (provider.protocol !== 'ldap' || provider.authenticationMode !== 'direct' || !provider.isEnabled) throw new Error('LDAP direct authentication is not available for this provider');
     const config = configuration(provider);
-    if (config.nestedGroups) throw new Error('Nested LDAP groups are not supported by direct LDAP authentication yet');
+    if (config.nestedGroups && config.membershipMode !== 'group_search') throw new Error('Nested LDAP groups require group_search membership mode');
     if (!username.trim() || !password) throw new Error('LDAP username and password are required');
     const filter = userFilter(config.userSearchFilter, username.trim());
     const client = clientFactory(config.url);
@@ -130,8 +130,16 @@ class DirectLdapIdentityService {
   }
 
   private async groupsForEntry(client: LdapClientLike, config: LdapConfiguration, userDn: string): Promise<string[]> {
-    const result = await client.search(config.groupBaseDn, { scope: 'sub', filter: `(member=${escapeFilter(userDn)})`, attributes: [config.groupIdAttribute], sizeLimit: 1_000, timeLimit: 5 });
-    return [...new Set(result.searchEntries.flatMap((entry) => values(entry[config.groupIdAttribute])))];
+    const ids = new Set<string>(); const seenDns = new Set<string>(); let frontier = [userDn];
+    for (let depth = 0; frontier.length && depth < (config.nestedGroups ? 10 : 1); depth += 1) {
+      const next: string[] = [];
+      for (const memberDn of frontier) {
+        const result = await client.search(config.groupBaseDn, { scope: 'sub', filter: `(member=${escapeFilter(memberDn)})`, attributes: [config.groupIdAttribute], sizeLimit: 1_000, timeLimit: 5 });
+        for (const entry of result.searchEntries) { values(entry[config.groupIdAttribute]).forEach((id) => ids.add(id)); const dn = first(entry, 'dn') || entry.dn; if (dn && !seenDns.has(dn)) { seenDns.add(dn); next.push(dn); } }
+      }
+      frontier = next;
+    }
+    return [...ids];
   }
 }
 
