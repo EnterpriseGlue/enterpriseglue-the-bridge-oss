@@ -120,7 +120,6 @@ export default function Decisions() {
     [selectedEngineId]
   )
   const decisionsReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.decisions.read', selectedEngineResource)
-  const decisionEditTargetDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.decisions.edit-target.read', selectedEngineResource)
 
   React.useEffect(() => {
     const engineIdParam = String(searchParams.get('engineId') || '')
@@ -283,7 +282,10 @@ export default function Decisions() {
       version: selectedVersion,
       decisionDefinitionId: defIdForVersion,
     }),
-    enabled: !!selectedEngineId && !!currentKey && selectedVersion !== null && decisionEditTargetDecision.allowed,
+    // The API resolves the selected definition and makes the authoritative
+    // runtime-resource decision. The browser snapshot intentionally excludes
+    // runtime-resource keys, so it cannot safely gate this request.
+    enabled: !!selectedEngineId && !!currentKey && selectedVersion !== null,
     retry: false,
     staleTime: 15_000,
   })

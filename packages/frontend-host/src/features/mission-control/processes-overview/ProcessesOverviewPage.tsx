@@ -250,7 +250,6 @@ export default function ProcessesOverviewPage() {
   const bulkActivateDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.activate', selectedEngineResource)
   const migrationExecuteDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.migrations.execute-direct', selectedEngineResource)
   const processStartDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-definitions.start', selectedEngineResource)
-  const processEditTargetReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-definitions.edit-target.read', selectedEngineResource)
   const jobsReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.jobs.read', selectedEngineResource)
   const externalTasksReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.external-tasks.read', selectedEngineResource)
   const savedFiltersReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.saved-filters.read', selectedEngineResource)
@@ -582,7 +581,9 @@ export default function ProcessesOverviewPage() {
       version: selectedVersion,
       processDefinitionId: defIdForVersion,
     }),
-    enabled: processEditTargetReadDecision.allowed && !!selectedEngineId && !!selectedProcess?.key && selectedVersion !== null,
+    // The endpoint resolves the selected process definition before checking
+    // access. Do not gate it with the runtime-resource-free UI snapshot.
+    enabled: !!selectedEngineId && !!selectedProcess?.key && selectedVersion !== null,
     retry: false,
     staleTime: 15_000,
   })
@@ -591,13 +592,11 @@ export default function ProcessesOverviewPage() {
   const showEditButton = Boolean(
     selectedProcess &&
     selectedVersion !== null &&
-    processEditTargetReadDecision.allowed &&
     processEditTarget?.canShowEditButton &&
     processEditTarget?.fileId
   )
 
   const handleEditInStarbase = React.useCallback(async () => {
-    if (notifyDeniedAction(processEditTargetReadDecision)) return
     if (!processEditTarget?.fileId || selectedVersion === null || !selectedProcess?.key) return
     try {
       const bridgeDecision = await evaluateMissionControlStarbaseBridge({
@@ -633,7 +632,7 @@ export default function ProcessesOverviewPage() {
     }
 
     tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
-  }, [notifyDeniedAction, processEditTarget, processEditTargetReadDecision, selectedVersion, selectedProcess?.key, selectedEngineId, showAlert, tenantNavigate])
+  }, [processEditTarget, selectedVersion, selectedProcess?.key, selectedEngineId, showAlert, tenantNavigate])
 
   // Viewer API for managing BPMN diagram
   const [viewerApi, setViewerApi] = React.useState<any>(null)

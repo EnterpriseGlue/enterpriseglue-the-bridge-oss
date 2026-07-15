@@ -124,7 +124,6 @@ export default function ProcessInstanceDetailPage() {
   const activityHistoryReadDecision = useActionDecision('engine.runtime.process-instances.activity-history.read', selectedEngineResource)
   const executionDetailsReadDecision = useActionDecision('engine.runtime.process-instances.execution-details.read', selectedEngineResource)
   const incidentsReadDecision = useActionDecision('engine.runtime.process-instances.incidents.read', selectedEngineResource)
-  const processEditTargetReadDecision = useActionDecision('engine.runtime.process-definitions.edit-target.read', selectedEngineResource)
   const historyDecisionsReadDecision = useActionDecision('engine.runtime.history.decisions.read', selectedEngineResource)
   const decisionInputsReadDecision = useActionDecision('engine.runtime.history.decisions.inputs.read', selectedEngineResource)
   const decisionOutputsReadDecision = useActionDecision('engine.runtime.history.decisions.outputs.read', selectedEngineResource)
@@ -799,7 +798,9 @@ export default function ProcessInstanceDetailPage() {
       version: processVersion,
       processDefinitionId: defId,
     }),
-    enabled: processEditTargetReadDecision.allowed && !!selectedEngineId && !!defKey && processVersion !== null,
+    // The endpoint resolves the process definition and is authoritative for
+    // runtime-resource access; the UI snapshot does not contain that lineage.
+    enabled: !!selectedEngineId && !!defKey && processVersion !== null,
     retry: false,
     staleTime: 15_000,
   })
@@ -807,13 +808,11 @@ export default function ProcessInstanceDetailPage() {
   const processEditTarget = processEditTargetQ.data || null
   const showEditButton = Boolean(
     processVersion !== null &&
-    processEditTargetReadDecision.allowed &&
     processEditTarget?.canShowEditButton &&
     processEditTarget?.fileId
   )
 
   const handleEditInStarbase = React.useCallback(async () => {
-    if (notifyDeniedAction(processEditTargetReadDecision)) return
     if (!processEditTarget?.fileId || processVersion === null || !defKey) return
     try {
       const bridgeDecision = await evaluateMissionControlStarbaseBridge({
@@ -850,7 +849,7 @@ export default function ProcessInstanceDetailPage() {
     }
 
     tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
-  }, [notifyDeniedAction, processEditTarget, processEditTargetReadDecision, processVersion, defKey, defId, selectedEngineId, showAlert, tenantNavigate])
+  }, [processEditTarget, processVersion, defKey, defId, selectedEngineId, showAlert, tenantNavigate])
 
   // Handle navigation to linked resources
   const handleElementNavigate = React.useCallback((linkInfo: ElementLinkInfo) => {
