@@ -30,7 +30,7 @@ import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/v
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
-import { filterRuntimeItemsByProcessDefinitionKeys, filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery } from './runtime-resource-filter.js'
+import { filterRuntimeItemsByProcessDefinitionKeys, filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js'
 import { addRuntimeProcessInstanceActionDecisions } from './runtime-row-action-decisions.js'
 
 // Validation schemas
@@ -93,6 +93,7 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
   try {
     const engineId = (req as any).engineId as string
     const keys = req.authorizedRuntimeResourceKeys
+    const scopes = req.authorizedRuntimeResourceScopes
     if (!keys) {
       return res.json(await listProcessDefinitions(engineId, req.query as { key?: string; nameLike?: string; latest?: string; maxResults?: number }))
     }
@@ -101,8 +102,8 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
     const visibleKeys = keys.filter((candidate) => !requestedKey || candidate === requestedKey)
     const query = getBoundedRuntimeResourceQuery(req.query)
     const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
-      const definitions = await listProcessDefinitions(engineId, { ...query, key: processDefinitionKey })
-      return filterRuntimeItemsByResourceKey(definitions, [processDefinitionKey], 'key')
+      const definitions = await listProcessDefinitions(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), key: processDefinitionKey })
+      return filterRuntimeItemsByResourceKey(definitions, [processDefinitionKey], 'key', scopes)
     }))
     res.json(collections.flat())
   } catch (e: any) {
@@ -186,6 +187,7 @@ r.post('/mission-control-api/process-instances/preview-count', requireRuntimeCol
   try {
     const engineId = (req as any).engineId as string
     const keys = req.authorizedRuntimeResourceKeys
+    const scopes = req.authorizedRuntimeResourceScopes
     if (!keys) {
       return res.json(await previewProcessInstanceCount(engineId, req.body || {}))
     }
@@ -199,14 +201,16 @@ r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('
   try {
     const engineId = (req as any).engineId as string
     const keys = req.authorizedRuntimeResourceKeys
+    const scopes = req.authorizedRuntimeResourceScopes
     const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null
     const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null
     const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query
     const data = visibleKeys
       ? (await Promise.all(visibleKeys.map(async (processDefinitionKey) => filterRuntimeItemsByProcessDefinitionKeys(
         engineId,
-        await listProcessInstancesDetailed(engineId, { ...query, processDefinitionKey }),
+        await listProcessInstancesDetailed(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey }),
         [processDefinitionKey],
+        scopes,
       )))).flat()
       : await listProcessInstancesDetailed(engineId, query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
@@ -312,14 +316,16 @@ r.get('/mission-control-api/history/process-instances', requireRuntimeCollection
   try {
     const engineId = (req as any).engineId as string
     const keys = req.authorizedRuntimeResourceKeys
+    const scopes = req.authorizedRuntimeResourceScopes
     const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null
     const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null
     const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query
     const data = visibleKeys
       ? (await Promise.all(visibleKeys.map(async (processDefinitionKey) => filterRuntimeItemsByResourceKey(
-        await listHistoricProcessInstances(engineId, { ...query, processDefinitionKey }),
+        await listHistoricProcessInstances(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey }),
         [processDefinitionKey],
         'processDefinitionKey',
+        scopes,
       )))).flat()
       : await listHistoricProcessInstances(engineId, query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
@@ -360,14 +366,16 @@ r.get('/mission-control-api/history/variable-instances', requireRuntimeCollectio
   try {
     const engineId = (req as any).engineId as string
     const keys = req.authorizedRuntimeResourceKeys
+    const scopes = req.authorizedRuntimeResourceScopes
     const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null
     const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null
     const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query
     const data = visibleKeys
       ? (await Promise.all(visibleKeys.map(async (processDefinitionKey) => filterRuntimeItemsByResourceKey(
-        await listHistoricVariableInstances(engineId, { ...query, processDefinitionKey }),
+        await listHistoricVariableInstances(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey }),
         [processDefinitionKey],
         'processDefinitionKey',
+        scopes,
       )))).flat()
       : await listHistoricVariableInstances(engineId, query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
