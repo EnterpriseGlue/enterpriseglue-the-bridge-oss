@@ -289,6 +289,10 @@ export interface CreateCustomRoleInput {
   createdById: string;
   source?: Exclude<RoleSource, 'system'>;
   sourceRef?: string | null;
+  ownershipMode?: ConfigOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
 }
 
 export interface CreateCustomPermissionInput {
@@ -1883,9 +1887,9 @@ class PermissionServiceClass {
     };
   }
 
-  async createCustomRole(input: CreateCustomRoleInput): Promise<{ id: string }> {
+  async createCustomRole(input: CreateCustomRoleInput, store?: DataSource | EntityManager): Promise<{ id: string }> {
     assertCustomRoleAllowOnlyInput(input);
-    const dataSource = await getDataSource();
+    const dataSource = store || await getDataSource();
     const id = generateId();
     const now = Date.now();
     const permissionIds = await this.validateRolePermissions(input.scope, input.permissionIds);
@@ -1902,7 +1906,7 @@ class PermissionServiceClass {
     const key = normalizeCustomRoleKey(input.key, input.scope, name, id);
     const tenantId = normalizeTenantId(input.tenantId);
 
-    await dataSource.transaction(async (manager) => {
+    const create = async (manager: EntityManager) => {
       await manager.getRepository(RbacRole).insert({
         id,
         tenantId,
@@ -1917,10 +1921,10 @@ class PermissionServiceClass {
         isArchived: false,
         source,
         sourceRef,
-        ownershipMode: source === 'config' ? 'config_locked' : 'manual',
-        sourceHash: null,
-        lastAppliedAt: null,
-        driftStatus: null,
+        ownershipMode: input.ownershipMode || (source === 'config' ? 'config_locked' : 'manual'),
+        sourceHash: input.sourceHash || null,
+        lastAppliedAt: input.lastAppliedAt || null,
+        driftStatus: input.driftStatus || null,
         createdById: input.createdById,
         createdAt: now,
         updatedAt: now,
@@ -1945,7 +1949,9 @@ class PermissionServiceClass {
           permissionIds,
         },
       });
-    });
+    };
+    if (store) await create(store as EntityManager);
+    else await (dataSource as DataSource).transaction(create);
 
     return { id };
   }

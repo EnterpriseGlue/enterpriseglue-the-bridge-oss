@@ -20,6 +20,7 @@ import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js'
 import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
+import { permissionService } from './permissions.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { createHash } from 'node:crypto';
 import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBundleDiffService.js';
@@ -80,10 +81,6 @@ export interface ConfigBundleApplyResult {
 function entries(files: Record<string, unknown>, path: string, property: string): any[] {
   const file = files[path] as Record<string, unknown> | undefined;
   return Array.isArray(file?.[property]) ? file[property] as any[] : [];
-}
-
-function canonicalRoleKeyIdentity(tenantId: string | null, key: string): string {
-  return `${tenantId || 'platform'}:${key}`;
 }
 
 function canonicalEngineKeyIdentity(tenantId: string | null, key: string): string {
@@ -377,19 +374,14 @@ class ConfigBundleApplyService {
           const desired = desiredRoles.get(change.key);
           const sourceHash = desired ? objectFingerprint('role', desired.key, desired) : objectFingerprint('role', change.key, { archived: true });
           if (change.operation === 'create' && desired) {
-            const roleId = generateId();
-            await roleRepo.insert({
-              id: roleId,
+            const permissions = compilation.preview.expandedRolePermissions?.[desired.key] || desired.permissions || [];
+            const { id: roleId } = await permissionService.createCustomRole({
               tenantId,
               key: desired.key,
-              roleKeyIdentity: canonicalRoleKeyIdentity(tenantId, desired.key),
               name: desired.name,
               description: desired.description || null,
               scope: desired.scope,
-              kind: 'custom',
-              isEditable: true,
-              isAssignable: true,
-              isArchived: false,
+              permissionIds: permissions,
               source: 'config',
               sourceRef: `config_bundle:${manifest.metadata.key}`,
               ownershipMode: desired.ownershipMode || 'config_locked',
@@ -397,19 +389,7 @@ class ConfigBundleApplyService {
               lastAppliedAt: now,
               driftStatus: 'in_sync',
               createdById: input.actorId,
-              createdAt: now,
-              updatedAt: now,
-            });
-            const permissions = compilation.preview.expandedRolePermissions?.[desired.key] || desired.permissions || [];
-            if (permissions.length > 0) {
-              await rolePermissionRepo.insert(permissions.map((permissionId: string) => ({
-                id: `${roleId}:${permissionId}`,
-                roleId,
-                permissionId,
-                createdAt: now,
-              })));
-            }
-            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.role.create', resourceType: 'role', resourceId: roleId, details: { bundleKey: manifest.metadata.key, roleKey: desired.key, canonicalHash: diff.canonicalHash } });
+            }, manager);
             created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
             await roleRepo.update({ id: change.currentId }, {
