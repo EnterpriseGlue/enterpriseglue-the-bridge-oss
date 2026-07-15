@@ -551,21 +551,7 @@ class ConfigBundleApplyService {
         if (change.objectType === 'identity_provider') {
           const desired = desiredIdentityProviders.get(change.key);
           const sourceHash = desired ? objectFingerprint('identity_provider', desired.key, desired) : objectFingerprint('identity_provider', change.key, { archived: true });
-          const values = desired ? {
-            protocol: desired.type,
-            isEnabled: desired.enabled,
-            authenticationMode: desired.authenticationMode,
-            directoryTenantId: desired.directoryTenantId || null,
-            configurationJson: JSON.stringify(providerConfiguration(desired)),
-            syncJson: JSON.stringify(desired.sync),
-            ownershipMode: desired.ownershipMode || 'config_locked',
-            sourceRef: `config_bundle:${manifest.metadata.key}`,
-            sourceHash,
-            lastAppliedAt: now,
-            driftStatus: 'in_sync',
-            updatedAt: now,
-          } : null;
-          if (change.operation === 'create' && desired && values) {
+          if (change.operation === 'create' && desired) {
             const provider = await identityProviderService.upsert({
               tenantId,
               key: desired.key,
@@ -583,8 +569,22 @@ class ConfigBundleApplyService {
             }, manager);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.create', resourceType: 'identity_provider', resourceId: provider.id, details: { bundleKey: manifest.metadata.key, providerKey: desired.key, canonicalHash: diff.canonicalHash } });
             created += 1;
-          } else if (change.operation === 'update' && change.currentId && values) {
-            await providerRepo.update({ id: change.currentId }, values);
+          } else if (change.operation === 'update' && desired && change.currentId) {
+            await identityProviderService.upsert({
+              tenantId,
+              key: desired.key,
+              protocol: desired.type,
+              isEnabled: desired.enabled,
+              authenticationMode: desired.authenticationMode,
+              directoryTenantId: desired.directoryTenantId || null,
+              configuration: providerConfiguration(desired),
+              sync: desired.sync,
+              ownershipMode: desired.ownershipMode || 'config_locked',
+              sourceRef: `config_bundle:${manifest.metadata.key}`,
+              sourceHash,
+              lastAppliedAt: now,
+              driftStatus: 'in_sync',
+            }, manager);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.update', resourceType: 'identity_provider', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, providerKey: desired!.key, canonicalHash: diff.canonicalHash } });
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
