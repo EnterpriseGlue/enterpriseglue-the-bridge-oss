@@ -65,8 +65,8 @@ describe('GET /api/admin/email-platform-name', () => {
       PlatformPermissions.SETTINGS_MANAGE,
       expect.objectContaining({
         userId: 'user-1',
-        platformRole: 'admin',
         resourceType: 'platform',
+        tenantId: null,
       })
     );
   });

@@ -54,7 +54,7 @@ describe('ProjectMemberService', () => {
     expect(membership?.roles).toContain('editor');
   });
 
-  it('falls back to owner role when user owns project', async () => {
+  it('does not treat project ownership metadata as an authorization membership', async () => {
     const memberRepo = { findOne: vi.fn().mockResolvedValue(null) };
     const roleRepo = { find: vi.fn().mockResolvedValue([]) };
     const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1' }) };
@@ -69,7 +69,7 @@ describe('ProjectMemberService', () => {
     });
 
     const membership = await service.getMembership('project-1', 'owner-1');
-    expect(membership?.role).toBe('owner');
+    expect(membership).toBeNull();
   });
 
   it('writes direct canonical legacy assignments when project member roles change', async () => {
