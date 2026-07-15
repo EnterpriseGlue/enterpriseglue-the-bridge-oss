@@ -245,7 +245,6 @@ export default function ProcessesOverviewPage() {
   const bulkSuspendDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.suspend', selectedEngineResource)
   const bulkActivateDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.activate', selectedEngineResource)
   const migrationExecuteDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.migrations.execute-direct', selectedEngineResource)
-  const processStartDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-definitions.start', selectedEngineResource)
   const savedFiltersReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.saved-filters.read', selectedEngineResource)
   const savedFiltersManageDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.saved-filters.manage', selectedEngineResource)
   const notifyDeniedAction = React.useCallback((decision: UiAuthzDecision) => {
@@ -878,7 +877,6 @@ export default function ProcessesOverviewPage() {
   }, [hasSelection, selectedInstances])
 
   const migratePermissionReason = deniedReason(migrationExecuteDecision)
-  const startPermissionReason = deniedReason(processStartDecision)
 
   const retryEligibility = React.useMemo(
     () => getBulkProcessActionEligibility('retry', selectedInstances, {
@@ -923,7 +921,7 @@ export default function ProcessesOverviewPage() {
   const suspendTitle = suspendEligibility.summary || 'Suspend (Batch)'
   const deleteTitle = deleteEligibility.summary || 'Cancel (Batch)'
   const migrateTitle = migratePermissionReason || migrateEligibility.summary || 'Migrate'
-  const startTitle = startPermissionReason || 'Start process instance'
+  const startTitle = 'Start process instance'
   const bulkDeleteDiagnosticDecision = deleteEligibility.firstDeniedDecision
   const bulkSuspendDiagnosticDecision = suspendEligibility.firstDeniedDecision
   const bulkMigrateDiagnosticDecision = hasSelection && migratePermissionReason ? migrationExecuteDecision : migrateEligibility.firstDeniedDecision
@@ -996,10 +994,6 @@ export default function ProcessesOverviewPage() {
 
   const handleStartProcess = React.useCallback(async () => {
     if (!selectedProcess?.key) return
-    if (startPermissionReason) {
-      setStartError(startPermissionReason)
-      return
-    }
     if (!selectedEngineId) {
       setStartError('Select an engine')
       return
@@ -1039,7 +1033,7 @@ export default function ProcessesOverviewPage() {
     } finally {
       setStartBusy(false)
     }
-  }, [instQ, selectedEngineId, selectedProcess?.key, showAlert, startBusinessKey, startPermissionReason, startVariablesJson])
+  }, [instQ, selectedEngineId, selectedProcess?.key, showAlert, startBusinessKey, startVariablesJson])
 
   const onRowClick = (rowId: string) => {
     detailsModal.openModal(rowId)
@@ -1122,11 +1116,10 @@ export default function ProcessesOverviewPage() {
                 size="sm"
                 renderIcon={Play}
                 onClick={() => {
-                  if (startPermissionReason) return
                   setStartError(null)
                   setStartProcessOpen(true)
                 }}
-                disabled={!!startPermissionReason}
+                disabled={!selectedProcess?.key}
                 title={startTitle}
               >
                 Start
@@ -1595,20 +1588,12 @@ export default function ProcessesOverviewPage() {
         modalHeading={`Start ${selectedProcess?.label || selectedProcess?.key || 'process'}`}
         primaryButtonText={startBusy ? 'Starting...' : 'Start process'}
         secondaryButtonText="Cancel"
-        primaryButtonDisabled={startBusy || !!startPermissionReason || !selectedProcess?.key}
+        primaryButtonDisabled={startBusy || !selectedProcess?.key}
         onRequestClose={closeStartProcessModal}
         onRequestSubmit={handleStartProcess}
         size="sm"
       >
         <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
-          {startPermissionReason ? (
-            <InlineNotification
-              lowContrast
-              kind="warning"
-              title="Start unavailable"
-              subtitle={startPermissionReason}
-            />
-          ) : null}
           {startError ? (
             <InlineNotification
               lowContrast
