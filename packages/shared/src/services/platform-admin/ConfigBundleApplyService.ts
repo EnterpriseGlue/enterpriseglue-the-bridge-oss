@@ -641,7 +641,7 @@ class ConfigBundleApplyService {
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.assignment.create', resourceType: 'role_assignment', resourceId: assignmentId, details: { bundleKey: manifest.metadata.key, roleKey: assignment.roleKey, principalGroupKey: assignment.principal.key, scopeType: assignment.scope.type, canonicalHash: diff.canonicalHash } });
           created += 1;
         } else if (existing.expiresAt !== (assignment.expiresAt || null) || existing.ownershipMode !== (assignment.ownershipMode || 'config_locked')) {
-          await assignmentRepo.update({ id: existing.id }, { expiresAt: assignment.expiresAt || null, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', lastSeenAt: now, updatedAt: now });
+          await permissionService.updateResolvedRoleAssignment(manager, existing.id, { expiresAt: assignment.expiresAt || null, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', lastSeenAt: now });
           updated += 1;
         }
         await assignmentOverrideRepo.delete({ assignmentKey, sourceRef });
@@ -650,7 +650,7 @@ class ConfigBundleApplyService {
         const existing = await assignmentRepo.find({ where: { source: 'config', sourceRef } });
         const staleIds = existing.filter((assignment) => !desiredKeys.has(assignment.assignmentKey)).map((assignment) => assignment.id);
         if (staleIds.length > 0) {
-          await assignmentRepo.delete(staleIds);
+          await permissionService.deleteResolvedRoleAssignments(manager, staleIds);
           for (const id of staleIds) await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.assignment.delete', resourceType: 'role_assignment', resourceId: id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash } });
           archived += staleIds.length;
         }

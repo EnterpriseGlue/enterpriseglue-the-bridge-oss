@@ -2588,6 +2588,26 @@ describe('permissionService', () => {
     expect(auditRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ details: expect.stringContaining('configOverride') }));
   });
 
+  it('updates and removes resolved assignments through a supplied transaction store', async () => {
+    const assignmentRepo = { update: vi.fn().mockResolvedValue(undefined), delete: vi.fn().mockResolvedValue(undefined) };
+    const store = { getRepository: (entity: unknown) => {
+      if (entity === RbacRoleAssignment) return assignmentRepo;
+      throw new Error('Unexpected repository');
+    } };
+
+    await permissionService.updateResolvedRoleAssignment(store as any, 'assignment-1', {
+      expiresAt: 123, ownershipMode: 'config_warn', sourceHash: 'hash-1', lastAppliedAt: 456,
+      driftStatus: 'in_sync', lastSeenAt: 789,
+    });
+    await permissionService.deleteResolvedRoleAssignments(store as any, ['assignment-1', 'assignment-2']);
+
+    expect(assignmentRepo.update).toHaveBeenCalledWith({ id: 'assignment-1' }, expect.objectContaining({
+      expiresAt: 123, ownershipMode: 'config_warn', sourceHash: 'hash-1', lastAppliedAt: 456,
+      driftStatus: 'in_sync', lastSeenAt: 789, updatedAt: expect.any(Number),
+    }));
+    expect(assignmentRepo.delete).toHaveBeenCalledWith(['assignment-1', 'assignment-2']);
+  });
+
   it('lists canonical user assignments while preserving the legacy user-id fallback', async () => {
     const assignmentQb = {
       orderBy: vi.fn().mockReturnThis(),

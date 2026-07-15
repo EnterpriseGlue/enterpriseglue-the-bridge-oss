@@ -2301,6 +2301,29 @@ class PermissionServiceClass {
     return id;
   }
 
+  /** Shared resolved-assignment lifecycle write for authorized callers such as configuration reconciliation. */
+  async updateResolvedRoleAssignment(dataSource: DataSource | EntityManager, id: string, input: {
+    expiresAt?: number | null;
+    ownershipMode?: ConfigOwnershipMode;
+    sourceHash?: string | null;
+    lastAppliedAt?: number | null;
+    driftStatus?: string | null;
+    lastSeenAt?: number | null;
+  }): Promise<void> {
+    const values: Record<string, unknown> = { updatedAt: Date.now() };
+    if (input.expiresAt !== undefined) values.expiresAt = input.expiresAt;
+    if (input.ownershipMode !== undefined) values.ownershipMode = input.ownershipMode;
+    if (input.sourceHash !== undefined) values.sourceHash = input.sourceHash;
+    if (input.lastAppliedAt !== undefined) values.lastAppliedAt = input.lastAppliedAt;
+    if (input.driftStatus !== undefined) values.driftStatus = input.driftStatus;
+    if (input.lastSeenAt !== undefined) values.lastSeenAt = input.lastSeenAt;
+    await dataSource.getRepository(RbacRoleAssignment).update({ id }, values);
+  }
+
+  async deleteResolvedRoleAssignments(dataSource: DataSource | EntityManager, ids: string[]): Promise<void> {
+    if (ids.length > 0) await dataSource.getRepository(RbacRoleAssignment).delete(ids);
+  }
+
   private async getRuntimeAssignmentWarnings(
     dataSource: DataSource,
     principal: { principalType: PrincipalType; principalId: string },
