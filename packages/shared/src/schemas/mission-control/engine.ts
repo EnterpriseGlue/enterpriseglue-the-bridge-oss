@@ -77,7 +77,7 @@ const EngineRegistrationFieldsSchema = z.object({
   deploymentDiscoveryEnabled: z.boolean().optional(),
   reconciliationIntervalSeconds: z.number().int().min(60).max(86400).optional(),
   pipelineReceiptEnabled: z.boolean().optional(),
-});
+}).strict();
 
 export const CreateEngineRequestSchema = EngineRegistrationFieldsSchema.extend({
   type: EngineTypeSchema.default('ion'),

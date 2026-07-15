@@ -81,4 +81,22 @@ describe('EngineSchema', () => {
       })).toEqual({ error, code: 'VALIDATION_ERROR' });
     }
   });
+
+  it('rejects undeclared sidecar transport fields instead of accepting downstream credentials', () => {
+    const result = CreateEngineRequestSchema.safeParse({
+      name: 'Payments sidecar',
+      baseUrl: 'https://sidecar.example.test/engine-rest',
+      type: 'ion',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+      customerDownstreamToken: 'must-not-be-stored',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'unrecognized_keys', keys: ['customerDownstreamToken'] }),
+      ]));
+    }
+  });
 });
