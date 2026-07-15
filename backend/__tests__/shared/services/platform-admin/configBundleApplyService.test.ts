@@ -847,6 +847,103 @@ describe('configBundleApplyService', () => {
     }));
   });
 
+  it('applies every supported resource family with staged references in one bundle', async () => {
+    const {
+      roleInsert, groupInsert, engineInsert, roleRepo, groupRepo, engineRepo, engineSetRepo,
+      runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, assignmentRepo,
+    } = setupDataSource();
+    const roleRows: any[] = [];
+    const groupRows: any[] = [];
+    const engineRows: any[] = [];
+    const engineSetRows: any[] = [];
+    const runtimeResourceSetRows: any[] = [];
+    const providerRows: any[] = [];
+    const projectId = '00000000-0000-4000-8000-000000000001';
+
+    roleRepo.find.mockImplementation(() => Promise.resolve(roleRows));
+    roleInsert.mockImplementation((row) => { roleRows.push(row); return Promise.resolve(undefined); });
+    groupRepo.find.mockImplementation(() => Promise.resolve(groupRows));
+    groupInsert.mockImplementation((row) => { groupRows.push(row); return Promise.resolve(undefined); });
+    engineRepo.find.mockImplementation(() => Promise.resolve(engineRows));
+    engineInsert.mockImplementation((row) => { engineRows.push(row); return Promise.resolve(undefined); });
+    engineSetRepo.find.mockImplementation(() => Promise.resolve(engineSetRows));
+    engineSetRepo.insert.mockImplementation((row: any) => { engineSetRows.push(row); return Promise.resolve(undefined); });
+    runtimeResourceSetRepo.find.mockImplementation(() => Promise.resolve(runtimeResourceSetRows));
+    runtimeResourceSetRepo.insert.mockImplementation((row: any) => { runtimeResourceSetRows.push(row); return Promise.resolve(undefined); });
+    providerRepo.find.mockImplementation(() => Promise.resolve(providerRows));
+    providerRepo.insert.mockImplementation((row: any) => { providerRows.push(row); return Promise.resolve(undefined); });
+    projectRepo.find.mockResolvedValue([{ id: projectId, tenantId: 'tenant-a' }]);
+    projectRepo.findOne.mockResolvedValue({ id: projectId, tenantId: 'tenant-a' });
+
+    const allBundle = {
+      ...bundle,
+      imports: [
+        './roles.json', './groups.json', './engines.json', './engine-sets.json', './runtime-resource-sets.json',
+        './assignments.json', './identity-providers.json', './identity-mappings.json', './project-engine-targets.json',
+      ],
+    };
+    const allFiles = {
+      './roles.json': { roles: [{ key: 'custom.engine.viewer', name: 'Engine viewer', scope: 'engine', permissions: ['engine:instance:view'] }] },
+      './groups.json': { groups: [{ key: 'group.operations', name: 'Operations' }] },
+      './engines.json': { engines: [{ key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'PAYMENTS_PASSWORD' } }] },
+      './engine-sets.json': { engineSets: [{ key: 'engines.payments', name: 'Payments engines', selector: { mode: 'engine_ids', engineKeys: ['engine.payments'] } }] },
+      './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.payments' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' } }] },
+      './assignments.json': { assignments: [
+        { key: 'assignment.engine', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine', engineKey: 'engine.payments' } },
+        { key: 'assignment.engine-set', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine_set', engineSetKey: 'engines.payments' } },
+        { key: 'assignment.runtime-set', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine_runtime_resource_set', runtimeResourceSetKey: 'runtime.payments' } },
+      ] },
+      './identity-providers.json': { identityProviders: [{
+        key: 'identity.oidc.main', type: 'oidc', enabled: true, authenticationMode: 'claims_only',
+        sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
+        oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', callbackUrl: 'https://app.example.test/callback', scopes: ['openid'] },
+      }] },
+      './identity-mappings.json': { identityMappings: [{ key: 'mapping.operations', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'operations' }, targetGroupKey: 'group.operations' }] },
+      './project-engine-targets.json': { projectEngineTargets: [{ key: 'target.payments', projectRef: { id: projectId }, engineRef: { engineKey: 'engine.payments' }, allowManualDeploy: true }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: allBundle, files: allFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle: allBundle,
+      files: allFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result).toMatchObject({
+      created: 11,
+      updated: 0,
+      archived: 0,
+      reconciliation: {
+        runtimeReconciliation: { status: 'queued', engineSetCount: 1, runtimeResourceSetCount: 1, engineCount: 1 },
+        identitySnapshot: { mode: 'apply', status: 'completed', providerCount: 1 },
+      },
+    });
+    expect(engineSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'engines.payments', selectorJson: expect.stringContaining(engineRows[0].id),
+    }));
+    expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ engineId: engineRows[0].id }));
+    expect(assignmentRepo.insert).toHaveBeenCalledTimes(3);
+    expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      principalId: groupRows[0].id,
+      roleId: roleRows[0].id,
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+    }));
+    expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: providerRows[0].id,
+      targetGroupId: groupRows[0].id,
+      configKey: 'mapping.operations',
+    }));
+    expect(targetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      projectId,
+      engineId: engineRows[0].id,
+      allowManualDeploy: true,
+      source: 'config',
+    }));
+  });
+
   it('applies a canonical key identity to a config-owned Engine Set', async () => {
     const { engineSetRepo } = setupDataSource();
     const engineSetBundle = { ...bundle, imports: ['./engine-sets.json'] };

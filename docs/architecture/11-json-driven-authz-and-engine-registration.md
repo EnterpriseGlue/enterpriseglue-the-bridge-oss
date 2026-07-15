@@ -2145,7 +2145,7 @@ Fixtures should include at least:
 
 ### JSON Bundle Round-Trip Scenarios
 
-- [ ] ⬜ Preview and apply a bundle containing providers, roles, groups, engines, runtime resource sets, assignments, identity mappings, and project-engine targets.
+- [x] ✅ Preview and apply a bundle containing providers, roles, groups, engines, engine sets, runtime resource sets, assignments, identity mappings, and project-engine targets. The all-resource apply regression exercises staged creates and their dependent references in one transaction, then verifies the exact runtime and identity reconciliation receipts.
 - [ ] ⬜ Export the applied source-owned state, re-preview it, and receive a deterministic no-op diff.
 - [ ] ⬜ Reject missing provider/group/role/engine references, duplicate keys, wrong-scope permissions, plaintext secrets, and test fixture imports.
 - [ ] ⬜ Prove UI-created manual objects survive authoritative config apply unless ownership is explicitly transferred.
