@@ -128,6 +128,12 @@ describe('canonical authorization persistence schema invariants', () => {
     const addColumn = vi.fn().mockResolvedValue(undefined);
     const changeColumn = vi.fn().mockResolvedValue(undefined);
     const createIndex = vi.fn().mockResolvedValue(undefined);
+    const query = vi.fn()
+      .mockResolvedValueOnce([
+        { id: 'newest', engine_id: 'engine-a', camunda_deployment_id: 'deployment-a' },
+        { id: 'stale', engine_id: 'engine-a', camunda_deployment_id: 'deployment-a' },
+      ])
+      .mockResolvedValue(undefined);
     const table = {
       indices: [],
       findColumnByName: vi.fn().mockReturnValue({ type: 'text', isNullable: false }),
@@ -139,7 +145,11 @@ describe('canonical authorization persistence schema invariants', () => {
       getTable: vi.fn().mockResolvedValue(table),
       changeColumn,
       createIndex,
-      connection: { getMetadata: () => { throw new Error('metadata unavailable'); } },
+      query,
+      connection: {
+        getMetadata: () => { throw new Error('metadata unavailable'); },
+        driver: { createParameter: vi.fn().mockReturnValue('$1') },
+      },
     } as any);
 
     expect(addColumn.mock.calls.map(([tableName, definition]) => [tableName, definition.name])).toEqual([
@@ -154,6 +164,7 @@ describe('canonical authorization persistence schema invariants', () => {
     expect(createIndex).toHaveBeenCalledWith('engine_deployments', expect.objectContaining({
       columnNames: ['engine_id', 'camunda_deployment_id'], isUnique: true,
     }));
+    expect(query).toHaveBeenCalledWith('DELETE FROM engine_deployments WHERE id = $1', ['stale']);
   });
 
   it('persists canonical runtime resources, sets, and materialization lineage', async () => {
