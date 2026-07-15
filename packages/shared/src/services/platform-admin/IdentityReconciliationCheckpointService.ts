@@ -1,5 +1,6 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { IdentityReconciliationCheckpoint } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityReconciliationCheckpoint.js';
+import { IsNull } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 
 class IdentityReconciliationCheckpointService {
@@ -12,25 +13,39 @@ class IdentityReconciliationCheckpointService {
     const repo = (await getDataSource()).getRepository(IdentityReconciliationCheckpoint);
     const now = Date.now();
     let row = await repo.findOne({ where: { providerId } });
-    if (row && row.leaseExpiresAt && row.leaseExpiresAt > now) return null;
-    if (row?.lastSuccessAt && minimumIntervalMs > 0 && row.lastSuccessAt + minimumIntervalMs > now) return null;
-
     const leaseId = generateId();
     if (!row) {
-      await repo.insert({
-        id: generateId(),
-        tenantId: tenantId || null,
-        providerId,
-        cursor: null,
-        lastSuccessAt: null,
-        leaseId,
-        leaseExpiresAt: now + leaseMs,
-        updatedAt: now,
-      });
-      return { leaseId, cursor: null };
+      try {
+        await repo.insert({
+          id: generateId(),
+          tenantId: tenantId || null,
+          providerId,
+          cursor: null,
+          lastSuccessAt: null,
+          leaseId,
+          leaseExpiresAt: now + leaseMs,
+          updatedAt: now,
+        });
+        return { leaseId, cursor: null };
+      } catch (error) {
+        // The provider key is unique. A simultaneous initial insert means another
+        // scheduler won the lease; re-read its row before deciding whether to stop.
+        row = await repo.findOne({ where: { providerId } });
+        if (!row) throw error;
+      }
     }
 
-    await repo.update({ id: row.id }, { leaseId, leaseExpiresAt: now + leaseMs, updatedAt: now });
+    if (row.leaseExpiresAt && row.leaseExpiresAt > now) return null;
+    if (row.lastSuccessAt && minimumIntervalMs > 0 && row.lastSuccessAt + minimumIntervalMs > now) return null;
+
+    // An expired lease is visible to every poller. Only acquire it if its observed
+    // values are still current, so competing schedulers cannot both run a page.
+    const result = await repo.update({
+      id: row.id,
+      leaseId: row.leaseId ?? IsNull(),
+      leaseExpiresAt: row.leaseExpiresAt ?? IsNull(),
+    }, { leaseId, leaseExpiresAt: now + leaseMs, updatedAt: now });
+    if (result.affected !== 1) return null;
     return { leaseId, cursor: row.cursor };
   }
 

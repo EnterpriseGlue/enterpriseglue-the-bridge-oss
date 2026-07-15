@@ -40,6 +40,15 @@ function authorizationAttributeKeys(provider: IdentityProvider): string[] {
   }
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; message?: unknown };
+  const code = typeof candidate.code === 'string' ? candidate.code : '';
+  const message = typeof candidate.message === 'string' ? candidate.message : '';
+  return ['23505', 'ER_DUP_ENTRY', 'SQLITE_CONSTRAINT', 'SQLITE_CONSTRAINT_UNIQUE'].includes(code)
+    || /duplicate (key|entry)|unique constraint/i.test(message);
+}
+
 class IdentityProviderProvisioningService {
   async provisionOidcUser(provider: IdentityProvider, claims: OidcIdentityClaims): Promise<ProvisionedIdentityUser> {
     return this.provision(provider, this.oidcInput(provider, claims));
@@ -84,6 +93,21 @@ class IdentityProviderProvisioningService {
   }
 
   private async provision(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisionedIdentityUser> {
+    // A new subject can arrive through a direct login while a scheduled directory
+    // page is creating the same link. Retry the full transaction once after the
+    // database's unique constraint resolves that first-writer race.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await this.provisionOnce(provider, input);
+      } catch (error) {
+        if (attempt === 0 && isUniqueConstraintError(error)) continue;
+        throw error;
+      }
+    }
+    throw new Error('Identity provisioning retry exhausted');
+  }
+
+  private async provisionOnce(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisionedIdentityUser> {
     const email = input.email.trim().toLowerCase();
     if (!email.includes('@')) throw new Error('Identity provider must return an email address');
     const emailVerified = input.emailVerified;

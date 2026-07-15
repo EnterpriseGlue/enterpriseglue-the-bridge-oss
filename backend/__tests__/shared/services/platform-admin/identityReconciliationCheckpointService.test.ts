@@ -9,7 +9,7 @@ function setup(row: Record<string, unknown> | null) {
   const repo = {
     findOne: vi.fn().mockResolvedValue(row),
     insert: vi.fn().mockResolvedValue(undefined),
-    update: vi.fn().mockResolvedValue(undefined),
+    update: vi.fn().mockResolvedValue({ affected: 1 }),
   };
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository(entity: unknown) {
@@ -39,6 +39,30 @@ describe('identityReconciliationCheckpointService', () => {
     const lease = await identityReconciliationCheckpointService.acquire('provider-1', 'tenant-a', 60_000, 60_000);
 
     expect(lease).toMatchObject({ cursor: 'cursor-1' });
-    expect(repo.update).toHaveBeenCalledWith({ id: 'checkpoint-1' }, expect.objectContaining({ leaseExpiresAt: 1_060_000 }));
+    expect(repo.update).toHaveBeenCalledWith(expect.objectContaining({ id: 'checkpoint-1' }), expect.objectContaining({ leaseExpiresAt: 1_060_000 }));
+  });
+
+  it('lets only one concurrent poller acquire an expired checkpoint lease', async () => {
+    const repo = setup({ id: 'checkpoint-1', cursor: 'cursor-1', lastSuccessAt: null, leaseId: null, leaseExpiresAt: 990_000 });
+    repo.update.mockResolvedValueOnce({ affected: 1 }).mockResolvedValueOnce({ affected: 0 });
+
+    const leases = await Promise.all([
+      identityReconciliationCheckpointService.acquire('provider-1', 'tenant-a'),
+      identityReconciliationCheckpointService.acquire('provider-1', 'tenant-a'),
+    ]);
+
+    expect(leases.filter(Boolean)).toHaveLength(1);
+    expect(repo.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats a competing first checkpoint insert as a lease held by the other poller', async () => {
+    const repo = setup(null);
+    repo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'checkpoint-1', cursor: null, lastSuccessAt: null, leaseId: 'other-lease', leaseExpiresAt: 1_060_000 });
+    repo.insert.mockRejectedValueOnce(new Error('duplicate provider checkpoint'));
+
+    await expect(identityReconciliationCheckpointService.acquire('provider-1', 'tenant-a')).resolves.toBeNull();
+    expect(repo.update).not.toHaveBeenCalled();
   });
 });

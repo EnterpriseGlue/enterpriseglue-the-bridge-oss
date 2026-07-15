@@ -2137,7 +2137,7 @@ Fixtures should include at least:
 - [ ] ⬜ Additive synchronization preserves previous provider-managed membership; authoritative synchronization removes stale rows owned by that mapping only.
 - [x] ✅ Mapping disable, delete, and meaningful manual mapping updates remove only memberships derived from that mapping. Manual, API, automation, and other-provider memberships remain untouched.
 - [x] ✅ Manual, API, automation, bootstrap, and other-provider assignments survive reconciliation. The SSO diagnostics and cleanup passes are source-scoped and only inspect/delete assignments written with `source: 'sso'`; regression coverage proves those non-SSO sources plus additive and other-provider SSO assignments are retained while stale authoritative SSO rows still clean up.
-- [ ] ⬜ Concurrent login and scheduled reconciliation remain idempotent under the uniqueness constraints.
+- [x] ✅ Concurrent login and scheduled reconciliation remain idempotent under the uniqueness constraints. First-login provisioning retries one transaction after a database duplicate-key race and reuses the winner's immutable external-identity link; the checkpoint service treats a competing initial insert as a held lease and compare-and-sets expired leases, so only one scheduler processes a provider page.
 - [ ] ⬜ Provider partial group result or group-overage state fails closed when authoritative completeness is required.
 - [ ] ⬜ Cross-tenant provider, group, mapping, principal, engine, and runtime-resource references are rejected.
 - [ ] ⬜ Mapping preview/test never persists users, memberships, assignments, or authorization-version changes.

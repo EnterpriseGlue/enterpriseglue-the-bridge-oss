@@ -60,6 +60,27 @@ describe('IdentityProviderProvisioningService', () => {
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
   });
 
+  it('retries a first-login unique-key race so the concurrent subject link is reused', async () => {
+    const existingUser = { id: 'user-1', email: 'person@example.test', firstName: null, lastName: null, platformRole: 'user', authProvider: 'ldap', passwordHash: null, isActive: true, isEmailVerified: true };
+    const existingIdentity = { id: 'identity-1', userId: 'user-1', status: 'active' };
+    stores.externalIdentity.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(existingIdentity)
+      .mockResolvedValueOnce(existingIdentity);
+    stores.user.findOneBy
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(existingUser);
+    stores.user.insert.mockRejectedValueOnce(Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' }));
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: '{}' } as any;
+
+    await expect(identityProviderProvisioningService.provisionLdapUser(provider, {
+      subjectId: 'subject-1', email: 'person@example.test', claims: { sub: 'subject-1', email: 'person@example.test' },
+    })).resolves.toMatchObject({ id: 'user-1', email: 'person@example.test' });
+
+    expect(stores.user.insert).toHaveBeenCalledTimes(1);
+    expect(stores.externalIdentity.update).toHaveBeenCalledWith({ id: 'identity-1' }, expect.objectContaining({ userId: 'user-1' }));
+  });
+
   it('rejects a new provider subject that tries to link an existing local account without explicit provider approval', async () => {
     stores.user.findOneBy.mockResolvedValueOnce({ id: 'local-user-1', email: 'person@example.test', isEmailVerified: true });
     const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: '{}' } as any;
