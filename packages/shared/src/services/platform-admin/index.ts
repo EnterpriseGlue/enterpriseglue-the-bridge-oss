@@ -57,6 +57,7 @@ export * from './ConfigBundleRuntimeReconciliationTaskService.js';
 export * from './ConfigBundleExportService.js';
 export * from './ConfigBundleArchiveService.js';
 export * from './RuntimeResourceInventoryService.js';
+export * from './RuntimeResourceSetService.js';
 export * from './EngineMetadataReconciliationService.js';
 export * from './DeploymentReceiptService.js';
 export * from './DeploymentDiscoveryService.js';
