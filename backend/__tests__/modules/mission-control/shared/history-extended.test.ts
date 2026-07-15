@@ -115,7 +115,7 @@ describe('mission-control extended history routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(listHistoricTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100 });
+    expect(listHistoricTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100, withoutTenantId: true });
   });
 
   it('drops historic rows outside the authorized process definition key', async () => {

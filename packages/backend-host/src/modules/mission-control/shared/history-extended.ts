@@ -18,7 +18,7 @@ import {
   HistoricDecisionQueryParams,
   UserOperationLogQueryParams,
 } from '@enterpriseglue/shared/schemas/mission-control/history.js';
-import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery } from './runtime-resource-filter.js';
+import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js';
 
 const r = Router();
 
@@ -29,12 +29,13 @@ r.use('/mission-control-api', requireAuth);
 r.get('/mission-control-api/history/tasks', requireRuntimeCollectionAction('engine.runtime.history.tasks.read', { resourceKind: 'process_definition' }), validateQuery(HistoricTaskQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
   const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   const data = visibleKeys
     ? (await Promise.all(visibleKeys.map(async (processDefinitionKey) => filterRuntimeItemsByResourceKey(
-      await listHistoricTasks(engineId, { ...query, processDefinitionKey }), [processDefinitionKey], 'processDefinitionKey',
+      await listHistoricTasks(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey }), [processDefinitionKey], 'processDefinitionKey', scopes,
     )))).flat()
     : await listHistoricTasks(engineId, query);
   res.json(data);
@@ -44,12 +45,13 @@ r.get('/mission-control-api/history/tasks', requireRuntimeCollectionAction('engi
 r.get('/mission-control-api/history/variables', requireRuntimeCollectionAction('engine.runtime.history.variables.read', { resourceKind: 'process_definition' }), validateQuery(HistoricVariableQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
   const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   const data = visibleKeys
     ? (await Promise.all(visibleKeys.map(async (processDefinitionKey) => filterRuntimeItemsByResourceKey(
-      await listHistoricVariables(engineId, { ...query, processDefinitionKey }), [processDefinitionKey], 'processDefinitionKey',
+      await listHistoricVariables(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey }), [processDefinitionKey], 'processDefinitionKey', scopes,
     )))).flat()
     : await listHistoricVariables(engineId, query);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
@@ -60,12 +62,13 @@ r.get('/mission-control-api/history/variables', requireRuntimeCollectionAction('
 r.get('/mission-control-api/history/decisions', requireRuntimeCollectionAction('engine.runtime.history.decisions.read', { resourceKind: 'decision_definition' }), validateQuery(HistoricDecisionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
   const requestedKey = typeof req.query.decisionDefinitionKey === 'string' ? req.query.decisionDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
   const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   const data = visibleKeys
     ? (await Promise.all(visibleKeys.map(async (decisionDefinitionKey) => filterRuntimeItemsByResourceKey(
-      await listHistoricDecisions(engineId, { ...query, decisionDefinitionKey }), [decisionDefinitionKey], 'decisionDefinitionKey',
+      await listHistoricDecisions(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, decisionDefinitionKey), decisionDefinitionKey }), [decisionDefinitionKey], 'decisionDefinitionKey', scopes,
     )))).flat()
     : await listHistoricDecisions(engineId, query);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
@@ -102,12 +105,13 @@ r.get('/mission-control-api/history/decisions/:id/outputs', requireRuntimeDefini
 r.get('/mission-control-api/history/user-operations', requireRuntimeCollectionAction('engine.runtime.history.user-operations.read', { resourceKind: 'process_definition' }), validateQuery(UserOperationLogQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
   const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   const data = visibleKeys
     ? (await Promise.all(visibleKeys.map(async (processDefinitionKey) => filterRuntimeItemsByResourceKey(
-      await listUserOperations(engineId, { ...query, processDefinitionKey }), [processDefinitionKey], 'processDefinitionKey',
+      await listUserOperations(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey }), [processDefinitionKey], 'processDefinitionKey', scopes,
     )))).flat()
     : await listUserOperations(engineId, query);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
