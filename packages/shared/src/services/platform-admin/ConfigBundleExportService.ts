@@ -20,6 +20,24 @@ function externalReference(value: string | null | undefined): string | null {
   return value?.startsWith('ref:') ? value.slice(4) : null;
 }
 
+const resolvedSecretKey = /(?:secret|password|private.?key|certificate|token)$/i;
+
+/** Export is a trust boundary for rows created before secret-reference validation existed. */
+function assertProviderConfigurationContainsOnlyReferences(value: unknown, path = 'configuration'): void {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => assertProviderConfigurationContainsOnlyReferences(entry, `${path}[${index}]`));
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const childPath = `${path}.${key}`;
+    if (resolvedSecretKey.test(key) && !/ref$/i.test(key)) {
+      throw new Error(`Cannot export identity provider configuration: ${childPath} must be an external secret reference`);
+    }
+    assertProviderConfigurationContainsOnlyReferences(child, childPath);
+  }
+}
+
 function sortedByKey<T extends { key: string }>(rows: T[]): T[] {
   return [...rows].sort((left, right) => left.key.localeCompare(right.key));
 }
@@ -93,6 +111,7 @@ class ConfigBundleExportService {
     const providerKeyById = new Map([...referenceProviders, ...identityProviders].map((provider) => [provider.id, provider.key]));
     if (identityProviders.length) files['./identity-providers.json'] = { identityProviders: sortedByKey(identityProviders).map((provider) => {
       const { allowVerifiedEmailLinking, authorizationAttributeKeys, ...protocolConfiguration } = json(provider.configurationJson);
+      assertProviderConfigurationContainsOnlyReferences(protocolConfiguration, `identity provider ${provider.key}`);
       return {
         key: provider.key,
         type: provider.protocol,

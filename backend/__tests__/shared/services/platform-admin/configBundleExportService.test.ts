@@ -60,6 +60,25 @@ describe('configBundleExportService', () => {
       .rejects.toThrow('credentials must be replaced with a secret reference before export');
   });
 
+  it('refuses to export a provider row containing a resolved legacy credential', async () => {
+    const rawClientSecret = 'must-not-leak-provider-client-secret';
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository(entity: unknown) {
+        if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue([{
+          id: 'provider-1', key: 'identity.oidc.legacy', protocol: 'oidc', isEnabled: true, authenticationMode: 'direct', directoryTenantId: null,
+          configurationJson: JSON.stringify({ issuerUrl: 'https://issuer.example.test', clientId: 'enterpriseglue', clientSecret: rawClientSecret }), syncJson: '{}', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz',
+        }]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, Engine, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(configBundleExportService.exportBundle({ bundleKey: 'acme.authz' }))
+      .rejects.toThrow('identity provider identity.oidc.legacy.clientSecret must be an external secret reference');
+    await expect(configBundleExportService.exportBundle({ bundleKey: 'acme.authz' }))
+      .rejects.not.toThrow(rawClientSecret);
+  });
+
   it('round-trips every UI-supported engine auth mode and operational labels', async () => {
     const common = {
       tenantId: null, externalId: null, version: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy',
