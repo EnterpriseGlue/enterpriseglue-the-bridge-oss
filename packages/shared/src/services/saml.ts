@@ -549,18 +549,14 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
       providerId,
       userId: result?.id ?? null,
       ...syncCounts,
-      details: {
-        email: userInfo.email,
-      },
+      details: {},
     });
     return result;
   } catch (error) {
     await ssoSyncDiagnosticsService.failRun(runId, error, {
       tenantId,
       providerId,
-      details: {
-        email: userInfo.email,
-      },
+      details: {},
     });
     throw error;
   }

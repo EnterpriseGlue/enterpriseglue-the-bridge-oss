@@ -406,17 +406,13 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo, select
       providerId,
       userId: result?.id ?? null,
       ...syncCounts,
-      details: {
-        email: userInfo.email,
-      },
+      details: {},
     });
     return result;
   } catch (error) {
     await ssoSyncDiagnosticsService.failRun(runId, error, {
       providerId,
-      details: {
-        email: userInfo.email,
-      },
+      details: {},
     });
     throw error;
   }

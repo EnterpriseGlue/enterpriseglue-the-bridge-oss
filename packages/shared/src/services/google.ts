@@ -346,10 +346,10 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo, selectedId?:
       return newUser;
     });
 
-    await ssoSyncDiagnosticsService.completeRun(runId, { providerId, userId: result?.id ?? null, ...syncCounts, details: { email: userInfo.email } });
+    await ssoSyncDiagnosticsService.completeRun(runId, { providerId, userId: result?.id ?? null, ...syncCounts, details: {} });
     return result;
   } catch (error) {
-    await ssoSyncDiagnosticsService.failRun(runId, error, { providerId, details: { email: userInfo.email } });
+    await ssoSyncDiagnosticsService.failRun(runId, error, { providerId, details: {} });
     throw error;
   }
 }
