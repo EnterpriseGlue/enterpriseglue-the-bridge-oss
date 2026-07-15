@@ -7,6 +7,10 @@ export type BpmnEngineRequestContext = {
   tenantId?: string;
   tenantSlug?: string;
   engineId?: string;
+  /** Canonical EnterpriseGlue action that authorized the outbound operation. */
+  actionId?: string;
+  /** Project lineage when the authorized operation is project-scoped. */
+  projectId?: string;
 };
 
 const storage = new AsyncLocalStorage<BpmnEngineRequestContext>();
@@ -25,4 +29,3 @@ export function updateBpmnEngineRequestContext(update: Partial<Omit<BpmnEngineRe
   if (!current) return;
   Object.assign(current, update);
 }
-

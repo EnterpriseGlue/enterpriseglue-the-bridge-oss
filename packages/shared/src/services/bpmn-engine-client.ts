@@ -7,6 +7,7 @@ import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { AppError, Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js'
 import { secretResolver } from './platform-admin/SecretResolver.js'
 import { getBpmnEngineRequestContext } from './bpmn-engine-request-context.js'
+import { logAudit } from './audit.js'
 import type {
   Batch,
   BatchStatistics,
@@ -559,6 +560,55 @@ export class BpmnEngineResponseTooLargeError extends AppError {
   }
 }
 
+type BpmnEngineAuditResult = 'succeeded' | 'operation_rejected' | 'transport_unavailable' | 'malformed_response' | 'response_too_large' | 'failed'
+
+function bpmnEngineAuditResult(error?: unknown): BpmnEngineAuditResult {
+  if (!(error instanceof AppError)) return error ? 'failed' : 'succeeded'
+  switch (error.code) {
+    case 'ENGINE_OPERATION_REJECTED': return 'operation_rejected'
+    case 'ENGINE_TRANSPORT_UNAVAILABLE': return 'transport_unavailable'
+    case 'ENGINE_MALFORMED_RESPONSE': return 'malformed_response'
+    case 'ENGINE_RESPONSE_TOO_LARGE': return 'response_too_large'
+    default: return 'failed'
+  }
+}
+
+/**
+ * Records only stable EnterpriseGlue lineage and sanitized outcome classes.
+ * It deliberately omits endpoint URLs, request payloads, credentials, and all
+ * customer-owned downstream sidecar material.
+ */
+async function auditBpmnEngineOperation(input: {
+  engineId: string;
+  method: string;
+  path: string;
+  connectionMode: 'direct' | 'customer_sidecar';
+  error?: unknown;
+}): Promise<void> {
+  const context = getBpmnEngineRequestContext()
+  if (!context?.userId || !context.actionId) return
+
+  const appError = input.error instanceof AppError ? input.error : null
+  await logAudit({
+    tenantId: context.tenantId,
+    userId: context.userId,
+    action: 'engine.operation',
+    resourceType: 'engine',
+    resourceId: input.engineId,
+    details: {
+      requestId: context.requestId,
+      authorizedActionId: context.actionId,
+      projectId: context.projectId || null,
+      operationClass: inferOperationClass(input.method, input.path),
+      method: input.method,
+      connectionMode: input.connectionMode,
+      result: bpmnEngineAuditResult(input.error),
+      ...(appError?.code ? { errorCode: appError.code } : {}),
+      ...(typeof appError?.details?.engineStatus === 'number' ? { engineStatus: appError.details.engineStatus } : {}),
+    },
+  })
+}
+
 async function decodeBpmnEngineResponse<T>(
   response: Awaited<ReturnType<typeof fetch>>,
   input: { method: string; path: string; connectionMode: 'direct' | 'customer_sidecar' },
@@ -582,24 +632,40 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
       else url.searchParams.set(k, String(v))
     }
   }
-  const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method: 'GET', path: `${path}${url.search}` })
-  if (!res.ok) {
-    await res.text().catch(() => '')
-    throw new BpmnEngineOperationError({ method: 'GET', path, status: res.status, connectionMode: diagnostics.connectionMode })
+  const connectionMode = cfg.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
+  try {
+    const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method: 'GET', path: `${path}${url.search}` })
+    if (!res.ok) {
+      await res.text().catch(() => '')
+      throw new BpmnEngineOperationError({ method: 'GET', path, status: res.status, connectionMode: diagnostics.connectionMode })
+    }
+    const decoded = await decodeBpmnEngineResponse<T>(res, { method: 'GET', path, connectionMode: diagnostics.connectionMode })
+    await auditBpmnEngineOperation({ engineId, method: 'GET', path, connectionMode: diagnostics.connectionMode })
+    return decoded
+  } catch (error) {
+    await auditBpmnEngineOperation({ engineId, method: 'GET', path, connectionMode, error })
+    throw error
   }
-  return decodeBpmnEngineResponse<T>(res, { method: 'GET', path, connectionMode: diagnostics.connectionMode })
 }
 
 async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
   const cfg = await getEngine(engineId)
-  const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method, path }, {
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-  if (!res.ok) {
-    await res.text().catch(() => '')
-    throw new BpmnEngineOperationError({ method, path, status: res.status, connectionMode: diagnostics.connectionMode })
+  const connectionMode = cfg.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
+  try {
+    const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method, path }, {
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+    if (!res.ok) {
+      await res.text().catch(() => '')
+      throw new BpmnEngineOperationError({ method, path, status: res.status, connectionMode: diagnostics.connectionMode })
+    }
+    const decoded = await decodeBpmnEngineResponse<T>(res, { method, path, connectionMode: diagnostics.connectionMode })
+    await auditBpmnEngineOperation({ engineId, method, path, connectionMode: diagnostics.connectionMode })
+    return decoded
+  } catch (error) {
+    await auditBpmnEngineOperation({ engineId, method, path, connectionMode, error })
+    throw error
   }
-  return decodeBpmnEngineResponse<T>(res, { method, path, connectionMode: diagnostics.connectionMode })
 }
 
 export const camundaPost = <T = unknown>(engineId: string, path: string, body?: any) => camundaSend<T>(engineId, 'POST', path, body)

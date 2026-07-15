@@ -39,6 +39,7 @@ import {
   type PermissionContext,
 } from '../services/platform-admin/permissions.js';
 import { Errors } from './errorHandler.js';
+import { updateBpmnEngineRequestContext } from '../services/bpmn-engine-request-context.js';
 
 type ResourceIdLocation = 'params' | 'body' | 'query' | 'any';
 
@@ -737,6 +738,7 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
         req.authzResource = { type: 'project', id: null };
         req.authzCollection = collection;
         req.authorizedProjectIds = collection.ids;
+        updateBpmnEngineRequestContext({ actionId: action.actionId });
         return next();
       }
       if (resolverId === 'engine.visibleCollection') {
@@ -745,6 +747,7 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
         req.authzResource = { type: 'engine', id: null };
         req.authzCollection = collection;
         req.authorizedEngineIds = collection.ids;
+        updateBpmnEngineRequestContext({ actionId: action.actionId });
         return next();
       }
 
@@ -769,6 +772,11 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
       req.authzAction = action;
       req.authzResource = resource;
       (req as Request & { permissionContext?: PermissionContext }).permissionContext = context;
+      updateBpmnEngineRequestContext({
+        actionId: action.actionId,
+        ...(resource.type === 'engine' && resource.id ? { engineId: resource.id } : {}),
+        ...(resource.type === 'project' && resource.id ? { projectId: resource.id } : {}),
+      });
       return next();
     } catch (error) {
       if (error instanceof Error) {
@@ -850,6 +858,7 @@ export function requireCompositeAction(actionId: string, options: RequireComposi
       if (options.attachDeployContext !== false) {
         req.deployContext = await loadDeployActionContext(projectId, engineId);
       }
+      updateBpmnEngineRequestContext({ actionId: action.actionId, projectId, engineId });
 
       return next();
     } catch (error) {
@@ -1006,6 +1015,7 @@ export function requireRuntimeCollectionAction(actionId: string, options: Requir
       req.authorizedRuntimeResourceScopes = scopes;
       req.runtimeAccessScope = engine.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide';
       (req as Request & { engineId?: string }).engineId = engineId;
+      updateBpmnEngineRequestContext({ actionId: action.actionId, engineId });
       return next();
     } catch (error) { return next(error instanceof Error ? error : Errors.internal('Runtime collection authorization failed')); }
   };
@@ -1099,6 +1109,7 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
       (req as Request & { engineId?: string }).engineId = engineId;
       req.authzAction = action;
       req.authzResource = resource;
+      updateBpmnEngineRequestContext({ actionId: action.actionId, engineId });
       return next();
     } catch (error) {
       return next(error instanceof Error ? error : Errors.internal('Runtime definition authorization failed'));
@@ -1174,6 +1185,7 @@ export function requireRuntimeProcessInstanceSelectionAction(
       req.authzAction = action;
       req.authzResource = resource;
       req.authorizedRuntimeResourceKeys = resourceKeys;
+      updateBpmnEngineRequestContext({ actionId: action.actionId, engineId });
       return next();
     } catch (error) {
       return next(error instanceof Error ? error : Errors.internal('Runtime batch authorization failed'));
@@ -1255,6 +1267,7 @@ export function requireRuntimeMigrationAction(
       req.authzAction = action;
       req.authzResource = resource;
       req.authorizedRuntimeResourceKeys = resourceKeys;
+      updateBpmnEngineRequestContext({ actionId: action.actionId, engineId });
       return next();
     } catch (error) {
       return next(error instanceof Error ? error : Errors.internal('Runtime migration authorization failed'));

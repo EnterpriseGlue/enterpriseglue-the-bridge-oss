@@ -19,6 +19,8 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import { engineAccessService } from '@enterpriseglue/shared/services/platform-admin/EngineAccessService.js';
 import { deploymentEligibilityService } from '@enterpriseglue/shared/services/platform-admin/DeploymentEligibilityService.js';
 
+const { updateBpmnEngineRequestContext } = vi.hoisted(() => ({ updateBpmnEngineRequestContext: vi.fn() }));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
@@ -55,6 +57,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/DeploymentEligibilitySer
   deploymentEligibilityService: {
     evaluate: vi.fn(),
   },
+}));
+
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-request-context.js', () => ({
+  updateBpmnEngineRequestContext,
 }));
 
 const { camundaGet } = vi.hoisted(() => ({ camundaGet: vi.fn() }));
@@ -463,6 +469,11 @@ describe('requireAction project resource resolvers', () => {
         projectRole: 'permission',
         engineName: 'Engine One',
       },
+    });
+    expect(updateBpmnEngineRequestContext).toHaveBeenCalledWith({
+      actionId: 'project.deploy.create',
+      projectId,
+      engineId,
     });
     expect(deploymentEligibilityService.evaluate).toHaveBeenCalledWith({
       userId: 'user-1',

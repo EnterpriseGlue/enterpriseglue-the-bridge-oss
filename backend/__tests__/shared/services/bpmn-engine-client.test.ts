@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
 import { fetch } from 'undici';
+import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import {
   camundaGet,
   camundaPost,
@@ -22,6 +23,10 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 
 vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
   safeDecrypt: vi.fn((val) => val),
+}));
+
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
+  logAudit: vi.fn(),
 }));
 
 vi.mock('undici', () => ({
@@ -122,6 +127,63 @@ describe('bpmn-engine-client', () => {
     });
     await expect(camundaPost('engine-sidecar', '/process-definition/key/payments/start', {})).resolves.toEqual({ id: 'process-1' });
     expect(JSON.stringify((fetch as unknown as Mock).mock.calls)).not.toContain('customer-downstream-token');
+  });
+
+  it('records sanitized canonical lineage for sidecar operations without endpoint or downstream-token data', async () => {
+    const engineRepo = { findOneBy: vi.fn().mockResolvedValue({
+      id: 'engine-sidecar', baseUrl: 'https://sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar', authType: 'none',
+    }) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : {} });
+
+    await runWithBpmnEngineRequestContext({
+      requestId: 'request-42', userId: 'user-1', tenantId: 'tenant-1', engineId: 'engine-sidecar', actionId: 'engine.runtime.instances.start', projectId: 'project-1',
+    }, async () => {
+      await camundaPost('engine-sidecar', '/process-definition/key/payments/start', { customerDownstreamToken: 'customer-downstream-token' });
+    });
+
+    expect(logAudit).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      action: 'engine.operation',
+      resourceType: 'engine',
+      resourceId: 'engine-sidecar',
+      details: {
+        requestId: 'request-42',
+        authorizedActionId: 'engine.runtime.instances.start',
+        projectId: 'project-1',
+        operationClass: 'engine.instance.mutate',
+        method: 'POST',
+        connectionMode: 'customer_sidecar',
+        result: 'succeeded',
+      },
+    });
+    expect(JSON.stringify((logAudit as unknown as Mock).mock.calls)).not.toContain('sidecar.example.test');
+    expect(JSON.stringify((logAudit as unknown as Mock).mock.calls)).not.toContain('customer-downstream-token');
+  });
+
+  it('records a sanitized sidecar rejection outcome without an upstream response body', async () => {
+    const engineRepo = { findOneBy: vi.fn().mockResolvedValue({
+      id: 'engine-sidecar', baseUrl: 'https://sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar', authType: 'none',
+    }) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : {} });
+    (fetch as unknown as Mock).mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', headers: { get: vi.fn().mockReturnValue('text/plain') }, text: vi.fn().mockResolvedValue('customer-downstream-token') });
+
+    await runWithBpmnEngineRequestContext({ requestId: 'request-43', userId: 'user-1', tenantId: 'tenant-1', actionId: 'engine.runtime.instances.start' }, async () => {
+      await expect(camundaPost('engine-sidecar', '/process-definition/key/payments/start', {})).rejects.toMatchObject({ code: 'ENGINE_OPERATION_REJECTED' });
+    });
+
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        requestId: 'request-43',
+        authorizedActionId: 'engine.runtime.instances.start',
+        operationClass: 'engine.instance.mutate',
+        connectionMode: 'customer_sidecar',
+        result: 'operation_rejected',
+        errorCode: 'ENGINE_OPERATION_REJECTED',
+        engineStatus: 401,
+      }),
+    }));
+    expect(JSON.stringify((logAudit as unknown as Mock).mock.calls)).not.toContain('customer-downstream-token');
   });
 
   it('retries one transient safe-read failure and reports bounded transport diagnostics', async () => {
