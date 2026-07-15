@@ -8,7 +8,7 @@ import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/per
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { In, IsNull, type EntityManager } from 'typeorm';
+import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 
 export type IdentityProviderProtocol = 'oidc' | 'saml' | 'ldap';
@@ -25,6 +25,9 @@ export interface IdentityProviderInput {
   sync?: Record<string, unknown>;
   ownershipMode?: string;
   sourceRef?: string | null;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
 }
 
 export type IdentityConnectorCapability = 'claim_only' | 'ldap_directory' | 'scim' | 'graph';
@@ -159,15 +162,15 @@ class IdentityProviderServiceClass {
   async listEnabledDirectLoginProviders(tenantId?: string | null): Promise<IdentityProvider[]> {
     return (await this.list(tenantId)).filter((provider) => provider.isEnabled && provider.authenticationMode === 'direct' && (provider.protocol === 'oidc' || provider.protocol === 'saml' || provider.protocol === 'ldap'));
   }
-  async upsert(input: IdentityProviderInput): Promise<IdentityProvider> {
+  async upsert(input: IdentityProviderInput, store?: DataSource | EntityManager): Promise<IdentityProvider> {
     const tenantId = normalized(input.tenantId); const key = input.key.trim();
     if (!key) throw Errors.validation('Identity provider key is required');
     ensureConfig(input.protocol, input.configuration);
     ensureSync(input.sync);
-    const repo = (await getDataSource()).getRepository(IdentityProvider); const now = Date.now();
+    const repo = (store || await getDataSource()).getRepository(IdentityProvider); const now = Date.now();
     const providerKeyIdentity = identityProviderKeyIdentity(tenantId, key);
     const existing = await repo.findOne({ where: { providerKeyIdentity } });
-    const values = { protocol: input.protocol, isEnabled: input.isEnabled ?? false, authenticationMode: input.authenticationMode ?? 'claims_only', directoryTenantId: normalized(input.directoryTenantId), configurationJson: json(input.configuration), syncJson: json(input.sync), ownershipMode: input.ownershipMode || 'manual', sourceRef: normalized(input.sourceRef), updatedAt: now };
+    const values = { protocol: input.protocol, isEnabled: input.isEnabled ?? false, authenticationMode: input.authenticationMode ?? 'claims_only', directoryTenantId: normalized(input.directoryTenantId), configurationJson: json(input.configuration), syncJson: json(input.sync), ownershipMode: input.ownershipMode || 'manual', sourceRef: normalized(input.sourceRef), sourceHash: input.sourceHash ?? null, lastAppliedAt: input.lastAppliedAt ?? null, driftStatus: input.driftStatus ?? null, updatedAt: now };
     if (existing) { await repo.update({ id: existing.id }, values); return { ...existing, ...values } as IdentityProvider; }
     const provider = { id: generateId(), tenantId, key, providerKeyIdentity, ...values, createdAt: now } as unknown as IdentityProvider;
     await repo.insert(provider); return provider;

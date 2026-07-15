@@ -31,6 +31,25 @@ describe('identityProviderService', () => {
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ providerKeyIdentity: 'tenant-a:identity.main' }));
     expect(identityProviderKeyIdentity(null, 'identity.main')).toBe('platform:identity.main');
   });
+  it('persists config provenance through a supplied transaction manager', async () => {
+    const transactionInsert = vi.fn().mockResolvedValue(undefined);
+    const transactionFindOne = vi.fn().mockResolvedValue(null);
+    const store = { getRepository: (entity: unknown) => {
+      if (entity === IdentityProvider) return { findOne: transactionFindOne, insert: transactionInsert };
+      throw new Error('Unexpected repository');
+    }} as any;
+
+    await identityProviderService.upsert({
+      tenantId: 'tenant-a', key: 'identity.config', protocol: 'oidc',
+      configuration: { issuerUrl: 'https://login.example.test', clientId: 'client' },
+      ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz', sourceHash: 'bundle-hash', lastAppliedAt: 123, driftStatus: 'in_sync',
+    }, store);
+
+    expect(transactionInsert).toHaveBeenCalledWith(expect.objectContaining({
+      providerKeyIdentity: 'tenant-a:identity.config', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz',
+      sourceHash: 'bundle-hash', lastAppliedAt: 123, driftStatus: 'in_sync',
+    }));
+  });
   it('rejects raw secrets and non-LDAPS LDAP endpoints', async () => {
     await expect(identityProviderService.upsert({ key: 'bad', protocol: 'oidc', configuration: { issuerUrl: 'https://idp.test', clientId: 'x', clientSecret: 'raw' } })).rejects.toThrow('secret references');
     await expect(identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: { url: 'ldap://directory.test' } })).rejects.toThrow('ldaps://');

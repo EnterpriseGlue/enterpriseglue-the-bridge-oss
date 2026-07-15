@@ -29,7 +29,7 @@ import { configBundlePreviewService, type ConfigBundlePolicyContext, type Config
 import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
 import { configBundleRuntimeReconciliationTaskService } from './ConfigBundleRuntimeReconciliationTaskService.js';
-import { archiveIdentityProviderInStore } from './IdentityProviderService.js';
+import { archiveIdentityProviderInStore, identityProviderService } from './IdentityProviderService.js';
 import { identityEntitlementMappingService, identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 import { authzGroupService } from './AuthzGroupService.js';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
@@ -586,9 +586,22 @@ class ConfigBundleApplyService {
             updatedAt: now,
           } : null;
           if (change.operation === 'create' && desired && values) {
-            const id = generateId();
-            await providerRepo.insert({ id, tenantId, key: desired.key, providerKeyIdentity: `${tenantId || 'platform'}:${desired.key}`, ...values, createdAt: now });
-            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.create', resourceType: 'identity_provider', resourceId: id, details: { bundleKey: manifest.metadata.key, providerKey: desired.key, canonicalHash: diff.canonicalHash } });
+            const provider = await identityProviderService.upsert({
+              tenantId,
+              key: desired.key,
+              protocol: desired.type,
+              isEnabled: desired.enabled,
+              authenticationMode: desired.authenticationMode,
+              directoryTenantId: desired.directoryTenantId || null,
+              configuration: providerConfiguration(desired),
+              sync: desired.sync,
+              ownershipMode: desired.ownershipMode || 'config_locked',
+              sourceRef: `config_bundle:${manifest.metadata.key}`,
+              sourceHash,
+              lastAppliedAt: now,
+              driftStatus: 'in_sync',
+            }, manager);
+            await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.create', resourceType: 'identity_provider', resourceId: provider.id, details: { bundleKey: manifest.metadata.key, providerKey: desired.key, canonicalHash: diff.canonicalHash } });
             created += 1;
           } else if (change.operation === 'update' && change.currentId && values) {
             await providerRepo.update({ id: change.currentId }, values);
