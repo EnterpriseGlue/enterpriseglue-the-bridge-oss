@@ -97,11 +97,7 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
     await samlAssertionReplayService.consume({ providerId, samlResponse });
     const userInfo = extractSamlUserInfo(profile);
 
-    logger.info('[SAML Auth] User info extracted:', {
-      oid: userInfo.oid,
-      email: userInfo.email,
-      name: userInfo.name,
-    });
+    logger.info('[SAML Auth] User info extracted', { subjectPresent: Boolean(userInfo.oid) });
 
     const user = await provisionSamlUser(userInfo, providerId);
     if (!user) {
@@ -109,7 +105,7 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
     }
 
     if (!user.isActive) {
-      logger.warn('[SAML Auth] User account is deactivated:', user.email);
+      logger.warn('[SAML Auth] User account is deactivated', { userId: user.id });
 
       await logAudit({
         action: AuditActions.LOGIN_FAILED,

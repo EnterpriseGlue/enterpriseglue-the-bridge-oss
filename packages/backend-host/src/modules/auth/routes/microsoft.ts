@@ -101,11 +101,7 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
     // Extract user info from ID token
     const userInfo = extractUserInfo(tokenResponse.idTokenClaims);
     
-    logger.info('[Microsoft Auth] User info extracted:', { 
-      oid: userInfo.oid, 
-      email: userInfo.email,
-      name: userInfo.name 
-    });
+    logger.info('[Microsoft Auth] User info extracted', { subjectPresent: Boolean(userInfo.oid) });
 
     // Create or update user (JIT provisioning)
     const user = ssoState?.providerId
@@ -116,15 +112,11 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
       throw new Error('Failed to provision user');
     }
     
-    logger.info('[Microsoft Auth] User provisioned:', { 
-      id: user.id, 
-      email: user.email, 
-      isNew: !user.lastLoginAt 
-    });
+    logger.info('[Microsoft Auth] User provisioned', { userId: user.id, isNew: !user.lastLoginAt });
 
     // Check if user is active
     if (!user.isActive) {
-      logger.warn('[Microsoft Auth] User account is deactivated:', user.email);
+      logger.warn('[Microsoft Auth] User account is deactivated', { userId: user.id });
       
       await logAudit({
         action: AuditActions.LOGIN_FAILED,
@@ -162,7 +154,7 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
       userAgent: req.headers['user-agent'],
     });
 
-    logger.info('[Microsoft Auth] Login successful:', user.email);
+    logger.info('[Microsoft Auth] Login successful', { userId: user.id });
 
     // Set tokens in HTTP-only cookies
     res.cookie('accessToken', session.accessToken, {

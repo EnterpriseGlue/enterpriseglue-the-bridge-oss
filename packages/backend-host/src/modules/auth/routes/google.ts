@@ -101,11 +101,7 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
     // Extract user info from ID token
     const userInfo = extractGoogleUserInfo(tokenResponse.payload);
     
-    logger.info('[Google Auth] User info extracted:', { 
-      sub: userInfo.sub, 
-      email: userInfo.email,
-      name: userInfo.name 
-    });
+    logger.info('[Google Auth] User info extracted', { subjectPresent: Boolean(userInfo.sub) });
 
     // Create or update user (JIT provisioning)
     const user = ssoState?.providerId
@@ -116,15 +112,11 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
       throw new Error('Failed to provision user');
     }
     
-    logger.info('[Google Auth] User provisioned:', { 
-      id: user.id, 
-      email: user.email, 
-      isNew: !user.lastLoginAt 
-    });
+    logger.info('[Google Auth] User provisioned', { userId: user.id, isNew: !user.lastLoginAt });
 
     // Check if user is active
     if (!user.isActive) {
-      logger.warn('[Google Auth] User account is deactivated:', user.email);
+      logger.warn('[Google Auth] User account is deactivated', { userId: user.id });
       
       await logAudit({
         action: AuditActions.LOGIN_FAILED,
@@ -162,7 +154,7 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
       userAgent: req.headers['user-agent'],
     });
 
-    logger.info('[Google Auth] Login successful:', user.email);
+    logger.info('[Google Auth] Login successful', { userId: user.id });
 
     // Set tokens in HTTP-only cookies
     res.cookie('accessToken', session.accessToken, {
