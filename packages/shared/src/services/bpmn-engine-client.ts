@@ -342,7 +342,7 @@ function inferOperationClass(method: string, path: string): string {
  * denial and avoid exposing engine URLs or response bodies to callers.
  */
 export class BpmnEngineOperationError extends AppError {
-  constructor(input: { method: string; path: string; status: number }) {
+  constructor(input: { method: string; path: string; status: number; connectionMode?: 'direct' | 'customer_sidecar' }) {
     super(
       'ENGINE_OPERATION_REJECTED',
       'The engine rejected the requested operation',
@@ -350,6 +350,7 @@ export class BpmnEngineOperationError extends AppError {
       {
         engineStatus: input.status,
         operationClass: inferOperationClass(input.method, input.path),
+        ...(input.connectionMode === 'customer_sidecar' ? { connectionMode: input.connectionMode } : {}),
       },
     )
   }
@@ -584,7 +585,7 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
   const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method: 'GET', path: `${path}${url.search}` })
   if (!res.ok) {
     await res.text().catch(() => '')
-    throw new BpmnEngineOperationError({ method: 'GET', path, status: res.status })
+    throw new BpmnEngineOperationError({ method: 'GET', path, status: res.status, connectionMode: diagnostics.connectionMode })
   }
   return decodeBpmnEngineResponse<T>(res, { method: 'GET', path, connectionMode: diagnostics.connectionMode })
 }
@@ -596,7 +597,7 @@ async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT'
   })
   if (!res.ok) {
     await res.text().catch(() => '')
-    throw new BpmnEngineOperationError({ method, path, status: res.status })
+    throw new BpmnEngineOperationError({ method, path, status: res.status, connectionMode: diagnostics.connectionMode })
   }
   return decodeBpmnEngineResponse<T>(res, { method, path, connectionMode: diagnostics.connectionMode })
 }

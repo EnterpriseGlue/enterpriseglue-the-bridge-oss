@@ -598,4 +598,30 @@ describe('bpmn-engine-client', () => {
       },
     );
   });
+
+  it('reports a customer-sidecar rejection with sanitized transport-specific diagnostics', async () => {
+    const engineRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'engine-sidecar', baseUrl: 'https://sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar', authType: 'none',
+      }),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : {} });
+    (fetch as unknown as Mock).mockResolvedValueOnce({
+      ok: false, status: 403, statusText: 'Forbidden', headers: { get: vi.fn().mockReturnValue('application/json') },
+      text: vi.fn().mockResolvedValue('{"downstreamToken":"must-not-leak"}'),
+    });
+
+    await camundaPost('engine-sidecar', '/job/job-1/execute').then(
+      () => { throw new Error('Expected sidecar rejection'); },
+      (error: { code: string; toJSON: () => unknown }) => {
+        expect(error.code).toBe('ENGINE_OPERATION_REJECTED');
+        expect(error.toJSON()).toEqual({
+          error: 'The engine rejected the requested operation', code: 'ENGINE_OPERATION_REJECTED',
+          details: { engineStatus: 403, operationClass: 'engine.job.mutate', connectionMode: 'customer_sidecar' },
+        });
+        expect(JSON.stringify(error.toJSON())).not.toContain('sidecar.example.test');
+        expect(JSON.stringify(error.toJSON())).not.toContain('must-not-leak');
+      },
+    );
+  });
 });
