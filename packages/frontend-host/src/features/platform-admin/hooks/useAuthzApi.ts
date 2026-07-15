@@ -222,8 +222,13 @@ export type EngineManagementMode = 'manual' | 'external_managed' | 'hybrid';
 export type EngineLifecycleStatus = 'active' | 'disabled' | 'stale' | 'decommissioned';
 export type EngineCapabilityStatus = 'unknown' | 'in_sync' | 'mismatch';
 export type EngineFieldOwnership = Record<string, 'manual' | 'external'>;
+export type EngineRuntimeQueryCapabilities = Partial<Record<
+  'processDefinitionKey' | 'decisionDefinitionKey' | 'tenantFilters' | 'instanceLineage' | 'history' | 'jobs' | 'incidents' | 'batches' | 'counts',
+  boolean
+>>;
 export interface ExternalEngineCapabilities {
   operations?: string[];
+  queryCapabilities?: EngineRuntimeQueryCapabilities;
   supportLevel?: string | null;
   compatibilityProfile?: string | null;
   [key: string]: unknown;
@@ -235,6 +240,9 @@ export interface ExternalEngineCapabilityDiagnostics {
   reportedOperations: string[];
   missingOperations: string[];
   extraOperations: string[];
+  expectedQueryCapabilities: EngineRuntimeQueryCapabilities;
+  reportedQueryCapabilities: EngineRuntimeQueryCapabilities | null;
+  mismatchedQueryCapabilities: string[];
   expectedSupportLevel: string;
   reportedSupportLevel: string | null;
   expectedCompatibilityProfile: string;

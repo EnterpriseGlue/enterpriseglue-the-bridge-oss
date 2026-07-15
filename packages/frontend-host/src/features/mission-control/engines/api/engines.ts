@@ -27,6 +27,7 @@ export type Engine = {
   lastExternalSyncAt?: number
   reportedCapabilities?: {
     operations?: string[]
+    queryCapabilities?: Record<string, boolean>
     supportLevel?: string | null
     compatibilityProfile?: string | null
     [key: string]: unknown
@@ -38,6 +39,9 @@ export type Engine = {
     reportedOperations: string[]
     missingOperations: string[]
     extraOperations: string[]
+    expectedQueryCapabilities: Record<string, boolean>
+    reportedQueryCapabilities: Record<string, boolean> | null
+    mismatchedQueryCapabilities: string[]
     expectedSupportLevel: string
     reportedSupportLevel: string | null
     expectedCompatibilityProfile: string

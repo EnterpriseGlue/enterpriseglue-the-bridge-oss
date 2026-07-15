@@ -32,6 +32,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js'
 import {
   CreateEngineRequestSchema,
   EndpointAuthenticationPolicyMessages,
+  EngineRuntimeQueryCapabilitiesSchema,
   ExternalEngineRegistrationRequestSchema,
   UpdateEngineRequestSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
@@ -46,6 +47,7 @@ const engineLifecycleStatusSchema = z.enum(['active', 'disabled', 'stale', 'deco
 const engineFieldOwnerSchema = z.enum(['manual', 'external'])
 const externalEngineCapabilitiesSchema = z.object({
   operations: z.array(z.enum(ENGINE_OPERATION_CAPABILITIES)).optional(),
+  queryCapabilities: EngineRuntimeQueryCapabilitiesSchema.optional(),
   supportLevel: z.string().max(128).nullable().optional(),
   compatibilityProfile: z.string().max(128).nullable().optional(),
 }).passthrough()
@@ -461,6 +463,7 @@ function normalizeExternalEngineCapabilities(capabilities: ExternalEngineCapabil
   return {
     ...capabilities,
     operations,
+    queryCapabilities: capabilities.queryCapabilities,
     supportLevel: capabilities.supportLevel ?? null,
     compatibilityProfile: capabilities.compatibilityProfile ?? null,
   }
@@ -487,6 +490,11 @@ function getCapabilityStatus(type: unknown, capabilities: ExternalEngineCapabili
 function getCapabilityDiagnostics(type: unknown, capabilities: ExternalEngineCapabilities | null) {
   const expected = getEngineCapabilities(type)
   const expectedOperations = [...expected.operations].sort()
+  const expectedQueryCapabilities = expected.queryCapabilities
+  const reportedQueryCapabilities = capabilities?.queryCapabilities || null
+  const mismatchedQueryCapabilities = Object.entries(expectedQueryCapabilities)
+    .filter(([capability, expectedValue]) => reportedQueryCapabilities?.[capability as keyof typeof expectedQueryCapabilities] !== expectedValue)
+    .map(([capability]) => capability)
   if (!capabilities || !Array.isArray(capabilities.operations) || capabilities.operations.length === 0) {
     return {
       status: 'unknown' as const,
@@ -494,6 +502,9 @@ function getCapabilityDiagnostics(type: unknown, capabilities: ExternalEngineCap
       reportedOperations: [] as string[],
       missingOperations: expectedOperations,
       extraOperations: [] as string[],
+      expectedQueryCapabilities,
+      reportedQueryCapabilities,
+      mismatchedQueryCapabilities: Object.keys(expectedQueryCapabilities),
       expectedSupportLevel: expected.supportLevel,
       reportedSupportLevel: null,
       expectedCompatibilityProfile: expected.compatibilityProfile,
@@ -507,10 +518,11 @@ function getCapabilityDiagnostics(type: unknown, capabilities: ExternalEngineCap
   const expectedSet = new Set(expectedOperations)
   const missingOperations = expectedOperations.filter((operation) => !reported.has(operation))
   const extraOperations = reportedOperations.filter((operation) => !expectedSet.has(operation))
-  const status = missingOperations.length > 0 ? 'mismatch' as const : 'in_sync' as const
+  const status = missingOperations.length > 0 || mismatchedQueryCapabilities.length > 0 ? 'mismatch' as const : 'in_sync' as const
   const issues = [
     missingOperations.length > 0 ? `Missing expected operations: ${missingOperations.join(', ')}.` : '',
     extraOperations.length > 0 ? `Reported unsupported operations: ${extraOperations.join(', ')}.` : '',
+    mismatchedQueryCapabilities.length > 0 ? `Missing or incompatible query capabilities: ${mismatchedQueryCapabilities.join(', ')}.` : '',
   ].filter(Boolean)
 
   return {
@@ -519,6 +531,9 @@ function getCapabilityDiagnostics(type: unknown, capabilities: ExternalEngineCap
     reportedOperations,
     missingOperations,
     extraOperations,
+    expectedQueryCapabilities,
+    reportedQueryCapabilities,
+    mismatchedQueryCapabilities,
     expectedSupportLevel: expected.supportLevel,
     reportedSupportLevel: capabilities.supportLevel ?? null,
     expectedCompatibilityProfile: expected.compatibilityProfile,
@@ -526,7 +541,7 @@ function getCapabilityDiagnostics(type: unknown, capabilities: ExternalEngineCap
     issues,
     recommendation: status === 'in_sync'
       ? 'No capability action required.'
-      : 'Update the external registration payload to report the missing operations, then run reconcile again.',
+      : 'Update the external registration payload to report the missing operations and query capabilities, then run reconcile again.',
   }
 }
 

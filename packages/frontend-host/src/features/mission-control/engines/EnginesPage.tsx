@@ -249,12 +249,15 @@ export function formatEngineCapabilitySummary(capabilities: any): string {
 
 export function formatEngineCapabilityDiagnostics(diagnostics: any): string {
   if (!diagnostics || typeof diagnostics !== 'object') return '-'
-  if (diagnostics.status === 'in_sync') return 'All expected operations reported'
+  if (diagnostics.status === 'in_sync') return 'All expected operations and query capabilities reported'
   if (Array.isArray(diagnostics.missingOperations) && diagnostics.missingOperations.length > 0) {
     return `Missing: ${diagnostics.missingOperations.join(', ')}`
   }
   if (Array.isArray(diagnostics.extraOperations) && diagnostics.extraOperations.length > 0) {
     return `Extra: ${diagnostics.extraOperations.join(', ')}`
+  }
+  if (Array.isArray(diagnostics.mismatchedQueryCapabilities) && diagnostics.mismatchedQueryCapabilities.length > 0) {
+    return `Query filters: ${diagnostics.mismatchedQueryCapabilities.join(', ')}`
   }
   if (Array.isArray(diagnostics.reportedOperations) && diagnostics.reportedOperations.length === 0) {
     return 'No operation capabilities reported'

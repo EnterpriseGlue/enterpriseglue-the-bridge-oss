@@ -475,8 +475,20 @@ export const EngineLifecycleStatusSchema = z.enum(['active', 'disabled', 'stale'
 export const EngineCapabilityStatusSchema = z.enum(['unknown', 'in_sync', 'mismatch']);
 export const EngineFieldOwnerSchema = z.enum(['manual', 'external']);
 export const EngineFieldOwnershipSchema = z.record(z.string().min(1), EngineFieldOwnerSchema);
+export const EngineRuntimeQueryCapabilitiesSchema = z.object({
+  processDefinitionKey: z.boolean().optional(),
+  decisionDefinitionKey: z.boolean().optional(),
+  tenantFilters: z.boolean().optional(),
+  instanceLineage: z.boolean().optional(),
+  history: z.boolean().optional(),
+  jobs: z.boolean().optional(),
+  incidents: z.boolean().optional(),
+  batches: z.boolean().optional(),
+  counts: z.boolean().optional(),
+}).strict();
 export const ExternalEngineCapabilitiesSchema = z.object({
   operations: z.array(z.string()).optional(),
+  queryCapabilities: EngineRuntimeQueryCapabilitiesSchema.optional(),
   supportLevel: z.string().nullable().optional(),
   compatibilityProfile: z.string().nullable().optional(),
 }).passthrough();
@@ -487,6 +499,9 @@ export const ExternalEngineCapabilityDiagnosticsSchema = z.object({
   reportedOperations: z.array(z.string()),
   missingOperations: z.array(z.string()),
   extraOperations: z.array(z.string()),
+  expectedQueryCapabilities: EngineRuntimeQueryCapabilitiesSchema,
+  reportedQueryCapabilities: EngineRuntimeQueryCapabilitiesSchema.nullable(),
+  mismatchedQueryCapabilities: z.array(z.string()),
   expectedSupportLevel: z.string(),
   reportedSupportLevel: z.string().nullable(),
   expectedCompatibilityProfile: z.string(),

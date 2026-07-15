@@ -33,9 +33,10 @@ export function formatStatusLabel(value: string | null | undefined) {
 
 export function formatCapabilityDiagnostics(diagnostics?: ExternalEngineCapabilityDiagnostics | null) {
   if (!diagnostics) return '-';
-  if (diagnostics.status === 'in_sync') return 'All expected operations reported';
+  if (diagnostics.status === 'in_sync') return 'All expected operations and query capabilities reported';
   if (diagnostics.reportedOperations.length === 0) return 'No operation capabilities reported';
   if (diagnostics.missingOperations.length > 0) return `Missing: ${diagnostics.missingOperations.join(', ')}`;
+  if (diagnostics.mismatchedQueryCapabilities.length > 0) return `Query filters: ${diagnostics.mismatchedQueryCapabilities.join(', ')}`;
   if (diagnostics.extraOperations.length > 0) return `Extra: ${diagnostics.extraOperations.join(', ')}`;
   return diagnostics.issues[0] || diagnostics.recommendation || '-';
 }

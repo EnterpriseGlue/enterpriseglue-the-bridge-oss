@@ -7,7 +7,10 @@ export function parseExternalEngineCapabilities(value: string | null | undefined
   const operations = Array.isArray(parsed.operations)
     ? Array.from(new Set(parsed.operations.filter((operation): operation is string => typeof operation === 'string'))).sort()
     : [];
-  return { ...parsed, operations };
+  const queryCapabilities = parsed.queryCapabilities && typeof parsed.queryCapabilities === 'object' && !Array.isArray(parsed.queryCapabilities)
+    ? Object.fromEntries(Object.entries(parsed.queryCapabilities).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'))
+    : undefined;
+  return { ...parsed, operations, ...(queryCapabilities ? { queryCapabilities } : {}) };
 }
 
 export function getExternalEngineCapabilityDiagnostics(type: unknown, capabilities: Record<string, unknown> | null) {
@@ -20,20 +23,32 @@ export function getExternalEngineCapabilityDiagnostics(type: unknown, capabiliti
   const expectedSet = new Set<string>(expectedOperations);
   const missingOperations = expectedOperations.filter((operation) => !reported.has(operation));
   const extraOperations = reportedOperations.filter((operation) => !expectedSet.has(operation));
-  const status: 'unknown' | 'in_sync' | 'mismatch' = reportedOperations.length === 0 ? 'unknown' : missingOperations.length ? 'mismatch' : 'in_sync';
+  const expectedQueryCapabilities = expected.queryCapabilities;
+  const rawReportedQueryCapabilities = capabilities?.queryCapabilities;
+  const reportedQueryCapabilities = rawReportedQueryCapabilities && typeof rawReportedQueryCapabilities === 'object' && !Array.isArray(rawReportedQueryCapabilities)
+    ? rawReportedQueryCapabilities as Record<string, boolean>
+    : null;
+  const mismatchedQueryCapabilities = Object.entries(expectedQueryCapabilities)
+    .filter(([capability, expectedValue]) => reportedQueryCapabilities?.[capability] !== expectedValue)
+    .map(([capability]) => capability);
+  const status: 'unknown' | 'in_sync' | 'mismatch' = reportedOperations.length === 0
+    ? 'unknown'
+    : missingOperations.length || mismatchedQueryCapabilities.length ? 'mismatch' : 'in_sync';
   const issues = [
     reportedOperations.length === 0 ? 'No operation capabilities were reported by the external system.' : '',
     missingOperations.length ? `Missing expected operations: ${missingOperations.join(', ')}.` : '',
     extraOperations.length ? `Reported unsupported operations: ${extraOperations.join(', ')}.` : '',
+    mismatchedQueryCapabilities.length ? `Missing or incompatible query capabilities: ${mismatchedQueryCapabilities.join(', ')}.` : '',
   ].filter(Boolean);
   return {
     status, expectedOperations, reportedOperations, missingOperations, extraOperations,
+    expectedQueryCapabilities, reportedQueryCapabilities, mismatchedQueryCapabilities,
     expectedSupportLevel: expected.supportLevel,
     reportedSupportLevel: typeof capabilities?.supportLevel === 'string' ? capabilities.supportLevel : null,
     expectedCompatibilityProfile: expected.compatibilityProfile,
     reportedCompatibilityProfile: typeof capabilities?.compatibilityProfile === 'string' ? capabilities.compatibilityProfile : null,
     issues,
-    recommendation: status === 'in_sync' ? 'No capability action required.' : 'Update the external registration payload to report the missing operations, then run reconcile again.',
+    recommendation: status === 'in_sync' ? 'No capability action required.' : 'Update the external registration payload to report the missing operations and query capabilities, then run reconcile again.',
   };
 }
 

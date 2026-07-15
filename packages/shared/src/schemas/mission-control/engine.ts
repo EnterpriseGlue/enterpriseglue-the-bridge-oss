@@ -29,8 +29,28 @@ export const EngineTransportDiagnosticsSchema = z.object({
   timeoutMs: z.number().int().min(100).max(60_000).optional(),
 });
 
+/**
+ * Query dimensions that a BPMN engine adapter must describe explicitly.  They
+ * are deliberately separate from mutation operations: resource-aware
+ * authorization needs to know whether a stable runtime lineage can be pushed
+ * to the upstream engine before a collection is read.
+ */
+export const EngineRuntimeQueryCapabilitiesSchema = z.object({
+  processDefinitionKey: z.boolean().optional(),
+  decisionDefinitionKey: z.boolean().optional(),
+  tenantFilters: z.boolean().optional(),
+  instanceLineage: z.boolean().optional(),
+  history: z.boolean().optional(),
+  jobs: z.boolean().optional(),
+  incidents: z.boolean().optional(),
+  batches: z.boolean().optional(),
+  counts: z.boolean().optional(),
+}).strict();
+export type EngineRuntimeQueryCapabilities = z.infer<typeof EngineRuntimeQueryCapabilitiesSchema>;
+
 export const ExternalEngineCapabilitiesSchema = z.object({
   operations: z.array(z.string()).optional(),
+  queryCapabilities: EngineRuntimeQueryCapabilitiesSchema.optional(),
   supportLevel: z.string().nullable().optional(),
   compatibilityProfile: z.string().nullable().optional(),
 }).passthrough();
@@ -82,6 +102,9 @@ export const ExternalEngineCapabilityDiagnosticsSchema = z.object({
   reportedOperations: z.array(z.string()),
   missingOperations: z.array(z.string()),
   extraOperations: z.array(z.string()),
+  expectedQueryCapabilities: EngineRuntimeQueryCapabilitiesSchema,
+  reportedQueryCapabilities: EngineRuntimeQueryCapabilitiesSchema.nullable(),
+  mismatchedQueryCapabilities: z.array(z.string()),
   expectedSupportLevel: z.string(),
   reportedSupportLevel: z.string().nullable(),
   expectedCompatibilityProfile: z.string(),

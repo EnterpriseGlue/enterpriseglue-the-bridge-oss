@@ -1754,8 +1754,9 @@ describe('platform-admin authz routes', () => {
         status: 'mismatch',
         reportedOperations: ['engine.read'],
         missingOperations: expect.arrayContaining(['engine.deploy', 'engine.admin']),
+        mismatchedQueryCapabilities: expect.arrayContaining(['processDefinitionKey', 'batches']),
         extraOperations: [],
-        recommendation: 'Update the external registration payload to report the missing operations, then run reconcile again.',
+        recommendation: 'Update the external registration payload to report the missing operations and query capabilities, then run reconcile again.',
       },
     });
     expect(listResponse.body[0]).not.toHaveProperty('passwordEnc');
@@ -1853,13 +1854,24 @@ describe('platform-admin authz routes', () => {
   it('reconciles external engine capability and materialization state', async () => {
     const engineUpdate = vi.fn().mockResolvedValue(undefined);
     const registrationUpdate = vi.fn().mockResolvedValue(undefined);
+    const queryCapabilities = {
+      processDefinitionKey: true,
+      decisionDefinitionKey: true,
+      tenantFilters: true,
+      instanceLineage: true,
+      history: true,
+      jobs: true,
+      incidents: true,
+      batches: false,
+      counts: true,
+    };
     const registration = {
       id: 'registration-1',
       engineId: 'engine-1',
       externalId: 'cluster-a/prod',
       externalSystemId: 'system-1',
       lifecycleStatus: 'active',
-      capabilitiesJson: JSON.stringify({ operations: ['engine.read', 'engine.deploy', 'engine.instance.mutate', 'engine.task.mutate', 'engine.job.mutate', 'engine.batch.admin', 'engine.admin'] }),
+      capabilitiesJson: JSON.stringify({ operations: ['engine.read', 'engine.deploy', 'engine.instance.mutate', 'engine.task.mutate', 'engine.job.mutate', 'engine.batch.admin', 'engine.admin'], queryCapabilities }),
       capabilityStatus: 'mismatch',
     };
     const engine = {
@@ -1906,6 +1918,7 @@ describe('platform-admin authz routes', () => {
       capabilityDiagnostics: {
         status: 'in_sync',
         missingOperations: [],
+        mismatchedQueryCapabilities: [],
         reportedOperations: expect.arrayContaining(['engine.read', 'engine.deploy']),
       },
       materializationDiagnostics: {
