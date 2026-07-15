@@ -252,17 +252,15 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo, select
   const resolvedRole = await ssoClaimsMappingService.resolveRoleFromClaims(ssoClaims, providerId);
 
   logger.info('[Microsoft Auth] SSO claims role resolution:', {
-    email: userInfo.email,
-    groups: userInfo.groups,
-    roles: userInfo.roles,
-    resolvedRole,
+    resolvedRole: Boolean(resolvedRole),
+    groupsCount: ssoClaims.groups?.length ?? 0,
+    rolesCount: ssoClaims.roles?.length ?? 0,
   });
 
   const runId = await ssoSyncDiagnosticsService.startRun({
     providerId,
     trigger: 'login',
     details: {
-      email: userInfo.email,
       groupsCount: ssoClaims.groups?.length ?? 0,
       rolesCount: ssoClaims.roles?.length ?? 0,
     },

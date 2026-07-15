@@ -245,15 +245,14 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo, selectedId?:
   const resolvedRole = await ssoClaimsMappingService.resolveRoleFromClaims(ssoClaims, providerId);
   
   logger.info('[Google Auth] SSO claims role resolution:', {
-    email: userInfo.email,
-    hd: userInfo.hd,
-    resolvedRole,
+    resolvedRole: Boolean(resolvedRole),
+    hostedDomainPresent: Boolean(userInfo.hd),
   });
 
   const runId = await ssoSyncDiagnosticsService.startRun({
     providerId,
     trigger: 'login',
-    details: { email: userInfo.email, hostedDomain: userInfo.hd || null },
+    details: { hostedDomainPresent: Boolean(userInfo.hd) },
   });
   let syncCounts: SsoSyncCounts = {};
 

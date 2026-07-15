@@ -421,10 +421,9 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
   );
 
   logger.info('[SAML Auth] SSO claims role resolution:', {
-    email: userInfo.email,
-    groups: userInfo.groups,
-    roles: userInfo.roles,
-    resolvedRole,
+    resolvedRole: Boolean(resolvedRole),
+    groupsCount: ssoClaims.groups?.length ?? 0,
+    rolesCount: ssoClaims.roles?.length ?? 0,
   });
 
   const runId = await ssoSyncDiagnosticsService.startRun({
@@ -432,7 +431,6 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
     providerId,
     trigger: 'login',
     details: {
-      email: userInfo.email,
       groupsCount: ssoClaims.groups?.length ?? 0,
       rolesCount: ssoClaims.roles?.length ?? 0,
     },
