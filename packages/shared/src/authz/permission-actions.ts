@@ -16,7 +16,6 @@ export const AUTHZ_RESOURCE_TYPES = [
   'external_engine_system',
   'api_client',
   'sso_mapping',
-  'sidecar',
   'extension',
 ] as const;
 
@@ -273,13 +272,6 @@ export const AUTHZ_RESOURCE_RESOLVERS: AuthzResourceResolverDefinition[] = [
     resourceType: 'sso_mapping',
     requiredParams: ['mappingId'],
     description: 'Resolve an SSO mapping by id and tenant boundary.',
-    failureMode: 'deny',
-  },
-  {
-    id: 'sidecar.byId',
-    resourceType: 'sidecar',
-    requiredParams: ['sidecarId'],
-    description: 'Resolve a sidecar identity by id and tenant boundary.',
     failureMode: 'deny',
   },
 ];

@@ -80,7 +80,7 @@ Current config-as-code status:
 - [x] ✅ Add UI and CI/CD workflows for managing config bundles.
 - [x] ✅ Add config-managed source ownership and drift diagnostics for imported objects. Config-locked and config-warn states are surfaced in the relevant access-control and role-management views.
 - [x] ✅ Add a Role Library with a fixed-width role list and focused single-role grouped permission editor. The legacy matrix remains available in Access Control for compatibility until it can be removed.
-- [ ] ⬜ Add customer-managed sidecar transport to the existing engine configuration and runtime connection paths without creating a parallel authorization model.
+- [x] ✅ Customer-managed sidecar transport uses the existing engine configuration and runtime connection paths without creating a parallel authorization model. The only persisted distinction is engine `connectionMode`; the action registry has no sidecar resource type, resolver, role, or route, and a registry contract prevents a sidecar authorization surface from returning in v1.
 - [x] ✅ Close the frontend action inventory gap: bridge evaluation actions are referenced by the shared authoritative bridge client, while the aggregate `engine.instances.mutate` action is explicitly API-only because concrete runtime mutation actions own mounted UI controls.
 
 ## Relationship To Implemented RBAC Foundation

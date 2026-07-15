@@ -20,6 +20,12 @@ describe('authorization action registry', () => {
     expect(runtimeActions.some((action) => action.routes?.some((route) => route.resourceResolver === 'engine.byId'))).toBe(true);
   });
 
+  it('keeps customer sidecars as engine transport only, not an authorization resource', () => {
+    expect(AUTHZ_RESOURCE_TYPES).not.toContain('sidecar');
+    expect(getAuthzResourceResolver('sidecar.byId')).toBeUndefined();
+    expect(listAuthzActions().every((action) => (action as { resourceType: string }).resourceType !== 'sidecar')).toBe(true);
+  });
+
   it('keeps identity mapping, configuration bundle, and deployment receipt actions registered with real resolvers', () => {
     for (const actionId of [
       'platform.sso.group-mappings.manage',
