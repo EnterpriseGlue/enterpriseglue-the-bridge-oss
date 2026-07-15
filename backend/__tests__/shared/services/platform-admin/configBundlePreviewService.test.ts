@@ -105,7 +105,7 @@ describe('configBundlePreviewService', () => {
           assignments: [{
             key: 'assignment.missing',
             principal: { type: 'group', key: 'group.missing' },
-            roleKey: 'custom.engine.operator',
+            roleKey: 'custom.engine.missing',
             scope: { type: 'engine', engineKey: 'engine.missing' },
           }],
         },
@@ -122,6 +122,31 @@ describe('configBundlePreviewService', () => {
         remediation: expect.stringContaining('Define the referenced object'),
       }),
       expect.objectContaining({ path: './assignments.json.assignments.0.scope.engineKey', message: 'Unknown engine key: engine.missing' }),
+      expect.objectContaining({ path: './assignments.json.assignments.0.roleKey', message: 'Unknown role key: custom.engine.missing' }),
+    ]));
+  });
+
+  it('rejects a permission whose scope does not match its custom role', () => {
+    const result = configBundlePreviewService.preview({
+      bundle: { ...bundle, imports: ['./roles.json'] },
+      files: {
+        './roles.json': {
+          roles: [{
+            key: 'custom.platform.deployer',
+            name: 'Platform deployer',
+            scope: 'platform',
+            permissions: ['engine:deploy'],
+          }],
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ valid: false });
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: './roles.json.roles.0.permissions',
+        message: 'Permission engine:deploy has engine scope and cannot be used by a platform role',
+      }),
     ]));
   });
 

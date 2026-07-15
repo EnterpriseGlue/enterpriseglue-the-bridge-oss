@@ -70,6 +70,15 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     }).success).toBe(false);
   });
 
+  it('rejects duplicate configuration object keys', () => {
+    expect(ConfigRolesFileSchema.safeParse({
+      roles: [
+        { key: 'custom.engine.viewer', name: 'Viewer', scope: 'engine', permissions: ['engine:view'] },
+        { key: 'custom.engine.viewer', name: 'Duplicate viewer', scope: 'engine', permissions: ['engine:view'] },
+      ],
+    }).success).toBe(false);
+  });
+
   it('requires immutable project IDs in project-engine target references', () => {
     const target = {
       engineRef: { engineKey: 'engine-prod-payments' },
