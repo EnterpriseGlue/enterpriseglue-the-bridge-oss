@@ -21,6 +21,7 @@ import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js'
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { permissionService } from './permissions.js';
+import { engineService } from './EngineService.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { createHash } from 'node:crypto';
 import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBundleDiffService.js';
@@ -480,7 +481,7 @@ class ConfigBundleApplyService {
           const sourceHash = desired ? objectFingerprint('engine', desired.key, desired) : objectFingerprint('engine', change.key, { archived: true });
           if (change.operation === 'create' && desired) {
             const engineId = generateId();
-            await engineRepo.insert({
+            await engineService.createEngineWithGovernanceAssignments({
               id: engineId, tenantId, name: desired.name, baseUrl: desired.baseUrl, type: desired.type,
               externalId: desired.externalId || null, labelsJson: JSON.stringify(desired.labels || {}),
               registrationSource: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`,
@@ -492,7 +493,7 @@ class ConfigBundleApplyService {
               environmentTagId: desired.environmentTagId || null, environmentLocked: false,
               runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, metadataDiscoveryEnabled: desired.metadataDiscoveryEnabled, deploymentDiscoveryEnabled: desired.deploymentDiscoveryEnabled, reconciliationIntervalSeconds: desired.reconciliationIntervalSeconds, lastMetadataReconciledAt: null, lastMetadataReconciliationStatus: null, pipelineReceiptEnabled: desired.pipelineReceiptEnabled, connectionMode: desired.connectionMode,
               createdAt: now, updatedAt: now,
-            });
+            } as Engine, manager, true);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.create', resourceType: 'engine', resourceId: engineId, details: { bundleKey: manifest.metadata.key, engineKey: desired.key, canonicalHash: diff.canonicalHash } });
             changedEngineIds.push(engineId);
             created += 1;

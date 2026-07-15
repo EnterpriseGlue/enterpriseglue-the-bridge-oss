@@ -289,13 +289,16 @@ export class EngineService {
    */
   async createEngineWithGovernanceAssignments(
     engine: Pick<Engine, 'id' | 'ownerId' | 'delegateId' | 'tenantId' | 'createdAt' | 'updatedAt'>,
-    providedDataSource?: Awaited<ReturnType<typeof getDataSource>>
+    providedStore?: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
+    withinTransaction = false,
   ): Promise<void> {
-    const dataSource = providedDataSource || await getDataSource();
-    await dataSource.transaction(async (manager) => {
+    const dataSource = providedStore || await getDataSource();
+    const create = async (manager: EntityManager) => {
       await manager.getRepository(Engine).insert(engine);
       await this.syncManagedEngineGovernanceAssignments(manager, engine);
-    });
+    };
+    if (withinTransaction) await create(dataSource as EntityManager);
+    else await (dataSource as Awaited<ReturnType<typeof getDataSource>>).transaction(create);
   }
 
   /**
