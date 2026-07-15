@@ -29,6 +29,37 @@ describe('identity entitlement mapping', () => {
     expect(result).not.toHaveProperty('identities');
   });
 
+  it('keeps stored-snapshot previews and ad-hoc mapping tests side-effect free', async () => {
+    const providerRepo = {
+      findOne: vi.fn().mockResolvedValue({ id: 'provider-1', key: 'identity.oidc.main', protocol: 'oidc' }),
+      insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
+    };
+    const snapshotRepo = {
+      find: vi.fn().mockResolvedValue([{ providerSubject: 'subject-1', email: 'user@example.test', providerTenantId: null, claimsJson: JSON.stringify({ groups: ['operators'] }), lastSeenAt: 100 }]),
+      insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
+    };
+    const transaction = vi.fn();
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === IdentityProvider ? providerRepo : entity === SsoNormalizedIdentity ? snapshotRepo : {},
+      transaction,
+    });
+
+    await expect(identityEntitlementMappingService.previewStoredSnapshots({
+      providerKey: 'identity.oidc.main', entitlementType: 'group', externalId: 'operators', matchOperator: 'exact',
+    }, 'tenant-a')).resolves.toMatchObject({ scanned: 1, matches: 1 });
+    await expect(identityEntitlementMappingService.test({
+      providerKey: 'identity.oidc.main', entitlementType: 'group', externalId: 'operators', matchOperator: 'exact',
+      claims: { sub: 'preview-subject', groups: ['operators'] },
+    }, 'tenant-a')).resolves.toMatchObject({ matches: true });
+
+    expect(transaction).not.toHaveBeenCalled();
+    for (const repo of [providerRepo, snapshotRepo]) {
+      expect(repo.insert).not.toHaveBeenCalled();
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(repo.delete).not.toHaveBeenCalled();
+    }
+  });
+
   it('rejects OAuth scopes as a human identity-mapping source before inspecting snapshots', async () => {
     await expect(identityEntitlementMappingService.previewStoredSnapshots({
       providerKey: 'identity.oidc.main', entitlementType: 'scope', externalId: 'engines.read', matchOperator: 'exact',

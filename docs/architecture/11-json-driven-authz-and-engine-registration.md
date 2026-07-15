@@ -2140,7 +2140,7 @@ Fixtures should include at least:
 - [x] ✅ Concurrent login and scheduled reconciliation remain idempotent under the uniqueness constraints. First-login provisioning retries one transaction after a database duplicate-key race and reuses the winner's immutable external-identity link; the checkpoint service treats a competing initial insert as a held lease and compare-and-sets expired leases, so only one scheduler processes a provider page.
 - [x] ✅ Provider partial group result or group-overage state fails closed when authoritative completeness is required. Entra-compatible OIDC `hasgroups`, explicit overage, and deferred group-claim markers are rejected before any user, external-identity, normalized-snapshot, or membership write, so an authoritative mapping never treats an incomplete result as an empty group set.
 - [ ] ⬜ Cross-tenant provider, group, mapping, principal, engine, and runtime-resource references are rejected.
-- [ ] ⬜ Mapping preview/test never persists users, memberships, assignments, or authorization-version changes.
+- [x] ✅ Mapping preview/test never persists users, memberships, assignments, or authorization-version changes. Stored-snapshot preview and ad-hoc test execute only read queries against the provider and sanitized snapshots; regression coverage proves neither path opens a transaction or invokes a mutable repository operation.
 - [ ] ⬜ Successful reconciliation records sanitized run/events and invalidates only affected principal/resource snapshots.
 
 ### JSON Bundle Round-Trip Scenarios
