@@ -135,6 +135,29 @@ describe('EngineService', () => {
     expect(assignmentSpy).toHaveBeenCalledWith('user-1', undefined);
   });
 
+  it('keeps canonical engine visibility identical for direct and customer-sidecar transports', async () => {
+    const directEngine = { id: 'engine-direct', name: 'Direct', connectionMode: 'direct', ownerId: null, delegateId: null, environmentTagId: null };
+    const sidecarEngine = { id: 'engine-sidecar', name: 'Sidecar', connectionMode: 'customer_sidecar', ownerId: null, delegateId: null, environmentTagId: null };
+    const assignmentQb = {
+      innerJoin: vi.fn().mockReturnThis(), where: vi.fn().mockReturnThis(), andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([{ scopeId: 'engine-direct' }, { scopeId: 'engine-sidecar' }]),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([directEngine, sidecarEngine]) };
+        if (entity === EnvironmentTag) return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+        throw new Error('Unexpected repository');
+      },
+    });
+    vi.spyOn(permissionService, 'getAssignedEngineRoles').mockResolvedValue([]);
+
+    const visible = await service.getUserEngines('user-1');
+
+    expect(visible.map(({ engine }) => engine.id)).toEqual(['engine-direct', 'engine-sidecar']);
+    expect(visible.map(({ role }) => role)).toEqual(['custom', 'custom']);
+  });
+
   it('lists effective engine members from canonical assignments with role precedence', async () => {
     const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1' }) };
     const assignmentQb = {
