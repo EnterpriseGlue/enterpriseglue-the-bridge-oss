@@ -22,7 +22,7 @@ import {
   SetJobDefinitionRetriesRequest,
   SetJobDefinitionSuspensionStateRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/job.js';
-import { getBoundedRuntimeResourceQuery } from './runtime-resource-filter.js';
+import { getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js';
 
 const r = Router();
 
@@ -33,6 +33,7 @@ r.use('/mission-control-api', requireAuth);
 r.get('/mission-control-api/jobs', requireRuntimeCollectionAction('engine.runtime.jobs.read', { resourceKind: 'process_definition' }), validateQuery(JobQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
   if (!keys) {
     return res.json(await listJobs(engineId, req.query));
   }
@@ -41,8 +42,8 @@ r.get('/mission-control-api/jobs', requireRuntimeCollectionAction('engine.runtim
   const visibleKeys = keys.filter((key) => !requestedKey || key === requestedKey);
   const query = getBoundedRuntimeResourceQuery(req.query);
   const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
-    const data = await listJobs(engineId, { ...query, processDefinitionKey });
-    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey]);
+    const data = await listJobs(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey });
+    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey], scopes);
   }));
   res.json(collections.flat());
 }));
@@ -106,6 +107,7 @@ r.put('/mission-control-api/jobs/:id/suspended', requireRuntimeDefinitionAction(
 r.get('/mission-control-api/job-definitions', requireRuntimeCollectionAction('engine.runtime.job-definitions.read', { resourceKind: 'process_definition' }), validateQuery(JobDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
   if (!keys) {
     return res.json(await listJobDefinitions(engineId, req.query));
   }
@@ -114,8 +116,8 @@ r.get('/mission-control-api/job-definitions', requireRuntimeCollectionAction('en
   const visibleKeys = keys.filter((key) => !requestedKey || key === requestedKey);
   const query = getBoundedRuntimeResourceQuery(req.query);
   const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
-    const data = await listJobDefinitions(engineId, { ...query, processDefinitionKey });
-    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey]);
+    const data = await listJobDefinitions(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey });
+    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey], scopes);
   }));
   res.json(collections.flat());
 }));

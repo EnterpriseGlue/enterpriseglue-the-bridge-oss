@@ -24,6 +24,7 @@ import {
   filterRuntimeItemsByProcessDefinitionKeys,
   getBoundedRuntimeFetchAndLockRequest,
   getBoundedRuntimeResourceQuery,
+  withAuthorizedRuntimeTenantQuery,
 } from './runtime-resource-filter.js';
 
 const r = Router();
@@ -46,6 +47,7 @@ r.post('/mission-control-api/external-tasks/fetchAndLock', requireRuntimeCollect
 }), validateBody(FetchAndLockRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
   if (!keys) return res.json(await fetchAndLockTasks(engineId, req.body));
   const body = getBoundedRuntimeFetchAndLockRequest(req.body);
   const topics = body.topics.flatMap((topic: Record<string, unknown>) => {
@@ -64,21 +66,22 @@ r.post('/mission-control-api/external-tasks/fetchAndLock', requireRuntimeCollect
   });
   if (!topics.length) throw Errors.forbidden('No authorized runtime resources match the requested external task topics');
   const data = await fetchAndLockTasks(engineId, { ...body, topics });
-  res.json(await filterRuntimeItemsByProcessDefinitionKeys(engineId, data, keys));
+  res.json(await filterRuntimeItemsByProcessDefinitionKeys(engineId, data, keys, scopes));
 }));
 
 // Query external tasks
 r.get('/mission-control-api/external-tasks', requireRuntimeCollectionAction('engine.runtime.external-tasks.read', { resourceKind: 'process_definition' }), validateQuery(ExternalTaskQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
   const query = keys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   if (!visibleKeys) return res.json(await listExternalTasks(engineId, query));
 
   const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
-    const data = await listExternalTasks(engineId, { ...query, processDefinitionKey });
-    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey]);
+    const data = await listExternalTasks(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey });
+    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey], scopes);
   }));
   res.json(collections.flat());
 }));

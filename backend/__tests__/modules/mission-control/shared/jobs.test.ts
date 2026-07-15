@@ -173,7 +173,7 @@ describe('mission-control jobs routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(listJobs).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100 });
+    expect(listJobs).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100, withoutTenantId: true });
   });
 
   it('denies job reads when instance view permission is missing', async () => {

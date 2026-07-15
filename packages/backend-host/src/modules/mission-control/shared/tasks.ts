@@ -23,7 +23,7 @@ import {
   CompleteTaskRequest,
   TaskVariablesRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/task.js';
-import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery } from './runtime-resource-filter.js';
+import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js';
 
 const r = Router();
 
@@ -43,13 +43,14 @@ r.use('/mission-control-api', requireAuth, missionControlLimiter);
 r.get('/mission-control-api/tasks', requireRuntimeCollectionAction('engine.runtime.tasks.read', { resourceKind: 'process_definition' }), validateQuery(TaskQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
   const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
   if (!visibleKeys) return res.json(await listTasks(engineId, query));
   const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
-    const data = await listTasks(engineId, { ...query, processDefinitionKey });
-    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey]);
+    const data = await listTasks(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey });
+    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey], scopes);
   }));
   res.json(collections.flat());
 }));

@@ -130,7 +130,7 @@ describe('mission-control external task routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(listExternalTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100 });
+    expect(listExternalTasks).toHaveBeenCalledWith('engine-1', { processDefinitionKey: 'payments', maxResults: 100, withoutTenantId: true });
   });
 
   it('drops external-task rows whose resolved definition lineage is outside the authorized key', async () => {
