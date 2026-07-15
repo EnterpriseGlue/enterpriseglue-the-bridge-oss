@@ -406,6 +406,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   },
   AllPermissions: {
     AUTHZ_CHECK: 'platform:authz:check',
+    INSTANCE_VIEW: 'engine:instance:view',
   },
   EnginePermissions: {
     MEMBERS_MANAGE: 'engine:members:manage',
@@ -1314,6 +1315,35 @@ describe('platform-admin authz routes', () => {
     });
   });
 
+  it('does not make either bridge direction depend on direct versus sidecar transport metadata', async () => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(true);
+    const evaluate = (route: string, connectionMode: 'direct' | 'customer_sidecar') => request(app)
+      .post(route)
+      .send({
+        engineId: 'engine-1',
+        projectId: 'project-1',
+        fileId: 'file-1',
+        definitionKey: 'invoice',
+        kind: 'process',
+        connectionMode,
+      });
+
+    for (const route of [
+      '/api/mission-control/bridge/starbase-edit/evaluate',
+      '/api/starbase/bridge/mission-control/evaluate',
+    ]) {
+      const [direct, sidecar] = await Promise.all([
+        evaluate(route, 'direct'),
+        evaluate(route, 'customer_sidecar'),
+      ]);
+
+      expect(direct.status).toBe(200);
+      expect(sidecar.status).toBe(200);
+      expect(sidecar.body).toEqual(direct.body);
+      expect(sidecar.body).toMatchObject({ allowed: true, reasonCode: 'allowed', engineId: 'engine-1' });
+    }
+  });
+
   it('denies Mission Control to Starbase bridge access when project edit permission is missing', async () => {
     vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
       permission !== 'project:files:edit'
@@ -1547,6 +1577,31 @@ describe('platform-admin authz routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.allowed).toBe(true);
     expect(response.body.baseReason).toBe('role:platform:admin');
+  });
+
+  it('does not make engine Effective Access depend on direct versus sidecar transport metadata', async () => {
+    const evaluate = (connectionMode: 'direct' | 'customer_sidecar') => request(app)
+      .post('/api/authz/evaluate')
+      .send({
+        userId: '00000000-0000-4000-8000-000000000001',
+        permission: 'engine:instance:view',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+        connectionMode,
+      });
+
+    const [direct, sidecar] = await Promise.all([
+      evaluate('direct'),
+      evaluate('customer_sidecar'),
+    ]);
+
+    expect(direct.status).toBe(200);
+    expect(sidecar.status).toBe(200);
+    expect(sidecar.body).toEqual(direct.body);
+    expect(permissionService.evaluatePermission).toHaveBeenCalledWith(
+      'engine:instance:view',
+      expect.objectContaining({ resourceType: 'engine', resourceId: 'engine-1' }),
+    );
   });
 
   it('resolves a runtime resource selector before evaluating access', async () => {

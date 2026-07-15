@@ -652,7 +652,7 @@ UI impact:
 - [x] ✅ Selecting customer sidecar changes credential copy to customer-managed endpoint authentication and allows the policy-controlled no-credential option.
 - [x] ✅ Engine detail shows `Customer-managed engine authentication`; it never implies that EnterpriseGlue authorization is disabled.
 - [x] ✅ Connection tests identify the failing hop as `EnterpriseGlue -> sidecar`; they expose a sanitized `upstreamHop` diagnostic and never request or display the customer's downstream peer token.
-- [ ] ⬜ Effective Access, Mission Control, deployment eligibility, Dashboard filtering, and bridge decisions behave identically for direct and sidecar-backed engines.
+- [x] ✅ Effective Access, Mission Control, deployment eligibility, Dashboard filtering, and bridge decisions behave identically for direct and sidecar-backed engines. Transport mode remains engine connection metadata rather than an authorization input; focused route/service coverage compares both modes across visible-engine collection, Mission Control serialization, Dashboard runtime visibility, deployment eligibility, Effective Access, and Mission Control-Starbase bridge decisions.
 
 Required tests:
 

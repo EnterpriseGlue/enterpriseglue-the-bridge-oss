@@ -251,6 +251,47 @@ describe('GET /api/dashboard/context', () => {
     expect(response.body.canViewDeployments).toBe(false);
   });
 
+  it('keeps Dashboard visibility identical for direct and customer-sidecar engines', async () => {
+    vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
+      ...emptyPermissions(),
+      engines: [
+        { resourceId: 'engine-direct', permissions: ['engine:instance:view'] },
+        { resourceId: 'engine-sidecar', permissions: ['engine:instance:view'] },
+      ],
+    });
+    vi.mocked(permissionService.getVisibleRuntimeResources).mockResolvedValue([{ resourceKey: 'payments' }] as any);
+    const projectMemberRepo = { find: vi.fn().mockResolvedValue([]) };
+    const projectRepo = { find: vi.fn().mockResolvedValue([]) };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === ProjectMember) return projectMemberRepo;
+        if (entity === Project) return projectRepo;
+        if (entity === Engine) return {
+          find: vi.fn().mockResolvedValue([
+            { id: 'engine-direct', connectionMode: 'direct' },
+            { id: 'engine-sidecar', connectionMode: 'customer_sidecar' },
+          ]),
+        };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app).get('/api/dashboard/context');
+
+    expect(response.status).toBe(200);
+    expect(response.body.accessibleEngineIds).toEqual(['engine-direct', 'engine-sidecar']);
+    expect(response.body.runtimeScopedEngineIds).toEqual(['engine-direct', 'engine-sidecar']);
+    expect(response.body).toMatchObject({
+      canViewEngines: true,
+      canViewProcessData: true,
+      canViewMetrics: true,
+    });
+    expect(vi.mocked(permissionService.getVisibleRuntimeResources).mock.calls.map(([input]: any[]) => input.engineId)).toEqual(
+      expect.arrayContaining(['engine-direct', 'engine-sidecar']),
+    );
+  });
+
   it('derives platform-admin dashboard flags from platform permissions', async () => {
     vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
       ...emptyPermissions(),

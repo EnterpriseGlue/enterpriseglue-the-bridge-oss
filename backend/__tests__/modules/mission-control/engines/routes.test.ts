@@ -210,6 +210,45 @@ describe('mission-control engines routes', () => {
     ]);
   });
 
+  it('keeps Mission Control list authorization identical for direct and customer-sidecar engines', async () => {
+    permissionServiceMock.getKnownEngineIdsForUser.mockResolvedValue(['engine-direct', 'engine-sidecar']);
+    (engineService as any).getEngineRole.mockResolvedValue(null);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        find: vi.fn().mockResolvedValue([
+          {
+            id: 'engine-direct', name: 'Direct engine', type: 'operaton',
+            connectionMode: 'direct', runtimeAccessScope: 'engine_wide',
+          },
+          {
+            id: 'engine-sidecar', name: 'Sidecar engine', type: 'operaton',
+            connectionMode: 'customer_sidecar', runtimeAccessScope: 'engine_wide',
+          },
+        ]),
+      }),
+    });
+
+    const response = await request(app).get('/engines-api/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((engine: any) => ({
+      id: engine.id,
+      connectionMode: engine.connectionMode,
+      myRole: engine.myRole,
+      capabilities: engine.capabilities,
+    }))).toEqual([
+      expect.objectContaining({
+        id: 'engine-direct', connectionMode: 'direct', myRole: null,
+        capabilities: expect.objectContaining({ compatibilityProfile: 'camunda7-rest' }),
+      }),
+      expect.objectContaining({
+        id: 'engine-sidecar', connectionMode: 'customer_sidecar', myRole: null,
+        capabilities: expect.objectContaining({ compatibilityProfile: 'camunda7-rest' }),
+      }),
+    ]);
+    expect(response.body[1].capabilities).toEqual(response.body[0].capabilities);
+  });
+
   it('lists evaluator-visible engines for a custom-role user without inventing a legacy role string', async () => {
     permissionServiceMock.getKnownEngineIdsForUser.mockResolvedValue(['custom-engine']);
     permissionServiceMock.hasPermission.mockImplementation(async (_permission: string, context: { resourceId?: string }) =>
