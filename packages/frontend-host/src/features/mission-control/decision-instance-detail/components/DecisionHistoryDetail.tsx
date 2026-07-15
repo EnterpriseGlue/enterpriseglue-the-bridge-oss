@@ -30,7 +30,6 @@ import { useSelectedEngine } from '../../../../components/EngineSelector'
 import styles from '../../process-instance-detail/styles/InstanceDetail.module.css'
 import { SplitPane, Pane } from 'react-split-pane'
 import { LoadingState } from '../../../shared/components/LoadingState'
-import { useActionDecision, WhyUnavailableLink } from '../../../../shared/auth/guards'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -82,14 +81,6 @@ export default function DecisionHistoryDetail() {
   const searchParams = new URLSearchParams(location.search)
   const fromInstanceId = searchParams.get('fromInstance') || (location?.state?.fromInstanceId as string | undefined)
   const processLabel = searchParams.get('processLabel') || null
-  const selectedEngineResource = React.useMemo(
-    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
-    [selectedEngineId]
-  )
-  const historyDecisionsReadDecision = useActionDecision('engine.runtime.history.decisions.read', selectedEngineResource)
-  const decisionInputsReadDecision = useActionDecision('engine.runtime.history.decisions.inputs.read', selectedEngineResource)
-  const decisionOutputsReadDecision = useActionDecision('engine.runtime.history.decisions.outputs.read', selectedEngineResource)
-
   const histQ = useQuery({
     queryKey: ['mission-control', 'decision-hist', id, selectedEngineId],
     queryFn: async () => {
@@ -103,7 +94,7 @@ export default function DecisionHistoryDetail() {
       )
       return data[0] || null
     },
-    enabled: !!id && !!selectedEngineId && historyDecisionsReadDecision.allowed,
+    enabled: !!id && !!selectedEngineId,
   })
 
   const decision = histQ.data as HistoricDecisionInstance | null
@@ -126,7 +117,7 @@ export default function DecisionHistoryDetail() {
       )
       return data
     },
-    enabled: !!rootDecisionInstanceId && !!selectedEngineId && historyDecisionsReadDecision.allowed,
+    enabled: !!rootDecisionInstanceId && !!selectedEngineId,
   })
 
   const versionLabel = React.useMemo(() => {
@@ -165,7 +156,7 @@ export default function DecisionHistoryDetail() {
         { credentials: 'include' },
       )
     },
-    enabled: !!id && !!selectedEngineId && decisionInputsReadDecision.allowed,
+    enabled: !!id && !!selectedEngineId,
   })
 
   const outputsQ = useQuery<DecisionIo[]>({
@@ -179,7 +170,7 @@ export default function DecisionHistoryDetail() {
         { credentials: 'include' },
       )
     },
-    enabled: !!id && !!selectedEngineId && decisionOutputsReadDecision.allowed,
+    enabled: !!id && !!selectedEngineId,
   })
 
   const title = decision?.decisionDefinitionName || decision?.decisionDefinitionKey || 'Decision'
@@ -306,23 +297,6 @@ export default function DecisionHistoryDetail() {
 
   // Check if initial data is loading
   const isInitialLoading = histQ.isLoading || xmlQ.isLoading
-
-  if (selectedEngineId && !historyDecisionsReadDecision.allowed) {
-    return (
-      <div style={{ padding: 'var(--spacing-4)' }}>
-        <InlineNotification
-          lowContrast
-          kind="warning"
-          title="Decision history unavailable"
-          subtitle={historyDecisionsReadDecision.reason || 'Missing permission to view decision history on this engine.'}
-          hideCloseButton
-        />
-        <div style={{ marginTop: 'var(--spacing-2)', fontSize: 12 }}>
-          <WhyUnavailableLink decision={historyDecisionsReadDecision} />
-        </div>
-      </div>
-    )
-  }
 
   return (
     <PageLoader isLoading={isInitialLoading} skeletonType="instance-detail">
@@ -597,15 +571,7 @@ export default function DecisionHistoryDetail() {
               <div style={{ fontSize: 'var(--text-14)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-2)' }}>
                 Inputs
               </div>
-              {!decisionInputsReadDecision.allowed ? (
-                <InlineNotification
-                  kind="warning"
-                  title="Inputs redacted"
-                  subtitle={decisionInputsReadDecision.reason || 'Missing permission to view decision input payloads.'}
-                  lowContrast
-                  hideCloseButton
-                />
-              ) : inputsQ.isLoading ? (
+              {inputsQ.isLoading ? (
                 <div style={{ padding: 'var(--spacing-2)' }}>Loading inputs...</div>
               ) : inputsQ.isError ? (
                 <InlineNotification
@@ -674,15 +640,7 @@ export default function DecisionHistoryDetail() {
               <div style={{ fontSize: 'var(--text-14)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-2)' }}>
                 Outputs
               </div>
-              {!decisionOutputsReadDecision.allowed ? (
-                <InlineNotification
-                  kind="warning"
-                  title="Outputs redacted"
-                  subtitle={decisionOutputsReadDecision.reason || 'Missing permission to view decision output payloads.'}
-                  lowContrast
-                  hideCloseButton
-                />
-              ) : outputsQ.isLoading ? (
+              {outputsQ.isLoading ? (
                 <div style={{ padding: 'var(--spacing-2)' }}>Loading outputs...</div>
               ) : outputsQ.isError ? (
                 <InlineNotification
