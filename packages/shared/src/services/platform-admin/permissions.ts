@@ -315,6 +315,19 @@ export interface UpdateCustomRoleInput {
   updatedById?: string;
 }
 
+export interface ConfiguredCustomRoleUpdate {
+  name?: string;
+  description?: string | null;
+  scope?: RoleScope;
+  permissionIds?: Permission[];
+  isArchived?: boolean;
+  isAssignable?: boolean;
+  ownershipMode?: ConfigOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
+}
+
 const CUSTOM_ROLE_DENY_FIELD_NAMES = [
   'denyPermissionIds',
   'deniedPermissionIds',
@@ -2088,6 +2101,26 @@ class PermissionServiceClass {
 
   async archiveCustomRole(id: string, archivedById?: string): Promise<void> {
     await this.updateCustomRole(id, { isArchived: true, updatedById: archivedById });
+  }
+
+  /** Configuration reconciliation write; apply owns the audit event and source authorization. */
+  async updateConfiguredCustomRole(id: string, input: ConfiguredCustomRoleUpdate, store: EntityManager): Promise<void> {
+    const now = Date.now();
+    const values: Partial<RbacRole> = { updatedAt: now };
+    if (input.name !== undefined) values.name = input.name.trim();
+    if (input.description !== undefined) values.description = input.description || null;
+    if (input.scope !== undefined) values.scope = input.scope;
+    if (input.isArchived !== undefined) values.isArchived = input.isArchived;
+    if (input.isAssignable !== undefined) values.isAssignable = input.isAssignable;
+    if (input.ownershipMode !== undefined) values.ownershipMode = input.ownershipMode;
+    if (input.sourceHash !== undefined) values.sourceHash = input.sourceHash;
+    if (input.lastAppliedAt !== undefined) values.lastAppliedAt = input.lastAppliedAt;
+    if (input.driftStatus !== undefined) values.driftStatus = input.driftStatus;
+    await store.getRepository(RbacRole).update({ id }, values);
+    if (input.permissionIds !== undefined) {
+      const permissions = await this.validateRolePermissions(input.scope!, input.permissionIds);
+      await this.replaceRolePermissions(store, id, permissions, now);
+    }
   }
 
   async listRoleAssignments(filters: RoleAssignmentFilters = {}): Promise<RoleAssignmentView[]> {

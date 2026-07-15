@@ -18,7 +18,6 @@ import { engineSetKeyIdentity, engineSetService } from './EngineSetService.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
 import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
-import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { permissionService } from './permissions.js';
 import { engineService } from './EngineService.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
@@ -362,7 +361,6 @@ class ConfigBundleApplyService {
       const targetRepo = manager.getRepository(ProjectEngineTarget);
       const providerRepo = manager.getRepository(IdentityProvider);
       const identityMappingRepo = manager.getRepository(IdentityEntitlementMapping);
-      const rolePermissionRepo = manager.getRepository(RbacRolePermission);
 
       for (const change of diff.changes) {
         if (change.operation === 'noop' || change.operation === 'conflict') continue;
@@ -388,39 +386,12 @@ class ConfigBundleApplyService {
             }, manager);
             created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
-            await roleRepo.update({ id: change.currentId }, {
-              name: desired.name,
-              description: desired.description || null,
-              scope: desired.scope,
-              isArchived: false,
-              isAssignable: true,
-              ownershipMode: desired.ownershipMode || 'config_locked',
-              sourceHash,
-              lastAppliedAt: now,
-              driftStatus: 'in_sync',
-              updatedAt: now,
-            });
-            await rolePermissionRepo.delete({ roleId: change.currentId });
             const permissions = compilation.preview.expandedRolePermissions?.[desired.key] || desired.permissions || [];
-            if (permissions.length > 0) {
-              await rolePermissionRepo.insert(permissions.map((permissionId: string) => ({
-                id: `${change.currentId}:${permissionId}`,
-                roleId: change.currentId,
-                permissionId,
-                createdAt: now,
-              })));
-            }
+            await permissionService.updateConfiguredCustomRole(change.currentId, { name: desired.name, description: desired.description || null, scope: desired.scope, permissionIds: permissions, isArchived: false, isAssignable: true, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync' }, manager);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.role.update', resourceType: 'role', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, roleKey: desired.key, canonicalHash: diff.canonicalHash } });
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
-            await roleRepo.update({ id: change.currentId }, {
-              isArchived: true,
-              isAssignable: false,
-              sourceHash,
-              lastAppliedAt: now,
-              driftStatus: 'in_sync',
-              updatedAt: now,
-            });
+            await permissionService.updateConfiguredCustomRole(change.currentId, { isArchived: true, isAssignable: false, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync' }, manager);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.role.archive', resourceType: 'role', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, roleKey: change.key, canonicalHash: diff.canonicalHash } });
             archived += 1;
           }
