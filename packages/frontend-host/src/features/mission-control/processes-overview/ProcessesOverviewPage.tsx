@@ -240,18 +240,12 @@ export default function ProcessesOverviewPage() {
   )
   const permissionSnapshot = authContext?.permissions ?? null
   const instanceRetryDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.retry', selectedEngineResource)
-  const instanceVariablesReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.variables.read', selectedEngineResource)
-  const instanceActivityHistoryReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.activity-history.read', selectedEngineResource)
-  const processDefinitionsReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-definitions.read', selectedEngineResource)
-  const processInstancesReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.read', selectedEngineResource)
   const bulkRetryDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.jobs.retry', selectedEngineResource)
   const bulkDeleteDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.delete', selectedEngineResource)
   const bulkSuspendDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.suspend', selectedEngineResource)
   const bulkActivateDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.activate', selectedEngineResource)
   const migrationExecuteDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.migrations.execute-direct', selectedEngineResource)
   const processStartDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-definitions.start', selectedEngineResource)
-  const jobsReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.jobs.read', selectedEngineResource)
-  const externalTasksReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.external-tasks.read', selectedEngineResource)
   const savedFiltersReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.saved-filters.read', selectedEngineResource)
   const savedFiltersManageDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.saved-filters.manage', selectedEngineResource)
   const notifyDeniedAction = React.useCallback((decision: UiAuthzDecision) => {
@@ -349,8 +343,10 @@ export default function ProcessesOverviewPage() {
     varOp,
     varValue,
     advancedOpen,
-    processDefinitionsEnabled: processDefinitionsReadDecision.allowed,
-    processInstancesEnabled: processInstancesReadDecision.allowed,
+    // Both collection routes filter against live runtime-resource lineage.
+    // Navigation snapshots intentionally omit that lineage.
+    processDefinitionsEnabled: true,
+    processInstancesEnabled: true,
   })
 
   const modalData = useProcessesModalData({
@@ -358,10 +354,10 @@ export default function ProcessesOverviewPage() {
     detailsModalOpen: detailsModal.isOpen,
     retryModalInstanceId,
     engineId: selectedEngineId,
-    variablesEnabled: instanceVariablesReadDecision.allowed,
-    activityHistoryEnabled: instanceActivityHistoryReadDecision.allowed,
-    jobsEnabled: jobsReadDecision.allowed,
-    externalTasksEnabled: externalTasksReadDecision.allowed,
+    variablesEnabled: true,
+    activityHistoryEnabled: true,
+    jobsEnabled: true,
+    externalTasksEnabled: true,
   })
 
   const bulkOps = useBulkOperations({
