@@ -2246,7 +2246,7 @@ class PermissionServiceClass {
       return { id: existing.id, warnings: store ? [] : await this.getRuntimeAssignmentWarnings(dataSource as DataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
     }
 
-    const id = await this.insertRoleAssignment(dataSource, assignmentKey, principal, {
+    const id = await this.createResolvedRoleAssignment(dataSource, assignmentKey, principal, {
       ...input, tenantId: normalizedTenantId, scopeType, scopeId, source, sourceRef,
     });
     await recordAuthzAudit(dataSource, {
@@ -2274,7 +2274,7 @@ class PermissionServiceClass {
     return { id, warnings: store ? [] : await this.getRuntimeAssignmentWarnings(dataSource as DataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
   }
 
-  private async insertRoleAssignment(dataSource: DataSource | EntityManager, assignmentKey: string, principal: { principalType: PrincipalType; principalId: string }, input: CreateRoleAssignmentInput & { scopeType: ResourceType; scopeId: string | null; source: RoleAssignmentSource; sourceRef: string | null }): Promise<string> {
+  async createResolvedRoleAssignment(dataSource: DataSource | EntityManager, assignmentKey: string, principal: { principalType: PrincipalType; principalId: string }, input: CreateRoleAssignmentInput & { scopeType: ResourceType; scopeId: string | null; source: RoleAssignmentSource; sourceRef: string | null }): Promise<string> {
     const id = generateId();
     const now = Date.now();
     await dataSource.getRepository(RbacRoleAssignment).insert({
