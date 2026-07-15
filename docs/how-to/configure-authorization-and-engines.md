@@ -248,6 +248,10 @@ For a customer-owned sidecar or gateway:
 
 The sidecar-to-engine peer token remains customer-owned. It must never appear in EnterpriseGlue configuration, persistence, OpenAPI, logs, audits, UI, exports, or diagnostics. EnterpriseGlue still performs all authorization before calling the sidecar.
 
+Use the [customer sidecar readiness runbook](./customer-sidecar-readiness-runbook.md)
+to validate the private endpoint, upstream authentication, audit boundary, and
+rollback plan in the deployed environment.
+
 ## Configure Project-Engine Targets
 
 One effective target exists per project/engine pair. Configure allowed modes independently:
