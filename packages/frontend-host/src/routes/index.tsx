@@ -24,10 +24,6 @@ const ProcessInstanceDetailPage = React.lazy(() => import('../features/mission-c
 const Decisions = React.lazy(() => import('../features/mission-control/decisions-overview/components/Decisions'))
 const DecisionHistoryDetail = React.lazy(() => import('../features/mission-control/decision-instance-detail/components/DecisionHistoryDetail'))
 const BatchesPage = React.lazy(() => import('../features/mission-control/batches/BatchesPage'))
-const NewDeleteBatch = React.lazy(() => import('../features/mission-control/batches/components/NewDeleteBatch'))
-const NewSuspendBatch = React.lazy(() => import('../features/mission-control/batches/components/NewSuspendBatch'))
-const NewActivateBatch = React.lazy(() => import('../features/mission-control/batches/components/NewActivateBatch'))
-const NewRetriesBatch = React.lazy(() => import('../features/mission-control/batches/components/NewRetriesBatch'))
 const MigrationWizardPage = React.lazy(() => import('../features/mission-control/migration-wizard/MigrationWizardPage'))
 
 // Platform Admin pages
@@ -78,9 +74,6 @@ import {
   hasMissionControlUiAccess,
   hasPlatformPermission,
   hasStarbaseUiAccess,
-  MISSION_CONTROL_BATCH_DELETE_ENGINE_PERMISSIONS,
-  MISSION_CONTROL_BATCH_RETRY_ENGINE_PERMISSIONS,
-  MISSION_CONTROL_BATCH_SUSPEND_ENGINE_PERMISSIONS,
   MISSION_CONTROL_BATCHES_ENGINE_PERMISSIONS,
   MISSION_CONTROL_DECISIONS_ENGINE_PERMISSIONS,
   MISSION_CONTROL_MIGRATION_ENGINE_PERMISSIONS,
@@ -599,66 +592,6 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
           <MissionControlRoleGuard requiredEnginePermissions={MISSION_CONTROL_BATCHES_ENGINE_PERMISSIONS}>
             <LazyRoute message="Loading batches...">
               <BatchesPage />
-            </LazyRoute>
-          </MissionControlRoleGuard>
-        </FeatureFlagGuard>
-      )
-    },
-    { 
-      path: `${pathPrefix}mission-control/batches/new/delete`, 
-      element: (
-        <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
-          <MissionControlRoleGuard
-            requiredEnginePermissions={MISSION_CONTROL_BATCH_DELETE_ENGINE_PERMISSIONS}
-            message="You need process instance delete permission on at least one engine to create delete batches."
-          >
-            <LazyRoute message="Loading batch form...">
-              <NewDeleteBatch />
-            </LazyRoute>
-          </MissionControlRoleGuard>
-        </FeatureFlagGuard>
-      )
-    },
-    { 
-      path: `${pathPrefix}mission-control/batches/new/suspend`, 
-      element: (
-        <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
-          <MissionControlRoleGuard
-            requiredEnginePermissions={MISSION_CONTROL_BATCH_SUSPEND_ENGINE_PERMISSIONS}
-            message="You need process modify permission on at least one engine to create suspend batches."
-          >
-            <LazyRoute message="Loading batch form...">
-              <NewSuspendBatch />
-            </LazyRoute>
-          </MissionControlRoleGuard>
-        </FeatureFlagGuard>
-      )
-    },
-    { 
-      path: `${pathPrefix}mission-control/batches/new/activate`, 
-      element: (
-        <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
-          <MissionControlRoleGuard
-            requiredEnginePermissions={MISSION_CONTROL_BATCH_SUSPEND_ENGINE_PERMISSIONS}
-            message="You need process modify permission on at least one engine to create activate batches."
-          >
-            <LazyRoute message="Loading batch form...">
-              <NewActivateBatch />
-            </LazyRoute>
-          </MissionControlRoleGuard>
-        </FeatureFlagGuard>
-      )
-    },
-    { 
-      path: `${pathPrefix}mission-control/batches/new/retries`, 
-      element: (
-        <FeatureFlagGuard flag="missionControl.batches" fallback={<Navigate to={fallbackPath} replace />}>
-          <MissionControlRoleGuard
-            requiredEnginePermissions={MISSION_CONTROL_BATCH_RETRY_ENGINE_PERMISSIONS}
-            message="You need instance retry permission on at least one engine to create retry batches."
-          >
-            <LazyRoute message="Loading batch form...">
-              <NewRetriesBatch />
             </LazyRoute>
           </MissionControlRoleGuard>
         </FeatureFlagGuard>
