@@ -493,18 +493,18 @@ class ConfigBundleApplyService {
             changedEngineIds.push(engineId);
             created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
-            await engineRepo.update({ id: change.currentId }, {
+            await engineService.updateConfiguredEngine(change.currentId, {
               name: desired.name, baseUrl: desired.baseUrl, type: desired.type, externalId: desired.externalId || null,
               labelsJson: JSON.stringify(desired.labels || {}), sourceHash, lastAppliedAt: now,
               ownershipMode: desired.ownershipMode || 'config_locked', lifecycleStatus: 'active', driftStatus: 'in_sync',
               ...engineCredentialFields(desired.auth), version: desired.version || null, environmentTagId: desired.environmentTagId || null,
-              runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, metadataDiscoveryEnabled: desired.metadataDiscoveryEnabled, deploymentDiscoveryEnabled: desired.deploymentDiscoveryEnabled, reconciliationIntervalSeconds: desired.reconciliationIntervalSeconds, pipelineReceiptEnabled: desired.pipelineReceiptEnabled, connectionMode: desired.connectionMode, updatedAt: now,
-            });
+              runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, metadataDiscoveryEnabled: desired.metadataDiscoveryEnabled, deploymentDiscoveryEnabled: desired.deploymentDiscoveryEnabled, reconciliationIntervalSeconds: desired.reconciliationIntervalSeconds, pipelineReceiptEnabled: desired.pipelineReceiptEnabled, connectionMode: desired.connectionMode,
+            }, manager);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.update', resourceType: 'engine', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, engineKey: desired.key, canonicalHash: diff.canonicalHash } });
             changedEngineIds.push(change.currentId);
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
-            await engineRepo.update({ id: change.currentId }, { lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned', lastAppliedAt: now, updatedAt: now });
+            await engineService.decommissionConfiguredEngine(change.currentId, { lastAppliedAt: now }, manager);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.decommission', resourceType: 'engine', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, engineKey: change.key, canonicalHash: diff.canonicalHash } });
             archived += 1;
           }

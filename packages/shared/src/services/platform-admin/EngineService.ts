@@ -43,6 +43,13 @@ export interface EngineMemberWithUser {
   } | null;
 }
 
+export type ConfiguredEngineUpdate = Pick<Engine,
+  'name' | 'baseUrl' | 'type' | 'externalId' | 'labelsJson' | 'sourceHash' | 'lastAppliedAt' | 'ownershipMode'
+  | 'lifecycleStatus' | 'driftStatus' | 'authType' | 'username' | 'passwordEnc' | 'oauthTokenUrl' | 'oauthScopes'
+  | 'oauthAudience' | 'version' | 'environmentTagId' | 'runtimeAccessScope' | 'deploymentIntegration'
+  | 'metadataDiscoveryEnabled' | 'deploymentDiscoveryEnabled' | 'reconciliationIntervalSeconds' | 'pipelineReceiptEnabled'
+  | 'connectionMode'>;
+
 const ENGINE_ACCESS_DISPLAY_SYSTEM_ROLE_IDS = [
   SYSTEM_ROLE_IDS.ENGINE_OWNER,
   SYSTEM_ROLE_IDS.ENGINE_DELEGATE,
@@ -299,6 +306,19 @@ export class EngineService {
     };
     if (withinTransaction) await create(dataSource as EntityManager);
     else await (dataSource as Awaited<ReturnType<typeof getDataSource>>).transaction(create);
+  }
+
+  /** Shared configuration lifecycle write; callers resolve ownership before invoking this command. */
+  async updateConfiguredEngine(id: string, input: Partial<ConfiguredEngineUpdate>, store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager): Promise<void> {
+    const dataSource = store || await getDataSource();
+    await dataSource.getRepository(Engine).update({ id }, { ...input, updatedAt: Date.now() });
+  }
+
+  async decommissionConfiguredEngine(id: string, input: Pick<ConfiguredEngineUpdate, 'lastAppliedAt'>, store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager): Promise<void> {
+    const dataSource = store || await getDataSource();
+    await dataSource.getRepository(Engine).update({ id }, {
+      lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned', lastAppliedAt: input.lastAppliedAt, updatedAt: Date.now(),
+    });
   }
 
   /**

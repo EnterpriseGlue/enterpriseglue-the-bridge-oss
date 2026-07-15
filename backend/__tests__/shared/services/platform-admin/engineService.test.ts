@@ -397,6 +397,30 @@ describe('EngineService', () => {
     expect(legacySyncSpy).not.toHaveBeenCalled();
   });
 
+  it('writes configuration engine updates and decommissions through a supplied transaction store', async () => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    const store = { getRepository: (entity: unknown) => {
+      if (entity === Engine) return { update };
+      throw new Error('Unexpected repository');
+    } };
+    await service.updateConfiguredEngine('engine-1', {
+      name: 'Payments', baseUrl: 'https://engine.example.test', type: 'operaton', externalId: 'payments', labelsJson: '{}',
+      sourceHash: 'hash-1', lastAppliedAt: 100, ownershipMode: 'config_locked', lifecycleStatus: 'active', driftStatus: 'in_sync',
+      authType: 'none', username: null, passwordEnc: null, oauthTokenUrl: null, oauthScopes: null, oauthAudience: null,
+      version: null, environmentTagId: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy',
+      metadataDiscoveryEnabled: true, deploymentDiscoveryEnabled: true, reconciliationIntervalSeconds: 300,
+      pipelineReceiptEnabled: true, connectionMode: 'direct',
+    }, store as any);
+    await service.decommissionConfiguredEngine('engine-1', { lastAppliedAt: 200 }, store as any);
+
+    expect(update).toHaveBeenNthCalledWith(1, { id: 'engine-1' }, expect.objectContaining({
+      name: 'Payments', sourceHash: 'hash-1', lifecycleStatus: 'active', updatedAt: expect.any(Number),
+    }));
+    expect(update).toHaveBeenNthCalledWith(2, { id: 'engine-1' }, expect.objectContaining({
+      lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned', lastAppliedAt: 200,
+    }));
+  });
+
   it('removes canonical legacy assignments when a legacy engine member is removed', async () => {
     const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
     const memberRepo = {
