@@ -5,8 +5,6 @@ import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useToast } from '../../../../shared/notifications/ToastProvider'
-import { AuthContext } from '../../../../contexts/AuthContext'
-import { evaluateActionSnapshot } from '../../../../shared/auth/guards'
 
 export interface MigrationDataParams {
   instanceIds: string[]
@@ -18,20 +16,6 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   const { tenantNavigate } = useTenantNavigate()
   const selectedEngineId = useSelectedEngine()
   const { notify } = useToast()
-  const authContext = React.useContext(AuthContext)
-  const permissionSnapshot = authContext?.permissions ?? null
-  const engineResource = React.useMemo(() => ({ type: 'engine' as const, id: selectedEngineId ?? null }), [selectedEngineId])
-  const migrationPreviewDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.migrations.preview', engineResource)
-  const migrationPlanGenerateDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.migrations.plan.generate', engineResource)
-  const migrationPlanValidateDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.migrations.plan.validate', engineResource)
-  const migrationActiveSourcesDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.migrations.active-sources.read', engineResource)
-  const migrationExecuteAsyncDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.migrations.execute-async', engineResource)
-  const migrationExecuteDirectDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.migrations.execute-direct', engineResource)
-  const migrationVariablesDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.variables.update', engineResource)
-
-  const notifyDeniedAction = React.useCallback((reason: string) => {
-    notify({ kind: 'warning', title: 'Action unavailable', subtitle: reason })
-  }, [notify])
 
   // Process definitions query
   const defsQ = useQuery({
@@ -124,10 +108,6 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
 
   // Generate plan handler
   async function handleGeneratePlan() {
-    if (!migrationPlanGenerateDecision.allowed) {
-      notifyDeniedAction(migrationPlanGenerateDecision.reason || 'Action unavailable')
-      return
-    }
     try {
       setGenerating(true)
       if (!selectedEngineId) throw new Error('Select an engine')
@@ -162,10 +142,9 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   React.useEffect(() => {
     if (!srcKey || !srcVer || !tgtKey || !tgtVer) return
     if (generating) return
-    if (!migrationPlanGenerateDecision.allowed) return
     if (!idFor(srcKey, srcVer) || !idFor(tgtKey, tgtVer)) return
     handleGeneratePlan()
-  }, [srcKey, srcVer, tgtKey, tgtVer, defsQ.data, migrationPlanGenerateDecision.allowed])
+  }, [srcKey, srcVer, tgtKey, tgtVer, defsQ.data])
 
   // Normalize plan object
   const basePlan = React.useMemo(() => {
@@ -214,15 +193,14 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
         { engineId: selectedEngineId, plan: planWithOverrides, processInstanceIds: instanceIds },
         { credentials: 'include' }
       ),
-    enabled: !!selectedEngineId && !!planWithOverrides && migrationPreviewDecision.allowed,
+    // Migration guards resolve the selected source and target definitions
+    // server-side. Permission snapshots deliberately omit that lineage.
+    enabled: !!selectedEngineId && !!planWithOverrides,
   })
 
   // Validate mutation — result handling is done by the component via mutateAsync
   const validateMutation = useMutation({
     mutationFn: async () => {
-      if (!migrationPlanValidateDecision.allowed) {
-        throw new Error(migrationPlanValidateDecision.reason || 'Action unavailable')
-      }
       return apiClient.post<any>(
         '/mission-control-api/migration/plan/validate',
         { engineId: selectedEngineId, plan: planWithOverrides },
@@ -252,22 +230,11 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
     }
     return out
   }, [varRows])
-  const hasVariablePayload = React.useMemo(
-    () => varRows.some((row) => row.name.trim().length > 0),
-    [varRows]
-  )
-
   // Execute mutations
   const executeMutation = useMutation({
     mutationFn: async (auditReason?: string) => {
-      if (!migrationExecuteAsyncDecision.allowed) {
-        throw new Error(migrationExecuteAsyncDecision.reason || 'Action unavailable')
-      }
       if (!auditReason?.trim()) {
         throw new Error('Audit reason is required')
-      }
-      if (hasVariablePayload && !migrationVariablesDecision.allowed) {
-        throw new Error(migrationVariablesDecision.reason || 'Action unavailable')
       }
       return apiClient.post<{ id: string }>(
         '/mission-control-api/migration/execute-async',
@@ -289,14 +256,8 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
 
   const executeDirectMutation = useMutation({
     mutationFn: async (auditReason?: string) => {
-      if (!migrationExecuteDirectDecision.allowed) {
-        throw new Error(migrationExecuteDirectDecision.reason || 'Action unavailable')
-      }
       if (!auditReason?.trim()) {
         throw new Error('Audit reason is required')
-      }
-      if (hasVariablePayload && !migrationVariablesDecision.allowed) {
-        throw new Error(migrationVariablesDecision.reason || 'Action unavailable')
       }
       return apiClient.post<{ ok: boolean }>(
         '/mission-control-api/migration/execute-direct',
@@ -364,7 +325,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
         { credentials: 'include' }
       )
     },
-    enabled: !!selectedEngineId && instanceIds.length > 0 && migrationActiveSourcesDecision.allowed,
+    enabled: !!selectedEngineId && instanceIds.length > 0,
   })
 
   const activeSet = React.useMemo(
@@ -425,16 +386,6 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
     varsObj,
     lockSource,
     generating,
-    hasVariablePayload,
-    actionDecisions: {
-      preview: migrationPreviewDecision,
-      planGenerate: migrationPlanGenerateDecision,
-      planValidate: migrationPlanValidateDecision,
-      activeSources: migrationActiveSourcesDecision,
-      executeAsync: migrationExecuteAsyncDecision,
-      executeDirect: migrationExecuteDirectDecision,
-      variablesUpdate: migrationVariablesDecision,
-    },
     // State and setters
     srcKey,
     setSrcKey,

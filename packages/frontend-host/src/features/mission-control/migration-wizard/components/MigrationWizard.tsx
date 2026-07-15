@@ -108,8 +108,6 @@ export default function MigrationWizard() {
     varsObj,
     lockSource,
     generating,
-    hasVariablePayload,
-    actionDecisions,
     srcKey,
     setSrcKey,
     srcVer,
@@ -152,23 +150,6 @@ export default function MigrationWizard() {
     pinnedIdx,
     setPinnedIdx,
   } = migrationData
-  const planGenerateDeniedReason = actionDecisions.planGenerate.allowed ? null : actionDecisions.planGenerate.reason || 'Action unavailable'
-  const validateDeniedReason = actionDecisions.planValidate.allowed ? null : actionDecisions.planValidate.reason || 'Action unavailable'
-  const variablesDeniedReason = actionDecisions.variablesUpdate.allowed ? null : actionDecisions.variablesUpdate.reason || 'Action unavailable'
-  const executionVariableDeniedReason = hasVariablePayload ? variablesDeniedReason : null
-  const batchExecutionDeniedReason =
-    executionVariableDeniedReason ||
-    (actionDecisions.executeAsync.allowed ? null : actionDecisions.executeAsync.reason || 'Action unavailable')
-  const directExecutionDeniedReason =
-    executionVariableDeniedReason ||
-    (actionDecisions.executeDirect.allowed ? null : actionDecisions.executeDirect.reason || 'Action unavailable')
-  const reviewDeniedReason =
-    validateDeniedReason ||
-    (batchExecutionDeniedReason && directExecutionDeniedReason
-      ? batchExecutionDeniedReason === directExecutionDeniedReason
-        ? batchExecutionDeniedReason
-        : `${batchExecutionDeniedReason} ${directExecutionDeniedReason}`
-      : null)
 
   // Diagram control APIs
   const srcViewerApi = React.useRef<any>(null)
@@ -284,7 +265,6 @@ export default function MigrationWizard() {
 
   // Gated Review & Execute: validate first, open modal only if clean
   const handleReviewAndExecute = React.useCallback(async () => {
-    if (reviewDeniedReason) return
     try {
       const data = await validateMutation.mutateAsync()
       const reports: any[] = data?.instructionReports || []
@@ -298,7 +278,7 @@ export default function MigrationWizard() {
     } catch {
       // error already handled by onError in the mutation
     }
-  }, [reviewDeniedReason, validateMutation, setValidation])
+  }, [validateMutation, setValidation])
 
   return (
     <div style={{ padding: 'var(--spacing-4)', display: 'grid', gap: 'var(--spacing-4)' }}>
@@ -362,14 +342,6 @@ export default function MigrationWizard() {
             />
           </div>
         </div>
-        {planGenerateDeniedReason && (
-          <InlineNotification
-            lowContrast
-            kind="warning"
-            title="Migration plan generation unavailable"
-            subtitle={planGenerateDeniedReason}
-          />
-        )}
       </div>
 
       {defsQ.isSuccess && processItems.length === 0 && (
@@ -676,8 +648,7 @@ export default function MigrationWizard() {
           <Button
             size="md"
             kind="primary"
-            disabled={!plan || validateMutation.isPending || !!reviewDeniedReason}
-            title={reviewDeniedReason || undefined}
+            disabled={!plan || validateMutation.isPending}
             onClick={handleReviewAndExecute}
           >
             {validateMutation.isPending ? 'Validating…' : 'Review & Execute'}
@@ -685,12 +656,7 @@ export default function MigrationWizard() {
           <Button
             size="md"
             kind="tertiary"
-            disabled={!!variablesDeniedReason}
-            title={variablesDeniedReason || undefined}
-            onClick={() => {
-              if (variablesDeniedReason) return
-              setVarsOpen(true)
-            }}
+            onClick={() => setVarsOpen(true)}
           >
             Set variables
           </Button>
@@ -830,8 +796,6 @@ export default function MigrationWizard() {
         onExecuteDirect={(auditReason) => { executeDirectMutation.mutate(auditReason); setReviewModalOpen(false) }}
         batchPending={executeMutation.isPending}
         directPending={executeDirectMutation.isPending}
-        batchDeniedReason={batchExecutionDeniedReason}
-        directDeniedReason={directExecutionDeniedReason}
       />
 
       <Modal
