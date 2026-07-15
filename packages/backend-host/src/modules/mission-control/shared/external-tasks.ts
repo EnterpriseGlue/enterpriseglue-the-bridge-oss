@@ -50,19 +50,24 @@ r.post('/mission-control-api/external-tasks/fetchAndLock', requireRuntimeCollect
   const scopes = req.authorizedRuntimeResourceScopes;
   if (!keys) return res.json(await fetchAndLockTasks(engineId, req.body));
   const body = getBoundedRuntimeFetchAndLockRequest(req.body);
+  const scopedTopic = (topic: Record<string, unknown>, processDefinitionKey: string) => ({
+    ...withAuthorizedRuntimeTenantQuery(topic, scopes, processDefinitionKey),
+    processDefinitionKey,
+    processDefinitionKeyIn: undefined,
+  });
   const topics = body.topics.flatMap((topic: Record<string, unknown>) => {
     if (typeof topic.processDefinitionId === 'string' || Array.isArray(topic.processDefinitionIdIn)) {
       throw Errors.validation('Resource-aware external task fetch requires processDefinitionKey filters');
     }
     if (typeof topic.processDefinitionKey === 'string') {
-      return keys.includes(topic.processDefinitionKey) ? [topic] : [];
+      return keys.includes(topic.processDefinitionKey) ? [scopedTopic(topic, topic.processDefinitionKey)] : [];
     }
     if (Array.isArray(topic.processDefinitionKeyIn)) {
       return topic.processDefinitionKeyIn
         .filter((key): key is string => typeof key === 'string' && keys.includes(key))
-        .map((processDefinitionKey) => ({ ...topic, processDefinitionKey, processDefinitionKeyIn: undefined }));
+        .map((processDefinitionKey) => scopedTopic(topic, processDefinitionKey));
     }
-    return keys.map((processDefinitionKey) => ({ ...topic, processDefinitionKey }));
+    return keys.map((processDefinitionKey) => scopedTopic(topic, processDefinitionKey));
   });
   if (!topics.length) throw Errors.forbidden('No authorized runtime resources match the requested external task topics');
   const data = await fetchAndLockTasks(engineId, { ...body, topics });
