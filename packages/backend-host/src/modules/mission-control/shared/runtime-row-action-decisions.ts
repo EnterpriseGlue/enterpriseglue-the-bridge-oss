@@ -10,6 +10,7 @@ export interface RuntimeProcessInstanceActionDecisions {
   suspension: RuntimeRowActionDecision
   retry: RuntimeRowActionDecision
   terminate: RuntimeRowActionDecision
+  migration?: RuntimeRowActionDecision
   modify?: RuntimeRowActionDecision
   variablesUpdate?: RuntimeRowActionDecision
 }
@@ -18,6 +19,7 @@ const ACTIONS = {
   suspension: 'engine.runtime.process-instances.suspension.update',
   retry: 'engine.runtime.process-instances.retry',
   terminate: 'engine.runtime.process-instances.delete',
+  migration: 'engine.runtime.migrations.execute-direct',
 } as const
 
 const DETAIL_ACTIONS = {
@@ -89,6 +91,7 @@ export async function addRuntimeProcessInstanceActionDecisions<T extends object>
         suspension: decisionFor('suspension'),
         retry: decisionFor('retry'),
         terminate: decisionFor('terminate'),
+        migration: decisionFor('migration'),
         ...(input.includeDetailActions ? {
           modify: decisionFor('modify'),
           variablesUpdate: decisionFor('variablesUpdate'),

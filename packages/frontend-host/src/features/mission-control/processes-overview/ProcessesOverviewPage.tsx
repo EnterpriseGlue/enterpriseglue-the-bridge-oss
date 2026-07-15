@@ -72,6 +72,7 @@ type BulkProcessInstance = {
     suspension?: { allowed: boolean; reason?: string }
     retry?: { allowed: boolean; reason?: string }
     terminate?: { allowed: boolean; reason?: string }
+    migration?: { allowed: boolean; reason?: string }
   }
 }
 
@@ -120,7 +121,7 @@ function actionPastTense(action: BulkProcessAction): string {
 
 function runtimeDecisionFor(
   instance: BulkProcessInstance,
-  runtimeAction: 'suspension' | 'retry' | 'terminate',
+  runtimeAction: 'suspension' | 'retry' | 'terminate' | 'migration',
   fallback: UiAuthzDecision,
 ): UiAuthzDecision {
   const runtimeDecision = instance.runtimeActionDecisions?.[runtimeAction]
@@ -244,7 +245,6 @@ export default function ProcessesOverviewPage() {
   const bulkDeleteDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.delete', selectedEngineResource)
   const bulkSuspendDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.suspend', selectedEngineResource)
   const bulkActivateDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.activate', selectedEngineResource)
-  const migrationExecuteDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.migrations.execute-direct', selectedEngineResource)
   const savedFiltersReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.saved-filters.read', selectedEngineResource)
   const savedFiltersManageDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.saved-filters.manage', selectedEngineResource)
   const notifyDeniedAction = React.useCallback((decision: UiAuthzDecision) => {
@@ -876,8 +876,6 @@ export default function ProcessesOverviewPage() {
     return new Set(vers).size <= 1
   }, [hasSelection, selectedInstances])
 
-  const migratePermissionReason = deniedReason(migrationExecuteDecision)
-
   const retryEligibility = React.useMemo(
     () => getBulkProcessActionEligibility('retry', selectedInstances, {
       diagnosticDecision: bulkRetryDecision,
@@ -907,24 +905,33 @@ export default function ProcessesOverviewPage() {
     [bulkDeleteDecision, selectedInstances]
   )
   const migrateEligibility = React.useMemo(
-    () => getBulkProcessActionEligibility('migrate', selectedInstances, { currentKey, diagnosticDecision: migrationExecuteDecision }),
-    [currentKey, migrationExecuteDecision, selectedInstances]
+    () => getBulkProcessActionEligibility('migrate', selectedInstances, {
+      currentKey,
+      getActionDecision: (instance) => runtimeDecisionFor(instance, 'migration', {
+        actionId: 'engine.runtime.migrations.execute-direct',
+        resourceType: 'engine_runtime_resource',
+        allowed: false,
+        state: 'disabled',
+        reason: 'Action decision unavailable for this runtime resource',
+      }),
+    }),
+    [currentKey, selectedInstances]
   )
 
   const canRetry = hasSelection && retryEligibility.allowed && !bulkOps.bulkRetryBusy
   const canActivate = hasSelection && activateEligibility.allowed && !bulkOps.bulkActivateBusy
   const canSuspend = hasSelection && suspendEligibility.allowed && !bulkOps.bulkSuspendBusy
   const canDelete = hasSelection && deleteEligibility.allowed && !bulkOps.bulkDeleteBusy
-  const canMigrate = hasSelection && migrateEligibility.allowed && migrateSameProcess && migrateSameVersion && migrationExecuteDecision.allowed
+  const canMigrate = hasSelection && migrateEligibility.allowed && migrateSameProcess && migrateSameVersion
   const retryTitle = retryEligibility.summary || 'Retry failed jobs (Batch)'
   const activateTitle = activateEligibility.summary || 'Activate (Batch)'
   const suspendTitle = suspendEligibility.summary || 'Suspend (Batch)'
   const deleteTitle = deleteEligibility.summary || 'Cancel (Batch)'
-  const migrateTitle = migratePermissionReason || migrateEligibility.summary || 'Migrate'
+  const migrateTitle = migrateEligibility.summary || 'Migrate'
   const startTitle = 'Start process instance'
   const bulkDeleteDiagnosticDecision = deleteEligibility.firstDeniedDecision
   const bulkSuspendDiagnosticDecision = suspendEligibility.firstDeniedDecision
-  const bulkMigrateDiagnosticDecision = hasSelection && migratePermissionReason ? migrationExecuteDecision : migrateEligibility.firstDeniedDecision
+  const bulkMigrateDiagnosticDecision = migrateEligibility.firstDeniedDecision
   const bulkActivateDiagnosticDecision = activateEligibility.firstDeniedDecision
   const bulkRetryDiagnosticDecision = retryEligibility.firstDeniedDecision
   const firstBulkDiagnosticDecision = bulkDeleteDiagnosticDecision ||
@@ -1342,7 +1349,6 @@ export default function ProcessesOverviewPage() {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => {
-                  if (notifyDeniedAction(migrationExecuteDecision)) return
                   const ids = Object.keys(selectedMap).filter(k => selectedMap[k])
                   const selKeys = ids.map(id => (instQ.data || []).find(i => i.id === id)?.processDefinitionKey || currentKey).filter(Boolean)
                   const unique = Array.from(new Set(selKeys))

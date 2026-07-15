@@ -209,6 +209,7 @@ describe('mission-control shared mission_control routes', () => {
           suspension: { allowed: true },
           retry: { allowed: true },
           terminate: { allowed: false, reason: 'Action unavailable for this runtime resource' },
+          migration: { allowed: true },
         },
       }),
     ]);
@@ -298,6 +299,7 @@ describe('mission-control shared mission_control routes', () => {
         suspension: { allowed: true },
         retry: { allowed: true },
         terminate: { allowed: true },
+        migration: { allowed: true },
         modify: { allowed: true },
         variablesUpdate: { allowed: true },
       },

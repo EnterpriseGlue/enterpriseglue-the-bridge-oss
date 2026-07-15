@@ -25,6 +25,7 @@ export const ProcessInstanceRuntimeActionDecisionsSchema = z.object({
   suspension: RuntimeRowActionDecisionSchema,
   retry: RuntimeRowActionDecisionSchema,
   terminate: RuntimeRowActionDecisionSchema,
+  migration: RuntimeRowActionDecisionSchema.optional(),
 });
 
 export const ProcessInstanceSchema = z.object({
