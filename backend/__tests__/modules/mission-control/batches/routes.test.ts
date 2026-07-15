@@ -15,6 +15,8 @@ import {
   deleteBatch,
 } from '../../../../../packages/backend-host/src/modules/mission-control/batches/service.js';
 
+const { logger } = vi.hoisted(() => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
@@ -69,6 +71,8 @@ vi.mock('@enterpriseglue/shared/services/pii/PiiRedactionService.js', () => ({
     redactPayload: vi.fn().mockImplementation(async (_req: any, payload: any) => payload),
   },
 }));
+
+vi.mock('@enterpriseglue/shared/utils/logger.js', () => ({ logger }));
 
 describe('mission-control batches routes', () => {
   let app: express.Application;
@@ -207,6 +211,16 @@ describe('mission-control batches routes', () => {
       auditReason: 'INC-124 approved suspend',
       suspended: true,
     });
+  });
+
+  it('does not log raw batch payloads or upstream engine responses', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/batches/process-instances/suspend')
+      .send({ engineId: 'engine-1', processInstanceIds: ['p1'], customerDownstreamToken: 'must-not-leak' });
+
+    expect(response.status).toBe(201);
+    expect(logger.info).not.toHaveBeenCalled();
+    expect(JSON.stringify(logger)).not.toContain('must-not-leak');
   });
 
   it('marks the batch poller viewer on list fetch', async () => {

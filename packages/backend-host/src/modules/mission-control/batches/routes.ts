@@ -127,10 +127,8 @@ r.post('/mission-control-api/batches/process-instances/delete', requireRuntimePr
 r.post('/mission-control-api/batches/process-instances/suspend', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.suspend', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   const body = { ...req.body, suspended: true }
   const engineBody = stripLocalAuditFields(body)
-  logger.info('[BATCH SUSPEND] Sending to Camunda:', JSON.stringify(engineBody, null, 2))
   const engineId = (req as any).engineId as string
   const engineDto: any = await suspendProcessInstancesBatch(engineId, engineBody)
-  logger.info('[BATCH SUSPEND] Camunda response:', JSON.stringify(engineDto, null, 2))
   const { id } = await insertLocalBatch('SUSPEND_INSTANCES', engineDto?.id, body, engineDto, engineId, req.authorizedRuntimeResourceKeys)
   res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'SUSPEND_INSTANCES' })
 }))
