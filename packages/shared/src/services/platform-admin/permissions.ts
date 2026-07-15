@@ -451,6 +451,10 @@ export interface CreateRoleAssignmentInput {
   source?: RoleAssignmentSource;
   sourceMappingId?: string | null;
   sourceRef?: string | null;
+  ownershipMode?: ConfigOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
   expiresAt?: number | null;
   createdById: string;
 }
@@ -2255,6 +2259,10 @@ class PermissionServiceClass {
       scopeId,
       source,
       sourceRef,
+      ownershipMode: input.ownershipMode || (source === 'config' ? 'config_locked' : 'manual'),
+      sourceHash: input.sourceHash ?? null,
+      lastAppliedAt: input.lastAppliedAt ?? null,
+      driftStatus: input.driftStatus ?? null,
       expiresAt: input.expiresAt ?? null,
       lastSeenAt: null,
       createdById: input.createdById,

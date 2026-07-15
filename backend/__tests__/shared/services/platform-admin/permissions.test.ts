@@ -1789,10 +1789,14 @@ describe('permissionService', () => {
     await permissionService.assignRole({
       principalType: 'group', principalId: 'group-1', roleId: 'custom.engine.viewer',
       scopeType: 'engine_runtime_resource_set', scopeId: 'runtime-set-1', createdById: 'admin-1',
+      source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn',
+      sourceHash: 'bundle-hash', lastAppliedAt: 123, driftStatus: 'in_sync',
     });
 
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
       scopeType: 'engine_runtime_resource_set', scopeId: 'runtime-set-1',
+      source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn',
+      sourceHash: 'bundle-hash', lastAppliedAt: 123, driftStatus: 'in_sync',
     }));
     const insertedAssignment = insertAssignment.mock.calls[0][0];
     expect(insertedAssignment).not.toHaveProperty('userId');
