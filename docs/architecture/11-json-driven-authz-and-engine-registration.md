@@ -661,7 +661,7 @@ Required tests:
 - [x] ✅ Customer-sidecar plus disallowed credentialless policy is rejected.
 - [x] ✅ EnterpriseGlue authorization denial prevents any sidecar request; the composite deployment eligibility test proves the outbound transport is not invoked.
 - [x] ✅ Sidecar timeout, TLS failure, malformed response, and downstream denial fail closed with sanitized transport diagnostics and audit outcomes. The bounded client records only stable operation/result classes (`ENGINE_TRANSPORT_UNAVAILABLE`, `ENGINE_MALFORMED_RESPONSE`, or `ENGINE_OPERATION_REJECTED`) plus canonical lineage; focused sidecar tests cover timeout, TLS, malformed JSON, and rejection paths while proving endpoint names, upstream bodies, and downstream-token-like values never enter the API diagnostics or audit payload.
-- [ ] ⬜ No config export, OpenAPI response, UI model, log, or audit event contains the downstream peer token.
+- [x] ✅ No config export, OpenAPI response, UI model, log, or audit event contains a downstream peer token. Customer-sidecar configuration has only the declared engine connection/auth fields: strict manual-registration and JSON-bundle schemas reject undeclared token fields; exports refuse non-reference credentials; engine response serializers redact stored credential material; the frontend consumes that response-only model; raw batch payload/response logging is removed; and outbound-operation audits record only stable lineage and sanitized enum outcomes. Regression coverage proves token-like request, upstream-response, and transport-error values never enter responses, logs, or audit payloads.
 
 ### Example Engines
 

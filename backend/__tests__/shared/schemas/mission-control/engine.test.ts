@@ -83,14 +83,15 @@ describe('EngineSchema', () => {
   });
 
   it('rejects undeclared sidecar transport fields instead of accepting downstream credentials', () => {
-    const result = CreateEngineRequestSchema.safeParse({
+    const engine = {
       name: 'Payments sidecar',
       baseUrl: 'https://sidecar.example.test/engine-rest',
       type: 'ion',
       connectionMode: 'customer_sidecar',
       authType: 'none',
       customerDownstreamToken: 'must-not-be-stored',
-    });
+    };
+    const result = CreateEngineRequestSchema.safeParse(engine);
 
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -98,5 +99,9 @@ describe('EngineSchema', () => {
         expect.objectContaining({ code: 'unrecognized_keys', keys: ['customerDownstreamToken'] }),
       ]));
     }
+    expect(ConfigEngineSchema.safeParse({
+      ...engine,
+      auth: { type: 'none' },
+    }).success).toBe(false);
   });
 });
