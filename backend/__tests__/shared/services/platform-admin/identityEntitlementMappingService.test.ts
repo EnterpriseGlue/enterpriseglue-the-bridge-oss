@@ -16,6 +16,21 @@ describe('identity entitlement mapping', () => {
     expect(matchesIdentityEntitlement({ entitlementType: 'authenticated', externalId: 'authenticated', matchOperator: 'exact' }, identity)).toBe(true);
   });
 
+  it('matches LDAP group access by immutable id rather than a mutable display name', () => {
+    const mapping = { entitlementType: 'group' as const, externalId: 'group-uuid-1', matchOperator: 'exact' as const };
+    const renamedGroup = {
+      providerKey: 'ldap', providerType: 'ldap' as const, subjectId: 'subject-1', observedAt: 1,
+      entitlements: [{ type: 'group' as const, externalId: 'group-uuid-1' }],
+    };
+    const reusedDisplayName = {
+      ...renamedGroup,
+      entitlements: [{ type: 'group' as const, externalId: 'group-uuid-2' }],
+    };
+
+    expect(matchesIdentityEntitlement(mapping, renamedGroup)).toBe(true);
+    expect(matchesIdentityEntitlement(mapping, reusedDisplayName)).toBe(false);
+  });
+
   it('matches duplicate normalized group, role, and allowlisted attribute entitlements without creating duplicate memberships', async () => {
     const attributeId = authorizationAttributeEntitlementId('clearance', 'release');
     const mappings = [
