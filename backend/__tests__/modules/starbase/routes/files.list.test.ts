@@ -6,7 +6,6 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
-import { AuthorizationService } from '@enterpriseglue/shared/services/authorization.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -49,12 +48,6 @@ vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({
   syncFileDelete: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@enterpriseglue/shared/services/authorization.js', () => ({
-  AuthorizationService: {
-    verifyProjectAccess: vi.fn().mockResolvedValue(false),
-    verifyFileAccess: vi.fn().mockResolvedValue(false),
-  },
-}));
 
 describe('starbase files routes - list', () => {
   const projectId = '22222222-2222-4222-8222-222222222222';
@@ -145,8 +138,8 @@ describe('starbase files routes - list', () => {
     });
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
-      platformRole: 'user',
       resourceType: 'project',
+      tenantId: null,
       resourceId: projectId,
     }));
     expect(fileFind).toHaveBeenCalledWith({
@@ -154,7 +147,6 @@ describe('starbase files routes - list', () => {
       order: { updatedAt: 'DESC' },
       select: ['id', 'name', 'type', 'folderId', 'createdAt', 'updatedAt', 'bpmnProcessId', 'dmnDecisionId', 'xml'],
     });
-    expect(AuthorizationService.verifyProjectAccess).not.toHaveBeenCalled();
   });
 
   it('denies project file list when project.files.read is not granted', async () => {
@@ -164,6 +156,5 @@ describe('starbase files routes - list', () => {
 
     expect(response.status).toBe(403);
     expect(fileFind).not.toHaveBeenCalled();
-    expect(AuthorizationService.verifyProjectAccess).not.toHaveBeenCalled();
   });
 });

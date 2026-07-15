@@ -6,7 +6,6 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { File } from '@enterpriseglue/shared/db/entities/File.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
-import { AuthorizationService } from '@enterpriseglue/shared/services/authorization.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -49,12 +48,6 @@ vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({
   syncFileDelete: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@enterpriseglue/shared/services/authorization.js', () => ({
-  AuthorizationService: {
-    verifyProjectAccess: vi.fn().mockResolvedValue(true),
-    verifyFileAccess: vi.fn().mockResolvedValue(true),
-  },
-}));
 
 describe('starbase files routes - callers', () => {
   let app: express.Application;
@@ -96,8 +89,6 @@ describe('starbase files routes - callers', () => {
         };
       },
     });
-    (AuthorizationService.verifyProjectAccess as unknown as Mock).mockResolvedValue(true);
-    (AuthorizationService.verifyFileAccess as unknown as Mock).mockResolvedValue(true);
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
       async (permission: string) => permission === 'project:files:view'
     );
@@ -195,7 +186,6 @@ describe('starbase files routes - callers', () => {
         },
       ],
     });
-    expect(AuthorizationService.verifyProjectAccess).not.toHaveBeenCalled();
   });
 
   it('returns no callers when no parent BPMN uses the target DMN file', async () => {
@@ -219,7 +209,6 @@ describe('starbase files routes - callers', () => {
   });
 
   it('returns callers through scoped files-view permission without legacy project access', async () => {
-    (AuthorizationService.verifyProjectAccess as unknown as Mock).mockResolvedValue(false);
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'project:files:view');
     fileFindOne.mockResolvedValue({
       id: '11111111-1111-1111-1111-111111111111',
@@ -240,7 +229,6 @@ describe('starbase files routes - callers', () => {
       resourceType: 'project',
       resourceId: '22222222-2222-2222-2222-222222222222',
     }));
-    expect(AuthorizationService.verifyProjectAccess).not.toHaveBeenCalled();
   });
 
   it('denies callers when project.files.read is not granted', async () => {
@@ -252,7 +240,6 @@ describe('starbase files routes - callers', () => {
     expect(response.status).toBe(403);
     expect(fileFindOne).not.toHaveBeenCalled();
     expect(fileFind).not.toHaveBeenCalled();
-    expect(AuthorizationService.verifyProjectAccess).not.toHaveBeenCalled();
   });
 
   it('returns parent business rule task occurrences that reference the current DMN file', async () => {
