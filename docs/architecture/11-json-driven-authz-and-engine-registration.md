@@ -656,7 +656,7 @@ UI impact:
 
 Required tests:
 
-- [ ] ⬜ Mock sidecar forwards successful metadata/runtime responses while injecting an opaque customer-owned downstream token that EnterpriseGlue cannot observe.
+- [x] ✅ Mock sidecar forwards successful metadata/runtime responses while injecting an opaque customer-owned downstream token that EnterpriseGlue cannot observe. The bounded client contract test verifies both `/version` and a runtime start request expose only EnterpriseGlue lineage headers and sanitized upstream responses.
 - [x] ✅ Direct engine plus `auth.type = "none"` is rejected by the shared engine and config-bundle schemas.
 - [x] ✅ Customer-sidecar plus disallowed credentialless policy is rejected.
 - [x] ✅ EnterpriseGlue authorization denial prevents any sidecar request; the composite deployment eligibility test proves the outbound transport is not invoked.

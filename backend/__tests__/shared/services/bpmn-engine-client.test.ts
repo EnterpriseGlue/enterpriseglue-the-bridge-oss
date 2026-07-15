@@ -102,7 +102,7 @@ describe('bpmn-engine-client', () => {
     expect(JSON.stringify(connection.diagnostics)).not.toContain('must-not-appear');
   });
 
-  it('supports an opaque-token sidecar hop without receiving or forwarding the customer downstream token', async () => {
+  it('supports opaque-token sidecar metadata and runtime hops without receiving or forwarding the customer downstream token', async () => {
     const engineRepo = { findOneBy: vi.fn().mockResolvedValue({
       id: 'engine-sidecar', baseUrl: 'https://sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar', authType: 'none',
     }) };
@@ -115,6 +115,12 @@ describe('bpmn-engine-client', () => {
     });
 
     await expect(camundaGet('engine-sidecar', '/version')).resolves.toEqual({ version: '7.22.0' });
+    (fetch as unknown as Mock).mockImplementationOnce(async (_url: string, init: { headers: Record<string, string> }) => {
+      expect(init.headers.Authorization).toBeUndefined();
+      expect(Object.values(init.headers).join(' ')).not.toContain('customer-downstream-token');
+      return { ok: true, status: 200, statusText: 'OK', headers: { get: vi.fn().mockReturnValue('application/json') }, json: vi.fn().mockResolvedValue({ id: 'process-1' }) };
+    });
+    await expect(camundaPost('engine-sidecar', '/process-definition/key/payments/start', {})).resolves.toEqual({ id: 'process-1' });
     expect(JSON.stringify((fetch as unknown as Mock).mock.calls)).not.toContain('customer-downstream-token');
   });
 
