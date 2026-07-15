@@ -132,6 +132,42 @@ describe('identity entitlement mapping', () => {
     expect(mappingRepo.insert).not.toHaveBeenCalled();
   });
 
+  it('persists config provenance when a mapping is created through an injected transaction manager', async () => {
+    const mappingRepo = { insert: vi.fn().mockResolvedValue(undefined) };
+    const provider = { id: 'provider-1', key: 'identity.oidc.main' };
+    const group = { id: 'group-1', key: 'group.operators' };
+    const store = {
+      getRepository: (entity: unknown) => entity === IdentityProvider ? { findOne: vi.fn().mockResolvedValue(provider) }
+        : entity === AuthzGroup ? { findOne: vi.fn().mockResolvedValue(group) }
+          : entity === IdentityEntitlementMapping ? mappingRepo
+            : {},
+    } as any;
+
+    const result = await identityEntitlementMappingService.create({
+      providerKey: provider.key,
+      targetGroupKey: group.key,
+      entitlementType: 'group',
+      externalId: 'operators',
+      matchOperator: 'exact',
+      configKey: 'mapping.operators',
+      configKeyIdentity: 'tenant-a:mapping.operators',
+      sourceRef: 'config_bundle:acme.authz',
+      sourceHash: 'bundle-hash',
+      lastAppliedAt: 123,
+      driftStatus: 'in_sync',
+    }, 'tenant-a', store);
+
+    expect(result).toMatchObject({ configKey: 'mapping.operators', sourceRef: 'config_bundle:acme.authz' });
+    expect(mappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      configKey: 'mapping.operators',
+      configKeyIdentity: 'tenant-a:mapping.operators',
+      sourceRef: 'config_bundle:acme.authz',
+      sourceHash: 'bundle-hash',
+      lastAppliedAt: 123,
+      driftStatus: 'in_sync',
+    }));
+  });
+
   it('removes legacy scope-derived memberships regardless of their prior sync mode', async () => {
     const mappingRepo = { find: vi.fn().mockResolvedValue([{ id: 'legacy-scope', providerId: 'entra', entitlementType: 'scope', externalId: 'engines.read', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'additive', isActive: true }]) };
     const membershipRepo = { findOne: vi.fn().mockResolvedValue({ id: 'membership-1', userId: 'user-1', groupId: 'group-1', source: 'identity_provider', sourceRef: identityProviderMembershipSourceRef('entra', 'legacy-scope') }), insert: vi.fn(), delete: vi.fn().mockResolvedValue(undefined) };

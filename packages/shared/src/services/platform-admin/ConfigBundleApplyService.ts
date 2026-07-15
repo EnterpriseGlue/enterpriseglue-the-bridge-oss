@@ -30,7 +30,7 @@ import { configBundleSecretPreflightService } from './ConfigBundleSecretPrefligh
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
 import { configBundleRuntimeReconciliationTaskService } from './ConfigBundleRuntimeReconciliationTaskService.js';
 import { archiveIdentityProviderInStore } from './IdentityProviderService.js';
-import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
+import { identityEntitlementMappingService, identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 import { authzGroupService } from './AuthzGroupService.js';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
@@ -736,9 +736,21 @@ class ConfigBundleApplyService {
         const existing = await identityMappingRepo.findOne({ where: { tenantId, configKey: mapping.key } as any });
         const values = { providerId: provider.id, configKey: mapping.key, configKeyIdentity: identityMappingConfigKeyIdentity(tenantId, mapping.key), sourceRef, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', entitlementType: mapping.source.type, externalId: mapping.source.externalId || null, matchOperator: mapping.source.operator, targetGroupId: group.id, syncMode: mapping.syncMode, isActive: true, updatedAt: now };
         if (!existing) {
-          const mappingId = generateId();
-          await identityMappingRepo.insert({ id: mappingId, tenantId, ...values, createdAt: now });
-          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.create', resourceType: 'identity_entitlement_mapping', resourceId: mappingId, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, providerKey: mapping.providerKey, groupKey: mapping.targetGroupKey, canonicalHash: diff.canonicalHash } });
+          const createdMapping = await identityEntitlementMappingService.create({
+            providerKey: mapping.providerKey,
+            targetGroupKey: mapping.targetGroupKey,
+            entitlementType: mapping.source.type,
+            externalId: mapping.source.externalId || null,
+            matchOperator: mapping.source.operator,
+            syncMode: mapping.syncMode,
+            configKey: mapping.key,
+            configKeyIdentity: identityMappingConfigKeyIdentity(tenantId, mapping.key),
+            sourceRef,
+            sourceHash,
+            lastAppliedAt: now,
+            driftStatus: 'in_sync',
+          }, tenantId, manager);
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_mapping.create', resourceType: 'identity_entitlement_mapping', resourceId: createdMapping.id, details: { bundleKey: manifest.metadata.key, mappingKey: mapping.key, providerKey: mapping.providerKey, groupKey: mapping.targetGroupKey, canonicalHash: diff.canonicalHash } });
           created += 1;
           replayProviderIds.push(provider.id);
         } else {

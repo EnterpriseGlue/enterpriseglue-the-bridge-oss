@@ -100,7 +100,8 @@ function setupDataSource() {
   const permissionInsert = vi.fn().mockResolvedValue(undefined);
   const auditInsert = vi.fn().mockResolvedValue(undefined);
   const roleRepo = { find: vi.fn().mockResolvedValue([]), insert: roleInsert, update: vi.fn() };
-  const groupRepo = { find: vi.fn().mockResolvedValue([]), findOneBy: vi.fn().mockResolvedValue(null), insert: groupInsert, update: vi.fn() };
+  const groupRepo: any = { find: vi.fn().mockResolvedValue([]), findOneBy: vi.fn().mockResolvedValue(null), insert: groupInsert, update: vi.fn() };
+  groupRepo.findOne = vi.fn(async ({ where }: any) => (await groupRepo.find()).find((group: any) => group.key === where.key && (where.isArchived === undefined || group.isArchived === where.isArchived)) || null);
   const permissionRepo = { find: vi.fn().mockResolvedValue([]), insert: permissionInsert, delete: vi.fn() };
   const engineInsert = vi.fn().mockResolvedValue(undefined);
   const engineRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a' }), insert: engineInsert, update: vi.fn() };
@@ -112,7 +113,8 @@ function setupDataSource() {
   const assignmentOverrideRepo = { delete: vi.fn() };
   const projectRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
   const targetRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
-  const providerRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
+  const providerRepo: any = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
+  providerRepo.findOne = vi.fn(async ({ where }: any) => (await providerRepo.find()).find((provider: any) => provider.key === where.key) || null);
   const identityMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
   const groupMembershipRepo = { find: vi.fn().mockResolvedValue([]), delete: vi.fn().mockResolvedValue(undefined) };
   const auditRepo = { insert: auditInsert };

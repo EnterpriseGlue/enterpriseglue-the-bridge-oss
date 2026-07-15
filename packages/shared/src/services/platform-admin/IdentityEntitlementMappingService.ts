@@ -32,6 +32,12 @@ export interface IdentityEntitlementMappingInput extends IdentityEntitlementMapp
   providerKey: string;
   targetGroupKey: string;
   syncMode?: 'additive' | 'authoritative';
+  configKey?: string | null;
+  configKeyIdentity?: string | null;
+  sourceRef?: string | null;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
 }
 
 export interface ManagedIdentityEntitlementMapping {
@@ -151,8 +157,26 @@ class IdentityEntitlementMappingService {
     const repo = dataSource.getRepository(IdentityEntitlementMapping);
     const now = Date.now();
     const id = generateId();
-    await repo.insert({ id, tenantId: tenantId || null, providerId: provider.id, configKey: null, sourceRef: null, entitlementType: input.entitlementType, externalId: input.externalId?.trim() || null, matchOperator: input.matchOperator, targetGroupId: group.id, syncMode: input.syncMode || 'authoritative', isActive: true, createdAt: now, updatedAt: now });
-    return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: input.entitlementType, externalId: input.externalId?.trim() || null, matchOperator: input.matchOperator, syncMode: input.syncMode || 'authoritative', isActive: true, configKey: null, sourceRef: null };
+    await repo.insert({
+      id,
+      tenantId: tenantId || null,
+      providerId: provider.id,
+      configKey: input.configKey ?? null,
+      configKeyIdentity: input.configKeyIdentity ?? null,
+      sourceRef: input.sourceRef ?? null,
+      sourceHash: input.sourceHash ?? null,
+      lastAppliedAt: input.lastAppliedAt ?? null,
+      driftStatus: input.driftStatus ?? null,
+      entitlementType: input.entitlementType,
+      externalId: input.externalId?.trim() || null,
+      matchOperator: input.matchOperator,
+      targetGroupId: group.id,
+      syncMode: input.syncMode || 'authoritative',
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: input.entitlementType, externalId: input.externalId?.trim() || null, matchOperator: input.matchOperator, syncMode: input.syncMode || 'authoritative', isActive: true, configKey: input.configKey ?? null, sourceRef: input.sourceRef ?? null };
   }
 
   async update(id: string, input: Partial<IdentityEntitlementMappingInput> & { isActive?: boolean }, tenantId?: string | null): Promise<ManagedIdentityEntitlementMapping> {
