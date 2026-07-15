@@ -12,6 +12,20 @@ import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeColl
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { AuthContext } from '../../../../contexts/AuthContext'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, WhyUnavailableLink } from '../../../../shared/auth/guards'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+
+type RuntimeActionDecision = { allowed: boolean; reason?: string }
+
+function rowDecision(actionId: string, decision?: RuntimeActionDecision): UiAuthzDecision {
+  const allowed = decision?.allowed === true
+  return {
+    actionId,
+    resourceType: 'engine_runtime_resource',
+    allowed,
+    state: allowed ? 'allowed' : 'disabled',
+    reason: allowed ? 'Allowed for this runtime resource' : decision?.reason || 'Action decision unavailable for this runtime resource',
+  }
+}
 
 type Batch = {
   id: string
@@ -23,6 +37,11 @@ type Batch = {
   status: string
   createdAt: number
   suspended?: boolean
+  runtimeActionDecisions?: {
+    suspension?: RuntimeActionDecision
+    cancel?: RuntimeActionDecision
+    recordDelete?: RuntimeActionDecision
+  }
 }
 
 export default function BatchesList() {
@@ -32,14 +51,12 @@ export default function BatchesList() {
   const authContext = React.useContext(AuthContext)
   const engineResource = React.useMemo(() => ({ type: 'engine' as const, id: selectedEngineId ?? null }), [selectedEngineId])
   const readDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'engine.runtime.batches.read', engineResource)
-  const toggleSuspensionDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'engine.runtime.batches.suspension.update', engineResource)
-  const cancelDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'engine.runtime.batches.cancel', engineResource)
-  const deleteRecordDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'engine.runtime.batches.record.delete', engineResource)
   const listQ = useQuery({
     queryKey: ['batches', 'list', selectedEngineId],
     queryFn: () => {
       const params = new URLSearchParams()
       if (selectedEngineId) params.set('engineId', selectedEngineId)
+      params.set('includeActionDecisions', 'true')
       const query = params.toString()
       const suffix = query ? `?${query}` : ''
       return apiClient.get<Batch[]>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
@@ -195,6 +212,9 @@ export default function BatchesList() {
                         const headerKey = (headers.find(h => h.key === c.info.header)?.key) || ''
                         if (headerKey === 'ops') {
                           const raw = (listQ.data || []).find((b) => b.id === r.id)
+                          const toggleSuspensionDecision = rowDecision('engine.runtime.batches.suspension.update', raw?.runtimeActionDecisions?.suspension)
+                          const cancelDecision = rowDecision('engine.runtime.batches.cancel', raw?.runtimeActionDecisions?.cancel)
+                          const deleteRecordDecision = rowDecision('engine.runtime.batches.record.delete', raw?.runtimeActionDecisions?.recordDelete)
                           const st = String(raw?.status || '').toUpperCase()
                           const isSuspended = st === 'SUSPENDED' || raw?.suspended === true
                           const canCancel = st === 'RUNNING' || st === 'PENDING'

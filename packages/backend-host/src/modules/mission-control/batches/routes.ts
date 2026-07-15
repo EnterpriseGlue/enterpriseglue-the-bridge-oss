@@ -3,7 +3,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireRuntimeCollectionAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { getRuntimeResourceActionDecision, requireRuntimeCollectionAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import {
   processRetries,
   fetchBatchInfo,
@@ -81,9 +81,25 @@ function batchRuntimeResourceKeys(row: Batch): string[] {
 function requireVisibleBatch(row: Batch, authorizedKeys?: string[]) {
   if (!authorizedKeys) return
   const batchKeys = batchRuntimeResourceKeys(row)
-  if (!batchKeys.length || !batchKeys.some((key) => authorizedKeys.includes(key))) {
+  if (!batchKeys.length || !batchKeys.every((key) => authorizedKeys.includes(key))) {
     throw Errors.forbidden('Batch is not available for the authorized runtime resources')
   }
+}
+
+async function batchRuntimeActionDecisions(req: Request, row: Batch) {
+  const input = {
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    engineId: row.engineId,
+    resourceKind: 'process_definition' as const,
+    resourceKeys: batchRuntimeResourceKeys(row),
+  }
+  const [suspension, cancel, recordDelete] = await Promise.all([
+    getRuntimeResourceActionDecision({ ...input, actionId: 'engine.runtime.batches.suspension.update' }),
+    getRuntimeResourceActionDecision({ ...input, actionId: 'engine.runtime.batches.cancel' }),
+    getRuntimeResourceActionDecision({ ...input, actionId: 'engine.runtime.batches.record.delete' }),
+  ])
+  return { suspension, cancel, recordDelete }
 }
 
 function stripLocalAuditFields<T extends Record<string, any>>(body: T): Omit<T, 'auditReason'> {
@@ -176,7 +192,9 @@ r.get('/mission-control-api/batches', requireRuntimeCollectionAction('engine.run
     }
     return suspended === undefined ? row : { ...row, suspended }
   })
-  res.json(withSuspended)
+  res.json(req.query.includeActionDecisions === 'true'
+    ? await Promise.all(withSuspended.map(async (row) => ({ ...row, runtimeActionDecisions: await batchRuntimeActionDecisions(req, row) })))
+    : withSuspended)
 }))
 
 r.put('/mission-control-api/batches/:id/suspended', requireRuntimeCollectionAction('engine.runtime.batches.suspension.update', { resourceKind: 'process_definition', engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
@@ -394,11 +412,15 @@ r.get('/mission-control-api/batches/:id', requireRuntimeCollectionAction('engine
     } catch (e) { logger.debug('Failed to parse batch metadata', { batchId: String(req.params.id), error: e }) }
   }
 
+  const runtimeActionDecisions = req.query.includeActionDecisions === 'true'
+    ? await batchRuntimeActionDecisions(req, row)
+    : undefined
   const redacted = await piiRedactionService.redactPayload(req, {
     batch: { ...row, lastError: batchError || row.lastError, ...(suspended === undefined ? {} : { suspended }) },
     engine,
     statistics: outStats,
     failedJobDetails,
+    ...(runtimeActionDecisions ? { runtimeActionDecisions } : {}),
   }, 'errors')
 
   res.json(redacted)

@@ -87,6 +87,53 @@ export interface RequireRuntimeMigrationActionOptions extends RequireRuntimeColl
   planKey?: string;
 }
 
+export interface RuntimeResourceActionDecision {
+  allowed: boolean;
+  reason?: string;
+}
+
+/** Returns a fail-closed UX decision for an already-resolved runtime resource set. */
+export async function getRuntimeResourceActionDecision(input: {
+  actionId: string;
+  userId: string;
+  tenantId: string | null;
+  engineId: string;
+  resourceKind: 'process_definition' | 'decision_definition';
+  resourceKeys: string[];
+}): Promise<RuntimeResourceActionDecision> {
+  try {
+    const action = assertKnownAuthzAction(input.actionId);
+    const context: PermissionContext = {
+      userId: input.userId,
+      tenantId: input.tenantId,
+      resourceType: 'engine',
+      resourceId: input.engineId,
+    };
+    if (await permissionService.hasPermission(action.permissionId, context)) return { allowed: true };
+
+    const keys = Array.from(new Set(input.resourceKeys.filter(Boolean)));
+    if (!keys.length) return { allowed: false, reason: 'Action decision unavailable for this runtime resource' };
+    const dataSource = await getDataSource();
+    const resources = await Promise.all(keys.map((resourceKey) => dataSource.getRepository(RuntimeResource).findOne({
+      where: { engineId: input.engineId, resourceKind: input.resourceKind, resourceKey, isActive: true },
+      select: ['id', 'tenantId'],
+    })));
+    if (resources.some((resource) => !resource || !isTenantVisible(resource.tenantId, input.tenantId))) {
+      return { allowed: false, reason: 'Action decision unavailable for this runtime resource' };
+    }
+    const allowed = await Promise.all(resources.map((resource) => permissionService.hasPermission(action.permissionId, {
+      ...context,
+      resourceType: 'engine_runtime_resource',
+      resourceId: resource!.id,
+    })));
+    return allowed.every(Boolean)
+      ? { allowed: true }
+      : { allowed: false, reason: 'Action unavailable for this runtime resource' };
+  } catch {
+    return { allowed: false, reason: 'Action decision unavailable for this runtime resource' };
+  }
+}
+
 export type CompositeActionKind = 'deployment';
 
 export interface RequireCompositeActionOptions {

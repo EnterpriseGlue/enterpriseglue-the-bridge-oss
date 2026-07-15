@@ -3,8 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ComposedModal, ModalHeader, ModalBody, ModalFooter, Button, InlineNotification, InlineLoading, ProgressBar } from '@carbon/react'
 import { apiClient } from '../../../../shared/api/client'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
-import { AuthContext } from '../../../../contexts/AuthContext'
-import { evaluateActionSnapshot } from '../../../../shared/auth/guards'
+
+type RuntimeActionDecision = { allowed: boolean; reason?: string }
+
+function deniedReason(decision?: RuntimeActionDecision): string | null {
+  if (decision?.allowed) return null
+  return decision?.reason || 'Action decision unavailable for this runtime resource'
+}
 
 interface Props {
   open: boolean
@@ -15,18 +20,13 @@ interface Props {
 export default function BatchDetailModal({ open, batchId, onClose }: Props) {
   const qc = useQueryClient()
   const selectedEngineId = useSelectedEngine()
-  const authContext = React.useContext(AuthContext)
-  const engineResource = React.useMemo(() => ({ type: 'engine' as const, id: selectedEngineId ?? null }), [selectedEngineId])
-  const toggleSuspensionDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'engine.runtime.batches.suspension.update', engineResource)
-  const cancelDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'engine.runtime.batches.cancel', engineResource)
-  const toggleSuspensionDeniedReason = toggleSuspensionDecision.allowed ? null : toggleSuspensionDecision.reason || 'Action unavailable'
-  const cancelDeniedReason = cancelDecision.allowed ? null : cancelDecision.reason || 'Action unavailable'
 
   const q = useQuery({
     queryKey: ['batches', 'detail', batchId, selectedEngineId],
     queryFn: () => {
       const params = new URLSearchParams()
       if (selectedEngineId) params.set('engineId', selectedEngineId)
+      params.set('includeActionDecisions', 'true')
       return apiClient.get<any>(`/mission-control-api/batches/${batchId}?${params}`, undefined, { credentials: 'include' })
     },
     enabled: open && !!batchId && !!selectedEngineId,
@@ -48,6 +48,8 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
   const seedDef = (engine?.seedJobDefinitionId ?? batch?.seedJobDefinitionId) as string | undefined
   const monitorDef = (engine?.monitorJobDefinitionId ?? batch?.monitorJobDefinitionId) as string | undefined
   const batchDef = (engine?.batchJobDefinitionId ?? batch?.batchJobDefinitionId) as string | undefined
+  const toggleSuspensionDeniedReason = deniedReason(q.data?.runtimeActionDecisions?.suspension)
+  const cancelDeniedReason = deniedReason(q.data?.runtimeActionDecisions?.cancel)
 
   const derivedCompleted = typeof totalJobs === 'number'
     ? Math.max(0, totalJobs - (failedJobs || 0) - (remainingJobs || 0))

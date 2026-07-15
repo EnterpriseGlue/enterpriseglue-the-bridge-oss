@@ -237,6 +237,46 @@ describe('mission-control batches routes', () => {
     expect(markBatchPollerViewer as unknown as Mock).toHaveBeenCalled();
   });
 
+  it('returns per-batch action decisions only when requested', async () => {
+    batchRepo.findOne.mockResolvedValue({
+      id: 'batch-1', engineId: 'engine-1', status: 'RUNNING', camundaBatchId: null,
+      metadata: JSON.stringify({ authz: { processDefinitionKeys: ['payments'] } }),
+    });
+
+    const response = await request(app)
+      .get('/mission-control-api/batches/batch-1')
+      .query({ engineId: 'engine-1', includeActionDecisions: 'true' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.runtimeActionDecisions).toEqual(expect.objectContaining({
+      suspension: expect.objectContaining({ allowed: true }),
+      cancel: expect.objectContaining({ allowed: true }),
+      recordDelete: expect.objectContaining({ allowed: true }),
+    }));
+  });
+
+  it('hides a multi-resource batch unless every runtime resource is authorized', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
+        if (entity === Batch) return batchRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+    batchRepo.findOne.mockResolvedValue({
+      id: 'batch-1', engineId: 'engine-1', status: 'RUNNING', camundaBatchId: null,
+      metadata: JSON.stringify({ authz: { processDefinitionKeys: ['payments', 'hr'] } }),
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/batches/batch-1')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(403);
+  });
+
   it('creates suspend and activate batches through process modify permission', async () => {
     const suspendResponse = await request(app)
       .post('/mission-control-api/batches/process-instances/suspend')
