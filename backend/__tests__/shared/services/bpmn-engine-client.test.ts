@@ -102,6 +102,22 @@ describe('bpmn-engine-client', () => {
     expect(JSON.stringify(connection.diagnostics)).not.toContain('must-not-appear');
   });
 
+  it('supports an opaque-token sidecar hop without receiving or forwarding the customer downstream token', async () => {
+    const engineRepo = { findOneBy: vi.fn().mockResolvedValue({
+      id: 'engine-sidecar', baseUrl: 'https://sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar', authType: 'none',
+    }) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : {} });
+    (fetch as unknown as Mock).mockImplementationOnce(async (_url: string, init: { headers: Record<string, string> }) => {
+      // This represents the customer sidecar injecting its own downstream token after EnterpriseGlue's hop.
+      expect(init.headers.Authorization).toBeUndefined();
+      expect(Object.values(init.headers).join(' ')).not.toContain('customer-downstream-token');
+      return { ok: true, status: 200, statusText: 'OK', headers: { get: vi.fn().mockReturnValue('application/json') }, json: vi.fn().mockResolvedValue({ version: '7.22.0' }) };
+    });
+
+    await expect(camundaGet('engine-sidecar', '/version')).resolves.toEqual({ version: '7.22.0' });
+    expect(JSON.stringify((fetch as unknown as Mock).mock.calls)).not.toContain('customer-downstream-token');
+  });
+
   it('retries one transient safe-read failure and reports bounded transport diagnostics', async () => {
     (fetch as unknown as Mock)
       .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Unavailable', body: null })
