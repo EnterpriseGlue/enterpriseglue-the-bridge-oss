@@ -132,6 +132,43 @@ describe('projectEngineTargetService', () => {
     }));
   });
 
+  it('reconciles config-owned target updates and archives through a supplied transaction manager', async () => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    const existing = {
+      id: 'target-1', tenantId: 'tenant-1', projectId: 'project-1', engineId: 'engine-1', status: 'active',
+      source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_locked', sourceHash: 'old-hash', lastAppliedAt: 1, driftStatus: 'in_sync', lastSeenAt: 1,
+      allowManualDeploy: true, allowCiDeploy: false, allowApiDeploy: false, allowImport: true,
+      approvedById: null, approvalStatus: 'not_required', approvedAt: null, policyTagsJson: JSON.stringify(['old']), diagnosticsJson: JSON.stringify({ old: true }),
+      externalSystemId: null, externalProjectId: null, externalEngineId: null, externalTargetId: null,
+    };
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity === ProjectEngineTarget) return { findOneBy: vi.fn().mockResolvedValue(existing), update };
+        throw new Error('Unexpected repository');
+      },
+    };
+
+    await projectEngineTargetService.updateTarget('target-1', {
+      tenantId: 'tenant-1', source: 'config', sourceRef: 'config_bundle:acme.authz', status: 'active',
+      allowManualDeploy: false, allowCiDeploy: true, allowApiDeploy: false, allowImport: false,
+      ownershipMode: 'config_warn', sourceHash: 'new-hash', lastAppliedAt: 2, driftStatus: 'in_sync', lastSeenAt: 2,
+      policyTags: null, diagnostics: null, allowSourceOwnedMutation: true,
+    }, manager as any);
+    await projectEngineTargetService.updateTarget('target-1', {
+      tenantId: 'tenant-1', status: 'archived', sourceHash: 'archive-hash', lastAppliedAt: 3,
+      driftStatus: 'in_sync', allowSourceOwnedMutation: true,
+    }, manager as any);
+
+    expect(update).toHaveBeenNthCalledWith(1, { id: 'target-1' }, expect.objectContaining({
+      source: 'config', ownershipMode: 'config_warn', sourceHash: 'new-hash', lastAppliedAt: 2, lastSeenAt: 2,
+      allowManualDeploy: false, allowCiDeploy: true, policyTagsJson: null, diagnosticsJson: null,
+    }));
+    expect(update).toHaveBeenNthCalledWith(2, { id: 'target-1' }, expect.objectContaining({
+      status: 'archived', sourceHash: 'archive-hash', lastAppliedAt: 3, driftStatus: 'in_sync',
+    }));
+    expect(getDataSource).not.toHaveBeenCalled();
+  });
+
   it('checks active targets by deployment mode', async () => {
     const targetFindOne = vi.fn().mockResolvedValue({
       id: 'target-1',

@@ -125,7 +125,11 @@ function setupDataSource() {
   const assignmentRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn(), delete: vi.fn() };
   const assignmentOverrideRepo = { delete: vi.fn() };
   const projectRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
-  const targetRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
+  const targetRepo: any = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
+  targetRepo.findOneBy = vi.fn(async ({ id }: { id: string }) => {
+    const direct = await targetRepo.findOne({ where: { id } });
+    return direct || (await targetRepo.find()).find((target: { id: string }) => target.id === id) || null;
+  });
   const providerRepo: any = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   providerRepo.findOne = vi.fn(async ({ where }: any) => (await providerRepo.find()).find((provider: any) => provider.key === where.key) || null);
   const identityMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };

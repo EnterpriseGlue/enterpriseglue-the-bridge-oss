@@ -666,11 +666,6 @@ class ConfigBundleApplyService {
         const pairKey = `${project.id}:${engine.id}`;
         targetKeys.add(pairKey);
         const existing = await targetRepo.findOne({ where: { projectId: project.id, engineId: engine.id } });
-        const values = {
-          status: target.status, source: 'config', sourceRef, ownershipMode: target.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', externalSystemId: null, externalProjectId: null, externalEngineId: null, externalTargetId: null,
-          allowManualDeploy: target.allowManualDeploy, allowCiDeploy: target.allowCiDeploy, allowApiDeploy: target.allowApiDeploy, allowImport: target.allowImport,
-          approvedById: null, approvalStatus: 'not_required', approvedAt: null, policyTagsJson: null, diagnosticsJson: null, lastSeenAt: now, updatedAt: now,
-        };
         if (!existing) {
           const createdTarget = await projectEngineTargetService.createTarget({
             tenantId,
@@ -703,7 +698,13 @@ class ConfigBundleApplyService {
           const transfersOwnership = existing.source !== 'config' || existing.sourceRef !== sourceRef;
           if (transfersOwnership && !target.transferOwnership) fail(`Config target conflicts with existing ${existing.source} target`, 409);
           if (!transfersOwnership && target.transferOwnership) fail('Config target ownership transfer no longer matches the previewed target', 409);
-          await targetRepo.update({ id: existing.id }, values);
+          await projectEngineTargetService.updateTarget(existing.id, {
+            tenantId, status: target.status, source: 'config', sourceRef, ownershipMode: target.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync',
+            externalSystemId: null, externalProjectId: null, externalEngineId: null, externalTargetId: null,
+            allowManualDeploy: target.allowManualDeploy, allowCiDeploy: target.allowCiDeploy, allowApiDeploy: target.allowApiDeploy, allowImport: target.allowImport,
+            approvedById: null, approvalStatus: 'not_required', approvedAt: null, policyTags: null, diagnostics: null, lastSeenAt: now,
+            allowSourceOwnedMutation: true,
+          }, manager);
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: transfersOwnership ? 'authz.config_bundle.project_engine_target.transfer_ownership' : 'authz.config_bundle.project_engine_target.update', resourceType: 'project_engine_target', resourceId: existing.id, details: { bundleKey: manifest.metadata.key, projectId: project.id, engineKey: target.engineRef.engineKey, canonicalHash: diff.canonicalHash, ...(transfersOwnership ? { previousSource: existing.source, previousSourceRef: existing.sourceRef || null, transferReason: target.transferOwnership!.reason } : {}) } });
           updated += 1;
         }
@@ -712,7 +713,7 @@ class ConfigBundleApplyService {
         const existing = await targetRepo.find({ where: { source: 'config', sourceRef } });
         for (const target of existing) {
           if (targetKeys.has(`${target.projectId}:${target.engineId}`)) continue;
-          await targetRepo.update({ id: target.id }, { status: 'archived', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', updatedAt: now });
+          await projectEngineTargetService.updateTarget(target.id, { tenantId, status: 'archived', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', allowSourceOwnedMutation: true }, manager);
           await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.project_engine_target.archive', resourceType: 'project_engine_target', resourceId: target.id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash } });
           archived += 1;
         }

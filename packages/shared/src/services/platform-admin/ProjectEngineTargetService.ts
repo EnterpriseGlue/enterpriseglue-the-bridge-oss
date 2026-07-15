@@ -82,8 +82,13 @@ export interface ProjectEngineTargetUpdateInput {
   approvedById?: string | null;
   approvalStatus?: ProjectEngineTargetApprovalStatus;
   approvedAt?: number | null;
-  policyTags?: string[];
+  policyTags?: string[] | null;
   diagnostics?: Record<string, unknown> | null;
+  ownershipMode?: ProjectEngineTargetOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
+  lastSeenAt?: number | null;
   allowSourceOwnedMutation?: boolean;
 }
 
@@ -153,7 +158,8 @@ function normalizeString(value: string | null | undefined): string | null {
   return normalized || null;
 }
 
-function normalizePolicyTags(tags: string[] | undefined): string[] | undefined {
+function normalizePolicyTags(tags: string[] | null | undefined): string[] | null | undefined {
+  if (tags === null) return null;
   if (!tags) return undefined;
   return Array.from(new Set(
     tags
@@ -162,8 +168,9 @@ function normalizePolicyTags(tags: string[] | undefined): string[] | undefined {
   )).sort((left, right) => left.localeCompare(right));
 }
 
-function stringifyPolicyTags(tags: string[] | undefined): string | null | undefined {
+function stringifyPolicyTags(tags: string[] | null | undefined): string | null | undefined {
   const normalized = normalizePolicyTags(tags);
+  if (normalized === null) return null;
   if (!normalized) return undefined;
   return normalized.length > 0 ? JSON.stringify(normalized) : null;
 }
@@ -373,8 +380,8 @@ export class ProjectEngineTargetService {
     return { id };
   }
 
-  async updateTarget(id: string, input: ProjectEngineTargetUpdateInput): Promise<void> {
-    const dataSource = await getDataSource();
+  async updateTarget(id: string, input: ProjectEngineTargetUpdateInput, store?: DataSource | EntityManager): Promise<void> {
+    const dataSource = store || await getDataSource();
     const targetRepo = dataSource.getRepository(ProjectEngineTarget);
     const existing = await targetRepo.findOneBy({ id });
     if (!existing || !isTenantVisible(existing.tenantId, input.tenantId)) {
@@ -407,13 +414,17 @@ export class ProjectEngineTargetService {
       approvedAt: resolveApprovedAt(approvalStatus, input.approvedAt, existing.approvedAt, now),
       policyTagsJson: policyTagsJson !== undefined ? policyTagsJson : existing.policyTagsJson,
       diagnosticsJson: diagnosticsJson !== undefined ? diagnosticsJson : existing.diagnosticsJson,
-      ...(isConfigWarn ? { driftStatus: 'drifted' } : {}),
+      ownershipMode: input.ownershipMode ?? existing.ownershipMode,
+      sourceHash: input.sourceHash ?? existing.sourceHash,
+      lastAppliedAt: input.lastAppliedAt ?? existing.lastAppliedAt,
+      driftStatus: input.driftStatus ?? (isConfigWarn ? 'drifted' : existing.driftStatus),
+      lastSeenAt: input.lastSeenAt ?? existing.lastSeenAt,
       updatedAt: now,
     });
   }
 
-  async archiveTarget(id: string, tenantId?: string | null, allowSourceOwnedMutation = false): Promise<void> {
-    await this.updateTarget(id, { tenantId, status: 'archived', allowSourceOwnedMutation });
+  async archiveTarget(id: string, tenantId?: string | null, allowSourceOwnedMutation = false, store?: DataSource | EntityManager): Promise<void> {
+    await this.updateTarget(id, { tenantId, status: 'archived', allowSourceOwnedMutation }, store);
   }
 
   async ensureTargetFromLegacyAccess(
