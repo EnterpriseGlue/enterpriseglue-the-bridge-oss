@@ -4,11 +4,19 @@
   "clients": [{
     "clientId": "enterpriseglue-local",
     "enabled": true,
-    "publicClient": false,
-    "secret": "enterpriseglue-local-client-secret",
+    "publicClient": true,
     "standardFlowEnabled": true,
-      "redirectUris": ["http://localhost:5173/*"],
-    "webOrigins": ["http://localhost:5173"]
+    "attributes": {
+      "pkce.code.challenge.method": "S256"
+    },
+    "redirectUris": [
+      "http://localhost:5173/*",
+      "https://localhost:5443/*"
+    ],
+    "webOrigins": [
+      "http://localhost:5173",
+      "https://localhost:5443"
+    ]
   }],
   "users": [{
     "username": "oidc-operator",

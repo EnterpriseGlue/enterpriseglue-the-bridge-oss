@@ -131,13 +131,63 @@ curl --fail --silent --show-error \
   | jq '{ issuer, authorization_endpoint, token_endpoint }'
 ```
 
-This overlay deliberately uses HTTP so it is easy to run on a disposable
-developer machine. EnterpriseGlue correctly requires HTTPS issuer and callback
-URLs for a configured OIDC provider, so this is a protocol rehearsal rather
-than a complete application sign-in configuration. A full local browser
-sign-in requires a trusted local TLS endpoint for both Keycloak and the
-EnterpriseGlue callback; it remains separate from the deployed-provider
-cutover evidence described below.
+### HTTPS provider rehearsal
+
+EnterpriseGlue only accepts HTTPS OIDC issuer and callback URLs. Use the
+following opt-in overlay when you need to configure and exercise a real local
+provider without weakening that product validation. It generates a new,
+seven-day CA and server certificate under the ignored `.local/` directory; no
+private key or reusable credential is committed.
+
+```bash
+./infra/docker/keycloak/generate-local-tls.sh
+
+docker compose --project-directory . \
+  --env-file .local/docker/env/docker.env \
+  -f infra/docker/compose/docker-compose.yml \
+  -f infra/docker/compose/docker-compose.backend-expose.yml \
+  -f infra/docker/compose/docker-compose.keycloak.yml \
+  -f infra/docker/compose/docker-compose.keycloak-tls.yml \
+  up -d backend keycloak frontend-tls
+```
+
+The TLS overlay deliberately makes Keycloak share the backend's local network
+namespace. Consequently, `https://localhost:8180` is both the browser-visible
+issuer and the address used by the backend for discovery and token exchange;
+there is no Docker-only issuer hostname to leak into application settings.
+The TLS frontend proxy is available at `https://localhost:5443`.
+
+Verify both endpoints with the generated CA:
+
+```bash
+curl --fail --silent --show-error \
+  --cacert .local/docker/keycloak-tls/ca.crt \
+  https://localhost:8180/realms/enterpriseglue-local/.well-known/openid-configuration \
+  | jq '{ issuer, authorization_endpoint, token_endpoint }'
+
+curl --fail --silent --show-error \
+  --cacert .local/docker/keycloak-tls/ca.crt \
+  https://localhost:5443/login >/dev/null
+```
+
+For the disposable local provider, configure `https://localhost:8180/realms/enterpriseglue-local`
+as the issuer and use an `https://localhost:5443/api/auth/identity/<provider-key>/callback`
+callback URL. The imported client is public and requires PKCE, so the local
+provider configuration does not need a client secret reference.
+
+Playwright does not import this disposable CA into Chromium. The guarded local
+browser lane can therefore opt into certificate-error handling only for this
+localhost rehearsal:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://localhost:5443 \
+PLAYWRIGHT_LOCAL_CA_FILE=.local/docker/keycloak-tls/ca.crt \
+PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
+pnpm test:identity:browser
+```
+
+This is local protocol and browser-flow evidence only. It does not replace the
+representative deployed-provider cutover evidence described below.
 
 ## Optional local sign-in smoke
 

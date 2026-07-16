@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 base_url="${PLAYWRIGHT_BASE_URL:-http://localhost:5173}"
 browser_e2e_grep="${BROWSER_E2E_GREP:-@identity-lifecycle}"
+local_ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-}"
 
 is_local_url() {
   node --input-type=module - "$1" <<'NODE'
@@ -22,7 +23,16 @@ if ! is_local_url "$base_url"; then
   exit 2
 fi
 
-if ! curl --fail --silent --show-error --max-time 5 "$base_url/login" >/dev/null; then
+curl_args=(--fail --silent --show-error --max-time 5)
+if [[ -n "$local_ca_file" ]]; then
+  if [[ ! -f "$local_ca_file" ]]; then
+    echo "[browser-e2e] PLAYWRIGHT_LOCAL_CA_FILE does not exist: $local_ca_file" >&2
+    exit 2
+  fi
+  curl_args+=(--cacert "$local_ca_file")
+fi
+
+if ! curl "${curl_args[@]}" "$base_url/login" >/dev/null; then
   echo "[browser-e2e] Frontend is not reachable at $base_url/login. Start the local frontend or set PLAYWRIGHT_BASE_URL to its local URL." >&2
   exit 2
 fi
