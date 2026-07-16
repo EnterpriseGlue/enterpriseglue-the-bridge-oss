@@ -2271,6 +2271,8 @@ The retained legacy platform-role SSO mapping create/update contract is now like
 
 The reusable SSO mapping hooks and the dedicated legacy mappings page now use those same write inputs and the shared claim-test response. The Access Control and dedicated forms both omit a blank provider id before mutation, preserving all-provider rows without sending a write-time `null` that the strict route contract does not accept.
 
+The retained legacy engine-assignment and group mapping routes now share their exact create/update validators with OpenAPI and Platform Admin hooks. An all-provider legacy row still uses an explicit `null` provider id, while blank provider values are rejected at the shared request boundary; update responses use the common success contract.
+
 The provider-neutral Identity Mappings form now consumes the canonical mapping write, provision-with-access, claim-preview, and stored-snapshot-preview request/response contracts rather than redeclaring payloads or result fields. Its in-flow group creation also relies on the existing shared group model for the returned identifier.
 
 Common authorization create, assignment, update, and legacy-target-sync responses now use bounded shared mutation contracts in both OpenAPI and Platform Admin hooks, removing repeated inline `{ id }`, `{ success: true }`, warning, and sync-count response shapes. The same hooks now consume their shared role-assignment, group, membership, and Engine Set write inputs instead of reconstructing equivalent local payloads.

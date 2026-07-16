@@ -96,14 +96,18 @@ import type {
   ServiceAccount as SharedServiceAccount,
   ServiceAccountWithToken as SharedServiceAccountWithToken,
   SsoAssignmentMapping as SharedSsoAssignmentMapping,
+  SsoAssignmentMappingInsert as SharedSsoAssignmentMappingInsert,
   SsoAssignmentMappingTestResponse as SharedSsoAssignmentMappingTestResponse,
+  SsoAssignmentMappingUpdate as SharedSsoAssignmentMappingUpdate,
   SsoClaimOperator as SharedSsoClaimOperator,
   SsoClaimsMapping as SharedSsoClaimsMapping,
   SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
   SsoEngineAccessSnapshotStatus as SharedSsoEngineAccessSnapshotStatus,
   SsoEngineAccessSnapshotQuery as SharedSsoEngineAccessSnapshotQuery,
   SsoGroupMapping as SharedSsoGroupMapping,
+  SsoGroupMappingInsert as SharedSsoGroupMappingInsert,
   SsoGroupMappingTestResponse as SharedSsoGroupMappingTestResponse,
+  SsoGroupMappingUpdate as SharedSsoGroupMappingUpdate,
   SsoMappingTestRequest as SharedSsoMappingTestRequest,
   SsoPlatformMappingTestResponse as SharedSsoPlatformMappingTestResponse,
   SsoSyncDiagnosticsRunRequest as SharedSsoSyncDiagnosticsRunRequest,
@@ -237,8 +241,12 @@ export type DeploymentEligibilityResult = SharedDeploymentEligibilityEvaluateRes
 
 /** UI-only acknowledgement retained while legacy mapping forms remain supported. */
 export type SsoAssignmentMapping = SharedSsoAssignmentMapping & { riskAcknowledged?: boolean };
+export type SsoAssignmentMappingInsert = SharedSsoAssignmentMappingInsert;
+export type SsoAssignmentMappingUpdate = SharedSsoAssignmentMappingUpdate;
 /** UI-only acknowledgement retained while legacy mapping forms remain supported. */
 export type SsoGroupMapping = SharedSsoGroupMapping & { riskAcknowledged?: boolean };
+export type SsoGroupMappingInsert = SharedSsoGroupMappingInsert;
+export type SsoGroupMappingUpdate = SharedSsoGroupMappingUpdate;
 export type SsoMappingTestRequest = SharedSsoMappingTestRequest;
 export type SsoPlatformMappingTestResponse = SharedSsoPlatformMappingTestResponse;
 export type SsoAssignmentMappingTestResponse = SharedSsoAssignmentMappingTestResponse;
@@ -958,7 +966,7 @@ export function useUpdateSsoMapping() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string } & LegacySsoPlatformMappingUpdateRequest) =>
-      apiClient.put<{ success: true }>(`/api/authz/sso-mappings/${id}`, data),
+      apiClient.put<AuthzMutationSuccessResponse>(`/api/authz/sso-mappings/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoMappings }),
   });
 }
@@ -991,8 +999,8 @@ export function useSsoAssignmentMappings() {
 export function useCreateSsoAssignmentMapping() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Omit<SsoAssignmentMapping, 'id' | 'targetScope' | 'createdAt' | 'updatedAt'>) =>
-      apiClient.post<{ id: string }>('/api/authz/sso-assignment-mappings', data),
+    mutationFn: (data: SsoAssignmentMappingInsert) =>
+      apiClient.post<AuthzCreatedIdResponse>('/api/authz/sso-assignment-mappings', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoAssignmentMappings }),
   });
 }
@@ -1000,8 +1008,8 @@ export function useCreateSsoAssignmentMapping() {
 export function useUpdateSsoAssignmentMapping() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: Partial<SsoAssignmentMapping> & { id: string }) =>
-      apiClient.put<void>(`/api/authz/sso-assignment-mappings/${id}`, data),
+    mutationFn: ({ id, ...data }: SsoAssignmentMappingUpdate & { id: string }) =>
+      apiClient.put<AuthzMutationSuccessResponse>(`/api/authz/sso-assignment-mappings/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoAssignmentMappings }),
   });
 }
@@ -1153,8 +1161,8 @@ export function useLegacyMappingRetirementReadiness(options: { enabled?: boolean
 export function useCreateSsoGroupMapping() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Omit<SsoGroupMapping, 'id' | 'targetGroupKey' | 'targetGroupName' | 'createdAt' | 'updatedAt'>) =>
-      apiClient.post<{ id: string }>('/api/authz/sso-group-mappings', data),
+    mutationFn: (data: SsoGroupMappingInsert) =>
+      apiClient.post<AuthzCreatedIdResponse>('/api/authz/sso-group-mappings', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoGroupMappings }),
   });
 }
@@ -1162,8 +1170,8 @@ export function useCreateSsoGroupMapping() {
 export function useUpdateSsoGroupMapping() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: Partial<SsoGroupMapping> & { id: string }) =>
-      apiClient.put<void>(`/api/authz/sso-group-mappings/${id}`, data),
+    mutationFn: ({ id, ...data }: SsoGroupMappingUpdate & { id: string }) =>
+      apiClient.put<AuthzMutationSuccessResponse>(`/api/authz/sso-group-mappings/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoGroupMappings }),
   });
 }

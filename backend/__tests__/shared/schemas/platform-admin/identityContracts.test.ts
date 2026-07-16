@@ -39,7 +39,11 @@ import {
   ProjectEngineTargetSyncLegacyResponseSchema,
   RoleAssignmentCreateResponseSchema,
   SsoAssignmentMappingTestResponseSchema,
+  SsoAssignmentMappingInsertSchema,
+  SsoAssignmentMappingUpdateSchema,
   SsoGroupMappingTestResponseSchema,
+  SsoGroupMappingInsertSchema,
+  SsoGroupMappingUpdateSchema,
   SamlAuthenticationStatusSchema,
   SsoMappingTestRequestSchema,
   SsoPlatformMappingTestResponseSchema,
@@ -215,6 +219,18 @@ describe('provider-neutral identity shared contracts', () => {
       }],
       memberships: [{ groupId: 'group-1', mappingId: 'mapping-1' }],
     }).memberships[0]?.groupId).toBe('group-1');
+  });
+
+  it('keeps retained assignment and group mapping writes strict and provider-compatible', () => {
+    expect(SsoAssignmentMappingInsertSchema.parse({
+      providerId: null, claimType: 'group', claimKey: 'groups', targetSelectorType: 'all_engines', targetRoleId: 'system.engine.operator',
+    }).claimValue).toBe('');
+    expect(SsoAssignmentMappingUpdateSchema.parse({ targetSelectorType: 'engine_label', targetLabelKey: 'environment', targetLabelValue: 'prod' }).targetSelectorType).toBe('engine_label');
+    expect(SsoGroupMappingInsertSchema.parse({
+      providerId: null, claimType: 'group', claimKey: 'groups', targetGroupId: 'group-1',
+    }).targetGroupId).toBe('group-1');
+    expect(SsoGroupMappingUpdateSchema.parse({ priority: 10 }).priority).toBe(10);
+    expect(() => SsoGroupMappingInsertSchema.parse({ providerId: '', claimType: 'group', claimKey: 'groups', targetGroupId: 'group-1' })).toThrow();
   });
 
   it('shares authorization check contracts without trusting caller identity or tenancy', () => {

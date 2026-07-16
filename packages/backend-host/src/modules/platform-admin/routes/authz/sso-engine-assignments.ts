@@ -12,22 +12,13 @@ import {
   LegacyMappingCoverageVerifyRequestSchema,
   LegacyMappingRetirementRequestSchema,
   LegacySsoMappingMigrationRequestSchema,
+  SsoAssignmentMappingInsertSchema,
+  SsoAssignmentMappingUpdateSchema,
   SsoMappingTestRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
 const engineIdParamSchema = z.object({ engineId: z.string().min(1) });
-const mappingSchema = z.object({
-  providerId: z.string().min(1).nullable().optional(), claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string().min(1), claimValue: z.string().optional().default(''),
-  claimOperator: z.enum(['equals', 'not_equals', 'contains', 'not_contains', 'contains_any', 'not_contains_any', 'contains_all', 'not_contains_all', 'matches_regex', 'not_matches_regex', 'exists', 'not_exists']).nullable().optional(),
-  targetSelectorType: z.enum(['engine_id', 'all_engines', 'external_engine_id', 'engine_label']),
-  targetEngineId: z.string().min(1).nullable().optional(), targetExternalEngineId: z.string().min(1).nullable().optional(),
-  targetLabelKey: z.string().min(1).nullable().optional(), targetLabelValue: z.string().min(1).nullable().optional(),
-  targetRoleId: z.string().min(1), syncMode: z.enum(['authoritative', 'additive']).optional(), priority: z.number().int().optional(),
-  isActive: z.boolean().optional(), riskAcknowledged: z.boolean().optional(),
-});
-const mappingUpdateSchema = mappingSchema.partial();
 const snapshotQuerySchema = z.object({
   providerId: z.string().min(1).optional(), mappingId: z.string().min(1).optional(), principalType: z.string().min(1).optional(),
   principalId: z.string().min(1).optional(), engineId: z.string().min(1).optional(),
@@ -48,7 +39,7 @@ export function registerSsoEngineAssignmentRoutes(router: Router, { requirePlatf
   router.post('/api/authz/legacy-mapping-coverage/:id/verify', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateParams(idParamSchema), validateBody(LegacyMappingCoverageVerifyRequestSchema), asyncHandler(async (req, res) => { await legacyMappingCoverageService.verifyReplacement({ tenantId: req.tenant?.tenantId || null, legacyMappingId: String(req.params.id), actorId: req.user!.userId, ...req.body }); res.status(204).send(); }));
   router.post('/api/authz/legacy-mapping-retirement/disable', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateBody(LegacyMappingRetirementRequestSchema), asyncHandler(async (req, res) => { res.json(await legacyMappingCoverageService.retireLegacyMappings(req.tenant?.tenantId || null, req.user!.userId)); }));
   router.post('/api/authz/legacy-mapping-retirement/disable-global', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateBody(LegacyGlobalMappingRetirementRequestSchema), asyncHandler(async (req, res) => { res.json(await legacyMappingCoverageService.retireLegacyMappings(null, req.user!.userId)); }));
-  router.post('/api/authz/sso-assignment-mappings', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateBody(mappingSchema), asyncHandler(async (req, res) => {
+  router.post('/api/authz/sso-assignment-mappings', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateBody(SsoAssignmentMappingInsertSchema), asyncHandler(async (req, res) => {
     try { res.status(201).json(await ssoAssignmentMappingService.createMapping({ ...req.body, tenantId: req.tenant?.tenantId || null, actorUserId: req.user!.userId })); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Create SSO assignment mapping error:', error); throw Errors.badRequest(error.message || 'Failed to create SSO assignment mapping'); }
   }));
@@ -57,7 +48,7 @@ export function registerSsoEngineAssignmentRoutes(router: Router, { requirePlatf
     await logAudit({ action: 'authz.sso_engine_assignment_mapping.provider_neutral_migration', userId: req.user!.userId, resourceType: 'sso_assignment_mapping', resourceId: result.legacyMappingId, details: { providerKey: result.providerKey, identityMappingId: result.identityMapping.id, assignmentId: result.assignment.id, created: result.created } });
     res.status(result.created ? 201 : 200).json(result);
   }));
-  router.put('/api/authz/sso-assignment-mappings/:id', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateParams(idParamSchema), validateBody(mappingUpdateSchema), asyncHandler(async (req, res) => {
+  router.put('/api/authz/sso-assignment-mappings/:id', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateParams(idParamSchema), validateBody(SsoAssignmentMappingUpdateSchema), asyncHandler(async (req, res) => {
     try { await ssoAssignmentMappingService.updateMapping(String(req.params.id), { ...req.body, tenantId: req.tenant?.tenantId || null, actorUserId: req.user!.userId }); res.json({ success: true }); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Update SSO assignment mapping error:', error); throw Errors.badRequest(error.message || 'Failed to update SSO assignment mapping'); }
   }));

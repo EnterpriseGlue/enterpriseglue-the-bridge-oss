@@ -1636,7 +1636,7 @@ export const SsoAssignmentMappingSchema = z.object({
 });
 
 export const SsoAssignmentMappingInsertSchema = z.object({
-  providerId: z.string().nullable().optional(),
+  providerId: z.string().min(1).nullable().optional(),
   claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
   claimKey: z.string().min(1),
   claimValue: z.string().optional().default(''),
@@ -1652,6 +1652,7 @@ export const SsoAssignmentMappingInsertSchema = z.object({
   isActive: z.boolean().optional(),
   riskAcknowledged: z.boolean().optional(),
 });
+export const SsoAssignmentMappingUpdateSchema = SsoAssignmentMappingInsertSchema.partial();
 
 export const SsoEngineAccessSnapshotStatusSchema = z.enum([
   'active',
@@ -1775,7 +1776,7 @@ export const SsoGroupMappingSchema = z.object({
 });
 
 export const SsoGroupMappingInsertSchema = z.object({
-  providerId: z.string().nullable().optional(),
+  providerId: z.string().min(1).nullable().optional(),
   claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
   claimKey: z.string().min(1),
   claimValue: z.string().optional().default(''),
@@ -1786,6 +1787,7 @@ export const SsoGroupMappingInsertSchema = z.object({
   isActive: z.boolean().optional(),
   riskAcknowledged: z.boolean().optional(),
 });
+export const SsoGroupMappingUpdateSchema = SsoGroupMappingInsertSchema.partial();
 
 /** Shared legacy SSO mapping preview input retained while migration remains evidence-gated. */
 export const SsoMappingTestRequestSchema = z.object({
@@ -1940,6 +1942,8 @@ export type RuntimeResource = z.infer<typeof RuntimeResourceSchema>;
 export type RuntimeResourceSet = z.infer<typeof RuntimeResourceSetSchema>;
 export type RuntimeResourceSetMaterializationResult = z.infer<typeof RuntimeResourceSetMaterializationResultSchema>;
 export type SsoAssignmentMapping = z.infer<typeof SsoAssignmentMappingSchema>;
+export type SsoAssignmentMappingInsert = z.input<typeof SsoAssignmentMappingInsertSchema>;
+export type SsoAssignmentMappingUpdate = z.input<typeof SsoAssignmentMappingUpdateSchema>;
 export type SsoMappingTestRequest = z.input<typeof SsoMappingTestRequestSchema>;
 export type SsoPlatformMappingTestResponse = z.infer<typeof SsoPlatformMappingTestResponseSchema>;
 export type SsoAssignmentMappingTestResponse = z.infer<typeof SsoAssignmentMappingTestResponseSchema>;
@@ -1957,6 +1961,8 @@ export type EngineAccessTransitionCleanupApplyResponse = z.infer<typeof EngineAc
 export type BridgeDecisionRequest = z.infer<typeof BridgeDecisionRequestSchema>;
 export type BridgeDecisionResponse = z.infer<typeof BridgeDecisionResponseSchema>;
 export type SsoGroupMapping = z.infer<typeof SsoGroupMappingSchema>;
+export type SsoGroupMappingInsert = z.input<typeof SsoGroupMappingInsertSchema>;
+export type SsoGroupMappingUpdate = z.input<typeof SsoGroupMappingUpdateSchema>;
 export type SsoGroupMappingTestResponse = z.infer<typeof SsoGroupMappingTestResponseSchema>;
 export type AuthzResourceType = z.infer<typeof AuthzResourceTypeSchema>;
 export type AuthzPrincipalType = z.infer<typeof AuthzPrincipalTypeSchema>;
