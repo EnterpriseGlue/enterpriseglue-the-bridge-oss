@@ -230,6 +230,38 @@ describe('EngineMembersModal', () => {
     expect(screen.queryByText('Change role to Deployer')).toBeNull();
   });
 
+  it('does not turn a delegate display label into a member mutation capability', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url.includes('/members')) {
+        return {
+          members: [
+            {
+              id: 'member-delegate',
+              engineId: 'engine-1',
+              userId: 'user-delegate',
+              role: 'delegate',
+              grantedAt: Date.now(),
+              user: { id: 'user-delegate', email: 'delegate@example.com', firstName: 'Delegate', lastName: 'User' },
+            },
+          ],
+          pendingInvites: [],
+        };
+      }
+
+      if (url === '/api/authz/roles' || url === '/api/authz/role-assignments' || url.includes('/access-requests')) {
+        return [];
+      }
+
+      return [];
+    });
+
+    renderModal();
+
+    expect(await screen.findByText('Delegate User')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^options$/i })).toBeNull();
+    expect(screen.queryByText('Remove delegate')).toBeNull();
+  });
+
   it('assigns scoped group access through the role assignments API', async () => {
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
       if (url.includes('/members')) {
