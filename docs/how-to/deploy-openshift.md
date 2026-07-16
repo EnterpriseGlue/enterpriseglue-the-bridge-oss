@@ -152,6 +152,12 @@ materialization, and bounded identity replay complete. Diagnose a failed rollout
 with the sanitized `/ready` response, backend log, metrics, and apply-run receipt;
 none contains resolved secret values.
 
+The backend Deployment uses `maxUnavailable: 0` and a five-minute progress
+deadline. On either rollout failure, the deploy script exits without automatically
+rolling back or deleting a ReplicaSet, leaving the previously ready ReplicaSet
+available. Inspect the failure, restore the prior reviewed image or configuration
+input, and rerun the deployment rather than changing live ReplicaSets manually.
+
 To roll back configuration, restore the previous reviewed bundle in
 `EG_CONFIG_BUNDLE_FILE` and rerun the deployment. The script computes a new
 annotation from that content and starts a normal rollout. Keep the previous

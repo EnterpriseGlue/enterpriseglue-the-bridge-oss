@@ -254,8 +254,14 @@ set_images_and_route() {
 }
 
 wait_for_rollout() {
-  oc -n "$OPENSHIFT_NAMESPACE" rollout status deployment/enterpriseglue-backend --timeout=300s
-  oc -n "$OPENSHIFT_NAMESPACE" rollout status deployment/enterpriseglue-frontend --timeout=300s
+  local deployment
+  for deployment in enterpriseglue-backend enterpriseglue-frontend; do
+    if ! oc -n "$OPENSHIFT_NAMESPACE" rollout status "deployment/$deployment" --timeout=300s; then
+      warn "$deployment did not reach readiness. The rolling strategy keeps the prior ready ReplicaSet available; no automatic rollback or ReplicaSet deletion was performed."
+      warn "Inspect the failing deployment and its sanitized readiness diagnostics, then restore the previous reviewed image/configuration input and rerun this command."
+      return 1
+    fi
+  done
 }
 
 verify_health() {
@@ -319,4 +325,6 @@ main() {
   log "Deployment complete"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
