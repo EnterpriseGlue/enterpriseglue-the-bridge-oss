@@ -1,0 +1,46 @@
+# LDAP Protocol Test Harness
+
+Use this opt-in harness when a change needs a real LDAP/LDAPS server boundary.
+It is not part of the ordinary unit, integration, browser, or deployment
+commands. OIDC and SAML use ephemeral in-process HTTPS fixtures; LDAP needs an
+actual directory service to exercise TLS, bind, search, and group semantics.
+
+The harness starts a temporary `osixia/openldap:1.5.0` directory on loopback
+with a random host port, a one-day local CA, random administrator and user
+passwords, and no persisted volume. It generates the following seed only:
+
+- `uid=alice,ou=people,dc=identity-mock,dc=test`;
+- `cn=operations,ou=groups,dc=identity-mock,dc=test` containing Alice.
+
+The image's documented configuration supports `LDAP_DOMAIN`,
+`LDAP_ADMIN_PASSWORD`, TLS material, and mapping LDAPS port 636; it is pinned
+to its published `1.5.0` release rather than using a floating tag. See the
+[image configuration reference](https://github.com/osixia/container-openldap).
+
+## Run an LDAP-aware command
+
+Run the maintained production-client test with:
+
+```bash
+pnpm run test:identity-ldap-container
+```
+
+To run another LDAP-aware command, pass it to the harness directly. The
+harness exports connection inputs only to that command and removes the
+container, volume, temporary CA, and credentials afterwards. A test must use
+the exported values rather than copying them into source:
+
+| Variable | Purpose |
+| --- | --- |
+| `EG_LDAP_TEST_URL` | Ephemeral `ldaps://localhost:<port>` endpoint. |
+| `EG_LDAP_TEST_BIND_DN` | Temporary directory administrator DN. |
+| `EG_LDAP_TEST_ADMIN_PASSWORD` | Temporary bind password. |
+| `EG_LDAP_TEST_USER_DN` | Seeded Alice DN. |
+| `EG_LDAP_TEST_USER_PASSWORD` | Seeded Alice password. |
+| `EG_LDAP_TEST_CA_CERT_PATH` / `NODE_EXTRA_CA_CERTS` | Generated CA for strict TLS verification. |
+
+Do not echo these values, store them in a ticket, add them to `.env`, or make
+them fixed Compose defaults. The script requires Docker and pulls the pinned
+image if it is not available locally. If Docker cannot start the fixture, the
+LDAP integration test is unavailable; ordinary authorization tests must still
+run without it.
