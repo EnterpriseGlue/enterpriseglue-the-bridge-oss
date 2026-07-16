@@ -73,6 +73,7 @@ export class MockOidcProvider {
   reset(): void {
     this.failureMode = 'none';
     this.tokenClaims = { sub: 'user-1', email: 'person@example.test', email_verified: true, groups: ['ops'], nonce: 'nonce-1' };
+    this.signingMaterial = createSigningMaterial(`identity-mock-key-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   }
 
   issueIdToken(
@@ -261,6 +262,16 @@ export class MockSamlIdentityProvider {
     this.signingMaterial = createSamlSigningMaterial();
   }
 
+  reset(): void {
+    this.signingMaterial = createSamlSigningMaterial();
+    this.sequence = 0;
+    this.attributes = {
+      nameID: 'person@example.test',
+      'http://schemas.microsoft.com/ws/2008/06/identity/claims/groups': ['payments', 'operations'],
+      role: ['operator'],
+    };
+  }
+
   signedResponse(): string {
     const material = this.signingMaterial;
     const now = new Date();
@@ -289,12 +300,20 @@ export class MockLdapDirectory {
   readonly url = 'ldaps://directory-mock.example.test:636';
   readonly bindDn = 'cn=service,dc=example,dc=test';
   /** Per-directory fixture credentials; never reusable outside this test instance. */
-  readonly bindPassword = randomBytes(24).toString('base64url');
-  readonly defaultUserPassword = randomBytes(24).toString('base64url');
+  bindPassword = '';
+  defaultUserPassword = '';
   private readonly users = new Map<string, { password: string; subjectId: string; memberOf: string[] }>();
   private failureMode: 'none' | 'tls_failure' | 'timeout' | 'search_failure' | 'malformed' = 'none';
 
   constructor() {
+    this.reset();
+  }
+
+  reset(): void {
+    this.bindPassword = randomBytes(24).toString('base64url');
+    this.defaultUserPassword = randomBytes(24).toString('base64url');
+    this.failureMode = 'none';
+    this.users.clear();
     this.setUser('person@example.test', {
       password: this.defaultUserPassword, subjectId: 'uid=person,ou=users,dc=example,dc=test',
       memberOf: ['cn=operations,ou=groups,dc=example,dc=test'],

@@ -2092,7 +2092,7 @@ interface IdentityMockController {
 ```
 
 - [ ] ⬜ Bind mock services to loopback/ephemeral ports and expose control methods only inside the test process or isolated test network.
-- [ ] ⬜ Reset all subjects, entitlements, keys, clocks, replay caches, and failure modes between tests.
+- [ ] ⬜ Reset all subjects, entitlements, keys, clocks, replay caches, and failure modes between tests. OIDC reset regenerates signing material and restores claims/failure state; SAML reset regenerates signing material and restores attributes; LDAP reset regenerates credentials and restores the deterministic directory entries. Replay-cache and clock fixtures remain protocol-specific work where those protocols expose those concepts.
 - [x] ✅ Generate signing keys/certificates per test-provider instance and never commit reusable private keys or bind credentials. The test-only SAML fixture creates one-day self-signed material in the process temporary directory and removes it before returning; the LDAP fixture generates bind and user credentials for each directory instance.
 
 #### Mock OIDC Provider

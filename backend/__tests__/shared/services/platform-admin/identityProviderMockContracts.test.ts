@@ -32,6 +32,33 @@ describe('identity mock provider contracts', () => {
     ]));
   });
 
+  it('resets mutable OIDC, SAML, and LDAP fixture state between tests', async () => {
+    const oidc = new MockOidcProvider();
+    oidc.setFailureMode('unavailable');
+    oidc.reset();
+    vi.stubGlobal('fetch', oidc.fetch.bind(oidc));
+    await expect(genericOidcService.exchangeCode(oidc.configuration(), {
+      code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
+    })).resolves.toMatchObject({ sub: 'user-1', groups: ['ops'] });
+
+    const saml = new MockSamlIdentityProvider();
+    saml.setAttributes({ nameID: 'changed@example.test', role: ['changed'] });
+    saml.reset();
+    expect(saml.assertion()).toMatchObject({ nameID: 'person@example.test', role: ['operator'] });
+
+    const directory = new MockLdapDirectory();
+    const previousBindPassword = directory.bindPassword;
+    const removedUserPassword = directory.defaultUserPassword;
+    directory.setUser('changed@example.test', {
+      password: removedUserPassword, subjectId: 'uid=changed,ou=users,dc=example,dc=test', memberOf: [],
+    });
+    directory.setFailureMode('timeout');
+    directory.reset();
+    expect(directory.bindPassword).not.toBe(previousBindPassword);
+    expect(() => directory.bind('changed@example.test', removedUserPassword)).toThrow('LDAP invalid credentials');
+    expect(directory.bind('person@example.test', directory.defaultUserPassword)).toMatchObject({ subjectId: expect.stringContaining('uid=person') });
+  });
+
   it('accepts a token signed with rotated provider key material', async () => {
     const provider = new MockOidcProvider();
     provider.rotateSigningMaterial();
