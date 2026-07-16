@@ -36,6 +36,7 @@ export default function IdentityMappingsSettingsTab() {
   const [editing, setEditing] = useState<Mapping | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [open, setOpen] = useState(false);
+  const [creationStep, setCreationStep] = useState(1);
   const [createGroupInFlow, setCreateGroupInFlow] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupKey, setNewGroupKey] = useState('');
@@ -71,6 +72,13 @@ export default function IdentityMappingsSettingsTab() {
   const provisionRuntimeResourceSetsQuery = useRuntimeResourceSets(provisionRuntimeEngineId, { enabled: rolesManage.allowed && provisionAccessInFlow && provisionScopeType === 'engine_runtime_resource_set' });
   const provisionRuntimeResources = provisionRuntimeResourcesQuery.data || [];
   const provisionRuntimeResourceSets = (provisionRuntimeResourceSetsQuery.data || []).filter((set) => !set.isArchived);
+  const creationAccessValid = Boolean(
+    (createGroupInFlow ? groupsManage.allowed && newGroupName.trim() && newGroupKey.trim() : form.targetGroupKey)
+    && (!provisionAccessInFlow || (groupsManage.allowed && rolesManage.allowed && provisionRoleId && provisionResourceId)),
+  );
+  const creationStepValid = creationStep === 1
+    ? Boolean(form.providerKey && (form.matchOperator === 'exists' || form.externalId.trim()))
+    : creationAccessValid;
 
   const save = useMutation({
     mutationFn: async (value: FormState) => {
@@ -133,8 +141,8 @@ export default function IdentityMappingsSettingsTab() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['legacy-mapping-coverage'] }); queryClient.invalidateQueries({ queryKey: ['legacy-mapping-retirement-readiness'] }); queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityEntitlementMappings }); setRetirementOpen(false); setRetirementConfirmation(''); },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to retire legacy mappings').message),
   });
-  const startCreate = () => { setEditing(null); setForm(emptyForm()); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionScopeType('engine'); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
-  const startEdit = (mapping: Mapping) => { if (mapping.entitlementType === 'scope') return; setEditing(mapping); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setForm({ ...emptyForm(), providerKey: mapping.providerKey, targetGroupKey: mapping.targetGroupKey, entitlementType: mapping.entitlementType, externalId: mapping.externalId || '', matchOperator: mapping.matchOperator, syncMode: mapping.syncMode }); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
+  const startCreate = () => { setEditing(null); setCreationStep(1); setForm(emptyForm()); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionScopeType('engine'); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
+  const startEdit = (mapping: Mapping) => { if (mapping.entitlementType === 'scope') return; setEditing(mapping); setCreationStep(1); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setForm({ ...emptyForm(), providerKey: mapping.providerKey, targetGroupKey: mapping.targetGroupKey, entitlementType: mapping.entitlementType, externalId: mapping.externalId || '', matchOperator: mapping.matchOperator, syncMode: mapping.syncMode }); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
 
   if (!read.allowed) return <UnauthorizedEmptyState title="Identity mappings unavailable" reason={read.reason || 'Missing identity mapping read permission.'} />;
   if (mappingsQuery.isLoading) return <SkeletonText paragraph lineCount={5} />;
@@ -169,8 +177,9 @@ export default function IdentityMappingsSettingsTab() {
       <p style={{ marginTop: 0 }}>This disables eligible legacy platform, group, and engine SSO mappings. It does not delete them; rollback is available by re-enabling each mapping through its existing Active control.</p>
       <TextInput id="legacy-mapping-retirement-confirmation" labelText={`Type ${includesGlobalPlatformRoleMappings ? 'RETIRE_GLOBAL_LEGACY_MAPPINGS' : 'RETIRE_LEGACY_MAPPINGS'} to continue`} value={retirementConfirmation} onChange={(event) => setRetirementConfirmation(event.target.value)} />
     </Modal>
-    <Modal open={open} modalHeading={editing ? 'Edit identity mapping' : 'Add identity mapping'} primaryButtonText={editing ? 'Save' : 'Add'} secondaryButtonText="Cancel" primaryButtonDisabled={!manage.allowed || save.isPending || (createGroupInFlow && (!groupsManage.allowed || !newGroupName.trim() || !newGroupKey.trim())) || (provisionAccessInFlow && (!groupsManage.allowed || !rolesManage.allowed || !provisionRoleId || !provisionResourceId))} onRequestClose={() => setOpen(false)} onRequestSubmit={() => save.mutate(form)}>
+    <Modal open={open} modalHeading={editing ? 'Edit identity mapping' : 'Add identity mapping'} primaryButtonText={editing ? 'Save' : creationStep < 3 ? 'Continue' : 'Create mapping'} secondaryButtonText={!editing && creationStep > 1 ? 'Back' : 'Cancel'} primaryButtonDisabled={Boolean(!manage.allowed || save.isPending || (!editing && !creationStepValid) || (editing && ((createGroupInFlow && (!groupsManage.allowed || !newGroupName.trim() || !newGroupKey.trim())) || (provisionAccessInFlow && (!groupsManage.allowed || !rolesManage.allowed || !provisionRoleId || !provisionResourceId)))))} onRequestClose={() => setOpen(false)} onSecondarySubmit={() => { if (!editing && creationStep > 1) setCreationStep((step) => step - 1); else setOpen(false); }} onRequestSubmit={() => { if (!editing && creationStep < 3) { setCreationStep((step) => step + 1); return; } save.mutate(form); }}>
       {error && <InlineNotification kind="error" title="Mapping not saved" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+      {!editing && <InlineNotification kind="info" title={`Step ${creationStep} of 3`} subtitle={creationStep === 1 ? 'Choose the provider entitlement that identifies members.' : creationStep === 2 ? 'Choose the EnterpriseGlue group and optional scoped engine access.' : 'Review the mapping, group, and access choices before creating them atomically.'} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       <ComboBox id="identity-mapping-provider" titleText="Identity provider" items={providers} itemToString={(item) => item?.key || ''} selectedItem={providers.find((provider) => provider.key === form.providerKey) || null} onChange={({ selectedItem }) => set('providerKey', selectedItem?.key || '')} />
       {createGroupInFlow ? <><TextInput id="identity-mapping-new-group-name" labelText="New EnterpriseGlue group name" value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} /><TextInput id="identity-mapping-new-group-key" labelText="New group key" helperText="Stable lowercase key used by JSON configuration and automation." value={newGroupKey} onChange={(event) => setNewGroupKey(event.target.value)} /><Button kind="tertiary" size="sm" onClick={() => setCreateGroupInFlow(false)}>Use an existing group</Button></> : <><ComboBox id="identity-mapping-group" titleText="EnterpriseGlue group" items={groups} itemToString={(item) => item ? `${item.name} (${item.key})` : ''} selectedItem={groups.find((group) => group.key === form.targetGroupKey) || null} onChange={({ selectedItem }) => set('targetGroupKey', selectedItem?.key || '')} />{!editing && <Button kind="tertiary" size="sm" disabled={!groupsManage.allowed} title={groupsManage.allowed ? undefined : groupsManage.reason || 'Missing group management permission'} onClick={() => setCreateGroupInFlow(true)}>Create a new group</Button>}</>}
       <Select id="identity-mapping-type" labelText="External entitlement type" value={form.entitlementType} onChange={(event) => set('entitlementType', event.target.value as EntitlementType)}><SelectItem value="group" text="Group" /><SelectItem value="role" text="Role" /><SelectItem value="attribute" text="Attribute" /><SelectItem value="authenticated" text="Authenticated identity" /></Select>

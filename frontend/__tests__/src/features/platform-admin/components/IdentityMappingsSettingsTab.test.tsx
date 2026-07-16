@@ -53,6 +53,18 @@ describe('IdentityMappingsSettingsTab', () => {
     expect(screen.getByRole('button', { name: /Add mapping/i })).toBeEnabled();
   });
 
+  it('starts new mapping creation as a guarded three-step engine-access wizard', async () => {
+    renderTab();
+    await screen.findByText('group.engine-operators');
+
+    fireEvent.click(screen.getByRole('button', { name: /Add mapping/i }));
+
+    expect(await screen.findByText('Step 1 of 3')).toBeInTheDocument();
+    expect(screen.getByText('Choose the provider entitlement that identifies members.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Cancel' }).length).toBeGreaterThan(0);
+  });
+
   it('shows config-managed mappings but disables UI mutation actions', async () => {
     server.use(http.get('/api/identity/mappings', () => HttpResponse.json([{ ...identityMappingFixture, sourceRef: 'config:identity-mappings/operations' }])));
     renderTab();
