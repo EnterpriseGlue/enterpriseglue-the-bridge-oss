@@ -7,6 +7,8 @@ import type {
   AuthzPrincipalType as SharedAuthzPrincipalType,
   BridgeDecisionRequest as SharedBridgeDecisionRequest,
   BridgeDecisionResponse as SharedBridgeDecisionResponse,
+  EngineAccessTransitionCleanupApplyResponse as SharedEngineAccessTransitionCleanupApplyResponse,
+  EngineAccessTransitionCleanupPreview as SharedEngineAccessTransitionCleanupPreview,
   AuthzGroup as SharedAuthzGroup,
   AuthzGroupMembership as SharedAuthzGroupMembership,
   AuthzGroupSource as SharedAuthzGroupSource,
@@ -59,6 +61,8 @@ import type {
   SsoAssignmentMapping as SharedSsoAssignmentMapping,
   SsoClaimOperator as SharedSsoClaimOperator,
   SsoClaimsMapping as SharedSsoClaimsMapping,
+  SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
+  SsoEngineAccessSnapshotStatus as SharedSsoEngineAccessSnapshotStatus,
   SsoGroupMapping as SharedSsoGroupMapping,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { EngineMetadataReconciliationResult as SharedEngineMetadataReconciliationResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
@@ -76,6 +80,8 @@ import type {
 import type {
   IdentityProviderAuthenticationMode,
   IdentityProviderType as IdentityProviderProtocol,
+  IdentitySyncEvent as SharedIdentitySyncEvent,
+  IdentitySyncRun as SharedIdentitySyncRun,
 } from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 import { apiClient } from '../../../shared/api/client';
 
@@ -276,42 +282,8 @@ export interface AuthzAuditEntry {
   timestamp: number;
 }
 
-export interface SsoSyncRun {
-  id: string;
-  tenantId: string | null;
-  providerId: string | null;
-  userId: string | null;
-  trigger: 'login' | 'scheduled' | 'manual' | 'mapping_change' | 'engine_change';
-  status: 'running' | 'success' | 'failed';
-  startedAt: number;
-  completedAt: number | null;
-  groupMembershipsCreated: number;
-  groupMembershipsUpdated: number;
-  groupMembershipsRemoved: number;
-  assignmentsCreated: number;
-  assignmentsUpdated: number;
-  assignmentsRemoved: number;
-  errorCode: string | null;
-  errorMessage: string | null;
-  details: string;
-}
-
-export interface SsoSyncEvent {
-  id: string;
-  tenantId: string | null;
-  providerId: string | null;
-  runId: string;
-  severity: 'info' | 'warning' | 'error';
-  type: string;
-  userId: string | null;
-  mappingType: string | null;
-  mappingId: string | null;
-  resourceType: string | null;
-  resourceId: string | null;
-  message: string;
-  details: string;
-  createdAt: number;
-}
+export type SsoSyncRun = SharedIdentitySyncRun;
+export type SsoSyncEvent = SharedIdentitySyncEvent;
 
 export interface SsoSyncRunParams {
   providerId?: string;
@@ -349,38 +321,8 @@ export interface SsoSyncDiagnosticsScanResult {
   cleanup?: Record<string, unknown>;
 }
 
-export type SsoEngineAccessSnapshotStatus =
-  | 'active'
-  | 'stale'
-  | 'removed_by_sso'
-  | 'removed_by_admin'
-  | 'mapping_disabled'
-  | 'provider_identity_missing'
-  | 'provider_group_missing'
-  | 'engine_no_longer_matches_selector';
-
-export interface SsoEngineAccessSnapshot {
-  id: string;
-  tenantId: string | null;
-  providerId: string | null;
-  mappingId: string;
-  principalType: string;
-  principalId: string;
-  engineId: string;
-  providerSubjectIds: string[];
-  providerGroupIds: string[];
-  providerAppRoleIds: string[];
-  currentRoleIds: string[];
-  previousRoleIds: string[];
-  status: SsoEngineAccessSnapshotStatus;
-  cleanupReason: string | null;
-  lastSeenAt: number;
-  lastSyncedAt: number;
-  removedAt: number | null;
-  details: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
-}
+export type SsoEngineAccessSnapshotStatus = SharedSsoEngineAccessSnapshotStatus;
+export type SsoEngineAccessSnapshot = SharedSsoEngineAccessSnapshot;
 
 export interface SsoEngineAccessSnapshotParams {
   providerId?: string;
@@ -405,18 +347,8 @@ export interface EngineAccessTransitionCleanupCandidate {
   recommendedAction: 'remove_manual_duplicate' | 'review_manual_conflict';
 }
 
-export interface EngineAccessTransitionCleanupPreview {
-  previewCorrelationId: string;
-  engineId: string;
-  candidates: EngineAccessTransitionCleanupCandidate[];
-}
-
-export interface EngineAccessTransitionCleanupApplyResult {
-  previewCorrelationId: string;
-  engineId: string;
-  removedAssignmentIds: string[];
-  removedCount: number;
-}
+export type EngineAccessTransitionCleanupPreview = SharedEngineAccessTransitionCleanupPreview;
+export type EngineAccessTransitionCleanupApplyResult = SharedEngineAccessTransitionCleanupApplyResponse;
 
 export type BridgeDecisionPayload = SharedBridgeDecisionRequest;
 export type BridgeDecisionResponse = SharedBridgeDecisionResponse;
