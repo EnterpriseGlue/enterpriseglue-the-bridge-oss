@@ -14,6 +14,14 @@ const bpmnRequestContext = vi.hoisted(() => ({
 
 vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
   verifyToken: vi.fn(),
+  normalizeUserJwtPayload: (payload: any) => {
+    const principalType = payload.principalType ?? 'user';
+    const principalId = payload.principalId ?? payload.userId;
+    if (principalType !== 'user' || !principalId || (payload.userId !== undefined && payload.userId !== principalId)) {
+      throw new Error('Invalid user principal');
+    }
+    return { ...payload, userId: principalId, principalType, principalId };
+  },
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -55,7 +63,7 @@ describe('auth middleware', () => {
       (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'access', platformRole: 'user', email: 'user@example.com' });
       (getDataSource as any).mockResolvedValue({
         getRepository: (entity: unknown) => {
-          if (entity === User) return { findOneBy: vi.fn().mockResolvedValue({ isActive: true, isEmailVerified: true }) };
+          if (entity === User) return { findOneBy: vi.fn().mockResolvedValue({ isActive: true, isEmailVerified: true, email: 'user@example.com' }) };
           throw new Error('Unexpected repository');
         },
       });
@@ -81,6 +89,19 @@ describe('auth middleware', () => {
 
       expect(req.user).toBeDefined();
       expect(next).toHaveBeenCalled();
+    });
+
+    it('accepts a new canonical-principal token without legacy user fields', async () => {
+      req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
+      (jwt.verifyToken as any).mockReturnValue({ principalType: 'user', principalId: 'user-1', type: 'access', authSessionVersion: 2 });
+      (getDataSource as any).mockResolvedValue({
+        getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', isActive: true, isEmailVerified: true, email: 'user@example.com', authSessionVersion: 2 }) }),
+      });
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(req.user).toMatchObject({ userId: 'user-1', principalType: 'user', principalId: 'user-1', email: 'user@example.com' });
+      expect(next).toHaveBeenCalledWith();
     });
 
     it('rejects an access token after its user session version advances', async () => {

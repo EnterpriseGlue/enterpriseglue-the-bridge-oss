@@ -38,14 +38,12 @@ const verifyInvitationSchema = z.object({
 
 function setOnboardingCookie(res: ExpressResponse, payload: {
   userId: string;
-  email: string;
   invitationId: string;
   tenantSlug: string;
   authSessionVersion?: number;
 }) {
   const onboardingToken = generateOnboardingToken({
     userId: payload.userId,
-    email: payload.email,
     invitationId: payload.invitationId,
     tenantSlug: payload.tenantSlug,
     authSessionVersion: payload.authSessionVersion,
@@ -178,7 +176,6 @@ router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerif
 
   setOnboardingCookie(res, {
     userId: user.id,
-    email: user.email,
     invitationId: verified.invitationId,
     tenantSlug: verified.tenantSlug,
     authSessionVersion: user.authSessionVersion,
@@ -216,7 +213,6 @@ router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLim
 
   setOnboardingCookie(res, {
     userId: user.id,
-    email: user.email,
     invitationId: verified.invitationId,
     tenantSlug: verified.tenantSlug,
     authSessionVersion: user.authSessionVersion,

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import bcrypt from 'bcryptjs';
-import { verifyToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { normalizeUserJwtPayload, verifyToken, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
@@ -26,16 +26,15 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   }
 
   // Verify refresh token
-  const payload = verifyToken(refreshToken);
+  let payload: UserJwtPayload;
+  try {
+    payload = normalizeUserJwtPayload(verifyToken(refreshToken));
+  } catch {
+    throw Errors.unauthorized('Invalid user principal');
+  }
 
   if (payload.type !== 'refresh') {
     throw Errors.unauthorized('Invalid token type');
-  }
-
-  const principalType = payload.principalType ?? 'user';
-  const principalId = payload.principalId ?? payload.userId;
-  if (principalType !== 'user' || principalId !== payload.userId) {
-    throw Errors.unauthorized('Invalid user principal');
   }
 
   const dataSource = await getDataSource();

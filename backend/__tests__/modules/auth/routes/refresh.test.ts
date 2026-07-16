@@ -19,7 +19,18 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@enterpriseglue/shared/utils/jwt.js');
+vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
+  verifyToken: vi.fn(),
+  generateAccessToken: vi.fn(),
+  normalizeUserJwtPayload: (payload: any) => {
+    const principalType = payload.principalType ?? 'user';
+    const principalId = payload.principalId ?? payload.userId;
+    if (principalType !== 'user' || !principalId || (payload.userId !== undefined && payload.userId !== principalId)) {
+      throw new Error('Invalid user principal');
+    }
+    return { ...payload, userId: principalId, principalType, principalId };
+  },
+}));
 
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
@@ -109,6 +120,23 @@ describe('POST /api/auth/refresh', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.expiresIn).toBe(3600);
+    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser);
+  });
+
+  it('refreshes a canonical-principal refresh token without legacy user fields', async () => {
+    const mockUser = { id: 'user-1', email: 'test@example.com', isActive: true, authSessionVersion: 2 };
+    const tokenHash = await bcrypt.hash(TEST_REFRESH_TOKEN, 10);
+    const userRepo = { findOneBy: vi.fn().mockResolvedValue(mockUser) };
+    const refreshTokenRepo = { find: vi.fn().mockResolvedValue([{ tokenHash }]) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === User ? userRepo : entity === RefreshToken ? refreshTokenRepo : (() => { throw new Error('Unexpected repository'); })(),
+    });
+    (jwt.verifyToken as any).mockReturnValue({ principalType: 'user', principalId: 'user-1', authSessionVersion: 2, type: 'refresh' });
+    (jwt.generateAccessToken as any).mockReturnValue(TEST_NEW_ACCESS_TOKEN);
+
+    const response = await request(app).post('/api/auth/refresh').send({ refreshToken: TEST_REFRESH_TOKEN });
+
+    expect(response.status).toBe(200);
     expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser);
   });
 

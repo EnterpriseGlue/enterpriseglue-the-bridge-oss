@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken, type JwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
+import { normalizeUserJwtPayload, verifyToken, type AuthenticatedUserJwtPayload, type JwtPayload, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 import { Errors, AppError } from './errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
@@ -16,8 +16,8 @@ import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/s
 declare global {
   namespace Express {
     interface Request {
-      user?: JwtPayload;
-      onboarding?: JwtPayload;
+      user?: AuthenticatedUserJwtPayload;
+      onboarding?: UserJwtPayload;
     }
   }
 }
@@ -76,15 +76,6 @@ function readOptionalAuthPayload(req: Request): JwtPayload | null {
  * Old sessions did not carry principal fields. Normalize them to the only
  * supported browser-session principal while rejecting a mismatched identity.
  */
-function normalizeUserPrincipal(payload: JwtPayload): JwtPayload {
-  const principalType = payload.principalType ?? 'user';
-  const principalId = payload.principalId ?? payload.userId;
-  if (principalType !== 'user' || principalId !== payload.userId) {
-    throw Errors.unauthorized('Invalid user principal');
-  }
-  return { ...payload, principalType, principalId };
-}
-
 async function runEnterprisePostAuthResolver(
   req: Request,
   context: EnterprisePostAuthContext
@@ -102,7 +93,7 @@ async function runEnterprisePostAuthResolver(
  */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    const payload = normalizeUserPrincipal(readRequiredAuthPayload(req));
+    const payload = normalizeUserJwtPayload(readRequiredAuthPayload(req));
 
     if (payload.type !== 'access') {
       throw Errors.unauthorized('Invalid token type. Use access token.');
@@ -121,7 +112,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     // Do not establish downstream request identity until the token's subject
     // has passed the active-account and session-revocation checks.
-    req.user = payload;
+    req.user = { ...payload, email: user.email };
     updateBpmnEngineRequestContext({ userId: payload.userId });
 
     const requestPath = req.path;
@@ -183,7 +174,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
 export async function requireOnboarding(req: Request, res: Response, next: NextFunction) {
   try {
     const token = typeof req.cookies?.onboardingToken === 'string' ? req.cookies.onboardingToken : '';
-    const payload = normalizeUserPrincipal(verifyToken(token));
+    const payload = normalizeUserJwtPayload(verifyToken(token));
 
     if (payload.type !== 'onboarding' || typeof payload.invitationId !== 'string' || payload.invitationId.trim().length === 0) {
       return next(Errors.unauthorized('Invalid onboarding token'));
@@ -219,14 +210,14 @@ export async function requireOnboarding(req: Request, res: Response, next: NextF
 export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
   try {
     const tokenPayload = readOptionalAuthPayload(req);
-    const payload = tokenPayload ? normalizeUserPrincipal(tokenPayload) : null;
+    const payload = tokenPayload ? normalizeUserJwtPayload(tokenPayload) : null;
     if (payload?.type === 'access') {
       const user = await (await getDataSource()).getRepository(User).findOneBy({
         id: payload.userId,
         isActive: true,
       });
       if (user && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
-        req.user = payload;
+        req.user = { ...payload, email: user.email };
       }
     }
   } catch {
