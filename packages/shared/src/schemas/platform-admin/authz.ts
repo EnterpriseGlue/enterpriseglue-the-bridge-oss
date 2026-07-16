@@ -150,17 +150,17 @@ export const AuthzAuditLogSchemaRaw = z.object({
 // Authorization Audit Log - Select schema (API response)
 export const AuthzAuditLogSchema = AuthzAuditLogSchemaRaw.transform((l) => ({
   id: l.id,
-  tenantId: l.tenantId ?? undefined,
+  tenantId: l.tenantId,
   userId: l.userId,
   action: l.action,
-  resourceType: l.resourceType ?? undefined,
-  resourceId: l.resourceId ?? undefined,
+  resourceType: l.resourceType,
+  resourceId: l.resourceId,
   decision: l.decision as 'allow' | 'deny',
-  reason: l.reason,
-  policyId: l.policyId ?? undefined,
-  context: l.context,
-  ipAddress: l.ipAddress ?? undefined,
-  userAgent: l.userAgent ?? undefined,
+  reason: l.reason || '',
+  policyId: l.policyId,
+  context: l.context || '',
+  ipAddress: l.ipAddress,
+  userAgent: l.userAgent,
   timestamp: Number(l.timestamp),
 }));
 

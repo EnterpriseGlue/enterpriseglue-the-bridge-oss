@@ -3,6 +3,7 @@ import {
   ApiClientWithTokenSchema,
   AuthzGroupMembershipSchema,
   AuthzGroupSchema,
+  AuthzAuditLogSchema,
   AuthzPolicySchema,
   CurrentUserPermissionsSchema,
   DeploymentEligibilityEvaluateResponseSchema,
@@ -104,6 +105,16 @@ describe('authorization response contracts', () => {
       effect: 'allow', priority: 0, resourceType: null, action: null, conditions: '{',
       isActive: true, createdAt: 1, updatedAt: 1, createdById: null,
     }).conditions).toEqual({});
+  });
+
+  it('preserves nullable audit references while making display strings safe', () => {
+    expect(AuthzAuditLogSchema.parse({
+      id: 'audit-a', tenantId: null, userId: 'user-a', action: 'engine.secret.manage',
+      resourceType: null, resourceId: null, decision: 'deny', reason: null, policyId: null,
+      context: null, ipAddress: null, userAgent: null, timestamp: 1,
+    })).toMatchObject({
+      resourceType: null, resourceId: null, policyId: null, reason: '', context: '', ipAddress: null, userAgent: null,
+    });
   });
 
   it('keeps one reveal-once credential response shape for machine principals', () => {

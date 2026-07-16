@@ -14,6 +14,7 @@ import type {
   AuthzGroupMembership as SharedAuthzGroupMembership,
   AuthzGroupSource as SharedAuthzGroupSource,
   AuthzOwnershipMode as SharedAuthzOwnershipMode,
+  AuthzAuditLogEntry as SharedAuthzAuditLogEntry,
   AuthzPolicy as SharedAuthzPolicy,
   AuthzResourceType as SharedAuthzResourceType,
   ApiClient as SharedApiClient,
@@ -220,20 +221,7 @@ export type PolicyCondition = SharedPolicyCondition;
 /** The policy list endpoint intentionally omits persistence-only metadata. */
 export type AuthzPolicy = Omit<SharedAuthzPolicy, 'tenantId' | 'createdAt' | 'updatedAt' | 'createdById'>;
 
-export interface AuthzAuditEntry {
-  id: string;
-  userId: string;
-  action: string;
-  resourceType: string | null;
-  resourceId: string | null;
-  decision: 'allow' | 'deny';
-  reason: string;
-  policyId: string | null;
-  context: string;
-  ipAddress: string | null;
-  userAgent: string | null;
-  timestamp: number;
-}
+export type AuthzAuditEntry = Omit<SharedAuthzAuditLogEntry, 'tenantId'>;
 
 export type SsoSyncRun = SharedIdentitySyncRun;
 export type SsoSyncEvent = SharedIdentitySyncEvent;
