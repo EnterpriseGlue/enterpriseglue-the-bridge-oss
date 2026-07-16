@@ -28,6 +28,7 @@ import FormModal from '../../../components/FormModal'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout'
 import { useModal } from '../../../shared/hooks/useModal'
 import { useAuth } from '../../../shared/hooks/useAuth'
+import type { CurrentUserPermissions } from '../../../shared/types/auth'
 import { useToast } from '../../../shared/notifications/ToastProvider'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
@@ -167,8 +168,9 @@ export function getEngineActionPermissions(engine: EngineActionSubject, hasPermi
 }
 
 type EngineActionPermissions = ReturnType<typeof getEngineActionPermissions>
+type EngineInventory = AccessibleEngineSummary
 
-function getEngineInventoryReadDecision(engine: EngineActionSubject, permissions: any) {
+function getEngineInventoryReadDecision(engine: EngineActionSubject, permissions: CurrentUserPermissions | null | undefined) {
   return evaluateActionSnapshot(permissions, 'engine.inventory.read', { type: 'engine', id: engine?.id ?? null })
 }
 
@@ -195,23 +197,23 @@ export type EngineRowDiagnosticTag = {
   title?: string
 }
 
-export function isExternallyRegisteredEngine(engine: any): boolean {
+export function isExternallyRegisteredEngine(engine: EngineInventory | null | undefined): boolean {
   return engine?.registrationSource === 'external_api' || Boolean(engine?.externalId)
 }
 
-export function isExternallyManagedEngine(engine: any): boolean {
+export function isExternallyManagedEngine(engine: EngineInventory | null | undefined): boolean {
   return engine?.registrationSource === 'external_api'
 }
 
-export function isConfigLockedEngine(engine: any): boolean {
+export function isConfigLockedEngine(engine: EngineInventory | null | undefined): boolean {
   return engine?.registrationSource === 'config' && engine?.ownershipMode === 'config_locked'
 }
 
-export function isConfigWarnEngine(engine: any): boolean {
+export function isConfigWarnEngine(engine: EngineInventory | null | undefined): boolean {
   return engine?.registrationSource === 'config' && engine?.ownershipMode === 'config_warn'
 }
 
-export function formatEngineRegistrationSource(engine: any): string {
+export function formatEngineRegistrationSource(engine: EngineInventory | null | undefined): string {
   if (engine?.registrationSource === 'config') return 'Configuration'
   if (engine?.registrationSource === 'external_api') return 'External API'
   if (engine?.registrationSource === 'user' || engine?.registrationSource === 'manual') return 'Manual'
@@ -243,10 +245,10 @@ export type EngineMetadataFilterOption = { id: string; label: string }
 
 const ENGINE_METADATA_FILTER_SEPARATOR = '\u0000'
 
-export function getEngineMetadataFilterOptions(engines: unknown[]): EngineMetadataFilterOption[] {
+export function getEngineMetadataFilterOptions(engines: ReadonlyArray<Pick<EngineInventory, 'labels'>>): EngineMetadataFilterOption[] {
   const entries = new Map<string, EngineMetadataFilterOption>()
   for (const engine of engines) {
-    for (const [key, value] of getEngineLabelEntries((engine as any)?.labels)) {
+    for (const [key, value] of getEngineLabelEntries(engine.labels)) {
       const id = `${key}${ENGINE_METADATA_FILTER_SEPARATOR}${value}`
       entries.set(id, { id, label: `${key}: ${value}` })
     }
@@ -254,13 +256,13 @@ export function getEngineMetadataFilterOptions(engines: unknown[]): EngineMetada
   return Array.from(entries.values()).sort((left, right) => left.label.localeCompare(right.label))
 }
 
-export function matchesEngineMetadataFilter(engine: unknown, filterId: string): boolean {
+export function matchesEngineMetadataFilter(engine: Pick<EngineInventory, 'labels'> | null | undefined, filterId: string): boolean {
   if (!filterId) return true
   const separatorIndex = filterId.indexOf(ENGINE_METADATA_FILTER_SEPARATOR)
   if (separatorIndex < 1) return false
   const key = filterId.slice(0, separatorIndex)
   const value = filterId.slice(separatorIndex + ENGINE_METADATA_FILTER_SEPARATOR.length)
-  return getEngineLabelEntries((engine as any)?.labels).some(([entryKey, entryValue]) => entryKey === key && entryValue === value)
+  return getEngineLabelEntries(engine?.labels).some(([entryKey, entryValue]) => entryKey === key && entryValue === value)
 }
 
 export function formatEngineFieldOwnership(ownership: unknown): string {
@@ -282,7 +284,7 @@ export function formatEngineTimestamp(value: unknown): string {
   return new Date(value).toISOString().replace('T', ' ').replace('.000Z', ' UTC')
 }
 
-export function formatEngineCapabilitySummary(capabilities: any): string {
+export function formatEngineCapabilitySummary(capabilities: EngineInventory['capabilities'] | EngineInventory['reportedCapabilities']): string {
   if (!capabilities || typeof capabilities !== 'object') return '-'
   const profile = typeof capabilities.compatibilityProfile === 'string' ? capabilities.compatibilityProfile : ''
   const support = typeof capabilities.supportLevel === 'string' ? capabilities.supportLevel : ''
@@ -294,7 +296,7 @@ export function formatEngineCapabilitySummary(capabilities: any): string {
   ].filter(Boolean).join(', ') || '-'
 }
 
-export function formatEngineCapabilityDiagnostics(diagnostics: any): string {
+export function formatEngineCapabilityDiagnostics(diagnostics: EngineInventory['capabilityDiagnostics']): string {
   if (!diagnostics || typeof diagnostics !== 'object') return '-'
   if (diagnostics.status === 'in_sync') return 'All expected operations and query capabilities reported'
   if (Array.isArray(diagnostics.missingOperations) && diagnostics.missingOperations.length > 0) {
@@ -319,7 +321,7 @@ function getStringStatus(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-export function getEngineRowDiagnosticTags(engine: any): EngineRowDiagnosticTag[] {
+export function getEngineRowDiagnosticTags(engine: EngineInventory | null | undefined): EngineRowDiagnosticTag[] {
   if (!engine) return []
   const tags: EngineRowDiagnosticTag[] = []
   if (engine.registrationSource === 'config' || engine.ownershipMode === 'config_locked' || engine.ownershipMode === 'config_warn') {
@@ -360,7 +362,7 @@ export function getEngineRowDiagnosticTags(engine: any): EngineRowDiagnosticTag[
   return tags
 }
 
-export function getEngineLifecycleUnavailableReason(engine: any, actionLabel: string): string | null {
+export function getEngineLifecycleUnavailableReason(engine: EngineInventory | null | undefined, actionLabel: string): string | null {
   const lifecycleStatus = getStringStatus(engine?.lifecycleStatus || 'active')
   if (lifecycleStatus === 'decommissioned') {
     return `Engine is decommissioned. Reactivate it from Access Control before ${actionLabel}.`
@@ -373,7 +375,7 @@ export function getEngineLifecycleUnavailableReason(engine: any, actionLabel: st
 
 export function getEngineTestUnavailableReason(
   actions: Pick<EngineActionPermissions, 'canTest'> | null | undefined,
-  engine?: any
+  engine?: EngineInventory | null
 ): string | null {
   if (!actions?.canTest) return `Missing permission ${EnginePermission.ENGINE_EDIT}`
   return getEngineLifecycleUnavailableReason(engine, 'testing the connection')
@@ -386,7 +388,7 @@ export function getEngineMembersUnavailableReason(actions: Pick<EngineActionPerm
 export function getEngineDeleteUnavailableReason(
   actions: Pick<EngineActionPermissions, 'canDelete'> | null | undefined,
   manualEngineOnboardingAllowed: boolean,
-  engine?: any
+  engine?: EngineInventory | null
 ): string | null {
   if (!actions?.canDelete) return `Missing permission ${EnginePermission.ENGINE_DELETE}`
   if (!manualEngineOnboardingAllowed) return 'Manual engine deletion is disabled by the current onboarding policy'
@@ -1221,7 +1223,7 @@ function EngineAccessSection({
   )
 }
 
-function EngineRegistrationSection({ engine }: { engine: any }) {
+function EngineRegistrationSection({ engine }: { engine: EngineInventory }) {
   if (!engine) return null
   return (
     <section
@@ -1347,9 +1349,9 @@ export default function Engines() {
     ? createEngineDecision.reason
     : 'Manual engine registration is disabled by the current onboarding policy.'
   const canCreateEngine = createEngineDecision.allowed && manualEngineOnboardingAllowed
-  const engineModal = useModal<any>()
+  const engineModal = useModal<EngineMutationForm>()
   const { notify } = useToast()
-  const [editing, setEditing] = React.useState<any | null>(null)
+  const [editing, setEditing] = React.useState<EngineInventory | null>(null)
   const [form, setForm] = React.useState<EngineMutationForm>({
     name: '',
     baseUrl: '',
@@ -1374,7 +1376,7 @@ export default function Engines() {
 
   // Engine members panel state
   const [membersOpen, setMembersOpen] = React.useState(false)
-  const [selectedEngine, setSelectedEngine] = React.useState<any | null>(null)
+  const [selectedEngine, setSelectedEngine] = React.useState<EngineInventory | null>(null)
 
   const TYPE_ITEMS = React.useMemo(() => ([
     { id: 'ion', label: ENGINE_TYPE_LABELS.ion },
@@ -1427,7 +1429,10 @@ export default function Engines() {
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to create engine', subtitle: getUiErrorMessage(e, 'Failed to create') })
   })
   const updateM = useMutation({
-    mutationFn: (payload: UpdateEngineRequest) => apiClient.put<AccessibleEngineSummary>(`/engines-api/engines/${encodeURIComponent(editing.id)}`, payload, { credentials: 'include' }),
+    mutationFn: (payload: UpdateEngineRequest) => {
+      if (!editing) throw new Error('Select an engine before updating it')
+      return apiClient.put<AccessibleEngineSummary>(`/engines-api/engines/${encodeURIComponent(editing.id)}`, payload, { credentials: 'include' })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['engines'] })
       qc.invalidateQueries({ queryKey: ['engines','active'] })
@@ -1601,7 +1606,7 @@ export default function Engines() {
     canViewRuntimeResources: Boolean(editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed),
   }), [canViewEditingDeployments, canViewEditingProjectAccess, editing, editingActions?.canViewMembers, runtimeResourcesReadDecision.allowed])
 
-  function openEngineDetails(row: any) {
+  function openEngineDetails(row: EngineInventory) {
     if (!row?.id) return
     const actions = getActionsForEngine(row)
     if (!actions.canEdit && !getEngineInventoryReadDecision(row, permissions).allowed) return
@@ -1628,24 +1633,24 @@ export default function Engines() {
     engineModal.openModal()
   }
 
-  function openEdit(row: any) {
+  function openEdit(row: EngineInventory) {
     if (!getActionsForEngine(row).canEdit) return
     openEngineDetails(row)
   }
 
-  function openMembersPanel(engine: any) {
+  function openMembersPanel(engine: EngineInventory) {
     const permissions = getActionsForEngine(engine)
     if (!permissions.canOpenMembers) return
     setSelectedEngine(engine)
     setMembersOpen(true)
   }
 
-  function testEngine(engine: any) {
+  function testEngine(engine: EngineInventory | null | undefined) {
     if (!engine || !getActionsForEngine(engine).canTest) return
     testM.mutate(engine.id)
   }
 
-  function deleteEngine(engine: any) {
+  function deleteEngine(engine: EngineInventory | null | undefined) {
     if (!engine || !manualEngineOnboardingAllowed || !getActionsForEngine(engine).canDelete) return
     deleteM.mutate(engine.id)
   }
@@ -1675,7 +1680,7 @@ export default function Engines() {
 
   const visibleEngines = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    return rows.filter((e: any) => {
+    return rows.filter((e) => {
       const envTagName = Array.isArray(envTags)
         ? (envTags.find((t) => t.id === e.environmentTagId)?.name || '')
         : ''
@@ -1791,7 +1796,7 @@ export default function Engines() {
       {!listQ.isLoading && rows.length > 0 && (
         <TableContainer>
           <DataTable
-            rows={visibleEngines.map((e: any) => {
+            rows={visibleEngines.map((e) => {
               const envTag = Array.isArray(envTags) ? envTags.find((t) => t.id === e.environmentTagId) : null
               return {
                 id: e.id,
@@ -1859,7 +1864,7 @@ export default function Engines() {
                       </TableRow>
                     )}
                     {tableRows.map((row) => {
-                      const engine = rows.find((e: any) => e.id === row.id)
+                      const engine = rows.find((e) => e.id === row.id)
                       const actions = getActionsForEngine(engine)
                       const testUnavailableReason = getEngineTestUnavailableReason(actions, engine)
                       const membersUnavailableReason = getEngineMembersUnavailableReason(actions)
@@ -1974,7 +1979,10 @@ export default function Engines() {
                                       <GuardedOverflowMenuItem
                                         itemText={actions.canEdit ? 'Edit' : 'View details'}
                                         decision={actions.canEdit ? null : inventoryReadDecision}
-                                        onClick={() => actions.canEdit ? openEdit(engine) : openEngineDetails(engine)}
+                                        onClick={() => {
+                                          if (!engine) return
+                                          actions.canEdit ? openEdit(engine) : openEngineDetails(engine)
+                                        }}
                                       />
                                       <GuardedOverflowMenuItem
                                         itemText="Test connection"
@@ -1987,7 +1995,7 @@ export default function Engines() {
                                         itemText={actions.canManageMembers || actions.canAddMembers || actions.canInviteMembers || actions.canUpdateMemberRoles || actions.canRemoveMembers || actions.canManageDelegate ? 'Manage members' : 'View members'}
                                         unavailableReason={membersUnavailableReason}
                                         onClick={() => {
-                                          openMembersPanel(engine)
+                                          if (engine) openMembersPanel(engine)
                                         }}
                                       />
                                       <GuardedOverflowMenuItem
