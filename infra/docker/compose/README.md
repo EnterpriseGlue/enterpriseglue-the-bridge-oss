@@ -12,6 +12,7 @@ The optional authorization config-bundle override is `docker-compose.config-bund
 - `docker-compose.oracle.yml` - Oracle development/production overlay
 - `docker-compose.spanner.yml` - Spanner development overlay
 - `docker-compose.backend-expose.yml` - optional backend host-port publish overlay
+- `docker-compose.keycloak.yml` - disposable local Keycloak realm for OIDC protocol rehearsal
 - `docker-compose.ci.yml` - CI-specific overrides
 - `docker-compose.prod.yml` - production base stack
 - `docker-compose.images.yml` - published-image deployment overlay

@@ -97,6 +97,48 @@ pnpm run db:migration:run
 - Frontend: http://localhost:5173 (default)
 - Login: http://localhost:5173/login (default)
 
+## Optional local Keycloak OIDC rehearsal
+
+The repository includes a disposable Keycloak realm that lets you exercise
+OIDC discovery and the provider's authorization endpoints locally. It never
+modifies EnterpriseGlue SSO mappings or replaces an existing provider.
+
+Start the normal Docker stack first (for example, `pnpm run dev`). Then, from
+the repository root, start the overlay using the same active Docker env file:
+
+```bash
+docker compose --project-directory . \
+  --env-file .local/docker/env/docker.env \
+  -f infra/docker/compose/docker-compose.yml \
+  -f infra/docker/compose/docker-compose.backend-expose.yml \
+  -f infra/docker/compose/docker-compose.keycloak.yml \
+  up -d keycloak
+```
+
+The provider is available at `http://localhost:8180`, with discovery at
+`/realms/enterpriseglue-local/.well-known/openid-configuration`. The imported
+realm, client, and disposable test account are defined in
+`infra/docker/keycloak/enterpriseglue-local-realm.json`. They are development
+fixtures only: do not reuse their credentials, realm export, or container
+configuration outside localhost.
+
+Use the following command to confirm that the service is healthy and discovery
+is available:
+
+```bash
+curl --fail --silent --show-error \
+  http://localhost:8180/realms/enterpriseglue-local/.well-known/openid-configuration \
+  | jq '{ issuer, authorization_endpoint, token_endpoint }'
+```
+
+This overlay deliberately uses HTTP so it is easy to run on a disposable
+developer machine. EnterpriseGlue correctly requires HTTPS issuer and callback
+URLs for a configured OIDC provider, so this is a protocol rehearsal rather
+than a complete application sign-in configuration. A full local browser
+sign-in requires a trusted local TLS endpoint for both Keycloak and the
+EnterpriseGlue callback; it remains separate from the deployed-provider
+cutover evidence described below.
+
 ## Optional local sign-in smoke
 
 After the stack is healthy, verify a real login with an existing disposable

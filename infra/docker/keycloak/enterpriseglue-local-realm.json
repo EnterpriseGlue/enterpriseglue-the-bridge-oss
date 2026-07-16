@@ -1,0 +1,23 @@
+{
+  "realm": "enterpriseglue-local",
+  "enabled": true,
+  "clients": [{
+    "clientId": "enterpriseglue-local",
+    "enabled": true,
+    "publicClient": false,
+    "secret": "enterpriseglue-local-client-secret",
+    "standardFlowEnabled": true,
+      "redirectUris": ["http://localhost:5173/*"],
+    "webOrigins": ["http://localhost:5173"]
+  }],
+  "users": [{
+    "username": "oidc-operator",
+    "enabled": true,
+    "emailVerified": true,
+    "email": "oidc-operator@localhost.test",
+    "firstName": "OIDC",
+    "lastName": "Operator",
+    "credentials": [{"type": "password", "value": "local-oidc-operator", "temporary": false}],
+    "realmRoles": ["offline_access"]
+  }]
+}
