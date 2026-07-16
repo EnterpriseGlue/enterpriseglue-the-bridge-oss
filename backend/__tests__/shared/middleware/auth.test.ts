@@ -8,6 +8,10 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { Request, Response, NextFunction } from 'express';
 
+const bpmnRequestContext = vi.hoisted(() => ({
+  updateBpmnEngineRequestContext: vi.fn(),
+}));
+
 vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
   verifyToken: vi.fn(),
 }));
@@ -15,6 +19,8 @@ vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
+
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-request-context.js', () => bpmnRequestContext);
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
   permissionService: {
@@ -57,6 +63,7 @@ describe('auth middleware', () => {
       await requireAuth(req as Request, res as Response, next);
 
       expect(req.user).toEqual({ userId: 'user-1', type: 'access', platformRole: 'user', email: 'user@example.com', principalType: 'user', principalId: 'user-1' });
+      expect(bpmnRequestContext.updateBpmnEngineRequestContext).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(next).toHaveBeenCalled();
     });
 
@@ -85,8 +92,23 @@ describe('auth middleware', () => {
 
       await requireAuth(req as Request, res as Response, next);
 
-      expect((req as any).user?.authSessionVersion).toBe(0);
+      expect(req.user).toBeUndefined();
+      expect(bpmnRequestContext.updateBpmnEngineRequestContext).not.toHaveBeenCalled();
       expect((next as any).mock.calls[0][0]?.message).toContain('Session has been revoked');
+    });
+
+    it('does not establish request identity for an inactive user', async () => {
+      req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
+      (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'access', email: 'user@example.com' });
+      (getDataSource as any).mockResolvedValue({
+        getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue(null) }),
+      });
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(req.user).toBeUndefined();
+      expect(bpmnRequestContext.updateBpmnEngineRequestContext).not.toHaveBeenCalled();
+      expect((next as any).mock.calls[0][0]?.message).toContain('User not found or inactive');
     });
 
     it('runs enterprise tenant authorization resolver after user validation', async () => {

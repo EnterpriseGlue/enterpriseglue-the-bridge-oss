@@ -108,10 +108,6 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       throw Errors.unauthorized('Invalid token type. Use access token.');
     }
 
-    // Add user info to request
-    req.user = payload;
-    updateBpmnEngineRequestContext({ userId: payload.userId });
-
     const dataSource = await getDataSource();
     const userRepo = dataSource.getRepository(User);
     const user = await userRepo.findOneBy({ id: payload.userId, isActive: true });
@@ -122,6 +118,11 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
       throw Errors.unauthorized('Session has been revoked');
     }
+
+    // Do not establish downstream request identity until the token's subject
+    // has passed the active-account and session-revocation checks.
+    req.user = payload;
+    updateBpmnEngineRequestContext({ userId: payload.userId });
 
     const requestPath = req.path;
     const allowUnverifiedPaths = [
