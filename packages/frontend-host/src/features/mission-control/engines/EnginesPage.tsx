@@ -36,9 +36,9 @@ import EngineMembersModal from './components/EngineMembersModal'
 import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
 import type { AccessAuthorityMode, EngineOnboardingMode } from '../../../api/platform-admin'
-import type { DeploymentHistoryView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
-import { getEngineDeploymentHistory, getEngineDeploymentReceipts } from './api/engines'
+import { getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts } from './api/engines'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -643,6 +643,11 @@ function EngineDeploymentSection({
   history,
   historyError,
   historyLoading,
+  lineage,
+  lineageError,
+  lineageLoading,
+  onSelectLineage,
+  selectedDeploymentId,
   isLoading,
   receipts,
   receiptsError,
@@ -654,6 +659,11 @@ function EngineDeploymentSection({
   history: DeploymentHistoryView[]
   historyError: unknown
   historyLoading: boolean
+  lineage: DeploymentLineageView | undefined
+  lineageError: unknown
+  lineageLoading: boolean
+  onSelectLineage: (deploymentId: string | null) => void
+  selectedDeploymentId: string | null
   isLoading: boolean
   receipts: DeploymentReceiptView[]
   receiptsError: unknown
@@ -765,6 +775,9 @@ function EngineDeploymentSection({
                   <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
                     {deployment.reconciledAt ? `Reconciled ${formatEngineTimestamp(deployment.reconciledAt)}` : `Recorded ${formatEngineTimestamp(deployment.deployedAt)}`}
                   </div>
+                  {deployment.engineDeploymentId ? <div><Button kind="ghost" size="sm" onClick={() => onSelectLineage(deployment.engineDeploymentId)}>
+                    {selectedDeploymentId === deployment.engineDeploymentId ? 'Viewing lineage' : 'View lineage'}
+                  </Button></div> : null}
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <Tag type={getDeploymentLineageTagType(deployment.lineageQuality)} size="sm">{deployment.lineageQuality}</Tag>
@@ -775,6 +788,36 @@ function EngineDeploymentSection({
             ))}
           </div>
         )}
+        {selectedDeploymentId ? (
+          <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-3)', display: 'grid', gap: 'var(--spacing-2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+              <h5 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Deployment lineage: {selectedDeploymentId}</h5>
+              <Button kind="ghost" size="sm" onClick={() => onSelectLineage(null)}>Close</Button>
+            </div>
+            {lineageLoading ? <InlineLoading description="Loading deployment lineage" /> : lineageError ? (
+              <InlineNotification lowContrast kind="error" title="Failed to load deployment lineage" subtitle={getUiErrorMessage(lineageError, 'Failed to load deployment lineage')} hideCloseButton />
+            ) : lineage ? (
+              <>
+                <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                  {lineage.reconciliationStatus === 'reconciled' ? `Reconciled ${formatEngineTimestamp(lineage.reconciledAt)}` : 'Reconciliation pending'} | {lineage.artifacts.length} runtime artifacts
+                </div>
+                {lineage.artifacts.length === 0 ? <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>No runtime artifact references were recorded.</div> : (
+                  <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+                    {lineage.artifacts.map((artifact, index) => <div key={`${artifact.artifactKind}-${artifact.runtimeResourceId || artifact.runtimeResourceKey || index}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-3)', padding: 'var(--spacing-2)', border: '1px solid var(--color-border-subtle)', borderRadius: 4 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, overflowWrap: 'anywhere' }}>{artifact.runtimeResourceKey || artifact.runtimeResourceId || 'Unkeyed runtime artifact'}</div>
+                        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
+                          {artifact.projectId ? `Project ${artifact.projectId}` : 'No project lineage'} | {artifact.fileId ? `File ${artifact.fileId}` : 'No file lineage'}{artifact.runtimeTenantId ? ` | Tenant ${artifact.runtimeTenantId}` : ''}
+                        </div>
+                      </div>
+                      <Tag type={artifact.artifactKind === 'process' ? 'blue' : artifact.artifactKind === 'decision' ? 'purple' : 'gray'} size="sm">{artifact.artifactKind} v{artifact.runtimeResourceVersion}</Tag>
+                    </div>)}
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-4)', display: 'grid', gap: 'var(--spacing-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
@@ -1493,6 +1536,12 @@ export default function Engines() {
     enabled: Boolean(engineModal.isOpen && editing?.id && canViewEditingDeployments),
     queryFn: () => getEngineDeploymentHistory(String(editing!.id)),
   })
+  const [selectedDeploymentLineageId, setSelectedDeploymentLineageId] = React.useState<string | null>(null)
+  const deploymentLineageQ = useQuery({
+    queryKey: ['engines', editing?.id, 'deployment-lineage', selectedDeploymentLineageId],
+    enabled: Boolean(engineModal.isOpen && editing?.id && canViewEditingDeployments && selectedDeploymentLineageId),
+    queryFn: () => getEngineDeploymentLineage(String(editing!.id), String(selectedDeploymentLineageId)),
+  })
   const runtimeResourcesQ = useRuntimeResources(editing?.id ? String(editing.id) : undefined, {
     includeInactive: true,
     enabled: Boolean(engineModal.isOpen && editing?.id && editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed),
@@ -2046,6 +2095,11 @@ export default function Engines() {
             history={deploymentHistoryQ.data || []}
             historyError={deploymentHistoryQ.error}
             historyLoading={deploymentHistoryQ.isLoading}
+            lineage={deploymentLineageQ.data}
+            lineageError={deploymentLineageQ.error}
+            lineageLoading={deploymentLineageQ.isLoading}
+            onSelectLineage={setSelectedDeploymentLineageId}
+            selectedDeploymentId={selectedDeploymentLineageId}
             isLoading={deploymentTargetsQ.isLoading}
             receipts={deploymentReceiptsQ.data || []}
             receiptsError={deploymentReceiptsQ.error}
