@@ -58,9 +58,10 @@ import type {
 import type {
   RoleAssignment as SharedRoleAssignment,
   SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
+  ProjectEngineTarget as SharedProjectEngineTarget,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
-import { getAccessibleEngines, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags } from './api/engines'
+import { getAccessibleEngines, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags, getEngineProjectTargets } from './api/engines'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -399,21 +400,7 @@ export function getEngineDeleteUnavailableReason(
   return null
 }
 
-type ProjectEngineTargetView = {
-  id: string
-  projectId: string
-  projectName?: string | null
-  environment?: { name?: string | null; color?: string | null; manualDeployAllowed?: boolean } | null
-  status?: string | null
-  source?: string | null
-  sourceRef?: string | null
-  allowManualDeploy?: boolean
-  allowCiDeploy?: boolean
-  allowApiDeploy?: boolean
-  allowImport?: boolean
-  lastSeenAt?: number | null
-  updatedAt?: number | null
-}
+type ProjectEngineTargetView = SharedProjectEngineTarget
 
 type EngineAccessMember = SharedEngineMember
 type EngineMembersResponse = SharedEngineMembersResponse
@@ -1534,11 +1521,7 @@ export default function Engines() {
   const deploymentTargetsQ = useQuery({
     queryKey: ['engines', editing?.id, 'project-targets'],
     enabled: Boolean(engineModal.isOpen && editing?.id && canViewEditingProjectAccess),
-    queryFn: () => apiClient.get<ProjectEngineTargetView[]>(
-      `/engines-api/engines/${encodeURIComponent(String(editing?.id))}/project-targets`,
-      undefined,
-      { credentials: 'include' }
-    ),
+    queryFn: () => getEngineProjectTargets(String(editing!.id)),
   })
   const deploymentReceiptsQ = useQuery({
     queryKey: ['engines', editing?.id, 'deployment-receipts'],
