@@ -11,6 +11,7 @@ const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
 const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn(), reconcileLdapLogin: vi.fn(), reconcileSamlLogin: vi.fn() }));
 const directLdapIdentityService = vi.hoisted(() => ({ authenticate: vi.fn() }));
 const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
+const auditService = vi.hoisted(() => ({ auditFromRequest: vi.fn(() => ({})), logAudit: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService }));
@@ -22,7 +23,7 @@ vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSe
 vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
   getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
 }));
-vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ AuditActions: { LOGIN_SUCCESS: 'auth.login.success' }, auditFromRequest: vi.fn(() => ({})), logAudit: vi.fn() }));
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ AuditActions: { LOGIN_SUCCESS: 'auth.login.success' }, ...auditService }));
 
 const provider = {
   id: 'provider-1', tenantId: null, key: 'identity.oidc.main', protocol: 'oidc', isEnabled: true,
@@ -140,6 +141,22 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.status).toBe(200);
     expect(identityProviderService.getById).toHaveBeenCalledWith('provider-1', null);
     expect(directLdapIdentityService.authenticate).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'ldap' }), 'person@example.test', 'directory-password');
+  });
+
+  it('does not expose LDAP transport failures during direct sign-in', async () => {
+    identityProviderService.getByKey.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
+    directLdapIdentityService.authenticate.mockRejectedValue(new Error('ETIMEDOUT ldaps://directory.internal:636 bind password=directory-password'));
+
+    const response = await request(app)
+      .post('/api/auth/identity/identity.oidc.main/ldap/login')
+      .send({ username: 'person@example.test', password: 'directory-password' });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('Invalid directory credentials');
+    expect(JSON.stringify(response.body)).not.toContain('directory.internal');
+    expect(JSON.stringify(response.body)).not.toContain('directory-password');
+    expect(auditService.logAudit).toHaveBeenCalledWith(expect.anything());
+    expect(authSessionService.issue).not.toHaveBeenCalled();
   });
 
   it('starts and completes direct SAML login through the exact provider id', async () => {
