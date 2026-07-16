@@ -13,12 +13,15 @@ automation that already use them.
 | `pnpm run test:identity:ui` | provider and mapping administration screens | none |
 | `pnpm run test:identity:local` | all of the preceding local-only lanes | none |
 | `pnpm run test:identity:ldap` | real LDAPS bind, search, TLS, and nested-group flow | Docker |
+| `pnpm run test:identity:verify` | complete local identity verification, including LDAPS | Docker |
 
 Run `test:identity:local` during ordinary development. Add
 `test:identity:ldap` for directory-client changes; it remains separate so a
 missing Docker daemon cannot hide regressions in the local-only suite. The
 broader `test:authz-refactor` lane keeps its compatibility-oriented CI scope
 and includes the protocol-mock lane, but deliberately does not start Docker.
+Use `test:identity:verify` when Docker is available and a complete local
+identity pass is appropriate.
 
 ## LDAP Protocol Test Harness
 
