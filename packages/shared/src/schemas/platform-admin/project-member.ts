@@ -55,6 +55,19 @@ export const ProjectMembersResponseSchema = z.object({
   pendingInvites: z.array(ProjectPendingInviteSchema),
 });
 
+/** Candidate returned while preparing a project-member invite or direct add. */
+export const ProjectMemberCandidateSchema = UserSummarySchema;
+export const ProjectMemberLookupSchema = z.object({
+  mode: z.enum(['invite', 'existing-member', 'direct-add']),
+  user: ProjectMemberCandidateSchema.nullable().optional(),
+});
+
+/** Delivery options that the project-member invitation flow can offer. */
+export const ProjectMemberCapabilitiesSchema = z.object({
+  ssoRequired: z.boolean(),
+  emailConfigured: z.boolean(),
+});
+
 // Request schemas
 export const AddProjectMemberRequest = z.object({
   email: z.string().email(),
@@ -78,4 +91,7 @@ export type ProjectMemberAccessView = z.infer<typeof ProjectMemberAccessViewSche
 export type ProjectPendingInviteStatus = z.infer<typeof ProjectPendingInviteStatusSchema>;
 export type ProjectPendingInvite = z.infer<typeof ProjectPendingInviteSchema>;
 export type ProjectMembersResponse = z.infer<typeof ProjectMembersResponseSchema>;
+export type ProjectMemberCandidate = z.infer<typeof ProjectMemberCandidateSchema>;
+export type ProjectMemberLookup = z.infer<typeof ProjectMemberLookupSchema>;
+export type ProjectMemberCapabilities = z.infer<typeof ProjectMemberCapabilitiesSchema>;
 export type AddProjectMember = z.infer<typeof AddProjectMemberRequest>;

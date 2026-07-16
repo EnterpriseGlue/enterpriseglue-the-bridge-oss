@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ProjectMembersResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js';
+import {
+  ProjectMemberCapabilitiesSchema,
+  ProjectMemberLookupSchema,
+  ProjectMembersResponseSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/project-member.js';
 
 describe('ProjectMembersResponseSchema', () => {
   it('models members and unresolved invitations returned by the Starbase route', () => {
@@ -29,5 +33,26 @@ describe('ProjectMembersResponseSchema', () => {
       members: [{ deployAllowed: false, user: null }],
       pendingInvites: [{ status: 'pending', deliveryMethod: 'email' }],
     });
+  });
+});
+
+describe('Project member invitation contracts', () => {
+  it('models lookup candidates and no-candidate existing-member responses', () => {
+    expect(ProjectMemberLookupSchema.parse({
+      mode: 'direct-add',
+      user: {
+        id: 'user-1',
+        email: 'member@example.com',
+        firstName: 'Member',
+        lastName: null,
+      },
+    })).toMatchObject({ mode: 'direct-add', user: { id: 'user-1' } });
+    expect(ProjectMemberLookupSchema.parse({ mode: 'existing-member', user: null }))
+      .toEqual({ mode: 'existing-member', user: null });
+  });
+
+  it('models invitation delivery capabilities shared by OpenAPI and the UI', () => {
+    expect(ProjectMemberCapabilitiesSchema.parse({ ssoRequired: true, emailConfigured: false }))
+      .toEqual({ ssoRequired: true, emailConfigured: false });
   });
 });

@@ -12,16 +12,13 @@ import type {
   AuthzPrincipalType as SharedAuthzPrincipalType,
   RoleSummary as SharedRoleSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
+import type {
+  ProjectMemberCapabilities as SharedProjectMemberCapabilities,
+  ProjectMemberLookup as SharedProjectMemberLookup,
+} from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
 
-interface MemberLookupResult {
-  mode: 'invite' | 'direct-add' | 'existing-member'
-  user?: UserSearchItem | null
-}
-
-interface MemberCapabilities {
-  ssoRequired: boolean
-  emailConfigured: boolean
-}
+type MemberLookupResult = SharedProjectMemberLookup
+type MemberCapabilities = SharedProjectMemberCapabilities
 
 interface MemberInviteReveal {
   email: string

@@ -59,6 +59,10 @@ import type {
   RoleAssignment as SharedRoleAssignment,
   RoleSummary as SharedRoleSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
+import type {
+  ProjectMemberCapabilities as SharedProjectMemberCapabilities,
+  ProjectMemberLookup as SharedProjectMemberLookup,
+} from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
 import { ProjectMembersModal } from './components/ProjectMembersModal'
 import { ProjectMembersManagementModals, type ProjectScopedCustomRole } from './components/ProjectMembersManagementModals'
 import { ProjectDetailHeader } from './components/ProjectDetailHeader'
@@ -1277,13 +1281,13 @@ export default function ProjectDetail() {
 
   const memberCapabilitiesQ = useQuery({
     queryKey: ['project-members', projectId, 'capabilities'],
-    queryFn: () => apiClient.get<{ ssoRequired: boolean; emailConfigured: boolean }>(`/starbase-api/projects/${projectId}/members/capabilities`),
+    queryFn: () => apiClient.get<SharedProjectMemberCapabilities>(`/starbase-api/projects/${projectId}/members/capabilities`),
     enabled: addMemberModal.isOpen && !!projectId && canInviteMembers,
     staleTime: 30 * 1000,
   })
   const memberLookupQ = useQuery({
     queryKey: ['project-members', projectId, 'lookup', debouncedMemberEmail.toLowerCase()],
-    queryFn: () => apiClient.get<{ mode: 'invite' | 'direct-add' | 'existing-member'; user?: UserSearchItem | null }>(
+    queryFn: () => apiClient.get<SharedProjectMemberLookup>(
       `/starbase-api/projects/${projectId}/members/lookup`,
       { email: debouncedMemberEmail.toLowerCase() }
     ),

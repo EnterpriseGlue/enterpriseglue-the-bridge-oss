@@ -1808,6 +1808,9 @@ const {
   ProjectEngineTargetPolicyModeSchema,
   ProjectMemberSchema,
   ProjectMembersResponseSchema,
+  ProjectMemberCandidateSchema,
+  ProjectMemberLookupSchema,
+  ProjectMemberCapabilitiesSchema,
   AddProjectMemberRequest,
   UpdateProjectMemberRoleRequest,
   TransferProjectOwnershipRequest,
@@ -2276,20 +2279,6 @@ registry.registerPath({ method: 'post', path: '/api/identity/mappings/stored-sna
 // Project Members API
 // -----------------------------
 registry.register('ProjectMember', ProjectMemberSchema);
-const ProjectMemberCandidateSchema = z.object({
-  id: z.string(),
-  email: z.string(),
-  firstName: z.string().nullable().optional(),
-  lastName: z.string().nullable().optional(),
-});
-const ProjectMemberLookupSchema = z.object({
-  mode: z.enum(['invite', 'existing-member', 'direct-add']),
-  user: ProjectMemberCandidateSchema.optional(),
-});
-const ProjectMemberCapabilitiesSchema = z.object({
-  ssoRequired: z.boolean(),
-  emailConfigured: z.boolean(),
-});
 const UpdateProjectDeployGrantRequestSchema = z.object({ allowed: z.boolean() });
 const ProjectDeployGrantResponseSchema = z.object({ allowed: z.boolean() });
 const ReissuedManualProjectInvitationSchema = z.object({
