@@ -42,6 +42,18 @@ describe('ProjectEngineTargetsPanel', () => {
     expect(screen.getByRole('button', { name: 'Edit' })).toHaveAttribute('title', 'Source-owned targets are managed by their external source');
   });
 
+  it('allows a config-warning target to be reconciled through the reviewed local controls', () => {
+    const props = renderPanel({
+      targets: [{ ...externalTarget, source: 'config', ownershipMode: 'config_warn', driftStatus: 'drifted' }],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+
+    expect(props.onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 'target-1', ownershipMode: 'config_warn' }));
+    expect(props.onArchive).toHaveBeenCalledWith('target-1');
+  });
+
   it('sends the explicit project target and requested mode to eligibility evaluation', () => {
     const props = renderPanel();
 
