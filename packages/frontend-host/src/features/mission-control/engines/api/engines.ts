@@ -1,5 +1,14 @@
 import { apiClient } from '../../../../shared/api/client'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
+
+/**
+ * Returns the authorization-filtered engine collection. This is deliberately
+ * the sanitized inventory contract rather than a persistence-shaped engine.
+ */
+export async function getAccessibleEngines(): Promise<AccessibleEngineSummary[]> {
+  return apiClient.get<AccessibleEngineSummary[]>('/engines-api/engines', undefined, { credentials: 'include' })
+}
 
 export async function getEngineDeploymentReceipts(engineId: string): Promise<DeploymentReceiptView[]> {
   return apiClient.get<DeploymentReceiptView[]>(

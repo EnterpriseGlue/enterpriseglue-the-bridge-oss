@@ -39,6 +39,7 @@ import SyncModal from '../../git/components/SyncModal'
 import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
+import { getAccessibleEngines } from '../../mission-control/engines/api/engines'
 import { PlatformPermission, ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { useSelectedEngine } from '../../../components/EngineSelector'
@@ -360,21 +361,21 @@ export default function ProjectDetail() {
 
   const enginesQ = useQuery({
     queryKey: ['engines','list'],
-    queryFn: () => apiClient.get<any[]>('/engines-api/engines'),
+    queryFn: getAccessibleEngines,
     enabled: deployModal.isOpen || deploymentTargetsOpen,
   })
   // Set default deploy engine when engines load or selected engine changes
   React.useEffect(() => {
     if (deployModal.isOpen && !deployEngineId) {
       const engines = enginesQ.data || []
-      if (selectedEngineId && engines.some((e: any) => e.id === selectedEngineId)) {
+      if (selectedEngineId && engines.some((engine) => engine.id === selectedEngineId)) {
         setDeployEngineId(selectedEngineId)
       } else if (engines.length === 1) {
         setDeployEngineId(engines[0].id)
       } else if (engines.length > 0) {
         // Select first engine alphabetically
-        const sorted = [...engines].sort((a: any, b: any) =>
-          (a.name || a.baseUrl).localeCompare(b.name || b.baseUrl)
+        const sorted = [...engines].sort((a, b) =>
+          (a.name ?? a.baseUrl ?? '').localeCompare(b.name ?? b.baseUrl ?? '')
         )
         setDeployEngineId(sorted[0].id)
       }

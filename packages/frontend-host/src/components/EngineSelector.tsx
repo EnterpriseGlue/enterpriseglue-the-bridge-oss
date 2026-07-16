@@ -2,17 +2,7 @@ import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Dropdown } from '@carbon/react'
 import { useEngineSelectorStore } from '../stores/engineSelectorStore'
-import { apiClient } from '../shared/api/client'
-
-type Engine = {
-  id: string
-  name: string
-  baseUrl: string
-}
-
-async function fetchAccessibleEngines(): Promise<Engine[]> {
-  return apiClient.get<Engine[]>('/engines-api/engines', undefined, { credentials: 'include' }).catch(() => [])
-}
+import { getAccessibleEngines } from '../features/mission-control/engines/api/engines'
 
 interface EngineSelectorProps {
   style?: React.CSSProperties
@@ -25,7 +15,7 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
 
   const enginesQuery = useQuery({
     queryKey: ['engines-selector'],
-    queryFn: fetchAccessibleEngines,
+    queryFn: () => getAccessibleEngines().catch(() => []),
     staleTime: 60000,
   })
 
@@ -34,7 +24,7 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
     // legacy display roles here: custom and runtime-derived grants may not
     // have a synthetic owner/delegate/operator value.
     return [...(enginesQuery.data || [])].sort((a, b) =>
-      (a.name || a.baseUrl).localeCompare(b.name || b.baseUrl)
+      (a.name ?? a.baseUrl ?? '').localeCompare(b.name ?? b.baseUrl ?? '')
     )
   }, [enginesQuery.data])
 

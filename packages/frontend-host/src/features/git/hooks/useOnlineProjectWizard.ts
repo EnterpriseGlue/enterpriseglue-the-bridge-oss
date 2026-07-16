@@ -10,6 +10,8 @@ import { sanitizePathParam, safeRelativePath } from '../../../shared/utils/sanit
 import { useAuth } from '../../../shared/hooks/useAuth'
 import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
+import { getAccessibleEngines } from '../../mission-control/engines/api/engines'
+import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
 
 export type AuthMethod = 'oauth' | 'pat'
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -35,11 +37,7 @@ type CreateOnlineResponse = {
 
 type CreateLocalResponse = { id: string; name: string }
 
-export type EngineForImport = {
-  id: string
-  name?: string | null
-  baseUrl?: string | null
-}
+export type EngineForImport = Pick<AccessibleEngineSummary, 'id' | 'name' | 'baseUrl'>
 
 export type EngineImportPreview = {
   engineId: string
@@ -325,7 +323,7 @@ export function useOnlineProjectWizard({
 
   const importableEnginesQuery = useQuery({
     queryKey: ['engines', 'importable-on-project-create'],
-    queryFn: () => apiClient.get<EngineForImport[]>('/engines-api/engines').catch(() => []),
+    queryFn: () => getAccessibleEngines().catch(() => []),
     enabled: open && !isExistingProject,
   })
 

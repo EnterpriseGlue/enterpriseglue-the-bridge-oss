@@ -68,7 +68,7 @@ import {
 } from './access-control/auditReferences';
 import { PermissionCatalogPanel, RoleCatalogPanel } from './access-control/RoleCatalogPanels';
 import { RuntimeResourcesPanel } from './access-control/RuntimeResourcesPanel';
-import type { RuntimeResourceEngineOption } from './access-control/runtimeResourceOptions';
+import { getAccessibleEngines } from '../../mission-control/engines/api/engines';
 import { SsoAssignmentsPanel } from './access-control/SsoAssignmentsPanel';
 import { SsoMappingsPanel } from './access-control/SsoMappingsPanel';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
@@ -1169,7 +1169,7 @@ export default function AccessControl() {
   const runtimeResourceEnginesQ = useQuery({
     queryKey: ['authz-runtime-resource-engines'],
     enabled: engineSetsReadDecision.allowed,
-    queryFn: () => apiClient.get<RuntimeResourceEngineOption[]>('/engines-api/engines'),
+    queryFn: getAccessibleEngines,
   });
   const runtimeResourcesQ = useQuery({
     queryKey: ['authz-runtime-resources', selectedRuntimeEngineId],

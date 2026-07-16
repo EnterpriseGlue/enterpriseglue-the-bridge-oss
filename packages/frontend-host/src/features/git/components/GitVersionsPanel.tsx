@@ -17,6 +17,8 @@ import { EnginePermission, ProjectPermission } from '../../../shared/auth/permis
 import { evaluateActionSnapshot } from '../../../shared/auth/guards';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import type { FileDeploymentSummary as LatestDeploymentByFile } from '@enterpriseglue/shared/schemas/starbase/deployment-query.js';
+import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
+import { getAccessibleEngines } from '../../mission-control/engines/api/engines';
 
 // Lazy load the viewers
 const Viewer = lazy(() => import('../../shared/components/Viewer'));
@@ -102,11 +104,7 @@ interface EnvironmentTag {
   color: string;
 }
 
-interface EngineWithAccess {
-  id: string;
-  name?: string;
-  baseUrl?: string;
-}
+type EngineWithAccess = Pick<AccessibleEngineSummary, 'id' | 'name' | 'baseUrl'>;
 
 type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean;
 type EngineActionCheck = (engineId: string | null | undefined, actionId: string) => boolean;
@@ -397,7 +395,7 @@ export default function GitVersionsPanel({
 
   const enginesQuery = useQuery({
     queryKey: ['engines', 'mine'],
-    queryFn: () => apiClient.get<EngineWithAccess[]>('/engines-api/engines', undefined, { credentials: 'include' }).catch(() => []),
+    queryFn: () => getAccessibleEngines().catch(() => []),
     staleTime: 60000,
   });
 

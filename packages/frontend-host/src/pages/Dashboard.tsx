@@ -7,6 +7,7 @@ import { UserAvatar, FolderOpen, Chip, Activity, Checkmark, Time, WarningAlt } f
 import { useDashboardFilterStore } from '../stores/dashboardFilterStore'
 import { apiClient } from '../shared/api/client'
 import { EngineSelector, useSelectedEngine } from '../components/EngineSelector'
+import { getAccessibleEngines } from '../features/mission-control/engines/api/engines'
 import { useAuth } from '../shared/hooks/useAuth'
 import { EnginePermission, PlatformPermission } from '../shared/auth/permissions'
 import { evaluateActionSnapshot, WhyUnavailableLink } from '../shared/auth/guards'
@@ -112,7 +113,7 @@ export default function Dashboard() {
   // Fetch engines
   const enginesQuery = useQuery({
     queryKey: ['engines'],
-    queryFn: () => apiClient.get<any[]>('/engines-api/engines').catch(() => []),
+    queryFn: () => getAccessibleEngines().catch(() => []),
     enabled: canReadDashboard,
   })
 
