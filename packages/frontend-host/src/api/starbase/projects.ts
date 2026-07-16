@@ -3,11 +3,15 @@ import type { Project } from '../../shared/api/types';
 import type { ProjectEngineAccessResponse } from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js';
 import type {
   ProjectMemberAccessView,
+  ProjectMemberCandidate,
+  AddProjectMember,
+  ProjectMemberAddResponse,
   ProjectMemberCapabilities,
   ProjectMemberLookup,
   ProjectMembersResponse,
   ProjectDeployGrantResponse,
   ReissuedManualProjectInvitation,
+  UpdateProjectMemberRole,
 } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js';
 
 const BASE_URL = '/starbase-api/projects';
@@ -52,6 +56,18 @@ export const projectsApi = {
 
   transferOwnership: (id: string, newOwnerId: string) =>
     apiClient.post(`${BASE_URL}/${encodeURIComponent(id)}/transfer-ownership`, { newOwnerId }),
+
+  searchMemberCandidates: (id: string, query: string) =>
+    apiClient.get<ProjectMemberCandidate[]>(
+      `${BASE_URL}/${encodeURIComponent(id)}/members/user-search`,
+      { q: query },
+    ),
+
+  addMember: (id: string, payload: AddProjectMember) =>
+    apiClient.post<ProjectMemberAddResponse>(`${BASE_URL}/${encodeURIComponent(id)}/members`, payload),
+
+  updateMemberRoles: (id: string, userId: string, payload: UpdateProjectMemberRole) =>
+    apiClient.patch(`${BASE_URL}/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, payload),
   
   create: (data: { name: string }) => apiClient.post<Project>(BASE_URL, data),
   

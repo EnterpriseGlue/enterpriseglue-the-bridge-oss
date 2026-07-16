@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Project roles
 export const ProjectRoleSchema = z.enum(['owner', 'delegate', 'developer', 'editor', 'viewer']);
 
-const EditableProjectRoleSchema = z.enum(['delegate', 'developer', 'editor', 'viewer']);
+export const EditableProjectRoleSchema = z.enum(['delegate', 'developer', 'editor', 'viewer']);
 
 // User summary for member responses
 export const UserSummarySchema = z.object({
@@ -106,6 +106,7 @@ export const AddProjectMemberRequest = z.object({
   email: z.string().email(),
   role: EditableProjectRoleSchema.optional(),
   roles: z.array(EditableProjectRoleSchema).optional(),
+  deliveryMethod: z.enum(['email', 'manual']).optional(),
 });
 
 export const UpdateProjectMemberRoleRequest = z.object({
@@ -119,6 +120,7 @@ export const TransferProjectOwnershipRequest = z.object({
 
 // Types
 export type ProjectRole = z.infer<typeof ProjectRoleSchema>;
+export type EditableProjectRole = z.infer<typeof EditableProjectRoleSchema>;
 export type ProjectMember = z.infer<typeof ProjectMemberSchema>;
 export type ProjectMemberAccessView = z.infer<typeof ProjectMemberAccessViewSchema>;
 export type ProjectPendingInviteStatus = z.infer<typeof ProjectPendingInviteStatusSchema>;
@@ -134,3 +136,4 @@ export type UpdateProjectDeployGrantRequest = z.infer<typeof UpdateProjectDeploy
 export type ProjectDeployGrantResponse = z.infer<typeof ProjectDeployGrantResponseSchema>;
 export type ReissuedManualProjectInvitation = z.infer<typeof ReissuedManualProjectInvitationSchema>;
 export type AddProjectMember = z.infer<typeof AddProjectMemberRequest>;
+export type UpdateProjectMemberRole = z.infer<typeof UpdateProjectMemberRoleRequest>;

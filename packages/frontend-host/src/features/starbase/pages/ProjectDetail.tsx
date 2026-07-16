@@ -62,7 +62,6 @@ import type {
   RoleSummary as SharedRoleSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import type {
-  ProjectMemberAddResponse as SharedProjectMemberAddResponse,
 } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
 import { ProjectMembersModal } from './components/ProjectMembersModal'
 import { ProjectMembersManagementModals, type ProjectScopedCustomRole } from './components/ProjectMembersManagementModals'
@@ -1236,10 +1235,7 @@ export default function ProjectDetail() {
     queryFn: () => {
       const q = memberUserSearch.trim()
       if (q.length < 2) return Promise.resolve([] as UserSearchItem[])
-      return apiClient.get<UserSearchItem[]>(
-        `/starbase-api/projects/${projectId}/members/user-search`,
-        q ? { q } : undefined
-      )
+      return projectsApi.searchMemberCandidates(projectId!, q)
     },
     enabled: addMemberModal.isOpen && !!projectId && canSearchMembers && memberUserSearch.trim().length >= 2,
     staleTime: 30 * 1000,
@@ -1312,12 +1308,13 @@ export default function ProjectDetail() {
     if (memberMode === 'direct-add' && !canAddMembers) return
     if (memberMode === 'invite' && !canInviteMembers) return
     try {
+      const roles = memberRoles.filter((role): role is Exclude<ProjectRole, 'owner'> => role !== 'owner')
       const body = {
         email,
-        roles: memberRoles.filter((r) => r !== 'owner'),
+        roles,
         ...(memberLookup?.mode === 'invite' ? { deliveryMethod: memberDeliveryMethod } : {}),
       }
-      const json = await apiClient.post<SharedProjectMemberAddResponse>(`/starbase-api/projects/${projectId}/members`, body)
+      const json = await projectsApi.addMember(projectId, body)
 
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
 
@@ -1405,8 +1402,8 @@ export default function ProjectDetail() {
     if (!canUpdateMemberRoles) return
     if (!projectId) return
     try {
-      await apiClient.patch(`/starbase-api/projects/${projectId}/members/${encodeURIComponent(member.userId)}`, {
-        roles: roles.filter((r) => r !== 'owner'),
+      await projectsApi.updateMemberRoles(projectId, member.userId, {
+        roles: roles.filter((role): role is Exclude<ProjectRole, 'owner'> => role !== 'owner'),
       })
       await syncProjectCustomRoleAssignments(member.userId, editCustomRoleIds)
       editRolesModal.closeModal()
