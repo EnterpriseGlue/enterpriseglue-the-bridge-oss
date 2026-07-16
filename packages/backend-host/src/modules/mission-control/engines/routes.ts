@@ -38,6 +38,11 @@ import {
   ExternalEngineRegistrationRequestSchema,
   UpdateEngineRequestSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
+import {
+  SavedFilterCreateRequestSchema,
+  SavedFilterResponseSchema,
+  SavedFilterUpdateRequestSchema,
+} from '@enterpriseglue/shared/schemas/mission-control/saved-filter.js'
 import { engineRegistrationJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js'
 
 type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[] }
@@ -318,29 +323,25 @@ const externalProjectEngineTargetDecommissionBodySchema = externalProjectEngineT
   path: ['engineId'],
 })
 
-const createSavedFilterBodySchema = z.object({
-  name: z.string().min(1).max(255),
-  engineId: z.string().min(1),
-  defKeys: z.array(z.string()).default([]),
-  version: z.string().nullable().optional(),
-  active: z.boolean().default(false),
-  incidents: z.boolean().default(false),
-  completed: z.boolean().default(false),
-  canceled: z.boolean().default(false),
-})
-
-const updateSavedFilterBodySchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  engineId: z.string().min(1).optional(),
-  defKeys: z.array(z.string()).optional(),
-  version: z.string().nullable().optional(),
-  active: z.boolean().optional(),
-  incidents: z.boolean().optional(),
-  completed: z.boolean().optional(),
-  canceled: z.boolean().optional(),
-})
+const createSavedFilterBodySchema = SavedFilterCreateRequestSchema
+const updateSavedFilterBodySchema = SavedFilterUpdateRequestSchema
 
 const r = Router()
+
+function serializeSavedFilter(row: Pick<SavedFilter, 'id' | 'name' | 'engineId' | 'defKeys' | 'active' | 'incidents' | 'completed' | 'canceled' | 'createdAt'> & { version: number | string | null }) {
+  return SavedFilterResponseSchema.parse({
+    id: row.id,
+    name: row.name,
+    engineId: row.engineId,
+    defKeys: JSON.parse(row.defKeys || '[]'),
+    version: row.version ?? null,
+    active: Boolean(row.active),
+    incidents: Boolean(row.incidents),
+    completed: Boolean(row.completed),
+    canceled: Boolean(row.canceled),
+    createdAt: Number(row.createdAt),
+  })
+}
 
 async function canViewEngine(req: Request, engineId: string): Promise<boolean> {
   return permissionService.hasPermission(EnginePermissions.INSTANCE_VIEW, {
@@ -1681,10 +1682,7 @@ r.get('/engines-api/saved-filters', apiLimiter, requireAuth, requireAction('engi
   }
   const rows = await filterRepo.find({ where: { engineId: In(engineIds) } })
 
-  res.json(rows.map((row: any) => ({
-    ...row,
-    defKeys: JSON.parse(row.defKeys || '[]'),
-  })))
+  res.json(rows.map((row) => serializeSavedFilter(row)))
 }))
 
 r.post('/engines-api/saved-filters', apiLimiter, requireAuth, validateBody(createSavedFilterBodySchema), requireAction('engine.saved-filters.manage', { resourceResolver: 'engine.byId', resourceIdFrom: 'body', resourceIdKey: 'engineId' }), asyncHandler(async (req: Request, res: Response) => {
@@ -1707,7 +1705,7 @@ r.post('/engines-api/saved-filters', apiLimiter, requireAuth, validateBody(creat
     createdAt: now,
   }
   await filterRepo.insert(payload)
-  res.status(201).json({ ...payload, defKeys: JSON.parse(payload.defKeys) })
+  res.status(201).json(serializeSavedFilter(payload))
 }))
 
 r.get('/engines-api/saved-filters/:id', apiLimiter, requireAuth, requireAction('engine.saved-filters.read', { resourceResolver: 'engine.bySavedFilterId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {
@@ -1717,7 +1715,7 @@ r.get('/engines-api/saved-filters/:id', apiLimiter, requireAuth, requireAction('
   const filter = await filterRepo.findOneBy({ id: filterId })
   if (!filter) throw Errors.notFound('Saved filter')
 
-  res.json({ ...filter, defKeys: JSON.parse(filter.defKeys || '[]') })
+  res.json(serializeSavedFilter(filter))
 }))
 
 r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.saved-filters.manage', { resourceResolver: 'engine.bySavedFilterId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateBody(updateSavedFilterBodySchema), asyncHandler(async (req: Request, res: Response) => {
@@ -1743,7 +1741,7 @@ r.put('/engines-api/saved-filters/:id', apiLimiter, requireAuth, validateParams(
   await filterRepo.update({ id: filterId }, updates)
   const updated = await filterRepo.findOneBy({ id: filterId })
   if (!updated) throw Errors.notFound('Saved filter')
-  res.json({ ...updated, defKeys: JSON.parse(updated.defKeys || '[]') })
+  res.json(serializeSavedFilter(updated))
 }))
 
 r.delete('/engines-api/saved-filters/:id', apiLimiter, requireAuth, requireAction('engine.saved-filters.manage', { resourceResolver: 'engine.bySavedFilterId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {

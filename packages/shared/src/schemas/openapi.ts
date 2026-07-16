@@ -49,7 +49,8 @@ const {
   UpdateEngineRequestSchema,
   ExternalEngineRegistrationRequestSchema,
   SavedFilterSchema,
-  SavedFilterSchemaRaw,
+  SavedFilterCreateRequestSchema,
+  SavedFilterUpdateRequestSchema,
   BatchSchema,
   ProcessDefinitionSchema: MissionControlProcessDefinitionSchema,
   ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
@@ -1088,7 +1089,7 @@ registry.registerPath({
   method: 'post',
   path: '/engines-api/saved-filters',
   ...authzExtension('engine.saved-filters.manage', 'POST', '/engines-api/saved-filters'),
-  request: { body: { content: { 'application/json': { schema: SavedFilterSchemaRaw.partial({ id: true, createdAt: true }) } } } },
+  request: { body: { content: { 'application/json': { schema: SavedFilterCreateRequestSchema } } } },
   responses: { 201: { description: 'Created', content: { 'application/json': { schema: SavedFilterSchema } } } },
 })
 
@@ -1104,7 +1105,7 @@ registry.registerPath({
   method: 'put',
   path: '/engines-api/saved-filters/{id}',
   ...authzExtension('engine.saved-filters.manage', 'PUT', '/engines-api/saved-filters/{id}'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: SavedFilterSchemaRaw.partial() } } } },
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: SavedFilterUpdateRequestSchema } } } },
   responses: { 200: { description: 'Updated', content: { 'application/json': { schema: SavedFilterSchema } } } },
 })
 

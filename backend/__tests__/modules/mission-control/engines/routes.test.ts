@@ -1162,6 +1162,7 @@ describe('mission-control engines routes', () => {
         incidents: true,
         completed: false,
         canceled: false,
+        version: null,
         createdAt: 1,
       },
     ]);
@@ -1183,6 +1184,7 @@ describe('mission-control engines routes', () => {
         id: 'filter-1',
         engineId: 'e1',
         defKeys: ['payment-process'],
+        version: null,
       }),
     ]);
     expect(filterFind).toHaveBeenCalledWith({

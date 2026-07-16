@@ -2293,6 +2293,8 @@ The authorization-audit list now serializes through one strict shared service-vi
 
 The Starbase deployed-commit file restore request and response now likewise share a bounded contract across route validation, serialization, OpenAPI, and Editor. The response requires the resolved semantic version to be either an integer or an explicit `null`, instead of allowing the UI and API to drift on an omitted version.
 
+Mission Control saved-engine filters now also distinguish their JSON-text persistence model from their API contract. Create/update validation, route serialization, OpenAPI, and the Process Overview client share one array-based response model; the response deliberately accepts a legacy string version from an immediate create alongside the persisted numeric version returned on subsequent reads.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

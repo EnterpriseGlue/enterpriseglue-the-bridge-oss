@@ -1,4 +1,8 @@
 import { apiClient } from '../../../../shared/api/client'
+import type {
+  SavedFilter as SharedSavedFilter,
+  SavedFilterCreateRequest as SharedSavedFilterCreateRequest,
+} from '@enterpriseglue/shared/schemas/mission-control/saved-filter.js'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 
 // Types
@@ -36,46 +40,8 @@ export type ActivityCountsByState = {
   completed: Record<string, number>
 }
 
-export type SavedProcessFilter = {
-  id: string
-  name: string
-  engineId: string
-  defKeys: string[]
-  version?: number | string | null
-  active: boolean
-  incidents: boolean
-  completed: boolean
-  canceled: boolean
-  createdAt?: number
-}
-
-export type CreateSavedProcessFilterRequest = {
-  name: string
-  engineId: string
-  defKeys: string[]
-  version?: string | null
-  active: boolean
-  incidents: boolean
-  completed: boolean
-  canceled: boolean
-}
-
-function normalizeSavedProcessFilter(filter: any): SavedProcessFilter {
-  return {
-    id: String(filter?.id || ''),
-    name: String(filter?.name || ''),
-    engineId: String(filter?.engineId || ''),
-    defKeys: Array.isArray(filter?.defKeys)
-      ? filter.defKeys.map((key: unknown) => String(key)).filter(Boolean)
-      : [],
-    version: filter?.version ?? null,
-    active: Boolean(filter?.active),
-    incidents: Boolean(filter?.incidents),
-    completed: Boolean(filter?.completed),
-    canceled: Boolean(filter?.canceled),
-    createdAt: typeof filter?.createdAt === 'number' ? filter.createdAt : undefined,
-  }
-}
+export type SavedProcessFilter = SharedSavedFilter
+export type CreateSavedProcessFilterRequest = SharedSavedFilterCreateRequest
 
 // API Functions
 export async function listProcessDefinitions(engineId?: string): Promise<ProcessDefinition[]> {
@@ -131,13 +97,11 @@ export async function fetchPreviewCount(body: Record<string, unknown>): Promise<
 }
 
 export async function listSavedProcessFilters(): Promise<SavedProcessFilter[]> {
-  const filters = await apiClient.get<any[]>('/engines-api/saved-filters', undefined, { credentials: 'include' })
-  return Array.isArray(filters) ? filters.map(normalizeSavedProcessFilter).filter((filter) => filter.id) : []
+  return apiClient.get<SavedProcessFilter[]>('/engines-api/saved-filters', undefined, { credentials: 'include' })
 }
 
 export async function createSavedProcessFilter(body: CreateSavedProcessFilterRequest): Promise<SavedProcessFilter> {
-  const filter = await apiClient.post<any>('/engines-api/saved-filters', body, { credentials: 'include' })
-  return normalizeSavedProcessFilter(filter)
+  return apiClient.post<SavedProcessFilter>('/engines-api/saved-filters', body, { credentials: 'include' })
 }
 
 export async function deleteSavedProcessFilter(filterId: string): Promise<void> {
