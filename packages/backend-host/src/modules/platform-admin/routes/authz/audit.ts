@@ -5,7 +5,10 @@ import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { policyService } from '@enterpriseglue/shared/services/platform-admin/index.js';
-import { AuthzAuditQuerySchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import {
+  AuthzAuditLogResponseSchema,
+  AuthzAuditQuerySchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 export interface AuditRouteDependencies {
   requirePlatformAction: (actionId: string) => RequestHandler;
@@ -20,7 +23,7 @@ export function registerAuditRoutes(router: Router, { requirePlatformAction }: A
       const decision = req.query.decision === 'allow' || req.query.decision === 'deny' ? req.query.decision : undefined;
       const limit = typeof req.query.limit === 'number' ? req.query.limit : undefined;
       const offset = typeof req.query.offset === 'number' ? req.query.offset : undefined;
-      res.json(await policyService.getAuditLog({
+      const entries = await policyService.getAuditLog({
         tenantId: req.tenant?.tenantId || null,
         userId,
         resourceType,
@@ -28,7 +31,8 @@ export function registerAuditRoutes(router: Router, { requirePlatformAction }: A
         decision,
         limit,
         offset,
-      }));
+      });
+      res.json(AuthzAuditLogResponseSchema.array().parse(entries));
     } catch (error: any) {
       logger.error('Get audit log error:', error);
       throw Errors.internal('Failed to get audit log');

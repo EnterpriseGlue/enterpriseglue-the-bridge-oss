@@ -3213,6 +3213,7 @@ const {
   ApiClientSchema,
   ApiClientWithTokenSchema,
   AuthzAuditQuerySchema,
+  AuthzAuditLogResponseSchema,
   AuthzCheckBatchRequestSchema,
   AuthzCheckBatchResponseSchema,
   AuthzCheckRequestSchema,
@@ -3323,22 +3324,6 @@ registry.registerPath({
   request: { params: z.object({ id: z.string() }) },
   responses: { 200: { description: 'Project-engine deployment targets for an engine', content: { 'application/json': { schema: z.array(ProjectEngineTargetSchema) } } } },
 });
-const AuthzAuditLogResponseSchema = z.object({
-  id: z.string(),
-  tenantId: z.string().nullable().optional(),
-  userId: z.string(),
-  action: z.string(),
-  resourceType: z.string().optional(),
-  resourceId: z.string().optional(),
-  decision: z.enum(['allow', 'deny']),
-  reason: z.string().nullable(),
-  policyId: z.string().optional(),
-  context: z.unknown().optional(),
-  ipAddress: z.string().optional(),
-  userAgent: z.string().optional(),
-  timestamp: z.number(),
-});
-
 const SsoClaimsMappingSchemaOpenApi = z.object({
   id: z.string(),
   providerId: z.string().optional(),

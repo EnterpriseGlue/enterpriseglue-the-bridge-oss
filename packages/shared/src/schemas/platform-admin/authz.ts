@@ -233,6 +233,23 @@ export const AuthzAuditQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional(),
 });
 
+/** Safe service view returned by the tenant-scoped authorization audit API. */
+export const AuthzAuditLogResponseSchema = z.object({
+  id: z.string(),
+  tenantId: z.string().nullable(),
+  userId: z.string(),
+  action: z.string(),
+  resourceType: z.string().nullable(),
+  resourceId: z.string().nullable(),
+  decision: z.enum(['allow', 'deny']),
+  reason: z.string(),
+  policyId: z.string().nullable(),
+  context: z.string(),
+  ipAddress: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  timestamp: z.number(),
+}).strict();
+
 // Raw schema - matches TypeORM SsoProvider entity
 export const SsoProviderSchemaRaw = z.object({
   id: z.string(),
@@ -1881,6 +1898,7 @@ export type AuthzCheckBatchResponse = z.infer<typeof AuthzCheckBatchResponseSche
 export type PolicyCondition = z.infer<typeof PolicyConditionSchema>;
 export type AuthzAuditLogEntry = z.infer<typeof AuthzAuditLogSchema>;
 export type AuthzAuditQuery = z.input<typeof AuthzAuditQuerySchema>;
+export type AuthzAuditLogResponse = z.infer<typeof AuthzAuditLogResponseSchema>;
 export type SsoProvider = z.infer<typeof SsoProviderSchema>;
 export type LegacySsoProviderResponse = z.infer<typeof LegacySsoProviderResponseSchema>;
 export type LegacySsoProviderCreateRequest = z.input<typeof LegacySsoProviderCreateRequestSchema>;

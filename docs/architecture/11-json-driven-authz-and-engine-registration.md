@@ -2289,6 +2289,8 @@ Project-target deployment eligibility and legacy-sync requests now share their r
 
 The tenant-scoped authorization-audit query now also has one shared, coercion-aware schema across the backend route and OpenAPI, so pagination and decision filters cannot drift between documented and executable behavior.
 
+The authorization-audit list now serializes through one strict shared service-view response schema across backend, OpenAPI, and the Platform Admin hook. It preserves nullable tenant/resource/policy/network references and the opaque stored context while rejecting persistence-only fields.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

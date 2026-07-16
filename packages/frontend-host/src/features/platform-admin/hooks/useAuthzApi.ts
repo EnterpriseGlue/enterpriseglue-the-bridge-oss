@@ -19,7 +19,7 @@ import type {
   AuthzGroupMembership as SharedAuthzGroupMembership,
   AuthzGroupSource as SharedAuthzGroupSource,
   AuthzOwnershipMode as SharedAuthzOwnershipMode,
-  AuthzAuditLogEntry as SharedAuthzAuditLogEntry,
+  AuthzAuditLogResponse as SharedAuthzAuditLogResponse,
   AuthzAuditQuery as SharedAuthzAuditQuery,
   AuthzCheckRequest as SharedAuthzCheckRequest,
   AuthzCheckResponse as SharedAuthzCheckResponse,
@@ -298,7 +298,7 @@ export type AuthzPolicyUpdate = SharedAuthzPolicyUpdate;
 export type AuthzCheckRequest = SharedAuthzCheckRequest;
 export type AuthzCheckResponse = SharedAuthzCheckResponse;
 
-export type AuthzAuditEntry = Omit<SharedAuthzAuditLogEntry, 'tenantId'>;
+export type AuthzAuditEntry = SharedAuthzAuditLogResponse;
 
 export type SsoSyncRun = SharedIdentitySyncRun;
 export type SsoSyncEvent = SharedIdentitySyncEvent;

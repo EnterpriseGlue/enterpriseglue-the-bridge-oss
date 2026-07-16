@@ -34,6 +34,7 @@ import {
   AuthzCheckRequestSchema,
   AuthzCheckResponseSchema,
   AuthzAuditQuerySchema,
+  AuthzAuditLogResponseSchema,
   AuthzCreatedIdResponseSchema,
   AuthzMutationSuccessResponseSchema,
   AuthzPolicyCreateSchema,
@@ -313,6 +314,19 @@ describe('provider-neutral identity shared contracts', () => {
       decision: 'deny', limit: 500, offset: 0,
     });
     expect(() => AuthzAuditQuerySchema.parse({ limit: '501' })).toThrow();
+  });
+
+  it('keeps the authorization-audit API view explicit and persistence-safe', () => {
+    expect(AuthzAuditLogResponseSchema.parse({
+      id: 'audit-1', tenantId: null, userId: 'user-1', action: 'authz.check',
+      resourceType: null, resourceId: null, decision: 'allow', reason: 'role assignment',
+      policyId: null, context: '{}', ipAddress: null, userAgent: null, timestamp: 1,
+    }).context).toBe('{}');
+    expect(() => AuthzAuditLogResponseSchema.parse({
+      id: 'audit-1', tenantId: null, userId: 'user-1', action: 'authz.check',
+      resourceType: null, resourceId: null, decision: 'allow', reason: 'role assignment',
+      policyId: null, context: '{}', ipAddress: null, userAgent: null, timestamp: 1, createdAt: 1,
+    })).toThrow();
   });
 
   it('shares bounded external-engine lifecycle notes with the route and OpenAPI', () => {
