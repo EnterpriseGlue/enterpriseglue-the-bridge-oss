@@ -63,6 +63,7 @@ import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './access-control/dataTablePrimitives';
 import { PermissionCatalogPanel, RoleCatalogPanel } from './access-control/RoleCatalogPanels';
 import { RuntimeResourcesPanel } from './access-control/RuntimeResourcesPanel';
+import { SsoMappingClaimsPreview } from './access-control/SsoMappingClaimsPreview';
 import { SsoAssignmentMappingsTable, ssoAssignmentHeaders } from './access-control/SsoAssignmentMappingsTable';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
@@ -2525,43 +2526,7 @@ function SsoMappingsPanel({
 
   return (
     <div style={{ display: 'grid', gap: 'var(--spacing-6)' }}>
-      <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-        <h3 style={{ margin: 0 }}>Claims preview</h3>
-        <TextInput
-          id="sso-mappings-test-claims"
-          labelText="Test claims JSON"
-          value={testClaims}
-          onChange={(event) => onTestClaimsChange(event.target.value)}
-        />
-        <div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
-          {canReadPlatform && (
-            <Button kind="ghost" size="sm" onClick={onTestPlatform} disabled={!canManagePlatform || platformPending} title={canManagePlatform ? undefined : 'Missing permission platform:settings:manage'}>
-              Test Platform Role Mappings
-            </Button>
-          )}
-          {canReadGroups && (
-            <Button kind="ghost" size="sm" onClick={onTestGroups} disabled={!canManageGroups || groupPending} title={canManageGroups ? undefined : 'Missing permission platform:sso-assignments:manage'}>
-              Test Group Mappings
-            </Button>
-          )}
-        </div>
-        {platformTestResult && (
-          <InlineNotification
-            kind="info"
-            title={`Platform role preview: ${platformRoleLabel(platformTestResult.resolvedRole)}`}
-            subtitle={`${platformTestResult.matchedMappings.length} mapping${platformTestResult.matchedMappings.length === 1 ? '' : 's'} matched.`}
-            lowContrast
-          />
-        )}
-        {groupTestResult && (
-          <InlineNotification
-            kind="info"
-            title={`${groupTestResult.memberships.length} group membership${groupTestResult.memberships.length === 1 ? '' : 's'} would sync`}
-            subtitle={`${groupTestResult.matchedMappings.length} mapping${groupTestResult.matchedMappings.length === 1 ? '' : 's'} matched.`}
-            lowContrast
-          />
-        )}
-      </div>
+      <SsoMappingClaimsPreview testClaims={testClaims} platformResult={platformTestResult} groupResult={groupTestResult} canReadPlatform={canReadPlatform} canManagePlatform={canManagePlatform} canReadGroups={canReadGroups} canManageGroups={canManageGroups} platformPending={platformPending} groupPending={groupPending} platformRoleLabel={platformRoleLabel} onTestClaimsChange={onTestClaimsChange} onTestPlatform={onTestPlatform} onTestGroups={onTestGroups} />
 
       {canReadPlatform && (
         <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
