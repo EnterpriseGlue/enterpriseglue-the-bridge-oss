@@ -1568,6 +1568,7 @@ export type IdentityMappingRequest = z.infer<typeof IdentityMappingRequestSchema
 export type IdentityMappingResponse = z.infer<typeof IdentityMappingResponseSchema>;
 export type IdentityProviderResponse = z.infer<typeof IdentityProviderResponseSchema>;
 export type IdentityProviderMembershipReplayResponse = z.infer<typeof IdentityProviderMembershipReplayResponseSchema>;
+export type IdentityProviderExternalIdentityUnlinkResponse = z.infer<typeof IdentityProviderExternalIdentityUnlinkResponseSchema>;
 export type IdentityProviderReconciliationPreview = z.infer<typeof IdentityProviderReconciliationPreviewSchema>;
 export type IdentityProviderConnectionTestResponse = z.infer<typeof IdentityProviderConnectionTestResponseSchema>;
 export type IdentityProviderMigrationReadinessResponse = z.infer<typeof IdentityProviderMigrationReadinessResponseSchema>;

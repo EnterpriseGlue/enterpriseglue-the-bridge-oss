@@ -48,6 +48,7 @@ import type {
   ExternalEngineSystemUpdate as SharedExternalEngineSystemUpdate,
   IdentityMappingResponse,
   IdentityProviderConnectionTestResponse,
+  IdentityProviderExternalIdentityUnlinkResponse,
   IdentityProviderMembershipReplayResponse,
   IdentityProviderMigrationReadinessResponse,
   IdentityProviderReconciliationPreview,
@@ -216,6 +217,7 @@ export type RuntimeResourceReconciliationResult = SharedEngineMetadataReconcilia
 
 export type { IdentityProviderAuthenticationMode, IdentityProviderProtocol };
 export type IdentityProvider = IdentityProviderResponse;
+export type IdentityProviderExternalIdentityUnlinkResult = IdentityProviderExternalIdentityUnlinkResponse;
 export type IdentityProviderMembershipReplayResult = IdentityProviderMembershipReplayResponse;
 export type IdentityProviderMembershipPreviewResult = IdentityProviderReconciliationPreview;
 export type IdentityProviderConnectionTestResult = IdentityProviderConnectionTestResponse;

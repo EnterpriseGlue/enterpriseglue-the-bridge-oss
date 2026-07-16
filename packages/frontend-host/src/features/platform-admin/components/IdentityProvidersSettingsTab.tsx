@@ -12,6 +12,7 @@ import { authzQueryKeys, useIdentityProviders } from '../hooks/useAuthzApi';
 import type {
   IdentityProvider,
   IdentityProviderConnectionTestResult,
+  IdentityProviderExternalIdentityUnlinkResult,
   IdentityProviderMembershipPreviewResult,
   IdentityProviderMembershipReplayResult,
   IdentityProviderMigrationReadiness,
@@ -48,13 +49,6 @@ type SyncRun = { id: string; status: 'running' | 'success' | 'failed'; trigger: 
 type ConnectionTestResult = IdentityProviderConnectionTestResult;
 type MigrationReadiness = IdentityProviderMigrationReadiness;
 type LegacyCutoverResult = LegacyIdentityProviderCutoverResult;
-type ExternalIdentityUnlinkResult = {
-  identityId: string;
-  providerManagedMembershipsRemoved: number;
-  normalizedIdentitiesMarked: number;
-  providerRefreshSessionsRevoked: number;
-  recovery: 'verified_sign_in_required';
-};
 
 type FormState = {
   key: string; protocol: Protocol; isEnabled: boolean; authenticationMode: AuthenticationMode; directoryTenantId: string;
@@ -119,7 +113,7 @@ export default function IdentityProvidersSettingsTab() {
   const [cutoverTarget, setCutoverTarget] = useState<{ legacyProvider: LegacySsoProvider; targetProviderKey: string } | null>(null);
   const [cutoverResult, setCutoverResult] = useState<LegacyCutoverResult | null>(null);
   const [externalIdentityConflict, setExternalIdentityConflict] = useState<{ provider: IdentityProvider; subjectId: string; userId: string } | null>(null);
-  const [externalIdentityUnlinkResult, setExternalIdentityUnlinkResult] = useState<{ providerKey: string; result: ExternalIdentityUnlinkResult } | null>(null);
+  const [externalIdentityUnlinkResult, setExternalIdentityUnlinkResult] = useState<{ providerKey: string; result: IdentityProviderExternalIdentityUnlinkResult } | null>(null);
   const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', historyProvider?.key], queryFn: () => apiClient.get<SyncRun[]>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
 
   const save = useMutation({
@@ -153,7 +147,7 @@ export default function IdentityProvidersSettingsTab() {
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to complete the legacy provider cutover').message),
   });
   const unlinkExternalIdentity = useMutation({
-    mutationFn: (input: { key: string; subjectId: string; userId: string }) => apiClient.post<ExternalIdentityUnlinkResult>(`/api/identity/providers/${encodeURIComponent(input.key)}/external-identities/unlink`, {
+    mutationFn: (input: { key: string; subjectId: string; userId: string }) => apiClient.post<IdentityProviderExternalIdentityUnlinkResult>(`/api/identity/providers/${encodeURIComponent(input.key)}/external-identities/unlink`, {
       subjectId: input.subjectId.trim(), userId: input.userId.trim(), confirmation: 'UNLINK_EXTERNAL_IDENTITY',
     }),
     onSuccess: (result, input) => {
