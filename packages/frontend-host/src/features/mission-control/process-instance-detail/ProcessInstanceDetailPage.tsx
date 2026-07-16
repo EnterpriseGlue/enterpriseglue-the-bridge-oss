@@ -26,7 +26,8 @@ import { useElementLinkPillOverlay } from './components/hooks/useElementLinkPill
 import { useProcessesFilterStore } from '../shared/stores/processesFilterStore'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { apiClient } from '../../../shared/api/client'
-import { evaluateMissionControlStarbaseBridge } from '../../../shared/api/bridgeAuthz'
+import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
+import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { getProcessInstanceVariableHistory } from './api/processInstances'
 import type { DecisionIo, HistoricDecisionInstanceLite, VariableHistoryTarget } from './components/types'
 import { ProcessInstanceDiagramPane } from './components/ProcessInstanceDiagramPane'
@@ -85,6 +86,8 @@ export default function ProcessInstanceDetailPage() {
   const location = useLocation()
   const { alertState, showAlert, closeAlert } = useAlert()
   const selectedEngineId = useSelectedEngine()
+  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
+  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
 
 
   // Get filter state from Zustand store (persisted)
@@ -798,6 +801,8 @@ export default function ProcessInstanceDetailPage() {
 
   const handleEditInStarbase = React.useCallback(async () => {
     if (!processEditTarget?.fileId || processVersion === null || !defKey) return
+    setBridgeError(null)
+    setBridgeDecision(null)
     try {
       const bridgeDecision = await evaluateMissionControlStarbaseBridge({
         engineId: String(selectedEngineId || processEditTarget.engineId || ''),
@@ -808,11 +813,11 @@ export default function ProcessInstanceDetailPage() {
         kind: 'process',
       })
       if (!bridgeDecision.allowed) {
-        showAlert(bridgeDecision.reason || 'Starbase edit is unavailable for this deployment.', 'warning', 'Action unavailable')
+        setBridgeDecision(bridgeDecision)
         return
       }
     } catch (error) {
-      showAlert(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'), 'error')
+      setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'))
       return
     }
 
@@ -833,7 +838,7 @@ export default function ProcessInstanceDetailPage() {
     }
 
     tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
-  }, [processEditTarget, processVersion, defKey, defId, selectedEngineId, showAlert, tenantNavigate])
+  }, [processEditTarget, processVersion, defKey, defId, selectedEngineId, tenantNavigate])
 
   // Handle navigation to linked resources
   const handleElementNavigate = React.useCallback((linkInfo: ElementLinkInfo) => {
@@ -1002,6 +1007,7 @@ export default function ProcessInstanceDetailPage() {
           {instanceId}
         </BreadcrumbItem>
       </BreadcrumbBar>
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
