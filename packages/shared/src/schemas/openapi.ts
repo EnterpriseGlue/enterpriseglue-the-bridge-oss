@@ -57,6 +57,8 @@ const {
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
+  MigrationActiveSourcesResponseSchema,
+  MigrationPreviewResponseSchema,
   PreviewCountResponseSchema,
   VariablesSchema: MissionControlVariablesSchema,
   ActivityInstanceSchema: MissionControlActivityInstanceSchema,
@@ -1439,28 +1441,26 @@ registry.registerPath({
 
 // POST /mission-control-api/migration/preview
 const MigrationPreviewRequest = z.object({ plan: MigrationPlanSchema.optional(), processInstanceIds: z.array(z.string()).optional() })
-const MigrationPreviewResponse = z.object({ count: z.number() })
 registry.register('MigrationPreviewRequest', MigrationPreviewRequest)
-registry.register('MigrationPreviewResponse', MigrationPreviewResponse)
+registry.register('MigrationPreviewResponse', MigrationPreviewResponseSchema)
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/migration/preview',
   ...authzExtension('engine.runtime.migrations.preview', 'POST', '/mission-control-api/migration/preview'),
   request: { body: { content: { 'application/json': { schema: MigrationPreviewRequest } } } },
-  responses: { 200: { description: 'Preview affected instances count', content: { 'application/json': { schema: MigrationPreviewResponse } } } },
+  responses: { 200: { description: 'Preview affected instances count', content: { 'application/json': { schema: MigrationPreviewResponseSchema } } } },
 })
 
 // POST /mission-control-api/migration/active-sources
 const ActiveSourcesRequest = z.object({ processInstanceIds: z.array(z.string()) })
-const ActiveSourcesResponse = z.record(z.string(), z.number())
 registry.register('ActiveSourcesRequest', ActiveSourcesRequest)
-registry.register('ActiveSourcesResponse', ActiveSourcesResponse)
+registry.register('ActiveSourcesResponse', MigrationActiveSourcesResponseSchema)
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/migration/active-sources',
   ...authzExtension('engine.runtime.migrations.active-sources.read', 'POST', '/mission-control-api/migration/active-sources'),
   request: { body: { content: { 'application/json': { schema: ActiveSourcesRequest } } } },
-  responses: { 200: { description: 'Active source activity counts keyed by activityId', content: { 'application/json': { schema: ActiveSourcesResponse } } } },
+  responses: { 200: { description: 'Active source activity counts keyed by activityId', content: { 'application/json': { schema: MigrationActiveSourcesResponseSchema } } } },
 })
 
 // -----------------------------

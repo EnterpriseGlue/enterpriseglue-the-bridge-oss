@@ -3,6 +3,10 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import {
+  MigrationActiveSourcesResponseSchema,
+  MigrationPreviewResponseSchema,
+} from '@enterpriseglue/shared/schemas/mission-control/migration.js'
+import {
   toEnginePlan,
   previewMigrationCount,
   generateMigrationPlan,
@@ -22,14 +26,14 @@ r.post('/mission-control-api/migration/preview', requireRuntimeMigrationAction('
   try {
     const { plan, processInstanceIds } = req.body || {}
     if (Array.isArray(processInstanceIds) && processInstanceIds.length > 0) {
-      return res.status(200).json({ count: processInstanceIds.length })
+      return res.status(200).json(MigrationPreviewResponseSchema.parse({ count: processInstanceIds.length }))
     }
     if (req.authorizedRuntimeResourceKeys) {
       throw Errors.forbidden('Resource-aware migration preview counts are not supported')
     }
     const engineId = (req as any).engineId as string
     const count = await previewMigrationCount(engineId, plan, processInstanceIds)
-    res.status(200).json({ count })
+    res.status(200).json(MigrationPreviewResponseSchema.parse({ count }))
   } catch (e: any) {
     if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to preview affected instances')
@@ -86,7 +90,7 @@ r.post('/mission-control-api/migration/active-sources', requireRuntimeProcessIns
     const ids: string[] = Array.isArray(req.body?.processInstanceIds) ? req.body.processInstanceIds : []
     const engineId = (req as any).engineId as string
     const counts = await aggregateActiveSources(engineId, ids)
-    res.status(200).json(counts)
+    res.status(200).json(MigrationActiveSourcesResponseSchema.parse(counts))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load active sources')
   }

@@ -6,6 +6,10 @@ import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useToast } from '../../../../shared/notifications/ToastProvider'
 import { fetchProcessDefinitionXml } from '../../shared/api/definitions'
+import type {
+  MigrationActiveSourcesResponse,
+  MigrationPreviewResponse,
+} from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 
 export interface MigrationDataParams {
   instanceIds: string[]
@@ -189,7 +193,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       instanceIds.join(','),
     ],
     queryFn: async () =>
-      await apiClient.post<{ count: number }>(
+      await apiClient.post<MigrationPreviewResponse>(
         '/mission-control-api/migration/preview',
         { engineId: selectedEngineId, plan: planWithOverrides, processInstanceIds: instanceIds },
         { credentials: 'include' }
@@ -302,7 +306,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
     queryKey: ['mission-control', 'migration', 'active-src', instanceIds.join(',')],
     queryFn: async () => {
       if (instanceIds.length === 0) return {} as Record<string, number>
-      return await apiClient.post<Record<string, number>>(
+      return await apiClient.post<MigrationActiveSourcesResponse>(
         '/mission-control-api/migration/active-sources',
         { engineId: selectedEngineId, processInstanceIds: instanceIds },
         { credentials: 'include' }

@@ -12,6 +12,7 @@ import {
   generateMigrationPlan,
   executeMigrationAsync,
   previewMigrationCount,
+  aggregateActiveSources,
 } from '../../../../../packages/backend-host/src/modules/mission-control/migration/service.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -188,5 +189,26 @@ describe('mission-control migration routes', () => {
     expect(response.status).toBe(403);
     expect(response.body.error).toBe('Resource-aware migration preview counts are not supported');
     expect(previewMigrationCount).not.toHaveBeenCalled();
+  });
+
+  it('serializes selected migration preview counts through the shared response contract', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/migration/preview')
+      .send({ engineId: 'engine-1', processInstanceIds: ['pi-1', 'pi-2'] });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ count: 2 });
+    expect(previewMigrationCount).not.toHaveBeenCalled();
+  });
+
+  it('serializes active source activity counts through the shared response contract', async () => {
+    vi.mocked(aggregateActiveSources).mockResolvedValueOnce({ approve: 2 });
+
+    const response = await request(app)
+      .post('/mission-control-api/migration/active-sources')
+      .send({ engineId: 'engine-1', processInstanceIds: ['pi-1'] });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ approve: 2 });
   });
 });
