@@ -111,4 +111,26 @@ describe('deploymentReceiptService', () => {
       engineDeploymentId: 'history-1', artifactKind: 'decision', artifactKey: 'credit-check', artifactVersion: 3,
     })]);
   });
+
+  it('upgrades matching discovered deployment lineage after a validated pipeline receipt', async () => {
+    const { deploymentRepo } = setup();
+    deploymentRepo.findOne.mockResolvedValue({
+      id: 'history-discovered', projectId: null, gitCommitSha: null, resourceCount: 0,
+      ingestionSource: 'engine_discovery', lineageQuality: 'discovered', lineageJson: JSON.stringify({ source: 'engine_discovery' }),
+    });
+
+    await deploymentReceiptService.record({
+      tenantId: 'tenant-a', engineId: 'engine-1', source: 'api_client', sourcePrincipalId: 'client-1',
+      idempotencyKey: 'release-003', projectId: 'project-1', engineDeploymentId: 'deployment-1',
+      artifacts: [{ resourceKind: 'process_definition', resourceKey: 'payments-order', version: 2 }],
+      lineage: { pipelineRunId: 'run-3', commitSha: 'receipt-sha' },
+    });
+
+    expect(deploymentRepo.update).toHaveBeenCalledWith('history-discovered', expect.objectContaining({
+      projectId: 'project-1', gitCommitSha: 'receipt-sha', lineageQuality: 'reported',
+      reportingPrincipalId: 'client-1', lineageJson: expect.stringContaining('run-3'),
+    }));
+    const [, updates] = deploymentRepo.update.mock.calls[0];
+    expect(updates).not.toHaveProperty('ingestionSource');
+  });
 });
