@@ -17,49 +17,28 @@ import type {
   ProjectEngineTargetPolicyMode,
   UpdatePlatformSettings,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import type {
+  GovernanceEngineSummary,
+  GovernanceProjectSummary,
+  UserListItem,
+} from '@enterpriseglue/shared/schemas/platform-admin/admin.js';
 
 export type {
   AccessAuthorityMode,
   EngineOnboardingMode,
   EngineRuntimeAuthorizationMode,
+  GovernanceEngineSummary,
+  GovernanceProjectSummary,
   PlatformSettings,
   ProjectEngineTargetPolicyMode,
+  UserListItem,
 };
 
 // Types
 export type EnvironmentTag = SharedEnvironmentTag;
 
-export interface UserListItem {
-  id: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  role: string;
-  isActive: boolean;
-  createdAt: number;
-  lastLoginAt: number | null;
-}
-
-export interface ProjectGovernanceItem {
-  id: string;
-  name: string;
-  ownerEmail: string | null;
-  ownerName: string | null;
-  delegateEmail: string | null;
-  delegateName: string | null;
-  createdAt: number;
-}
-
-export interface EngineGovernanceItem {
-  id: string;
-  name: string;
-  type: string;
-  ownerEmail: string | null;
-  ownerName: string | null;
-  delegateEmail: string | null;
-  delegateName: string | null;
-  createdAt: number;
-}
+export type ProjectGovernanceItem = GovernanceProjectSummary;
+export type EngineGovernanceItem = GovernanceEngineSummary;
 
 // API
 export const platformAdminApi = {

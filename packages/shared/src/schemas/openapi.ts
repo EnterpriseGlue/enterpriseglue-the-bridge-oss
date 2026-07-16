@@ -1827,6 +1827,8 @@ const {
   AssignOwnerRequest,
   UserSearchResultSchema,
   UserListItemSchema,
+  GovernanceProjectSummarySchema,
+  GovernanceEngineSummarySchema,
   SuccessResponseSchema,
   InvitationCapabilitiesResponseSchema,
   CreateInvitationRequestSchema,
@@ -1944,18 +1946,6 @@ registry.registerPath({
 });
 
 // Admin Governance
-const GovernanceProjectSummarySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  ownerEmail: z.string().nullable(),
-  ownerName: z.string().nullable(),
-  delegateEmail: z.string().nullable(),
-  delegateName: z.string().nullable(),
-  createdAt: z.number(),
-});
-const GovernanceEngineSummarySchema = GovernanceProjectSummarySchema.extend({
-  type: z.string(),
-});
 registry.registerPath({
   method: 'get',
   path: '/api/admin/projects',
