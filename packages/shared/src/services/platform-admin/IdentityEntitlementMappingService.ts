@@ -7,20 +7,26 @@ import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persiste
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import {
+  HumanIdentityEntitlementTypeSchema,
+  IdentityEntitlementMatchOperatorSchema,
+  type HumanIdentityEntitlementType as SchemaHumanIdentityEntitlementType,
+  type IdentityEntitlementMatchOperator as SchemaIdentityEntitlementMatchOperator,
+} from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ExternalEntitlement, NormalizedExternalIdentity } from './IdentityProviderAdapter.js';
 
-export type IdentityEntitlementMatchOperator = 'exact' | 'contains' | 'exists';
+export type IdentityEntitlementMatchOperator = SchemaIdentityEntitlementMatchOperator;
 
 /**
  * OAuth scopes describe API delegation. They are normalized with other external
  * entitlements, but must not grant access to an interactive human identity.
  */
-export const humanIdentityEntitlementTypes = ['group', 'role', 'attribute', 'authenticated'] as const;
-export type HumanIdentityEntitlementType = typeof humanIdentityEntitlementTypes[number];
+export const humanIdentityEntitlementTypes = HumanIdentityEntitlementTypeSchema.options;
+export type HumanIdentityEntitlementType = SchemaHumanIdentityEntitlementType;
 
 export function isHumanIdentityEntitlementType(value: string): value is HumanIdentityEntitlementType {
-  return (humanIdentityEntitlementTypes as readonly string[]).includes(value);
+  return HumanIdentityEntitlementTypeSchema.safeParse(value).success;
 }
 
 export interface IdentityEntitlementMappingMatch {

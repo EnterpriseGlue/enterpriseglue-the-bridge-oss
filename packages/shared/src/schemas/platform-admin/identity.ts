@@ -4,6 +4,10 @@ import { z } from 'zod';
 export const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);
 export const IdentityProviderAuthenticationModeSchema = z.enum(['direct', 'claims_only']);
 export const ExternalEntitlementTypeSchema = z.enum(['group', 'role', 'scope', 'attribute', 'authenticated']);
+/** Scopes are protocol metadata, not human authorization inputs. */
+export const HumanIdentityEntitlementTypeSchema = z.enum(['group', 'role', 'attribute', 'authenticated']);
+export const IdentityEntitlementMatchOperatorSchema = z.enum(['exact', 'contains', 'exists']);
+export const IdentityEntitlementSyncModeSchema = z.enum(['additive', 'authoritative']);
 
 export const ExternalEntitlementSchema = z.object({
   type: ExternalEntitlementTypeSchema,
@@ -166,6 +170,9 @@ export const IdentitySyncDiagnosticSchema = z.object({
 export type IdentityProviderType = z.infer<typeof IdentityProviderProtocolSchema>;
 export type IdentityProviderAuthenticationMode = z.infer<typeof IdentityProviderAuthenticationModeSchema>;
 export type ExternalEntitlementType = z.infer<typeof ExternalEntitlementTypeSchema>;
+export type HumanIdentityEntitlementType = z.infer<typeof HumanIdentityEntitlementTypeSchema>;
+export type IdentityEntitlementMatchOperator = z.infer<typeof IdentityEntitlementMatchOperatorSchema>;
+export type IdentityEntitlementSyncMode = z.infer<typeof IdentityEntitlementSyncModeSchema>;
 export type ExternalEntitlement = z.infer<typeof ExternalEntitlementSchema>;
 export type ProviderIdentityInput = z.infer<typeof ProviderIdentityInputSchema>;
 export type NormalizedExternalIdentity = z.infer<typeof NormalizedExternalIdentitySchema>;

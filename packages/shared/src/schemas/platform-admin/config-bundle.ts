@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { ExternalEntitlementTypeSchema } from './identity.js';
+import {
+  ExternalEntitlementTypeSchema,
+  HumanIdentityEntitlementTypeSchema,
+  IdentityEntitlementMatchOperatorSchema,
+  IdentityEntitlementSyncModeSchema,
+} from './identity.js';
 import {
   AccessAuthorityModeSchema,
   EngineOnboardingModeSchema,
@@ -454,18 +459,16 @@ export const ConfigIdentityProvidersFileSchema = z.object({
   identityProviders: z.array(ConfigIdentityProviderSchema),
 }).strict().superRefine((file, ctx) => uniqueKeys(file.identityProviders, ctx, 'identityProviders'));
 
-/** OAuth scopes are valid in test fixtures but cannot grant interactive human access. */
-export const HumanIdentityEntitlementTypeSchema = z.enum(['group', 'role', 'attribute', 'authenticated']);
 export const ConfigIdentityMappingSchema = z.object({
   key: ConfigKeySchema,
   providerKey: ReferenceKeySchema,
   source: z.object({
     type: HumanIdentityEntitlementTypeSchema,
     externalId: z.string().min(1).max(2000).optional(),
-    operator: z.enum(['exact', 'contains', 'exists']).default('exact'),
+    operator: IdentityEntitlementMatchOperatorSchema.default('exact'),
   }).strict(),
   targetGroupKey: ReferenceKeySchema.regex(/^group\./, 'Identity mappings must target an internal group key'),
-  syncMode: z.enum(['additive', 'authoritative']).default('authoritative'),
+  syncMode: IdentityEntitlementSyncModeSchema.default('authoritative'),
   ownershipMode: ConfigOwnershipModeSchema.optional(),
 }).strict().superRefine((mapping, ctx) => {
   if (mapping.source.operator !== 'exists' && !mapping.source.externalId) {
