@@ -74,6 +74,24 @@ function mockDataSource(
 describe('configBundleDiffService', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('does not echo a rejected plaintext credential in persisted-state diff errors', async () => {
+    const plaintext = 'diff-secret-must-not-leak';
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest',
+            auth: { type: 'basic', username: 'enterpriseglue', password: plaintext },
+          }],
+        },
+      },
+    }, 'tenant-a');
+
+    expect(result).toMatchObject({ valid: false, changes: [] });
+    expect(JSON.stringify(result)).not.toContain(plaintext);
+  });
+
   it('identifies creation and authoritative archival without mutating persisted state', async () => {
     mockDataSource([], [{
       id: 'group-stale', tenantId: 'tenant-a', key: 'group.stale', name: 'Stale', description: null,
