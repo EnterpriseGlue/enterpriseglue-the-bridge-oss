@@ -215,7 +215,9 @@ pnpm test:identity:browser
 After configuring the disposable provider, run the opt-in live callback lane to
 sign in through Keycloak and verify the application session on the dashboard.
 The runner accepts only localhost, loopback, or `.local` browser targets and
-applies certificate-error handling only to this local rehearsal.
+applies certificate-error handling only to this local rehearsal. It probes
+issuer discovery first, so a stale Keycloak network namespace fails with the
+recreate guidance above instead of appearing as a browser-login timeout.
 
 ```bash
 PLAYWRIGHT_BASE_URL=https://localhost:5443 \

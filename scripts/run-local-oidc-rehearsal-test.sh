@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 base_url="${PLAYWRIGHT_BASE_URL:-https://localhost:5443}"
 ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-.local/docker/keycloak-tls/ca.crt}"
+issuer_url="${LOCAL_OIDC_ISSUER_URL:-https://localhost:8180/realms/enterpriseglue-local}"
 
 is_local_url() {
   node --input-type=module - "$1" <<'NODE'
@@ -22,6 +23,11 @@ if ! is_local_url "$base_url"; then
   exit 2
 fi
 
+if ! is_local_url "$issuer_url"; then
+  echo "[local-oidc-rehearsal] LOCAL_OIDC_ISSUER_URL must target localhost, loopback, or a .local host; got: $issuer_url" >&2
+  exit 2
+fi
+
 if [[ ! -f "$ca_file" ]]; then
   echo "[local-oidc-rehearsal] PLAYWRIGHT_LOCAL_CA_FILE does not exist: $ca_file" >&2
   exit 2
@@ -29,6 +35,13 @@ fi
 
 if ! curl --fail --silent --show-error --cacert "$ca_file" "$base_url/login" >/dev/null; then
   echo "[local-oidc-rehearsal] Frontend is not reachable at $base_url/login." >&2
+  exit 2
+fi
+
+issuer_discovery_url="${issuer_url%/}/.well-known/openid-configuration"
+if ! curl --fail --silent --show-error --max-time 15 --cacert "$ca_file" "$issuer_discovery_url" >/dev/null; then
+  echo "[local-oidc-rehearsal] Keycloak discovery is unavailable at $issuer_discovery_url." >&2
+  echo "[local-oidc-rehearsal] If backend was recreated, recreate Keycloak in the same Compose command or run: docker compose ... up -d --force-recreate keycloak" >&2
   exit 2
 fi
 
