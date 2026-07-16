@@ -3,6 +3,22 @@
  */
 
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
+import type {
+  EffectiveAccessEvaluateResponse,
+  IdentityMappingResponse,
+  IdentityProviderConnectionTestResponse,
+  IdentityProviderMembershipReplayResponse,
+  IdentityProviderMigrationReadinessResponse,
+  IdentityProviderReconciliationPreview,
+  IdentityProviderResponse,
+  LegacyIdentityProviderCutoverResponse,
+  RuntimeResource as SharedRuntimeResource,
+  RuntimeResourceSet as SharedRuntimeResourceSet,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import type {
+  IdentityProviderAuthenticationMode,
+  IdentityProviderType as IdentityProviderProtocol,
+} from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 import { apiClient } from '../../../shared/api/client';
 
 // Types
@@ -543,171 +559,18 @@ export interface SsoGroupMapping {
   riskAcknowledged?: boolean;
 }
 
-export type HumanIdentityEntitlementType = 'group' | 'role' | 'attribute' | 'authenticated';
+export type HumanIdentityEntitlementType = IdentityMappingResponse['entitlementType'];
 /** `scope` is retained solely to render and retire pre-migration rows. */
 export type ListedIdentityEntitlementType = HumanIdentityEntitlementType | 'scope';
 
-export interface IdentityEntitlementMapping {
-  id: string;
-  providerId: string;
-  providerKey: string;
-  targetGroupId: string;
-  targetGroupKey: string;
+export type IdentityEntitlementMapping = Omit<IdentityMappingResponse, 'entitlementType'> & {
   entitlementType: ListedIdentityEntitlementType;
-  externalId: string | null;
-  matchOperator: 'exact' | 'contains' | 'exists';
-  syncMode: 'authoritative' | 'additive';
-  isActive: boolean;
-  configKey: string | null;
-  sourceRef: string | null;
-}
+};
 
-export interface EffectiveAccessResult {
-  allowed: boolean;
-  decision: 'allow' | 'deny';
-  reason: string;
-  policyId?: string;
-  policyName?: string;
-  baseAllowed: boolean;
-  baseReason: string;
-  resolvedRuntimeResource?: {
-    id: string;
-    engineId: string;
-    resourceKind: 'process_definition' | 'decision_definition';
-    resourceKey: string;
-    runtimeTenantId: string;
-  };
-  sources: Array<{
-    type: string;
-    assignmentId?: string;
-    roleId?: string;
-    role?: string;
-    principalType?: AuthzPrincipalType;
-    principalId?: string;
-    source?: string;
-    sourceMappingId?: string | null;
-    sourceRef?: string | null;
-    scopeType?: AuthzResourceType | null;
-    scopeId?: string | null;
-    groupId?: string | null;
-    groupKey?: string | null;
-    groupName?: string | null;
-    groupMembership?: {
-      id: string;
-      source: string;
-      sourceRef: string | null;
-      expiresAt: number | null;
-    } | null;
-    engineSetId?: string | null;
-    engineSetKey?: string | null;
-    engineSetName?: string | null;
-    selectorFingerprint?: string | null;
-    materializationId?: string | null;
-    matchedEngineId?: string | null;
-    engineRegistration?: {
-      engineId: string;
-      engineName: string | null;
-      externalId: string | null;
-      registrationId: string | null;
-      registrationSource: string | null;
-      externalSystemId: string | null;
-      lifecycleStatus: string | null;
-      apiClientId: string | null;
-      lastExternalSyncAt: number | null;
-      lastRegisteredAt: number | null;
-      externalUpdatedAt: number | null;
-    } | null;
-    matchedBy?: Record<string, unknown> | null;
-    lineage?: Record<string, unknown> | null;
-    configBundle?: {
-      bundleKey: string;
-      sourceRef: string;
-      objectType: 'role_assignment';
-      objectId: string;
-      sourceHash: string | null;
-      lastAppliedAt: number | null;
-      driftStatus: string | null;
-      ownershipMode: string;
-      applyRun: { id: string; canonicalHash: string; appliedAt: number } | null;
-    };
-    ssoMapping?: {
-      id: string;
-      providerId: string | null;
-      claimType: string;
-      claimKey: string;
-      claimValue: string;
-      claimOperator: string | null;
-      targetSelectorType: string;
-    } | null;
-    ssoGroupMapping?: {
-      id: string;
-      providerId: string | null;
-      claimType: string;
-      claimKey: string;
-      claimValue: string;
-      claimOperator: string | null;
-      targetGroupId: string;
-      syncMode: string;
-    } | null;
-    identityEntitlementMapping?: {
-      id: string;
-      providerId: string;
-      entitlementType: string;
-      externalId: string | null;
-      matchOperator: string;
-      targetGroupId: string;
-      syncMode: string;
-    } | null;
-    shadowedRuntimeAssignmentIds?: string[];
-    permission?: string;
-  }>;
-}
-
-export type RuntimeResourceKind = 'process_definition' | 'decision_definition';
-
-export interface RuntimeResource {
-  id: string;
-  tenantId: string | null;
-  engineId: string;
-  resourceKind: RuntimeResourceKind;
-  resourceKey: string;
-  runtimeTenantId: string;
-  engineResourceId: string | null;
-  deploymentId: string | null;
-  projectId: string | null;
-  fileId: string | null;
-  version: number | null;
-  labelsJson: string;
-  lineageJson: string;
-  source: string;
-  sourceRef: string | null;
-  observedAt: number;
-  isActive: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface RuntimeResourceSet {
-  id: string;
-  tenantId: string | null;
-  key: string;
-  name: string;
-  description: string | null;
-  engineId: string;
-  resourceKind: RuntimeResourceKind;
-  selectorJson: string;
-  selectorFingerprint: string;
-  runtimeTenantId: string | null;
-  source: string;
-  sourceRef: string | null;
-  sourceHash: string | null;
-  lastAppliedAt: number | null;
-  driftStatus: string | null;
-  isArchived: boolean;
-  createdById: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
+export type EffectiveAccessResult = EffectiveAccessEvaluateResponse;
+export type RuntimeResourceKind = SharedRuntimeResource['resourceKind'];
+export type RuntimeResource = SharedRuntimeResource;
+export type RuntimeResourceSet = SharedRuntimeResourceSet;
 
 export interface RuntimeResourceSetMaterializationResult {
   runtimeResourceSetId: string;
@@ -830,66 +693,13 @@ export interface ConfigBundleRuntimeReconciliationTask {
   updatedAt: number;
 }
 
-export type IdentityProviderProtocol = 'oidc' | 'saml' | 'ldap';
-export type IdentityProviderAuthenticationMode = 'direct' | 'claims_only';
-
-export interface IdentityProvider {
-  id: string;
-  key: string;
-  protocol: IdentityProviderProtocol;
-  isEnabled: boolean;
-  authenticationMode: IdentityProviderAuthenticationMode;
-  directoryTenantId: string | null;
-  configurationJson: string;
-  syncJson: string;
-  ownershipMode: string;
-  sourceRef: string | null;
-}
-
-export interface IdentityProviderMembershipReplayResult {
-  runId: string | null;
-  scanned: number;
-  created: number;
-  removed: number;
-  failed: number;
-  truncated: boolean;
-  nextCursor: string | null;
-}
-
-export interface IdentityProviderMembershipPreviewResult {
-  scanned: number;
-  additions: number;
-  removals: number;
-  unchanged: number;
-  failed: number;
-  truncated: boolean;
-  nextCursor: string | null;
-  latestSnapshotAt: number | null;
-  warnings: Array<'stored_snapshots_only' | 'no_active_snapshots' | 'truncated'>;
-  mappings: Array<{ mappingId: string; targetGroupId: string; additions: number; removals: number; unchanged: number }>;
-}
-
-export type IdentityProviderConnectionTestResult =
-  | { status: 'connected'; protocol: 'oidc'; issuer: string }
-  | { status: 'connected'; protocol: 'saml'; entityDescriptorCount: number }
-  | { status: 'connected'; protocol: 'ldap'; sampledIdentities: number };
-
-export interface IdentityProviderMigrationReadiness {
-  ready: boolean;
-  targetProviderKey: string;
-  legacyProviderId: string | null;
-  requiredDefaultGroupId: string | null;
-  activeMappingCount: number;
-  checks: { defaultRoleMappingConfigured: boolean | null; directLoginProtocol: boolean };
-  blockers: Array<'target_not_found' | 'target_not_direct_oidc' | 'target_protocol_mismatch' | 'target_disabled' | 'secret_reference_missing' | 'secret_reference_unavailable' | 'identity_mappings_missing' | 'legacy_provider_not_found' | 'default_role_mapping_missing'>;
-}
-
-export interface LegacyIdentityProviderCutoverResult {
-  legacyProvider: { id: string; name: string; type: 'microsoft' | 'google' | 'oidc' | 'saml' };
-  targetProviderKey: string;
-  legacyProviderDisabled: boolean;
-  alreadyDisabled: boolean;
-}
+export type { IdentityProviderAuthenticationMode, IdentityProviderProtocol };
+export type IdentityProvider = IdentityProviderResponse;
+export type IdentityProviderMembershipReplayResult = IdentityProviderMembershipReplayResponse;
+export type IdentityProviderMembershipPreviewResult = IdentityProviderReconciliationPreview;
+export type IdentityProviderConnectionTestResult = IdentityProviderConnectionTestResponse;
+export type IdentityProviderMigrationReadiness = IdentityProviderMigrationReadinessResponse;
+export type LegacyIdentityProviderCutoverResult = LegacyIdentityProviderCutoverResponse;
 
 export interface PolicyCondition {
   timeWindow?: {

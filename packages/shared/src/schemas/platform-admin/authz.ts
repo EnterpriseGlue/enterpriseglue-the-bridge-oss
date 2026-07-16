@@ -13,6 +13,7 @@ import {
 import { EngineConnectionModeSchema } from '../mission-control/engine.js';
 import { RuntimeResourceKindSchema } from './config-bundle.js';
 import {
+  IdentityProviderAuthenticationModeSchema,
   IdentityProviderProtocolSchema as SharedIdentityProviderProtocolSchema,
   IdentitySyncEventSchema,
   IdentitySyncRunSchema,
@@ -918,6 +919,15 @@ export const EffectiveAccessEvaluateResponseSchema = z.object({
       targetGroupId: z.string(),
       syncMode: z.string(),
     }).nullable().optional(),
+    identityEntitlementMapping: z.object({
+      id: z.string(),
+      providerId: z.string(),
+      entitlementType: z.string(),
+      externalId: z.string().nullable(),
+      matchOperator: z.string(),
+      targetGroupId: z.string(),
+      syncMode: z.string(),
+    }).nullable().optional(),
     shadowedRuntimeAssignmentIds: z.array(z.string()).optional(),
     permission: z.string().optional(),
   })),
@@ -1001,6 +1011,8 @@ export const IdentityMappingResponseSchema = IdentityMappingRequestSchema.extend
   id: z.string(),
   providerId: z.string(),
   targetGroupId: z.string(),
+  externalId: z.string().min(1).max(2000).nullable(),
+  syncMode: z.enum(['additive', 'authoritative']),
   isActive: z.boolean(),
   configKey: z.string().nullable(),
   sourceRef: z.string().nullable(),
@@ -1209,7 +1221,7 @@ export const IdentityProviderRequestSchema = z.object({
   key: z.string().min(1).max(128),
   protocol: SharedIdentityProviderProtocolSchema,
   isEnabled: z.boolean().optional(),
-  authenticationMode: z.enum(['direct', 'claims_only']).optional(),
+  authenticationMode: IdentityProviderAuthenticationModeSchema.optional(),
   directoryTenantId: z.string().nullable().optional(),
   configuration: IdentityProviderConfigurationSchema,
   sync: z.record(z.string(), z.unknown()).optional(),
@@ -1223,7 +1235,7 @@ export const IdentityProviderResponseSchema = IdentityProviderRequestSchema.exte
   id: z.string(),
   tenantId: z.string().nullable(),
   isEnabled: z.boolean(),
-  authenticationMode: z.enum(['direct', 'claims_only']),
+  authenticationMode: IdentityProviderAuthenticationModeSchema,
   configurationJson: z.string(),
   syncJson: z.string(),
   createdAt: z.number(),
@@ -1454,6 +1466,12 @@ export type EffectiveAccessEvaluateRequest = z.infer<typeof EffectiveAccessEvalu
 export type EffectiveAccessEvaluateResponse = z.infer<typeof EffectiveAccessEvaluateResponseSchema>;
 export type IdentityMappingRequest = z.infer<typeof IdentityMappingRequestSchema>;
 export type IdentityMappingResponse = z.infer<typeof IdentityMappingResponseSchema>;
+export type IdentityProviderResponse = z.infer<typeof IdentityProviderResponseSchema>;
+export type IdentityProviderMembershipReplayResponse = z.infer<typeof IdentityProviderMembershipReplayResponseSchema>;
+export type IdentityProviderReconciliationPreview = z.infer<typeof IdentityProviderReconciliationPreviewSchema>;
+export type IdentityProviderConnectionTestResponse = z.infer<typeof IdentityProviderConnectionTestResponseSchema>;
+export type IdentityProviderMigrationReadinessResponse = z.infer<typeof IdentityProviderMigrationReadinessResponseSchema>;
+export type LegacyIdentityProviderCutoverResponse = z.infer<typeof LegacyIdentityProviderCutoverResponseSchema>;
 export type RuntimeResource = z.infer<typeof RuntimeResourceSchema>;
 export type RuntimeResourceSet = z.infer<typeof RuntimeResourceSetSchema>;
 export type SsoAssignmentMapping = z.infer<typeof SsoAssignmentMappingSchema>;

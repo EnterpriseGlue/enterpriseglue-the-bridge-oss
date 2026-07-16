@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 /** Provider-neutral contracts shared by adapters, mapping services, and API schemas. */
 export const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);
+export const IdentityProviderAuthenticationModeSchema = z.enum(['direct', 'claims_only']);
 export const ExternalEntitlementTypeSchema = z.enum(['group', 'role', 'scope', 'attribute', 'authenticated']);
 
 export const ExternalEntitlementSchema = z.object({
@@ -40,7 +41,7 @@ export const IdentityProviderRecordSchema = z.object({
   providerKeyIdentity: z.string().min(1),
   protocol: IdentityProviderProtocolSchema,
   isEnabled: z.boolean(),
-  authenticationMode: z.enum(['direct', 'claims_only']),
+  authenticationMode: IdentityProviderAuthenticationModeSchema,
   directoryTenantId: z.string().nullable(),
   configurationJson: z.string(),
   syncJson: z.string(),
@@ -163,6 +164,7 @@ export const IdentitySyncDiagnosticSchema = z.object({
 }).strict();
 
 export type IdentityProviderType = z.infer<typeof IdentityProviderProtocolSchema>;
+export type IdentityProviderAuthenticationMode = z.infer<typeof IdentityProviderAuthenticationModeSchema>;
 export type ExternalEntitlementType = z.infer<typeof ExternalEntitlementTypeSchema>;
 export type ExternalEntitlement = z.infer<typeof ExternalEntitlementSchema>;
 export type ProviderIdentityInput = z.infer<typeof ProviderIdentityInputSchema>;

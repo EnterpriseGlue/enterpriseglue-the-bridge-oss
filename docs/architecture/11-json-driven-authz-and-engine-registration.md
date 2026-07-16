@@ -2223,7 +2223,7 @@ This phase is required because the current implementation still carries compatib
 - [x] ✅ Isolate the Role Assignment form state, principal/scope transitions, eligible-role rules, static selector options, submit rule, and runtime-resource queries in `pages/access-control/assignmentFormOptions.ts`; the final Carbon form JSX move remains a mechanical component-boundary follow-up.
 - [x] ✅ Split external registration and all SSO mapping/diagnostic families into focused routers. Roles/permissions, assignments/groups, project-engine targets/bridges, engine sets/runtime resources, policies, machines, configuration bundles, audit, external registration, and SSO mappings are now isolated; the parent router retains only shared evaluation and module mounting.
 - [x] ✅ Split action and OpenAPI registrations into domain modules with aggregate validation exports so strict inventory guards remain authoritative. Platform, engine/runtime, and project catalogs now compose through the existing compatibility export; duplicate action/resolver ids, missing UI surfaces, and unknown route resolvers fail aggregate validation.
-- [ ] ⬜ Keep shared types generated/imported from shared schemas instead of duplicating hand-maintained frontend interfaces.
+- [ ] ⬜ Keep shared types generated/imported from shared schemas instead of duplicating hand-maintained frontend interfaces. The Platform Admin hook now imports the canonical identity-provider lifecycle, mapping, Effective Access, and runtime-resource response types from the shared schemas; its explicit `scope` entitlement union remains only to render pre-migration rows. Other legacy frontend interfaces still require consolidation.
 
 Phase 0 exit criteria:
 

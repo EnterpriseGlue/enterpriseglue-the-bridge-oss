@@ -10,6 +10,8 @@ import {
   ProviderIdentityInputSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 import {
+  EffectiveAccessEvaluateResponseSchema,
+  IdentityMappingResponseSchema,
   SsoSyncEventSchema,
   SsoSyncRunSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
@@ -54,5 +56,19 @@ describe('provider-neutral identity shared contracts', () => {
     expect(SsoSyncRunSchema).toBe(IdentitySyncRunSchema);
     expect(SsoSyncEventSchema).toBe(IdentitySyncEventSchema);
     expect(IdentitySyncEventSchema.parse({ id: 'event-1', tenantId: 'tenant-a', providerId: 'provider-1', runId: 'run-1', severity: 'info', type: 'identity_synced', userId: null, mappingType: null, mappingId: null, resourceType: null, resourceId: null, message: 'Completed', details: '{}', createdAt: 2 }).runId).toBe('run-1');
+  });
+
+  it('keeps identity mapping and Effective Access provider lineage in shared API contracts', () => {
+    expect(IdentityMappingResponseSchema.parse({
+      id: 'mapping-1', providerId: 'provider-1', providerKey: 'identity.oidc.example', targetGroupId: 'group-1', targetGroupKey: 'operators',
+      entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, configKey: null, sourceRef: null,
+    }).syncMode).toBe('authoritative');
+    expect(EffectiveAccessEvaluateResponseSchema.parse({
+      allowed: true, decision: 'allow', reason: 'Granted by group', baseAllowed: true, baseReason: 'Canonical assignment',
+      sources: [{
+        type: 'group_membership',
+        identityEntitlementMapping: { id: 'mapping-1', providerId: 'provider-1', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'authoritative' },
+      }],
+    }).sources[0]?.identityEntitlementMapping?.providerId).toBe('provider-1');
   });
 });
