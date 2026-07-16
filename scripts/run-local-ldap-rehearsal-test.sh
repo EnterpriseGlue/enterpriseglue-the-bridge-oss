@@ -31,7 +31,7 @@ if ! curl --fail --silent --show-error --cacert "$ca_file" "$base_url/login" >/d
 fi
 
 if [[ "${LOCAL_LDAP_FIXTURE_ACTIVE:-}" != 'true' ]]; then
-  if [[ -f .local/docker/env/oidc-rehearsal.env ]]; then
+  if [[ -z "${LOCAL_LDAP_ADMIN_EMAIL:-}" && -z "${LOCAL_LDAP_ADMIN_PASSWORD:-}" && -z "${ADMIN_EMAIL:-}" && -z "${ADMIN_PASSWORD:-}" && -f .local/docker/env/oidc-rehearsal.env ]]; then
     set -a
     source .local/docker/env/oidc-rehearsal.env
     set +a

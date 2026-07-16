@@ -108,4 +108,6 @@ test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to lo
   assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_REHEARSAL=true/);
   assert.match(localLdapRehearsalRunner, /run-ldap-protocol-mock\.sh/);
   assert.match(localLdapRehearsalRunner, /localhost, loopback, or a \.local host/);
+  assert.match(localLdapRehearsalRunner, /-z "\$\{ADMIN_EMAIL:-\}"/);
+  assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_ADMIN_EMAIL/);
 });

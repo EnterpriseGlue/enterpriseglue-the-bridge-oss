@@ -300,6 +300,10 @@ This lane accepts only local browser targets and a Docker-local LDAP host. It
 does not print directory credentials, bound secrets, certificates, cookies, or
 tokens. Like OIDC and SAML, it is local protocol/browser evidence only and
 does not authorize compatibility-path removal or a deployed-provider cutover.
+When the active compose environment already exports `ADMIN_EMAIL` and
+`ADMIN_PASSWORD`, the runner uses those values; it loads the disposable
+`.local/docker/env/oidc-rehearsal.env` fallback only when no administrator
+input was supplied.
 
 ## Optional local sign-in smoke
 
