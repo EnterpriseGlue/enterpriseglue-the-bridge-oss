@@ -43,6 +43,7 @@ import { redirectTo, replaceAndReloadToInternalPath } from '../../../utils/redir
 import type { ProjectEngineAccessData } from '../utils/deployEligibility'
 import { LoadingState } from '../../shared/components/LoadingState'
 import type { LockHolder, LockResponse } from '../../git/types/git'
+import type { LatestProjectDeploymentArtifact as LatestDeploymentByFile } from '@enterpriseglue/shared/schemas/starbase/deployment-query.js'
 
 type FolderBreadcrumb = {
   id: string
@@ -88,21 +89,6 @@ function toDisplayFileName(name: string | null | undefined): string {
 
 function formatUsedInParentProcessesLabel(count: number): string {
   return `Used in ${count} parent ${count === 1 ? 'process' : 'processes'}`
-}
-
-type DeploymentArtifact = {
-  kind?: string
-  key?: string
-  version?: number
-}
-
-type LatestDeploymentByFile = {
-  engineId?: string
-  engineName?: string | null
-  environmentTag?: string | null
-  deployedAt?: number | null
-  fileId?: string
-  artifacts?: DeploymentArtifact[]
 }
 
 type FileCommitRef = {

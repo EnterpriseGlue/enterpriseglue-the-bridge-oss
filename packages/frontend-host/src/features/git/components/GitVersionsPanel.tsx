@@ -16,6 +16,7 @@ import { useAuth } from '../../../shared/hooks/useAuth';
 import { EnginePermission, ProjectPermission } from '../../../shared/auth/permissions';
 import { evaluateActionSnapshot } from '../../../shared/auth/guards';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
+import type { FileDeploymentSummary as LatestDeploymentByFile } from '@enterpriseglue/shared/schemas/starbase/deployment-query.js';
 
 // Lazy load the viewers
 const Viewer = lazy(() => import('../../shared/components/Viewer'));
@@ -109,17 +110,6 @@ interface EngineWithAccess {
 
 type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean;
 type EngineActionCheck = (engineId: string | null | undefined, actionId: string) => boolean;
-
-interface LatestDeploymentByFile {
-  engineId?: string;
-  engineDeploymentId?: string | null;
-  engineName?: string | null;
-  environmentTag?: string | null;
-  deployedAt?: number | null;
-  fileId?: string | null;
-  fileGitCommitId?: string | null;
-  artifacts?: Array<{ kind?: string; key?: string; version?: number }>;
-}
 
 interface DeploymentBadge {
   label: string;

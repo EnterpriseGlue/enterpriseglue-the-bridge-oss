@@ -25,6 +25,8 @@ const {
   UpdateFolderRequest,
   ProjectContentsSchema,
   FolderDeletePreviewSchema,
+  FileDeploymentSummarySchema,
+  LatestProjectDeploymentArtifactSchema,
 } = await import('@enterpriseglue/shared/schemas/starbase/index.js');
 
 const {
@@ -2772,7 +2774,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/engine-deployments/latest',
   ...authzExtension('project.deployments.read', 'GET', '/starbase-api/projects/:projectId/engine-deployments/latest'),
   request: { params: z.object({ projectId: z.string() }) },
-  responses: { 200: { description: 'Latest engine deployments per file', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Latest engine deployments per file', content: { 'application/json': { schema: z.array(LatestProjectDeploymentArtifactSchema) } } } },
 });
 
 // GET /starbase-api/projects/:projectId/files/:fileId/deployments
@@ -2781,7 +2783,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/files/{fileId}/deployments',
   ...authzExtension('project.deployments.read', 'GET', '/starbase-api/projects/:projectId/files/:fileId/deployments'),
   request: { params: z.object({ projectId: z.string(), fileId: z.string() }) },
-  responses: { 200: { description: 'Deployments for a specific file', content: { 'application/json': { schema: z.array(z.unknown()) } } } },
+  responses: { 200: { description: 'Deployments for a specific file', content: { 'application/json': { schema: z.array(FileDeploymentSummarySchema) } } } },
 });
 
 // GET /starbase-api/projects/:projectId/files/:fileId/deployments/history
@@ -2790,7 +2792,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/files/{fileId}/deployments/history',
   ...authzExtension('project.deployments.read', 'GET', '/starbase-api/projects/:projectId/files/:fileId/deployments/history'),
   request: { params: z.object({ projectId: z.string(), fileId: z.string() }) },
-  responses: { 200: { description: 'Full deployment history for a file', content: { 'application/json': { schema: z.array(z.unknown()) } } } },
+  responses: { 200: { description: 'Full deployment history for a file', content: { 'application/json': { schema: z.array(FileDeploymentSummarySchema) } } } },
 });
 
 // -----------------------------

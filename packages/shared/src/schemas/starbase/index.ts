@@ -4,3 +4,4 @@ export * from './file.js';
 export * from './version.js';
 export * from './comment.js';
 export * from './folder.js';
+export * from './deployment-query.js';
