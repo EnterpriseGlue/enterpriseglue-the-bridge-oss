@@ -54,10 +54,13 @@ test('browser, credentialed local authorization, and LDAP-container boundaries s
     .map((name) => scripts[name])
     .join(' ');
 
-  assert.doesNotMatch(localCommands, /test:(?:identity:(?:browser|ldap)|authz:local-(?:login|access-control))/);
+  assert.doesNotMatch(localCommands, /test:(?:identity:(?:browser|ldap)|authz:local-(?:login|access-control|smoke))/);
 });
 
 test('credentialed local authorization smokes use the guarded runner', () => {
   assert.match(scripts['test:authz:local-login'], /run-authz-local-login-test\.sh/);
   assert.match(scripts['test:authz:local-access-control'], /run-authz-local-login-test\.sh/);
+  assert.match(scripts['test:authz:local-smoke'], /run-authz-local-login-test\.sh/);
+  assert.match(scripts['test:authz:local-smoke'], /test\/e2e\/smoke\/login\.spec\.ts/);
+  assert.match(scripts['test:authz:local-smoke'], /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
 });

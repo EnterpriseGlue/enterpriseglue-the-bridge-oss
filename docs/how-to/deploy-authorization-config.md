@@ -234,11 +234,13 @@ not seed, modify, or print its credentials.
 E2E_USER='local-admin@example.test' \
 E2E_PASSWORD='your-local-password' \
 PLAYWRIGHT_BASE_URL='http://localhost:5173' \
-pnpm test:authz:local-login
+pnpm test:authz:local-smoke
 ```
 
-To also verify that the authenticated administrator can reach the Access
-Control UI, repeat the command with `pnpm test:authz:local-access-control`.
+This local-only lane verifies sign-in and that the authenticated administrator
+can reach the Access Control UI. The narrower `test:authz:local-login` and
+`test:authz:local-access-control` commands remain available for targeted
+reruns.
 
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
 

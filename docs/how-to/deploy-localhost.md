@@ -107,11 +107,13 @@ only localhost, loopback, or `.local` URLs.
 E2E_USER='local-admin@example.test' \
 E2E_PASSWORD='your-local-password' \
 PLAYWRIGHT_BASE_URL='http://localhost:5173' \
-pnpm test:authz:local-login
+pnpm test:authz:local-smoke
 ```
 
-Run the same environment variables with `pnpm test:authz:local-access-control`
-to verify the authenticated administrator can open the Access Control UI.
+This guarded local-only lane verifies both sign-in and that the authenticated
+administrator can open the Access Control UI. The narrower
+`test:authz:local-login` and `test:authz:local-access-control` commands remain
+available for targeted reruns.
 
 If Chromium is not installed for this workspace, run `pnpm exec playwright
 install chromium` once. The command fails rather than skipping if either
