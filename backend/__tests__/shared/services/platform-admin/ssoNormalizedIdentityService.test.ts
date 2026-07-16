@@ -66,6 +66,8 @@ describe('ssoNormalizedIdentityService', () => {
         access_token: 'raw-access-token',
         saml_assertion: '<Assertion>raw-saml-assertion</Assertion>',
         bindPassword: 'raw-directory-password',
+        signingCertificate: '-----BEGIN CERTIFICATE-----raw-certificate-----END CERTIFICATE-----',
+        privateKey: '-----BEGIN PRIVATE KEY-----raw-private-key-----END PRIVATE KEY-----',
       },
       now: 1234,
     });
@@ -101,6 +103,8 @@ describe('ssoNormalizedIdentityService', () => {
     expect(persistedSnapshot).not.toContain('raw-access-token');
     expect(persistedSnapshot).not.toContain('raw-saml-assertion');
     expect(persistedSnapshot).not.toContain('raw-directory-password');
+    expect(persistedSnapshot).not.toContain('raw-certificate');
+    expect(persistedSnapshot).not.toContain('raw-private-key');
   });
 
   it('updates an existing normalized identity snapshot by provider subject', async () => {
