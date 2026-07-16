@@ -1,21 +1,11 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/db/entities/PlatformSettings.js';
+import type {
+  PublicPlatformBranding,
+  UpdatePlatformBrandingRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 
-export interface PlatformBranding {
-  logoUrl: string | null;
-  loginLogoUrl: string | null;
-  loginTitleVerticalOffset: number;
-  loginTitleColor: string | null;
-  logoTitle: string | null;
-  logoScale: number;
-  titleFontUrl: string | null;
-  titleFontWeight: string;
-  titleFontSize: number;
-  titleVerticalOffset: number;
-  menuAccentColor: string | null;
-  faviconUrl: string | null;
-  ssoAutoRedirectSingleProvider?: boolean;
-}
+export type PlatformBranding = PublicPlatformBranding;
 
 const BRANDING_DEFAULTS: PlatformBranding = {
   logoUrl: null,
@@ -60,7 +50,7 @@ class BrandingService {
     };
   }
 
-  async update(input: Partial<PlatformBranding>, updatedById: string): Promise<void> {
+  async update(input: UpdatePlatformBrandingRequest, updatedById: string): Promise<void> {
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(PlatformSettings);
     const now = Date.now();

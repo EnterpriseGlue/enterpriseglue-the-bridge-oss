@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const PiiProviderTypeSchema = z.enum(['presidio', 'gcp_dlp', 'aws_comprehend', 'azure_pii']);
 const PiiScopeSchema = z.enum(['processDetails', 'history', 'logs', 'errors', 'audit']);
+const BrandingHexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 export const EngineOnboardingModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
 export const ProjectEngineTargetPolicyModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
 export const AccessAuthorityModeSchema = z.enum(['manual', 'transition_to_sso', 'sso_managed']);
@@ -16,6 +17,42 @@ export const UnsupportedEngineRuntimeAuthorizationModeErrorSchema = z.object({
     message: z.literal(UnsupportedEngineRuntimeAuthorizationModeMessage),
     code: z.literal('invalid_value'),
   })).min(1),
+});
+
+/** Platform-wide branding returned to the administrator settings surface. */
+export const PlatformBrandingSchema = z.object({
+  logoUrl: z.string().nullable(),
+  loginLogoUrl: z.string().nullable(),
+  loginTitleVerticalOffset: z.number(),
+  loginTitleColor: z.string().nullable(),
+  logoTitle: z.string().nullable(),
+  logoScale: z.number(),
+  titleFontUrl: z.string().nullable(),
+  titleFontWeight: z.string(),
+  titleFontSize: z.number(),
+  titleVerticalOffset: z.number(),
+  menuAccentColor: z.string().nullable(),
+  faviconUrl: z.string().nullable(),
+});
+
+/** Non-secret branding available before a normal user session exists. */
+export const PublicPlatformBrandingSchema = PlatformBrandingSchema.extend({
+  ssoAutoRedirectSingleProvider: z.boolean(),
+});
+
+export const UpdatePlatformBrandingRequestSchema = z.object({
+  logoUrl: z.string().nullable().optional(),
+  loginLogoUrl: z.string().nullable().optional(),
+  loginTitleVerticalOffset: z.number().min(-50).max(50).optional(),
+  loginTitleColor: BrandingHexColorSchema.nullable().optional(),
+  logoTitle: z.string().nullable().optional(),
+  logoScale: z.number().min(50).max(200).optional(),
+  titleFontUrl: z.string().nullable().optional(),
+  titleFontWeight: z.string().optional(),
+  titleFontSize: z.number().min(10).max(32).optional(),
+  titleVerticalOffset: z.number().min(-20).max(20).optional(),
+  menuAccentColor: BrandingHexColorSchema.nullable().optional(),
+  faviconUrl: z.string().nullable().optional(),
 });
 
 // Select schema (read responses)
@@ -95,6 +132,9 @@ export const UpdatePlatformSettingsRequest = z.object({
 // Types
 export type PlatformSettings = z.infer<typeof PlatformSettingsSchema>;
 export type UpdatePlatformSettings = z.infer<typeof UpdatePlatformSettingsRequest>;
+export type PlatformBranding = z.infer<typeof PlatformBrandingSchema>;
+export type PublicPlatformBranding = z.infer<typeof PublicPlatformBrandingSchema>;
+export type UpdatePlatformBrandingRequest = z.infer<typeof UpdatePlatformBrandingRequestSchema>;
 export type EngineOnboardingMode = z.infer<typeof EngineOnboardingModeSchema>;
 export type ProjectEngineTargetPolicyMode = z.infer<typeof ProjectEngineTargetPolicyModeSchema>;
 export type AccessAuthorityMode = z.infer<typeof AccessAuthorityModeSchema>;

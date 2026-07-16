@@ -8,6 +8,7 @@ import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { PublicPlatformBrandingSchema } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import {
   normalizeEngineOnboardingMode,
   normalizeProjectEngineTargetMode,
@@ -139,7 +140,7 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
     const settings = await settingsRepo.findOneBy({ id: 'default' });
 
     if (!settings) {
-      return res.json({
+      return res.json(PublicPlatformBrandingSchema.parse({
         logoUrl: null,
         loginLogoUrl: null,
         loginTitleVerticalOffset: 0,
@@ -153,10 +154,10 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
         menuAccentColor: null,
         faviconUrl: null,
         ssoAutoRedirectSingleProvider: false,
-      });
+      }));
     }
 
-    res.json({
+    res.json(PublicPlatformBrandingSchema.parse({
       logoUrl: settings.logoUrl || null,
       loginLogoUrl: settings.loginLogoUrl || null,
       loginTitleVerticalOffset: settings.loginTitleVerticalOffset ?? 0,
@@ -170,7 +171,7 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
       menuAccentColor: settings.menuAccentColor || null,
       faviconUrl: settings.faviconUrl || null,
       ssoAutoRedirectSingleProvider: (settings as any).ssoAutoRedirectSingleProvider ?? false,
-    });
+    }));
   } catch (error) {
     logger.error('Get branding error:', error);
     res.status(500).json({ error: 'Failed to get branding' });

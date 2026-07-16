@@ -43,21 +43,7 @@ import {
   PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS,
   USER_MANAGEMENT_PLATFORM_PERMISSIONS,
 } from '../../../shared/auth/permissions'
-
-interface TenantBranding {
-  logoUrl: string | null;
-  loginLogoUrl: string | null;
-  logoTitle: string | null;
-  loginTitleVerticalOffset: number;
-  loginTitleColor: string | null;
-  logoScale: number;
-  titleFontUrl: string | null;
-  titleFontWeight: string;
-  titleFontSize: number;
-  titleVerticalOffset: number;
-  menuAccentColor: string | null;
-  faviconUrl: string | null;
-}
+import type { PlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js'
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1'
 
@@ -140,7 +126,7 @@ function normalizeEnterpriseNavItems(raw: unknown): NavExtension[] {
   return items
 }
 
-function normalizeBranding(raw: any): TenantBranding {
+function normalizeBranding(raw: any): PlatformBranding {
   const r = raw && typeof raw === 'object' ? raw : {}
   return {
     logoUrl: typeof r.logoUrl === 'string' ? r.logoUrl : null,
@@ -158,7 +144,7 @@ function normalizeBranding(raw: any): TenantBranding {
   }
 }
 
-function readCachedBranding(): TenantBranding | undefined {
+function readCachedBranding(): PlatformBranding | undefined {
   try {
     const raw = window.localStorage.getItem(BRANDING_CACHE_KEY)
     if (!raw) return undefined
@@ -168,7 +154,7 @@ function readCachedBranding(): TenantBranding | undefined {
   }
 }
 
-function writeCachedBranding(branding: TenantBranding): void {
+function writeCachedBranding(branding: PlatformBranding): void {
   try {
     window.localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(branding))
   } catch {
@@ -460,9 +446,9 @@ export default function LayoutWithProSidebar() {
   // Fetch tenant branding
   const brandingQuery = useQuery({
     queryKey: ['tenant-branding'],
-    queryFn: async (): Promise<TenantBranding> => {
+    queryFn: async (): Promise<PlatformBranding> => {
       try {
-        const data = await apiClient.get<TenantBranding>('/api/auth/branding', undefined, {
+        const data = await apiClient.get<PlatformBranding>('/api/auth/branding', undefined, {
           credentials: 'include',
         })
         const normalized = normalizeBranding(data)

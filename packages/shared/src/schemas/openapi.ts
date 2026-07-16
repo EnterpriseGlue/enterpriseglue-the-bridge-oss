@@ -1762,6 +1762,9 @@ const {
   ReorderEnvironmentTagsRequest,
   PlatformSettingsSchema,
   UpdatePlatformSettingsRequest,
+  PlatformBrandingSchema,
+  PublicPlatformBrandingSchema,
+  UpdatePlatformBrandingRequestSchema,
   EngineOnboardingModeSchema,
   EngineRuntimeAuthorizationModeSchema,
   UnsupportedEngineRuntimeAuthorizationModeErrorSchema,
@@ -1877,21 +1880,6 @@ registry.registerPath({
 });
 
 // Platform Branding
-const PlatformBrandingSchema = z.object({
-  logoUrl: z.string().nullable(),
-  loginLogoUrl: z.string().nullable(),
-  loginTitleVerticalOffset: z.number(),
-  loginTitleColor: z.string().nullable(),
-  logoTitle: z.string().nullable(),
-  logoScale: z.number(),
-  titleFontUrl: z.string().nullable(),
-  titleFontWeight: z.string(),
-  titleFontSize: z.number(),
-  titleVerticalOffset: z.number(),
-  menuAccentColor: z.string().nullable(),
-  faviconUrl: z.string().nullable(),
-});
-const UpdatePlatformBrandingRequest = PlatformBrandingSchema.partial();
 registry.register('PlatformBranding', PlatformBrandingSchema);
 registry.registerPath({
   method: 'get',
@@ -1904,7 +1892,7 @@ registry.registerPath({
   method: 'put',
   path: '/api/admin/branding',
   ...authzExtension('platform.settings.manage', 'PUT', '/api/admin/branding'),
-  request: { body: { content: { 'application/json': { schema: UpdatePlatformBrandingRequest } } } },
+  request: { body: { content: { 'application/json': { schema: UpdatePlatformBrandingRequestSchema } } } },
   responses: { 200: { description: 'Branding updated', content: { 'application/json': { schema: SuccessResponseSchema } } } },
 });
 
@@ -3056,7 +3044,7 @@ registry.registerPath({
   method: 'get',
   path: '/api/auth/branding',
   ...authzExemption('GET', '/api/auth/branding'),
-  responses: { 200: { description: 'Platform branding config', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Public non-secret platform branding', content: { 'application/json': { schema: PublicPlatformBrandingSchema } } } },
 });
 
 // GET /api/auth/platform-settings (authenticated UI)

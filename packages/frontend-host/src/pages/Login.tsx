@@ -12,6 +12,7 @@ import logoPng from '../assets/logo.png';
 import { toSafeInternalPath } from '../utils/safeNavigation';
 import { redirectTo } from '../utils/redirect';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
+import type { PublicPlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 
 const DEFAULT_TENANT_SLUG = 'default';
 
@@ -34,24 +35,10 @@ interface IdentityProviderLoginOption {
   loginMethod: 'redirect' | 'password';
 }
 
-interface PublicBranding {
-  logoUrl: string | null;
-  loginLogoUrl: string | null;
-  loginTitleVerticalOffset: number;
-  loginTitleColor: string | null;
-  logoTitle: string | null;
-  logoScale: number;
-  titleFontUrl: string | null;
-  titleFontWeight: string;
-  titleFontSize: number;
-  faviconUrl: string | null;
-  ssoAutoRedirectSingleProvider: boolean;
-}
-
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
 const SSO_AUTO_REDIRECT_BLOCK_UNTIL_KEY = 'eg.sso.autoRedirect.blockUntil';
 
-function normalizeBranding(raw: any): PublicBranding {
+function normalizeBranding(raw: any): PublicPlatformBranding {
   const r = raw && typeof raw === 'object' ? raw : {};
   return {
     logoUrl: typeof r.logoUrl === 'string' ? r.logoUrl : null,
@@ -63,12 +50,14 @@ function normalizeBranding(raw: any): PublicBranding {
     titleFontUrl: typeof r.titleFontUrl === 'string' ? r.titleFontUrl : null,
     titleFontWeight: typeof r.titleFontWeight === 'string' ? r.titleFontWeight : '600',
     titleFontSize: typeof r.titleFontSize === 'number' ? r.titleFontSize : 14,
+    titleVerticalOffset: typeof r.titleVerticalOffset === 'number' ? r.titleVerticalOffset : 0,
+    menuAccentColor: typeof r.menuAccentColor === 'string' ? r.menuAccentColor : null,
     faviconUrl: typeof r.faviconUrl === 'string' ? r.faviconUrl : null,
     ssoAutoRedirectSingleProvider: Boolean(r.ssoAutoRedirectSingleProvider),
   };
 }
 
-function readCachedBranding(): PublicBranding | null {
+function readCachedBranding(): PublicPlatformBranding | null {
   try {
     const raw = window.localStorage.getItem(BRANDING_CACHE_KEY);
     if (!raw) return null;
@@ -78,7 +67,7 @@ function readCachedBranding(): PublicBranding | null {
   }
 }
 
-function writeCachedBranding(branding: PublicBranding): void {
+function writeCachedBranding(branding: PublicPlatformBranding): void {
   try {
     window.localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(branding));
   } catch {
@@ -161,7 +150,7 @@ export default function Login() {
   const [ssoProviders, setSsoProviders] = useState<SsoProviderButton[]>([]);
   const [directLdapProvider, setDirectLdapProvider] = useState<SsoProviderButton | null>(null);
   const [ssoLoading, setSsoLoading] = useState(true);
-  const [branding, setBranding] = useState<PublicBranding | null>(initialBranding);
+  const [branding, setBranding] = useState<PublicPlatformBranding | null>(initialBranding);
   const [brandingFetchDone, setBrandingFetchDone] = useState(false);
   const [logoObjectUrl, setLogoObjectUrl] = useState<string | null>(() => {
     const raw = initialBranding?.loginLogoUrl || initialBranding?.logoUrl;

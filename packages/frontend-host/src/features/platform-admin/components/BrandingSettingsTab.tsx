@@ -21,29 +21,18 @@ import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import logoPng from '../../../assets/logo.png';
+import type {
+  PlatformBranding,
+  UpdatePlatformBrandingRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
 
-function writeCachedBranding(branding: Record<string, any>): void {
+function writeCachedBranding(branding: PlatformBranding): void {
   try {
     window.localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(branding));
   } catch {
   }
-}
-
-interface PlatformBranding {
-  logoUrl: string | null;
-  loginLogoUrl: string | null;
-  loginTitleVerticalOffset: number;
-  loginTitleColor: string | null;
-  logoTitle: string | null;
-  logoScale: number;
-  titleFontUrl: string | null;
-  titleFontWeight: string;
-  titleFontSize: number;
-  titleVerticalOffset: number;
-  menuAccentColor: string | null;
-  faviconUrl: string | null;
 }
 
 async function fetchBranding(): Promise<PlatformBranding> {
@@ -52,7 +41,7 @@ async function fetchBranding(): Promise<PlatformBranding> {
   });
 }
 
-async function updateBranding(data: Partial<PlatformBranding>): Promise<void> {
+async function updateBranding(data: UpdatePlatformBrandingRequest): Promise<void> {
   await apiClient.put('/api/admin/branding', data, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -190,7 +179,7 @@ export default function BrandingSettingsTab({
   };
 
   const updateMutation = useMutation({
-    mutationFn: (data: Partial<PlatformBranding>) =>
+    mutationFn: (data: UpdatePlatformBrandingRequest) =>
       canManageSettings ? updateBranding(data) : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-branding'] });

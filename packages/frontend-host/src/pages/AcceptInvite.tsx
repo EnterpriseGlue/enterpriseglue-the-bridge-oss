@@ -19,24 +19,12 @@ import type {
   InvitationOnboardingResponse,
   VerifyInvitationOtpRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
+import type { PublicPlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import logoPng from '../assets/logo.png';
-
-interface PublicBranding {
-  logoUrl: string | null;
-  loginLogoUrl: string | null;
-  loginTitleVerticalOffset: number;
-  loginTitleColor: string | null;
-  logoTitle: string | null;
-  logoScale: number;
-  titleFontUrl: string | null;
-  titleFontWeight: string;
-  titleFontSize: number;
-  faviconUrl: string | null;
-}
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
 
-function normalizeBranding(raw: any): PublicBranding {
+function normalizeBranding(raw: any): PublicPlatformBranding {
   const r = raw && typeof raw === 'object' ? raw : {};
   return {
     logoUrl: typeof r.logoUrl === 'string' ? r.logoUrl : null,
@@ -48,11 +36,14 @@ function normalizeBranding(raw: any): PublicBranding {
     titleFontUrl: typeof r.titleFontUrl === 'string' ? r.titleFontUrl : null,
     titleFontWeight: typeof r.titleFontWeight === 'string' ? r.titleFontWeight : '600',
     titleFontSize: typeof r.titleFontSize === 'number' ? r.titleFontSize : 14,
+    titleVerticalOffset: typeof r.titleVerticalOffset === 'number' ? r.titleVerticalOffset : 0,
+    menuAccentColor: typeof r.menuAccentColor === 'string' ? r.menuAccentColor : null,
     faviconUrl: typeof r.faviconUrl === 'string' ? r.faviconUrl : null,
+    ssoAutoRedirectSingleProvider: Boolean(r.ssoAutoRedirectSingleProvider),
   };
 }
 
-function readCachedBranding(): PublicBranding | null {
+function readCachedBranding(): PublicPlatformBranding | null {
   try {
     const raw = window.localStorage.getItem(BRANDING_CACHE_KEY);
     if (!raw) return null;
@@ -130,7 +121,7 @@ export default function AcceptInvite() {
   const [oneTimePassword, setOneTimePassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [branding, setBranding] = useState<PublicBranding | null>(initialBranding);
+  const [branding, setBranding] = useState<PublicPlatformBranding | null>(initialBranding);
   const [brandingFetchDone, setBrandingFetchDone] = useState(false);
   const [logoObjectUrl, setLogoObjectUrl] = useState<string | null>(() => {
     const raw = initialBranding?.loginLogoUrl || initialBranding?.logoUrl;
