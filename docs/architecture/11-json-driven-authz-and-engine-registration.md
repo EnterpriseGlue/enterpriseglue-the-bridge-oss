@@ -2205,7 +2205,7 @@ This phase is required because the current implementation still carries compatib
 - [x] ✅ Replace provider base64 secret writes with the shared AES-GCM `SecretResolver`; legacy base64 rows are read-only compatibility input until rotated, and opaque `ref:` resolution is available for later config ownership.
 - [x] ✅ Add engine credential resolution so `passwordEnc` is not treated as plaintext at runtime; engine create/update stores authenticated ciphertext or an opaque external reference, and runtime calls resolve both modes through `SecretResolver`.
 - [ ] ⬜ Add source, sourceRef, sourceHash, configKey, lastAppliedAt, and ownership mode where required on every config-managed object.
-- [ ] ⬜ Define one-row project-engine-target conflict/ownership-transfer behavior and cover it in preview/apply services.
+- [x] ✅ Define one-row project-engine-target conflict/ownership-transfer behavior and cover it in preview/apply services. Bundle validation rejects duplicate immutable project/engine pairs (and duplicate optional target keys); preview blocks an existing differently owned row until a reviewable `transferOwnership` reason is supplied, and apply re-checks that exact transfer before updating the existing row in place with an audit record of its prior owner.
 
 #### Module Boundaries
 

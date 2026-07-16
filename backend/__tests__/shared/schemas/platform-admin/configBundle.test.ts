@@ -96,6 +96,24 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     }).success).toBe(false);
   });
 
+  it('rejects duplicate project-engine target pairs and optional config keys', () => {
+    const target = {
+      key: 'target.payments',
+      projectRef: { id: '00000000-0000-4000-8000-000000000001' },
+      engineRef: { engineKey: 'engine-prod-payments' },
+      allowCiDeploy: true,
+    };
+    expect(ConfigProjectEngineTargetsFileSchema.safeParse({
+      projectEngineTargets: [target, { ...target, key: 'target.payments-secondary' }],
+    }).success).toBe(false);
+    expect(ConfigProjectEngineTargetsFileSchema.safeParse({
+      projectEngineTargets: [target, {
+        ...target,
+        projectRef: { id: '00000000-0000-4000-8000-000000000002' },
+      }],
+    }).success).toBe(false);
+  });
+
   it('allows only opaque secret references and requires sidecar mode for credentialless engines', () => {
     expect(ConfigEnginesFileSchema.safeParse({
       engines: [{

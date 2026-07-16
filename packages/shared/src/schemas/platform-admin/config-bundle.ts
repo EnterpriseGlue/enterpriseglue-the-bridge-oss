@@ -500,7 +500,35 @@ export const ConfigProjectEngineTargetSchema = z.object({
 });
 export const ConfigProjectEngineTargetsFileSchema = z.object({
   projectEngineTargets: z.array(ConfigProjectEngineTargetSchema),
-}).strict();
+}).strict().superRefine((file, ctx) => {
+  const seenPairs = new Map<string, number>();
+  const seenKeys = new Map<string, number>();
+  file.projectEngineTargets.forEach((target, index) => {
+    const pair = `${target.projectRef.id}:${target.engineRef.engineKey}`;
+    const duplicatePairIndex = seenPairs.get(pair);
+    if (duplicatePairIndex !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['projectEngineTargets', index, 'engineRef', 'engineKey'],
+        message: `Duplicate project-engine target pair also declared at projectEngineTargets.${duplicatePairIndex}`,
+      });
+    } else {
+      seenPairs.set(pair, index);
+    }
+
+    if (!target.key) return;
+    const duplicateKeyIndex = seenKeys.get(target.key);
+    if (duplicateKeyIndex !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['projectEngineTargets', index, 'key'],
+        message: `Duplicate project-engine target key also declared at projectEngineTargets.${duplicateKeyIndex}`,
+      });
+    } else {
+      seenKeys.set(target.key, index);
+    }
+  });
+});
 
 /** Test-harness input only. Production bundle manifests never import this shape. */
 export const IdentityMockFixturesSchema = z.object({
