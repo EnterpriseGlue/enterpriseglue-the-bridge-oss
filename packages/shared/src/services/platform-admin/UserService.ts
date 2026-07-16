@@ -14,6 +14,9 @@ import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence
 import { ProjectMemberRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMemberRole.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineMember.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
@@ -374,6 +377,14 @@ export class UserService {
       await manager.getRepository(ProjectMemberRole).delete({ userId: id });
       await manager.getRepository(ProjectMember).delete({ userId: id });
       await manager.getRepository(EngineMember).delete({ userId: id });
+      // Principal-scoped assignments and group memberships have no database
+      // foreign key to User. Revoke both canonical and pre-refactor alias
+      // rows before deleting the account so a later id reuse cannot inherit
+      // access or leave a dangling external-account link.
+      await manager.getRepository(RbacRoleAssignment).delete({ principalType: 'user', principalId: id });
+      await manager.getRepository(RbacRoleAssignment).delete({ userId: id });
+      await manager.getRepository(AuthzGroupMembership).delete({ userId: id });
+      await manager.getRepository(ExternalIdentity).delete({ userId: id });
       await manager.getRepository(User).delete({ id });
     });
   }
