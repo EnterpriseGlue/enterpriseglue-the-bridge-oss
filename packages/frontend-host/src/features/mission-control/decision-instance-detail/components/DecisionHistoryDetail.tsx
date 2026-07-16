@@ -25,7 +25,8 @@ import { PageLoader } from '../../../../shared/components/PageLoader'
 import { BreadcrumbBar } from '../../../shared/components/BreadcrumbBar'
 import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
-import { evaluateMissionControlStarbaseBridge } from '../../../../shared/api/bridgeAuthz'
+import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../../shared/api/bridgeAuthz'
+import { BridgeAccessNotice } from '../../../../shared/auth/BridgeAccessNotice'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import styles from '../../process-instance-detail/styles/InstanceDetail.module.css'
 import { SplitPane, Pane } from 'react-split-pane'
@@ -78,6 +79,7 @@ export default function DecisionHistoryDetail() {
   const location = useLocation() as any
   const selectedEngineId = useSelectedEngine()
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
+  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
   const searchParams = new URLSearchParams(location.search)
   const fromInstanceId = searchParams.get('fromInstance') || (location?.state?.fromInstanceId as string | undefined)
   const processLabel = searchParams.get('processLabel') || null
@@ -256,6 +258,7 @@ export default function DecisionHistoryDetail() {
   const handleEditInStarbase = React.useCallback(async () => {
     if (!decisionEditTarget?.fileId || decisionVersion === null || !decisionKey) return
     setBridgeError(null)
+    setBridgeDecision(null)
     try {
       const bridgeDecision = await evaluateMissionControlStarbaseBridge({
         engineId: String(selectedEngineId || decisionEditTarget.engineId || ''),
@@ -268,7 +271,7 @@ export default function DecisionHistoryDetail() {
         kind: 'decision',
       })
       if (!bridgeDecision.allowed) {
-        setBridgeError(bridgeDecision.reason || 'Starbase edit is unavailable for this deployment.')
+        setBridgeDecision(bridgeDecision)
         return
       }
     } catch (error) {
@@ -373,15 +376,7 @@ export default function DecisionHistoryDetail() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
-      {bridgeError && (
-        <InlineNotification
-          kind="warning"
-          title="Starbase edit unavailable"
-          subtitle={bridgeError}
-          lowContrast
-          hideCloseButton
-        />
-      )}
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
       
       {/* SplitPane wrapper to fill remaining height */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>

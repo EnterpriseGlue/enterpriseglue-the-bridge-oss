@@ -8,8 +8,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, Button, InlineNotification, ProgressIndicator, ProgressStep, Toggle, Dropdown } from '@carbon/react';
 import { TrashCan } from '@carbon/icons-react';
 import { apiClient } from '../../../shared/api/client';
-import { evaluateStarbaseMissionControlBridge } from '../../../shared/api/bridgeAuthz';
+import { evaluateStarbaseMissionControlBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
+import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice';
 import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate';
 import { LoadingState } from '../../shared/components/LoadingState';
 import { useAuth } from '../../../shared/hooks/useAuth';
@@ -313,6 +314,7 @@ export default function GitVersionsPanel({
   const [showSystemVersions, setShowSystemVersions] = useState(false);
   const [environmentFilter, setEnvironmentFilter] = useState<{ id: string; label: string } | null>({ id: 'all', label: 'All environments' });
   const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [bridgeDecision, setBridgeDecision] = useState<BridgeDecisionResponse | null>(null);
   const projectResource = React.useMemo(() => ({ type: 'project' as const, id: projectId }), [projectId]);
   const localVersionsReadDecision = evaluateActionSnapshot(permissions, 'project.versions.read', projectResource);
   const localVersionsRestoreDecision = evaluateActionSnapshot(permissions, 'project.versions.restore', projectResource);
@@ -744,6 +746,7 @@ export default function GitVersionsPanel({
     event.preventDefault();
     event.stopPropagation();
     setBridgeError(null);
+    setBridgeDecision(null);
     try {
       const bridgeDecision = await evaluateStarbaseMissionControlBridge({
         projectId,
@@ -754,7 +757,7 @@ export default function GitVersionsPanel({
         kind: target.keyParam === 'decision' || fileType === 'dmn' ? 'decision' : 'process',
       });
       if (!bridgeDecision.allowed) {
-        setBridgeError(bridgeDecision.reason || 'Mission Control is unavailable for this deployment.');
+        setBridgeDecision(bridgeDecision);
         return;
       }
     } catch (error) {
@@ -869,16 +872,7 @@ export default function GitVersionsPanel({
           msOverflowStyle: 'none',
         }}
       >
-        {bridgeError && (
-          <InlineNotification
-            kind="warning"
-            title="Mission Control unavailable"
-            subtitle={bridgeError}
-            lowContrast
-            hideCloseButton
-            style={{ marginBottom: 'var(--spacing-3)' }}
-          />
-        )}
+        <BridgeAccessNotice title="Mission Control unavailable" decision={bridgeDecision} error={bridgeError} />
         <style>{`
           .git-versions-progress .cds--progress--vertical,
           .git-versions-progress .bx--progress--vertical {

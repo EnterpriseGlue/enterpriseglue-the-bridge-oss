@@ -21,7 +21,8 @@ import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../../stores/engineSelectorStore'
 import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
-import { evaluateMissionControlStarbaseBridge } from '../../../../shared/api/bridgeAuthz'
+import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../../shared/api/bridgeAuthz'
+import { BridgeAccessNotice } from '../../../../shared/auth/BridgeAccessNotice'
 import styles from './Decisions.module.css'
 import { LoadingState } from '../../../shared/components/LoadingState'
 
@@ -111,6 +112,7 @@ export default function Decisions() {
   const selectedEngineId = useSelectedEngine()
   const setSelectedEngineId = useEngineSelectorStore((s) => s.setSelectedEngineId)
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
+  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
 
   React.useEffect(() => {
     const engineIdParam = String(searchParams.get('engineId') || '')
@@ -292,6 +294,7 @@ export default function Decisions() {
   const handleEditInStarbase = React.useCallback(async () => {
     if (!decisionEditTarget?.fileId || selectedVersion === null || !currentKey) return
     setBridgeError(null)
+    setBridgeDecision(null)
     try {
       const bridgeDecision = await evaluateMissionControlStarbaseBridge({
         engineId: String(selectedEngineId || decisionEditTarget.engineId || ''),
@@ -304,7 +307,7 @@ export default function Decisions() {
         kind: 'decision',
       })
       if (!bridgeDecision.allowed) {
-        setBridgeError(bridgeDecision.reason || 'Starbase edit is unavailable for this deployment.')
+        setBridgeDecision(bridgeDecision)
         return
       }
     } catch (error) {
@@ -470,15 +473,7 @@ export default function Decisions() {
       {defsQ.isSuccess && selectedEngineId && defItems.length === 0 && (
         <RuntimeCollectionEmptyState kind="decision_definitions" style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }} />
       )}
-      {bridgeError && (
-        <InlineNotification
-          kind="warning"
-          title="Starbase edit unavailable"
-          subtitle={bridgeError}
-          lowContrast
-          hideCloseButton
-        />
-      )}
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
