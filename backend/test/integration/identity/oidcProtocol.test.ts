@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
-import { MockOidcHttpsServer } from '../../../../test/identity-mocks/index.js';
+import { MockOidcHttpsServer } from '../../identity-mocks/index.js';
 
 describe('loopback OIDC protocol mock', () => {
   let server: MockOidcHttpsServer | null = null;
