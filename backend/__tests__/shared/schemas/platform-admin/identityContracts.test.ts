@@ -38,9 +38,11 @@ import {
   AuthzPolicyCreateSchema,
   AuthzPolicyResponseSchema,
   AuthzPolicyUpdateSchema,
+  ApiClientCreateSchema,
   CustomPermissionCreateResponseSchema,
   ProjectEngineTargetSyncLegacyResponseSchema,
   RoleAssignmentCreateResponseSchema,
+  ServiceAccountCreateSchema,
   SsoAssignmentMappingTestResponseSchema,
   SsoAssignmentMappingInsertSchema,
   SsoAssignmentMappingUpdateSchema,
@@ -265,6 +267,20 @@ describe('provider-neutral identity shared contracts', () => {
     }).effect).toBe('deny');
     expect(AuthzPolicyUpdateSchema.parse({ priority: 10, isActive: false })).toMatchObject({ priority: 10, isActive: false });
     expect(() => AuthzPolicyCreateSchema.parse({ name: 'bad', effect: 'allow', priority: -1 })).toThrow();
+  });
+
+  it('shares machine-principal write contracts with the route and OpenAPI', () => {
+    expect(ApiClientCreateSchema.parse({
+      name: 'Engine registration',
+      scopes: ['engine:register'],
+    })).toMatchObject({ scopes: ['engine:register'] });
+    expect(ServiceAccountCreateSchema.parse({
+      name: 'Release service',
+      description: 'Release automation',
+      scopes: ['deployment:execute'],
+    })).toMatchObject({ scopes: ['deployment:execute'] });
+    expect(() => ApiClientCreateSchema.parse({ name: 'invalid', scopes: ['admin:all'] })).toThrow();
+    expect(() => ServiceAccountCreateSchema.parse({ name: 'invalid', scopes: ['engine:register'] })).toThrow();
   });
 
   it('keeps the public policy response aligned with the service view', () => {

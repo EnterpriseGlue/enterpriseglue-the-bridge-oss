@@ -2279,6 +2279,8 @@ Common authorization create, assignment, update, and legacy-target-sync response
 
 The backend assignment routes now validate those same role-assignment, group, and membership writes through the shared schemas, so scoped assignment authorization operates on the exact payload contract that OpenAPI and the UI use.
 
+The backend machine-principal routes likewise validate API-client and service-account creation through their existing shared write schemas, keeping their allowed machine scopes identical across route validation and OpenAPI.
+
 Policy create and update inputs now use the same shared schemas in route validation, OpenAPI, and Platform Admin hooks. OpenAPI now accurately advertises the service's identifier-only create response and success-only update response rather than a policy record that the mutation never returns.
 
 The policy list response now has one strict shared service-view schema across the route, OpenAPI, and hook. It exposes effective policy fields only; persistence timestamps and creator fields are no longer advertised when the service does not return them.

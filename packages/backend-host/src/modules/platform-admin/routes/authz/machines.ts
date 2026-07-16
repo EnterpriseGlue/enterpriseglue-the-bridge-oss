@@ -7,25 +7,14 @@ import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import {
   apiClientService,
-  ApiClientScopes,
   serviceAccountService,
-  ServiceAccountScopes,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import {
+  ApiClientCreateSchema,
+  ServiceAccountCreateSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
-const apiClientCreateSchema = z.object({
-  name: z.string().min(1).max(255),
-  scopes: z.array(z.enum([
-    ApiClientScopes.CONFIG_BUNDLE_MANAGE,
-    ApiClientScopes.ENGINE_REGISTER,
-    ApiClientScopes.DEPLOYMENT_EXECUTE,
-  ])).min(1).optional(),
-});
-const serviceAccountCreateSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().max(2000).nullable().optional(),
-  scopes: z.array(z.enum([ServiceAccountScopes.DEPLOYMENT_EXECUTE])).min(1).optional(),
-});
 
 export interface MachineRouteDependencies {
   requirePlatformAction: (actionId: string) => RequestHandler;
@@ -43,7 +32,7 @@ export function registerMachineRoutes(router: Router, { requirePlatformAction }:
     }
   }));
 
-  router.post('/api/authz/api-clients', apiLimiter, requireAuth, requirePlatformAction('platform.api-clients.manage'), validateBody(apiClientCreateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/api-clients', apiLimiter, requireAuth, requirePlatformAction('platform.api-clients.manage'), validateBody(ApiClientCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const result = await apiClientService.createClient({ name: req.body.name, scopes: req.body.scopes, createdById: req.user!.userId });
       res.status(201).json(result);
@@ -85,7 +74,7 @@ export function registerMachineRoutes(router: Router, { requirePlatformAction }:
     }
   }));
 
-  router.post('/api/authz/service-accounts', apiLimiter, requireAuth, requirePlatformAction('platform.service-accounts.manage'), validateBody(serviceAccountCreateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/service-accounts', apiLimiter, requireAuth, requirePlatformAction('platform.service-accounts.manage'), validateBody(ServiceAccountCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const result = await serviceAccountService.createServiceAccount({
         name: req.body.name,
