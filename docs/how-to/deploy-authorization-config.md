@@ -210,9 +210,18 @@ suite from the repository root:
 pnpm test:authz-refactor
 ```
 
-It runs the named identity-contract, identity-route-integration, and
-configuration-bundle suites. It does not replace the separate browser
-end-to-end environment that will use containerized identity providers.
+The aggregate is organized into three independently runnable, local-safe lanes:
+
+| Lane | Command | Covers |
+| --- | --- | --- |
+| Identity | `pnpm test:authz:identity` | Provider-neutral contracts, provider routes, serialized legacy sign-in compatibility, persistence/key invariants, mapping matrix, and protocol mocks. |
+| Configuration | `pnpm test:authz:config` | Bundle schema/preview/apply/export, deployment manifests, CI contract, documentation, secret boundaries, ownership, and engine import. |
+| Runtime authorization | `pnpm test:authz:runtime` | Action/route inventory, assignment targets, group/resource identities, runtime/deployment lineage, engine connection resolution, and deployment eligibility. |
+
+`test:authz-refactor` runs those lanes in that order. They are deterministic
+local contracts; they do not require a deployed identity provider, browser
+lifecycle environment, or LDAP container. Run those opt-in boundaries
+separately with `pnpm test:identity:browser` and `pnpm test:identity:ldap`.
 
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
 
