@@ -73,12 +73,16 @@ import type {
   ServiceAccount as SharedServiceAccount,
   ServiceAccountWithToken as SharedServiceAccountWithToken,
   SsoAssignmentMapping as SharedSsoAssignmentMapping,
+  SsoAssignmentMappingTestResponse as SharedSsoAssignmentMappingTestResponse,
   SsoClaimOperator as SharedSsoClaimOperator,
   SsoClaimsMapping as SharedSsoClaimsMapping,
   SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
   SsoEngineAccessSnapshotStatus as SharedSsoEngineAccessSnapshotStatus,
   SsoEngineAccessSnapshotQuery as SharedSsoEngineAccessSnapshotQuery,
   SsoGroupMapping as SharedSsoGroupMapping,
+  SsoGroupMappingTestResponse as SharedSsoGroupMappingTestResponse,
+  SsoMappingTestRequest as SharedSsoMappingTestRequest,
+  SsoPlatformMappingTestResponse as SharedSsoPlatformMappingTestResponse,
   SsoSyncDiagnosticsRunRequest as SharedSsoSyncDiagnosticsRunRequest,
   SsoSyncDiagnosticsScanResult as SharedSsoSyncDiagnosticsScanResult,
   SsoSyncEventsQuery as SharedSsoSyncEventsQuery,
@@ -203,6 +207,10 @@ export type DeploymentEligibilityResult = SharedDeploymentEligibilityEvaluateRes
 export type SsoAssignmentMapping = SharedSsoAssignmentMapping & { riskAcknowledged?: boolean };
 /** UI-only acknowledgement retained while legacy mapping forms remain supported. */
 export type SsoGroupMapping = SharedSsoGroupMapping & { riskAcknowledged?: boolean };
+export type SsoMappingTestRequest = SharedSsoMappingTestRequest;
+export type SsoPlatformMappingTestResponse = SharedSsoPlatformMappingTestResponse;
+export type SsoAssignmentMappingTestResponse = SharedSsoAssignmentMappingTestResponse;
+export type SsoGroupMappingTestResponse = SharedSsoGroupMappingTestResponse;
 
 export type HumanIdentityEntitlementType = IdentityMappingResponse['entitlementType'];
 /** `scope` is retained solely to render and retire pre-migration rows. */
@@ -933,8 +941,8 @@ export function useDeleteSsoMapping() {
 
 export function useTestSsoMapping() {
   return useMutation({
-    mutationFn: (data: { claims: Record<string, any>; providerId?: string }) =>
-      apiClient.post<{ resolvedRole: string; matchedMappings: Array<{ id: string; name: string; targetRole: string }> }>(
+    mutationFn: (data: SsoMappingTestRequest) =>
+      apiClient.post<SsoPlatformMappingTestResponse>(
         '/api/authz/sso-mappings/test',
         data
       ),
@@ -976,11 +984,8 @@ export function useDeleteSsoAssignmentMapping() {
 
 export function useTestSsoAssignmentMapping() {
   return useMutation({
-    mutationFn: (data: { claims: Record<string, any>; providerId?: string }) =>
-      apiClient.post<{
-        matchedMappings: Array<SsoAssignmentMapping & { targetResourceId: string | null; targetResourceIds: Array<string | null> }>;
-        assignments: Array<{ roleId: string; resourceType: 'engine'; resourceId: string | null; mappingId: string }>;
-      }>('/api/authz/sso-assignment-mappings/test', data),
+    mutationFn: (data: SsoMappingTestRequest) =>
+      apiClient.post<SsoAssignmentMappingTestResponse>('/api/authz/sso-assignment-mappings/test', data),
   });
 }
 
@@ -1141,11 +1146,8 @@ export function useDeleteSsoGroupMapping() {
 
 export function useTestSsoGroupMapping() {
   return useMutation({
-    mutationFn: (data: { claims: Record<string, any>; providerId?: string }) =>
-      apiClient.post<{
-        matchedMappings: SsoGroupMapping[];
-        memberships: Array<{ groupId: string; mappingId: string }>;
-      }>('/api/authz/sso-group-mappings/test', data),
+    mutationFn: (data: SsoMappingTestRequest) =>
+      apiClient.post<SsoGroupMappingTestResponse>('/api/authz/sso-group-mappings/test', data),
   });
 }
 

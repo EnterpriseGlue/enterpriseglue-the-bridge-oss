@@ -1634,6 +1634,42 @@ export const SsoGroupMappingInsertSchema = z.object({
   riskAcknowledged: z.boolean().optional(),
 });
 
+/** Shared legacy SSO mapping preview input retained while migration remains evidence-gated. */
+export const SsoMappingTestRequestSchema = z.object({
+  claims: z.record(z.string(), z.unknown()),
+  providerId: z.string().min(1).optional(),
+});
+
+export const SsoPlatformMappingTestResponseSchema = z.object({
+  resolvedRole: z.enum(['admin', 'user']),
+  matchedMappings: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    targetRole: z.string(),
+  })),
+});
+
+export const SsoAssignmentMappingTestResponseSchema = z.object({
+  matchedMappings: z.array(SsoAssignmentMappingSchema.extend({
+    targetResourceId: z.string().nullable(),
+    targetResourceIds: z.array(z.string().nullable()),
+  })),
+  assignments: z.array(z.object({
+    roleId: z.string(),
+    resourceType: z.literal('engine'),
+    resourceId: z.string().nullable(),
+    mappingId: z.string(),
+  })),
+});
+
+export const SsoGroupMappingTestResponseSchema = z.object({
+  matchedMappings: z.array(SsoGroupMappingSchema),
+  memberships: z.array(z.object({
+    groupId: z.string(),
+    mappingId: z.string(),
+  })),
+});
+
 // Types
 export type AuthzPolicy = z.infer<typeof AuthzPolicySchema>;
 export type PolicyCondition = z.infer<typeof PolicyConditionSchema>;
@@ -1717,6 +1753,9 @@ export type RuntimeResource = z.infer<typeof RuntimeResourceSchema>;
 export type RuntimeResourceSet = z.infer<typeof RuntimeResourceSetSchema>;
 export type RuntimeResourceSetMaterializationResult = z.infer<typeof RuntimeResourceSetMaterializationResultSchema>;
 export type SsoAssignmentMapping = z.infer<typeof SsoAssignmentMappingSchema>;
+export type SsoMappingTestRequest = z.input<typeof SsoMappingTestRequestSchema>;
+export type SsoPlatformMappingTestResponse = z.infer<typeof SsoPlatformMappingTestResponseSchema>;
+export type SsoAssignmentMappingTestResponse = z.infer<typeof SsoAssignmentMappingTestResponseSchema>;
 export type SsoEngineAccessSnapshot = z.infer<typeof SsoEngineAccessSnapshotSchema>;
 export type SsoEngineAccessSnapshotStatus = z.infer<typeof SsoEngineAccessSnapshotStatusSchema>;
 export type SsoEngineAccessSnapshotQuery = z.input<typeof SsoEngineAccessSnapshotQuerySchema>;
@@ -1731,6 +1770,7 @@ export type EngineAccessTransitionCleanupApplyResponse = z.infer<typeof EngineAc
 export type BridgeDecisionRequest = z.infer<typeof BridgeDecisionRequestSchema>;
 export type BridgeDecisionResponse = z.infer<typeof BridgeDecisionResponseSchema>;
 export type SsoGroupMapping = z.infer<typeof SsoGroupMappingSchema>;
+export type SsoGroupMappingTestResponse = z.infer<typeof SsoGroupMappingTestResponseSchema>;
 export type AuthzResourceType = z.infer<typeof AuthzResourceTypeSchema>;
 export type AuthzPrincipalType = z.infer<typeof AuthzPrincipalTypeSchema>;
 export type AuthzActionRisk = z.infer<typeof AuthzActionRiskSchema>;

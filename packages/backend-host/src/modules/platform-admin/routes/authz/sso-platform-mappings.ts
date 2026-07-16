@@ -7,6 +7,7 @@ import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { ssoClaimsMappingService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { SsoMappingTestRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
 const ssoMappingCreateSchema = z.object({
@@ -16,7 +17,6 @@ const ssoMappingCreateSchema = z.object({
   targetRole: z.enum(['admin', 'user']), priority: z.number().int().optional(), isActive: z.boolean().optional(), riskAcknowledged: z.boolean().optional(),
 });
 const ssoMappingUpdateSchema = ssoMappingCreateSchema.partial();
-const ssoMappingTestSchema = z.object({ claims: z.record(z.string(), z.unknown()), providerId: z.string().min(1).optional() });
 const providerNeutralMigrationSchema = z.object({
   providerKey: z.string().min(1).max(128), targetGroupKey: z.string().min(1).max(160).optional(),
   newGroup: z.object({ key: z.string().min(1).max(255), name: z.string().min(1).max(255), description: z.string().max(2000).nullable().optional() }).optional(),
@@ -46,7 +46,7 @@ export function registerSsoPlatformMappingRoutes(router: Router, { requirePlatfo
     try { await ssoClaimsMappingService.deleteMapping(String(req.params.id)); res.status(204).send(); }
     catch (error: any) { logger.error('Delete SSO mapping error:', error); throw Errors.internal('Failed to delete SSO mapping'); }
   }));
-  router.post('/api/authz/sso-mappings/test', apiLimiter, requireAuth, requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateBody(ssoMappingTestSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/sso-mappings/test', apiLimiter, requireAuth, requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateBody(SsoMappingTestRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     try { res.json(await ssoClaimsMappingService.testClaims(req.body.claims, req.body.providerId)); }
     catch (error: any) { logger.error('Test SSO mapping error:', error); throw Errors.internal('Failed to test SSO mapping'); }
   }));

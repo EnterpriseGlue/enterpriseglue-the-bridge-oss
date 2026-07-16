@@ -7,6 +7,7 @@ import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { ssoGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { SsoMappingTestRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
 const mappingSchema = z.object({
@@ -16,7 +17,6 @@ const mappingSchema = z.object({
   targetGroupId: z.string().min(1), syncMode: z.enum(['authoritative', 'additive']).optional(), priority: z.number().int().optional(), isActive: z.boolean().optional(), riskAcknowledged: z.boolean().optional(),
 });
 const mappingUpdateSchema = mappingSchema.partial();
-const mappingTestSchema = z.object({ claims: z.record(z.string(), z.unknown()), providerId: z.string().min(1).optional() });
 const providerNeutralMigrationSchema = z.object({ providerKey: z.string().min(1).max(128) });
 
 export interface SsoGroupMappingRouteDependencies { requirePlatformAction: (actionId: string) => RequestHandler; }
@@ -43,7 +43,7 @@ export function registerSsoGroupMappingRoutes(router: Router, { requirePlatformA
     try { await ssoGroupMappingService.deleteMapping(String(req.params.id)); res.status(204).send(); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Delete SSO group mapping error:', error); throw Errors.internal('Failed to delete SSO group mapping'); }
   }));
-  router.post('/api/authz/sso-group-mappings/test', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateBody(mappingTestSchema), asyncHandler(async (req, res) => {
+  router.post('/api/authz/sso-group-mappings/test', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateBody(SsoMappingTestRequestSchema), asyncHandler(async (req, res) => {
     try { res.json(await ssoGroupMappingService.testClaims(req.body.claims, req.body.providerId, req.tenant?.tenantId || null)); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Test SSO group mapping error:', error); throw Errors.internal('Failed to test SSO group mapping'); }
   }));

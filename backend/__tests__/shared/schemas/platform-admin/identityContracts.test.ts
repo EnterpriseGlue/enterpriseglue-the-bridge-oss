@@ -19,6 +19,10 @@ import {
   LegacyMappingCoverageVerifyRequestSchema,
   LegacyMappingRetirementReadinessSchema,
   LegacyMappingRetirementRequestSchema,
+  SsoAssignmentMappingTestResponseSchema,
+  SsoGroupMappingTestResponseSchema,
+  SsoMappingTestRequestSchema,
+  SsoPlatformMappingTestResponseSchema,
   SsoSyncEventSchema,
   SsoSyncRunSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
@@ -123,5 +127,30 @@ describe('provider-neutral identity shared contracts', () => {
     expect(provider.hasCertificate).toBe(true);
     expect(Object.keys(provider)).not.toContain('certificate');
     expect(() => LegacySsoProviderResponseSchema.parse({ ...provider, clientSecret: 'raw-secret' })).toThrow();
+  });
+
+  it('shares retained legacy SSO mapping preview contracts across route, API, and UI boundaries', () => {
+    expect(SsoMappingTestRequestSchema.parse({ claims: { groups: ['operators'] }, providerId: 'provider-1' }).providerId).toBe('provider-1');
+    expect(SsoPlatformMappingTestResponseSchema.parse({
+      resolvedRole: 'user',
+      matchedMappings: [{ id: 'mapping-1', name: 'group:operators', targetRole: 'user' }],
+    }).matchedMappings).toHaveLength(1);
+    expect(SsoAssignmentMappingTestResponseSchema.parse({
+      matchedMappings: [{
+        id: 'mapping-1', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'operators', claimOperator: 'equals',
+        targetScope: 'engine', targetSelectorType: 'engine_id', targetEngineId: 'engine-1', targetExternalEngineId: null,
+        targetLabelKey: null, targetLabelValue: null, targetRoleId: 'system.engine.operator', syncMode: 'authoritative', priority: 0,
+        isActive: true, createdAt: 1, updatedAt: 2, targetResourceId: 'engine-1', targetResourceIds: ['engine-1'],
+      }],
+      assignments: [{ roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1', mappingId: 'mapping-1' }],
+    }).assignments[0]?.resourceType).toBe('engine');
+    expect(SsoGroupMappingTestResponseSchema.parse({
+      matchedMappings: [{
+        id: 'mapping-1', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'operators', claimOperator: 'equals',
+        targetGroupId: 'group-1', targetGroupKey: 'operators', targetGroupName: 'Operators', syncMode: 'authoritative', priority: 0,
+        isActive: true, createdAt: 1, updatedAt: 2,
+      }],
+      memberships: [{ groupId: 'group-1', mappingId: 'mapping-1' }],
+    }).memberships[0]?.groupId).toBe('group-1');
   });
 });

@@ -1,10 +1,7 @@
 import { InlineNotification, Tag } from '@carbon/react';
-import type { RoleAssignment, RoleSummary, SsoAssignmentMapping } from '../../hooks/useAuthzApi';
+import type { RoleAssignment, RoleSummary, SsoAssignmentMapping, SsoAssignmentMappingTestResponse } from '../../hooks/useAuthzApi';
 
-export interface SsoAssignmentTestResult {
-  matchedMappings: Array<SsoAssignmentMapping & { targetResourceId: string | null; targetResourceIds: Array<string | null> }>;
-  assignments: Array<{ roleId: string; resourceType: 'engine'; resourceId: string | null; mappingId: string }>;
-}
+export type SsoAssignmentTestResult = SsoAssignmentMappingTestResponse;
 export interface SsoAssignmentDiagnostics {
   activeMappings: number; inactiveMappings: number; authoritativeMappings: number; additiveMappings: number; allEngineSelectors: number;
   targetWarnings: Array<{ mapping: SsoAssignmentMapping; warning: string }>; staleAssignments: RoleAssignment[]; ssoAssignmentCount: number;

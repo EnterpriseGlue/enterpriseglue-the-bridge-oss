@@ -11,6 +11,7 @@ import {
   LegacyGlobalMappingRetirementRequestSchema,
   LegacyMappingCoverageVerifyRequestSchema,
   LegacyMappingRetirementRequestSchema,
+  SsoMappingTestRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
@@ -26,7 +27,6 @@ const mappingSchema = z.object({
   isActive: z.boolean().optional(), riskAcknowledged: z.boolean().optional(),
 });
 const mappingUpdateSchema = mappingSchema.partial();
-const mappingTestSchema = z.object({ claims: z.record(z.string(), z.unknown()), providerId: z.string().min(1).optional() });
 const providerNeutralMigrationSchema = z.object({
   providerKey: z.string().min(1).max(128), targetGroupKey: z.string().min(1).max(160).optional(),
   newGroup: z.object({ key: z.string().min(1).max(255), name: z.string().min(1).max(255), description: z.string().max(2000).nullable().optional() }).optional(),
@@ -68,7 +68,7 @@ export function registerSsoEngineAssignmentRoutes(router: Router, { requirePlatf
     try { await ssoAssignmentMappingService.deleteMapping(String(req.params.id), req.user!.userId); res.status(204).send(); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Delete SSO assignment mapping error:', error); throw Errors.internal('Failed to delete SSO assignment mapping'); }
   }));
-  router.post('/api/authz/sso-assignment-mappings/test', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateBody(mappingTestSchema), asyncHandler(async (req, res) => {
+  router.post('/api/authz/sso-assignment-mappings/test', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateBody(SsoMappingTestRequestSchema), asyncHandler(async (req, res) => {
     try { res.json(await ssoAssignmentMappingService.testClaims(req.body.claims, req.body.providerId, req.tenant?.tenantId || null)); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Test SSO assignment mapping error:', error); throw Errors.internal('Failed to test SSO assignment mapping'); }
   }));

@@ -14,7 +14,13 @@ import {
   TableToolbarContent,
   Tag,
 } from '@carbon/react';
-import type { AuthzGroup, SsoClaimsMapping, SsoGroupMapping } from '../../hooks/useAuthzApi';
+import type {
+  AuthzGroup,
+  SsoClaimsMapping,
+  SsoGroupMapping,
+  SsoGroupMappingTestResponse,
+  SsoPlatformMappingTestResponse,
+} from '../../hooks/useAuthzApi';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
 import { SsoMappingClaimsPreview } from './SsoMappingClaimsPreview';
 
@@ -37,15 +43,8 @@ const ssoGroupMappingHeaders = [
   { key: 'actions', header: '' },
 ];
 
-export interface SsoPlatformMappingTestResult {
-  resolvedRole: string;
-  matchedMappings: Array<{ id: string; name: string; targetRole: string }>;
-}
-
-export interface SsoGroupMappingTestResult {
-  matchedMappings: SsoGroupMapping[];
-  memberships: Array<{ groupId: string; mappingId: string }>;
-}
+export type SsoPlatformMappingTestResult = SsoPlatformMappingTestResponse;
+export type SsoGroupMappingTestResult = SsoGroupMappingTestResponse;
 
 export function SsoMappingsPanel({
   platformMappings,
