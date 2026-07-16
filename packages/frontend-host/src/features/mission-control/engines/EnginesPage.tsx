@@ -1274,7 +1274,17 @@ function EngineRegistrationSection({ engine }: { engine: any }) {
 
 export function buildEngineMutationPayload(
   form: EngineMutationForm,
-  editing?: any | null,
+  editing: null | undefined,
+  options?: { canManageSecrets?: boolean }
+): CreateEngineRequest
+export function buildEngineMutationPayload(
+  form: EngineMutationForm,
+  editing: AccessibleEngineSummary,
+  options?: { canManageSecrets?: boolean }
+): UpdateEngineRequest
+export function buildEngineMutationPayload(
+  form: EngineMutationForm,
+  editing?: AccessibleEngineSummary | null,
   options: { canManageSecrets?: boolean } = {}
 ): EngineMutationPayload {
   if (editing && isExternallyManagedEngine(editing)) {
@@ -1400,7 +1410,7 @@ export default function Engines() {
   const areSourceOwnedFieldsReadOnly = Boolean(editing && (isExternallyManagedEngine(editing) || isConfigLockedEngine(editing)))
 
   const createM = useMutation({
-    mutationFn: (payload: any) => apiClient.post<any>('/engines-api/engines', payload, { credentials: 'include' }),
+    mutationFn: (payload: CreateEngineRequest) => apiClient.post<AccessibleEngineSummary>('/engines-api/engines', payload, { credentials: 'include' }),
     onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['engines'] })
       qc.invalidateQueries({ queryKey: ['engines','active'] })
@@ -1416,7 +1426,7 @@ export default function Engines() {
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to create engine', subtitle: getUiErrorMessage(e, 'Failed to create') })
   })
   const updateM = useMutation({
-    mutationFn: (payload: any) => apiClient.put<any>(`/engines-api/engines/${encodeURIComponent(editing.id)}`, payload, { credentials: 'include' }),
+    mutationFn: (payload: UpdateEngineRequest) => apiClient.put<AccessibleEngineSummary>(`/engines-api/engines/${encodeURIComponent(editing.id)}`, payload, { credentials: 'include' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['engines'] })
       qc.invalidateQueries({ queryKey: ['engines','active'] })
@@ -2033,7 +2043,6 @@ export default function Engines() {
           setEditing(null)
         }}
         onSubmit={() => {
-          const payload = buildEngineMutationPayload(form, editing, { canManageSecrets: canManageEditingSecrets })
           if (editing) {
             if (isEngineFormReadOnly) {
               engineModal.closeModal()
@@ -2048,10 +2057,12 @@ export default function Engines() {
               return
             }
             if (!getActionsForEngine(editing).canEdit) return
+            const payload = buildEngineMutationPayload(form, editing, { canManageSecrets: canManageEditingSecrets })
             updateM.mutate(payload)
           }
           else {
             if (!canCreateEngine) return
+            const payload = buildEngineMutationPayload(form, null, { canManageSecrets: canManageEditingSecrets })
             createM.mutate(payload)
           }
         }}
