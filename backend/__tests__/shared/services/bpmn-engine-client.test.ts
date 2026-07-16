@@ -136,7 +136,7 @@ describe('bpmn-engine-client', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : {} });
 
     await runWithBpmnEngineRequestContext({
-      requestId: 'request-42', userId: 'user-1', tenantId: 'tenant-1', engineId: 'engine-sidecar', actionId: 'engine.runtime.instances.start', projectId: 'project-1',
+      requestId: 'request-42', userId: 'user-1', tenantId: 'tenant-1', engineId: 'engine-sidecar', actionId: 'engine.runtime.process-definitions.start', projectId: 'project-1',
     }, async () => {
       await camundaPost('engine-sidecar', '/process-definition/key/payments/start', { customerDownstreamToken: 'customer-downstream-token' });
     });
@@ -149,7 +149,7 @@ describe('bpmn-engine-client', () => {
       resourceId: 'engine-sidecar',
       details: {
         requestId: 'request-42',
-        authorizedActionId: 'engine.runtime.instances.start',
+        authorizedActionId: 'engine.runtime.process-definitions.start',
         projectId: 'project-1',
         operationClass: 'engine.instance.mutate',
         method: 'POST',
@@ -168,14 +168,14 @@ describe('bpmn-engine-client', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : {} });
     (fetch as unknown as Mock).mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', headers: { get: vi.fn().mockReturnValue('text/plain') }, text: vi.fn().mockResolvedValue('customer-downstream-token') });
 
-    await runWithBpmnEngineRequestContext({ requestId: 'request-43', userId: 'user-1', tenantId: 'tenant-1', actionId: 'engine.runtime.instances.start' }, async () => {
+    await runWithBpmnEngineRequestContext({ requestId: 'request-43', userId: 'user-1', tenantId: 'tenant-1', actionId: 'engine.runtime.process-definitions.start' }, async () => {
       await expect(camundaPost('engine-sidecar', '/process-definition/key/payments/start', {})).rejects.toMatchObject({ code: 'ENGINE_OPERATION_REJECTED' });
     });
 
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
       details: expect.objectContaining({
         requestId: 'request-43',
-        authorizedActionId: 'engine.runtime.instances.start',
+        authorizedActionId: 'engine.runtime.process-definitions.start',
         operationClass: 'engine.instance.mutate',
         connectionMode: 'customer_sidecar',
         result: 'operation_rejected',
@@ -210,7 +210,7 @@ describe('bpmn-engine-client', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : {} });
     (fetch as unknown as Mock).mockRejectedValueOnce(new Error('request timed out https://secret-engine.example.com/downstream-secret-must-not-leak'));
 
-    await runWithBpmnEngineRequestContext({ requestId: 'request-timeout', userId: 'user-1', tenantId: 'tenant-1', actionId: 'engine.runtime.instances.start' }, async () => {
+    await runWithBpmnEngineRequestContext({ requestId: 'request-timeout', userId: 'user-1', tenantId: 'tenant-1', actionId: 'engine.runtime.process-definitions.start' }, async () => {
       await camundaPost('engine-sidecar', '/process-definition/key/order/start', {}).then(
         () => { throw new Error('Expected transport failure'); },
         (error: { code: string; statusCode: number; toJSON: () => unknown }) => {
@@ -246,7 +246,7 @@ describe('bpmn-engine-client', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : {} });
     (fetch as unknown as Mock).mockRejectedValueOnce(new Error('TLS handshake failed for https://sidecar.example.test/engine-rest?peer=customer-downstream-token'));
 
-    await runWithBpmnEngineRequestContext({ requestId: 'request-tls', userId: 'user-1', tenantId: 'tenant-1', actionId: 'engine.runtime.instances.start' }, async () => {
+    await runWithBpmnEngineRequestContext({ requestId: 'request-tls', userId: 'user-1', tenantId: 'tenant-1', actionId: 'engine.runtime.process-definitions.start' }, async () => {
       await expect(camundaPost('engine-sidecar', '/process-definition/key/payments/start', {})).rejects.toMatchObject({
         code: 'ENGINE_TRANSPORT_UNAVAILABLE',
         details: { connectionMode: 'customer_sidecar', operationClass: 'engine.instance.mutate' },

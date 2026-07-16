@@ -63,7 +63,9 @@ import type {
   RoleAssignment as SharedRoleAssignment,
   RoleSummary as SharedRoleSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
-import type {
+import {
+  EditableProjectRoleSchema,
+  type EditableProjectRole,
 } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
 import { ProjectMembersModal } from './components/ProjectMembersModal'
 import { ProjectMembersManagementModals, type ProjectScopedCustomRole } from './components/ProjectMembersManagementModals'
@@ -90,6 +92,14 @@ import {
 import { EngineAccessModal } from '../components/project-detail/EngineAccessModal'
 import { ProjectDeploymentTargetsModal } from '../components/project-detail/ProjectDeploymentTargetsModal'
 import { FolderLoader, CurrentPath, TreePicker } from '../components/project-detail/FolderTreeHelpers'
+
+/** Project ownership changes only through the dedicated ownership-transfer flow. */
+function editableProjectRoles(roles: readonly ProjectRole[]): EditableProjectRole[] {
+  return roles.flatMap((projectRole) => {
+    const parsed = EditableProjectRoleSchema.safeParse(projectRole)
+    return parsed.success ? [parsed.data] : []
+  })
+}
 
 function getProjectDetailBulkActionId(action: ProjectDetailBulkAction): string {
   if (action === 'download') return 'project.files.read'
@@ -1309,7 +1319,7 @@ export default function ProjectDetail() {
     if (memberMode === 'direct-add' && !canAddMembers) return
     if (memberMode === 'invite' && !canInviteMembers) return
     try {
-      const roles = memberRoles.filter((role): role is Exclude<ProjectRole, 'owner'> => role !== 'owner')
+      const roles = editableProjectRoles(memberRoles)
       const body = {
         email,
         roles,
@@ -1404,7 +1414,7 @@ export default function ProjectDetail() {
     if (!projectId) return
     try {
       await projectsApi.updateMemberRoles(projectId, member.userId, {
-        roles: roles.filter((role): role is Exclude<ProjectRole, 'owner'> => role !== 'owner'),
+        roles: editableProjectRoles(roles),
       })
       await syncProjectCustomRoleAssignments(member.userId, editCustomRoleIds)
       editRolesModal.closeModal()
@@ -2076,7 +2086,7 @@ export default function ProjectDetail() {
           onEditRoles={(member) => {
             if (!manualProjectAccessEnabled || !canUpdateMemberRoles) return
             const current = (Array.isArray(member.roles) && member.roles.length > 0 ? member.roles : [member.role]) as ProjectRole[]
-            const editable = current.filter((rr) => rr !== 'owner')
+            const editable = editableProjectRoles(current)
             setEditRolesSelection(editable.length ? editable : ['viewer'])
             setEditCustomRoleIds((customProjectAssignmentsByUser.get(member.userId) || []).map((assignment) => assignment.roleId))
             editRolesModal.openModal(member)
