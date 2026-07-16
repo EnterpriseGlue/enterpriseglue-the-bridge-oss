@@ -720,7 +720,8 @@ router.patch(
       const { role, roles } = req.body as { role?: ProjectRole; roles?: ProjectRole[] };
       const requesterId = req.user!.userId;
 
-      // Can't change owner role through this endpoint unless requester is owner
+      // Owner transitions are governance operations and only use the dedicated
+      // ownership-transfer endpoint.
       const targetMembership = await projectMemberService.getMembership(projectId, targetUserId);
       if (!targetMembership) {
         throw Errors.projectNotFound();
