@@ -59,7 +59,7 @@ import type {
   ProjectEngineTarget as SharedProjectEngineTarget,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
-import { createEngine, deleteEngine as deleteEngineRequest, getAccessibleEngines, getEngineConnectionHealth, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags, getEngineProjectTargets, setEngineEnvironment, testEngineConnection, updateEngine } from './api/engines'
+import { createEngine, deleteEngine as deleteEngineRequest, getAccessibleEngines, getEngineConnectionHealth, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags, getEngineMembers, getEngineProjectTargets, setEngineEnvironment, testEngineConnection, updateEngine } from './api/engines'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -1549,11 +1549,7 @@ export default function Engines() {
   const accessMembersQ = useQuery({
     queryKey: ['engines', editing?.id, 'access-members'],
     enabled: Boolean(engineModal.isOpen && editing?.id && editingActions?.canViewMembers),
-    queryFn: () => apiClient.get<EngineMembersResponse>(
-      `/engines-api/engines/${encodeURIComponent(String(editing?.id))}/members`,
-      undefined,
-      { credentials: 'include' }
-    ),
+    queryFn: () => getEngineMembers(String(editing!.id)),
   })
   const accessAssignmentsQ = useQuery({
     queryKey: ['engines', editing?.id, 'access-assignments'],
