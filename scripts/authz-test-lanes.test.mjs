@@ -6,6 +6,7 @@ const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.me
 const scripts = packageJson.scripts;
 const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
 const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsal-test.sh', import.meta.url), 'utf8');
+const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
   'test:identity-contract',
@@ -79,4 +80,12 @@ test('the live local SAML rehearsal is opt-in and guarded to local browser targe
   assert.match(localSamlRehearsalRunner, /LOCAL_SAML_REHEARSAL=true/);
   assert.match(localSamlRehearsalRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
   assert.match(localSamlRehearsalRunner, /localhost, loopback, or a \.local host/);
+});
+
+test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to local browser targets', () => {
+  assert.match(scripts['test:ldap:local-rehearsal'], /run-local-ldap-rehearsal-test\.sh/);
+  assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_FIXTURE_ACTIVE=true/);
+  assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_REHEARSAL=true/);
+  assert.match(localLdapRehearsalRunner, /run-ldap-protocol-mock\.sh/);
+  assert.match(localLdapRehearsalRunner, /localhost, loopback, or a \.local host/);
 });

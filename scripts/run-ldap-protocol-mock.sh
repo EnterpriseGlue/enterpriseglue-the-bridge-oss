@@ -30,10 +30,11 @@ export EG_LDAP_TEST_CERT_DIR="$tmp_dir"
 export EG_LDAP_TEST_USER_PASSWORD="$(random_secret)"
 export EG_LDAP_TEST_SECOND_USER_PASSWORD="$(random_secret)"
 export EG_LDAP_TEST_DISABLED_USER_PASSWORD="$(random_secret)"
+export EG_LDAP_TEST_BROWSER_USER_PASSWORD="$(random_secret)"
 
 openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 1 \
   -keyout "$tmp_dir/ldap.key" -out "$tmp_dir/ldap.crt" \
-  -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' >/dev/null 2>&1
+  -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,DNS:host.docker.internal,IP:127.0.0.1' >/dev/null 2>&1
 chmod 600 "$tmp_dir/ldap.key"
 
 if ! docker compose -p "$project" -f "$compose_file" up --detach --wait; then
@@ -93,6 +94,17 @@ givenName: Disabled
 mail: disabled@identity-mock.test
 employeeType: disabled
 userPassword: $EG_LDAP_TEST_DISABLED_USER_PASSWORD
+
+dn: uid=browser-login,ou=people,$base_dn
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+uid: browser-login
+cn: Browser Login Rehearsal
+sn: Rehearsal
+givenName: Browser
+mail: browser-login@identity-mock.test
+employeeType: active
+userPassword: $EG_LDAP_TEST_BROWSER_USER_PASSWORD
 
 dn: ou=groups,$base_dn
 objectClass: organizationalUnit

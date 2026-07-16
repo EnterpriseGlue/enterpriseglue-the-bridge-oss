@@ -269,6 +269,27 @@ corepack pnpm@11.0.8 run test:saml:local-rehearsal
 As with OIDC, this is local protocol and browser-flow evidence only. It does
 not authorize a legacy-provider cutover or compatibility-path removal.
 
+### Live local direct-LDAP sign-in
+
+The direct-LDAP rehearsal starts a disposable OpenLDAP fixture with a generated
+CA and credentials, exposes it only on loopback, and removes it when the test
+finishes. It writes the generated CA and service-bind password into the ignored
+local secret directory, then configures the provider with opaque file
+references and runs a connection check before opening the browser login form.
+The backend must include the existing file-reference overlay shown for the SAML
+rehearsal above.
+
+```bash
+PLAYWRIGHT_BASE_URL=https://localhost:5443 \
+PLAYWRIGHT_LOCAL_CA_FILE=.local/docker/keycloak-tls/ca.crt \
+corepack pnpm@11.0.8 run test:ldap:local-rehearsal
+```
+
+This lane accepts only local browser targets and a Docker-local LDAP host. It
+does not print directory credentials, bound secrets, certificates, cookies, or
+tokens. Like OIDC and SAML, it is local protocol/browser evidence only and
+does not authorize compatibility-path removal or a deployed-provider cutover.
+
 ## Optional local sign-in smoke
 
 After the stack is healthy, verify a real login with an existing disposable
