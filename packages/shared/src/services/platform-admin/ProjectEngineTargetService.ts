@@ -5,6 +5,13 @@ import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistenc
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import type {
+  ProjectEngineTarget as SharedProjectEngineTarget,
+  ProjectEngineTargetApprovalStatus as SharedProjectEngineTargetApprovalStatus,
+  ProjectEngineTargetMode as SharedProjectEngineTargetMode,
+  ProjectEngineTargetSource as SharedProjectEngineTargetSource,
+  ProjectEngineTargetStatus as SharedProjectEngineTargetStatus,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { ProjectEngineTargetPolicyMode } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, type DataSource, type EntityManager } from 'typeorm';
@@ -13,11 +20,11 @@ import {
   platformSettingsService,
 } from './PlatformSettingsService.js';
 
-export type ProjectEngineTargetMode = 'manual' | 'ci' | 'api' | 'import';
-export type ProjectEngineTargetSource = 'manual' | 'legacy' | 'ci' | 'api' | 'import' | 'deployment_history' | 'external' | 'system' | 'automation' | 'config';
-export type ProjectEngineTargetStatus = 'active' | 'disabled' | 'archived';
-export type ProjectEngineTargetApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected';
-export type ProjectEngineTargetOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
+export type ProjectEngineTargetMode = SharedProjectEngineTargetMode;
+export type ProjectEngineTargetSource = SharedProjectEngineTargetSource;
+export type ProjectEngineTargetStatus = SharedProjectEngineTargetStatus;
+export type ProjectEngineTargetApprovalStatus = SharedProjectEngineTargetApprovalStatus;
+export type ProjectEngineTargetOwnershipMode = SharedProjectEngineTarget['ownershipMode'];
 
 const SOURCE_OWNED_TARGET_SOURCES = new Set<ProjectEngineTargetSource>([
   'ci',
@@ -92,40 +99,7 @@ export interface ProjectEngineTargetUpdateInput {
   allowSourceOwnedMutation?: boolean;
 }
 
-export interface ProjectEngineTargetView {
-  id: string;
-  tenantId: string | null;
-  projectId: string;
-  projectName: string | null;
-  engineId: string;
-  engineName: string | null;
-  engineBaseUrl: string | null;
-  environment: { id: string; name: string; color: string; manualDeployAllowed: boolean } | null;
-  status: ProjectEngineTargetStatus;
-  source: ProjectEngineTargetSource;
-  sourceRef: string | null;
-  ownershipMode: ProjectEngineTargetOwnershipMode;
-  sourceHash: string | null;
-  lastAppliedAt: number | null;
-  driftStatus: string | null;
-  externalSystemId: string | null;
-  externalProjectId: string | null;
-  externalEngineId: string | null;
-  externalTargetId: string | null;
-  allowManualDeploy: boolean;
-  allowCiDeploy: boolean;
-  allowApiDeploy: boolean;
-  allowImport: boolean;
-  createdById: string | null;
-  approvedById: string | null;
-  approvalStatus: ProjectEngineTargetApprovalStatus;
-  approvedAt: number | null;
-  policyTags: string[];
-  diagnostics: Record<string, unknown> | null;
-  lastSeenAt: number | null;
-  createdAt: number;
-  updatedAt: number;
-}
+export type ProjectEngineTargetView = SharedProjectEngineTarget;
 
 export interface ProjectEngineTargetFilters {
   tenantId?: string | null;
