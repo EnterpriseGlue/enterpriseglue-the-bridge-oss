@@ -40,6 +40,11 @@ import {
   prepareLatestEngineImport,
   previewLatestEngineImport,
 } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
+import {
+  ProjectEngineAccessResponseSchema,
+  type ProjectEngineAccessedEngine,
+  type ProjectEngineAccessPendingRequest,
+} from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js';
 
 // Validation schemas
 const projectIdParamSchema = z.object({ projectId: z.string().uuid() });
@@ -121,64 +126,6 @@ interface UserRow {
   id: string;
   firstName: string | null;
   lastName: string | null;
-}
-
-interface AccessedEngineResponse {
-  engineId: string;
-  engineName: string;
-  baseUrl: string;
-  deploymentIntegration?: 'enterpriseglue_proxy' | 'direct_engine';
-  environment: { name: string; color: string } | null;
-  deploymentTarget?: {
-    id: string;
-    status: string;
-    source: string;
-    sourceRef: string | null;
-    allowManualDeploy: boolean;
-    allowCiDeploy: boolean;
-    allowApiDeploy: boolean;
-    allowImport: boolean;
-    lastSeenAt: number | null;
-    createdAt: number;
-    updatedAt: number;
-  };
-  manualDeployAllowed?: boolean;
-  manualDeployDeniedReasons?: string[];
-  ciDeployAllowed?: boolean;
-  ciDeployDeniedReasons?: string[];
-  deploymentEligibility?: {
-    diagnosticsVisible?: boolean;
-    manual: {
-      allowed: boolean;
-      reasons: string[];
-      checks?: Array<{
-        id: string;
-        allowed: boolean;
-        reason: string;
-        remediation?: string;
-      }>;
-    };
-    ci?: {
-      allowed: boolean;
-      reasons: string[];
-      checks?: Array<{
-        id: string;
-        allowed: boolean;
-        reason: string;
-        remediation?: string;
-      }>;
-    };
-  };
-  health: { status: string; latencyMs: number | null } | null;
-  grantedAt: number;
-  isLegacy?: boolean;
-}
-
-interface PendingRequestWithDetails {
-  requestId: string;
-  engineId: string;
-  engineName: string;
-  requestedAt: number;
 }
 
 const DEPLOYMENT_DIAGNOSTIC_PERMISSIONS = new Set<string>([
@@ -695,7 +642,7 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
   const engineIds = connectedRows
     .map((r) => r.engineId)
     .filter((id: string) => id !== '__env__');
-  let accessedEngines: AccessedEngineResponse[] = [];
+  const accessedEngines: ProjectEngineAccessedEngine[] = [];
   
   // Handle special __env__ engine (legacy environment-based engine)
   const envEngineAccess = connectedRows.find((r) => r.engineId === '__env__');
@@ -806,7 +753,7 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
 
   // Get engine details for pending requests
   const pendingEngineIds = pendingRequests.map((r: Pick<EngineAccessRequest, 'engineId'>) => r.engineId);
-  let pendingWithDetails: PendingRequestWithDetails[] = [];
+  let pendingWithDetails: ProjectEngineAccessPendingRequest[] = [];
   if (pendingEngineIds.length > 0) {
     const pendingEngineRows = await engineRepo.find({
       where: { id: In(pendingEngineIds) },
@@ -835,11 +782,11 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
     .filter((e: Pick<Engine, 'id'>) => !usedEngineIds.has(e.id))
     .map((e: Pick<Engine, 'id' | 'name' | 'baseUrl'>) => ({ id: e.id, name: e.name || e.baseUrl || 'Unknown' }));
 
-  res.json({
+  res.json(ProjectEngineAccessResponseSchema.parse({
     accessedEngines,
     pendingRequests: pendingWithDetails,
     availableEngines,
-  });
+  }));
 }));
 
 export default r;

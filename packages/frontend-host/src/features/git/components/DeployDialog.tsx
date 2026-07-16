@@ -416,7 +416,7 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
         </Select>
         {selectedEngine?.environment && (
           <div style={{ marginTop: 'var(--spacing-2)', display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
-            <Tag size="sm" style={{ backgroundColor: selectedEngine.environment.color, color: '#fff' }}>
+            <Tag size="sm" style={{ backgroundColor: selectedEngine.environment.color ?? 'var(--cds-border-strong-01)', color: '#fff' }}>
               {selectedEngine.environment.name}
             </Tag>
             {selectedEngine.health?.status === 'connected' && (

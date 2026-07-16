@@ -28,6 +28,7 @@ const {
   FileDeploymentSummarySchema,
   LatestProjectDeploymentArtifactSchema,
   ProjectEngineDeploymentViewSchema,
+  ProjectEngineAccessResponseSchema,
 } = await import('@enterpriseglue/shared/schemas/starbase/index.js');
 
 const {
@@ -2666,72 +2667,7 @@ registry.registerPath({
   responses: { 200: { description: 'File restored', content: { 'application/json': { schema: z.object({ restored: z.boolean(), fileId: z.string(), commitId: z.string(), fileVersionNumber: z.number().nullable(), updatedAt: z.number() }) } } } },
 });
 
-const DeploymentEligibilityCheckOpenApiSchema = z.object({
-  id: z.string(),
-  allowed: z.boolean(),
-  reason: z.string(),
-  remediation: z.string().optional(),
-});
-
-const ProjectEngineAccessResponseOpenApiSchema = z.object({
-  accessedEngines: z.array(z.object({
-    engineId: z.string(),
-    engineName: z.string(),
-    baseUrl: z.string().optional(),
-    environment: z.object({
-      name: z.string(),
-      color: z.string(),
-    }).nullable(),
-    deploymentTarget: z.object({
-      id: z.string(),
-      status: z.string(),
-      source: z.string(),
-      sourceRef: z.string().nullable(),
-      allowManualDeploy: z.boolean(),
-      allowCiDeploy: z.boolean(),
-      allowApiDeploy: z.boolean(),
-      allowImport: z.boolean(),
-      lastSeenAt: z.number().nullable(),
-      createdAt: z.number(),
-      updatedAt: z.number(),
-    }).optional(),
-    manualDeployAllowed: z.boolean().optional(),
-    manualDeployDeniedReasons: z.array(z.string()).optional(),
-    ciDeployAllowed: z.boolean().optional(),
-    ciDeployDeniedReasons: z.array(z.string()).optional(),
-    deploymentEligibility: z.object({
-      diagnosticsVisible: z.boolean().optional(),
-      manual: z.object({
-        allowed: z.boolean(),
-        reasons: z.array(z.string()),
-        checks: z.array(DeploymentEligibilityCheckOpenApiSchema).optional(),
-      }),
-      ci: z.object({
-        allowed: z.boolean(),
-        reasons: z.array(z.string()),
-        checks: z.array(DeploymentEligibilityCheckOpenApiSchema).optional(),
-      }).optional(),
-    }).optional(),
-    health: z.object({
-      status: z.string(),
-      latencyMs: z.number().nullable(),
-    }).nullable(),
-    grantedAt: z.number(),
-    isLegacy: z.boolean().optional(),
-  })),
-  pendingRequests: z.array(z.object({
-    requestId: z.string(),
-    engineId: z.string(),
-    engineName: z.string(),
-    requestedAt: z.number(),
-  })),
-  availableEngines: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-  })),
-});
-
-registry.register('ProjectEngineAccessResponse', ProjectEngineAccessResponseOpenApiSchema);
+registry.register('ProjectEngineAccessResponse', ProjectEngineAccessResponseSchema);
 
 // GET /starbase-api/projects/:projectId/engine-access
 registry.registerPath({
@@ -2739,7 +2675,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/engine-access',
   ...authzExtension('project.deployment-options.read', 'GET', '/starbase-api/projects/:projectId/engine-access'),
   request: { params: z.object({ projectId: z.string() }) },
-  responses: { 200: { description: 'Engine access status and deployment eligibility for project', content: { 'application/json': { schema: ProjectEngineAccessResponseOpenApiSchema } } } },
+  responses: { 200: { description: 'Engine access status and deployment eligibility for project', content: { 'application/json': { schema: ProjectEngineAccessResponseSchema } } } },
 });
 
 // GET /starbase-api/projects/:projectId/engine-deployments

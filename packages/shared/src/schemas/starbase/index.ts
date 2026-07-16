@@ -6,3 +6,4 @@ export * from './comment.js';
 export * from './folder.js';
 export * from './deployment-query.js';
 export * from './engine-deployment.js';
+export * from './project-engine-access.js';

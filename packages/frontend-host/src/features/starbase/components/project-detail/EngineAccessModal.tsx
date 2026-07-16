@@ -21,55 +21,15 @@ import {
 } from '@carbon/react'
 import { Information } from '@carbon/icons-react'
 import { ProjectPermission } from '../../../../shared/auth/permissions'
+import type {
+  ProjectEngineAccessResponse,
+  ProjectEngineDeploymentEligibilityMode,
+  ProjectEngineDeploymentTargetView,
+} from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js'
 
-type DeploymentEligibilityMode = {
-  allowed: boolean
-  reasons: string[]
-  checks?: Array<{ id: string; allowed: boolean; reason: string; remediation?: string }>
-}
-
-type DeploymentTarget = {
-  id: string
-  status: string
-  source: string
-  sourceRef: string | null
-  allowManualDeploy: boolean
-  allowCiDeploy: boolean
-  allowApiDeploy: boolean
-  allowImport: boolean
-  lastSeenAt: number | null
-  createdAt: number
-  updatedAt: number
-}
-
-interface EngineAccessData {
-  accessedEngines: Array<{
-    engineId: string
-    engineName: string
-    baseUrl?: string
-    environment?: { name: string; color: string }
-    health?: { status: string; latencyMs?: number }
-    deploymentTarget?: DeploymentTarget
-    manualDeployAllowed?: boolean
-    manualDeployDeniedReasons?: string[]
-    ciDeployAllowed?: boolean
-    ciDeployDeniedReasons?: string[]
-    deploymentEligibility?: {
-      diagnosticsVisible?: boolean
-      manual?: DeploymentEligibilityMode
-      ci?: DeploymentEligibilityMode
-    }
-  }>
-  pendingRequests: Array<{
-    requestId: string
-    engineName: string
-    requestedAt: number
-  }>
-  availableEngines: Array<{
-    id: string
-    name: string
-  }>
-}
+type DeploymentEligibilityMode = ProjectEngineDeploymentEligibilityMode
+type DeploymentTarget = ProjectEngineDeploymentTargetView
+type EngineAccessData = ProjectEngineAccessResponse
 
 interface EngineAccessModalProps {
   open: boolean
@@ -159,7 +119,7 @@ export function EngineAccessModal({
                         </TableCell>
                         <TableCell>
                           {e.environment ? (
-                            <Tag size="sm" style={{ backgroundColor: e.environment.color, color: '#fff' }}>
+                            <Tag size="sm" style={{ backgroundColor: e.environment.color ?? 'var(--cds-border-strong-01)', color: '#fff' }}>
                               {e.environment.name}
                             </Tag>
                           ) : (
