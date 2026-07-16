@@ -157,6 +157,12 @@ issuer and the address used by the backend for discovery and token exchange;
 there is no Docker-only issuer hostname to leak into application settings.
 The TLS frontend proxy is available at `https://localhost:5443`.
 
+When rebuilding or recreating the backend while this overlay is running, also
+recreate `keycloak` in the same Compose command (or run `up -d --force-recreate
+keycloak` afterwards). Its shared network namespace belongs to the backend
+container, so leaving Keycloak attached to a replaced backend causes local OIDC
+discovery to fail with a connection-refused error.
+
 Verify both endpoints with the generated CA:
 
 ```bash
