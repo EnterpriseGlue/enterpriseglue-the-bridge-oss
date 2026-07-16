@@ -198,6 +198,14 @@ describe('AccessControl helpers', () => {
   });
 
   it('filters roles by search query and scope', () => {
+    const manualRoleOwnership = {
+      source: 'manual' as const,
+      sourceRef: null,
+      ownershipMode: 'manual' as const,
+      sourceHash: null,
+      lastAppliedAt: null,
+      driftStatus: null,
+    };
     const roles: RoleSummary[] = [
       {
         id: 'system.platform.admin',
@@ -209,6 +217,7 @@ describe('AccessControl helpers', () => {
         isEditable: false,
         isAssignable: true,
         isArchived: false,
+        ...manualRoleOwnership,
         permissionCount: 1,
         createdAt: 1,
         updatedAt: 1,
@@ -223,6 +232,7 @@ describe('AccessControl helpers', () => {
         isEditable: true,
         isAssignable: true,
         isArchived: false,
+        ...manualRoleOwnership,
         permissionCount: 2,
         createdAt: 1,
         updatedAt: 1,
@@ -237,6 +247,7 @@ describe('AccessControl helpers', () => {
         isEditable: false,
         isAssignable: true,
         isArchived: false,
+        ...manualRoleOwnership,
         permissionCount: 3,
         createdAt: 1,
         updatedAt: 1,
@@ -281,6 +292,7 @@ describe('AccessControl helpers', () => {
         name: 'External Engine',
         baseUrl: 'https://engine.example.com',
         type: 'camunda8',
+        connectionMode: 'direct',
         externalId: 'cluster-a/prod',
         labels: { environment: 'prod' },
         registrationSource: 'external_api',
