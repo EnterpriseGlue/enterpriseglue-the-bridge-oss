@@ -46,6 +46,10 @@ export type AuthzUiBehavior = typeof AUTHZ_UI_BEHAVIORS[number];
 export const AUTHZ_SURFACE_COVERAGE = [
   'frontend',
   'api-only',
+  // The backend resolves and evaluates an exact runtime resource before it
+  // returns a collection or row. A coarse client permission snapshot must not
+  // hide that resource-aware surface.
+  'runtime-enforced',
 ] as const;
 
 export type AuthzSurfaceCoverage = typeof AUTHZ_SURFACE_COVERAGE[number];

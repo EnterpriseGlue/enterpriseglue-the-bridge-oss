@@ -102,6 +102,11 @@ const uiActionIds = new Set(
     .filter((action) => Array.isArray(action.ui) && action.ui.some((surface) => (surface.coverage || 'frontend') === 'frontend'))
     .map((action) => action.actionId)
 );
+const runtimeEnforcedUiActionIds = new Set(
+  registeredActions
+    .filter((action) => Array.isArray(action.ui) && action.ui.some((surface) => surface.coverage === 'runtime-enforced'))
+    .map((action) => action.actionId)
+);
 
 const files = sourceRoots
   .flatMap((sourceRoot) => walkFiles(path.join(repoRoot, sourceRoot)))
@@ -157,6 +162,9 @@ console.log(
   `(${explicitActionMatches.length} explicit guard/action-id parameters) across ${files.length} source files.`
 );
 console.log(
+  `[frontend-authz-coverage] ${runtimeEnforcedUiActionIds.size} runtime-resource UI action ids are enforced by server-side resolution.`
+);
+console.log(
   `[frontend-authz-coverage] Used categories: ${
     [...usedByCategory.entries()]
       .sort(([left], [right]) => left.localeCompare(right))
@@ -165,14 +173,12 @@ console.log(
   }`
 );
 if (unreferencedUiActionIds.length > 0) {
-  console.log(
-    `[frontend-authz-coverage] Unreferenced registered UI action ids: ${unreferencedUiActionIds.length} ` +
-    '(reported for migration inventory; not a failure).'
-  );
+  console.error(`[frontend-authz-coverage] Unreferenced snapshot-guardable UI action ids: ${unreferencedUiActionIds.length}.`);
   for (const actionId of unreferencedUiActionIds.slice(0, 25)) {
-    console.log(`[frontend-authz-coverage] unreferenced ${actionId}`);
+    console.error(`[frontend-authz-coverage] unreferenced ${actionId}`);
   }
   if (unreferencedUiActionIds.length > 25) {
-    console.log(`[frontend-authz-coverage] ... ${unreferencedUiActionIds.length - 25} more`);
+    console.error(`[frontend-authz-coverage] ... ${unreferencedUiActionIds.length - 25} more`);
   }
+  process.exit(1);
 }

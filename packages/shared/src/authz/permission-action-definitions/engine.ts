@@ -524,7 +524,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Decisions',
       description: 'Read deployed decision definitions and DMN XML from an engine.',
-      ui: [{ surfaceId: 'mission-control.decisions.list', behavior: 'hide' }],
+      ui: [{ surfaceId: 'mission-control.decisions.list', behavior: 'hide', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -555,7 +555,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Decisions',
       description: 'Resolve a deployed decision definition back to a Starbase file edit target.',
-      ui: [{ surfaceId: 'mission-control.decisions.edit-target', behavior: 'hide' }],
+      ui: [{ surfaceId: 'mission-control.decisions.edit-target', behavior: 'hide', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -603,7 +603,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Migrations',
       description: 'Preview the number of process instances affected by a migration plan.',
-      ui: [{ surfaceId: 'mission-control.migrations.preview', behavior: 'disable' }],
+      ui: [{ surfaceId: 'mission-control.migrations.preview', behavior: 'disable', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'POST',
@@ -622,7 +622,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Migrations',
       description: 'Generate an engine migration plan from source and target process definitions.',
-      ui: [{ surfaceId: 'mission-control.migrations.plan.generate', behavior: 'disable' }],
+      ui: [{ surfaceId: 'mission-control.migrations.plan.generate', behavior: 'disable', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'POST',
@@ -650,7 +650,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Migrations',
       description: 'Validate an engine migration plan before execution.',
-      ui: [{ surfaceId: 'mission-control.migrations.plan.validate', behavior: 'disable' }],
+      ui: [{ surfaceId: 'mission-control.migrations.plan.validate', behavior: 'disable', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'POST',
@@ -669,7 +669,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Migrations',
       description: 'Read active source activity counts for process instances before migration.',
-      ui: [{ surfaceId: 'mission-control.migrations.active-sources', behavior: 'hide' }],
+      ui: [{ surfaceId: 'mission-control.migrations.active-sources', behavior: 'hide', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'POST',
@@ -688,7 +688,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: true,
       category: 'Mission Control Migrations',
       description: 'Execute a migration plan through an asynchronous engine batch.',
-      ui: [{ surfaceId: 'mission-control.migrations.execute-async', behavior: 'disable' }],
+      ui: [{ surfaceId: 'mission-control.migrations.execute-async', behavior: 'disable', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'POST',
@@ -726,7 +726,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Process Instances',
       description: 'Read process instance lists and process instance details from an engine.',
-      ui: [{ surfaceId: 'mission-control.process-instances.list', behavior: 'hide' }],
+      ui: [{ surfaceId: 'mission-control.process-instances.list', behavior: 'hide', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -757,7 +757,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Process Instances',
       description: 'Read runtime variables for a process instance using the current compatibility permission.',
-      ui: [{ surfaceId: 'mission-control.process-instances.variables', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.process-instances.variables', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -776,7 +776,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Process Instances',
       description: 'Read variable history for a process instance variable using the current compatibility permission.',
-      ui: [{ surfaceId: 'mission-control.process-instances.variable-history', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.process-instances.variable-history', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -798,7 +798,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Process Instances',
       description: 'Read the runtime activity instance tree for a process instance.',
-      ui: [{ surfaceId: 'mission-control.process-instances.activity-tree', behavior: 'hide' }],
+      ui: [{ surfaceId: 'mission-control.process-instances.activity-tree', behavior: 'hide', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -817,7 +817,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Process Instances',
       description: 'Read historic activity instances for a process instance.',
-      ui: [{ surfaceId: 'mission-control.process-instances.activity-history', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.process-instances.activity-history', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -839,7 +839,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Process Instances',
       description: 'Read lazy execution details for a process instance activity.',
-      ui: [{ surfaceId: 'mission-control.process-instances.execution-details', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.process-instances.execution-details', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -861,7 +861,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Process Instances',
       description: 'Read incidents for a process instance.',
-      ui: [{ surfaceId: 'mission-control.process-instances.incidents', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.process-instances.incidents', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -984,7 +984,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Process Definitions',
       description: 'Read process definitions, BPMN XML, and process definition runtime statistics from an engine.',
-      ui: [{ surfaceId: 'mission-control.process-definitions.list', behavior: 'hide' }],
+      ui: [{ surfaceId: 'mission-control.process-definitions.list', behavior: 'hide', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -1039,7 +1039,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Process Definitions',
       description: 'Resolve a deployed process definition back to a Starbase file edit target.',
-      ui: [{ surfaceId: 'mission-control.process-definitions.edit-target', behavior: 'hide' }],
+      ui: [{ surfaceId: 'mission-control.process-definitions.edit-target', behavior: 'hide', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -1062,7 +1062,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: true,
       category: 'Mission Control Process Definitions',
       description: 'Start a new process instance from a deployed process definition key.',
-      ui: [{ surfaceId: 'mission-control.process-definitions.start', behavior: 'disable' }],
+      ui: [{ surfaceId: 'mission-control.process-definitions.start', behavior: 'disable', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'POST',
@@ -1320,7 +1320,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control External Tasks',
       description: 'Read external tasks from an engine.',
-      ui: [{ surfaceId: 'mission-control.external-tasks.list', behavior: 'hide' }],
+      ui: [{ surfaceId: 'mission-control.external-tasks.list', behavior: 'hide', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -1497,7 +1497,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control History',
       description: 'Read historic task instances from an engine.',
-      ui: [{ surfaceId: 'mission-control.history.tasks', behavior: 'hide' }],
+      ui: [{ surfaceId: 'mission-control.history.tasks', behavior: 'hide', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -1516,7 +1516,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control History',
       description: 'Read historic variable instances from an engine using the current compatibility permission.',
-      ui: [{ surfaceId: 'mission-control.history.variables', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.history.variables', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -1547,7 +1547,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control History',
       description: 'Read historic decision instances from an engine using the current compatibility permission.',
-      ui: [{ surfaceId: 'mission-control.history.decisions', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.history.decisions', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -1569,7 +1569,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control History',
       description: 'Read input payloads for a historic decision instance.',
-      ui: [{ surfaceId: 'mission-control.history.decisions.inputs', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.history.decisions.inputs', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -1591,7 +1591,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control History',
       description: 'Read output payloads for a historic decision instance.',
-      ui: [{ surfaceId: 'mission-control.history.decisions.outputs', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.history.decisions.outputs', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -1613,7 +1613,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control History',
       description: 'Read user operation history from an engine.',
-      ui: [{ surfaceId: 'mission-control.history.user-operations', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.history.user-operations', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -1635,7 +1635,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control History',
       description: 'Read historic process instance lists and details from an engine.',
-      ui: [{ surfaceId: 'mission-control.history.process-instances', behavior: 'redact' }],
+      ui: [{ surfaceId: 'mission-control.history.process-instances', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -1666,7 +1666,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Mission Control Jobs',
       description: 'Read executable jobs from an engine.',
-      ui: [{ surfaceId: 'mission-control.jobs.list', behavior: 'hide' }],
+      ui: [{ surfaceId: 'mission-control.jobs.list', behavior: 'hide', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
@@ -2087,7 +2087,8 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: true,
       category: 'Mission Control',
       description: 'Create, update, or delete runtime variables.',
-      ui: [{ surfaceId: 'mission-control.variables.actions', behavior: 'disable' }],
+      // Aggregate reporting action; concrete runtime controls own the mounted UI surfaces.
+      ui: [{ surfaceId: 'mission-control.variables.actions', behavior: 'disable', coverage: 'api-only' }],
     },
   {
       actionId: 'engine.instances.read',
