@@ -2070,7 +2070,7 @@ Every adapter must pass the same assertions:
 - [x] ✅ Deduplicates repeated entitlements deterministically without losing the preferred immutable external id.
 - [x] ✅ Keeps display names diagnostic-only and never substitutes them for a configured immutable id match.
 - [x] ✅ Classifies invalid credentials/signatures, unavailable provider, timeout, malformed response, missing required subject, and incomplete group result distinctly through provider-neutral diagnostic error codes while browser login responses remain generic.
-- [ ] ⬜ Redacts tokens, assertions, bind passwords, certificates/private keys, and sensitive raw attributes from errors, audit, and snapshots.
+- [x] ✅ Redacts tokens, assertions, bind passwords, certificates/private keys, and sensitive raw attributes from errors, sync diagnostic events, and snapshots; browser login routes retain only generic failure responses.
 - [x] ✅ Supports deterministic clock and correlation id injection for repeatable sync/audit assertions through the provider-neutral sync diagnostics clock and run/event detail correlation id.
 - [x] ✅ Produces the same normalized group entitlement for equivalent OIDC, SAML, and LDAP identities.
 
