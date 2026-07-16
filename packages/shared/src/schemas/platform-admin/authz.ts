@@ -564,6 +564,7 @@ export const AuthzCreatedIdResponseSchema = z.object({ id: z.string() });
 export const AuthzMutationSuccessResponseSchema = z.object({ success: z.literal(true) });
 export const CustomPermissionCreateResponseSchema = AuthzCreatedIdResponseSchema.extend({ key: z.string() });
 export const RoleAssignmentCreateResponseSchema = AuthzCreatedIdResponseSchema.extend({ warnings: z.array(z.string()) });
+export const ProjectEngineTargetSyncLegacyRequestSchema = z.object({ projectId: z.string().min(1) });
 export const ProjectEngineTargetSyncLegacyResponseSchema = z.object({ createdOrUpdated: z.number().int().nonnegative() });
 
 export const AuthzGroupSourceSchema = z.enum(['manual', 'sso', 'identity_provider', 'api', 'automation', 'system', 'config']);
@@ -1889,6 +1890,7 @@ export type AuthzCreatedIdResponse = z.infer<typeof AuthzCreatedIdResponseSchema
 export type AuthzMutationSuccessResponse = z.infer<typeof AuthzMutationSuccessResponseSchema>;
 export type CustomPermissionCreateResponse = z.infer<typeof CustomPermissionCreateResponseSchema>;
 export type RoleAssignmentCreateResponse = z.infer<typeof RoleAssignmentCreateResponseSchema>;
+export type ProjectEngineTargetSyncLegacyRequest = z.infer<typeof ProjectEngineTargetSyncLegacyRequestSchema>;
 export type ProjectEngineTargetSyncLegacyResponse = z.infer<typeof ProjectEngineTargetSyncLegacyResponseSchema>;
 export type RoleAssignmentSource = z.infer<typeof RoleAssignmentSourceSchema>;
 export type AuthzOwnershipMode = z.infer<typeof AuthzOwnershipModeSchema>;

@@ -43,6 +43,7 @@ import {
   EngineSetCreateSchema,
   EngineSetUpdateSchema,
   ProjectEngineTargetSyncLegacyResponseSchema,
+  ProjectEngineTargetSyncLegacyRequestSchema,
   RoleAssignmentCreateResponseSchema,
   ServiceAccountCreateSchema,
   SsoAssignmentMappingTestResponseSchema,
@@ -298,6 +299,11 @@ describe('provider-neutral identity shared contracts', () => {
       name: 'invalid labels',
       selector: { mode: 'labels', labels: {} },
     })).toThrow();
+  });
+
+  it('shares deployment-target legacy synchronization input with the route and OpenAPI', () => {
+    expect(ProjectEngineTargetSyncLegacyRequestSchema.parse({ projectId: 'project-1' })).toEqual({ projectId: 'project-1' });
+    expect(() => ProjectEngineTargetSyncLegacyRequestSchema.parse({ projectId: '' })).toThrow();
   });
 
   it('keeps the public policy response aligned with the service view', () => {

@@ -2285,6 +2285,8 @@ Engine Set creation, update, and selector preview validation also now consume th
 
 Custom permission and allow-only custom role writes now use their shared schemas in the backend role route as well, so attempts to add deny fields are rejected by the same contract at every transport boundary.
 
+Project-target deployment eligibility and legacy-sync requests now share their route and OpenAPI contracts. Direct target writes compose the canonical target schemas while retaining their explicit rejection of the configuration-owned source; configuration ownership continues to flow only through the bundle apply path.
+
 Policy create and update inputs now use the same shared schemas in route validation, OpenAPI, and Platform Admin hooks. OpenAPI now accurately advertises the service's identifier-only create response and success-only update response rather than a policy record that the mutation never returns.
 
 The policy list response now has one strict shared service-view schema across the route, OpenAPI, and hook. It exposes effective policy fields only; persistence timestamps and creator fields are no longer advertised when the service does not return them.

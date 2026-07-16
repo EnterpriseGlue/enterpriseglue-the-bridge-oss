@@ -7,27 +7,30 @@ import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.j
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { deploymentEligibilityService, projectEngineTargetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import {
+  DeploymentEligibilityEvaluateRequestSchema,
+  ProjectEngineTargetCreateSchema,
+  ProjectEngineTargetSourceSchema,
+  ProjectEngineTargetSyncLegacyRequestSchema,
+  ProjectEngineTargetUpdateSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { evaluateMissionControlStarbaseBridge, evaluateStarbaseMissionControlBridge } from '../../services/bridgeDecisionService.js';
 
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
 const projectEngineTargetStatusSchema = z.enum(['active', 'disabled', 'archived']);
 const projectEngineTargetSourceSchema = z.enum(['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation']);
-const projectEngineTargetModeSchema = z.enum(['manual', 'ci', 'api', 'import']);
-const projectEngineTargetApprovalStatusSchema = z.enum(['not_required', 'pending', 'approved', 'rejected']);
-const projectEngineTargetDiagnosticsSchema = z.record(z.string(), z.unknown());
 const projectEngineTargetQuerySchema = z.object({
   projectId: z.string().min(1).optional(), engineId: z.string().min(1).optional(),
   status: z.enum(['active', 'disabled', 'archived', 'all']).optional(), source: projectEngineTargetSourceSchema.optional(),
 });
-const projectEngineTargetCreateSchema = z.object({
-  projectId: z.string().min(1), engineId: z.string().min(1), status: projectEngineTargetStatusSchema.optional(), source: projectEngineTargetSourceSchema.optional(), sourceRef: z.string().nullable().optional(),
-  externalSystemId: z.string().nullable().optional(), externalProjectId: z.string().nullable().optional(), externalEngineId: z.string().nullable().optional(), externalTargetId: z.string().nullable().optional(),
-  allowManualDeploy: z.boolean().optional(), allowCiDeploy: z.boolean().optional(), allowApiDeploy: z.boolean().optional(), allowImport: z.boolean().optional(),
-  approvedById: z.string().nullable().optional(), approvalStatus: projectEngineTargetApprovalStatusSchema.optional(), approvedAt: z.number().nullable().optional(), policyTags: z.array(z.string()).optional(), diagnostics: projectEngineTargetDiagnosticsSchema.nullable().optional(),
+/** Direct writes cannot claim configuration ownership; config bundles use their dedicated apply path. */
+const directProjectEngineTargetSourceSchema = ProjectEngineTargetSourceSchema.exclude(['config']);
+const projectEngineTargetCreateSchema = ProjectEngineTargetCreateSchema.extend({
+  source: directProjectEngineTargetSourceSchema.optional(),
 });
-const projectEngineTargetUpdateSchema = projectEngineTargetCreateSchema.omit({ projectId: true, engineId: true }).partial();
-const projectEngineTargetSyncLegacySchema = z.object({ projectId: z.string().min(1) });
-const deploymentEligibilityEvaluateSchema = z.object({ userId: z.string().min(1), projectId: z.string().min(1), engineId: z.string().min(1), mode: projectEngineTargetModeSchema.optional() });
+const projectEngineTargetUpdateSchema = ProjectEngineTargetUpdateSchema.extend({
+  source: directProjectEngineTargetSourceSchema.optional(),
+});
 const bridgeDecisionSchema = z.object({
   engineId: z.string().min(1).optional(), projectId: z.string().min(1).optional(), fileId: z.string().min(1).optional(), targetId: z.string().min(1).optional(),
   definitionId: z.string().min(1).optional(), definitionKey: z.string().min(1).optional(), decisionDefinitionId: z.string().min(1).optional(), decisionDefinitionKey: z.string().min(1).optional(), kind: z.enum(['process', 'decision', 'bpmn', 'dmn']).optional(),
@@ -41,7 +44,7 @@ export function registerProjectEngineTargetRoutes(router: Router, { requirePlatf
       res.json(await projectEngineTargetService.listTargets({ tenantId: req.tenant?.tenantId || null, projectId: req.query.projectId as string | undefined, engineId: req.query.engineId as string | undefined, status: req.query.status as any, source: req.query.source as any }));
     } catch (error: any) { if (error.statusCode) throw error; logger.error('List project-engine targets error:', error); throw Errors.internal('Failed to list project-engine targets'); }
   }));
-  router.post('/api/authz/project-engine-targets/evaluate', apiLimiter, requireAuth, requirePlatformAction('project.deployment-eligibility.evaluate'), validateBody(deploymentEligibilityEvaluateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/project-engine-targets/evaluate', apiLimiter, requireAuth, requirePlatformAction('project.deployment-eligibility.evaluate'), validateBody(DeploymentEligibilityEvaluateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     try { res.json(await deploymentEligibilityService.evaluate({ ...req.body, tenantId: req.tenant?.tenantId || null })); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Evaluate deployment eligibility error:', error); throw Errors.internal('Failed to evaluate deployment eligibility'); }
   }));
@@ -53,7 +56,7 @@ export function registerProjectEngineTargetRoutes(router: Router, { requirePlatf
     try { res.json(await evaluateStarbaseMissionControlBridge(req.body, req.user!.userId, req.tenant?.tenantId || null)); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Evaluate Starbase to Mission Control bridge error:', error); throw Errors.internal('Failed to evaluate Starbase to Mission Control bridge'); }
   }));
-  router.post('/api/authz/project-engine-targets/sync-legacy', apiLimiter, requireAuth, requirePlatformAction('platform.project-engine-targets.manage'), validateBody(projectEngineTargetSyncLegacySchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/project-engine-targets/sync-legacy', apiLimiter, requireAuth, requirePlatformAction('platform.project-engine-targets.manage'), validateBody(ProjectEngineTargetSyncLegacyRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     try { res.json(await projectEngineTargetService.syncLegacyAccessForProject(req.body.projectId, req.tenant?.tenantId || null)); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Sync legacy project-engine targets error:', error); throw Errors.badRequest(error.message || 'Failed to sync legacy project-engine targets'); }
   }));
