@@ -2236,7 +2236,7 @@ Phase 0 exit criteria:
 - [x] ✅ Secrets are encrypted or externally referenced end to end. The maintained `test:secret-boundaries` lane verifies encrypted local provider values, opaque engine/provider references, plaintext rejection, and redaction across APIs, audits, errors, exports, diagnostics, and transport behavior.
 - [x] ✅ Config-manageable entities have deterministic keys and ownership metadata. Runtime Resource Sets use their tenant-scoped key identity plus source/ownership provenance, aligning them with roles, groups, providers, mappings, engines, Engine Sets, assignments, and project-engine targets.
 - [x] ✅ Project-engine target ownership has one unambiguous effective row per pair. Persistence enforces a unique project/engine pair, service reads resolve that exact pair, and config preview/apply either update its owner or require an explicit audited ownership transfer; focused service/diff/apply tests cover conflicts, transfer, update, and archive behavior.
-- [ ] ⬜ Runtime role assignment types can be represented without changing permission scope.
+- [x] ✅ Runtime role assignment types preserve engine permission scope. Engine roles normalize engine, Engine Set, exact runtime-resource, and runtime-resource-set targets into canonical `scopeType`/`scopeId` assignments; focused assignment-target, per-engine, and runtime-lineage authorization lanes cover the bounded target and runtime-resolution paths.
 - [x] ✅ Module splits preserve route/OpenAPI/frontend action inventory guards. Strict backend route inventory remains 434/434, all 168 registered UI action ids are referenced, and Admin navigation/action parity passes after the domain registry split.
 
 ### Phase 1: Shared Config Contract
