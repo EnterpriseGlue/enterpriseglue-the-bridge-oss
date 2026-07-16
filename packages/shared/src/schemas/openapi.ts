@@ -1828,6 +1828,7 @@ const {
   EngineEnvironmentUpdateResponseSchema,
   SetLockedRequest,
   RequestAccessRequest,
+  EngineProjectAccessRequestResultSchema,
   AssignOwnerRequest,
   UserSearchResultSchema,
   UserListItemSchema,
@@ -2492,7 +2493,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/request-access',
   ...authzExtension('project-engine-target.access.request', 'POST', '/engines-api/engines/{engineId}/request-access'),
   request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: RequestAccessRequest } } } },
-  responses: { 200: { description: 'Access request result', content: { 'application/json': { schema: z.object({ status: z.string(), autoApproved: z.boolean().optional(), requestId: z.string().optional() }) } } } },
+  responses: { 200: { description: 'Access request result', content: { 'application/json': { schema: EngineProjectAccessRequestResultSchema } } } },
 });
 
 registry.registerPath({

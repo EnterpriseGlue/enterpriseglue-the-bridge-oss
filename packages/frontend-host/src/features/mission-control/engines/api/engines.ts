@@ -16,6 +16,7 @@ import type {
   EngineMemberLookup,
   EngineMembersResponse,
   EngineProjectAccessRequest,
+  EngineProjectAccessRequestResult,
   ReissuedManualEngineInvitation,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 
@@ -175,6 +176,17 @@ export async function addEngineMember(
   return apiClient.post<EngineMemberAddResponse>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/members`,
     payload,
+    { credentials: 'include' },
+  )
+}
+
+export async function requestEngineProjectAccess(
+  engineId: string,
+  projectId: string,
+): Promise<EngineProjectAccessRequestResult> {
+  return apiClient.post<EngineProjectAccessRequestResult>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/request-access`,
+    { projectId },
     { credentials: 'include' },
   )
 }

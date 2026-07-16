@@ -39,7 +39,7 @@ import SyncModal from '../../git/components/SyncModal'
 import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
-import { getAccessibleEngines } from '../../mission-control/engines/api/engines'
+import { getAccessibleEngines, requestEngineProjectAccess } from '../../mission-control/engines/api/engines'
 import { projectsApi } from '../../../api/starbase/projects'
 import { PlatformPermission, ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
@@ -754,10 +754,7 @@ export default function ProjectDetail() {
   // Engine access request mutation
   const requestEngineAccessM = useMutation({
     mutationFn: async (engineId: string) => {
-      return apiClient.post<{ autoApproved?: boolean }>(
-        `/engines-api/engines/${engineId}/request-access`,
-        { projectId }
-      )
+      return requestEngineProjectAccess(engineId, projectId!)
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['project-engine-access', projectId] })

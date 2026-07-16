@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { EngineProjectAccessRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js';
+import {
+  EngineProjectAccessRequestResultSchema,
+  EngineProjectAccessRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js';
 
 describe('EngineProjectAccessRequestSchema', () => {
   it('preserves the pending request contract without relation or role assumptions', () => {
@@ -22,5 +25,15 @@ describe('EngineProjectAccessRequestSchema', () => {
       status: 'pending',
       createdAt: 1710000000,
     });
+  });
+});
+
+describe('EngineProjectAccessRequestResultSchema', () => {
+  it('preserves the request outcome returned to a project caller', () => {
+    expect(EngineProjectAccessRequestResultSchema.parse({
+      status: 'pending',
+      autoApproved: false,
+      requestId: 'request-1',
+    })).toMatchObject({ status: 'pending', autoApproved: false });
   });
 });

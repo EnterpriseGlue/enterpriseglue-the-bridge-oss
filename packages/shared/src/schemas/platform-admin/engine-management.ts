@@ -175,6 +175,12 @@ export const RequestAccessRequest = z.object({
   projectId: z.string().uuid(),
 });
 
+export const EngineProjectAccessRequestResultSchema = z.object({
+  status: z.string(),
+  autoApproved: z.boolean().optional(),
+  requestId: z.string().optional(),
+});
+
 export const EngineRoleResponse = z.object({
   role: EngineRoleSchema.nullable(),
 });
@@ -198,3 +204,4 @@ export type EngineEndpointAuthenticationSummary = z.infer<typeof EngineEndpointA
 export type EngineGovernanceMetadata = z.infer<typeof EngineGovernanceMetadataSchema>;
 export type EngineEnvironmentUpdateResponse = z.infer<typeof EngineEnvironmentUpdateResponseSchema>;
 export type AddEngineMember = z.infer<typeof AddEngineMemberRequest>;
+export type EngineProjectAccessRequestResult = z.infer<typeof EngineProjectAccessRequestResultSchema>;

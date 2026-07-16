@@ -23,6 +23,7 @@ import { ProjectOverviewBulkSyncModal } from './components/ProjectOverviewBulkSy
 import { ProjectOverviewModals } from './components/ProjectOverviewModals'
 import DeployDialog from '../../git/components/DeployDialog'
 import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
+import { requestEngineProjectAccess } from '../../mission-control/engines/api/engines'
 import type { Project, ProjectMember, SyncDirection, BulkSyncResult } from './projectOverviewTypes'
 import type { ProjectOverviewBulkAction, ProjectOverviewRowAction } from './components/ProjectOverviewTable'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
@@ -621,10 +622,7 @@ export default function ProjectOverview() {
   const requestEngineAccessM = useMutation({
     mutationFn: async (engineId: string) => {
       if (!engineAccessProject?.id) return { autoApproved: false }
-      return apiClient.post<{ autoApproved?: boolean }>(
-        `/engines-api/engines/${engineId}/request-access`,
-        { projectId: engineAccessProject.id }
-      )
+      return requestEngineProjectAccess(engineId, engineAccessProject.id)
     },
     onSuccess: () => {
       if (engineAccessProject?.id) {
