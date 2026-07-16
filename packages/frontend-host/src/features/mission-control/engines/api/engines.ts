@@ -8,7 +8,13 @@ import type {
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
 import type { EnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js'
 import type { ProjectEngineTarget } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
-import type { EngineEnvironmentUpdateResponse } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
+import type {
+  EngineEnvironmentUpdateResponse,
+  EngineMemberCapabilities,
+  EngineMemberLookup,
+  EngineMembersResponse,
+  EngineProjectAccessRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 
 /**
  * Returns the authorization-filtered engine collection. This is deliberately
@@ -66,6 +72,41 @@ export async function getEngineConnectionHealth(engineId: string): Promise<Engin
   return apiClient.get<EngineConnectionHealthResponse | null>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/health`,
     undefined,
+    { credentials: 'include' },
+  )
+}
+
+export async function getEngineMembers(engineId: string): Promise<EngineMembersResponse> {
+  return apiClient.get<EngineMembersResponse>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/members`,
+    undefined,
+    { credentials: 'include' },
+  )
+}
+
+export async function getEngineAccessRequests(engineId: string): Promise<EngineProjectAccessRequest[]> {
+  return apiClient.get<EngineProjectAccessRequest[]>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/access-requests`,
+    undefined,
+    { credentials: 'include' },
+  )
+}
+
+export async function getEngineMemberCapabilities(engineId: string): Promise<EngineMemberCapabilities> {
+  return apiClient.get<EngineMemberCapabilities>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/members/capabilities`,
+    undefined,
+    { credentials: 'include' },
+  )
+}
+
+export async function lookupEngineMember(
+  engineId: string,
+  query: { email?: string; role?: 'delegate' | 'operator' | 'deployer' },
+): Promise<EngineMemberLookup> {
+  return apiClient.get<EngineMemberLookup>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/members/lookup`,
+    query,
     { credentials: 'include' },
   )
 }

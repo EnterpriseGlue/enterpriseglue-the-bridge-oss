@@ -34,6 +34,21 @@ export const EngineMembersResponseSchema = z.object({
   pendingInvites: z.array(PendingEngineInviteSchema),
 });
 
+/**
+ * A pending project-to-engine access request. The API deliberately exposes
+ * only the request record: project and requester display details are resolved
+ * by separately authorized views rather than leaking relation data here.
+ */
+export const EngineProjectAccessRequestStatusSchema = z.enum(['pending', 'approved', 'denied']);
+export const EngineProjectAccessRequestSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  engineId: z.string(),
+  requestedById: z.string(),
+  status: EngineProjectAccessRequestStatusSchema,
+  createdAt: z.number(),
+});
+
 export const EngineMemberCandidateSchema = UserSummarySchema;
 export const EngineMemberLookupSchema = z.object({
   mode: z.enum(['invite', 'existing-member', 'direct-add', 'direct-add-only']),
@@ -169,6 +184,8 @@ export type EngineRole = z.infer<typeof EngineRoleSchema>;
 export type EngineMember = z.infer<typeof EngineMemberSchema>;
 export type PendingEngineInvite = z.infer<typeof PendingEngineInviteSchema>;
 export type EngineMembersResponse = z.infer<typeof EngineMembersResponseSchema>;
+export type EngineProjectAccessRequestStatus = z.infer<typeof EngineProjectAccessRequestStatusSchema>;
+export type EngineProjectAccessRequest = z.infer<typeof EngineProjectAccessRequestSchema>;
 export type EngineMemberCandidate = z.infer<typeof EngineMemberCandidateSchema>;
 export type EngineMemberLookup = z.infer<typeof EngineMemberLookupSchema>;
 export type EngineMemberCapabilities = z.infer<typeof EngineMemberCapabilitiesSchema>;

@@ -1813,6 +1813,7 @@ const {
   TransferProjectOwnershipRequest,
   EngineMemberSchema,
   EngineMembersResponseSchema,
+  EngineProjectAccessRequestSchema,
   EngineMemberCapabilitiesSchema,
   EngineMemberLookupSchema,
   EngineMemberAddResponseSchema,
@@ -2499,7 +2500,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/access-requests',
   ...authzExtension('engine.project-access.requests.read', 'GET', '/engines-api/engines/{engineId}/access-requests'),
   request: { params: z.object({ engineId: z.string() }) },
-  responses: { 200: { description: 'Pending engine access requests', content: { 'application/json': { schema: z.array(z.unknown()) } } } },
+  responses: { 200: { description: 'Pending engine access requests', content: { 'application/json': { schema: z.array(EngineProjectAccessRequestSchema) } } } },
 });
 
 registry.registerPath({

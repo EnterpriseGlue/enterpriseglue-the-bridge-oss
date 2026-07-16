@@ -41,12 +41,15 @@ import InvitationRevealPanel from '../../../../shared/components/InvitationRevea
 import UserLookupEmailField from '../../../../shared/components/UserLookupEmailField'
 import { getInvitationDeliveryOptions, getPreferredInvitationDeliveryMethod, type InvitationDeliveryMethod, type InvitationRevealData } from '../../../../shared/utils/invitationFlow'
 import { StarbaseTableShell } from '../../../starbase/components/StarbaseTableShell'
+import {
+  getEngineAccessRequests,
+  getEngineMemberCapabilities,
+  getEngineMembers,
+  lookupEngineMember,
+} from '../api/engines'
 import type {
   EngineMember as SharedEngineMember,
   EngineMemberAddResponse as SharedEngineMemberAddResponse,
-  EngineMemberCapabilities as SharedEngineMemberCapabilities,
-  EngineMemberLookup as SharedEngineMemberLookup,
-  EngineMembersResponse as SharedEngineMembersResponse,
   EngineRole as SharedEngineRole,
   PendingEngineInvite as SharedPendingEngineInvite,
   ReissuedManualEngineInvitation as SharedReissuedManualEngineInvitation,
@@ -61,22 +64,9 @@ type EngineRole = Exclude<SharedEngineRole, 'custom'>
 
 type EngineMember = SharedEngineMember
 
-type AccessRequest = {
-  id: string
-  projectId: string
-  engineId: string
-  requestedById: string
-  requestedRole: EngineRole
-  status: 'pending' | 'approved' | 'denied'
-  createdAt: number
-  project?: { id: string; name: string } | null
-  requestedBy?: { id: string; email: string; firstName?: string | null; lastName?: string | null } | null
-}
-
 type UserSearchItem = { id: string; email: string; firstName?: string | null; lastName?: string | null }
 type PendingEngineInvite = SharedPendingEngineInvite
 type PendingEngineInviteStatus = PendingEngineInvite['status']
-type EngineMembersResponse = SharedEngineMembersResponse
 type MemberModalFlow = 'invite' | 'delegate'
 type AssignableEngineRole = Exclude<EngineRole, 'owner'>
 type AuthzPrincipalType = 'user' | 'group' | 'api_client' | 'service_account'
@@ -332,13 +322,13 @@ export default function EngineMembersModal({
 
   const membersQ = useQuery({
     queryKey: ['engine-members', engine?.id],
-    queryFn: () => apiClient.get<EngineMembersResponse>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/members`, undefined, { credentials: 'include' }),
+    queryFn: () => getEngineMembers(engine!.id),
     enabled: !!engine?.id && open && canViewMembers,
   })
 
   const accessRequestsQ = useQuery({
     queryKey: ['engine-access-requests', engine?.id],
-    queryFn: () => apiClient.get<AccessRequest[]>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/access-requests`, undefined, { credentials: 'include' }),
+    queryFn: () => getEngineAccessRequests(engine!.id),
     enabled: !!engine?.id && canViewProjectAccess && open,
   })
 
@@ -386,17 +376,13 @@ export default function EngineMembersModal({
 
   const memberCapabilitiesQ = useQuery({
     queryKey: ['engine-members', engine?.id, 'capabilities'],
-    queryFn: () => apiClient.get<SharedEngineMemberCapabilities>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/members/capabilities`, undefined, { credentials: 'include' }),
+    queryFn: () => getEngineMemberCapabilities(engine!.id),
     enabled: addMemberModal.isOpen && memberFlow === 'invite' && !!engine?.id && canInviteMembers,
   })
 
   const memberLookupQ = useQuery({
     queryKey: ['engine-members', engine?.id, 'lookup', debouncedMemberEmail.toLowerCase(), memberRole],
-    queryFn: () => apiClient.get<SharedEngineMemberLookup>(
-      `/engines-api/engines/${encodeURIComponent(engine!.id)}/members/lookup`,
-      { email: debouncedMemberEmail.toLowerCase(), role: memberRole },
-      { credentials: 'include' },
-    ),
+    queryFn: () => lookupEngineMember(engine!.id, { email: debouncedMemberEmail.toLowerCase(), role: memberRole }),
     enabled: addMemberModal.isOpen && !!engine?.id && canLookupMembers && isValidEmail(debouncedMemberEmail),
     staleTime: 30 * 1000,
   })
@@ -880,10 +866,8 @@ export default function EngineMembersModal({
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{req.project?.name || req.projectId}</div>
-                        <div style={{ fontSize: 12, color: 'var(--cds-text-secondary)' }}>
-                          Requested by {req.requestedBy?.email || req.requestedById} • Role: {roleLabel(req.requestedRole)}
-                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{req.projectId}</div>
+                        <div style={{ fontSize: 12, color: 'var(--cds-text-secondary)' }}>Requested by {req.requestedById}</div>
                       </div>
                       {(canDenyProjectAccess || canApproveProjectAccess) ? (
                         <div style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
