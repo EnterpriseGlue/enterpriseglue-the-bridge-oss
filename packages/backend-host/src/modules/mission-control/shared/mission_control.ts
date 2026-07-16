@@ -35,6 +35,7 @@ import { addRuntimeProcessInstanceActionDecisions } from './runtime-row-action-d
 import {
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
+  ProcessDefXmlSchema,
   PreviewCountResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
@@ -151,7 +152,7 @@ r.get('/mission-control-api/process-definitions/:id/xml', requireRuntimeDefiniti
     const engineId = (req as any).engineId as string
     const definitionId = String(req.params.id)
     const data = await getProcessDefinitionXmlById(engineId, definitionId)
-    res.json(data)
+    res.json(ProcessDefXmlSchema.parse(data))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process definition XML')
   }

@@ -2299,6 +2299,8 @@ Mission Control activity-count reads now share explicit per-activity and five-st
 
 The permissive runtime preview-count request remains compatible with supported engine filter fields, while its non-negative integer response now has one shared contract across route serialization, OpenAPI, and Process Overview.
 
+Process-definition XML now uses its existing shared schema at the runtime route and frontend API boundary; the migration wizard reuses that frontend helper for both source and target diagrams instead of maintaining duplicate transport shapes.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

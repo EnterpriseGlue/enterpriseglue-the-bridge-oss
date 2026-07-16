@@ -82,6 +82,7 @@ export const PreviewCountResponseSchema = z.object({
 
 // Types
 export type ProcessDefinition = z.infer<typeof ProcessDefinitionSchema>;
+export type ProcessDefXml = z.infer<typeof ProcessDefXmlSchema>;
 export type ProcessInstance = z.infer<typeof ProcessInstanceSchema>;
 export type ActivityCountByActivityId = z.infer<typeof ActivityCountByActivityIdSchema>;
 export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;

@@ -144,6 +144,15 @@ describe('mission-control shared mission_control routes', () => {
     expect(getActiveActivityCounts).toHaveBeenCalledWith('engine-77', 'pd-1');
   });
 
+  it('serializes process-definition XML through the shared response contract', async () => {
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/pd-1/xml')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ bpmn20Xml: '' });
+  });
+
   it('reads five-state activity counts through process-definition action permission', async () => {
     const counts = {
       active: { approve: 2 },

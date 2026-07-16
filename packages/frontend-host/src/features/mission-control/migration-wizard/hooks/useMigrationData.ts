@@ -5,6 +5,7 @@ import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useToast } from '../../../../shared/notifications/ToastProvider'
+import { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 
 export interface MigrationDataParams {
   instanceIds: string[]
@@ -286,31 +287,13 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
 
   const targetXmlQ = useQuery({
     queryKey: ['mission-control', 'migration', 'tgt-xml', tgtDefId, selectedEngineId],
-    queryFn: async () => {
-      if (!tgtDefId) return null as any
-      const params = selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''
-      const data = await apiClient.get<{ bpmn20Xml: string }>(
-        `/mission-control-api/process-definitions/${tgtDefId}/xml${params}`,
-        undefined,
-        { credentials: 'include' }
-      )
-      return data?.bpmn20Xml || null
-    },
+    queryFn: () => tgtDefId ? fetchProcessDefinitionXml(tgtDefId, selectedEngineId) : Promise.resolve(null),
     enabled: !!tgtDefId && !!selectedEngineId,
   })
 
   const sourceXmlQ = useQuery({
     queryKey: ['mission-control', 'migration', 'src-xml', srcDefId, selectedEngineId],
-    queryFn: async () => {
-      if (!srcDefId) return null as any
-      const params = selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''
-      const data = await apiClient.get<{ bpmn20Xml: string }>(
-        `/mission-control-api/process-definitions/${srcDefId}/xml${params}`,
-        undefined,
-        { credentials: 'include' }
-      )
-      return data?.bpmn20Xml || null
-    },
+    queryFn: () => srcDefId ? fetchProcessDefinitionXml(srcDefId, selectedEngineId) : Promise.resolve(null),
     enabled: !!srcDefId && !!selectedEngineId,
   })
 
