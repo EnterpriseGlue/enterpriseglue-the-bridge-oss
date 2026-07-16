@@ -12,6 +12,13 @@ import {
 } from '../../authz/route-exemptions.js';
 import { EngineConnectionModeSchema } from '../mission-control/engine.js';
 import { RuntimeResourceKindSchema } from './config-bundle.js';
+import {
+  IdentityProviderProtocolSchema as SharedIdentityProviderProtocolSchema,
+  IdentitySyncEventSchema,
+  IdentitySyncRunSchema,
+} from './identity.js';
+
+export { IdentityProviderProtocolSchema } from './identity.js';
 
 export const AuthzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
 export const AuthzPrincipalTypeSchema = z.enum(AUTHZ_PRINCIPAL_TYPES);
@@ -1062,42 +1069,9 @@ export const IdentityMappingProvisionAccessResponseSchema = z.object({
   createdGroup: z.object({ id: z.string() }).nullable(),
 });
 
-export const SsoSyncRunSchema = z.object({
-  id: z.string(),
-  tenantId: z.string().nullable(),
-  providerId: z.string().nullable(),
-  userId: z.string().nullable(),
-  trigger: z.enum(['login', 'scheduled', 'manual', 'mapping_change', 'engine_change']),
-  status: z.enum(['running', 'success', 'failed']),
-  startedAt: z.number(),
-  completedAt: z.number().nullable(),
-  groupMembershipsCreated: z.number(),
-  groupMembershipsUpdated: z.number(),
-  groupMembershipsRemoved: z.number(),
-  assignmentsCreated: z.number(),
-  assignmentsUpdated: z.number(),
-  assignmentsRemoved: z.number(),
-  errorCode: z.string().nullable(),
-  errorMessage: z.string().nullable(),
-  details: z.string(),
-});
-
-export const SsoSyncEventSchema = z.object({
-  id: z.string(),
-  tenantId: z.string().nullable(),
-  providerId: z.string().nullable(),
-  runId: z.string(),
-  severity: z.enum(['info', 'warning', 'error']),
-  type: z.string(),
-  userId: z.string().nullable(),
-  mappingType: z.string().nullable(),
-  mappingId: z.string().nullable(),
-  resourceType: z.string().nullable(),
-  resourceId: z.string().nullable(),
-  message: z.string(),
-  details: z.string(),
-  createdAt: z.number(),
-});
+/** Backward-compatible names for the shared provider-neutral sync contracts. */
+export const SsoSyncRunSchema = IdentitySyncRunSchema;
+export const SsoSyncEventSchema = IdentitySyncEventSchema;
 
 export const SsoSyncRunsQuerySchema = z.object({
   providerId: z.string().min(1).optional(),
@@ -1228,13 +1202,12 @@ export const IdentityProviderMigrationReadinessResponseSchema = z.object({
   ])),
 });
 
-export const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);
 export const IdentityProviderConfigurationSchema = z.record(z.string(), z.unknown());
 
 /** Configuration contains opaque secret references only; resolved values are never an API contract. */
 export const IdentityProviderRequestSchema = z.object({
   key: z.string().min(1).max(128),
-  protocol: IdentityProviderProtocolSchema,
+  protocol: SharedIdentityProviderProtocolSchema,
   isEnabled: z.boolean().optional(),
   authenticationMode: z.enum(['direct', 'claims_only']).optional(),
   directoryTenantId: z.string().nullable().optional(),
