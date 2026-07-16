@@ -48,6 +48,120 @@ const AllowedImportPaths = [
 export const ConfigBundleModeSchema = z.enum(['additive', 'authoritative', 'preview_only']);
 export const ConfigOwnershipModeSchema = z.enum(['config_locked', 'config_warn', 'manual']);
 
+/** Public, sanitized receipts for hash-bound configuration apply and recovery. */
+export const ConfigBundleBootstrapStatusSchema = z.object({
+  mode: z.enum(['disabled', 'validate', 'apply']),
+  status: z.enum(['disabled', 'validated', 'applied', 'failed']),
+  hash: z.string().nullable(),
+  message: z.string().nullable(),
+  reconciliation: z.enum(['not_run', 'completed', 'pending']),
+  secretPreflight: z.enum(['not_required', 'passed', 'failed']),
+  issueCode: z.enum([
+    'bundle_path_missing', 'bundle_read_failed', 'hash_mismatch', 'validation_failed',
+    'secret_preflight_failed', 'tenant_scope_missing', 'apply_failed', 'identity_reconciliation_failed',
+  ]).nullable(),
+});
+
+export const ConfigBundleIdentityReconciliationModeSchema = z.enum(['none', 'preview', 'apply']);
+export const ConfigBundleIdentitySnapshotStatusSchema = z.enum(['not_needed', 'skipped', 'previewed', 'completed', 'truncated', 'failed']);
+export const ConfigBundleRuntimeReconciliationStatusSchema = z.enum(['not_needed', 'queued', 'completed', 'failed']);
+
+export const ConfigBundleIdentitySnapshotSchema = z.object({
+  mode: ConfigBundleIdentityReconciliationModeSchema,
+  status: ConfigBundleIdentitySnapshotStatusSchema,
+  providerCount: z.number().int().nonnegative(),
+  scanned: z.number().int().nonnegative(),
+  created: z.number().int().nonnegative(),
+  removed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+});
+
+export const ConfigBundleRuntimeReconciliationSchema = z.object({
+  status: ConfigBundleRuntimeReconciliationStatusSchema,
+  taskId: z.string().nullable(),
+  engineSetCount: z.number().int().nonnegative(),
+  runtimeResourceSetCount: z.number().int().nonnegative(),
+  engineCount: z.number().int().nonnegative(),
+});
+
+export const ConfigBundleApplyReconciliationSchema = z.object({
+  status: z.literal('completed'),
+  engineSetCount: z.number().int().nonnegative(),
+  runtimeResourceSetCount: z.number().int().nonnegative(),
+  engineCount: z.number().int().nonnegative(),
+  identitySnapshot: ConfigBundleIdentitySnapshotSchema,
+  runtimeReconciliation: ConfigBundleRuntimeReconciliationSchema,
+});
+
+export const ConfigBundleApplyRunChangeSchema = z.object({
+  objectType: z.string(),
+  key: z.string(),
+  operation: z.string(),
+  reason: z.string(),
+});
+
+export const ConfigBundleApplyResultSchema = z.object({
+  canonicalHash: z.string(),
+  created: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  archived: z.number().int().nonnegative(),
+  changes: z.array(ConfigBundleApplyRunChangeSchema),
+  reconciliation: ConfigBundleApplyReconciliationSchema,
+  idempotent: z.boolean().optional(),
+  applyRunId: z.string().optional(),
+});
+
+export const ConfigBundleApplyRunSchema = z.object({
+  id: z.string(),
+  bundleKey: z.string(),
+  bundleApiVersion: z.string().nullable(),
+  idempotencyKey: z.string().nullable(),
+  actorId: z.string().nullable(),
+  status: z.enum(['pending', 'succeeded', 'failed']),
+  errorMessage: z.string().nullable(),
+  completedAt: z.number().nullable(),
+  createdAt: z.number(),
+  canonicalHash: z.string(),
+  created: z.number().int().nonnegative().optional(),
+  updated: z.number().int().nonnegative().optional(),
+  archived: z.number().int().nonnegative().optional(),
+  reconciliation: ConfigBundleApplyReconciliationSchema.optional(),
+  mode: ConfigBundleModeSchema.nullable().optional(),
+  changes: z.array(ConfigBundleApplyRunChangeSchema).optional(),
+  bootstrap: ConfigBundleBootstrapStatusSchema.optional(),
+});
+
+export const ConfigBundleIdentityReplayTaskSchema = z.object({
+  id: z.string(),
+  providerId: z.string(),
+  syncRunId: z.string().nullable(),
+  status: z.enum(['queued', 'running', 'completed', 'cancelled']),
+  attempts: z.number().int().nonnegative(),
+  nextAttemptAt: z.number().int().nullable(),
+  scanned: z.number().int().nonnegative(),
+  created: z.number().int().nonnegative(),
+  removed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  lastError: z.string().nullable(),
+  completedAt: z.number().int().nullable(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+});
+
+export const ConfigBundleRuntimeReconciliationTaskSchema = z.object({
+  id: z.string(),
+  status: z.enum(['queued', 'running', 'completed']),
+  attempts: z.number().int().nonnegative(),
+  nextAttemptAt: z.number().int().nullable(),
+  engineSetIds: z.array(z.string()),
+  runtimeResourceSetIds: z.array(z.string()),
+  engineIds: z.array(z.string()),
+  lastError: z.string().nullable(),
+  completedAt: z.number().int().nullable(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+});
+
 export const ConfigBundleSettingsSchema = z.object({
   engineAccessAuthority: AccessAuthorityModeSchema.default('manual'),
   projectAccessAuthority: AccessAuthorityModeSchema.default('manual'),
@@ -397,6 +511,15 @@ export const IdentityMockFixturesSchema = z.object({
 
 export type EnterpriseGlueConfigBundle = z.infer<typeof EnterpriseGlueConfigBundleSchema>;
 export type ConfigBundleSettings = z.infer<typeof ConfigBundleSettingsSchema>;
+export type ConfigBundleBootstrapStatus = z.infer<typeof ConfigBundleBootstrapStatusSchema>;
+export type ConfigBundleIdentitySnapshot = z.infer<typeof ConfigBundleIdentitySnapshotSchema>;
+export type ConfigBundleRuntimeReconciliation = z.infer<typeof ConfigBundleRuntimeReconciliationSchema>;
+export type ConfigBundleApplyReconciliation = z.infer<typeof ConfigBundleApplyReconciliationSchema>;
+export type ConfigBundleApplyResult = z.infer<typeof ConfigBundleApplyResultSchema>;
+export type ConfigBundleApplyRunChange = z.infer<typeof ConfigBundleApplyRunChangeSchema>;
+export type ConfigBundleApplyRun = z.infer<typeof ConfigBundleApplyRunSchema>;
+export type ConfigBundleIdentityReplayTask = z.infer<typeof ConfigBundleIdentityReplayTaskSchema>;
+export type ConfigBundleRuntimeReconciliationTask = z.infer<typeof ConfigBundleRuntimeReconciliationTaskSchema>;
 export type ConfigRole = z.infer<typeof ConfigRoleSchema>;
 export type ConfigIdentityProvider = z.infer<typeof ConfigIdentityProviderSchema>;
 export type ConfigIdentityMapping = z.infer<typeof ConfigIdentityMappingSchema>;
