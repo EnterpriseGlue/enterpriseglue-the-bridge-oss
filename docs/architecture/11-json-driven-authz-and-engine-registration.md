@@ -746,7 +746,7 @@ OAuth2 client credentials keep the current public configuration shape, but secre
 - [ ] ⬜ Add optional Kubernetes Secret, Docker secret, and Vault adapters later.
 - [x] ✅ Reject plaintext secret fields by default. Config-bundle engine authentication accepts only opaque secret references, and preview diagnostics do not echo rejected literal credential values.
 - [ ] ⬜ Audit secret reference identifiers and change events, but never resolved values; unredacted-audit permission does not reveal credentials.
-- [ ] ⬜ Keep reveal-once semantics for any generated API client credentials.
+- [x] ✅ Keep reveal-once semantics for any generated API client credentials. API-client and service-account create/rotate responses are the only paths that return a token; persisted rows retain a one-way secret hash, list responses omit both hash and token, and rotation invalidates the previous token. The maintained secret-boundary lane verifies service and HTTP behavior for both credential types.
 - [x] ✅ Add tests proving API responses, logs, audit, config diffs, mock-provider failures, and engine errors never expose resolved secrets. The maintained `test:secret-boundaries` lane covers opaque-reference preflight, API projection, provider and sync-diagnostic redaction, config export and persisted-state diff rejection, and sanitized engine response/audit/transport outcomes. It uses explicit secret sentinels and asserts none appear in returned payloads, persisted diagnostics, or audit entries.
 
 ## Roles, Groups, And Per-Engine Assignments
