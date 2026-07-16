@@ -64,7 +64,7 @@ describe('ConfigurationBundleSettingsTab', () => {
     await waitFor(() => expect(applyBody).not.toBeNull());
     await waitFor(() => expect(authState.refreshPermissions).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(queryClient.getQueryState(authzQueryKeys.roles)?.isInvalidated).toBe(true));
-    const capturedApplyBody = applyBody as Record<string, unknown>;
+    const capturedApplyBody = applyBody as unknown as Record<string, unknown>;
     expect(capturedApplyBody).toMatchObject({ expectedPreviewHash: 'preview-hash-1', identityReconciliationMode: 'apply' });
     expect(capturedApplyBody.idempotencyKey).toEqual(expect.any(String));
   });
@@ -84,7 +84,7 @@ describe('ConfigurationBundleSettingsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }));
 
     await waitFor(() => expect(exportUrl).not.toBeNull());
-    const capturedExportUrl = exportUrl as URL;
+    const capturedExportUrl = exportUrl as unknown as URL;
     expect(capturedExportUrl.searchParams.get('bundleKey')).toBe('example.authz');
     expect(capturedExportUrl.searchParams.get('tenantKey')).toBe('default');
     expect(createObjectUrl).toHaveBeenCalledTimes(1);

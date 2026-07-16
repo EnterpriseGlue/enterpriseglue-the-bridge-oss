@@ -489,7 +489,7 @@ describe('GitVersionsPanel', () => {
   it('requires a scoped deployment history permission or action', () => {
     const noScopedPermission = vi.fn().mockReturnValue(false);
 
-    expect(canViewDeploymentHistoryForEngine({ id: 'engine-1', myRole: 'operator' }, noScopedPermission)).toBe(false);
+    expect(canViewDeploymentHistoryForEngine({ id: 'engine-1' }, noScopedPermission)).toBe(false);
     expect(canViewDeploymentHistoryForEngine(
       { id: 'engine-1' },
       noScopedPermission,

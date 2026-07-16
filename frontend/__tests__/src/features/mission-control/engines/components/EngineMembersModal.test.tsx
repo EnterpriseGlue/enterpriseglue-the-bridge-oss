@@ -86,7 +86,7 @@ describe('EngineMembersModal', () => {
     });
     const props: Parameters<typeof EngineMembersModal>[0] = {
       open: true,
-      engine: { id: 'engine-1', name: 'Dev Engine', myRole: null as any },
+      engine: { id: 'engine-1', name: 'Dev Engine' },
       canManage: false,
       canViewMembers: true,
       canLookupMembers: false,
