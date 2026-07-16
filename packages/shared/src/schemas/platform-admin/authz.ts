@@ -272,6 +272,34 @@ export const LegacySsoProviderResponseSchema = z.object({
   hasCertificate: z.boolean(),
 }).strict();
 
+export const LegacySsoProviderCreateRequestSchema = z.object({
+  name: z.string().min(1).max(100),
+  type: z.enum(['microsoft', 'google', 'saml', 'oidc']),
+  enabled: z.boolean().optional(),
+  riskAcknowledged: z.boolean().optional(),
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  tenantId: z.string().optional(),
+  issuerUrl: z.string().url().optional().or(z.literal('')),
+  authorizationUrl: z.string().url().optional().or(z.literal('')),
+  tokenUrl: z.string().url().optional().or(z.literal('')),
+  userInfoUrl: z.string().url().optional().or(z.literal('')),
+  scopes: z.array(z.string()).optional(),
+  entityId: z.string().optional(),
+  ssoUrl: z.string().url().optional().or(z.literal('')),
+  sloUrl: z.string().url().optional().or(z.literal('')),
+  certificate: z.string().optional(),
+  signatureAlgorithm: z.enum(['sha256', 'sha512']).optional(),
+  iconUrl: z.string().url().optional().or(z.literal('')),
+  buttonLabel: z.string().optional(),
+  buttonColor: z.string().optional(),
+  displayOrder: z.number().int().optional(),
+  autoProvision: z.boolean().optional(),
+}).strict();
+export const LegacySsoProviderUpdateRequestSchema = LegacySsoProviderCreateRequestSchema.partial();
+export const LegacySsoProviderToggleRequestSchema = z.object({ riskAcknowledged: z.boolean().optional() }).default({});
+export const LegacySsoProviderDefaultRoleMigrationRequestSchema = z.object({ providerKey: z.string().min(1).max(160), riskAcknowledged: z.boolean().optional() });
+
 // SSO Provider - Insert schema
 export const SsoProviderInsertSchema = z.object({
   id: z.string().uuid().optional(),

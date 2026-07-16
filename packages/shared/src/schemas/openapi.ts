@@ -2009,36 +2009,10 @@ registry.registerPath({
 });
 
 // SSO Providers
-const SsoProviderTypeSchema = z.enum(['microsoft', 'google', 'saml', 'oidc']);
 const legacySsoProviderSchemas = await import('./platform-admin/authz.js');
-const SsoProviderCreateRequestSchema = z.object({
-  name: z.string().min(1).max(100),
-  type: SsoProviderTypeSchema,
-  enabled: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-  clientId: z.string().optional(),
-  clientSecret: z.string().optional(),
-  tenantId: z.string().optional(),
-  issuerUrl: z.string().url().optional().or(z.literal('')),
-  authorizationUrl: z.string().url().optional().or(z.literal('')),
-  tokenUrl: z.string().url().optional().or(z.literal('')),
-  userInfoUrl: z.string().url().optional().or(z.literal('')),
-  scopes: z.array(z.string()).optional(),
-  entityId: z.string().optional(),
-  ssoUrl: z.string().url().optional().or(z.literal('')),
-  sloUrl: z.string().url().optional().or(z.literal('')),
-  certificate: z.string().optional(),
-  signatureAlgorithm: z.enum(['sha256', 'sha512']).optional(),
-  iconUrl: z.string().url().optional().or(z.literal('')),
-  buttonLabel: z.string().optional(),
-  buttonColor: z.string().optional(),
-  displayOrder: z.number().int().optional(),
-  autoProvision: z.boolean().optional(),
-});
-const SsoProviderUpdateRequestSchema = SsoProviderCreateRequestSchema.partial();
-const SsoProviderToggleRequestSchema = z.object({
-  riskAcknowledged: z.boolean().optional(),
-});
+const SsoProviderCreateRequestSchema = legacySsoProviderSchemas.LegacySsoProviderCreateRequestSchema;
+const SsoProviderUpdateRequestSchema = legacySsoProviderSchemas.LegacySsoProviderUpdateRequestSchema;
+const SsoProviderToggleRequestSchema = legacySsoProviderSchemas.LegacySsoProviderToggleRequestSchema;
 const SsoProviderPublicSchema = legacySsoProviderSchemas.LegacySsoProviderResponseSchema.pick({
   id: true,
   name: true,

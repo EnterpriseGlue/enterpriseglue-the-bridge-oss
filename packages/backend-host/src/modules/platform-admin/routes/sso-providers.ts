@@ -13,6 +13,12 @@ import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/
 import { AppError, asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { ssoProviderService } from '@enterpriseglue/shared/services/platform-admin/SsoProviderService.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
+import {
+  LegacySsoProviderCreateRequestSchema,
+  LegacySsoProviderDefaultRoleMigrationRequestSchema,
+  LegacySsoProviderToggleRequestSchema,
+  LegacySsoProviderUpdateRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const router = Router();
 
@@ -20,50 +26,6 @@ function rethrowKnownError(error: unknown): never {
   if (error instanceof AppError) throw error;
   throw error;
 }
-
-// Validation schemas
-const createProviderSchema = z.object({
-  name: z.string().min(1).max(100),
-  type: z.enum(['microsoft', 'google', 'saml', 'oidc']),
-  enabled: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-
-  // OIDC
-  clientId: z.string().optional(),
-  clientSecret: z.string().optional(),
-  tenantId: z.string().optional(),
-  issuerUrl: z.string().url().optional().or(z.literal('')),
-  authorizationUrl: z.string().url().optional().or(z.literal('')),
-  tokenUrl: z.string().url().optional().or(z.literal('')),
-  userInfoUrl: z.string().url().optional().or(z.literal('')),
-  scopes: z.array(z.string()).optional(),
-
-  // SAML
-  entityId: z.string().optional(),
-  ssoUrl: z.string().url().optional().or(z.literal('')),
-  sloUrl: z.string().url().optional().or(z.literal('')),
-  certificate: z.string().optional(),
-  signatureAlgorithm: z.enum(['sha256', 'sha512']).optional(),
-
-  // Display
-  iconUrl: z.string().url().optional().or(z.literal('')),
-  buttonLabel: z.string().optional(),
-  buttonColor: z.string().optional(),
-  displayOrder: z.number().int().optional(),
-
-  // Provisioning
-  autoProvision: z.boolean().optional(),
-  // Legacy defaults can be inspected and converted, but never changed through
-  // the provider CRUD API.
-  defaultRole: z.never().optional(),
-});
-
-const updateProviderSchema = createProviderSchema.partial();
-
-const toggleProviderSchema = z.object({
-  riskAcknowledged: z.boolean().optional(),
-}).default({});
-const migrateDefaultRoleSchema = z.object({ providerKey: z.string().min(1).max(160), riskAcknowledged: z.boolean().optional() });
 
 type SsoProviderRiskInput = {
   enabled?: boolean;
@@ -188,7 +150,7 @@ router.post(
   '/api/sso/providers',
   requireAuth,
   requireAction('platform.sso.providers.manage'),
-  validateBody(createProviderSchema),
+  validateBody(LegacySsoProviderCreateRequestSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const riskReasons = assertProviderRiskAcknowledged(req.body);
@@ -227,7 +189,7 @@ router.put(
   requireAuth,
   requireAction('platform.sso.providers.manage'),
   validateParams(providerIdSchema),
-  validateBody(updateProviderSchema),
+  validateBody(LegacySsoProviderUpdateRequestSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const providerId = String(req.params.id);
@@ -307,7 +269,7 @@ router.post(
   requireAuth,
   requireAction('platform.sso.providers.manage'),
   validateParams(providerIdSchema),
-  validateBody(migrateDefaultRoleSchema),
+  validateBody(LegacySsoProviderDefaultRoleMigrationRequestSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const providerId = String(req.params.id);
     const existing = await ssoProviderService.getProvider(providerId);
@@ -326,7 +288,7 @@ router.post(
   requireAuth,
   requireAction('platform.sso.providers.manage'),
   validateParams(providerIdSchema),
-  validateBody(toggleProviderSchema),
+  validateBody(LegacySsoProviderToggleRequestSchema),
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const providerId = String(req.params.id);
