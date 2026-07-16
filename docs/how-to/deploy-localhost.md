@@ -115,6 +115,11 @@ the authorized Runtime Resources, SSO Engine Assignments, and Effective Access t
 `test:authz:local-login` and `test:authz:local-access-control` commands remain
 available for targeted reruns.
 
+The Access Control smoke also evaluates one catalog platform permission for the
+authenticated local administrator through the Effective Access UI. This proves
+the local evaluator path; it does not replace representative external-provider
+sign-in evidence required for a legacy-provider cutover.
+
 If Chromium is not installed for this workspace, run `pnpm exec playwright
 install chromium` once. The command fails rather than skipping if either
 credential is absent.

@@ -243,6 +243,11 @@ narrower `test:authz:local-login` and
 `test:authz:local-access-control` commands remain available for targeted
 reruns.
 
+The Access Control smoke also evaluates one catalog platform permission for the
+authenticated local administrator through the Effective Access UI. It is local
+evaluator evidence only; the legacy-provider cutover still requires the
+representative external-provider sign-in and decision evidence in its runbook.
+
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
 
 - `ENTERPRISEGLUE_API_URL` as an Environment variable;
