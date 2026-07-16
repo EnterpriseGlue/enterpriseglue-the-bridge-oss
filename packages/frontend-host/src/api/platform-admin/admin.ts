@@ -4,6 +4,11 @@
  */
 
 import { apiClient } from '../../shared/api/client';
+import type {
+  CreateEnvironmentTag,
+  EnvironmentTag as SharedEnvironmentTag,
+  UpdateEnvironmentTag,
+} from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js';
 
 // Types
 export type EngineOnboardingMode = 'manual_allowed' | 'external_only' | 'hybrid';
@@ -11,16 +16,7 @@ export type ProjectEngineTargetPolicyMode = 'manual_allowed' | 'external_only' |
 export type AccessAuthorityMode = 'manual' | 'transition_to_sso' | 'sso_managed';
 export type EngineRuntimeAuthorizationMode = 'enterpriseglue_authoritative';
 
-export interface EnvironmentTag {
-  id: string;
-  name: string;
-  color: string;
-  manualDeployAllowed: boolean;
-  sortOrder: number;
-  isDefault: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
+export type EnvironmentTag = SharedEnvironmentTag;
 
 export interface PlatformSettings {
   defaultEnvironmentTagId: string | null;
@@ -103,10 +99,10 @@ export const platformAdminApi = {
   getEnvironments: () =>
     apiClient.get<EnvironmentTag[]>('/api/admin/environments'),
 
-  createEnvironment: (data: { name: string; color?: string; manualDeployAllowed?: boolean }) =>
+  createEnvironment: (data: CreateEnvironmentTag) =>
     apiClient.post<EnvironmentTag>('/api/admin/environments', data),
 
-  updateEnvironment: (id: string, data: Partial<{ name: string; color: string; manualDeployAllowed: boolean; isDefault: boolean }>) =>
+  updateEnvironment: (id: string, data: UpdateEnvironmentTag) =>
     apiClient.put<{ success: boolean }>(`/api/admin/environments/${id}`, data),
 
   deleteEnvironment: (id: string) =>

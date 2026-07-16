@@ -4,6 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { platformAdminApi, type PlatformSettings, type EnvironmentTag, type ProjectGovernanceItem, type EngineGovernanceItem, type GitProvider } from '../../../api/platform-admin';
+import type { CreateEnvironmentTag, UpdateEnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js';
 // Query keys
 export const adminQueryKeys = {
   settings: ['platform-admin', 'admin', 'settings'] as const,
@@ -68,7 +69,7 @@ export function useCreateEnvironmentTag() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: { name: string; color?: string; manualDeployAllowed?: boolean }) =>
+    mutationFn: (data: CreateEnvironmentTag) =>
       platformAdminApi.createEnvironment(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.environments });
@@ -80,7 +81,7 @@ export function useUpdateEnvironmentTag() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & Partial<EnvironmentTag>) =>
+    mutationFn: ({ id, ...data }: { id: string } & UpdateEnvironmentTag) =>
       platformAdminApi.updateEnvironment(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.environments });

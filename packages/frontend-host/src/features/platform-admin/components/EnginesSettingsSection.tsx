@@ -502,7 +502,7 @@ export function EnginesSettingsSection({
                     }}
                   >
                     <Draggable size={16} style={{ color: 'var(--color-text-secondary)', flexShrink: 0, cursor: canManageSettings ? 'grab' : 'default' }} />
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: tag.color, flexShrink: 0 }} />
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: tag.color ?? 'var(--cds-border-strong-01)', flexShrink: 0 }} />
                     <span style={{ flex: 1, fontWeight: 500, fontSize: '14px' }}>{tag.name}</span>
                     <Tag type={tag.manualDeployAllowed ? 'green' : 'red'} size="sm">
                       {tag.manualDeployAllowed ? 'Manual OK' : 'CI/CD Only'}

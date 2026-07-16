@@ -231,7 +231,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const openEditModal = (tag: EnvironmentTag) => {
     if (!canManageSettings) return;
     setFormName(tag.name);
-    setFormColor(tag.color);
+    setFormColor(tag.color ?? TAG_COLORS[0]);
     setFormManualDeploy(tag.manualDeployAllowed);
     setEditingTag(tag);
   };
