@@ -8,6 +8,7 @@ import type {
   BridgeDecisionRequest as SharedBridgeDecisionRequest,
   BridgeDecisionResponse as SharedBridgeDecisionResponse,
   EngineAccessTransitionCleanupApplyResponse as SharedEngineAccessTransitionCleanupApplyResponse,
+  EngineAccessTransitionCleanupCandidate as SharedEngineAccessTransitionCleanupCandidate,
   EngineAccessTransitionCleanupPreview as SharedEngineAccessTransitionCleanupPreview,
   AuthzGroup as SharedAuthzGroup,
   AuthzGroupMembership as SharedAuthzGroupMembership,
@@ -334,18 +335,7 @@ export interface SsoEngineAccessSnapshotParams {
   limit?: number;
 }
 
-export interface EngineAccessTransitionCleanupCandidate {
-  manualAssignmentId: string;
-  ssoAssignmentId: string;
-  principalType: string;
-  principalId: string;
-  engineId: string;
-  manualRoleId: string;
-  ssoRoleId: string;
-  sourceMappingId: string | null;
-  lastSnapshotStatus: SsoEngineAccessSnapshotStatus | null;
-  recommendedAction: 'remove_manual_duplicate' | 'review_manual_conflict';
-}
+export type EngineAccessTransitionCleanupCandidate = SharedEngineAccessTransitionCleanupCandidate;
 
 export type EngineAccessTransitionCleanupPreview = SharedEngineAccessTransitionCleanupPreview;
 export type EngineAccessTransitionCleanupApplyResult = SharedEngineAccessTransitionCleanupApplyResponse;
