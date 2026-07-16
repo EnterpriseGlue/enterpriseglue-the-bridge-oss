@@ -83,6 +83,8 @@ export class MockBrowserIdentityStack {
           platform: [
             'platform:dashboard:view', 'platform:settings:view', 'platform:settings:manage',
             'platform:authz:roles:view', 'platform:authz:roles:manage',
+            'platform:config-bundles:view', 'platform:config-bundles:preview',
+            'platform:config-bundles:apply', 'platform:config-bundles:export',
             'platform:sso-providers:view', 'platform:sso-providers:manage',
             'platform:sso-assignments:view', 'platform:sso-assignments:manage',
           ],

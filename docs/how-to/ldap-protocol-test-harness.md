@@ -12,16 +12,39 @@ automation that already use them.
 | `pnpm run test:identity:protocol` | loopback OIDC and SAML transport fixtures plus mock contracts | none |
 | `pnpm run test:identity:ui` | provider and mapping administration screens | none |
 | `pnpm run test:identity:local` | all of the preceding local-only lanes | none |
+| `pnpm run test:identity:browser` | configure, apply, login, and reconciliation browser lifecycle using the in-browser identity stack | local frontend and Playwright Chromium |
 | `pnpm run test:identity:ldap` | real LDAPS bind, search, TLS, and nested-group flow | Docker |
-| `pnpm run test:identity:verify` | complete local identity verification, including LDAPS | Docker |
+| `pnpm run test:identity:verify` | complete local identity verification, including browser lifecycle and LDAPS | local frontend, Playwright Chromium, and Docker |
 
-Run `test:identity:local` during ordinary development. Add
-`test:identity:ldap` for directory-client changes; it remains separate so a
-missing Docker daemon cannot hide regressions in the local-only suite. The
+Run `test:identity:local` during ordinary development. It is fully in-process
+and does not read or write a database. Add `test:identity:browser` when a
+provider or mapping change affects the UI lifecycle: it disables E2E seeding,
+intercepts every application API request with the browser-local identity stack,
+and refuses a non-local `PLAYWRIGHT_BASE_URL`. It needs only a locally running
+frontend (by default `http://localhost:5173`) and Playwright Chromium. Install
+the latter once for the current workspace with:
+
+```bash
+pnpm exec playwright install chromium
+```
+
+Add `test:identity:ldap` for directory-client changes; it remains separate so
+a missing Docker daemon cannot hide regressions in the local-only suite. The
 broader `test:authz-refactor` lane keeps its compatibility-oriented CI scope
 and includes the protocol-mock lane, but deliberately does not start Docker.
-Use `test:identity:verify` when Docker is available and a complete local
-identity pass is appropriate.
+Use `test:identity:verify` when the local frontend, Playwright, and Docker are
+available and a complete local identity pass is appropriate.
+
+To point the browser lane at another local stack, set a loopback or `.local`
+URL explicitly:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://localhost:5174 pnpm run test:identity:browser
+```
+
+The browser command deliberately rejects public or shared URLs. Use the
+cutover runbook for deployed-provider evidence; this lane is not an IdP
+credential or production sign-in test.
 
 ## LDAP Protocol Test Harness
 
