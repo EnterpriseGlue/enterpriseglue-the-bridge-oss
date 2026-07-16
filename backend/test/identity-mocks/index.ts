@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { createRequire } from 'node:module';
 import jwt from 'jsonwebtoken';
 import type { IdentityProviderAdapter, NormalizedExternalIdentity, ProviderIdentityInput } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
+import { IdentityProviderFailure } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderFailure.js';
 import { createEphemeralTestCertificate, createSamlSigningMaterial } from './samlSigningMaterial.js';
 
 const require = createRequire(import.meta.url);
@@ -493,7 +494,7 @@ export const inMemoryIdentityProviderAdapter: IdentityProviderAdapter = {
   normalizeIdentity(input: ProviderIdentityInput): NormalizedExternalIdentity {
     const subjectId = input.subjectId.trim();
     if (!input.providerKey.trim()) throw new Error('providerKey is required');
-    if (!subjectId) throw new Error('subjectId is required');
+    if (!subjectId) throw new IdentityProviderFailure('missing_subject', 'subjectId is required');
     const values = (value: unknown): string[] => [...new Set((Array.isArray(value) ? value : value == null ? [] : [value])
       .map((entry) => String(entry).trim()).filter(Boolean))].sort();
     const scopes = values(input.claims.scp ?? input.claims.scope).flatMap((value) => value.split(/\s+/)).filter(Boolean).sort();

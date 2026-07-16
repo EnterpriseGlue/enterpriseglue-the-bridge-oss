@@ -1,6 +1,7 @@
 import { createHash, createPublicKey, randomBytes } from 'node:crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { secretResolver } from './SecretResolver.js';
+import { IdentityProviderFailure, classifyIdentityProviderFailure } from './IdentityProviderFailure.js';
 
 export interface GenericOidcProviderConfiguration {
   issuerUrl: string;
@@ -94,40 +95,46 @@ function resolveSecretReference(reference?: string): string | null {
 
 export class GenericOidcService {
   async testConnection(rawConfiguration: Record<string, unknown>): Promise<{ issuer: string; authorizationEndpoint: string; tokenEndpoint: string; jwksUri: string }> {
-    const provider = config(rawConfiguration);
-    const metadata = await discover(provider.issuerUrl);
-    return { issuer: metadata.issuer, authorizationEndpoint: metadata.authorization_endpoint, tokenEndpoint: metadata.token_endpoint, jwksUri: metadata.jwks_uri };
+    try {
+      const provider = config(rawConfiguration);
+      const metadata = await discover(provider.issuerUrl);
+      return { issuer: metadata.issuer, authorizationEndpoint: metadata.authorization_endpoint, tokenEndpoint: metadata.token_endpoint, jwksUri: metadata.jwks_uri };
+    } catch (error) { throw classifyIdentityProviderFailure(error); }
   }
 
   async createAuthorizationRequest(rawConfiguration: Record<string, unknown>, state: string, nonce: string): Promise<OidcAuthorizationRequest> {
-    const provider = config(rawConfiguration);
-    const metadata = await discover(provider.issuerUrl);
-    const codeVerifier = base64Url(randomBytes(48));
-    const url = new URL(metadata.authorization_endpoint);
-    url.searchParams.set('response_type', 'code');
-    url.searchParams.set('client_id', provider.clientId);
-    url.searchParams.set('redirect_uri', provider.callbackUrl);
-    url.searchParams.set('scope', provider.scopes.join(' '));
-    url.searchParams.set('state', state);
-    url.searchParams.set('nonce', nonce);
-    url.searchParams.set('code_challenge_method', 'S256');
-    url.searchParams.set('code_challenge', base64Url(createHash('sha256').update(codeVerifier).digest()));
-    return { url: url.toString(), codeVerifier };
+    try {
+      const provider = config(rawConfiguration);
+      const metadata = await discover(provider.issuerUrl);
+      const codeVerifier = base64Url(randomBytes(48));
+      const url = new URL(metadata.authorization_endpoint);
+      url.searchParams.set('response_type', 'code');
+      url.searchParams.set('client_id', provider.clientId);
+      url.searchParams.set('redirect_uri', provider.callbackUrl);
+      url.searchParams.set('scope', provider.scopes.join(' '));
+      url.searchParams.set('state', state);
+      url.searchParams.set('nonce', nonce);
+      url.searchParams.set('code_challenge_method', 'S256');
+      url.searchParams.set('code_challenge', base64Url(createHash('sha256').update(codeVerifier).digest()));
+      return { url: url.toString(), codeVerifier };
+    } catch (error) { throw classifyIdentityProviderFailure(error); }
   }
 
   async exchangeCode(rawConfiguration: Record<string, unknown>, input: { code: string; codeVerifier: string; nonce: string }): Promise<OidcIdentityClaims> {
-    const provider = config(rawConfiguration);
-    const metadata = await discover(provider.issuerUrl);
-    const body = new URLSearchParams({ grant_type: 'authorization_code', code: input.code, redirect_uri: provider.callbackUrl, client_id: provider.clientId, code_verifier: input.codeVerifier });
-    const clientSecret = resolveSecretReference(provider.clientSecretRef);
-    if (clientSecret) body.set('client_secret', clientSecret);
-    const response = await fetch(metadata.token_endpoint, {
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body, signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) throw new Error(`OIDC token exchange failed (${response.status})`);
-    const tokens = await response.json() as { id_token?: unknown };
-    if (typeof tokens.id_token !== 'string') throw new Error('OIDC token response did not include an ID token');
-    return this.verifyIdToken(tokens.id_token, metadata, provider, input.nonce);
+    try {
+      const provider = config(rawConfiguration);
+      const metadata = await discover(provider.issuerUrl);
+      const body = new URLSearchParams({ grant_type: 'authorization_code', code: input.code, redirect_uri: provider.callbackUrl, client_id: provider.clientId, code_verifier: input.codeVerifier });
+      const clientSecret = resolveSecretReference(provider.clientSecretRef);
+      if (clientSecret) body.set('client_secret', clientSecret);
+      const response = await fetch(metadata.token_endpoint, {
+        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body, signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) throw new Error(`OIDC token exchange failed (${response.status})`);
+      const tokens = await response.json() as { id_token?: unknown };
+      if (typeof tokens.id_token !== 'string') throw new Error('OIDC token response did not include an ID token');
+      return await this.verifyIdToken(tokens.id_token, metadata, provider, input.nonce);
+    } catch (error) { throw classifyIdentityProviderFailure(error); }
   }
 
   private async verifyIdToken(token: string, metadata: OidcDiscoveryDocument, provider: GenericOidcProviderConfiguration, nonce: string): Promise<OidcIdentityClaims> {
@@ -142,7 +149,8 @@ export class GenericOidcService {
       algorithms: ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'], issuer: metadata.issuer,
       audience: provider.expectedAudience || provider.clientId,
     }) as OidcIdentityClaims;
-    if (!claims.sub || claims.nonce !== nonce) throw new Error('OIDC ID token subject or nonce is invalid');
+    if (!claims.sub) throw new IdentityProviderFailure('missing_subject', 'OIDC ID token subject is invalid');
+    if (claims.nonce !== nonce) throw new IdentityProviderFailure('invalid_signature', 'OIDC ID token nonce is invalid');
     return claims;
   }
 }

@@ -167,10 +167,10 @@ describe('direct LDAP identity service', () => {
   });
 
   it.each([
-    ['tls_failure', 'TLS certificate verification failed'],
-    ['timeout', 'timed out'],
-    ['search_failure', 'search failed'],
-  ] as const)('fails closed for LDAP %s behavior', async (failureMode, message) => {
+    ['tls_failure', 'TLS certificate verification failed', 'provider_unavailable'],
+    ['timeout', 'timed out', 'timeout'],
+    ['search_failure', 'search failed', 'provider_unavailable'],
+  ] as const)('fails closed for LDAP %s behavior', async (failureMode, message, code) => {
     const directory = new MockLdapDirectory();
     directory.setFailureMode(failureMode);
     process.env.LDAP_BIND_SECRET = directory.bindPassword;
@@ -178,6 +178,8 @@ describe('direct LDAP identity service', () => {
 
     await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', directory.defaultUserPassword))
       .rejects.toThrow(message);
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', directory.defaultUserPassword))
+      .rejects.toMatchObject({ code });
   });
 
   it('rejects a malformed LDAP search entry without a DN', async () => {
@@ -199,6 +201,8 @@ describe('direct LDAP identity service', () => {
     setLdapClientFactoryForTest(() => rejectedServiceClient);
     await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', testUserPassword))
       .rejects.toThrow('LDAP service credentials were rejected');
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', testUserPassword))
+      .rejects.toMatchObject({ code: 'invalid_credentials' });
 
     const rejectedUserClient = {
       bind: vi.fn()

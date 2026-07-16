@@ -38,6 +38,7 @@ export * from './IdentityProviderAdapter.js';
 export * from './IdentityProviderService.js';
 export * from './LegacyIdentityProviderMigrationService.js';
 export * from './GenericOidcService.js';
+export * from './IdentityProviderFailure.js';
 export * from './SamlAssertionReplayService.js';
 export * from './SamlMetadataService.js';
 export * from './IdentityProviderProvisioningService.js';

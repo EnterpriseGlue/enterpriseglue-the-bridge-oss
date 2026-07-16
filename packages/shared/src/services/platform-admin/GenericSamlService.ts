@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { secretResolver } from './SecretResolver.js';
+import { classifyIdentityProviderFailure } from './IdentityProviderFailure.js';
 
 const require = createRequire(import.meta.url);
 const nodeSaml = require('@node-saml/node-saml');
@@ -132,38 +133,44 @@ function client(raw: Record<string, unknown>): { config: GenericSamlProviderConf
 
 export class GenericSamlService {
   async createAuthorizationRequest(raw: Record<string, unknown>, relayState: string): Promise<{ url: string; entryPoint: string }> {
-    const { config, saml } = client(raw);
-    return { url: await saml.getAuthorizeUrlAsync(relayState, undefined, {}), entryPoint: config.ssoUrl };
+    try {
+      const { config, saml } = client(raw);
+      return { url: await saml.getAuthorizeUrlAsync(relayState, undefined, {}), entryPoint: config.ssoUrl };
+    } catch (error) { throw classifyIdentityProviderFailure(error); }
   }
 
   async validatePostResponse(raw: Record<string, unknown>, samlResponse: string): Promise<SamlProfile> {
-    const { config, saml } = client(raw);
-    const { profile, loggedOut } = await saml.validatePostResponseAsync({ SAMLResponse: samlResponse });
-    if (loggedOut) throw new Error('Unexpected SAML logout response');
-    if (!profile) throw new Error('SAML assertion did not contain a profile');
-    const normalizedProfile = profile as SamlProfile;
-    requireExpectedRecipient(normalizedProfile, config.callbackUrl);
-    return normalizedProfile;
+    try {
+      const { config, saml } = client(raw);
+      const { profile, loggedOut } = await saml.validatePostResponseAsync({ SAMLResponse: samlResponse });
+      if (loggedOut) throw new Error('Unexpected SAML logout response');
+      if (!profile) throw new Error('SAML assertion did not contain a profile');
+      const normalizedProfile = profile as SamlProfile;
+      requireExpectedRecipient(normalizedProfile, config.callbackUrl);
+      return normalizedProfile;
+    } catch (error) { throw classifyIdentityProviderFailure(error, 'invalid_signature'); }
   }
 
   extractUserClaims(raw: Record<string, unknown>, profile: SamlProfile): GenericSamlUserClaims {
-    const config = configuration(raw);
-    const nameId = first(profile, config.nameIdAttribute, 'nameID', 'nameId', 'NameID');
-    const email = first(profile, config.emailAttribute, 'email', 'mail', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress') || (nameId?.includes('@') ? nameId : null);
-    if (!email) throw new Error('SAML assertion must contain an email address');
-    const subjectId = nameId || first(profile, 'oid', 'http://schemas.microsoft.com/identity/claims/objectidentifier') || email;
-    const groups = values(profile[config.groupAttribute || 'groups']);
-    const claims: Record<string, unknown> = { ...profile, sub: subjectId, email: email.toLowerCase() };
-    if (groups.length) claims.groups = groups;
-    return {
-      subjectId,
-      email: email.toLowerCase(),
-      displayName: first(profile, 'name', 'displayName', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'),
-      firstName: first(profile, 'given_name', 'givenName', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname'),
-      lastName: first(profile, 'family_name', 'surname', 'sn', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname'),
-      directoryTenantId: first(profile, 'tid', 'tenantid', 'http://schemas.microsoft.com/identity/claims/tenantid'),
-      claims,
-    };
+    try {
+      const config = configuration(raw);
+      const nameId = first(profile, config.nameIdAttribute, 'nameID', 'nameId', 'NameID');
+      const email = first(profile, config.emailAttribute, 'email', 'mail', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress') || (nameId?.includes('@') ? nameId : null);
+      if (!email) throw new Error('SAML assertion must contain an email address');
+      const subjectId = nameId || first(profile, 'oid', 'http://schemas.microsoft.com/identity/claims/objectidentifier') || email;
+      const groups = values(profile[config.groupAttribute || 'groups']);
+      const claims: Record<string, unknown> = { ...profile, sub: subjectId, email: email.toLowerCase() };
+      if (groups.length) claims.groups = groups;
+      return {
+        subjectId,
+        email: email.toLowerCase(),
+        displayName: first(profile, 'name', 'displayName', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'),
+        firstName: first(profile, 'given_name', 'givenName', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname'),
+        lastName: first(profile, 'family_name', 'surname', 'sn', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname'),
+        directoryTenantId: first(profile, 'tid', 'tenantid', 'http://schemas.microsoft.com/identity/claims/tenantid'),
+        claims,
+      };
+    } catch (error) { throw classifyIdentityProviderFailure(error, 'missing_subject'); }
   }
 }
 

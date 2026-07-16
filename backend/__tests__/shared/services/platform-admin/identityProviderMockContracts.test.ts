@@ -108,7 +108,7 @@ describe('identity mock provider contracts', () => {
     ['wrong_audience', 'jwt audience invalid. expected: enterpriseglue-test-client'],
     ['expired_token', 'jwt expired'],
     ['not_yet_valid_token', 'jwt not active'],
-    ['missing_subject', 'OIDC ID token subject or nonce is invalid'],
+    ['missing_subject', 'OIDC ID token subject is invalid'],
   ] as const)('fails closed when the OIDC fixture returns %s', async (failureMode, message) => {
     const provider = new MockOidcProvider();
     provider.setFailureMode(failureMode);
@@ -126,5 +126,25 @@ describe('identity mock provider contracts', () => {
 
     await expect(genericOidcService.createAuthorizationRequest(provider.configuration(), 'state-1', 'nonce-1'))
       .rejects.toThrow('OIDC provider request timed out');
+  });
+
+  it('classifies OIDC provider failures without exposing protocol payloads', async () => {
+    const cases = [
+      ['unavailable', 'provider_unavailable'],
+      ['malformed', 'malformed_response'],
+      ['invalid_token', 'invalid_signature'],
+      ['missing_subject', 'missing_subject'],
+      ['timeout', 'timeout'],
+    ] as const;
+
+    for (const [failureMode, code] of cases) {
+      const provider = new MockOidcProvider();
+      provider.setFailureMode(failureMode);
+      vi.stubGlobal('fetch', provider.fetch.bind(provider));
+      const operation = failureMode === 'invalid_token' || failureMode === 'missing_subject'
+        ? genericOidcService.exchangeCode(provider.configuration(), { code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1' })
+        : genericOidcService.createAuthorizationRequest(provider.configuration(), 'state-1', 'nonce-1');
+      await expect(operation).rejects.toMatchObject({ code });
+    }
   });
 });

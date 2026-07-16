@@ -36,8 +36,10 @@ describe('GenericSamlService', () => {
   });
 
   it('fails closed when a SAML assertion has no configured or standard email attribute', () => {
-    expect(() => genericSamlService.extractUserClaims(configuration, { 'urn:example:subject': 'subject-123' }))
+    const extract = () => genericSamlService.extractUserClaims(configuration, { 'urn:example:subject': 'subject-123' });
+    expect(extract)
       .toThrow('SAML assertion must contain an email address');
+    expect(extract).toThrow(expect.objectContaining({ code: 'missing_subject' }));
   });
 
   it('rejects SHA-1 SAML signature configuration', () => {
@@ -73,7 +75,7 @@ describe('GenericSamlService', () => {
     await expect(genericSamlService.validatePostResponse({
       ...configuration,
       signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
-    }, tampered)).rejects.toThrow(/signature/i);
+    }, tampered)).rejects.toMatchObject({ code: 'invalid_signature' });
   });
 
   it('requires the configured certificate to rotate with SAML signing material', async () => {

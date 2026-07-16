@@ -97,9 +97,11 @@ describe('identity provider adapters', () => {
     { groups_overage: true },
     { _claim_names: { groups: 'src1' }, _claim_sources: { src1: { endpoint: 'https://graph.example.test/me/getMemberObjects' } } },
   ])('fails closed when an OIDC response reports incomplete group claims', (claims) => {
-    expect(() => oidcIdentityProviderAdapter.normalizeIdentity({
+    const normalize = () => oidcIdentityProviderAdapter.normalizeIdentity({
       providerKey: 'entra-prod', subjectId: 'oid-1', claims,
-    })).toThrow('OIDC group claims are incomplete');
+    });
+    expect(normalize).toThrow('OIDC group claims are incomplete');
+    expect(normalize).toThrow(expect.objectContaining({ code: 'incomplete_entitlements' }));
   });
 });
 
@@ -153,7 +155,9 @@ function identityAdapterContract(name: string, adapter: IdentityProviderAdapter)
         { type: 'scope', externalId: 'engine.read' },
       ]);
       expect(() => adapter.normalizeIdentity({ providerKey: ' ', subjectId: 'subject-1', claims: {} })).toThrow('providerKey is required');
-      expect(() => adapter.normalizeIdentity({ providerKey: `provider-${name}`, subjectId: ' ', claims: {} })).toThrow('subjectId is required');
+      const missingSubject = () => adapter.normalizeIdentity({ providerKey: `provider-${name}`, subjectId: ' ', claims: {} });
+      expect(missingSubject).toThrow('subjectId is required');
+      expect(missingSubject).toThrow(expect.objectContaining({ code: 'missing_subject' }));
     });
   });
 }

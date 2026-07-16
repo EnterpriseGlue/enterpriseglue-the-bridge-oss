@@ -1,6 +1,7 @@
 import { Client } from 'ldapts';
 import type { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { secretResolver } from './SecretResolver.js';
+import { IdentityProviderFailure, classifyIdentityProviderFailure } from './IdentityProviderFailure.js';
 
 interface LdapConfiguration {
   url: string;
@@ -70,7 +71,7 @@ function ldapBindError(error: unknown, subject: 'service' | 'user'): Error {
   const code = Number(candidate?.code);
   const message = typeof candidate?.message === 'string' ? candidate.message : '';
   if (code === 49 || /(?:invalid credentials|code:\s*0x31)/i.test(message)) {
-    return new Error(`LDAP ${subject} credentials were rejected`);
+    return new IdentityProviderFailure('invalid_credentials', `LDAP ${subject} credentials were rejected`, { cause: error });
   }
   return error instanceof Error ? error : new Error(`LDAP ${subject} bind failed`);
 }
@@ -115,19 +116,23 @@ class DirectLdapIdentityService {
   async listDirectoryPage(provider: IdentityProvider): Promise<LdapDirectoryPage> {
     if (provider.protocol !== 'ldap' || !provider.isEnabled) throw new Error('LDAP directory reconciliation is not available for this provider');
     const config = configuration(provider);
-    const client = clientFactory(config.url, tlsTrust(config));
+    let client: LdapClientLike | null = null;
     try {
+      const connectedClient = clientFactory(config.url, tlsTrust(config));
+      client = connectedClient;
       const password = secretResolver.resolveStored(config.bindPasswordRef.startsWith('ref:') ? config.bindPasswordRef : `ref:${config.bindPasswordRef}`);
       if (!password) throw new Error('LDAP bind password reference is unavailable');
-      try { await client.bind(config.bindDn, password); } catch (error) { throw ldapBindError(error, 'service'); }
-      const entries = await this.enumerateUsers(client, config);
+      try { await connectedClient.bind(config.bindDn, password); } catch (error) { throw ldapBindError(error, 'service'); }
+      const entries = await this.enumerateUsers(connectedClient, config);
       const identities = await Promise.all(entries.map(async (entry) => {
         const dn = first(entry, 'dn') || entry.dn || '';
-        const groups = config.membershipMode === 'memberOf' ? values(entry.memberOf) : await this.groupsForEntry(client, config, dn);
+        const groups = config.membershipMode === 'memberOf' ? values(entry.memberOf) : await this.groupsForEntry(connectedClient, config, dn);
         return { subjectId: first(entry, config.subjectAttribute, 'entryUUID', 'objectGUID', 'uid') || dn, email: first(entry, config.emailAttribute, 'mail') || '', displayName: first(entry, 'cn'), firstName: first(entry, 'givenName'), lastName: first(entry, 'sn'), groups };
       }));
       return { identities: identities.filter((identity) => identity.subjectId && identity.email.includes('@')), nextCursor: null };
-    } finally { await client.unbind().catch(() => undefined); }
+    } catch (error) {
+      throw classifyIdentityProviderFailure(error);
+    } finally { await client?.unbind().catch(() => undefined); }
   }
 
   private async enumerateUsers(client: LdapClientLike, config: LdapConfiguration): Promise<Array<Record<string, unknown> & { dn?: string }>> {
@@ -149,26 +154,30 @@ class DirectLdapIdentityService {
     if (config.nestedGroups && config.membershipMode !== 'group_search') throw new Error('Nested LDAP groups require group_search membership mode');
     if (!username.trim() || !password) throw new Error('LDAP username and password are required');
     const filter = userFilter(config.userSearchFilter, username.trim());
-    const client = clientFactory(config.url, tlsTrust(config));
+    let client: LdapClientLike | null = null;
     try {
+      const connectedClient = clientFactory(config.url, tlsTrust(config));
+      client = connectedClient;
       const bindPassword = secretResolver.resolveStored(config.bindPasswordRef.startsWith('ref:') ? config.bindPasswordRef : `ref:${config.bindPasswordRef}`);
       if (!bindPassword) throw new Error('LDAP bind password reference is unavailable');
-      try { await client.bind(config.bindDn, bindPassword); } catch (error) { throw ldapBindError(error, 'service'); }
-      const result = await client.search(config.userBaseDn, { scope: 'sub', filter, attributes: ['entryUUID', 'objectGUID', 'uid', 'mail', 'cn', 'givenName', 'sn', 'memberOf'], sizeLimit: 2, timeLimit: 5 });
+      try { await connectedClient.bind(config.bindDn, bindPassword); } catch (error) { throw ldapBindError(error, 'service'); }
+      const result = await connectedClient.search(config.userBaseDn, { scope: 'sub', filter, attributes: ['entryUUID', 'objectGUID', 'uid', 'mail', 'cn', 'givenName', 'sn', 'memberOf'], sizeLimit: 2, timeLimit: 5 });
       if (result.searchEntries.length !== 1) throw new Error('LDAP user lookup did not return exactly one entry');
       const entry = result.searchEntries[0];
       const userDn = first(entry, 'dn') || entry.dn || null;
       if (!userDn) throw new Error('LDAP user entry did not include a DN');
-      try { await client.bind(userDn, password); } catch (error) { throw ldapBindError(error, 'user'); }
-      try { await client.bind(config.bindDn, bindPassword); } catch (error) { throw ldapBindError(error, 'service'); }
+      try { await connectedClient.bind(userDn, password); } catch (error) { throw ldapBindError(error, 'user'); }
+      try { await connectedClient.bind(config.bindDn, bindPassword); } catch (error) { throw ldapBindError(error, 'service'); }
       const groups = config.membershipMode === 'memberOf'
         ? values(entry.memberOf)
-        : await this.groupsForEntry(client, config, userDn);
+        : await this.groupsForEntry(connectedClient, config, userDn);
       const subjectId = first(entry, 'entryUUID', 'objectGUID', 'uid') || userDn;
       const email = first(entry, 'mail') || username.trim().toLowerCase();
       return { subjectId, email, displayName: first(entry, 'cn'), firstName: first(entry, 'givenName'), lastName: first(entry, 'sn'), groups };
+    } catch (error) {
+      throw classifyIdentityProviderFailure(error);
     } finally {
-      await client.unbind().catch(() => undefined);
+      await client?.unbind().catch(() => undefined);
     }
   }
 

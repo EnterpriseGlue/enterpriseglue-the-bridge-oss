@@ -1,3 +1,5 @@
+import { IdentityProviderFailure } from './IdentityProviderFailure.js';
+
 export type IdentityProviderType = 'oidc' | 'saml' | 'ldap';
 export type ExternalEntitlementType = 'group' | 'role' | 'scope' | 'attribute' | 'authenticated';
 
@@ -96,7 +98,7 @@ class ClaimsIdentityAdapter implements IdentityProviderAdapter {
   normalizeIdentity(input: ProviderIdentityInput): NormalizedExternalIdentity {
     const claims = input.claims || {};
     if (this.type === 'oidc' && hasIncompleteOidcGroupClaims(claims)) {
-      throw new Error('OIDC group claims are incomplete; resolve group overage before synchronizing authorization');
+      throw new IdentityProviderFailure('incomplete_entitlements', 'OIDC group claims are incomplete; resolve group overage before synchronizing authorization');
     }
     const entitlements = [
       // This synthetic entitlement exists only after the provider has validated
@@ -111,10 +113,12 @@ class ClaimsIdentityAdapter implements IdentityProviderAdapter {
       ...(emailDomainValue(input.email) ? [entitlement('attribute', `email_domain:${emailDomainValue(input.email)}`)] : []),
     ];
     const seen = new Set<string>();
+    const subjectId = input.subjectId.trim();
+    if (!subjectId) throw new IdentityProviderFailure('missing_subject', 'subjectId is required');
     return {
       providerKey: required(input.providerKey, 'providerKey'),
       providerType: this.type,
-      subjectId: required(input.subjectId, 'subjectId'),
+      subjectId,
       username: input.username?.trim() || undefined,
       email: input.email?.trim().toLowerCase() || undefined,
       directoryTenantId: input.directoryTenantId?.trim() || undefined,
