@@ -22,6 +22,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
 import { deploymentReceiptService } from '@enterpriseglue/shared/services/platform-admin/DeploymentReceiptService.js'
 import { DeploymentHistoryViewSchema, DeploymentLineageViewSchema, DeploymentReceiptCreateSchema, type DeploymentLineageIssue, type DeploymentLineageReadiness } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import { EngineDeploymentRequestSchema } from '@enterpriseglue/shared/schemas/mission-control/deployment.js'
 import { auditLog } from '@enterpriseglue/shared/services/audit.js'
 import {
   sanitize,
@@ -45,16 +46,7 @@ import type {
 } from '../../../types/deployment.js'
 
 // Validation schemas
-const deployResourcesSchema = z.object({
-  resources: z.object({
-    fileIds: z.array(z.string()).optional(),
-    folderId: z.string().optional(),
-    projectId: z.string().optional(),
-  }).optional(),
-  deploymentName: z.string().optional(),
-  enableDuplicateFiltering: z.boolean().optional(),
-  deployChangedOnly: z.boolean().optional(),
-}).passthrough()
+const deployResourcesSchema = EngineDeploymentRequestSchema
 
 // Type for Camunda definition in deployment response
 interface CamundaDefinitionItem {

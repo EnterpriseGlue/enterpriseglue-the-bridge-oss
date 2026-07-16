@@ -53,6 +53,8 @@ const {
   PreviewCountRequest,
   DeploymentSchema,
   DeploymentQueryParams,
+  EngineDeploymentRequestSchema,
+  EngineDeploymentResponseSchema,
   TaskSchema,
   TaskQueryParams,
   ClaimTaskRequest,
@@ -1111,31 +1113,17 @@ registry.registerPath({
 // -----------------------------
 // Engines API - Deployments (Camunda 7 passthrough)
 // -----------------------------
-const DeployResources = z.object({
-  fileIds: z.array(z.string()).optional(),
-  folderId: z.string().optional(),
-  projectId: z.string().optional(),
-  recursive: z.boolean().optional(),
-})
-const DeployOptions = z.object({
-  deploymentName: z.string().optional(),
-  enableDuplicateFiltering: z.boolean().optional(),
-  deployChangedOnly: z.boolean().optional(),
-  tenantId: z.string().optional(),
-})
-const DeployRequest = z.object({ resources: DeployResources.optional(), options: DeployOptions.optional() })
 const PreviewResponse = z.object({ count: z.number(), resources: z.array(z.string()), warnings: z.array(z.string()), errors: z.array(z.string()) })
-const DeployResponse = z.object({ engineId: z.string(), engineBaseUrl: z.string(), raw: z.unknown() })
 
-registry.register('EnginesDeployRequest', DeployRequest)
+registry.register('EnginesDeployRequest', EngineDeploymentRequestSchema)
 registry.register('EnginesDeployPreviewResponse', PreviewResponse)
-registry.register('EnginesDeployResponse', DeployResponse)
+registry.register('EnginesDeployResponse', EngineDeploymentResponseSchema)
 
 registry.registerPath({
   method: 'post',
   path: '/engines-api/engines/{engineId}/deployments/preview',
   ...authzExtension('project-engine-target.deploy.use', 'POST', '/engines-api/engines/:engineId/deployments/preview'),
-  request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: DeployRequest } } } },
+  request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: EngineDeploymentRequestSchema } } } },
   responses: { 200: { description: 'Preview of resources to deploy', content: { 'application/json': { schema: PreviewResponse } } } },
 })
 
@@ -1143,17 +1131,17 @@ registry.registerPath({
   method: 'post',
   path: '/engines-api/engines/{engineId}/deployments',
   ...authzExtension('project-engine-target.deploy.use', 'POST', '/engines-api/engines/:engineId/deployments'),
-  request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: DeployRequest } } } },
-  responses: { 201: { description: 'Deployment created', content: { 'application/json': { schema: DeployResponse } } } },
+  request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: EngineDeploymentRequestSchema } } } },
+  responses: { 201: { description: 'Deployment created', content: { 'application/json': { schema: EngineDeploymentResponseSchema } } } },
 })
 
 registry.registerPath({
   method: 'post',
   path: '/engines-api/external/engines/{engineId}/deployments',
   ...authzExtension('project-engine-target.deploy.use', 'POST', '/engines-api/external/engines/:engineId/deployments'),
-  request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: DeployRequest } } } },
+  request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: EngineDeploymentRequestSchema } } } },
   responses: {
-    201: { description: 'API-client deployment created', content: { 'application/json': { schema: DeployResponse } } },
+    201: { description: 'API-client deployment created', content: { 'application/json': { schema: EngineDeploymentResponseSchema } } },
     401: { description: 'API client bearer token required' },
     403: { description: 'API deployment is not allowed' },
   },

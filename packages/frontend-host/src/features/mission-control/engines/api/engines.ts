@@ -6,6 +6,10 @@ import type {
   EngineConnectionHealthResponse,
   UpdateEngineRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
+import type {
+  EngineDeploymentRequest,
+  EngineDeploymentResponse,
+} from '@enterpriseglue/shared/schemas/mission-control/deployment.js'
 import type { EnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js'
 import type { ProjectEngineTarget } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import type {
@@ -187,6 +191,17 @@ export async function requestEngineProjectAccess(
   return apiClient.post<EngineProjectAccessRequestResult>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/request-access`,
     { projectId },
+    { credentials: 'include' },
+  )
+}
+
+export async function createEngineDeployment(
+  engineId: string,
+  payload: EngineDeploymentRequest,
+): Promise<EngineDeploymentResponse> {
+  return apiClient.post<EngineDeploymentResponse>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/deployments`,
+    payload,
     { credentials: 'include' },
   )
 }

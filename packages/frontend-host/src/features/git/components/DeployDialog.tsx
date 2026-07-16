@@ -23,6 +23,7 @@ import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { useToast } from '../../../shared/notifications/ToastProvider';
 import { useDeployment } from '../hooks/useDeployment';
 import { projectsApi } from '../../../api/starbase/projects';
+import { createEngineDeployment } from '../../mission-control/engines/api/engines';
 import { EnginePermission, ProjectPermission } from '../../../shared/auth/permissions';
 import { WhyUnavailableLink } from '../../../shared/auth/guards';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
@@ -128,18 +129,15 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
 
   const engineDeployment = useMutation({
     mutationFn: async (params: { engineId: string; deploymentName: string; vcsCommitId?: string }) => {
-      return apiClient.post(
-        `/engines-api/engines/${encodeURIComponent(params.engineId)}/deployments`,
-        {
-          resources: isFileScopedDeploy ? { fileIds: scopedFileIds } : { projectId },
-          options: {
-            deploymentName: params.deploymentName,
-            enableDuplicateFiltering: true,
-            deployChangedOnly: true,
-            vcsCommitId: params.vcsCommitId,
-          },
-        }
-      );
+      return createEngineDeployment(params.engineId, {
+        resources: isFileScopedDeploy ? { fileIds: scopedFileIds } : { projectId },
+        options: {
+          deploymentName: params.deploymentName,
+          enableDuplicateFiltering: true,
+          deployChangedOnly: true,
+          vcsCommitId: params.vcsCommitId,
+        },
+      });
     },
   });
 
