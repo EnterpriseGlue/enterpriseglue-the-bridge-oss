@@ -10,6 +10,9 @@ import { authzQueryKeys, useAuthzGroups, useEngineSets, useIdentityEntitlementMa
 import type { AuthzGroup, HumanIdentityEntitlementType, IdentityEntitlementMapping, LegacyMappingCoverageItem } from '../hooks/useAuthzApi';
 import type {
   IdentityMappingRequest,
+  IdentityMappingProvisionAccessRequest,
+  IdentityMappingProvisionAccessResponse,
+  IdentityMappingResponse,
   IdentityMappingStoredSnapshotPreviewRequest,
   IdentityMappingStoredSnapshotPreviewResponse,
   IdentityMappingTestRequest,
@@ -100,10 +103,14 @@ export default function IdentityMappingsSettingsTab() {
       try {
         if (!editing && provisionAccessInFlow) {
           if (!provisionRoleId || !provisionResourceId) throw new Error('Select an engine role and access target');
-          const provisionBody = createGroupInFlow ? { providerKey: body.providerKey, entitlementType: body.entitlementType, externalId: body.externalId, matchOperator: body.matchOperator, syncMode: body.syncMode, newGroup: { name: newGroupName.trim(), key: newGroupKey.trim() } } : body;
-          return await apiClient.post('/api/identity/mappings/provision-access', { ...provisionBody, roleId: provisionRoleId, resourceType: provisionScopeType, resourceId: provisionResourceId });
+          const provisionRequest: IdentityMappingProvisionAccessRequest = createGroupInFlow
+            ? { providerKey: body.providerKey, entitlementType: body.entitlementType, externalId: body.externalId, matchOperator: body.matchOperator, syncMode: body.syncMode, newGroup: { name: newGroupName.trim(), key: newGroupKey.trim() }, roleId: provisionRoleId, resourceType: provisionScopeType, resourceId: provisionResourceId }
+            : { ...body, roleId: provisionRoleId, resourceType: provisionScopeType, resourceId: provisionResourceId };
+          return await apiClient.post<IdentityMappingProvisionAccessResponse>('/api/identity/mappings/provision-access', provisionRequest);
         }
-        return editing ? await apiClient.put(`/api/identity/mappings/${encodeURIComponent(editing.id)}`, body) : await apiClient.post('/api/identity/mappings', body);
+        return editing
+          ? await apiClient.put<IdentityMappingResponse>(`/api/identity/mappings/${encodeURIComponent(editing.id)}`, body)
+          : await apiClient.post<IdentityMappingResponse>('/api/identity/mappings', body);
       } catch (error) {
         if (createdGroupId) await apiClient.delete(`/api/authz/groups/${encodeURIComponent(createdGroupId)}`).catch(() => undefined);
         throw error;
