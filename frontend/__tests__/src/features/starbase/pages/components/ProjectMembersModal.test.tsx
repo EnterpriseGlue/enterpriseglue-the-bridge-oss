@@ -232,6 +232,25 @@ describe('ProjectMembersModal', () => {
     expect(screen.queryByRole('button', { name: /options/i })).toBeNull();
   });
 
+  it('does not treat a legacy owner label as permission to mutate the owner row', () => {
+    const legacyOwner = {
+      userId: 'user-2',
+      role: 'owner',
+      roles: ['owner'],
+      deployAllowed: true,
+      user: { email: 'owner@example.com' },
+    } as any;
+    renderMembersModal({
+      members: [legacyOwner],
+      canUpdateMemberRoles: true,
+      canManageMemberDeployGrant: true,
+      canTransferOwnership: true,
+      canRemoveMembers: true,
+    });
+
+    expect(screen.queryByRole('button', { name: /options/i })).toBeNull();
+  });
+
   it('shows transfer ownership only when transfer permission is available', async () => {
     const onTransferOwnership = vi.fn();
     const { member } = renderMembersModal({ canTransferOwnership: true, onTransferOwnership });
