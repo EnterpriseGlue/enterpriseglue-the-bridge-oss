@@ -6,10 +6,16 @@ import { EngineAccessRequest } from '@enterpriseglue/shared/db/entities/EngineAc
 import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
 import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/db/entities/ProjectEngineTarget.js';
-import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  EnginePermissions: { ENGINE_EDIT: 'engine:edit' },
+  ProjectPermissions: { PROJECT_SETTINGS: 'project:settings:manage' },
+  permissionService: { hasPermission: vi.fn() },
 }));
 
 describe('EngineAccessService', () => {
@@ -23,14 +29,14 @@ describe('EngineAccessService', () => {
     const accessRepo = { findOne: vi.fn().mockResolvedValue({ id: 'access-1' }) };
     const requestRepo = { findOne: vi.fn() };
     const engineRepo = { findOne: vi.fn() };
-    const memberRepo = { find: vi.fn() };
+    const projectRepo = { findOne: vi.fn() };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === EngineProjectAccess) return accessRepo;
         if (entity === EngineAccessRequest) return requestRepo;
         if (entity === Engine) return engineRepo;
-        if (entity === ProjectMember) return memberRepo;
+        if (entity === Project) return projectRepo;
         throw new Error('Unexpected repository');
       },
     });
@@ -43,7 +49,7 @@ describe('EngineAccessService', () => {
     const accessRepo = { findOne: vi.fn().mockResolvedValue(null) };
     const requestRepo = { findOne: vi.fn().mockResolvedValue({ id: 'req-1' }) };
     const engineRepo = { findOne: vi.fn() };
-    const memberRepo = { find: vi.fn() };
+    const projectRepo = { findOne: vi.fn() };
     const targetRepo = { findOne: vi.fn().mockResolvedValue(null) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -51,8 +57,8 @@ describe('EngineAccessService', () => {
         if (entity === EngineProjectAccess) return accessRepo;
         if (entity === EngineAccessRequest) return requestRepo;
         if (entity === Engine) return engineRepo;
+        if (entity === Project) return projectRepo;
         if (entity === ProjectEngineTarget) return targetRepo;
-        if (entity === ProjectMember) return memberRepo;
         throw new Error('Unexpected repository');
       },
     });
@@ -62,11 +68,10 @@ describe('EngineAccessService', () => {
     expect(result.requestId).toBe('req-1');
   });
 
-  it('auto-approves when project leader matches engine owner', async () => {
+  it('auto-approves when the requester has canonical management permissions for both resources', async () => {
     const accessRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
     const requestRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
-    const engineRepo = { findOne: vi.fn().mockResolvedValue({ ownerId: 'user-1', delegateId: null }) };
-    const memberRepo = { find: vi.fn().mockResolvedValue([{ userId: 'user-1' }]) };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }) };
     const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null }) };
     const targetRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
 
@@ -77,10 +82,12 @@ describe('EngineAccessService', () => {
         if (entity === Engine) return engineRepo;
         if (entity === Project) return projectRepo;
         if (entity === ProjectEngineTarget) return targetRepo;
-        if (entity === ProjectMember) return memberRepo;
         throw new Error('Unexpected repository');
       },
     });
+    (permissionService.hasPermission as Mock)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true);
 
     const result = await service.requestAccess('project-1', 'engine-1', 'user-1');
     expect(result.status).toBe('approved');
@@ -90,13 +97,19 @@ describe('EngineAccessService', () => {
       engineId: 'engine-1',
       source: 'legacy',
     }));
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('project:settings:manage', expect.objectContaining({
+      userId: 'user-1', resourceType: 'project', resourceId: 'project-1',
+    }));
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:edit', expect.objectContaining({
+      userId: 'user-1', resourceType: 'engine', resourceId: 'engine-1',
+    }));
   });
 
-  it('creates pending request when no auto-approval', async () => {
+  it('does not auto-approve from matching accountable metadata without canonical permissions', async () => {
     const accessRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
     const requestRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
-    const engineRepo = { findOne: vi.fn().mockResolvedValue({ ownerId: 'owner-1', delegateId: null }) };
-    const memberRepo = { find: vi.fn().mockResolvedValue([{ userId: 'member-1' }]) };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, ownerId: 'user-1', delegateId: null }) };
+    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null, ownerId: 'user-1' }) };
     const targetRepo = { findOne: vi.fn().mockResolvedValue(null) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -104,14 +117,39 @@ describe('EngineAccessService', () => {
         if (entity === EngineProjectAccess) return accessRepo;
         if (entity === EngineAccessRequest) return requestRepo;
         if (entity === Engine) return engineRepo;
+        if (entity === Project) return projectRepo;
         if (entity === ProjectEngineTarget) return targetRepo;
-        if (entity === ProjectMember) return memberRepo;
         throw new Error('Unexpected repository');
       },
     });
+    (permissionService.hasPermission as Mock)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false);
 
     const result = await service.requestAccess('project-1', 'engine-1', 'user-1');
     expect(result.status).toBe('pending');
     expect(requestRepo.insert).toHaveBeenCalled();
+  });
+
+  it('rejects a cross-tenant project and engine before evaluating auto-approval', async () => {
+    const accessRepo = { findOne: vi.fn().mockResolvedValue(null) };
+    const requestRepo = { findOne: vi.fn().mockResolvedValue(null) };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-engine' }) };
+    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-project' }) };
+    const targetRepo = { findOne: vi.fn().mockResolvedValue(null) };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === EngineProjectAccess) return accessRepo;
+        if (entity === EngineAccessRequest) return requestRepo;
+        if (entity === Engine) return engineRepo;
+        if (entity === Project) return projectRepo;
+        if (entity === ProjectEngineTarget) return targetRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(service.requestAccess('project-1', 'engine-1', 'user-1')).rejects.toThrow('same tenant');
+    expect(permissionService.hasPermission).not.toHaveBeenCalled();
   });
 });

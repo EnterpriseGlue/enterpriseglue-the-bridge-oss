@@ -7,10 +7,10 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineProjectAccess } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineProjectAccess.js';
 import { EngineAccessRequest } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineAccessRequest.js';
-import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMember.js';
-import { In } from 'typeorm';
+import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
+import { EnginePermissions, permissionService, ProjectPermissions } from './permissions.js';
 
 export interface AccessRequest {
   id: string;
@@ -53,7 +53,9 @@ export class EngineAccessService {
 
   /**
    * Request access to an engine for a project
-   * May auto-approve if project owner/delegate is also engine owner/delegate
+   * May auto-approve only when the requester holds canonical management
+   * permissions for both the project and the engine. Accountable owner and
+   * delegate metadata is deliberately not an authorization input here.
    */
   async requestAccess(
     projectId: string,
@@ -63,7 +65,7 @@ export class EngineAccessService {
     const dataSource = await getDataSource();
     const requestRepo = dataSource.getRepository(EngineAccessRequest);
     const engineRepo = dataSource.getRepository(Engine);
-    const memberRepo = dataSource.getRepository(ProjectMember);
+    const projectRepo = dataSource.getRepository(Project);
 
     // Check if access already exists
     const existingAccess = await this.hasProjectAccess(projectId, engineId);
@@ -80,28 +82,43 @@ export class EngineAccessService {
       return { status: 'pending', requestId: pendingRequest.id };
     }
 
-    // Get engine owner/delegate
+    // Resolve tenant context for the canonical evaluator. Do not infer access
+    // from the legacy accountable owner/delegate columns.
     const engine = await engineRepo.findOne({
       where: { id: engineId },
-      select: ['ownerId', 'delegateId']
+      select: ['id', 'tenantId']
     });
 
     if (!engine) {
       throw new Error('Engine not found');
     }
-
-    const engineOwnerDelegate = [engine.ownerId, engine.delegateId].filter(Boolean) as string[];
-
-    // Get project owners and delegates
-    const projectLeaders = await memberRepo.find({
-      where: { projectId, role: In(['owner', 'delegate']) },
-      select: ['userId']
+    const project = await projectRepo.findOne({
+      where: { id: projectId },
+      select: ['id', 'tenantId'],
     });
+    if (!project) {
+      throw new Error('Project not found');
+    }
+    if (project.tenantId && engine.tenantId && project.tenantId !== engine.tenantId) {
+      throw new Error('Project and engine must belong to the same tenant');
+    }
 
-    const projectUserIds = projectLeaders.map((p) => p.userId);
-
-    // Check for auto-approval: project owner/delegate is also engine owner/delegate
-    const shouldAutoApprove = projectUserIds.some((id) => engineOwnerDelegate.includes(id));
+    const tenantId = project.tenantId || engine.tenantId || null;
+    const [canManageProject, canManageEngine] = await Promise.all([
+      permissionService.hasPermission(ProjectPermissions.PROJECT_SETTINGS, {
+        userId: requestedById,
+        tenantId,
+        resourceType: 'project',
+        resourceId: projectId,
+      }),
+      permissionService.hasPermission(EnginePermissions.ENGINE_EDIT, {
+        userId: requestedById,
+        tenantId,
+        resourceType: 'engine',
+        resourceId: engineId,
+      }),
+    ]);
+    const shouldAutoApprove = canManageProject && canManageEngine;
 
     if (shouldAutoApprove) {
       // Auto-approve: directly grant access
