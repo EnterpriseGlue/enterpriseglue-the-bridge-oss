@@ -12,6 +12,7 @@ import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js'
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-a' };
     next();
   },
 }));
@@ -129,6 +130,7 @@ describe('git project connection routes', () => {
     });
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
+      tenantId: 'tenant-a',
       resourceType: 'project',
       resourceId: projectId,
     }));

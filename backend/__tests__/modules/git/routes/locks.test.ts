@@ -21,6 +21,7 @@ const lockManagerMock = vi.hoisted(() => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-a' };
     next();
   },
 }));
@@ -142,6 +143,7 @@ describe('git locks routes', () => {
     expect(response.status).toBe(201);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:edit', expect.objectContaining({
       userId: 'user-1',
+      tenantId: 'tenant-a',
       resourceType: 'project',
       resourceId: 'project-1',
     }));
@@ -164,6 +166,7 @@ describe('git locks routes', () => {
     expect(response.body).toEqual({ locks: [{ id: 'lock-1' }] });
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
+      tenantId: 'tenant-a',
       resourceType: 'project',
       resourceId: projectId,
     }));

@@ -17,6 +17,7 @@ const lockManager = new LockManager();
 async function hasProjectPermission(req: Request, projectId: string, permission: Permission): Promise<boolean> {
   return permissionService.hasPermission(permission, {
     userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
     resourceType: 'project',
     resourceId: projectId,
   });

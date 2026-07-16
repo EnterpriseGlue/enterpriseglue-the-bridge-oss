@@ -12,6 +12,7 @@ import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-a' };
     next();
   },
 }));
@@ -186,6 +187,7 @@ describe('git sync routes', () => {
     });
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:git:pull', expect.objectContaining({
       userId: 'user-1',
+      tenantId: 'tenant-a',
       resourceType: 'project',
       resourceId: projectId,
     }));

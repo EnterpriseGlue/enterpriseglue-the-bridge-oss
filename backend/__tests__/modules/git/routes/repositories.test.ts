@@ -11,6 +11,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-a' };
     next();
   },
 }));
@@ -124,11 +125,13 @@ describe('git repositories routes', () => {
     ]);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
+      tenantId: 'tenant-a',
       resourceType: 'project',
       resourceId: allowedProjectId,
     }));
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
+      tenantId: 'tenant-a',
       resourceType: 'project',
       resourceId: deniedProjectId,
     }));
@@ -145,6 +148,7 @@ describe('git repositories routes', () => {
     expect(response.status).toBe(204);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:git:connect', expect.objectContaining({
       userId: 'user-1',
+      tenantId: 'tenant-a',
       resourceType: 'project',
       resourceId: projectId,
     }));

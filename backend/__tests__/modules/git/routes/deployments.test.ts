@@ -16,6 +16,7 @@ const gitRouteMocks = vi.hoisted(() => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-a' };
     next();
   },
 }));
@@ -165,7 +166,7 @@ describe('git deployments routes', () => {
     expect(response.status).toBe(201);
     expect(gitRouteMocks.evaluateDeploymentEligibility).toHaveBeenCalledWith({
       userId: 'user-1',
-      tenantId: null,
+      tenantId: 'tenant-a',
       projectId,
       engineId: 'engine-1',
       mode: 'ci',
@@ -261,6 +262,7 @@ describe('git deployments routes', () => {
     ]);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
+      tenantId: 'tenant-a',
       resourceType: 'project',
       resourceId: projectId,
     }));
