@@ -107,7 +107,7 @@ export EG_LDAP_TEST_URL="ldaps://localhost:$ldap_port"
 export EG_LDAP_TEST_BIND_DN="$bind_dn"
 export EG_LDAP_TEST_USER_DN="uid=alice,ou=people,$base_dn"
 export EG_LDAP_TEST_CA_CERT_PATH="$tmp_dir/ldap.crt"
-export NODE_EXTRA_CA_CERTS="$tmp_dir/ldap.crt"
+export EG_LDAP_TEST_CA_CERTIFICATE="$(<"$tmp_dir/ldap.crt")"
 
 if [[ "$#" -eq 0 ]]; then
   echo 'LDAP protocol fixture is healthy and seeded. Pass a command to exercise it with the exported EG_LDAP_TEST_* inputs.'

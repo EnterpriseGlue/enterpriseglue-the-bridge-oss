@@ -6,6 +6,7 @@ const requiredEnvironment = [
   'EG_LDAP_TEST_BIND_DN',
   'EG_LDAP_TEST_ADMIN_PASSWORD',
   'EG_LDAP_TEST_USER_PASSWORD',
+  'EG_LDAP_TEST_CA_CERTIFICATE',
 ] as const;
 
 const hasContainerInputs = requiredEnvironment.every((name) => Boolean(process.env[name]));
@@ -29,6 +30,7 @@ describeContainer('direct LDAP container integration', () => {
       groupIdAttribute: 'businessCategory',
       membershipMode: 'group_search',
       nestedGroups: true,
+      tlsTrustRef: 'EG_LDAP_TEST_CA_CERTIFICATE',
     }),
   } as any;
 

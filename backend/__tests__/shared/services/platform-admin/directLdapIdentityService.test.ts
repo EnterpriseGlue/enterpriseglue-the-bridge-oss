@@ -12,7 +12,7 @@ const provider = {
 } as any;
 
 describe('direct LDAP identity service', () => {
-  afterEach(() => { setLdapClientFactoryForTest(); delete process.env.LDAP_BIND_SECRET; });
+  afterEach(() => { setLdapClientFactoryForTest(); delete process.env.LDAP_BIND_SECRET; delete process.env.LDAP_CA_CERTIFICATE; });
 
   it('uses a service lookup then user bind and returns a stable user id with group DNs', async () => {
     process.env.LDAP_BIND_SECRET = serviceBindPassword;
@@ -28,6 +28,37 @@ describe('direct LDAP identity service', () => {
     expect(client.bind).toHaveBeenNthCalledWith(2, 'uid=person,ou=users,dc=example,dc=test', testUserPassword);
     expect(client.search).toHaveBeenCalledWith('ou=users,dc=example,dc=test', expect.objectContaining({ filter: '(mail=person@example.test)', sizeLimit: 2 }));
     expect(client.unbind).toHaveBeenCalled();
+  });
+
+  it('resolves a provider-scoped TLS trust reference for the LDAP client', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    process.env.LDAP_CA_CERTIFICATE = '-----BEGIN CERTIFICATE-----\nprovider-ca\n-----END CERTIFICATE-----';
+    const client = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn().mockResolvedValue({ searchEntries: [{ dn: 'uid=person,ou=users,dc=example,dc=test', entryUUID: 'uuid-1', mail: 'person@example.test' }] }),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    const factory = vi.fn(() => client);
+    setLdapClientFactoryForTest(factory);
+
+    await directLdapIdentityService.authenticate({
+      ...provider,
+      configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), tlsTrustRef: 'LDAP_CA_CERTIFICATE' }),
+    }, 'person@example.test', testUserPassword);
+
+    expect(factory).toHaveBeenCalledWith('ldaps://directory.example.test:636', process.env.LDAP_CA_CERTIFICATE);
+  });
+
+  it('fails before opening a client when the configured TLS trust reference is unavailable', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    const factory = vi.fn();
+    setLdapClientFactoryForTest(factory);
+
+    await expect(directLdapIdentityService.authenticate({
+      ...provider,
+      configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), tlsTrustRef: 'MISSING_LDAP_CA_CERTIFICATE' }),
+    }, 'person@example.test', testUserPassword)).rejects.toThrow('LDAP TLS trust reference is unavailable');
+    expect(factory).not.toHaveBeenCalled();
   });
 
   it('returns configured immutable group ids from reverse group search', async () => {

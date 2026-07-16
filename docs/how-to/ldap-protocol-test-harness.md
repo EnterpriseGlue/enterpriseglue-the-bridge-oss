@@ -66,7 +66,8 @@ the exported values rather than copying them into source:
 | `EG_LDAP_TEST_ADMIN_PASSWORD` | Temporary bind password. |
 | `EG_LDAP_TEST_USER_DN` | Seeded Alice DN. |
 | `EG_LDAP_TEST_USER_PASSWORD` | Seeded Alice password. |
-| `EG_LDAP_TEST_CA_CERT_PATH` / `NODE_EXTRA_CA_CERTS` | Generated CA for strict TLS verification. |
+| `EG_LDAP_TEST_CA_CERT_PATH` | Path to the generated CA, for external diagnostic commands only. |
+| `EG_LDAP_TEST_CA_CERTIFICATE` | Generated CA supplied through the provider's `tlsTrustRef`, proving provider-scoped strict TLS verification. |
 
 Do not echo these values, store them in a ticket, add them to `.env`, or make
 them fixed Compose defaults. The script requires Docker and pulls the pinned

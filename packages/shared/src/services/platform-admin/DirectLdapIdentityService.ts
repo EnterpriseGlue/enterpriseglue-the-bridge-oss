@@ -16,6 +16,7 @@ interface LdapConfiguration {
   groupIdAttribute: string;
   membershipMode: 'memberOf' | 'group_search';
   nestedGroups?: boolean;
+  tlsTrustRef?: string;
 }
 
 export interface DirectLdapIdentity {
@@ -36,8 +37,13 @@ export interface LdapClientLike {
   unbind(): Promise<void>;
 }
 
-type LdapClientFactory = (url: string) => LdapClientLike;
-const defaultClientFactory: LdapClientFactory = (url) => new Client({ url, timeout: 10_000, connectTimeout: 10_000, tlsOptions: { rejectUnauthorized: true } });
+type LdapClientFactory = (url: string, tlsCa?: string) => LdapClientLike;
+const defaultClientFactory: LdapClientFactory = (url, tlsCa) => new Client({
+  url,
+  timeout: 10_000,
+  connectTimeout: 10_000,
+  tlsOptions: { rejectUnauthorized: true, ...(tlsCa ? { ca: tlsCa } : {}) },
+});
 let clientFactory: LdapClientFactory = defaultClientFactory;
 
 export function setLdapClientFactoryForTest(factory?: LdapClientFactory): void {
@@ -76,7 +82,20 @@ function configuration(provider: IdentityProvider): LdapConfiguration {
   if (!url.startsWith('ldaps://')) throw new Error('LDAP URL must use LDAPS');
   const membershipMode = raw.membershipMode === 'group_search' ? 'group_search' : raw.membershipMode === 'memberOf' ? 'memberOf' : null;
   if (!membershipMode) throw new Error('LDAP membershipMode must be memberOf or group_search');
-  return { url, bindDn: required(raw.bindDn, 'bindDn'), bindPasswordRef: required(raw.bindPasswordRef, 'bindPasswordRef'), userBaseDn: required(raw.userBaseDn, 'userBaseDn'), userSearchFilter: required(raw.userSearchFilter, 'userSearchFilter'), userEnumerationFilter: typeof raw.userEnumerationFilter === 'string' && raw.userEnumerationFilter.trim() ? raw.userEnumerationFilter.trim() : '(objectClass=person)', pageSize: Number.isInteger(raw.pageSize) && Number(raw.pageSize) > 0 ? Math.min(Number(raw.pageSize), 1000) : 200, subjectAttribute: typeof raw.subjectAttribute === 'string' && raw.subjectAttribute.trim() ? raw.subjectAttribute.trim() : 'entryUUID', emailAttribute: typeof raw.emailAttribute === 'string' && raw.emailAttribute.trim() ? raw.emailAttribute.trim() : 'mail', groupBaseDn: required(raw.groupBaseDn, 'groupBaseDn'), groupIdAttribute: required(raw.groupIdAttribute, 'groupIdAttribute'), membershipMode, nestedGroups: raw.nestedGroups === true };
+  const tlsTrustRef = typeof raw.tlsTrustRef === 'string' && raw.tlsTrustRef.trim() ? raw.tlsTrustRef.trim() : undefined;
+  return { url, bindDn: required(raw.bindDn, 'bindDn'), bindPasswordRef: required(raw.bindPasswordRef, 'bindPasswordRef'), userBaseDn: required(raw.userBaseDn, 'userBaseDn'), userSearchFilter: required(raw.userSearchFilter, 'userSearchFilter'), userEnumerationFilter: typeof raw.userEnumerationFilter === 'string' && raw.userEnumerationFilter.trim() ? raw.userEnumerationFilter.trim() : '(objectClass=person)', pageSize: Number.isInteger(raw.pageSize) && Number(raw.pageSize) > 0 ? Math.min(Number(raw.pageSize), 1000) : 200, subjectAttribute: typeof raw.subjectAttribute === 'string' && raw.subjectAttribute.trim() ? raw.subjectAttribute.trim() : 'entryUUID', emailAttribute: typeof raw.emailAttribute === 'string' && raw.emailAttribute.trim() ? raw.emailAttribute.trim() : 'mail', groupBaseDn: required(raw.groupBaseDn, 'groupBaseDn'), groupIdAttribute: required(raw.groupIdAttribute, 'groupIdAttribute'), membershipMode, nestedGroups: raw.nestedGroups === true, tlsTrustRef };
+}
+
+function tlsTrust(config: LdapConfiguration): string | undefined {
+  if (!config.tlsTrustRef) return undefined;
+  let certificate: string | null;
+  try {
+    certificate = secretResolver.resolveStored(config.tlsTrustRef.startsWith('ref:') ? config.tlsTrustRef : `ref:${config.tlsTrustRef}`);
+  } catch {
+    throw new Error('LDAP TLS trust reference is unavailable');
+  }
+  if (!certificate) throw new Error('LDAP TLS trust reference is unavailable');
+  return certificate;
 }
 
 function userFilter(template: string, username: string): string {
@@ -96,7 +115,7 @@ class DirectLdapIdentityService {
   async listDirectoryPage(provider: IdentityProvider): Promise<LdapDirectoryPage> {
     if (provider.protocol !== 'ldap' || !provider.isEnabled) throw new Error('LDAP directory reconciliation is not available for this provider');
     const config = configuration(provider);
-    const client = clientFactory(config.url);
+    const client = clientFactory(config.url, tlsTrust(config));
     try {
       const password = secretResolver.resolveStored(config.bindPasswordRef.startsWith('ref:') ? config.bindPasswordRef : `ref:${config.bindPasswordRef}`);
       if (!password) throw new Error('LDAP bind password reference is unavailable');
@@ -130,7 +149,7 @@ class DirectLdapIdentityService {
     if (config.nestedGroups && config.membershipMode !== 'group_search') throw new Error('Nested LDAP groups require group_search membership mode');
     if (!username.trim() || !password) throw new Error('LDAP username and password are required');
     const filter = userFilter(config.userSearchFilter, username.trim());
-    const client = clientFactory(config.url);
+    const client = clientFactory(config.url, tlsTrust(config));
     try {
       const bindPassword = secretResolver.resolveStored(config.bindPasswordRef.startsWith('ref:') ? config.bindPasswordRef : `ref:${config.bindPasswordRef}`);
       if (!bindPassword) throw new Error('LDAP bind password reference is unavailable');
