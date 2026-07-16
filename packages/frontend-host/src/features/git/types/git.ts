@@ -3,6 +3,16 @@
  * Matches backend API schemas
  */
 
+import type {
+  AcquireLockRequest as SharedAcquireLockRequest,
+  DeployRequest as SharedDeployRequest,
+  DeploymentResponse as SharedDeploymentResponse,
+  LockHeartbeatRequest as SharedLockHeartbeatRequest,
+  LockHolder as SharedLockHolder,
+  LockResponse as SharedLockResponse,
+  RollbackRequest as SharedRollbackRequest,
+} from '@enterpriseglue/shared/schemas/git/index.js';
+
 export interface Repository {
   id: string;
   projectId: string;
@@ -97,61 +107,10 @@ export interface CloneFromGitRequest {
   conflictStrategy?: 'preferRemote' | 'preferLocal';
 }
 
-export interface DeployRequest {
-  projectId: string;
-  engineId?: string;
-  message: string;
-  environment?: string;
-  createTag?: boolean;
-  tagName?: string;
-}
-
-export interface RollbackRequest {
-  projectId: string;
-  commitSha: string;
-}
-
-export interface AcquireLockRequest {
-  fileId: string;
-  force?: boolean;
-  visibilityState?: 'visible' | 'hidden';
-  hasInteraction?: boolean;
-}
-
-export interface LockHeartbeatRequest {
-  visibilityState?: 'visible' | 'hidden';
-  hasInteraction?: boolean;
-}
-
-// Response types
-export interface DeploymentResponse {
-  deploymentId: string;
-  commitSha: string;
-  tag?: string;
-  filesChanged: number;
-}
-
-export interface LockResponse {
-  id: string;
-  fileId: string;
-  userId: string;
-  acquiredAt: number;
-  lastInteractionAt: number;
-  expiresAt: number;
-  heartbeatAt: number;
-  visibilityState: 'visible' | 'hidden';
-  visibilityChangedAt: number;
-  sessionStatus: 'active' | 'idle' | 'hidden';
-  userName?: string;
-}
-
-export interface LockHolder {
-  userId: string;
-  name: string;
-  acquiredAt: number;
-  heartbeatAt: number;
-  lastInteractionAt: number;
-  visibilityState: 'visible' | 'hidden';
-  visibilityChangedAt: number;
-  sessionStatus: 'active' | 'idle' | 'hidden';
-}
+export type DeployRequest = SharedDeployRequest;
+export type RollbackRequest = SharedRollbackRequest;
+export type AcquireLockRequest = SharedAcquireLockRequest;
+export type LockHeartbeatRequest = SharedLockHeartbeatRequest;
+export type DeploymentResponse = SharedDeploymentResponse;
+export type LockResponse = SharedLockResponse;
+export type LockHolder = SharedLockHolder;

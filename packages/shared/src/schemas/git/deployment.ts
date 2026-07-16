@@ -67,6 +67,7 @@ export const DeploymentResponseSchema = z.object({
 // Types
 export type Deployment = z.infer<typeof DeploymentSelectSchema>;
 export type DeploymentInsert = z.infer<typeof DeploymentInsertSchema>;
-export type DeployRequest = z.infer<typeof DeployRequestSchema>;
-export type RollbackRequest = z.infer<typeof RollbackRequestSchema>;
+/** Request types describe accepted transport input, before schema defaults apply. */
+export type DeployRequest = z.input<typeof DeployRequestSchema>;
+export type RollbackRequest = z.input<typeof RollbackRequestSchema>;
 export type DeploymentResponse = z.infer<typeof DeploymentResponseSchema>;
