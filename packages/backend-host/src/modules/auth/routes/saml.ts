@@ -14,6 +14,7 @@ import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { samlAssertionReplayService } from '@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js';
+import { SamlAuthenticationStatusSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import {
   appendSsoStartQuery,
   getSsoRedirectUrl,
@@ -37,7 +38,7 @@ function samlCallbackFailureMessage(error: unknown): string {
  */
 router.get('/api/auth/saml/status', apiLimiter, asyncHandler(async (_req: Request, res: Response) => {
   const status = await getSamlStatus();
-  res.json(status);
+  res.json(SamlAuthenticationStatusSchema.parse(status));
 }));
 
 /**

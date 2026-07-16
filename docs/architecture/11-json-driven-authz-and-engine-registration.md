@@ -2265,6 +2265,8 @@ The legacy SSO provider form now imports the same create/update/toggle/default-r
 
 Its SSO login-behavior and high-risk mapping controls also consume the canonical administrator settings response and bounded update fields, removing their locally maintained settings subset while retaining the existing backend permission enforcement.
 
+The unauthenticated SAML status endpoint now has one strict safe-readiness contract across the service, route serializer, OpenAPI, and provider form. It reports only enabled/configured indicators and missing field names; accidental certificate or configuration fields fail closed before they can reach the response.
+
 The retained legacy platform-role SSO mapping create/update contract is now likewise shared between route validation, OpenAPI, and the reachable settings form. The form narrows selector strings at its UI boundary and sends an omitted provider id for the historical all-provider case; the response-only `null` compatibility representation remains isolated to legacy rows.
 
 The reusable SSO mapping hooks and the dedicated legacy mappings page now use those same write inputs and the shared claim-test response. The Access Control and dedicated forms both omit a blank provider id before mutation, preserving all-provider rows without sending a write-time `null` that the strict route contract does not accept.

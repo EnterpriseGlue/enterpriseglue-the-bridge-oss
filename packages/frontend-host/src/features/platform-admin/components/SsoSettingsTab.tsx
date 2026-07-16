@@ -41,6 +41,7 @@ import type {
   LegacySsoProviderUpdateRequest,
   LegacySsoPlatformMappingCreateRequest,
   LegacySsoPlatformMappingUpdateRequest,
+  SamlAuthenticationStatus,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type {
   PlatformSettings,
@@ -430,13 +431,7 @@ export default function SsoSettingsTab() {
     setSamlStatusNotice(null);
 
     try {
-      const status = await apiClient.get<{
-        enabled: boolean;
-        message?: string;
-        missingFields?: string[];
-        providerConfigured?: boolean;
-        providerEnabled?: boolean;
-      }>('/api/auth/saml/status');
+      const status = await apiClient.get<SamlAuthenticationStatus>('/api/auth/saml/status');
 
       if (status.enabled) {
         setSamlStatusNotice({

@@ -300,6 +300,15 @@ export const LegacySsoProviderUpdateRequestSchema = LegacySsoProviderCreateReque
 export const LegacySsoProviderToggleRequestSchema = z.object({ riskAcknowledged: z.boolean().optional() }).default({});
 export const LegacySsoProviderDefaultRoleMigrationRequestSchema = z.object({ providerKey: z.string().min(1).max(160), riskAcknowledged: z.boolean().optional() });
 
+/** Public SAML readiness indicators; this contract never exposes provider secrets or configuration. */
+export const SamlAuthenticationStatusSchema = z.object({
+  enabled: z.boolean(),
+  message: z.string(),
+  providerConfigured: z.boolean(),
+  providerEnabled: z.boolean(),
+  missingFields: z.array(z.enum(['entityId', 'ssoUrl', 'certificate'])),
+}).strict();
+
 // SSO Provider - Insert schema
 export const SsoProviderInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -1820,6 +1829,7 @@ export type LegacySsoProviderCreateRequest = z.input<typeof LegacySsoProviderCre
 export type LegacySsoProviderUpdateRequest = z.input<typeof LegacySsoProviderUpdateRequestSchema>;
 export type LegacySsoProviderToggleRequest = z.input<typeof LegacySsoProviderToggleRequestSchema>;
 export type LegacySsoProviderDefaultRoleMigrationRequest = z.input<typeof LegacySsoProviderDefaultRoleMigrationRequestSchema>;
+export type SamlAuthenticationStatus = z.infer<typeof SamlAuthenticationStatusSchema>;
 export type SsoClaimOperator = z.infer<typeof SsoClaimOperatorSchema>;
 export type SsoClaimsMapping = z.infer<typeof SsoClaimsMappingSchema>;
 export type LegacySsoPlatformMappingCreateRequest = z.input<typeof LegacySsoPlatformMappingCreateRequestSchema>;

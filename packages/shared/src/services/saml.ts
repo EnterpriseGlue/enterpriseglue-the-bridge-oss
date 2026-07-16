@@ -12,6 +12,7 @@ import { ssoNormalizedIdentityService } from './platform-admin/SsoNormalizedIden
 import { ssoProviderService } from './platform-admin/SsoProviderService.js';
 import { ssoSyncDiagnosticsService, type SsoSyncCounts } from './platform-admin/SsoSyncDiagnosticsService.js';
 import { externalIdentityService } from './platform-admin/ExternalIdentityService.js';
+import type { SamlAuthenticationStatus } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const LEGACY_SAML_EXTERNAL_PROVIDER_ID = 'legacy:saml';
 
@@ -90,13 +91,7 @@ export interface SamlUserInfo {
   customClaims: Record<string, string | string[]>;
 }
 
-export interface SamlStatus {
-  enabled: boolean;
-  message: string;
-  providerConfigured: boolean;
-  providerEnabled: boolean;
-  missingFields: Array<'entityId' | 'ssoUrl' | 'certificate'>;
-}
+export type SamlStatus = SamlAuthenticationStatus;
 
 function normalizePemCertificate(input: string): string {
   const trimmed = input.trim();

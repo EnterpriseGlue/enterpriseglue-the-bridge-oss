@@ -31,6 +31,7 @@ import {
   AuthzCheckResponseSchema,
   SsoAssignmentMappingTestResponseSchema,
   SsoGroupMappingTestResponseSchema,
+  SamlAuthenticationStatusSchema,
   SsoMappingTestRequestSchema,
   SsoPlatformMappingTestResponseSchema,
   SsoSyncEventSchema,
@@ -38,6 +39,24 @@ import {
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 describe('provider-neutral identity shared contracts', () => {
+  it('limits public SAML status to safe readiness indicators', () => {
+    expect(SamlAuthenticationStatusSchema.parse({
+      enabled: false,
+      message: 'SAML provider is not configured',
+      providerConfigured: false,
+      providerEnabled: false,
+      missingFields: ['entityId', 'ssoUrl', 'certificate'],
+    }).missingFields).toEqual(['entityId', 'ssoUrl', 'certificate']);
+    expect(() => SamlAuthenticationStatusSchema.parse({
+      enabled: true,
+      message: 'configured',
+      providerConfigured: true,
+      providerEnabled: true,
+      missingFields: [],
+      certificate: 'must-not-be-exposed',
+    })).toThrow();
+  });
+
   it('shares the retained legacy platform-mapping write contracts', () => {
     expect(LegacySsoPlatformMappingCreateRequestSchema.parse({
       claimType: 'group', claimKey: 'groups', targetRole: 'user', priority: 0,
