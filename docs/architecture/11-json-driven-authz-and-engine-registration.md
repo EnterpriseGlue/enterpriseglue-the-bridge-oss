@@ -2233,7 +2233,7 @@ Phase 0 exit criteria:
 
 - [ ] ⬜ No new authorization write uses a legacy user/role/member field.
 - [x] ✅ Provider login and reconciliation are exact-provider-id based for every protocol. Provider-neutral OIDC/SAML/direct LDAP and selected Microsoft/Google compatibility records are executable; provider-API reconciliation remains pending.
-- [ ] ⬜ Secrets are encrypted or externally referenced end to end.
+- [x] ✅ Secrets are encrypted or externally referenced end to end. The maintained `test:secret-boundaries` lane verifies encrypted local provider values, opaque engine/provider references, plaintext rejection, and redaction across APIs, audits, errors, exports, diagnostics, and transport behavior.
 - [x] ✅ Config-manageable entities have deterministic keys and ownership metadata. Runtime Resource Sets use their tenant-scoped key identity plus source/ownership provenance, aligning them with roles, groups, providers, mappings, engines, Engine Sets, assignments, and project-engine targets.
 - [ ] ⬜ Project-engine target ownership has one unambiguous effective row per pair.
 - [ ] ⬜ Runtime role assignment types can be represented without changing permission scope.
