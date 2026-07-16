@@ -24,6 +24,7 @@ import type {
 } from '@enterpriseglue/shared/schemas/platform-admin/admin.js';
 import type {
   GitProviderAdminSummary,
+  GitProviderAdminUpdateResponse,
   UpdateGitProviderRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 
@@ -101,7 +102,7 @@ export const platformAdminApi = {
     apiClient.get<GitProvider[]>('/git-api/admin/providers'),
 
   updateGitProvider: (id: string, data: UpdateGitProviderRequest) =>
-    apiClient.put<GitProvider>(`/git-api/admin/providers/${id}`, data),
+    apiClient.put<GitProviderAdminUpdateResponse>(`/git-api/admin/providers/${id}`, data),
 };
 
 // Git Provider type

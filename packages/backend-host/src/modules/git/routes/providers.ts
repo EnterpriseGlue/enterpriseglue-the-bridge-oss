@@ -15,6 +15,7 @@ import { credentialService } from '@enterpriseglue/shared/services/git/Credentia
 import { encrypt as encryptSecret, isEncrypted as isEncryptedValue } from '@enterpriseglue/shared/services/encryption.js';
 import {
   GitProviderAdminSummarySchema,
+  GitProviderAdminUpdateResponseSchema,
   UpdateGitProviderRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 
@@ -193,7 +194,7 @@ router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requireActio
   // Return updated provider
   const updated = await providerRepo.findOneBy({ id });
 
-  res.json(updated);
+  res.json(GitProviderAdminUpdateResponseSchema.parse(updated));
 }));
 
 /**

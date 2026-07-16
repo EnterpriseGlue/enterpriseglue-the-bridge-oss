@@ -55,6 +55,9 @@ export const UpdateGitProviderRequestSchema = z.object({
   displayOrder: z.number().int().optional(),
 });
 
+/** Sanitized update response: persistent OAuth client settings never leave the route. */
+export const GitProviderAdminUpdateResponseSchema = GitProviderSchemaRaw;
+
 // Git Provider - Insert schema
 export const GitProviderInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -68,3 +71,4 @@ export const GitProviderInsertSchema = z.object({
 export type GitProvider = z.infer<typeof GitProviderSchema>;
 export type GitProviderAdminSummary = z.infer<typeof GitProviderAdminSummarySchema>;
 export type UpdateGitProviderRequest = z.infer<typeof UpdateGitProviderRequestSchema>;
+export type GitProviderAdminUpdateResponse = z.infer<typeof GitProviderAdminUpdateResponseSchema>;
