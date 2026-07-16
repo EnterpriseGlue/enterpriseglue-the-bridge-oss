@@ -11,6 +11,7 @@ import {
   LegacyGlobalMappingRetirementRequestSchema,
   LegacyMappingCoverageVerifyRequestSchema,
   LegacyMappingRetirementRequestSchema,
+  LegacySsoMappingMigrationRequestSchema,
   SsoMappingTestRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
@@ -27,10 +28,6 @@ const mappingSchema = z.object({
   isActive: z.boolean().optional(), riskAcknowledged: z.boolean().optional(),
 });
 const mappingUpdateSchema = mappingSchema.partial();
-const providerNeutralMigrationSchema = z.object({
-  providerKey: z.string().min(1).max(128), targetGroupKey: z.string().min(1).max(160).optional(),
-  newGroup: z.object({ key: z.string().min(1).max(255), name: z.string().min(1).max(255), description: z.string().max(2000).nullable().optional() }).optional(),
-}).refine((value) => Boolean(value.targetGroupKey) !== Boolean(value.newGroup), { message: 'Provide exactly one of targetGroupKey or newGroup' });
 const snapshotQuerySchema = z.object({
   providerId: z.string().min(1).optional(), mappingId: z.string().min(1).optional(), principalType: z.string().min(1).optional(),
   principalId: z.string().min(1).optional(), engineId: z.string().min(1).optional(),
@@ -55,7 +52,7 @@ export function registerSsoEngineAssignmentRoutes(router: Router, { requirePlatf
     try { res.status(201).json(await ssoAssignmentMappingService.createMapping({ ...req.body, tenantId: req.tenant?.tenantId || null, actorUserId: req.user!.userId })); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Create SSO assignment mapping error:', error); throw Errors.badRequest(error.message || 'Failed to create SSO assignment mapping'); }
   }));
-  router.post('/api/authz/sso-assignment-mappings/:id/migrate-provider-neutral', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateParams(idParamSchema), validateBody(providerNeutralMigrationSchema), asyncHandler(async (req, res) => {
+  router.post('/api/authz/sso-assignment-mappings/:id/migrate-provider-neutral', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateParams(idParamSchema), validateBody(LegacySsoMappingMigrationRequestSchema), asyncHandler(async (req, res) => {
     const result = await ssoAssignmentMappingService.migrateToProviderNeutral(String(req.params.id), { ...req.body, createdById: req.user!.userId });
     await logAudit({ action: 'authz.sso_engine_assignment_mapping.provider_neutral_migration', userId: req.user!.userId, resourceType: 'sso_assignment_mapping', resourceId: result.legacyMappingId, details: { providerKey: result.providerKey, identityMappingId: result.identityMapping.id, assignmentId: result.assignment.id, created: result.created } });
     res.status(result.created ? 201 : 200).json(result);

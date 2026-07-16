@@ -34,7 +34,12 @@ import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid';
-import type { LegacySsoProvider as SsoProvider, SsoClaimsMapping } from '../hooks/useAuthzApi';
+import type {
+  LegacySsoMappingMigrationRequest,
+  LegacySsoPlatformMappingMigrationResponse,
+  LegacySsoProvider as SsoProvider,
+  SsoClaimsMapping,
+} from '../hooks/useAuthzApi';
 
 // Provider type labels
 const PROVIDER_TYPES = {
@@ -185,10 +190,10 @@ export default function SsoSettingsTab() {
 
   const migrateLegacyPlatformMapping = useMutation({
     mutationFn: (input: { id: string; providerKey: string; targetGroupKey: string }) =>
-      apiClient.post(`/api/authz/sso-mappings/${encodeURIComponent(input.id)}/migrate-provider-neutral`, {
+      apiClient.post<LegacySsoPlatformMappingMigrationResponse>(`/api/authz/sso-mappings/${encodeURIComponent(input.id)}/migrate-provider-neutral`, {
         providerKey: input.providerKey.trim(),
         targetGroupKey: input.targetGroupKey.trim(),
-      }),
+      } satisfies LegacySsoMappingMigrationRequest),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-mappings'] });
       queryClient.invalidateQueries({ queryKey: ['identity-mappings'] });

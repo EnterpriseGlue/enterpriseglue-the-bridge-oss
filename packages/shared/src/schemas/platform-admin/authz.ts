@@ -1210,6 +1210,52 @@ export const IdentityMappingProvisionAccessResponseSchema = z.object({
   createdGroup: z.object({ id: z.string() }).nullable(),
 });
 
+/** Retained legacy mapping conversion inputs; conversion creates a replacement and never disables the legacy evaluator. */
+export const LegacyMappingMigrationNewGroupSchema = z.object({
+  key: z.string().min(1).max(255),
+  name: z.string().min(1).max(255),
+  description: z.string().max(2000).nullable().optional(),
+});
+
+export const LegacySsoMappingMigrationRequestSchema = z.object({
+  providerKey: z.string().min(1).max(128),
+  targetGroupKey: z.string().min(1).max(160).optional(),
+  newGroup: LegacyMappingMigrationNewGroupSchema.optional(),
+}).refine((value) => Boolean(value.targetGroupKey) !== Boolean(value.newGroup), {
+  message: 'Provide exactly one of targetGroupKey or newGroup',
+});
+
+const LegacyMappingMigrationGroupResponseSchema = z.object({ id: z.string(), key: z.string() }).nullable();
+const LegacyMappingMigrationAssignmentResponseSchema = z.object({ id: z.string(), warnings: z.array(z.string()) });
+
+export const LegacySsoPlatformMappingMigrationResponseSchema = z.object({
+  legacyMappingId: z.string(),
+  created: z.boolean(),
+  mapping: IdentityMappingResponseSchema,
+  assignment: LegacyMappingMigrationAssignmentResponseSchema,
+  createdGroup: LegacyMappingMigrationGroupResponseSchema,
+});
+
+export const LegacySsoAssignmentMappingMigrationResponseSchema = z.object({
+  legacyMappingId: z.string(),
+  providerKey: z.string(),
+  identityMapping: IdentityMappingResponseSchema,
+  assignment: LegacyMappingMigrationAssignmentResponseSchema,
+  created: z.boolean(),
+  createdGroup: LegacyMappingMigrationGroupResponseSchema,
+});
+
+export const LegacySsoGroupMappingMigrationRequestSchema = z.object({
+  providerKey: z.string().min(1).max(128),
+});
+
+export const LegacySsoGroupMappingMigrationResponseSchema = z.object({
+  legacyMappingId: z.string(),
+  providerKey: z.string(),
+  created: z.boolean(),
+  identityMapping: IdentityMappingResponseSchema,
+});
+
 /** Diagnostics and retirement gate for compatibility mapping evaluators. */
 export const LegacyMappingCoverageFamilySchema = z.enum(['platform_role', 'group', 'engine_assignment']);
 export const LegacyMappingCoverageStatusSchema = z.enum(['replacement_candidate', 'manual_redesign_required', 'no_replacement_candidate']);
@@ -1769,6 +1815,11 @@ export type EffectiveAccessEvaluateRequest = z.infer<typeof EffectiveAccessEvalu
 export type EffectiveAccessEvaluateResponse = z.infer<typeof EffectiveAccessEvaluateResponseSchema>;
 export type IdentityMappingRequest = z.infer<typeof IdentityMappingRequestSchema>;
 export type IdentityMappingResponse = z.infer<typeof IdentityMappingResponseSchema>;
+export type LegacySsoMappingMigrationRequest = z.input<typeof LegacySsoMappingMigrationRequestSchema>;
+export type LegacySsoPlatformMappingMigrationResponse = z.infer<typeof LegacySsoPlatformMappingMigrationResponseSchema>;
+export type LegacySsoAssignmentMappingMigrationResponse = z.infer<typeof LegacySsoAssignmentMappingMigrationResponseSchema>;
+export type LegacySsoGroupMappingMigrationRequest = z.input<typeof LegacySsoGroupMappingMigrationRequestSchema>;
+export type LegacySsoGroupMappingMigrationResponse = z.infer<typeof LegacySsoGroupMappingMigrationResponseSchema>;
 export type LegacyMappingCoverageFamily = z.infer<typeof LegacyMappingCoverageFamilySchema>;
 export type LegacyMappingCoverageStatus = z.infer<typeof LegacyMappingCoverageStatusSchema>;
 export type LegacyMappingCoverageVerification = z.infer<typeof LegacyMappingCoverageVerificationSchema>;

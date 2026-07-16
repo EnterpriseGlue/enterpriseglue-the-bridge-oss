@@ -196,6 +196,10 @@ import {
   type EngineFieldOwnership,
   type EngineManagementMode,
   type IdentityEntitlementMapping,
+  type LegacySsoAssignmentMappingMigrationResponse,
+  type LegacySsoGroupMappingMigrationRequest,
+  type LegacySsoGroupMappingMigrationResponse,
+  type LegacySsoMappingMigrationRequest,
   type ProjectEngineTarget,
   type ProjectEngineTargetMode,
   type ProjectEngineTargetStatus,
@@ -1045,9 +1049,9 @@ export default function AccessControl() {
   const deleteSsoGroupMappingM = useDeleteSsoGroupMapping();
   const testSsoGroupMappingM = useTestSsoGroupMapping();
   const migrateSsoGroupM = useMutation({
-    mutationFn: (input: { id: string; providerKey: string }) => apiClient.post(
+    mutationFn: (input: { id: string; providerKey: string }) => apiClient.post<LegacySsoGroupMappingMigrationResponse>(
       `/api/authz/sso-group-mappings/${encodeURIComponent(input.id)}/migrate-provider-neutral`,
-      { providerKey: input.providerKey.trim() },
+      { providerKey: input.providerKey.trim() } satisfies LegacySsoGroupMappingMigrationRequest,
     ),
     onSuccess: () => {
       void ssoGroupMappingsQ.refetch();
@@ -1063,9 +1067,9 @@ export default function AccessControl() {
   const deleteM = useDeleteSsoAssignmentMapping();
   const testM = useTestSsoAssignmentMapping();
   const migrateSsoAssignmentM = useMutation({
-    mutationFn: (input: { id: string; providerKey: string; targetGroupKey: string }) => apiClient.post(
+    mutationFn: (input: { id: string; providerKey: string; targetGroupKey: string }) => apiClient.post<LegacySsoAssignmentMappingMigrationResponse>(
       `/api/authz/sso-assignment-mappings/${encodeURIComponent(input.id)}/migrate-provider-neutral`,
-      { providerKey: input.providerKey.trim(), targetGroupKey: input.targetGroupKey.trim() },
+      { providerKey: input.providerKey.trim(), targetGroupKey: input.targetGroupKey.trim() } satisfies LegacySsoMappingMigrationRequest,
     ),
     onSuccess: () => {
       void mappingsQ.refetch();

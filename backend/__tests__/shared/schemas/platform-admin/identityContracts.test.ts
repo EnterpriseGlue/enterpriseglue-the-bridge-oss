@@ -19,6 +19,10 @@ import {
   LegacyMappingCoverageVerifyRequestSchema,
   LegacyMappingRetirementReadinessSchema,
   LegacyMappingRetirementRequestSchema,
+  LegacySsoGroupMappingMigrationRequestSchema,
+  LegacySsoGroupMappingMigrationResponseSchema,
+  LegacySsoMappingMigrationRequestSchema,
+  LegacySsoPlatformMappingMigrationResponseSchema,
   AuthzCheckBatchRequestSchema,
   AuthzCheckBatchResponseSchema,
   AuthzCheckRequestSchema,
@@ -170,5 +174,26 @@ describe('provider-neutral identity shared contracts', () => {
       results: [{ action: 'engine.instances.read', allowed: false, reason: 'Missing assignment' }],
     }).results[0]?.allowed).toBe(false);
     expect(() => AuthzCheckRequestSchema.parse({ action: '' })).toThrow();
+  });
+
+  it('keeps legacy mapping conversion additive and validates shared provider-neutral contracts', () => {
+    expect(LegacySsoMappingMigrationRequestSchema.parse({
+      providerKey: 'identity.oidc.example', targetGroupKey: 'operators',
+    }).targetGroupKey).toBe('operators');
+    expect(() => LegacySsoMappingMigrationRequestSchema.parse({
+      providerKey: 'identity.oidc.example', targetGroupKey: 'operators', newGroup: { key: 'operators', name: 'Operators' },
+    })).toThrow();
+    expect(LegacySsoGroupMappingMigrationRequestSchema.parse({ providerKey: 'identity.oidc.example' }).providerKey).toBe('identity.oidc.example');
+    const identityMapping = {
+      id: 'mapping-1', providerId: 'provider-1', providerKey: 'identity.oidc.example', targetGroupId: 'group-1', targetGroupKey: 'operators',
+      entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, configKey: null, sourceRef: null,
+    } as const;
+    expect(LegacySsoPlatformMappingMigrationResponseSchema.parse({
+      legacyMappingId: 'legacy-1', created: true, mapping: identityMapping,
+      assignment: { id: 'assignment-1', warnings: [] }, createdGroup: { id: 'group-1', key: 'operators' },
+    }).created).toBe(true);
+    expect(LegacySsoGroupMappingMigrationResponseSchema.parse({
+      legacyMappingId: 'legacy-1', providerKey: 'identity.oidc.example', created: false, identityMapping,
+    }).created).toBe(false);
   });
 });
