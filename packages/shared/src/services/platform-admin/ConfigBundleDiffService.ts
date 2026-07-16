@@ -374,9 +374,10 @@ class ConfigBundleDiffService {
         existing.resourceKind !== set.resourceKind ||
         existing.selectorJson !== JSON.stringify(set.selector) ||
         existing.runtimeTenantId !== (set.runtimeTenantId || null) ||
+        (existing.ownershipMode || 'config_locked') !== (set.ownershipMode || 'config_locked') ||
         existing.isArchived
       ) {
-        changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'update', currentId: existing.id, reason: 'Config-owned Runtime Resource Set differs from the desired engine, selector, tenant, metadata, or archive state', ...(runtimeResourceChanges ? { runtimeResourceChanges } : {}) });
+        changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'update', currentId: existing.id, reason: 'Config-owned Runtime Resource Set differs from the desired engine, selector, tenant, ownership mode, metadata, or archive state', ...(runtimeResourceChanges ? { runtimeResourceChanges } : {}) });
       } else {
         changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned Runtime Resource Set already matches the desired state' });
       }

@@ -105,7 +105,7 @@ class ConfigBundleExportService {
     if (runtimeResourceSets.length) files['./runtime-resource-sets.json'] = { runtimeResourceSets: sortedByKey(runtimeResourceSets).map((set) => {
       const engineKey = engineKeyById.get(set.engineId);
       if (!engineKey) throw new Error(`Cannot export Runtime Resource Set ${set.key}: its engine is not config-owned by this bundle`);
-      return { key: set.key, name: set.name, description: set.description || undefined, engineRef: { engineKey }, resourceKind: set.resourceKind, selector: json(set.selectorJson), runtimeTenantId: set.runtimeTenantId || undefined, ownershipMode: 'config_locked' };
+      return { key: set.key, name: set.name, description: set.description || undefined, engineRef: { engineKey }, resourceKind: set.resourceKind, selector: json(set.selectorJson), runtimeTenantId: set.runtimeTenantId || undefined, ownershipMode: set.ownershipMode || 'config_locked' };
     }) };
 
     const providerKeyById = new Map([...referenceProviders, ...identityProviders].map((provider) => [provider.id, provider.key]));

@@ -472,13 +472,13 @@ class ConfigBundleApplyService {
           const engine = desired ? engineByConfigKey.get(desired.engineRef.engineKey) : null;
           if (desired && !engine) fail(`Runtime Resource Set ${desired.key} references an unresolved engine`, 422);
           if (change.operation === 'create' && desired && engine) {
-            const createdSet = await runtimeResourceSetService.create({ tenantId, key: desired.key, name: desired.name, description: desired.description || null, engineId: engine!.id, resourceKind: desired.resourceKind, selector: desired.selector, runtimeTenantId: desired.runtimeTenantId || null, source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', createdById: input.actorId }, manager);
+            const createdSet = await runtimeResourceSetService.create({ tenantId, key: desired.key, name: desired.name, description: desired.description || null, engineId: engine!.id, resourceKind: desired.resourceKind, selector: desired.selector, runtimeTenantId: desired.runtimeTenantId || null, source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', createdById: input.actorId }, manager);
             const id = createdSet.id;
             materializeRuntimeResourceSetIds.push(id);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.runtime_resource_set.create', resourceType: 'runtime_resource_set', resourceId: id, details: { bundleKey: manifest.metadata.key, runtimeResourceSetKey: desired.key, canonicalHash: diff.canonicalHash } });
             created += 1;
           } else if (change.operation === 'update' && desired && engine && change.currentId) {
-            await runtimeResourceSetService.update(change.currentId, { name: desired.name, description: desired.description || null, engineId: engine.id, resourceKind: desired.resourceKind, selector: desired.selector, runtimeTenantId: desired.runtimeTenantId || null, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', isArchived: false }, manager);
+            await runtimeResourceSetService.update(change.currentId, { name: desired.name, description: desired.description || null, engineId: engine.id, resourceKind: desired.resourceKind, selector: desired.selector, runtimeTenantId: desired.runtimeTenantId || null, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', isArchived: false }, manager);
             materializeRuntimeResourceSetIds.push(change.currentId);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.runtime_resource_set.update', resourceType: 'runtime_resource_set', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, runtimeResourceSetKey: desired!.key, canonicalHash: diff.canonicalHash } });
             updated += 1;

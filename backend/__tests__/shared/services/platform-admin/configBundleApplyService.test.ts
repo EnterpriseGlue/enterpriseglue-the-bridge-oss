@@ -868,11 +868,11 @@ describe('configBundleApplyService', () => {
     const runtimeBundle = { ...bundle, imports: ['./engines.json', './runtime-resource-sets.json'] };
     const runtimeFiles = {
       './engines.json': { engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' } }] },
-      './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.central' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' } }] },
+      './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.central' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' }, ownershipMode: 'config_warn' }] },
     };
     const preview = configBundlePreviewService.preview({ bundle: runtimeBundle, files: runtimeFiles });
     await configBundleApplyService.apply({ bundle: runtimeBundle, files: runtimeFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
-    expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ key: 'runtime.payments', runtimeResourceSetKeyIdentity: 'tenant-a:runtime.payments', engineId: 'engine-1', resourceKind: 'process_definition', source: 'config', sourceRef: 'config_bundle:acme.authz' }));
+    expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ key: 'runtime.payments', runtimeResourceSetKeyIdentity: 'tenant-a:runtime.payments', engineId: 'engine-1', resourceKind: 'process_definition', source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn' }));
     expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a', runtimeResourceSetIds: [expect.any(String)],
     }));

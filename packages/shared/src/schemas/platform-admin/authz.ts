@@ -1031,6 +1031,7 @@ export const RuntimeResourceSetSchema = z.object({
   runtimeTenantId: z.string().nullable(),
   source: z.string(),
   sourceRef: z.string().nullable(),
+  ownershipMode: z.string(),
   sourceHash: z.string().nullable(),
   lastAppliedAt: z.number().nullable(),
   driftStatus: z.string().nullable(),

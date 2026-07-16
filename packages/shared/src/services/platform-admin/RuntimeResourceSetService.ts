@@ -7,7 +7,7 @@ import type { RuntimeResourceSetSelector } from './RuntimeResourceInventoryServi
 
 export interface RuntimeResourceSetInput {
   tenantId?: string | null; key: string; name: string; description?: string | null; engineId: string; resourceKind: string;
-  selector: RuntimeResourceSetSelector; runtimeTenantId?: string | null; source?: string; sourceRef?: string | null;
+  selector: RuntimeResourceSetSelector; runtimeTenantId?: string | null; source?: string; sourceRef?: string | null; ownershipMode?: string;
   sourceHash?: string | null; lastAppliedAt?: number | null; driftStatus?: string | null; createdById?: string | null;
 }
 
@@ -18,6 +18,7 @@ export interface RuntimeResourceSetUpdateInput {
   resourceKind?: string;
   selector?: RuntimeResourceSetSelector;
   runtimeTenantId?: string | null;
+  ownershipMode?: string;
   sourceHash?: string | null;
   lastAppliedAt?: number | null;
   driftStatus?: string | null;
@@ -30,7 +31,8 @@ export class RuntimeResourceSetService {
   async create(input: RuntimeResourceSetInput, store?: DataSource | EntityManager): Promise<{ id: string }> {
     const key = input.key.trim(); if (!key || !input.name.trim()) throw new Error('Runtime Resource Set key and name are required');
     const repo = (store || await getDataSource()).getRepository(RuntimeResourceSet); const id = generateId(); const now = Date.now();
-    await repo.insert({ id, tenantId: input.tenantId || null, key, runtimeResourceSetKeyIdentity: runtimeResourceSetKeyIdentity(input.tenantId, key), name: input.name.trim(), description: input.description || null, engineId: input.engineId, resourceKind: input.resourceKind, selectorJson: JSON.stringify(input.selector), selectorFingerprint: createHash('sha256').update(stable(input.selector)).digest('hex'), runtimeTenantId: input.runtimeTenantId || null, source: input.source || 'manual', sourceRef: input.sourceRef || null, sourceHash: input.sourceHash || null, lastAppliedAt: input.lastAppliedAt || null, driftStatus: input.driftStatus || null, isArchived: false, createdById: input.createdById || null, createdAt: now, updatedAt: now });
+    const source = input.source || 'manual';
+    await repo.insert({ id, tenantId: input.tenantId || null, key, runtimeResourceSetKeyIdentity: runtimeResourceSetKeyIdentity(input.tenantId, key), name: input.name.trim(), description: input.description || null, engineId: input.engineId, resourceKind: input.resourceKind, selectorJson: JSON.stringify(input.selector), selectorFingerprint: createHash('sha256').update(stable(input.selector)).digest('hex'), runtimeTenantId: input.runtimeTenantId || null, source, sourceRef: input.sourceRef || null, ownershipMode: input.ownershipMode || (source === 'config' ? 'config_locked' : 'manual'), sourceHash: input.sourceHash || null, lastAppliedAt: input.lastAppliedAt || null, driftStatus: input.driftStatus || null, isArchived: false, createdById: input.createdById || null, createdAt: now, updatedAt: now });
     return { id };
   }
 
@@ -49,6 +51,7 @@ export class RuntimeResourceSetService {
       values.selectorFingerprint = createHash('sha256').update(stable(input.selector)).digest('hex');
     }
     if (input.runtimeTenantId !== undefined) values.runtimeTenantId = input.runtimeTenantId || null;
+    if (input.ownershipMode !== undefined) values.ownershipMode = input.ownershipMode;
     if (input.sourceHash !== undefined) values.sourceHash = input.sourceHash;
     if (input.lastAppliedAt !== undefined) values.lastAppliedAt = input.lastAppliedAt;
     if (input.driftStatus !== undefined) values.driftStatus = input.driftStatus;
@@ -56,7 +59,7 @@ export class RuntimeResourceSetService {
     await repo.update({ id }, values);
   }
 
-  async archive(id: string, input: Pick<RuntimeResourceSetUpdateInput, 'sourceHash' | 'lastAppliedAt' | 'driftStatus'> = {}, store?: DataSource | EntityManager): Promise<void> {
+  async archive(id: string, input: Pick<RuntimeResourceSetUpdateInput, 'ownershipMode' | 'sourceHash' | 'lastAppliedAt' | 'driftStatus'> = {}, store?: DataSource | EntityManager): Promise<void> {
     await this.update(id, { ...input, isArchived: true }, store);
   }
 }

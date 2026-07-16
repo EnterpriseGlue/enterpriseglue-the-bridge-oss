@@ -2204,7 +2204,7 @@ This phase is required because the current implementation still carries compatib
 
 - [x] ✅ Replace provider base64 secret writes with the shared AES-GCM `SecretResolver`; legacy base64 rows are read-only compatibility input until rotated, and opaque `ref:` resolution is available for later config ownership.
 - [x] ✅ Add engine credential resolution so `passwordEnc` is not treated as plaintext at runtime; engine create/update stores authenticated ciphertext or an opaque external reference, and runtime calls resolve both modes through `SecretResolver`.
-- [ ] ⬜ Add source, sourceRef, sourceHash, configKey, lastAppliedAt, and ownership mode where required on every config-managed object.
+- [x] ✅ Add source, sourceRef, sourceHash, configKey, lastAppliedAt, and ownership mode where required on every config-managed object. Runtime Resource Sets now persist and export `ownershipMode`, diff it against the bundle, apply it on create/update, and migrate existing config rows to `config_locked`; roles, groups, providers, mappings, engines, Engine Sets, assignments, and project-engine targets already carry their applicable deterministic key and provenance fields.
 - [x] ✅ Define one-row project-engine-target conflict/ownership-transfer behavior and cover it in preview/apply services. Bundle validation rejects duplicate immutable project/engine pairs (and duplicate optional target keys); preview blocks an existing differently owned row until a reviewable `transferOwnership` reason is supplied, and apply re-checks that exact transfer before updating the existing row in place with an audit record of its prior owner.
 
 #### Module Boundaries
@@ -2234,7 +2234,7 @@ Phase 0 exit criteria:
 - [ ] ⬜ No new authorization write uses a legacy user/role/member field.
 - [x] ✅ Provider login and reconciliation are exact-provider-id based for every protocol. Provider-neutral OIDC/SAML/direct LDAP and selected Microsoft/Google compatibility records are executable; provider-API reconciliation remains pending.
 - [ ] ⬜ Secrets are encrypted or externally referenced end to end.
-- [ ] ⬜ Config-manageable entities have deterministic keys and ownership metadata.
+- [x] ✅ Config-manageable entities have deterministic keys and ownership metadata. Runtime Resource Sets use their tenant-scoped key identity plus source/ownership provenance, aligning them with roles, groups, providers, mappings, engines, Engine Sets, assignments, and project-engine targets.
 - [ ] ⬜ Project-engine target ownership has one unambiguous effective row per pair.
 - [ ] ⬜ Runtime role assignment types can be represented without changing permission scope.
 - [x] ✅ Module splits preserve route/OpenAPI/frontend action inventory guards. Strict backend route inventory remains 434/434, all 168 registered UI action ids are referenced, and Admin navigation/action parity passes after the domain registry split.

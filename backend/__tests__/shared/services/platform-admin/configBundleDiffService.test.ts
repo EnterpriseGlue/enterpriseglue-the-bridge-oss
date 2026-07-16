@@ -220,6 +220,25 @@ describe('configBundleDiffService', () => {
     ]));
   });
 
+  it('detects a Runtime Resource Set ownership-mode change', async () => {
+    mockDataSource([], [], [], [
+      { id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz' },
+    ], [], [], [], [], [], [], [], [
+      { id: 'runtime-set-1', tenantId: 'tenant-a', key: 'runtime.payments', name: 'Payments processes', description: null, engineId: 'engine-1', resourceKind: 'process_definition', selectorJson: JSON.stringify({ mode: 'prefix', prefix: 'payments-' }), runtimeTenantId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_locked', isArchived: false },
+    ]);
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json', './runtime-resource-sets.json'] },
+      files: {
+        './engines.json': { engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' } }] },
+        './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.central' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' }, ownershipMode: 'config_warn' }] },
+      },
+    }, 'tenant-a');
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'update',
+      reason: expect.stringContaining('ownership mode'),
+    }));
+  });
+
   it('reports runtime resources entering and leaving a changed selector', async () => {
     mockDataSource([], [], [], [{
       id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz',
