@@ -1,18 +1,12 @@
 import { apiClient } from '../../../../shared/api/client'
+import type {
+  MigrationInstruction,
+  MigrationPlan,
+} from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 
 // Types
-export type MigrationPlan = {
-  sourceProcessDefinitionId: string
-  targetProcessDefinitionId: string
-  instructions: MigrationInstruction[]
-}
-
-export type MigrationInstruction = {
-  sourceActivityIds: string[]
-  targetActivityIds: string[]
-  updateEventTrigger?: boolean
-}
+export type { MigrationInstruction, MigrationPlan }
 
 export type MigrationValidationReport = {
   instructionReports: InstructionReport[]

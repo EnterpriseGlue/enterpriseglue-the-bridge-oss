@@ -58,6 +58,9 @@ const {
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
   MigrationActiveSourcesResponseSchema,
+  MigrationGenerateRequestSchema,
+  MigrationInstructionSchema,
+  MigrationPlanSchema,
   MigrationPreviewResponseSchema,
   PreviewCountResponseSchema,
   VariablesSchema: MissionControlVariablesSchema,
@@ -1355,36 +1358,9 @@ registry.registerPath({
 // -----------------------------
 // Migration (async batch)
 // -----------------------------
-const MigrationInstructionSchema = z.object({
-  sourceActivityIds: z.array(z.string()),
-  targetActivityId: z.string(),
-  updateEventTrigger: z.boolean().optional(),
-})
-const MigrationPlanSchema = z.object({
-  sourceProcessDefinitionId: z.string(),
-  targetProcessDefinitionId: z.string(),
-  instructions: z.array(MigrationInstructionSchema).default([]),
-  updateEventTriggers: z.boolean().optional(),
-})
+registry.register('MigrationInstruction', MigrationInstructionSchema)
 registry.register('MigrationPlan', MigrationPlanSchema)
-
-const MigrationGenerateInput = z.object({
-  sourceDefinitionId: z.string(),
-  targetDefinitionId: z.string(),
-  updateEventTriggers: z.boolean().optional(),
-  overrides: z
-    .array(
-      z.object({
-        sourceActivityIds: z.array(z.string()).optional(),
-        sourceActivityId: z.string().optional(),
-        targetActivityId: z.string().optional(),
-        targetActivityIds: z.array(z.string()).optional(),
-        updateEventTrigger: z.boolean().optional(),
-      })
-    )
-    .optional(),
-})
-registry.register('MigrationGenerateInput', MigrationGenerateInput)
+registry.register('MigrationGenerateInput', MigrationGenerateRequestSchema)
 
 const MigrationValidateRequest = z.object({ plan: MigrationPlanSchema })
 registry.register('MigrationValidateRequest', MigrationValidateRequest)
@@ -1404,15 +1380,6 @@ registry.register('MigrationCreateResponse', MigrationCreateResponse)
 
 const MigrationDirectResponse = z.object({ ok: z.boolean() })
 registry.register('MigrationDirectResponse', MigrationDirectResponse)
-
-// POST /mission-control-api/migration/plan/generate
-registry.registerPath({
-  method: 'post',
-  path: '/mission-control-api/migration/plan/generate',
-  ...authzExtension('engine.runtime.migrations.plan.generate', 'POST', '/mission-control-api/migration/plan/generate'),
-  request: { body: { content: { 'application/json': { schema: MigrationGenerateInput } } } },
-  responses: { 200: { description: 'Generated migration plan (engine shape)', content: { 'application/json': { schema: MigrationPlanSchema } } } },
-})
 
 // POST /mission-control-api/migration/plan/validate
 registry.registerPath({
@@ -2765,8 +2732,8 @@ registry.registerPath({
   method: 'post',
   path: '/mission-control-api/migration/generate',
   ...authzExtension('engine.runtime.migrations.plan.generate', 'POST', '/mission-control-api/migration/generate'),
-  request: { body: { content: { 'application/json': { schema: z.object({ sourceDefinitionId: z.string(), targetDefinitionId: z.string(), updateEventTriggers: z.boolean().optional() }) } } } },
-  responses: { 200: { description: 'Generated migration plan', content: { 'application/json': { schema: z.unknown() } } } },
+  request: { body: { content: { 'application/json': { schema: MigrationGenerateRequestSchema } } } },
+  responses: { 200: { description: 'Generated migration plan', content: { 'application/json': { schema: MigrationPlanSchema } } } },
 });
 
 // -----------------------------
