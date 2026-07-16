@@ -17,6 +17,7 @@ const baseSettings: PlatformSettings = {
   inviteAllowAllDomains: true,
   inviteAllowedDomains: [],
   ssoAutoRedirectSingleProvider: false,
+  ssoBroadEntitlementMappingsEnabled: false,
   ssoAllEnginesAssignmentMappingsEnabled: true,
   ssoEngineOwnerAssignmentMappingsEnabled: false,
   ssoEngineDelegateAssignmentMappingsEnabled: false,
@@ -24,6 +25,7 @@ const baseSettings: PlatformSettings = {
   ssoSecretViewMappingsEnabled: false,
   ssoUnredactedAuditMappingsEnabled: false,
   ssoPermanentDeleteMappingsEnabled: false,
+  credentiallessCustomerSidecarsEnabled: false,
   piiRegexEnabled: false,
   piiExternalProviderEnabled: false,
   piiExternalProviderType: null,
@@ -54,6 +56,7 @@ describe('EnginesSettingsSection', () => {
         onProjectEngineTargetModeChange={vi.fn()}
         onEngineAccessAuthorityChange={vi.fn()}
         onProjectAccessAuthorityChange={vi.fn()}
+        onCredentiallessCustomerSidecarsEnabledChange={vi.fn()}
         onDeployRoleToggle={vi.fn()}
         envTags={[]}
         envLoading={false}
