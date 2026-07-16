@@ -1,13 +1,11 @@
 import type { DeepPartial, EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
-import { ENGINE_MEMBER_ROLES } from '@enterpriseglue/shared/constants/roles.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineProjectAccess } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineProjectAccess.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { Version } from '@enterpriseglue/shared/infrastructure/persistence/entities/Version.js';
-import { engineService } from '../platform-admin/index.js';
 import { camundaGet } from '../bpmn-engine-client.js';
 import type { DecisionDefinition, DecisionDefinitionXml, ProcessDefinition } from '@enterpriseglue/shared/types/bpmn-engine-api.js';
 import { ensureExt, sanitize, sanitizeBpmnXml, sanitizeDmnXml } from '../engines/deployment-utils.js';
@@ -198,13 +196,12 @@ export async function assertUserCanImportFromEngine(
     throw Errors.engineNotFound(engineId);
   }
 
-  const hasAccess = await engineService.hasEngineAccess(userId, engineId, ENGINE_MEMBER_ROLES, tenantId) ||
-    await permissionService.hasPermission(EnginePermissions.DEPLOY_VIEW, {
-      userId,
-      tenantId,
-      resourceType: 'engine',
-      resourceId: engineId,
-    });
+  const hasAccess = await permissionService.hasPermission(EnginePermissions.DEPLOY_VIEW, {
+    userId,
+    tenantId,
+    resourceType: 'engine',
+    resourceId: engineId,
+  });
   if (!hasAccess) {
     throw Errors.forbidden('You do not have access to the selected engine');
   }

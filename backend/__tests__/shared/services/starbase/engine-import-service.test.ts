@@ -7,7 +7,6 @@ import { Version } from '@enterpriseglue/shared/db/entities/Version.js';
 
 const mocks = vi.hoisted(() => ({
   camundaGet: vi.fn(),
-  hasEngineAccess: vi.fn(),
   hasPermission: vi.fn(),
   getRepository: vi.fn(),
   findOne: vi.fn(),
@@ -15,12 +14,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   camundaGet: mocks.camundaGet,
-}));
-
-vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
-  engineService: {
-    hasEngineAccess: mocks.hasEngineAccess,
-  },
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
@@ -48,7 +41,6 @@ import {
 describe('engine import service', () => {
   beforeEach(() => {
     mocks.camundaGet.mockReset();
-    mocks.hasEngineAccess.mockReset();
     mocks.hasPermission.mockReset();
     mocks.getRepository.mockReset();
     mocks.findOne.mockReset();
@@ -129,7 +121,6 @@ describe('engine import service', () => {
 
   it('rejects import when user has no access to selected engine', async () => {
     mocks.findOne.mockResolvedValue({ id: 'engine-1' });
-    mocks.hasEngineAccess.mockResolvedValue(false);
     mocks.hasPermission.mockResolvedValue(false);
 
     await expect(assertUserCanImportFromEngine('user-1', 'engine-1')).rejects.toThrow('access');
@@ -137,7 +128,6 @@ describe('engine import service', () => {
 
   it('allows import when scoped engine deploy-view permission is granted', async () => {
     mocks.findOne.mockResolvedValue({ id: 'engine-1' });
-    mocks.hasEngineAccess.mockResolvedValue(false);
     mocks.hasPermission.mockResolvedValue(true);
 
     await expect(assertUserCanImportFromEngine('user-1', 'engine-1')).resolves.toBeUndefined();
@@ -151,7 +141,6 @@ describe('engine import service', () => {
 
   it('previews import counts and file metadata without returning XML', async () => {
     mocks.findOne.mockResolvedValue({ id: 'engine-1' });
-    mocks.hasEngineAccess.mockResolvedValue(false);
     mocks.hasPermission.mockResolvedValue(true);
     mocks.camundaGet.mockImplementation(async (_engineId: string, path: string) => {
       if (path === '/process-definition') {
