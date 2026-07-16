@@ -90,7 +90,12 @@ const ASSIGNMENT_PRINCIPAL_TYPE_LABELS: Record<AuthzPrincipalType, string> = {
 
 interface EngineMembersModalProps {
   open: boolean
-  engine: { id: string; name: string } | null
+  engine: {
+    id: string
+    name: string
+    delegateId?: string | null
+    governance?: { accountableOwnerId: string | null; delegateId: string | null }
+  } | null
   canManage: boolean
   engineAccessAuthority?: 'manual' | 'transition_to_sso' | 'sso_managed'
   canViewMembers?: boolean
@@ -126,8 +131,13 @@ function isGovernanceEngineMember(member: EngineMember | null | undefined): bool
   return ENGINE_GOVERNANCE_MEMBER_ROLES.has(String(member?.role || ''))
 }
 
-function isDelegateEngineMember(member: EngineMember | null | undefined): boolean {
-  return String(member?.role || '') === 'delegate'
+export function isCurrentEngineDelegate(
+  engine: EngineMembersModalProps['engine'],
+  member: EngineMember | null | undefined,
+): boolean {
+  if (!engine || !member) return false
+  const delegateId = engine.governance?.delegateId ?? engine.delegateId ?? null
+  return delegateId === member.userId
 }
 
 function isOperatorEngineMember(member: EngineMember | null | undefined): boolean {
@@ -1025,7 +1035,7 @@ export default function EngineMembersModal({
                                             onClick={() => pendingInvite && reissuePendingInviteM.mutate(pendingInvite)}
                                           />
                                         </GuardedOverflowMenu>
-                                      ) : canAssignDelegate && isDelegateEngineMember(member) && member ? (
+                                      ) : canAssignDelegate && isCurrentEngineDelegate(engine, member) ? (
                                         <GuardedOverflowMenu size="sm" flipped iconDescription="Options">
                                           <GuardedOverflowMenuItem itemText="Remove delegate" isDelete hasDivider onClick={() => assignDelegateM.mutate(null)} />
                                         </GuardedOverflowMenu>

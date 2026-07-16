@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import EngineMembersModal from '@src/features/mission-control/engines/components/EngineMembersModal';
+import EngineMembersModal, { isCurrentEngineDelegate } from '@src/features/mission-control/engines/components/EngineMembersModal';
 import { apiClient } from '@src/shared/api/client';
 
 vi.mock('@carbon/react', async () => {
@@ -260,6 +260,29 @@ describe('EngineMembersModal', () => {
     expect(await screen.findByText('Delegate User')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^options$/i })).toBeNull();
     expect(screen.queryByText('Remove delegate')).toBeNull();
+  });
+
+  it('uses engine governance metadata rather than the member display role to identify the removable delegate', () => {
+    const operatorMember = {
+      id: 'member-operator',
+      engineId: 'engine-1',
+      userId: 'user-delegate',
+      role: 'operator' as const,
+      grantedAt: 1,
+      user: null,
+    };
+    const delegateDisplayMember = { ...operatorMember, userId: 'user-other', role: 'delegate' as const };
+
+    expect(isCurrentEngineDelegate({
+      id: 'engine-1',
+      name: 'Dev Engine',
+      governance: { accountableOwnerId: 'user-owner', delegateId: 'user-delegate' },
+    }, operatorMember)).toBe(true);
+    expect(isCurrentEngineDelegate({
+      id: 'engine-1',
+      name: 'Dev Engine',
+      governance: { accountableOwnerId: 'user-owner', delegateId: 'user-delegate' },
+    }, delegateDisplayMember)).toBe(false);
   });
 
   it('assigns scoped group access through the role assignments API', async () => {
