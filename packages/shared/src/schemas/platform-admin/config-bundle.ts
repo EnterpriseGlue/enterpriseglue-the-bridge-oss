@@ -71,6 +71,131 @@ export const ConfigBundleIdentityReconciliationModeSchema = z.enum(['none', 'pre
 export const ConfigBundleIdentitySnapshotStatusSchema = z.enum(['not_needed', 'skipped', 'previewed', 'completed', 'truncated', 'failed']);
 export const ConfigBundleRuntimeReconciliationStatusSchema = z.enum(['not_needed', 'queued', 'completed', 'failed']);
 
+/**
+ * Transport envelope accepted by the preview, diff, secret-preflight, and
+ * archive-import routes. Semantic validation intentionally remains in the
+ * compiler so every entry point gets the same diagnostics.
+ */
+export const ConfigBundleRequestSchema = z.object({
+  bundle: z.unknown(),
+  files: z.record(z.string(), z.unknown()),
+}).strict();
+
+export const ConfigBundleValidationIssueSchema = z.object({
+  path: z.string(),
+  message: z.string(),
+  severity: z.literal('error'),
+  remediation: z.string(),
+  objectKey: z.string().optional(),
+});
+
+export const ConfigBundleRoleTemplateBaselineSchema = z.object({
+  copyFromRoleKey: z.string(),
+  fingerprint: z.string(),
+  permissions: z.array(z.string()),
+});
+
+/** Shared sanitized result of an in-memory config compilation. */
+export const ConfigBundlePreviewResponseSchema = z.object({
+  valid: z.boolean(),
+  canonicalHash: z.string().optional(),
+  errors: z.array(ConfigBundleValidationIssueSchema),
+  counts: z.record(z.string(), z.number().int().nonnegative()),
+  expandedRolePermissions: z.record(z.string(), z.array(z.string())).optional(),
+  roleTemplateBaselines: z.record(z.string(), ConfigBundleRoleTemplateBaselineSchema).optional(),
+});
+
+export const ConfigBundleSecretReferenceStatusSchema = z.object({
+  reference: z.string(),
+  locations: z.array(z.string()),
+  available: z.boolean(),
+  reason: z.enum([
+    'file_provider_not_configured',
+    'file_outside_root',
+    'file_unavailable',
+    'environment_variable_missing',
+  ]).optional(),
+});
+
+/** Secret availability only; this response must never contain secret bytes. */
+export const ConfigBundleSecretPreflightResponseSchema = z.object({
+  valid: z.boolean(),
+  canonicalHash: z.string().optional(),
+  availabilityHash: z.string().optional(),
+  available: z.boolean(),
+  errors: z.array(ConfigBundleValidationIssueSchema),
+  references: z.array(ConfigBundleSecretReferenceStatusSchema),
+});
+
+export const ConfigBundleDiffOperationSchema = z.enum(['create', 'update', 'noop', 'archive', 'conflict']);
+export const ConfigBundleDiffObjectTypeSchema = z.enum([
+  'role', 'group', 'engine', 'engine_set', 'runtime_resource_set',
+  'identity_provider', 'identity_mapping', 'project_engine_target', 'assignment',
+]);
+const ConfigBundleRuntimeResourceReferenceSchema = z.object({
+  resourceKind: z.string(),
+  resourceKey: z.string(),
+  runtimeTenantId: z.string().nullable(),
+});
+
+export const ConfigBundleDiffChangeSchema = z.object({
+  objectType: ConfigBundleDiffObjectTypeSchema,
+  key: z.string(),
+  operation: ConfigBundleDiffOperationSchema,
+  reason: z.string(),
+  currentId: z.string().optional(),
+  permissionChanges: z.object({
+    additions: z.array(z.string()),
+    removals: z.array(z.string()),
+    effectivePermissions: z.array(z.string()),
+  }).optional(),
+  affectedAssignmentCount: z.number().int().nonnegative().optional(),
+  runtimeResourceChanges: z.object({
+    matchedCount: z.number().int().nonnegative(),
+    unmatchedCount: z.number().int().nonnegative(),
+    currentlyMaterialized: z.array(ConfigBundleRuntimeResourceReferenceSchema),
+    newlyMatched: z.array(ConfigBundleRuntimeResourceReferenceSchema),
+    noLongerMatched: z.array(ConfigBundleRuntimeResourceReferenceSchema),
+    unmatchedSelectors: z.array(z.string()),
+    detailsTruncated: z.boolean(),
+  }).optional(),
+  identitySnapshotPreview: z.object({
+    scanned: z.number().int().nonnegative(),
+    matches: z.number().int().nonnegative(),
+    nonMatches: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+    latestSnapshotAt: z.number().nullable(),
+    warnings: z.array(z.string()),
+  }).optional(),
+});
+
+export const ConfigBundleDiffWarningSchema = z.object({
+  id: z.string(),
+  message: z.string(),
+  acknowledgementId: z.string().optional(),
+});
+
+export const ConfigBundleDiffResponseSchema = ConfigBundlePreviewResponseSchema.extend({
+  changes: z.array(ConfigBundleDiffChangeSchema),
+  warnings: z.array(ConfigBundleDiffWarningSchema),
+  requiredAcknowledgements: z.array(z.string()),
+  affectedPrincipals: z.object({
+    affectedGroupCount: z.number().int().nonnegative(),
+    affectedUserCount: z.number().int().nonnegative(),
+    externalIdentityMappingChangeCount: z.number().int().nonnegative(),
+  }),
+});
+
+export const ConfigBundleApplyRequestSchema = ConfigBundleRequestSchema.extend({
+  expectedPreviewHash: z.string().min(1),
+  expectedSecretPreflightHash: z.string().min(1).max(255).optional(),
+  acknowledgements: z.array(z.string().min(1).max(500)).max(100).optional(),
+  idempotencyKey: z.string().min(8).max(160).optional(),
+  expectedTenantScope: z.string().min(1).max(255).optional(),
+  identityReconciliationMode: ConfigBundleIdentityReconciliationModeSchema.optional(),
+});
+
 export const ConfigBundleIdentitySnapshotSchema = z.object({
   mode: ConfigBundleIdentityReconciliationModeSchema,
   status: ConfigBundleIdentitySnapshotStatusSchema,
@@ -110,7 +235,7 @@ export const ConfigBundleApplyResultSchema = z.object({
   created: z.number().int().nonnegative(),
   updated: z.number().int().nonnegative(),
   archived: z.number().int().nonnegative(),
-  changes: z.array(ConfigBundleApplyRunChangeSchema),
+  changes: z.array(ConfigBundleDiffChangeSchema),
   reconciliation: ConfigBundleApplyReconciliationSchema,
   idempotent: z.boolean().optional(),
   applyRunId: z.string().optional(),
@@ -132,7 +257,7 @@ export const ConfigBundleApplyRunSchema = z.object({
   archived: z.number().int().nonnegative().optional(),
   reconciliation: ConfigBundleApplyReconciliationSchema.optional(),
   mode: ConfigBundleModeSchema.nullable().optional(),
-  changes: z.array(ConfigBundleApplyRunChangeSchema).optional(),
+  changes: z.array(ConfigBundleDiffChangeSchema).optional(),
   bootstrap: ConfigBundleBootstrapStatusSchema.optional(),
 });
 
@@ -541,6 +666,15 @@ export const IdentityMockFixturesSchema = z.object({
 }).strict();
 
 export type EnterpriseGlueConfigBundle = z.infer<typeof EnterpriseGlueConfigBundleSchema>;
+export type ConfigBundleRequest = z.infer<typeof ConfigBundleRequestSchema>;
+export type ConfigBundleApplyRequest = z.infer<typeof ConfigBundleApplyRequestSchema>;
+export type ConfigBundleValidationIssue = z.infer<typeof ConfigBundleValidationIssueSchema>;
+export type ConfigBundlePreviewResponse = z.infer<typeof ConfigBundlePreviewResponseSchema>;
+export type ConfigBundleSecretReferenceStatus = z.infer<typeof ConfigBundleSecretReferenceStatusSchema>;
+export type ConfigBundleSecretPreflightResponse = z.infer<typeof ConfigBundleSecretPreflightResponseSchema>;
+export type ConfigBundleDiffChange = z.infer<typeof ConfigBundleDiffChangeSchema>;
+export type ConfigBundleDiffWarning = z.infer<typeof ConfigBundleDiffWarningSchema>;
+export type ConfigBundleDiffResponse = z.infer<typeof ConfigBundleDiffResponseSchema>;
 export type ConfigBundleSettings = z.infer<typeof ConfigBundleSettingsSchema>;
 export type ConfigBundleBootstrapStatus = z.infer<typeof ConfigBundleBootstrapStatusSchema>;
 export type ConfigBundleIdentityReconciliationMode = z.infer<typeof ConfigBundleIdentityReconciliationModeSchema>;

@@ -17,19 +17,7 @@ import { configBundleRuntimeReconciliationTaskService } from '@enterpriseglue/sh
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
-
-const configBundlePreviewSchema = z.object({
-  bundle: z.unknown(),
-  files: z.record(z.string(), z.unknown()),
-});
-const configBundleApplySchema = configBundlePreviewSchema.extend({
-  expectedPreviewHash: z.string().min(1),
-  expectedSecretPreflightHash: z.string().min(1).max(255).optional(),
-  acknowledgements: z.array(z.string().min(1).max(500)).max(100).optional(),
-  idempotencyKey: z.string().min(8).max(160).optional(),
-  expectedTenantScope: z.string().min(1).max(255).optional(),
-  identityReconciliationMode: z.enum(['none', 'preview', 'apply']).optional(),
-});
+import { ConfigBundleApplyRequestSchema, ConfigBundleRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
 function configBundleRunResponse(row: ConfigBundleApplyRun): Record<string, unknown> {
   let result: Record<string, unknown> = {};
@@ -75,13 +63,13 @@ export function registerConfigBundleRoutes(
     res.json(payload);
   }));
 
-  router.post('/api/authz/config-bundles/preview', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/preview', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(ConfigBundleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     const settings = await platformSettingsService.get();
     const preview = configBundlePreviewService.preview(req.body, settings);
     res.status(preview.valid ? 200 : 422).json(preview);
   }));
 
-  router.post('/api/authz/config-bundles/validate-secret-refs', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/validate-secret-refs', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(ConfigBundleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     const settings = await platformSettingsService.get();
     const preflight = configBundleSecretPreflightService.check(req.body, settings);
     await logAudit({
@@ -101,13 +89,13 @@ export function registerConfigBundleRoutes(
     res.status(preflight.valid ? 200 : 422).json(preflight);
   }));
 
-  router.post('/api/authz/config-bundles/diff', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(configBundlePreviewSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/diff', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(ConfigBundleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     const settings = await platformSettingsService.get();
     const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null, settings);
     res.status(diff.valid ? 200 : 422).json(diff);
   }));
 
-  router.post('/api/authz/config-bundles/apply', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.apply'), configBundleJsonPayloadLimit, validateBody(configBundleApplySchema), requireTargetTransferAccess, asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/apply', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.apply'), configBundleJsonPayloadLimit, validateBody(ConfigBundleApplyRequestSchema), requireTargetTransferAccess, asyncHandler(async (req: Request, res: Response) => {
     const actorId = req.apiClient?.createdById || req.apiClient?.id || req.user!.userId;
     const settings = await platformSettingsService.get();
     const result = await configBundleApplyService.apply({

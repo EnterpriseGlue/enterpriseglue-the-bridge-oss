@@ -1778,6 +1778,11 @@ const {
   EngineRuntimeAuthorizationModeSchema,
   UnsupportedEngineRuntimeAuthorizationModeErrorSchema,
   EnterpriseGlueConfigBundleSchema,
+  ConfigBundleApplyRequestSchema,
+  ConfigBundleApplyResultSchema,
+  ConfigBundleApplyRunSchema,
+  ConfigBundleDiffChangeSchema,
+  ConfigBundleDiffResponseSchema,
   ConfigEngineSchema,
   ConfigAssignmentsFileSchema,
   ConfigEnginesFileSchema,
@@ -1788,6 +1793,9 @@ const {
   ConfigProjectEngineTargetsFileSchema,
   ConfigRolesFileSchema,
   ConfigRuntimeResourceSetsFileSchema,
+  ConfigBundlePreviewResponseSchema,
+  ConfigBundleSecretPreflightResponseSchema,
+  ConfigBundleValidationIssueSchema,
   LegacyGlobalMappingRetirementRequestSchema,
   LegacyMappingCoverageItemSchema,
   LegacyMappingCoverageVerifyRequestSchema,
@@ -3549,153 +3557,14 @@ const ConfigBundleRequestOpenApiSchema = z.object({
   files: ConfigBundleFilesOpenApiSchema,
 });
 
-const ConfigBundleValidationIssueOpenApiSchema = z.object({
-  path: z.string(),
-  message: z.string(),
-  severity: z.literal('error'),
-  remediation: z.string(),
-  objectKey: z.string().optional(),
-});
-
-const ConfigBundlePreviewResponseOpenApiSchema = z.object({
-  valid: z.boolean(),
-  canonicalHash: z.string().optional(),
-  errors: z.array(ConfigBundleValidationIssueOpenApiSchema),
-  counts: z.record(z.string(), z.number().int().nonnegative()),
-  expandedRolePermissions: z.record(z.string(), z.array(z.string())).optional(),
-  roleTemplateBaselines: z.record(z.string(), z.object({ copyFromRoleKey: z.string(), fingerprint: z.string(), permissions: z.array(z.string()) })).optional(),
-});
-
-const ConfigBundleSecretPreflightResponseOpenApiSchema = z.object({
-  valid: z.boolean(),
-  canonicalHash: z.string().optional(),
-  availabilityHash: z.string().optional(),
-  available: z.boolean(),
-  errors: z.array(ConfigBundleValidationIssueOpenApiSchema),
-  references: z.array(z.object({
-    reference: z.string(),
-    locations: z.array(z.string()),
-    available: z.boolean(),
-    reason: z.enum(['file_provider_not_configured', 'file_outside_root', 'file_unavailable', 'environment_variable_missing']).optional(),
-  })),
-});
-
-const ConfigBundleDiffChangeOpenApiSchema = z.object({
-  objectType: z.enum(['role', 'group', 'engine', 'engine_set', 'runtime_resource_set', 'identity_provider', 'identity_mapping', 'project_engine_target', 'assignment']),
-  key: z.string(),
-  operation: z.enum(['create', 'update', 'noop', 'archive', 'conflict']),
-  reason: z.string(),
-  currentId: z.string().optional(),
-  permissionChanges: z.object({
-    additions: z.array(z.string()),
-    removals: z.array(z.string()),
-    effectivePermissions: z.array(z.string()),
-  }).optional(),
-  affectedAssignmentCount: z.number().int().nonnegative().optional(),
-  runtimeResourceChanges: z.object({
-    matchedCount: z.number().int().nonnegative(),
-    unmatchedCount: z.number().int().nonnegative(),
-    currentlyMaterialized: z.array(z.object({ resourceKind: z.string(), resourceKey: z.string(), runtimeTenantId: z.string().nullable() })),
-    newlyMatched: z.array(z.object({ resourceKind: z.string(), resourceKey: z.string(), runtimeTenantId: z.string().nullable() })),
-    noLongerMatched: z.array(z.object({ resourceKind: z.string(), resourceKey: z.string(), runtimeTenantId: z.string().nullable() })),
-    unmatchedSelectors: z.array(z.string()),
-    detailsTruncated: z.boolean(),
-  }).optional(),
-  identitySnapshotPreview: z.object({ scanned: z.number().int().nonnegative(), matches: z.number().int().nonnegative(), nonMatches: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), truncated: z.boolean(), latestSnapshotAt: z.number().nullable(), warnings: z.array(z.string()) }).optional(),
-});
-
-const ConfigBundleDiffResponseOpenApiSchema = ConfigBundlePreviewResponseOpenApiSchema.extend({
-  changes: z.array(ConfigBundleDiffChangeOpenApiSchema),
-  warnings: z.array(z.object({ id: z.string(), message: z.string(), acknowledgementId: z.string().optional() })),
-  requiredAcknowledgements: z.array(z.string()),
-  affectedPrincipals: z.object({
-    affectedGroupCount: z.number().int().nonnegative(),
-    affectedUserCount: z.number().int().nonnegative(),
-    externalIdentityMappingChangeCount: z.number().int().nonnegative(),
-  }),
-});
-
-const ConfigBundleApplyRequestOpenApiSchema = ConfigBundleRequestOpenApiSchema.extend({
-  expectedPreviewHash: z.string().min(1),
-  expectedSecretPreflightHash: z.string().min(1).max(255).optional(),
-  acknowledgements: z.array(z.string()).max(100).optional(),
-  idempotencyKey: z.string().min(8).max(160).optional(),
-  expectedTenantScope: z.string().min(1).max(255).optional(),
-  identityReconciliationMode: z.enum(['none', 'preview', 'apply']).optional(),
-});
-
-const ConfigBundleApplyResponseOpenApiSchema = z.object({
-  canonicalHash: z.string(),
-  created: z.number().int().nonnegative(),
-  updated: z.number().int().nonnegative(),
-  archived: z.number().int().nonnegative(),
-  changes: z.array(ConfigBundleDiffChangeOpenApiSchema),
-  reconciliation: z.object({
-    status: z.literal('completed'),
-    engineSetCount: z.number().int().nonnegative(),
-    runtimeResourceSetCount: z.number().int().nonnegative(),
-    engineCount: z.number().int().nonnegative(),
-    identitySnapshot: z.object({
-      mode: z.enum(['none', 'preview', 'apply']),
-      status: z.enum(['not_needed', 'skipped', 'previewed', 'completed', 'truncated', 'failed']),
-      providerCount: z.number().int().nonnegative(),
-      scanned: z.number().int().nonnegative(),
-      created: z.number().int().nonnegative(),
-      removed: z.number().int().nonnegative(),
-      failed: z.number().int().nonnegative(),
-    }),
-    runtimeReconciliation: z.object({
-      status: z.enum(['not_needed', 'queued', 'completed', 'failed']),
-      taskId: z.string().nullable(),
-      engineSetCount: z.number().int().nonnegative(),
-      runtimeResourceSetCount: z.number().int().nonnegative(),
-      engineCount: z.number().int().nonnegative(),
-    }),
-  }),
-  idempotent: z.boolean().optional(),
-  applyRunId: z.string().optional(),
-});
-
-const ConfigBundleApplyRunOpenApiSchema = z.object({
-  id: z.string(),
-  bundleKey: z.string(),
-  bundleApiVersion: z.string().nullable(),
-  idempotencyKey: z.string().nullable(),
-  actorId: z.string().nullable(),
-  status: z.enum(['pending', 'succeeded', 'failed']),
-  errorMessage: z.string().nullable(),
-  completedAt: z.number().nullable(),
-  createdAt: z.number(),
-  canonicalHash: z.string().optional(),
-  created: z.number().int().nonnegative().optional(),
-  updated: z.number().int().nonnegative().optional(),
-  archived: z.number().int().nonnegative().optional(),
-  reconciliation: z.object({
-    status: z.literal('completed'),
-    engineSetCount: z.number().int().nonnegative(),
-    runtimeResourceSetCount: z.number().int().nonnegative(),
-    engineCount: z.number().int().nonnegative(),
-    identitySnapshot: z.object({
-      mode: z.enum(['none', 'preview', 'apply']),
-      status: z.enum(['not_needed', 'skipped', 'previewed', 'completed', 'truncated', 'failed']),
-      providerCount: z.number().int().nonnegative(),
-      scanned: z.number().int().nonnegative(),
-      created: z.number().int().nonnegative(),
-      removed: z.number().int().nonnegative(),
-      failed: z.number().int().nonnegative(),
-    }),
-    runtimeReconciliation: z.object({
-      status: z.enum(['not_needed', 'queued', 'completed', 'failed']),
-      taskId: z.string().nullable(),
-      engineSetCount: z.number().int().nonnegative(),
-      runtimeResourceSetCount: z.number().int().nonnegative(),
-      engineCount: z.number().int().nonnegative(),
-    }),
-  }).optional(),
-  mode: z.enum(['additive', 'authoritative', 'preview_only']).nullable().optional(),
-  changes: z.array(ConfigBundleDiffChangeOpenApiSchema).optional(),
-  bootstrap: ConfigBootstrapStatusOpenApiSchema.optional(),
-});
+const ConfigBundleValidationIssueOpenApiSchema = ConfigBundleValidationIssueSchema;
+const ConfigBundlePreviewResponseOpenApiSchema = ConfigBundlePreviewResponseSchema;
+const ConfigBundleSecretPreflightResponseOpenApiSchema = ConfigBundleSecretPreflightResponseSchema;
+const ConfigBundleDiffChangeOpenApiSchema = ConfigBundleDiffChangeSchema;
+const ConfigBundleDiffResponseOpenApiSchema = ConfigBundleDiffResponseSchema;
+const ConfigBundleApplyRequestOpenApiSchema = ConfigBundleApplyRequestSchema;
+const ConfigBundleApplyResponseOpenApiSchema = ConfigBundleApplyResultSchema;
+const ConfigBundleApplyRunOpenApiSchema = ConfigBundleApplyRunSchema;
 
 // POST /api/authz/check
 registry.registerPath({

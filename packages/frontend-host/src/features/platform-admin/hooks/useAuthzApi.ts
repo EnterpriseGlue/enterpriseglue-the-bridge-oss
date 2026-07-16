@@ -102,10 +102,14 @@ import type {
   ConfigBundleApplyRun,
   ConfigBundleApplyRunChange,
   ConfigBundleBootstrapStatus,
+  ConfigBundleDiffChange,
+  ConfigBundleDiffResponse,
   ConfigBundleIdentityReplayTask,
   ConfigBundleIdentitySnapshot,
+  ConfigBundlePreviewResponse,
   ConfigBundleRuntimeReconciliation,
   ConfigBundleRuntimeReconciliationTask,
+  ConfigBundleSecretPreflightResponse,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import type {
   IdentityProviderAuthenticationMode,
@@ -121,10 +125,14 @@ export type {
   ConfigBundleApplyRun,
   ConfigBundleApplyRunChange,
   ConfigBundleBootstrapStatus,
+  ConfigBundleDiffChange,
+  ConfigBundleDiffResponse,
   ConfigBundleIdentityReplayTask,
   ConfigBundleIdentitySnapshot,
+  ConfigBundlePreviewResponse,
   ConfigBundleRuntimeReconciliation,
   ConfigBundleRuntimeReconciliationTask,
+  ConfigBundleSecretPreflightResponse,
 };
 
 // Types

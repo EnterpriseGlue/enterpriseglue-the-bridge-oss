@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type ConfigBundleDiffChange,
   filterConfigBundleChanges,
   formatConfigBundleObjectType,
   getConfigBundleEffectiveAccessHref,
@@ -8,11 +9,11 @@ import {
   groupConfigBundleChangesByObjectType,
 } from '@src/features/platform-admin/components/configBundleDiff';
 
-const changes = [
+const changes: ConfigBundleDiffChange[] = [
   { objectType: 'role', key: 'role.deployers', operation: 'create', reason: 'New config role' },
   { objectType: 'engine', key: 'engine.shared', operation: 'update', reason: 'Changed labels' },
   { objectType: 'group', key: 'group.legacy', operation: 'archive', reason: 'Removed from bundle' },
-  { objectType: 'target', key: 'payments-prod', operation: 'conflict', reason: 'Manual target already exists' },
+  { objectType: 'project_engine_target', key: 'payments-prod', operation: 'conflict', reason: 'Manual target already exists' },
 ];
 
 describe('ConfigurationBundleSettingsTab diff helpers', () => {
@@ -41,8 +42,8 @@ describe('ConfigurationBundleSettingsTab diff helpers', () => {
     expect(groupConfigBundleChangesByObjectType(changes).map((group) => [group.objectType, group.changes.length])).toEqual([
       ['engine', 1],
       ['group', 1],
+      ['project_engine_target', 1],
       ['role', 1],
-      ['target', 1],
     ]);
   });
 

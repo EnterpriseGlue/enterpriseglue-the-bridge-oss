@@ -1,26 +1,6 @@
-export type ConfigBundleDiffChange = {
-  objectType: string;
-  key: string;
-  operation: string;
-  reason: string;
-  currentId?: string;
-  permissionChanges?: {
-    additions: string[];
-    removals: string[];
-    effectivePermissions: string[];
-  };
-  affectedAssignmentCount?: number;
-  runtimeResourceChanges?: {
-    matchedCount: number;
-    unmatchedCount: number;
-    currentlyMaterialized: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
-    newlyMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
-    noLongerMatched: Array<{ resourceKind: string; resourceKey: string; runtimeTenantId: string | null }>;
-    unmatchedSelectors: string[];
-    detailsTruncated: boolean;
-  };
-  identitySnapshotPreview?: { scanned: number; matches: number; nonMatches: number; failed: number; truncated: boolean; latestSnapshotAt: number | null; warnings: string[] };
-};
+import type { ConfigBundleDiffChange as SharedConfigBundleDiffChange } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
+
+export type ConfigBundleDiffChange = SharedConfigBundleDiffChange;
 
 const effectiveAccessResourceTypes: Record<string, string> = {
   engine: 'engine',

@@ -14,7 +14,10 @@ import {
 } from '../hooks/useAuthzApi';
 import type {
   ConfigBundleApplyResult,
+  ConfigBundleDiffResponse,
   ConfigBundleIdentitySnapshot,
+  ConfigBundlePreviewResponse,
+  ConfigBundleSecretPreflightResponse,
 } from '../hooks/useAuthzApi';
 import {
   filterConfigBundleChanges,
@@ -27,11 +30,6 @@ import {
   type ConfigBundleDiffChange,
 } from './configBundleDiff';
 
-type ConfigBundleValidationIssue = { path: string; message: string; severity: 'error'; remediation: string; objectKey?: string };
-type Preview = { valid: boolean; canonicalHash?: string; errors: ConfigBundleValidationIssue[]; counts: Record<string, number>; roleTemplateBaselines?: Record<string, { copyFromRoleKey: string; fingerprint: string; permissions: string[] }> };
-type DiffWarning = { id: string; message: string; acknowledgementId?: string };
-type Diff = Preview & { changes: ConfigBundleDiffChange[]; warnings: DiffWarning[]; requiredAcknowledgements: string[]; affectedPrincipals: { affectedGroupCount: number; affectedUserCount: number; externalIdentityMappingChangeCount: number } };
-type SecretPreflight = { valid: boolean; canonicalHash?: string; availabilityHash?: string; available: boolean; errors: ConfigBundleValidationIssue[]; references: Array<{ reference: string; locations: string[]; available: boolean; reason?: string }> };
 const placeholder = '{\n  "bundle": {\n    "apiVersion": "enterpriseglue.ai/v1alpha1",\n    "kind": "EnterpriseGlueConfigBundle",\n    "metadata": { "key": "example.authz", "owner": "platform" },\n    "tenantKey": "default",\n    "mode": "preview_only",\n    "settings": {},\n    "imports": ["./groups.json"]\n  },\n  "files": { "./groups.json": { "groups": [] } }\n}';
 const ciCommand = `export ENTERPRISEGLUE_API_URL="https://enterpriseglue.example"\nexport ENTERPRISEGLUE_API_TOKEN="$EG_CONFIG_TOKEN"\nexport ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE="<tenant-id>"\n\npnpm authz:config preview ./enterpriseglue-config.json\npnpm authz:config apply ./enterpriseglue-config.json`;
 
@@ -68,9 +66,9 @@ export default function ConfigurationBundleSettingsTab() {
   const applyAccess = useActionDecision('platform.config-bundles.apply', resource);
   const exportAccess = useActionDecision('platform.config-bundles.export', resource);
   const [source, setSource] = useState(placeholder);
-  const [preview, setPreview] = useState<Preview | null>(null);
-  const [diff, setDiff] = useState<Diff | null>(null);
-  const [secretPreflight, setSecretPreflight] = useState<SecretPreflight | null>(null);
+  const [preview, setPreview] = useState<ConfigBundlePreviewResponse | null>(null);
+  const [diff, setDiff] = useState<ConfigBundleDiffResponse | null>(null);
+  const [secretPreflight, setSecretPreflight] = useState<ConfigBundleSecretPreflightResponse | null>(null);
   const [applyResult, setApplyResult] = useState<ConfigBundleApplyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'preview' | 'preflight' | 'apply' | null>(null);
@@ -101,7 +99,7 @@ export default function ConfigurationBundleSettingsTab() {
   };
   const previewBundle = async () => {
     setBusy('preview'); setError(null); setCiCommandCopied(false);
-    try { const input = parse(); const [nextPreview, nextDiff] = await Promise.all([apiClient.post<Preview>('/api/authz/config-bundles/preview', input), apiClient.post<Diff>('/api/authz/config-bundles/diff', input)]); setPreview(nextPreview); setDiff(nextDiff); setAcknowledgements([]); setApplyIdempotencyKey(nextPreview.valid ? crypto.randomUUID() : null); }
+    try { const input = parse(); const [nextPreview, nextDiff] = await Promise.all([apiClient.post<ConfigBundlePreviewResponse>('/api/authz/config-bundles/preview', input), apiClient.post<ConfigBundleDiffResponse>('/api/authz/config-bundles/diff', input)]); setPreview(nextPreview); setDiff(nextDiff); setAcknowledgements([]); setApplyIdempotencyKey(nextPreview.valid ? crypto.randomUUID() : null); }
     catch (value) { setError(parseApiError(value, 'Configuration preview failed').message); setPreview(null); setDiff(null); }
     finally { setBusy(null); }
   };
@@ -126,7 +124,7 @@ export default function ConfigurationBundleSettingsTab() {
   };
   const preflightSecrets = async () => {
     setBusy('preflight'); setError(null);
-    try { setSecretPreflight(await apiClient.post<SecretPreflight>('/api/authz/config-bundles/validate-secret-refs', parse())); }
+    try { setSecretPreflight(await apiClient.post<ConfigBundleSecretPreflightResponse>('/api/authz/config-bundles/validate-secret-refs', parse())); }
     catch (value) { setError(parseApiError(value, 'Secret reference validation failed').message); setSecretPreflight(null); }
     finally { setBusy(null); }
   };
