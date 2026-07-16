@@ -35,7 +35,7 @@ export function classifyIdentityProviderFailure(
         : /credential|bind password|client secret|certificate reference/.test(normalized) ? 'invalid_credentials'
           : /signature|audience|recipient|nonce|signing key|jwt|id token|issuer/.test(normalized) ? 'invalid_signature'
             : /subject.*required|nameid|email address|did not include a dn/.test(normalized) ? 'missing_subject'
-              : /unavailable|failed \([45]\d\d\)|fetch failed|certificate verification|network|search failed/.test(normalized) ? 'provider_unavailable'
+              : /unavailable|failed \([45]\d\d\)|fetch failed|certificate verification|network|search failed|\breferral\b/.test(normalized) ? 'provider_unavailable'
                 : fallback;
   return new IdentityProviderFailure(code, message, { cause: error });
 }

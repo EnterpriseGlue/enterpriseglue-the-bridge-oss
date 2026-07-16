@@ -192,6 +192,20 @@ describe('direct LDAP identity service', () => {
       .rejects.toThrow('did not include a DN');
   });
 
+  it('fails closed when a directory returns an LDAP referral', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    const client = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn().mockRejectedValue(new Error('LDAP referral received from directory')),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => client);
+
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', testUserPassword))
+      .rejects.toMatchObject({ code: 'provider_unavailable' });
+    expect(client.unbind).toHaveBeenCalledOnce();
+  });
+
   it('classifies rejected service and user binds without exposing LDAP protocol details', async () => {
     process.env.LDAP_BIND_SECRET = serviceBindPassword;
     const rejectedServiceClient = {
