@@ -9,50 +9,25 @@ import type {
   EnvironmentTag as SharedEnvironmentTag,
   UpdateEnvironmentTag,
 } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js';
+import type {
+  AccessAuthorityMode,
+  EngineOnboardingMode,
+  EngineRuntimeAuthorizationMode,
+  PlatformSettings,
+  ProjectEngineTargetPolicyMode,
+  UpdatePlatformSettings,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+
+export type {
+  AccessAuthorityMode,
+  EngineOnboardingMode,
+  EngineRuntimeAuthorizationMode,
+  PlatformSettings,
+  ProjectEngineTargetPolicyMode,
+};
 
 // Types
-export type EngineOnboardingMode = 'manual_allowed' | 'external_only' | 'hybrid';
-export type ProjectEngineTargetPolicyMode = 'manual_allowed' | 'external_only' | 'hybrid';
-export type AccessAuthorityMode = 'manual' | 'transition_to_sso' | 'sso_managed';
-export type EngineRuntimeAuthorizationMode = 'enterpriseglue_authoritative';
-
 export type EnvironmentTag = SharedEnvironmentTag;
-
-export interface PlatformSettings {
-  defaultEnvironmentTagId: string | null;
-  syncPushEnabled: boolean;
-  syncPullEnabled: boolean;
-  gitProjectTokenSharingEnabled: boolean;
-  defaultDeployRoles: string[];
-  engineOnboardingMode: EngineOnboardingMode;
-  projectEngineTargetMode: ProjectEngineTargetPolicyMode;
-  engineAccessAuthority: AccessAuthorityMode;
-  projectAccessAuthority: AccessAuthorityMode;
-  engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationMode;
-  credentiallessCustomerSidecarsEnabled: boolean;
-  inviteAllowAllDomains: boolean;
-  inviteAllowedDomains: string[];
-  ssoAutoRedirectSingleProvider: boolean;
-  ssoAllEnginesAssignmentMappingsEnabled: boolean;
-  ssoEngineOwnerAssignmentMappingsEnabled: boolean;
-  ssoEngineDelegateAssignmentMappingsEnabled: boolean;
-  ssoRegexClaimMappingsEnabled: boolean;
-  ssoBroadEntitlementMappingsEnabled: boolean;
-  ssoSecretViewMappingsEnabled: boolean;
-  ssoUnredactedAuditMappingsEnabled: boolean;
-  ssoPermanentDeleteMappingsEnabled: boolean;
-  piiRegexEnabled: boolean;
-  piiExternalProviderEnabled: boolean;
-  piiExternalProviderType: 'presidio' | 'gcp_dlp' | 'aws_comprehend' | 'azure_pii' | null;
-  piiExternalProviderEndpoint: string | null;
-  piiExternalProviderAuthHeader: string | null;
-  piiExternalProviderAuthToken: string | null;
-  piiExternalProviderProjectId: string | null;
-  piiExternalProviderRegion: string | null;
-  piiRedactionStyle: string;
-  piiScopes: Array<'processDetails' | 'history' | 'logs' | 'errors' | 'audit'>;
-  piiMaxPayloadSizeBytes: number;
-}
 
 export interface UserListItem {
   id: string;
@@ -92,7 +67,7 @@ export const platformAdminApi = {
   getSettings: () =>
     apiClient.get<PlatformSettings>('/api/admin/settings'),
 
-  updateSettings: (data: Partial<PlatformSettings>) =>
+  updateSettings: (data: UpdatePlatformSettings) =>
     apiClient.put<{ success: boolean }>('/api/admin/settings', data),
 
   // Environment Tags
