@@ -17,7 +17,7 @@ import {
 import { ssoAssignmentMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoAssignmentMappingService.js';
 import { ssoGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.js';
 import { ssoProviderIdentityCheckService } from '@enterpriseglue/shared/services/platform-admin/SsoProviderIdentityCheckService.js';
-import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
+import { setSsoSyncDiagnosticsClockForTest, ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
 import { IdentityProviderFailure } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderFailure.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -67,6 +67,7 @@ function createSnapshotRepositoryMock(snapshot: { id: string; details: string } 
 describe('ssoSyncDiagnosticsService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setSsoSyncDiagnosticsClockForTest();
     (ssoAssignmentMappingService.getDisabledPlatformRiskReasonsForMapping as unknown as Mock).mockResolvedValue([]);
   });
 
@@ -145,6 +146,34 @@ describe('ssoSyncDiagnosticsService', () => {
       type: 'sso_sync_failed',
       message: 'materialization failed',
     }));
+  });
+
+  it('persists an injected clock and correlation id consistently across a sync run and its events', async () => {
+    const runInsert = vi.fn().mockResolvedValue(undefined);
+    const runUpdate = vi.fn().mockResolvedValue(undefined);
+    const eventInsert = vi.fn().mockResolvedValue(undefined);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === SsoSyncRun
+        ? { insert: runInsert, update: runUpdate }
+        : entity === SsoSyncEvent ? { insert: eventInsert } : {},
+    });
+    setSsoSyncDiagnosticsClockForTest(() => 1_700_000_000_000);
+
+    const runId = await ssoSyncDiagnosticsService.startRun({ trigger: 'manual', correlationId: 'correlation-1' });
+    await ssoSyncDiagnosticsService.completeRun(runId, { correlationId: 'correlation-1' });
+
+    expect(runInsert).toHaveBeenCalledWith(expect.objectContaining({
+      startedAt: 1_700_000_000_000,
+      details: JSON.stringify({ correlationId: 'correlation-1' }),
+    }));
+    expect(runUpdate).toHaveBeenCalledWith({ id: runId }, expect.objectContaining({
+      completedAt: 1_700_000_000_000,
+      details: JSON.stringify({ correlationId: 'correlation-1' }),
+    }));
+    expect(eventInsert).toHaveBeenCalledTimes(2);
+    expect(eventInsert.mock.calls).toEqual(expect.arrayContaining([
+      [expect.objectContaining({ createdAt: 1_700_000_000_000, details: JSON.stringify({ correlationId: 'correlation-1' }) })],
+    ]));
   });
 
   it('redacts protocol material from failed sync diagnostics while preserving a stable failure code', async () => {

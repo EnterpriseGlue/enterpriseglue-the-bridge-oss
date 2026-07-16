@@ -38,6 +38,7 @@ export interface StartSsoSyncRunInput {
   providerId?: string | null;
   userId?: string | null;
   trigger: SsoSyncTrigger;
+  correlationId?: string | null;
   details?: Record<string, unknown>;
 }
 
@@ -45,6 +46,7 @@ export interface CompleteSsoSyncRunInput extends SsoSyncCounts {
   tenantId?: string | null;
   providerId?: string | null;
   userId?: string | null;
+  correlationId?: string | null;
   details?: Record<string, unknown>;
 }
 
@@ -219,6 +221,17 @@ function stringifyDetails(details?: Record<string, unknown>): string {
   } catch {
     return '{}';
   }
+}
+
+function withCorrelation(details: Record<string, unknown> | undefined, correlationId: string | null | undefined): Record<string, unknown> | undefined {
+  const normalized = correlationId?.trim();
+  return normalized ? { ...details, correlationId: normalized } : details;
+}
+
+let diagnosticNow = () => Date.now();
+
+export function setSsoSyncDiagnosticsClockForTest(clock?: () => number): void {
+  diagnosticNow = clock || (() => Date.now());
 }
 
 function errorMessage(error: unknown): string {
@@ -1603,7 +1616,8 @@ class SsoSyncDiagnosticsServiceClass {
     try {
       const dataSource = await getDataSource();
       const id = generateId();
-      const now = Date.now();
+      const now = diagnosticNow();
+      const details = withCorrelation(input.details, input.correlationId);
       await dataSource.getRepository(SsoSyncRun).insert({
         id,
         tenantId: normalizeTenantId(input.tenantId),
@@ -1621,7 +1635,7 @@ class SsoSyncDiagnosticsServiceClass {
         assignmentsRemoved: 0,
         errorCode: null,
         errorMessage: null,
-        details: stringifyDetails(input.details),
+        details: stringifyDetails(details),
       });
       await this.recordEvent(id, {
         tenantId: input.tenantId,
@@ -1630,7 +1644,7 @@ class SsoSyncDiagnosticsServiceClass {
         severity: 'info',
         type: 'sso_sync_started',
         message: 'SSO authorization sync started',
-        details: input.details,
+        details,
       });
       return id;
     } catch (error) {
@@ -1643,9 +1657,10 @@ class SsoSyncDiagnosticsServiceClass {
     if (!runId) return;
     try {
       const dataSource = await getDataSource();
+      const details = withCorrelation(input.details, input.correlationId);
       await dataSource.getRepository(SsoSyncRun).update({ id: runId }, {
         status: 'success',
-        completedAt: Date.now(),
+        completedAt: diagnosticNow(),
         groupMembershipsCreated: input.groupMembershipsCreated ?? 0,
         groupMembershipsUpdated: input.groupMembershipsUpdated ?? 0,
         groupMembershipsRemoved: input.groupMembershipsRemoved ?? 0,
@@ -1654,7 +1669,7 @@ class SsoSyncDiagnosticsServiceClass {
         assignmentsRemoved: input.assignmentsRemoved ?? 0,
         errorCode: null,
         errorMessage: null,
-        details: stringifyDetails(input.details),
+        details: stringifyDetails(details),
       });
       await this.recordEvent(runId, {
         tenantId: input.tenantId,
@@ -1664,7 +1679,7 @@ class SsoSyncDiagnosticsServiceClass {
         type: 'sso_sync_completed',
         message: 'SSO authorization sync completed',
         details: {
-          ...input.details,
+          ...details,
           counts: {
             groupMembershipsCreated: input.groupMembershipsCreated ?? 0,
             groupMembershipsUpdated: input.groupMembershipsUpdated ?? 0,
@@ -1688,12 +1703,13 @@ class SsoSyncDiagnosticsServiceClass {
       const code = error instanceof IdentityProviderFailure
         ? error.code
         : error instanceof Error && error.name ? error.name : 'SsoSyncError';
+      const details = withCorrelation(input.details, input.correlationId);
       await dataSource.getRepository(SsoSyncRun).update({ id: runId }, {
         status: 'failed',
-        completedAt: Date.now(),
+        completedAt: diagnosticNow(),
         errorCode: code,
         errorMessage: message,
-        details: stringifyDetails(input.details),
+        details: stringifyDetails(details),
       });
       await this.recordEvent(runId, {
         tenantId: input.tenantId,
@@ -1702,7 +1718,7 @@ class SsoSyncDiagnosticsServiceClass {
         severity: 'error',
         type: 'sso_sync_failed',
         message,
-        details: input.details,
+        details,
       });
     } catch (diagnosticError) {
       logger.warn('Failed to mark SSO sync diagnostic run as failed:', diagnosticError);
@@ -1737,7 +1753,7 @@ class SsoSyncDiagnosticsServiceClass {
       resourceId: input.resourceId || null,
       message: input.message,
       details: stringifyDetails(input.details),
-      createdAt: Date.now(),
+      createdAt: diagnosticNow(),
     });
   }
 }
