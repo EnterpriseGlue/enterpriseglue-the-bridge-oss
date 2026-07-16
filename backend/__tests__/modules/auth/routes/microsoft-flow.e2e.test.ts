@@ -5,6 +5,7 @@ import microsoftRouter from '../../../../../packages/backend-host/src/modules/au
 import microsoftStartRouter from '../../../../../packages/backend-host/src/modules/auth/routes/microsoft-start.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import {
   isMicrosoftAuthEnabled,
   getAuthorizationUrl,
@@ -159,6 +160,9 @@ describe('Microsoft OAuth flow e2e harness', () => {
       expect.objectContaining({ id: 'user-1', email: 'entra-user@example.com' }),
       expect.objectContaining({ identityProviderId: null }),
     );
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.not.objectContaining({ entraId: expect.anything() }),
+    }));
   });
 
   it('preserves tenant context through mocked Entra ID start -> callback flow', async () => {

@@ -5,6 +5,7 @@ import googleRouter from '../../../../../packages/backend-host/src/modules/auth/
 import googleStartRouter from '../../../../../packages/backend-host/src/modules/auth/routes/google-start.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import {
   isGoogleAuthEnabled,
   getGoogleAuthorizationUrl,
@@ -158,6 +159,9 @@ describe('Google OAuth flow e2e harness', () => {
       expect.objectContaining({ id: 'user-1', email: 'google-user@example.com' }),
       expect.objectContaining({ identityProviderId: null }),
     );
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.not.objectContaining({ googleId: expect.anything() }),
+    }));
   });
 
   it('preserves tenant context through Google start and callback', async () => {

@@ -149,7 +149,7 @@ router.get('/api/auth/google/callback', apiLimiter, asyncHandler(async (req: Req
     await logAudit({
       action: AuditActions.LOGIN_SUCCESS,
       userId: user.id,
-      details: { provider: 'google', providerId: ssoState?.providerId || null, googleId: userInfo.sub },
+      details: { provider: 'google', providerId: ssoState?.providerId || null },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });

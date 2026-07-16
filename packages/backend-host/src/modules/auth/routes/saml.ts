@@ -137,7 +137,7 @@ router.post('/api/auth/saml/callback', apiLimiter, asyncHandler(async (req: Requ
     await logAudit({
       action: AuditActions.LOGIN_SUCCESS,
       userId: user.id,
-      details: { provider: 'saml', entraId: userInfo.oid },
+      details: { provider: 'saml' },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });

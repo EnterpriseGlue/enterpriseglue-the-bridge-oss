@@ -149,7 +149,7 @@ router.get('/api/auth/microsoft/callback', apiLimiter, asyncHandler(async (req: 
     await logAudit({
       action: AuditActions.LOGIN_SUCCESS,
       userId: user.id,
-      details: { provider: 'microsoft', providerId: ssoState?.providerId || null, entraId: userInfo.oid },
+      details: { provider: 'microsoft', providerId: ssoState?.providerId || null },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });

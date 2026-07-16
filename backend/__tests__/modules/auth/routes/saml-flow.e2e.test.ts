@@ -5,6 +5,7 @@ import samlRouter from '../../../../../packages/backend-host/src/modules/auth/ro
 import samlStartRouter from '../../../../../packages/backend-host/src/modules/auth/routes/saml-start.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import {
   isSamlAuthEnabled,
   getSamlAuthorizationUrl,
@@ -189,6 +190,9 @@ describe('SAML auth flow e2e harness', () => {
       expect.objectContaining({ id: 'user-1', email: 'saml-user@example.com' }),
       expect.objectContaining({ identityProviderId: 'provider-saml-1' }),
     );
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.not.objectContaining({ entraId: expect.anything() }),
+    }));
   });
 
   it('preserves tenant context through mocked Entra SAML start -> callback flow', async () => {
