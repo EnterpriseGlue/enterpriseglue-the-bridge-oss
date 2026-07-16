@@ -12,6 +12,16 @@ to the approved change record and fill it in. The template separates the
 operator inputs, representative-user matrix, execution ownership, and evidence
 index from this procedure. Do not commit a completed copy to this repository.
 
+Before using a deployed environment, run the repository-local identity gate:
+
+```bash
+pnpm run test:identity:verify
+```
+
+It covers the local contract, route, protocol, UI, and disposable LDAPS
+boundaries. It is necessary regression evidence, but it does not substitute
+for the real provider sign-in and Effective Access evidence required below.
+
 ## Required environment and inputs
 
 Use an environment with the same identity-provider protocol, claim shape,
