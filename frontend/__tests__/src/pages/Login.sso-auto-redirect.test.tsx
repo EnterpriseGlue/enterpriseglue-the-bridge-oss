@@ -136,7 +136,7 @@ describe('Login SSO auto-redirect behavior', () => {
     expect(redirectTo).not.toHaveBeenCalled();
   });
 
-  it('hides local login form when SSO providers are enabled', async () => {
+  it('keeps local login available for the backend-enforced break-glass policy', async () => {
     setupApiResponses({
       providers: [{ id: 'p1', name: 'Entra SAML', type: 'saml' }],
       autoRedirect: false,
@@ -145,8 +145,8 @@ describe('Login SSO auto-redirect behavior', () => {
     renderLogin('/login');
 
     await waitFor(() => {
-      expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
-      expect(screen.getByText(/Local sign-in disabled/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^sign in$/i })).toBeDisabled();
     });
   });
 });

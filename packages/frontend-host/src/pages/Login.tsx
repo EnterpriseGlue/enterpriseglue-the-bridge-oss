@@ -169,7 +169,6 @@ export default function Login() {
   });
   const logoObjectUrlRef = useRef<string | null>(logoObjectUrl);
   const hasTriggeredAutoSsoRedirect = useRef(false);
-  const localLoginDisabledByPolicy = !ssoLoading && ssoProviders.length > 0;
   
   // Prefer the canonical provider-neutral registry. Legacy rows remain only as
   // a fallback while installations finish moving their provider definitions.
@@ -362,15 +361,6 @@ export default function Login() {
   ]);
 
   const submitLogin = async () => {
-    if (localLoginDisabledByPolicy) {
-      notify({
-        kind: 'warning',
-        title: 'Local sign-in disabled',
-        subtitle: 'Use your configured SSO provider to sign in.',
-      });
-      return;
-    }
-
     if (isLoading) return;
     setIsLoading(true);
 
@@ -541,12 +531,6 @@ export default function Login() {
             <Button type="submit" kind="primary" disabled={isLoading || !email || !password} style={{ width: '100%' }}>{isLoading ? 'Signing in...' : `Sign in with ${directLdapProvider.name}`}</Button>
             <Button type="button" kind="ghost" disabled={isLoading} onClick={() => { setDirectLdapProvider(null); setPassword(''); }} style={{ width: '100%', marginTop: 'var(--spacing-3)' }}>Choose another sign-in method</Button>
           </form>
-        ) : localLoginDisabledByPolicy ? (
-          <InlineNotification
-            kind="info"
-            title="Local sign-in disabled"
-            subtitle="Your organization requires SSO. Use one of the SSO options below."
-          />
         ) : (
           <form
             onSubmit={handleSubmit}
@@ -586,7 +570,7 @@ export default function Login() {
             <Button
               type="submit"
               kind="primary"
-              disabled={isLoading || ssoLoading || localLoginDisabledByPolicy || !email || !password}
+              disabled={isLoading || ssoLoading || !email || !password}
               style={{ 
                 width: '100%',
                 backgroundColor: 'var(--eg-color-dark-gray)',

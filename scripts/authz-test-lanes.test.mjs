@@ -7,6 +7,7 @@ const scripts = packageJson.scripts;
 const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
 const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
+const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test.sh', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
   'test:identity-contract',
@@ -66,6 +67,9 @@ test('credentialed local authorization smokes use the guarded runner', () => {
   assert.match(scripts['test:authz:local-smoke'], /run-authz-local-login-test\.sh/);
   assert.match(scripts['test:authz:local-smoke'], /test\/e2e\/smoke\/login\.spec\.ts/);
   assert.match(scripts['test:authz:local-smoke'], /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
+  assert.match(localAuthzSmokeRunner, /PLAYWRIGHT_LOCAL_CA_FILE/);
+  assert.match(localAuthzSmokeRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
+  assert.match(localAuthzSmokeRunner, /localhost, loopback, or a \.local host/);
 });
 
 test('the live local OIDC rehearsal is opt-in and guarded to local browser targets', () => {

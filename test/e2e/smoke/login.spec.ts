@@ -9,7 +9,7 @@ test.describe('Smoke: login', () => {
   test('login happy path @smoke', async ({ page }) => {
     const { email, password } = getE2ECredentials();
     if (!email || !password) throw new Error('Missing E2E credentials');
-    await page.goto('/login');
+    await page.goto('/login?local=1');
 
     await page.getByLabel(/email/i).fill(email);
     await page.getByLabel(/password/i).fill(password);

@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 base_url="${PLAYWRIGHT_BASE_URL:-http://localhost:5173}"
+local_ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-}"
 
 if [[ "$#" -eq 0 ]]; then
   echo "[authz-local-login] Provide one or more Playwright test paths." >&2
@@ -31,7 +32,20 @@ if [[ -z "${E2E_USER:-}" || -z "${E2E_PASSWORD:-}" ]]; then
   exit 2
 fi
 
-if ! curl --fail --silent --show-error --max-time 5 "$base_url/login" >/dev/null; then
+curl_args=(--fail --silent --show-error --max-time 5)
+playwright_https_args=()
+if [[ -n "$local_ca_file" ]]; then
+  if [[ ! -f "$local_ca_file" ]]; then
+    echo "[authz-local-login] PLAYWRIGHT_LOCAL_CA_FILE does not exist: $local_ca_file" >&2
+    exit 2
+  fi
+  curl_args+=(--cacert "$local_ca_file")
+  # Playwright does not import the disposable local CA. This runner only
+  # accepts loopback targets, so certificate-error handling stays local-only.
+  playwright_https_args=(PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true)
+fi
+
+if ! curl "${curl_args[@]}" "$base_url/login" >/dev/null; then
   echo "[authz-local-login] Frontend is not reachable at $base_url/login. Start the local frontend or set PLAYWRIGHT_BASE_URL to its local URL." >&2
   exit 2
 fi
@@ -43,4 +57,4 @@ if [[ -z "$headless_shell_path" ]] || [[ ! -d "$headless_shell_path" ]] || ! fin
 fi
 
 # Avoid mutating the local database: this smoke uses an existing disposable account.
-E2E_SEED_USER=false pnpm exec playwright test "$@" --config test/e2e/playwright.config.ts
+env E2E_SEED_USER=false "${playwright_https_args[@]}" pnpm exec playwright test "$@" --config test/e2e/playwright.config.ts

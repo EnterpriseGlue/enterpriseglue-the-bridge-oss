@@ -305,14 +305,20 @@ only localhost, loopback, or `.local` URLs.
 ```bash
 E2E_USER='local-admin@example.test' \
 E2E_PASSWORD='your-local-password' \
-PLAYWRIGHT_BASE_URL='http://localhost:5173' \
+PLAYWRIGHT_BASE_URL='https://localhost:5443' \
+PLAYWRIGHT_LOCAL_CA_FILE=.local/docker/keycloak-tls/ca.crt \
 pnpm test:authz:local-smoke
 ```
 
 This guarded local-only lane verifies sign-in, Access Control navigation, and
 the authorized Runtime Resources, SSO Engine Assignments, and Effective Access tab surfaces. The narrower
 `test:authz:local-login` and `test:authz:local-access-control` commands remain
-available for targeted reruns.
+available for targeted reruns. Omit `PLAYWRIGHT_LOCAL_CA_FILE` and use
+`http://localhost:5173` when the TLS overlay is not running.
+
+The smoke opens the local-login bypass URL (`/login?local=1`) so a configured
+single-provider auto-redirect cannot hide the break-glass form. The backend
+still enforces who may use local credentials when SSO policy is active.
 
 The Access Control smoke also evaluates one catalog platform permission for the
 authenticated local administrator through the Effective Access UI. This proves
