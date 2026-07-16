@@ -18,6 +18,9 @@ import type {
   IdentityProviderMigrationReadiness,
   IdentityProviderProtocol,
   LegacyIdentityProviderCutoverResult,
+  LegacyIdentityProviderMigrationDraft,
+  LegacySsoProvider,
+  SsoSyncRun,
 } from '../hooks/useAuthzApi';
 
 type Protocol = IdentityProviderProtocol;
@@ -30,22 +33,8 @@ export function isConfigLockedIdentityProvider(provider: { ownershipMode?: strin
 export function isConfigWarnIdentityProvider(provider: { ownershipMode?: string | null } | null | undefined): boolean {
   return provider?.ownershipMode === 'config_warn';
 }
-interface LegacySsoProvider {
-  id: string;
-  name: string;
-  type: 'microsoft' | 'google' | 'saml' | 'oidc';
-  enabled: boolean;
-}
-type LegacyMigrationDraft = {
-  legacyProvider: { id: string; name: string; type: 'microsoft' | 'google' | 'oidc' | 'saml'; enabled: boolean; clientSecretConfigured?: boolean; signingCertificateConfigured?: boolean };
-  provider: { key: string; protocol: 'oidc'; isEnabled: false; authenticationMode: 'direct'; directoryTenantId: string | null; configuration: { issuerUrl: string; clientId: string; callbackUrl: string; scopes: string[]; clientSecretRef?: string } }
-    | { key: string; protocol: 'saml'; isEnabled: false; authenticationMode: 'direct'; directoryTenantId: null; configuration: { entityId: string; callbackUrl: string; ssoUrl: string; signingCertificateRef: string; signatureAlgorithm: 'sha256' | 'sha512' } };
-  requirements: string[];
-  warnings: string[];
-};
 type MembershipReplayResult = IdentityProviderMembershipReplayResult;
 type MembershipPreviewResult = IdentityProviderMembershipPreviewResult;
-type SyncRun = { id: string; status: 'running' | 'success' | 'failed'; trigger: string; startedAt: number; completedAt: number | null; groupMembershipsCreated: number; groupMembershipsRemoved: number; errorMessage: string | null };
 type ConnectionTestResult = IdentityProviderConnectionTestResult;
 type MigrationReadiness = IdentityProviderMigrationReadiness;
 type LegacyCutoverResult = LegacyIdentityProviderCutoverResult;
@@ -94,7 +83,7 @@ export default function IdentityProvidersSettingsTab() {
   const manage = useActionDecision('platform.sso.providers.manage', resource);
   const providersQuery = useIdentityProviders({ enabled: read.allowed });
   const legacyProvidersQuery = useQuery({ queryKey: ['legacy-sso-providers-for-migration'], queryFn: () => apiClient.get<LegacySsoProvider[]>('/api/sso/providers'), enabled: manage.allowed });
-  const environmentMigrationDraftsQuery = useQuery({ queryKey: ['environment-identity-provider-migration-drafts'], queryFn: () => apiClient.get<LegacyMigrationDraft[]>('/api/identity/providers/environment-migration-drafts'), enabled: manage.allowed });
+  const environmentMigrationDraftsQuery = useQuery({ queryKey: ['environment-identity-provider-migration-drafts'], queryFn: () => apiClient.get<LegacyIdentityProviderMigrationDraft[]>('/api/identity/providers/environment-migration-drafts'), enabled: manage.allowed });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<IdentityProvider | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -109,12 +98,12 @@ export default function IdentityProvidersSettingsTab() {
   const [connectionResult, setConnectionResult] = useState<{ providerKey: string; result: ConnectionTestResult } | null>(null);
   const [migrationReadiness, setMigrationReadiness] = useState<MigrationReadiness | null>(null);
   const [legacyProviderId, setLegacyProviderId] = useState('');
-  const [migrationDraft, setMigrationDraft] = useState<LegacyMigrationDraft | null>(null);
+  const [migrationDraft, setMigrationDraft] = useState<LegacyIdentityProviderMigrationDraft | null>(null);
   const [cutoverTarget, setCutoverTarget] = useState<{ legacyProvider: LegacySsoProvider; targetProviderKey: string } | null>(null);
   const [cutoverResult, setCutoverResult] = useState<LegacyCutoverResult | null>(null);
   const [externalIdentityConflict, setExternalIdentityConflict] = useState<{ provider: IdentityProvider; subjectId: string; userId: string } | null>(null);
   const [externalIdentityUnlinkResult, setExternalIdentityUnlinkResult] = useState<{ providerKey: string; result: IdentityProviderExternalIdentityUnlinkResult } | null>(null);
-  const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', historyProvider?.key], queryFn: () => apiClient.get<SyncRun[]>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
+  const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', historyProvider?.key], queryFn: () => apiClient.get<SsoSyncRun[]>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
 
   const save = useMutation({
     mutationFn: (payload: FormState) => {
@@ -157,7 +146,7 @@ export default function IdentityProvidersSettingsTab() {
     },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to unlink the external identity').message),
   });
-  const openMigrationDraft = (draft: LegacyMigrationDraft) => {
+  const openMigrationDraft = (draft: LegacyIdentityProviderMigrationDraft) => {
     setEditing(null);
     setForm(draft.provider.protocol === 'saml'
       ? { ...emptyForm(), key: draft.provider.key, protocol: 'saml', isEnabled: false, authenticationMode: 'direct', entityId: draft.provider.configuration.entityId, callbackUrl: draft.provider.configuration.callbackUrl, ssoUrl: draft.provider.configuration.ssoUrl, signingCertificateRef: draft.provider.configuration.signingCertificateRef, signatureAlgorithm: draft.provider.configuration.signatureAlgorithm }
@@ -168,7 +157,7 @@ export default function IdentityProvidersSettingsTab() {
     setOpen(true);
   };
   const prepareLegacyMigration = useMutation({
-    mutationFn: (id: string) => apiClient.get<LegacyMigrationDraft>(`/api/identity/providers/legacy-migration-draft/${encodeURIComponent(id)}`),
+    mutationFn: (id: string) => apiClient.get<LegacyIdentityProviderMigrationDraft>(`/api/identity/providers/legacy-migration-draft/${encodeURIComponent(id)}`),
     onSuccess: openMigrationDraft,
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to prepare the legacy provider migration').message),
   });

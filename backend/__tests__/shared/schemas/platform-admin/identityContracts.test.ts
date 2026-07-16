@@ -13,6 +13,7 @@ import {
   EffectiveAccessEvaluateResponseSchema,
   IdentityMappingResponseSchema,
   LegacyGlobalMappingRetirementRequestSchema,
+  LegacyIdentityProviderMigrationDraftSchema,
   LegacyMappingCoverageItemSchema,
   LegacyMappingCoverageVerifyRequestSchema,
   LegacyMappingRetirementReadinessSchema,
@@ -91,5 +92,22 @@ describe('provider-neutral identity shared contracts', () => {
     expect(LegacyMappingRetirementRequestSchema.parse({ confirmation: 'RETIRE_LEGACY_MAPPINGS' }).confirmation).toBe('RETIRE_LEGACY_MAPPINGS');
     expect(LegacyGlobalMappingRetirementRequestSchema.parse({ confirmation: 'RETIRE_GLOBAL_LEGACY_MAPPINGS' }).confirmation).toBe('RETIRE_GLOBAL_LEGACY_MAPPINGS');
     expect(() => LegacyMappingCoverageVerifyRequestSchema.parse({ family: 'scope', candidateIdentityMappingId: 'mapping-1', note: 'no' })).toThrow();
+  });
+
+  it('keeps legacy provider migration drafts provider-neutral and secret-reference-only', () => {
+    const draft = {
+      legacyProvider: { id: 'legacy-1', name: 'Legacy OIDC', type: 'oidc', enabled: true, clientSecretConfigured: true },
+      provider: {
+        key: 'legacy-oidc-legacy-1', protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: null,
+        configuration: { issuerUrl: 'https://issuer.example.test', clientId: 'client-1', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid'], clientSecretRef: 'env://OIDC_CLIENT_SECRET' },
+      },
+      requirements: ['client_secret_reference', 'identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'],
+      warnings: ['The generated provider is disabled.'],
+    };
+    expect(LegacyIdentityProviderMigrationDraftSchema.parse(draft).provider.protocol).toBe('oidc');
+    expect(() => LegacyIdentityProviderMigrationDraftSchema.parse({
+      ...draft,
+      provider: { ...draft.provider, configuration: { ...draft.provider.configuration, clientSecret: 'raw-secret' } },
+    })).toThrow();
   });
 });

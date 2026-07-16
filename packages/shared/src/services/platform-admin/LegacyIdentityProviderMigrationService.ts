@@ -5,6 +5,7 @@ import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persiste
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { DEFAULT_PLATFORM_GROUP_IDS } from './AuthzGroupService.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import type { LegacyIdentityProviderMigrationDraft } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { secretResolver } from './SecretResolver.js';
 import { IsNull } from 'typeorm';
 import type { EntityManager } from 'typeorm';
@@ -12,55 +13,7 @@ import type { EntityManager } from 'typeorm';
 type LegacyMigratableProviderType = 'microsoft' | 'google' | 'oidc' | 'saml';
 type EnvironmentMigratableProviderType = 'microsoft' | 'google';
 type RepositoryManager = Pick<EntityManager, 'getRepository'>;
-
-interface LegacyIdentityProviderMigrationDraftBase {
-  legacyProvider: {
-    id: string;
-    name: string;
-    type: LegacyMigratableProviderType;
-    enabled: boolean;
-    clientSecretConfigured?: boolean;
-    signingCertificateConfigured?: boolean;
-  };
-  requirements: Array<'client_secret_reference' | 'signing_certificate_reference' | 'identity_provider_redirect_uri' | 'identity_mappings' | 'legacy_provider_cutover'>;
-  warnings: string[];
-}
-
-interface LegacyOidcIdentityProviderMigrationDraft extends LegacyIdentityProviderMigrationDraftBase {
-  provider: {
-    key: string;
-    protocol: 'oidc';
-    isEnabled: false;
-    authenticationMode: 'direct';
-    directoryTenantId: string | null;
-    configuration: {
-      issuerUrl: string;
-      clientId: string;
-      callbackUrl: string;
-      scopes: string[];
-      clientSecretRef?: string;
-    };
-  };
-}
-
-interface LegacySamlIdentityProviderMigrationDraft extends LegacyIdentityProviderMigrationDraftBase {
-  provider: {
-    key: string;
-    protocol: 'saml';
-    isEnabled: false;
-    authenticationMode: 'direct';
-    directoryTenantId: null;
-    configuration: {
-      entityId: string;
-      callbackUrl: string;
-      ssoUrl: string;
-      signingCertificateRef: string;
-      signatureAlgorithm: 'sha256' | 'sha512';
-    };
-  };
-}
-
-export type LegacyIdentityProviderMigrationDraft = LegacyOidcIdentityProviderMigrationDraft | LegacySamlIdentityProviderMigrationDraft;
+export type { LegacyIdentityProviderMigrationDraft } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 export interface LegacyIdentityProviderMigrationReadiness {
   ready: boolean;

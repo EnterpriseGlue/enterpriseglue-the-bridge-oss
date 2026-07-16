@@ -1273,6 +1273,60 @@ export const IdentityProviderMigrationReadinessQuerySchema = z.object({
   legacyProviderId: z.string().min(1).max(128).optional(),
 });
 
+/**
+ * A non-persistent, non-secret migration plan for a legacy SSO provider.
+ * The configuration deliberately contains references only; never copy or
+ * resolve legacy ciphertext into this API contract.
+ */
+export const LegacyIdentityProviderMigrationDraftSchema = z.object({
+  legacyProvider: z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.enum(['microsoft', 'google', 'oidc', 'saml']),
+    enabled: z.boolean(),
+    clientSecretConfigured: z.boolean().optional(),
+    signingCertificateConfigured: z.boolean().optional(),
+  }),
+  provider: z.discriminatedUnion('protocol', [
+    z.object({
+      key: z.string(),
+      protocol: z.literal('oidc'),
+      isEnabled: z.literal(false),
+      authenticationMode: z.literal('direct'),
+      directoryTenantId: z.string().nullable(),
+      configuration: z.object({
+        issuerUrl: z.string().url(),
+        clientId: z.string(),
+        callbackUrl: z.string().url(),
+        scopes: z.array(z.string()),
+        clientSecretRef: z.string().optional(),
+      }).strict(),
+    }),
+    z.object({
+      key: z.string(),
+      protocol: z.literal('saml'),
+      isEnabled: z.literal(false),
+      authenticationMode: z.literal('direct'),
+      directoryTenantId: z.null(),
+      configuration: z.object({
+        entityId: z.string(),
+        callbackUrl: z.string().url(),
+        ssoUrl: z.string().url(),
+        signingCertificateRef: z.string(),
+        signatureAlgorithm: z.enum(['sha256', 'sha512']),
+      }).strict(),
+    }),
+  ]),
+  requirements: z.array(z.enum([
+    'client_secret_reference',
+    'signing_certificate_reference',
+    'identity_provider_redirect_uri',
+    'identity_mappings',
+    'legacy_provider_cutover',
+  ])),
+  warnings: z.array(z.string()),
+});
+
 export const LegacyIdentityProviderCutoverRequestSchema = z.object({
   legacyProviderId: z.string().min(1).max(128),
   targetProviderKey: z.string().min(1).max(128),
@@ -1621,6 +1675,7 @@ export type IdentityProviderExternalIdentityUnlinkResponse = z.infer<typeof Iden
 export type IdentityProviderReconciliationPreview = z.infer<typeof IdentityProviderReconciliationPreviewSchema>;
 export type IdentityProviderConnectionTestResponse = z.infer<typeof IdentityProviderConnectionTestResponseSchema>;
 export type IdentityProviderMigrationReadinessResponse = z.infer<typeof IdentityProviderMigrationReadinessResponseSchema>;
+export type LegacyIdentityProviderMigrationDraft = z.infer<typeof LegacyIdentityProviderMigrationDraftSchema>;
 export type LegacyIdentityProviderCutoverResponse = z.infer<typeof LegacyIdentityProviderCutoverResponseSchema>;
 export type RuntimeResource = z.infer<typeof RuntimeResourceSchema>;
 export type RuntimeResourceSet = z.infer<typeof RuntimeResourceSetSchema>;
