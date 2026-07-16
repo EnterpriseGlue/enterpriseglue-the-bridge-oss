@@ -62,6 +62,7 @@ import { effectiveAccessSourceHeaders, isEffectiveAccessTabRequested, type CoreA
 import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './access-control/dataTablePrimitives';
 import { PermissionCatalogPanel, RoleCatalogPanel } from './access-control/RoleCatalogPanels';
+import { SsoAssignmentMappingsTable, ssoAssignmentHeaders } from './access-control/SsoAssignmentMappingsTable';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
 import {
@@ -299,16 +300,6 @@ const SYNC_MODES = [
 function unavailableReason(decision: UiAuthzDecision, fallback: string): string | undefined {
   return decision.allowed ? undefined : decision.reason || fallback;
 }
-
-const ssoAssignmentHeaders = [
-  { key: 'claim', header: 'Claim' },
-  { key: 'target', header: 'Target' },
-  { key: 'role', header: 'Role' },
-  { key: 'mode', header: 'Sync' },
-  { key: 'status', header: 'Status' },
-  { key: 'warning', header: 'Warning' },
-  { key: 'actions', header: '' },
-];
 
 const ssoPlatformMappingHeaders = [
   { key: 'provider', header: 'Provider' },
@@ -5887,87 +5878,27 @@ export default function AccessControl() {
                   canManageCleanup={canManageSsoAssignments}
                   cleanupUnavailableReason={ssoAssignmentsManageUnavailableReason}
                 />
-                <TableContainer>
-                  <DataTable
-                    rows={mappings.map((mapping) => ({
-                      id: mapping.id,
-                      claim: ssoClaimLabel(mapping),
-                      target: selectorLabel(mapping),
-                      role: roleLabel(mapping.targetRoleId, roles),
-                      mode: mapping.syncMode,
-                      status: mapping.isActive,
-                      warning: getSsoAssignmentMappingWarning(mapping, externalEngines) || '',
-                      actions: '',
-                    }))}
-                    headers={ssoAssignmentHeaders}
-                  >
-                    {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
-                      <>
-                        <TableToolbar>
-                          <TableToolbarContent>
-                            <Button kind="ghost" size="sm" onClick={testAssignments} disabled={testM.isPending || !canManageSsoAssignments} title={ssoAssignmentsManageUnavailableReason}>
-                              Test Claims
-                            </Button>
-                            <Button kind="primary" renderIcon={Add} onClick={openCreate} disabled={!canManageSsoAssignments} title={ssoAssignmentsManageUnavailableReason}>
-                              Add Mapping
-                            </Button>
-                          </TableToolbarContent>
-                        </TableToolbar>
-                        <Table {...getTableProps()} size="md">
-                          <TableHead>
-                            <TableRow>
-                              {headers.map((header) => (
-                                <DataTableHeaderCell key={dataTableHeaderKey(header)} header={header} getHeaderProps={getHeaderProps} />
-                              ))}
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {rows.map((row) => {
-                              const mapping = mappings.find((item) => item.id === row.id);
-                              return (
-                                <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
-                                  {row.cells.map((cell) => {
-                                    if (cell.info.header === 'status') {
-                                      return <TableCell key={cell.id}><Tag type={cell.value ? 'green' : 'gray'}>{cell.value ? 'Active' : 'Inactive'}</Tag></TableCell>;
-                                    }
-                                    if (cell.info.header === 'warning') {
-                                      return <TableCell key={cell.id}>{cell.value ? <Tag type="gray">{cell.value}</Tag> : '-'}</TableCell>;
-                                    }
-                                    if (cell.info.header === 'actions') {
-                                      const canMigrateMapping = mapping?.targetSelectorType === 'engine_id' && Boolean(mapping.targetEngineId);
-                                      return (
-                                        <TableCell key={cell.id}>
-                                          <Button kind="ghost" size="sm" disabled={!canManageSsoAssignments} title={ssoAssignmentsManageUnavailableReason} onClick={() => mapping && openEdit(mapping)}>Edit</Button>
-                                          <Button
-                                            kind="ghost"
-                                            size="sm"
-                                            disabled={!canManageSsoAssignments || !canMigrateMapping}
-                                            title={!canManageSsoAssignments ? ssoAssignmentsManageUnavailableReason : canMigrateMapping ? undefined : 'Only exact-engine mappings can be migrated. Recreate dynamic selectors with an Engine Set and group assignment.'}
-                                            onClick={() => {
-                                              if (!mapping) return;
-                                              setSsoAssignmentMigrationTarget(mapping);
-                                              setSsoAssignmentMigrationProviderKey('');
-                                              setSsoAssignmentMigrationGroupKey('');
-                                              setSsoAssignmentMigrationError(null);
-                                            }}
-                                          >
-                                            Create group-first replacement
-                                          </Button>
-                                          <Button kind="ghost" size="sm" disabled={!canManageSsoAssignments} title={ssoAssignmentsManageUnavailableReason} renderIcon={TrashCan} hasIconOnly iconDescription="Delete mapping" onClick={() => mapping && deleteM.mutate(mapping.id)} />
-                                        </TableCell>
-                                      );
-                                    }
-                                    return <TableCell key={cell.id}>{cell.value}</TableCell>;
-                                  })}
-                                </DataTableDataRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </>
-                    )}
-                  </DataTable>
-                </TableContainer>
+                <SsoAssignmentMappingsTable
+                  mappings={mappings}
+                  roles={roles}
+                  canManage={canManageSsoAssignments}
+                  manageUnavailableReason={ssoAssignmentsManageUnavailableReason}
+                  testPending={testM.isPending}
+                  claimLabel={ssoClaimLabel}
+                  targetLabel={selectorLabel}
+                  roleLabel={roleLabel}
+                  warningFor={(mapping) => getSsoAssignmentMappingWarning(mapping, externalEngines)}
+                  onTest={testAssignments}
+                  onCreate={openCreate}
+                  onEdit={openEdit}
+                  onMigrate={(mapping) => {
+                    setSsoAssignmentMigrationTarget(mapping);
+                    setSsoAssignmentMigrationProviderKey('');
+                    setSsoAssignmentMigrationGroupKey('');
+                    setSsoAssignmentMigrationError(null);
+                  }}
+                  onDelete={(mappingId) => deleteM.mutate(mappingId)}
+                />
               </div>
             )}
             {testM.data && (
