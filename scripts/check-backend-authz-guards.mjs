@@ -87,6 +87,16 @@ const forbiddenPatterns = [
     fileSuffix: 'packages/shared/src/services/platform-admin/EngineAccessService.ts',
     pattern: /\bProjectMember\b|\bmemberRepo\b/g,
   },
+  {
+    id: 'dashboard-context-project-member-lookup',
+    fileSuffix: 'packages/backend-host/src/modules/dashboard/routes/context.ts',
+    pattern: /\bProjectMember\b|\bprojectMemberRepo\b/g,
+  },
+  {
+    id: 'dashboard-stats-project-member-lookup',
+    fileSuffix: 'packages/backend-host/src/modules/dashboard/routes/stats.ts',
+    pattern: /\bProjectMember\b|\bprojectMemberRepo\b/g,
+  },
 ];
 
 // Maximum current route-local legacy-auth pattern counts by rule. New files must
