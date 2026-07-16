@@ -61,6 +61,7 @@ describe('IdentityMappingsSettingsTab', () => {
 
     expect(await screen.findByText('Step 1 of 3')).toBeInTheDocument();
     expect(screen.getByText('Choose the provider entitlement that identifies members.')).toBeInTheDocument();
+    expect(document.getElementById('identity-mapping-group')).not.toBeVisible();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
     expect(screen.getAllByRole('button', { name: 'Cancel' }).length).toBeGreaterThan(0);
   });
