@@ -223,6 +223,16 @@ export const AuthzAuditLogSchema = AuthzAuditLogSchemaRaw.transform((l) => ({
   timestamp: Number(l.timestamp),
 }));
 
+/** Query contract for the tenant-scoped authorization audit API. */
+export const AuthzAuditQuerySchema = z.object({
+  userId: z.string().optional(),
+  resourceType: z.string().optional(),
+  resourceId: z.string().optional(),
+  decision: z.enum(['allow', 'deny']).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
 // Raw schema - matches TypeORM SsoProvider entity
 export const SsoProviderSchemaRaw = z.object({
   id: z.string(),
@@ -1865,6 +1875,7 @@ export type AuthzCheckBatchRequest = z.input<typeof AuthzCheckBatchRequestSchema
 export type AuthzCheckBatchResponse = z.infer<typeof AuthzCheckBatchResponseSchema>;
 export type PolicyCondition = z.infer<typeof PolicyConditionSchema>;
 export type AuthzAuditLogEntry = z.infer<typeof AuthzAuditLogSchema>;
+export type AuthzAuditQuery = z.input<typeof AuthzAuditQuerySchema>;
 export type SsoProvider = z.infer<typeof SsoProviderSchema>;
 export type LegacySsoProviderResponse = z.infer<typeof LegacySsoProviderResponseSchema>;
 export type LegacySsoProviderCreateRequest = z.input<typeof LegacySsoProviderCreateRequestSchema>;

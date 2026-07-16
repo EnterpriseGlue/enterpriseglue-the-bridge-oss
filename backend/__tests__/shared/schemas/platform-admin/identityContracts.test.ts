@@ -33,6 +33,7 @@ import {
   AuthzCheckBatchResponseSchema,
   AuthzCheckRequestSchema,
   AuthzCheckResponseSchema,
+  AuthzAuditQuerySchema,
   AuthzCreatedIdResponseSchema,
   AuthzMutationSuccessResponseSchema,
   AuthzPolicyCreateSchema,
@@ -304,6 +305,13 @@ describe('provider-neutral identity shared contracts', () => {
   it('shares deployment-target legacy synchronization input with the route and OpenAPI', () => {
     expect(ProjectEngineTargetSyncLegacyRequestSchema.parse({ projectId: 'project-1' })).toEqual({ projectId: 'project-1' });
     expect(() => ProjectEngineTargetSyncLegacyRequestSchema.parse({ projectId: '' })).toThrow();
+  });
+
+  it('shares authorization-audit query bounds with the route and OpenAPI', () => {
+    expect(AuthzAuditQuerySchema.parse({ decision: 'deny', limit: '500', offset: '0' })).toMatchObject({
+      decision: 'deny', limit: 500, offset: 0,
+    });
+    expect(() => AuthzAuditQuerySchema.parse({ limit: '501' })).toThrow();
   });
 
   it('keeps the public policy response aligned with the service view', () => {

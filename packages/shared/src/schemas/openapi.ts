@@ -3212,6 +3212,7 @@ const {
   ApiClientCreateSchema,
   ApiClientSchema,
   ApiClientWithTokenSchema,
+  AuthzAuditQuerySchema,
   AuthzCheckBatchRequestSchema,
   AuthzCheckBatchResponseSchema,
   AuthzCheckRequestSchema,
@@ -3321,15 +3322,6 @@ registry.registerPath({
   request: { params: z.object({ id: z.string() }) },
   responses: { 200: { description: 'Project-engine deployment targets for an engine', content: { 'application/json': { schema: z.array(ProjectEngineTargetSchema) } } } },
 });
-const AuthzAuditQueryOpenApiSchema = z.object({
-  userId: z.string().optional(),
-  resourceType: z.string().optional(),
-  resourceId: z.string().optional(),
-  decision: z.enum(['allow', 'deny']).optional(),
-  limit: z.number().int().min(1).max(500).optional(),
-  offset: z.number().int().min(0).optional(),
-});
-
 const AuthzAuditLogResponseSchema = z.object({
   id: z.string(),
   tenantId: z.string().nullable().optional(),
@@ -3512,7 +3504,7 @@ registry.registerPath({ method: 'put', path: '/api/authz/policies/{id}', ...auth
 registry.registerPath({ method: 'delete', path: '/api/authz/policies/{id}', ...authzExtension('platform.authz.policies.manage', 'DELETE', '/api/authz/policies/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Policy deleted' } } });
 
 // Authz audit
-registry.registerPath({ method: 'get', path: '/api/authz/audit', ...authzExtension('platform.audit.read', 'GET', '/api/authz/audit'), request: { query: AuthzAuditQueryOpenApiSchema }, responses: { 200: { description: 'Authorization audit log', content: { 'application/json': { schema: z.array(AuthzAuditLogResponseSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/api/authz/audit', ...authzExtension('platform.audit.read', 'GET', '/api/authz/audit'), request: { query: AuthzAuditQuerySchema }, responses: { 200: { description: 'Authorization audit log', content: { 'application/json': { schema: z.array(AuthzAuditLogResponseSchema) } } } } });
 
 // SSO mappings
 registry.registerPath({ method: 'get', path: '/api/authz/sso-mappings', ...authzExtension('platform.sso.platform-role-mappings.read', 'GET', '/api/authz/sso-mappings'), responses: { 200: { description: 'List SSO role mappings', content: { 'application/json': { schema: z.array(SsoClaimsMappingSchemaOpenApi) } } } } });
