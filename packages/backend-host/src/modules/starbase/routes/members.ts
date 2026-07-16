@@ -173,6 +173,7 @@ const router = Router();
 function projectPermissionContext(req: any, projectId: string) {
   return {
     userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
     resourceType: 'project' as const,
     resourceId: projectId,
   };
@@ -382,6 +383,7 @@ router.put(
 
       const targetCanEditProjectFiles = await permissionService.hasPermission(ProjectPermissions.FILES_EDIT, {
         userId: targetUserId,
+        tenantId: req.tenant?.tenantId || null,
         resourceType: 'project',
         resourceId: projectId,
       });

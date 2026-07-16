@@ -15,6 +15,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 
 const authMocks = vi.hoisted(() => ({
   currentUser: { userId: 'owner-1', email: 'owner@example.com' } as any,
+  tenantId: null as string | null,
 }));
 
 const projectId = '00000000-0000-0000-0000-000000000001';
@@ -43,7 +44,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = authMocks.currentUser;
-    req.tenant = { tenantId: null };
+    req.tenant = { tenantId: authMocks.tenantId };
     next();
   },
 }));
@@ -168,6 +169,7 @@ describe('starbase members routes', () => {
     app.use(errorHandler);
     vi.clearAllMocks();
     authMocks.currentUser = { userId: 'owner-1', email: 'owner@example.com' };
+    authMocks.tenantId = null;
     (getEmailConfigForTenant as unknown as Mock).mockResolvedValue(null);
     (projectMemberService.hasAccess as Mock).mockResolvedValue(true);
     (projectMemberService.hasRole as Mock).mockResolvedValue(true);
@@ -389,6 +391,37 @@ describe('starbase members routes', () => {
         resourceType: 'project',
         resourceId: '00000000-0000-0000-0000-000000000001',
       })
+    );
+  });
+
+  it('propagates the selected tenant into project member authorization checks', async () => {
+    authMocks.tenantId = 'tenant-a';
+    const userRepo = {
+      createQueryBuilder: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        getOne: vi.fn().mockResolvedValue({ id: 'target-1', email: 'target@example.com', passwordHash: 'hash' }),
+      }),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === User || entityName(entity) === 'User') return userRepo;
+        if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (projectMemberService.getMembership as Mock).mockResolvedValue(null);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'project:members:add');
+
+    const response = await request(app)
+      .post('/starbase-api/projects/00000000-0000-0000-0000-000000000001/members')
+      .send({ email: 'target@example.com', roles: ['viewer'] });
+
+    expect(response.status).toBe(201);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'project:members:add',
+      expect.objectContaining({ tenantId: 'tenant-a', resourceType: 'project', resourceId: '00000000-0000-0000-0000-000000000001' }),
     );
   });
 
