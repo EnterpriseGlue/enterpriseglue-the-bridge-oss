@@ -210,7 +210,10 @@ suite from the repository root:
 pnpm test:authz-refactor
 ```
 
-The aggregate is organized into three independently runnable, local-safe lanes:
+The aggregate is organized into three independently runnable, local-safe lanes.
+Its runner loads non-secret loopback-only test configuration and clears inherited
+database settings first, so unit and contract imports cannot accidentally use a
+self-hosted database:
 
 | Lane | Command | Covers |
 | --- | --- | --- |

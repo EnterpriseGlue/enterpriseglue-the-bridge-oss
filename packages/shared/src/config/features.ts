@@ -7,7 +7,12 @@
 
 import dotenv from 'dotenv';
 
-dotenv.config();
+// `config/index` owns explicit environment-file selection. Loading the default
+// `.env` here first would let a self-hosted database override a caller's
+// intentionally isolated test configuration.
+if (!process.env.EG_ENV_FILE) {
+  dotenv.config();
+}
 
 export interface FeatureFlags {
   // Phase 2: Project Collaboration

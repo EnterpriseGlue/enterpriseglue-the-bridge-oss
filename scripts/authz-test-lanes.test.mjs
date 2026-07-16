@@ -9,6 +9,7 @@ const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsa
 const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
 const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test.sh', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
+const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
   'test:identity-contract',
@@ -42,10 +43,14 @@ function invokedScripts(command) {
 }
 
 test('the authz refactor aggregate composes the three local-safe lanes', () => {
-  assert.deepEqual(invokedScripts(scripts['test:authz-refactor']), [
+  assert.match(scripts['test:authz-refactor'], /run-local-safe-authz-refactor\.sh/);
+  assert.deepEqual(invokedScripts(authzRefactorRunner), [
     'test:authz:structure',
     ...localLanes,
   ]);
+  assert.match(authzRefactorRunner, /EG_ENV_FILE/);
+  assert.match(authzRefactorRunner, /POSTGRES_HOST/);
+  assert.match(authzRefactorRunner, /POSTGRES_URL/);
 });
 
 test('the local-safe lanes preserve every focused authorization check once', () => {
@@ -55,8 +60,9 @@ test('the local-safe lanes preserve every focused authorization check once', () 
 });
 
 test('browser, credentialed local authorization, and LDAP-container boundaries stay opt-in', () => {
-  const localCommands = [...localLanes, 'test:authz-refactor']
+  const localCommands = [...localLanes]
     .map((name) => scripts[name])
+    .concat(authzRefactorRunner)
     .join(' ');
 
   assert.doesNotMatch(localCommands, /test:(?:identity:(?:browser|ldap)|authz:local-(?:login|access-control|smoke))/);
