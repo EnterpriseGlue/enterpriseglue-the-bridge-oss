@@ -19,6 +19,11 @@ const sharedMiddlewareRoleFallbackFiles = [
   'packages/shared/src/middleware/requireAction.ts',
   'packages/shared/src/interfaces/middleware/requireAction.ts',
 ];
+const sharedAuthorizationServiceFiles = [
+  // Project-engine access must be authorized by canonical evaluator decisions;
+  // accountable owner/delegate metadata is not an access source.
+  'packages/shared/src/services/platform-admin/EngineAccessService.ts',
+];
 const legacyRoleValues = [
   'admin',
   'developer',
@@ -72,6 +77,16 @@ const forbiddenPatterns = [
       'g'
     ),
   },
+  {
+    id: 'engine-access-accountable-metadata',
+    fileSuffix: 'packages/shared/src/services/platform-admin/EngineAccessService.ts',
+    pattern: /\b(?:ownerId|delegateId)\b/g,
+  },
+  {
+    id: 'engine-access-project-member-lookup',
+    fileSuffix: 'packages/shared/src/services/platform-admin/EngineAccessService.ts',
+    pattern: /\bProjectMember\b|\bmemberRepo\b/g,
+  },
 ];
 
 // Maximum current route-local legacy-auth pattern counts by rule. New files must
@@ -116,8 +131,10 @@ function lineAndColumn(content, index) {
 function scanFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf8');
   const matches = [];
+  const rel = relativePath(filePath);
 
   for (const rule of forbiddenPatterns) {
+    if (rule.fileSuffix && rel !== rule.fileSuffix) continue;
     rule.pattern.lastIndex = 0;
     for (const match of content.matchAll(rule.pattern)) {
       const location = lineAndColumn(content, match.index || 0);
@@ -144,6 +161,9 @@ function countMatchesByRule(matches) {
 const files = Array.from(new Set([
   ...walkFiles(path.join(repoRoot, sourceRoot)),
   ...sharedMiddlewareRoleFallbackFiles
+    .map((filePath) => path.join(repoRoot, filePath))
+    .filter((filePath) => fs.existsSync(filePath)),
+  ...sharedAuthorizationServiceFiles
     .map((filePath) => path.join(repoRoot, filePath))
     .filter((filePath) => fs.existsSync(filePath)),
 ])).sort((a, b) => a.localeCompare(b));
