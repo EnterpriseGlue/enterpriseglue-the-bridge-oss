@@ -238,7 +238,7 @@ pnpm test:authz:local-smoke
 ```
 
 This local-only lane verifies sign-in, Access Control navigation, and the
-authorized Runtime Resources and SSO Engine Assignments tab surfaces. The
+authorized Runtime Resources, SSO Engine Assignments, and Effective Access tab surfaces. The
 narrower `test:authz:local-login` and
 `test:authz:local-access-control` commands remain available for targeted
 reruns.
