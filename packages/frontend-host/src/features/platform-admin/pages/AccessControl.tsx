@@ -174,7 +174,8 @@ import {
   type ExternalEngineAuditAction,
   type ExternalEngineRegistrationAuditEntry,
   type ExternalEngineSystem,
-  type ExternalEngineSystemPayload,
+  type ExternalEngineSystemCreatePayload,
+  type ExternalEngineSystemUpdatePayload,
   type EffectiveAccessResult,
   type EngineSetDetail,
   type EngineSetSelector,
@@ -3634,8 +3635,8 @@ function ApiClientsPanel({
   onRotateServiceAccount: (id: string) => void;
   onRevoke: (id: string) => void;
   onRevokeServiceAccount: (id: string) => void;
-  onCreateExternalSystem: (payload: Required<Pick<ExternalEngineSystemPayload, 'name'>> & ExternalEngineSystemPayload) => void;
-  onUpdateExternalSystem: (id: string, payload: ExternalEngineSystemPayload) => void;
+  onCreateExternalSystem: (payload: ExternalEngineSystemCreatePayload) => void;
+  onUpdateExternalSystem: (id: string, payload: ExternalEngineSystemUpdatePayload) => void;
   onArchiveExternalSystem: (id: string) => void;
   onSelectEngine: (id: string) => void;
   onReconcileEngine: (id: string) => void;
@@ -5254,7 +5255,7 @@ export default function AccessControl() {
     }
   };
 
-  const createExternalSystem = async (payload: Required<Pick<ExternalEngineSystemPayload, 'name'>> & ExternalEngineSystemPayload) => {
+  const createExternalSystem = async (payload: ExternalEngineSystemCreatePayload) => {
     try {
       await createExternalSystemM.mutateAsync(payload);
       setError(null);
@@ -5263,7 +5264,7 @@ export default function AccessControl() {
     }
   };
 
-  const updateExternalSystem = async (id: string, payload: ExternalEngineSystemPayload) => {
+  const updateExternalSystem = async (id: string, payload: ExternalEngineSystemUpdatePayload) => {
     try {
       await updateExternalSystemM.mutateAsync({ id, ...payload });
       setError(null);

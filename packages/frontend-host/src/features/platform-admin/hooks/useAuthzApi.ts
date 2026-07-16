@@ -42,6 +42,8 @@ import type {
   ExternalEngineRegistration as SharedExternalEngineRegistration,
   ExternalEngineRegistrationAuditEntry as SharedExternalEngineRegistrationAuditEntry,
   ExternalEngineSystem as SharedExternalEngineSystem,
+  ExternalEngineSystemCreate as SharedExternalEngineSystemCreate,
+  ExternalEngineSystemUpdate as SharedExternalEngineSystemUpdate,
   IdentityMappingResponse,
   IdentityProviderConnectionTestResponse,
   IdentityProviderMembershipReplayResponse,
@@ -145,14 +147,8 @@ export type ExternalEngineCapabilityDiagnostics = SharedExternalEngineCapability
 export type ExternalEngineMaterializationDiagnostics = SharedExternalEngineMaterializationDiagnostics;
 export type ExternalEngineSystem = SharedExternalEngineSystem;
 
-export interface ExternalEngineSystemPayload {
-  key?: string;
-  name?: string;
-  description?: string | null;
-  defaultManagementMode?: Exclude<EngineManagementMode, 'manual'>;
-  defaultFieldOwnership?: EngineFieldOwnership;
-  isActive?: boolean;
-}
+export type ExternalEngineSystemCreatePayload = SharedExternalEngineSystemCreate;
+export type ExternalEngineSystemUpdatePayload = SharedExternalEngineSystemUpdate;
 
 export type ExternalEngineRegistration = SharedExternalEngineRegistration;
 export type ExternalEngineRegistrationAuditEntry = SharedExternalEngineRegistrationAuditEntry;
@@ -663,7 +659,7 @@ export function useExternalEngineSystems() {
 export function useCreateExternalEngineSystem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Required<Pick<ExternalEngineSystemPayload, 'name'>> & ExternalEngineSystemPayload) =>
+    mutationFn: (data: ExternalEngineSystemCreatePayload) =>
       apiClient.post<ExternalEngineSystem>('/api/authz/external-engine-systems', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.externalEngineSystems }),
   });
@@ -672,7 +668,7 @@ export function useCreateExternalEngineSystem() {
 export function useUpdateExternalEngineSystem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & ExternalEngineSystemPayload) =>
+    mutationFn: ({ id, ...data }: { id: string } & ExternalEngineSystemUpdatePayload) =>
       apiClient.put<ExternalEngineSystem>(`/api/authz/external-engine-systems/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: authzQueryKeys.externalEngineSystems });
