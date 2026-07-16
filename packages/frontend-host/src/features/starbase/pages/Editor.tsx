@@ -30,6 +30,7 @@ const DMNEvaluatePanel = React.lazy(() => import('../components/DMNEvaluatePanel
 import DeployButton from '../../git/components/DeployButton'
 import GitVersionsPanel from '../../git/components/GitVersionsPanel'
 import { gitApi } from '../../git/api/gitApi'
+import { projectsApi } from '../../../api/starbase/projects'
 import { useGitRepository } from '../../git/hooks/useGitRepository'
 import { ProjectAccessError, isProjectAccessError } from '../components/ProjectAccessError'
 import { useSelectedEngine } from '../../../components/EngineSelector'
@@ -40,7 +41,6 @@ import { ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { toSafeInternalPath } from '../../../utils/safeNavigation'
 import { redirectTo, replaceAndReloadToInternalPath } from '../../../utils/redirect'
-import type { ProjectEngineAccessData } from '../utils/deployEligibility'
 import { LoadingState } from '../../shared/components/LoadingState'
 import type { LockHolder, LockResponse } from '../../git/types/git'
 import type { LatestProjectDeploymentArtifact as LatestDeploymentByFile } from '@enterpriseglue/shared/schemas/starbase/deployment-query.js'
@@ -1577,7 +1577,7 @@ export default function Editor() {
 
   const deployEngineAccessQ = useQuery({
     queryKey: ['project-engine-access', fileQ.data?.projectId],
-    queryFn: () => apiClient.get<ProjectEngineAccessData>(`/starbase-api/projects/${fileQ.data?.projectId}/engine-access`),
+    queryFn: () => projectsApi.getEngineAccess(String(fileQ.data?.projectId)),
     enabled: !!fileQ.data?.projectId,
     staleTime: 30 * 1000,
   })

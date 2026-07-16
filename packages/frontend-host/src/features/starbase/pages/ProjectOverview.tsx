@@ -13,6 +13,7 @@ import { NoDataState, ErrorState } from '../../shared/components'
 import { useInlineRename } from '../hooks/useInlineRename'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import { gitApi } from '../../git/api/gitApi'
+import { projectsApi } from '../../../api/starbase/projects'
 import { StarbaseTableShell } from '../components/StarbaseTableShell'
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
@@ -22,7 +23,7 @@ import { ProjectOverviewBulkSyncModal } from './components/ProjectOverviewBulkSy
 import { ProjectOverviewModals } from './components/ProjectOverviewModals'
 import DeployDialog from '../../git/components/DeployDialog'
 import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
-import type { Project, ProjectMember, EngineAccessData, SyncDirection, BulkSyncResult } from './projectOverviewTypes'
+import type { Project, ProjectMember, SyncDirection, BulkSyncResult } from './projectOverviewTypes'
 import type { ProjectOverviewBulkAction, ProjectOverviewRowAction } from './components/ProjectOverviewTable'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import { hasConnectedEngine } from '../utils/deployEligibility'
@@ -283,7 +284,7 @@ export default function ProjectOverview() {
   const engineAccessQueries = useQueries({
     queries: projectIds.map((projectId) => ({
       queryKey: ['project-engine-access', projectId],
-      queryFn: () => apiClient.get<EngineAccessData>(`/starbase-api/projects/${projectId}/engine-access`),
+      queryFn: () => projectsApi.getEngineAccess(projectId),
       enabled: !!projectId,
       staleTime: 30 * 1000,
     })),
@@ -595,7 +596,7 @@ export default function ProjectOverview() {
 
   const engineAccessQ = useQuery({
     queryKey: ['project-engine-access', engineAccessProject?.id],
-    queryFn: () => apiClient.get<EngineAccessData>(`/starbase-api/projects/${engineAccessProject?.id}/engine-access`),
+    queryFn: () => projectsApi.getEngineAccess(String(engineAccessProject?.id)),
     enabled: engineAccessOpen && !!engineAccessProject?.id,
   })
 

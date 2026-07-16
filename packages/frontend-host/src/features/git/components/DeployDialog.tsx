@@ -22,11 +22,12 @@ import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { useToast } from '../../../shared/notifications/ToastProvider';
 import { useDeployment } from '../hooks/useDeployment';
+import { projectsApi } from '../../../api/starbase/projects';
 import { EnginePermission, ProjectPermission } from '../../../shared/auth/permissions';
 import { WhyUnavailableLink } from '../../../shared/auth/guards';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import type { DeployRequest } from '../types/git';
-import type { ConnectedEngine, ProjectEngineAccessData } from '../../starbase/utils/deployEligibility';
+import type { ConnectedEngine } from '../../starbase/utils/deployEligibility';
 
 type DeploymentMode = 'manual' | 'ci';
 
@@ -161,9 +162,7 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
   // Fetch connected engines for this project
   const enginesQuery = useQuery({
     queryKey: ['project', 'engine-access', projectId],
-    queryFn: () => apiClient.get<ProjectEngineAccessData>(
-      `/starbase-api/projects/${projectId}/engine-access`
-    ),
+    queryFn: () => projectsApi.getEngineAccess(projectId),
     staleTime: 30000,
     enabled: open && !!projectId,
   });

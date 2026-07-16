@@ -40,6 +40,7 @@ import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
 import { getAccessibleEngines } from '../../mission-control/engines/api/engines'
+import { projectsApi } from '../../../api/starbase/projects'
 import { PlatformPermission, ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { useSelectedEngine } from '../../../components/EngineSelector'
@@ -72,7 +73,6 @@ import { ProjectMembersManagementModals, type ProjectScopedCustomRole } from './
 import { ProjectDetailHeader } from './components/ProjectDetailHeader'
 import { downloadBlob, toSafeDownloadFilename, toSafeDownloadFilenameWithExtension } from '../../../utils/safeDom'
 import { renderDiagramToPdf } from '../utils/renderDiagramToPdf'
-import type { ProjectEngineAccessData } from '../utils/deployEligibility'
 
 // Import extracted utilities and components
 import {
@@ -747,7 +747,7 @@ export default function ProjectDetail() {
   // Engine access query
   const engineAccessQ = useQuery({
     queryKey: ['project-engine-access', projectId],
-    queryFn: () => apiClient.get<ProjectEngineAccessData>(`/starbase-api/projects/${projectId}/engine-access`),
+    queryFn: () => projectsApi.getEngineAccess(projectId!),
     enabled: !!projectId,
   })
 

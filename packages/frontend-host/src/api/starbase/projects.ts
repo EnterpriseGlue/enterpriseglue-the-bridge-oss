@@ -1,5 +1,6 @@
 import { apiClient } from '../../shared/api/client';
 import type { Project } from '../../shared/api/types';
+import type { ProjectEngineAccessResponse } from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js';
 
 const BASE_URL = '/starbase-api/projects';
 
@@ -7,6 +8,9 @@ export const projectsApi = {
   list: () => apiClient.get<Project[]>(BASE_URL),
   
   getById: (id: string) => apiClient.get<Project>(`${BASE_URL}/${id}`),
+
+  getEngineAccess: (id: string) =>
+    apiClient.get<ProjectEngineAccessResponse>(`${BASE_URL}/${encodeURIComponent(id)}/engine-access`),
   
   create: (data: { name: string }) => apiClient.post<Project>(BASE_URL, data),
   
