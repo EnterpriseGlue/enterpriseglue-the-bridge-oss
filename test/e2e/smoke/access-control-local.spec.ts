@@ -19,6 +19,8 @@ test.describe('Smoke: local Access Control authorization', () => {
     await page.goto('/admin/access-control');
     await expect(page.getByRole('heading', { name: 'Access Control' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Assignments', exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Runtime Resources', exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'SSO Engine Assignments', exact: true })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Roles', exact: true })).toHaveAttribute('aria-selected', 'true');
   });
 });
