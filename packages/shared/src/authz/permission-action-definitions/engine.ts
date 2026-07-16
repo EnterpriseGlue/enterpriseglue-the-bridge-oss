@@ -139,6 +139,12 @@ export const ENGINE_AUTHZ_ACTIONS = [
             'the special __env__ id returns environment health for authenticated users without resolving an engine row',
           ],
         },
+        {
+          method: 'GET',
+          route: '/engines-api/engines/{id}/runtime-resources',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['returns only sanitized runtime-inventory rows in the caller tenant'],
+        },
       ],
     },
   {
@@ -238,6 +244,12 @@ export const ENGINE_AUTHZ_ACTIONS = [
           route: '/engines-api/engines/{id}/test',
           resourceResolver: 'engine.byId',
           additionalChecks: ['legacy engine manage role also accepted for compatibility'],
+        },
+        {
+          method: 'POST',
+          route: '/engines-api/engines/{id}/runtime-resources/reconcile',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['runs idempotent runtime and deployment metadata discovery with Runtime Resource Set rematerialization'],
         },
       ],
     },

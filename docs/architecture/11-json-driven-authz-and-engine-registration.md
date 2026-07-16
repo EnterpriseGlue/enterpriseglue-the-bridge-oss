@@ -1935,10 +1935,10 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Record a short-lived, provider-scoped SHA-256 hash for each validated direct-SAML response before provisioning. The provider-neutral and legacy callback paths share the unique replay ledger, which rejects a duplicate assertion without retaining raw assertion data; expired entries are removed during consumption.
 - [x] ✅ `POST /api/auth/providers/:providerId/login`
   - Performs direct LDAP authentication only for providers configured with `authenticationMode = direct`; rate limits and generic credential errors are mandatory.
-- [ ] ⬜ `GET /engines-api/engines/:engineId/runtime-resources`
-  - Lists authorized inventory or admin diagnostics by runtime kind, key, tenant, lineage, and status.
-- [ ] ⬜ `POST /engines-api/engines/:engineId/runtime-resources/reconcile`
-  - Runs idempotent deployment/process/decision metadata discovery and resource-set rematerialization.
+- [x] ✅ `GET /engines-api/engines/:engineId/runtime-resources`
+  - Lists tenant-scoped sanitized inventory for an engine viewer by runtime kind, key, tenant, lineage, and status; optional kind and inactive-row filters are validated.
+- [x] ✅ `POST /engines-api/engines/:engineId/runtime-resources/reconcile`
+  - Requires engine edit authorization and runs idempotent deployment/process/decision metadata discovery with Runtime Resource Set rematerialization.
 - [x] ✅ `POST /engines-api/external/engines/:engineId/deployment-receipts`
   - Accepts an idempotent API-client or service-account receipt for a direct pipeline deployment only after API deployment eligibility passes; it stores sanitized lineage and updates runtime inventory.
 - [ ] ⬜ `GET /engines-api/engines/:engineId/deployments/:deploymentId/lineage`

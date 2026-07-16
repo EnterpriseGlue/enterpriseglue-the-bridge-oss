@@ -7,6 +7,8 @@ import { engineService, projectEngineTargetService } from '@enterpriseglue/share
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 const apiClientAuthMock = vi.hoisted(() => ({
@@ -86,6 +88,7 @@ vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
   engineLimiter: (_req: any, _res: any, next: any) => next(),
   engineRegistrationLimiter: (_req: any, _res: any, next: any) => next(),
+  reconciliationLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -375,6 +378,54 @@ describe('mission-control engines routes', () => {
       userId: 'user-1',
       resourceType: 'engine',
       resourceId: 'e1',
+    }));
+  });
+
+  it('lists only tenant-visible sanitized runtime inventory for an authorized engine viewer', async () => {
+    const resourceRepo = {
+      find: vi.fn().mockResolvedValue([
+        { id: 'resource-payments', tenantId: null, engineId: 'e1', resourceKind: 'process_definition', resourceKey: 'payments', isActive: true, lineageJson: '{}' },
+        { id: 'resource-foreign', tenantId: 'tenant-b', engineId: 'e1', resourceKind: 'decision_definition', resourceKey: 'foreign', isActive: true, lineageJson: '{}' },
+      ]),
+    };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === RuntimeResource
+        ? resourceRepo
+        : entity === Engine
+          ? { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null }) }
+          : { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null }) },
+    });
+
+    const response = await request(app).get('/engines-api/engines/e1/runtime-resources?resourceKind=process_definition');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([expect.objectContaining({ id: 'resource-payments', resourceKey: 'payments' })]);
+    expect(resourceRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ engineId: 'e1', resourceKind: 'process_definition', isActive: true }),
+    }));
+  });
+
+  it('reconciles one engine runtime inventory through engine edit authorization', async () => {
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'engine:edit'
+    );
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null }) }
+        : { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null }) },
+    });
+    (engineMetadataReconciliationService as any).reconcileEngine.mockResolvedValue({
+      created: 1, updated: 2, deactivated: 0, materializedSets: 1,
+      deployments: { created: 1, updated: 0, artifactsCreated: 2 },
+    });
+
+    const response = await request(app).post('/engines-api/engines/e1/runtime-resources/reconcile');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ created: 1, deployments: { artifactsCreated: 2 } });
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('e1', null);
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:edit', expect.objectContaining({
+      resourceType: 'engine', resourceId: 'e1',
     }));
   });
 

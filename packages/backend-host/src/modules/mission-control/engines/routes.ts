@@ -18,8 +18,8 @@ import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireApiClientAction } from '@enterpriseglue/shared/middleware/apiClientAuth.js'
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
-import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js'
-import { apiLimiter, engineLimiter, engineRegistrationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
+import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
+import { apiLimiter, engineLimiter, engineRegistrationLimiter, reconciliationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
 import { engineService, engineSetService, platformSettingsService, projectEngineTargetService, ApiClientScopes } from '@enterpriseglue/shared/services/platform-admin/index.js'
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
@@ -43,6 +43,10 @@ type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[]
 
 // Validation schemas
 const engineIdParamSchema = z.object({ id: z.string().min(1) })
+const runtimeResourceInventoryQuerySchema = z.object({
+  resourceKind: z.enum(['process_definition', 'decision_definition']).optional(),
+  includeInactive: z.enum(['true', 'false']).optional(),
+})
 const engineManagementModeSchema = z.enum(['external_managed', 'hybrid'])
 const engineLifecycleStatusSchema = z.enum(['active', 'disabled', 'stale', 'decommissioned'])
 const engineFieldOwnerSchema = z.enum(['manual', 'external'])
@@ -1436,6 +1440,25 @@ r.get('/engines-api/engines/:id', engineLimiter, requireAuth, requireEngineInven
   }
 
   res.json(withEngineCapabilities(serializeEngine(engine)))
+}))
+
+r.get('/engines-api/engines/:id/runtime-resources', engineLimiter, requireAuth, validateParams(engineIdParamSchema), validateQuery(runtimeResourceInventoryQuerySchema), requireEngineInventoryReadById, asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenant?.tenantId || null
+  const resources = await (await getDataSource()).getRepository(RuntimeResource).find({
+    where: {
+      engineId: String(req.params.id),
+      ...(req.query.resourceKind ? { resourceKind: String(req.query.resourceKind) } : {}),
+      ...(req.query.includeInactive === 'true' ? {} : { isActive: true }),
+    },
+    order: { resourceKind: 'ASC', resourceKey: 'ASC', id: 'ASC' },
+  })
+  res.json(resources.filter((resource) => (resource.tenantId || null) === tenantId))
+}))
+
+r.post('/engines-api/engines/:id/runtime-resources/reconcile', engineLimiter, requireAuth, reconciliationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const tenantId = req.tenant?.tenantId || null
+  res.json(await engineMetadataReconciliationService.reconcileEngine(engineId, tenantId))
 }))
 
 r.get('/engines-api/engines/:id/project-targets', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.project-access.requests.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.PROJECT_ACCESS_VIEW, EnginePermissions.MEMBERS_MANAGE] }), asyncHandler(async (req: Request, res: Response) => {
