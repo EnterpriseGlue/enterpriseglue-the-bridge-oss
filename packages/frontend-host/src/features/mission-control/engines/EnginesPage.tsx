@@ -41,6 +41,10 @@ import type {
   EngineMember as SharedEngineMember,
   EngineMembersResponse as SharedEngineMembersResponse,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
+import type {
+  RoleAssignment as SharedRoleAssignment,
+  SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
 import { getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts } from './api/engines'
 
@@ -374,26 +378,10 @@ type ProjectEngineTargetView = {
 type EngineAccessMember = SharedEngineMember
 type EngineMembersResponse = SharedEngineMembersResponse
 
-type EngineRoleAssignment = {
-  id: string
-  userId?: string | null
-  principalType?: string | null
-  principalId?: string | null
-  roleId: string
-  roleName?: string | null
-  roleScope?: string | null
-  resourceType?: string | null
-  resourceId?: string | null
-  scopeType?: string | null
-  scopeId?: string | null
-  source: string
-  sourceMappingId?: string | null
-  sourceRef?: string | null
-  expiresAt?: number | null
-  lastSeenAt?: number | null
-  createdAt?: number | null
-  updatedAt?: number | null
-}
+type EngineRoleAssignment = SharedRoleAssignment
+type EngineRoleAssignmentDisplay = Pick<SharedRoleAssignment, 'id' | 'roleId' | 'source'> & Partial<Pick<SharedRoleAssignment,
+  'userId' | 'principalType' | 'principalId' | 'sourceMappingId' | 'sourceRef'
+>>
 
 type RuntimeResourceAccessInventory = {
   id: string
@@ -420,25 +408,7 @@ type RuntimeResourceSetAccessInventory = {
   isArchived?: boolean
 }
 
-type SsoEngineAccessSnapshot = {
-  id: string
-  providerId: string | null
-  mappingId: string
-  principalType: string
-  principalId: string
-  engineId: string
-  providerSubjectIds: string[]
-  providerGroupIds: string[]
-  providerAppRoleIds: string[]
-  currentRoleIds: string[]
-  previousRoleIds: string[]
-  status: string
-  cleanupReason: string | null
-  lastSeenAt: number
-  lastSyncedAt: number
-  removedAt: number | null
-  details?: Record<string, unknown>
-}
+type SsoEngineAccessSnapshot = SharedSsoEngineAccessSnapshot
 
 export function formatProjectEngineTargetProject(target: ProjectEngineTargetView | null | undefined): string {
   return target?.projectName || target?.projectId || '-'
@@ -465,7 +435,7 @@ export function formatEngineAccessMemberName(member: EngineAccessMember | null |
   return fullName || member.user?.email || member.userId || '-'
 }
 
-export function formatEngineAccessPrincipal(assignment: EngineRoleAssignment | null | undefined): string {
+export function formatEngineAccessPrincipal(assignment: EngineRoleAssignmentDisplay | null | undefined): string {
   if (!assignment) return '-'
   const type = assignment.principalType || (assignment.userId ? 'user' : 'principal')
   const id = assignment.principalId || assignment.userId || '-'
@@ -485,7 +455,7 @@ export function formatEngineAccessRole(value: string | null | undefined): string
   return formatEngineRegistrationStatus(value)
 }
 
-export function formatEngineAccessSourceLineage(assignment: EngineRoleAssignment | null | undefined): string {
+export function formatEngineAccessSourceLineage(assignment: EngineRoleAssignmentDisplay | null | undefined): string {
   if (!assignment) return '-'
   const source = String(assignment.source || '').toLowerCase()
   const sourceLabel = source === 'sso'
@@ -507,7 +477,7 @@ export function formatEngineAccessSourceLineage(assignment: EngineRoleAssignment
   return parts.join('; ')
 }
 
-export function isEngineGovernanceRoleAssignment(assignment: EngineRoleAssignment | null | undefined): boolean {
+export function isEngineGovernanceRoleAssignment(assignment: EngineRoleAssignmentDisplay | null | undefined): boolean {
   return assignment?.roleId === 'system.engine.owner' || assignment?.roleId === 'system.engine.delegate'
 }
 
@@ -531,7 +501,7 @@ export function getEngineAccountableOwnerLabels(members: EngineAccessMember[]): 
     .filter((label) => label !== '-')
 }
 
-export function getEngineEffectiveOwnerLabels(members: EngineAccessMember[], assignments: EngineRoleAssignment[]): string[] {
+export function getEngineEffectiveOwnerLabels(members: EngineAccessMember[], assignments: EngineRoleAssignmentDisplay[]): string[] {
   const accountableOwnerMembers = members.filter(isAccountableOwnerMember)
   const accountableOwnerIds = new Set(accountableOwnerMembers.map((member) => member.userId).filter(Boolean))
   const labels = [
