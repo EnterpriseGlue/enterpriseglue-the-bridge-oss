@@ -5,26 +5,28 @@ import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/ent
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
 import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import type {
+  EngineSetDetail as SharedEngineSetDetail,
+  EngineSetMaterializationResult as SharedEngineSetMaterializationResult,
+  EngineSetPreview as SharedEngineSetPreview,
+  EngineSetSelector as SharedEngineSetSelector,
+  EngineSetSummary as SharedEngineSetSummary,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, type DataSource, type EntityManager, type Repository } from 'typeorm';
 
-export type EngineSetSource = 'manual' | 'sso' | 'api' | 'external' | 'system' | 'automation' | 'config';
-export type EngineSetOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
-export type EngineSetSelectorMode = 'all' | 'engine_ids' | 'labels';
-export type EngineSetLabelMatch = 'all' | 'any';
-export type EngineSetSelectorRiskReason = 'all_engines_selector' | 'any_label_match';
+export type EngineSetSource = SharedEngineSetSummary['source'];
+export type EngineSetOwnershipMode = SharedEngineSetSummary['ownershipMode'];
+export type EngineSetSelectorMode = SharedEngineSetSelector['mode'];
+export type EngineSetLabelMatch = NonNullable<Extract<SharedEngineSetSelector, { mode: 'labels' }>['labelMatch']>;
+export type EngineSetSelectorRiskReason = SharedEngineSetPreview['riskReasons'][number];
 
 /** Canonical portable identity for a global or tenant-scoped Engine Set key. */
 export function engineSetKeyIdentity(tenantId: string | null | undefined, key: string): string {
   return `${tenantId || 'platform'}:${key.trim()}`;
 }
 
-export interface EngineSetSelector {
-  mode: EngineSetSelectorMode;
-  engineIds?: string[];
-  labels?: Record<string, string>;
-  labelMatch?: EngineSetLabelMatch;
-}
+export type EngineSetSelector = SharedEngineSetSelector;
 
 export interface EngineSetInput {
   tenantId?: string | null;
@@ -67,72 +69,11 @@ export function engineSetOwnershipReason(source: string | null | undefined, sour
   return `Engine Set is managed by ${owner}${sourceRef ? ` (${sourceRef})` : ''} and cannot be changed through manual Engine Set management`;
 }
 
-export interface EngineSetSummary {
-  id: string;
-  tenantId: string | null;
-  key: string;
-  name: string;
-  description: string | null;
-  selector: EngineSetSelector;
-  selectorFingerprint: string;
-  source: EngineSetSource;
-  sourceRef: string | null;
-  ownershipMode: EngineSetOwnershipMode;
-  sourceHash: string | null;
-  lastAppliedAt: number | null;
-  driftStatus: string | null;
-  isArchived: boolean;
-  createdById: string | null;
-  lastMaterializedAt: number | null;
-  materializationStatus: string;
-  materializationError: string | null;
-  materializedEngineCount: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface EngineSetMaterializationView {
-  id: string;
-  tenantId: string | null;
-  engineSetId: string;
-  engineId: string;
-  engineName: string | null;
-  selectorFingerprint: string;
-  matchedBy: Record<string, unknown>;
-  lineage: Record<string, unknown>;
-  source: string;
-  sourceRef: string | null;
-  lastSeenAt: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface EngineSetDetail extends EngineSetSummary {
-  materializations: EngineSetMaterializationView[];
-}
-
-export interface EngineSetPreview {
-  selector: EngineSetSelector;
-  selectorFingerprint: string;
-  riskReasons: EngineSetSelectorRiskReason[];
-  warnings: string[];
-  matchedEngines: Array<{
-    engineId: string;
-    engineName: string;
-    labels: Record<string, string>;
-    matchedBy: Record<string, unknown>;
-  }>;
-}
-
-export interface EngineSetMaterializationResult {
-  engineSetId: string;
-  selectorFingerprint: string;
-  matched: number;
-  created: number;
-  updated: number;
-  removed: number;
-  materializations: EngineSetMaterializationView[];
-}
+export type EngineSetSummary = SharedEngineSetSummary;
+export type EngineSetMaterializationView = SharedEngineSetMaterializationResult['materializations'][number];
+export type EngineSetDetail = SharedEngineSetDetail;
+export type EngineSetPreview = SharedEngineSetPreview;
+export type EngineSetMaterializationResult = SharedEngineSetMaterializationResult;
 
 function normalizeTenantId(tenantId?: string | null): string | null {
   const normalized = tenantId?.trim();
@@ -276,8 +217,8 @@ function toMaterializationView(
   };
 }
 
-function labelsMatch(selector: EngineSetSelector, labels: Record<string, string>): boolean {
-  const requiredLabels = selector.labels || {};
+function labelsMatch(selector: Extract<EngineSetSelector, { mode: 'labels' }>, labels: Record<string, string>): boolean {
+  const requiredLabels = selector.labels;
   const entries = Object.entries(requiredLabels);
   if (selector.labelMatch === 'any') {
     return entries.some(([key, value]) => labels[key] === value);
@@ -612,7 +553,7 @@ class EngineSetServiceClass {
       })
       : [];
     const registrationByEngineId = new Map(registrations.map((registration) => [registration.engineId, registration]));
-    const selectorEngineIds = new Set(selector.engineIds || []);
+    const selectorEngineIds = new Set(selector.mode === 'engine_ids' ? selector.engineIds : []);
     const matched = [];
 
     for (const engine of engines) {
