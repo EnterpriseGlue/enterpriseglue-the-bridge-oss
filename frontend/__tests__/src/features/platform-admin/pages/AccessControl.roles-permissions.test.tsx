@@ -297,12 +297,13 @@ describe('AccessControl roles and permissions', () => {
   });
 
   it('labels provider-managed assignments without exposing manual removal', () => {
-    const assignment = {
-      id: 'provider-assignment', userId: 'provider-user', principalType: 'user', principalId: 'provider-user',
-      roleId: 'system.engine.operator', roleName: 'Engine Operator', roleScope: 'engine', resourceType: 'engine', resourceId: 'engine-1',
-      scopeType: 'engine', scopeId: 'engine-1', source: 'identity_provider', sourceMappingId: 'identity-mapping-1', sourceRef: 'identity_mapping:identity-mapping-1',
+    const assignment: RoleAssignment = {
+      id: 'provider-assignment', tenantId: null, userId: 'provider-user', principalType: 'user', principalId: 'provider-user',
+      roleId: 'system.engine.operator', roleKey: 'system.engine.operator', roleName: 'Engine Operator', roleScope: 'engine', resourceType: 'engine', resourceId: 'engine-1',
+      scopeType: 'engine', scopeId: 'engine-1', source: 'sso', sourceMappingId: 'identity-mapping-1', sourceRef: 'identity_mapping:identity-mapping-1',
+      ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
       expiresAt: null, lastSeenAt: 1, createdById: null, createdAt: 1, updatedAt: 1,
-    } as RoleAssignment;
+    };
     render(<RoleAssignmentsTable assignments={[assignment]} apiClients={[]} groups={[]} serviceAccounts={[]} externalSystems={[]} loading={false} canDelete onRemove={() => undefined} />);
 
     const row = screen.getByText('provider-user').closest('tr');
