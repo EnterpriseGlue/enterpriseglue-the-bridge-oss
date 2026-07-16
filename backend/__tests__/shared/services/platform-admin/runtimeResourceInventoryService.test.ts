@@ -56,6 +56,24 @@ describe('runtimeResourceInventoryService', () => {
     expect(materializationRepo.delete).toHaveBeenCalled();
   });
 
+  it('materializes only matching runtime tenants for a tenant-constrained set', async () => {
+    const { resourceRepo, setRepo, materializationRepo } = setup();
+    setRepo.findOne.mockResolvedValue({
+      id: 'set-1', tenantId: 'tenant-a', engineId: 'engine-1', resourceKind: 'process_definition',
+      selectorJson: JSON.stringify({ mode: 'prefix', prefix: 'payments-' }), runtimeTenantId: 'runtime-payments', isArchived: false,
+    });
+    resourceRepo.find.mockResolvedValue([
+      { id: 'payments-tenant', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'payments-order', runtimeTenantId: 'runtime-payments', labelsJson: '{}', source: 'engine_discovery', sourceRef: null },
+      { id: 'risk-tenant', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'payments-risk', runtimeTenantId: 'runtime-risk', labelsJson: '{}', source: 'engine_discovery', sourceRef: null },
+    ]);
+
+    const result = await runtimeResourceInventoryService.materialize('set-1', 'tenant-a');
+
+    expect(result).toMatchObject({ matched: 1, created: 1, removed: 0 });
+    expect(materializationRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ runtimeResourceId: 'payments-tenant' }));
+    expect(materializationRepo.insert).not.toHaveBeenCalledWith(expect.objectContaining({ runtimeResourceId: 'risk-tenant' }));
+  });
+
   it('fails closed when a caller requests a set from another tenant', async () => {
     const { setRepo } = setup();
     setRepo.findOne.mockResolvedValue({ id: 'set-1', tenantId: 'tenant-a', isArchived: false });

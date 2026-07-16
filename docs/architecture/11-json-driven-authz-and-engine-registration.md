@@ -1553,7 +1553,7 @@ Recommended persisted fields for `engine_runtime_resources`:
 | `resourceKind` | `process_definition`, `decision_definition`, `deployment`, `case_definition`, or later `process_instance`. |
 | `resourceKey` | Stable engine key, such as Camunda process definition key or decision definition key. |
 | `resourceVersion` | Optional runtime version for diagnostics; access should usually apply to all versions of a key. |
-| `engineTenantId` | Optional process-engine tenant id where the runtime supports tenant identifiers. |
+| `runtimeTenantId` | Optional process-engine tenant id where the runtime supports tenant identifiers. |
 | `deploymentId` | Runtime deployment id when known. |
 | `sourceProjectId` | Starbase project that deployed or owns the artifact when lineage exists. |
 | `sourceFileId` | Starbase file/model that produced the runtime artifact when lineage exists. |
@@ -1565,11 +1565,11 @@ V1 should avoid direct per-process-instance assignments because instance ids are
 
 V1 assignment scopes are therefore intentionally limited to:
 
-- [ ] ⬜ Whole engine for the normal distributed-engine topology.
-- [ ] ⬜ Runtime tenant within one `resource_aware` engine.
-- [ ] ⬜ Process definition key, applying to all versions unless a policy narrows it.
-- [ ] ⬜ Decision definition key, applying to all versions unless a policy narrows it.
-- [ ] ⬜ Materialized runtime resource set containing tenant, process, or decision resources.
+- [x] ✅ Whole engine for the normal distributed-engine topology.
+- [x] ✅ Runtime tenant within one `resource_aware` engine, materialized as a tenant-constrained Runtime Resource Set.
+- [x] ✅ Process definition key, applying to all versions unless a policy narrows it.
+- [x] ✅ Decision definition key, applying to all versions unless a policy narrows it.
+- [x] ✅ Materialized runtime resource set containing tenant, process, or decision resources.
 
 Tasks, process instances, variables, jobs, incidents, history, batches, and migrations inherit these scopes. They are not independent assignment targets in v1.
 

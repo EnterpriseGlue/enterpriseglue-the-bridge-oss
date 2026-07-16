@@ -244,8 +244,8 @@ describe('configBundleDiffService', () => {
       id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz',
       name: 'Central', baseUrl: 'https://central.example.com/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}', runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, pipelineReceiptEnabled: true, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active',
     }], [], [], [], [], [
-      { id: 'resource-orders', tenantId: 'tenant-a', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'orders-v1', runtimeTenantId: '', isActive: true, labelsJson: '{}' },
-      { id: 'resource-payments', tenantId: 'tenant-a', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'payments-v1', runtimeTenantId: '', isActive: true, labelsJson: '{}' },
+      { id: 'resource-orders', tenantId: 'tenant-a', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'orders-v1', runtimeTenantId: 'runtime-orders', isActive: true, labelsJson: '{}' },
+      { id: 'resource-payments', tenantId: 'tenant-a', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'payments-v1', runtimeTenantId: 'runtime-payments', isActive: true, labelsJson: '{}' },
     ], [], [], [{
       id: 'set-1', tenantId: 'tenant-a', key: 'runtime.payments', name: 'Payments processes', description: null, engineId: 'engine-1', resourceKind: 'process_definition', selectorJson: JSON.stringify({ mode: 'prefix', prefix: 'payments-' }), runtimeTenantId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,
     }], [{ tenantId: 'tenant-a', runtimeResourceSetId: 'set-1', runtimeResourceId: 'resource-payments' }]);
@@ -254,7 +254,7 @@ describe('configBundleDiffService', () => {
       bundle: { ...bundle, imports: ['./engines.json', './runtime-resource-sets.json'] },
       files: {
         './engines.json': { engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' } }] },
-        './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.central' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'orders-' } }] },
+        './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.central' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'orders-' }, runtimeTenantId: 'runtime-orders' }] },
       },
     }, 'tenant-a');
 
@@ -262,9 +262,9 @@ describe('configBundleDiffService', () => {
       objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'update',
       runtimeResourceChanges: {
         matchedCount: 1, unmatchedCount: 1, detailsTruncated: false,
-        currentlyMaterialized: [{ resourceKind: 'process_definition', resourceKey: 'payments-v1', runtimeTenantId: null }],
-        newlyMatched: [{ resourceKind: 'process_definition', resourceKey: 'orders-v1', runtimeTenantId: null }],
-        noLongerMatched: [{ resourceKind: 'process_definition', resourceKey: 'payments-v1', runtimeTenantId: null }],
+        currentlyMaterialized: [{ resourceKind: 'process_definition', resourceKey: 'payments-v1', runtimeTenantId: 'runtime-payments' }],
+        newlyMatched: [{ resourceKind: 'process_definition', resourceKey: 'orders-v1', runtimeTenantId: 'runtime-orders' }],
+        noLongerMatched: [{ resourceKind: 'process_definition', resourceKey: 'payments-v1', runtimeTenantId: 'runtime-payments' }],
         unmatchedSelectors: [],
       },
     }));

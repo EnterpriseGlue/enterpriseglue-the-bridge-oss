@@ -129,8 +129,12 @@ function runtimeResourceChangeSummary(
   existingMaterializations: Array<{ runtimeResourceId: string }>,
   resourcesById: Map<string, RuntimeResource>,
   selector: RuntimeResourceSetSelector,
+  runtimeTenantId: string | null | undefined,
 ): NonNullable<ConfigBundleDiffChange['runtimeResourceChanges']> {
-  const matchingResources = resources.filter((resource) => Boolean(matchRuntimeResourceSetSelector(resource, selector)));
+  const matchingResources = resources.filter((resource) =>
+    (!runtimeTenantId || resource.runtimeTenantId === runtimeTenantId)
+    && Boolean(matchRuntimeResourceSetSelector(resource, selector)),
+  );
   const matchingIds = new Set(matchingResources.map((resource) => resource.id));
   const existingIds = new Set(existingMaterializations.map((row) => row.runtimeResourceId));
   const currentlyMaterialized = Array.from(existingIds)
@@ -361,6 +365,7 @@ class ConfigBundleDiffService {
           existing ? runtimeResourceSetMaterializationsBySetId.get(existing.id) || [] : [],
           runtimeResourcesById,
           set.selector as RuntimeResourceSetSelector,
+          set.runtimeTenantId,
         )
         : undefined;
       if (!existing) {

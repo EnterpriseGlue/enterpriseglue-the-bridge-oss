@@ -137,7 +137,13 @@ class RuntimeResourceInventoryService {
     const selector = parseSelector(set.selectorJson);
     const fingerprint = selectorFingerprint(selector);
     const resources = await resourceRepo.find({ where: { engineId: set.engineId, resourceKind: set.resourceKind, isActive: true } });
-    const matches = resources.map((resource) => ({ resource, matchedBy: matchRuntimeResourceSetSelector(resource, selector) })).filter((match): match is { resource: RuntimeResource; matchedBy: Record<string, unknown> } => Boolean(match.matchedBy));
+    // A runtime-tenant constrained set is the assignment boundary for every
+    // matching resource in that tenant. Keep the constraint here, at the
+    // materialization boundary, so set-based grants cannot cross tenants.
+    const matches = resources
+      .filter((resource) => !set.runtimeTenantId || resource.runtimeTenantId === set.runtimeTenantId)
+      .map((resource) => ({ resource, matchedBy: matchRuntimeResourceSetSelector(resource, selector) }))
+      .filter((match): match is { resource: RuntimeResource; matchedBy: Record<string, unknown> } => Boolean(match.matchedBy));
     const existing = await materializationRepo.find({ where: { runtimeResourceSetId } });
     const existingByResource = new Map(existing.map((row) => [row.runtimeResourceId, row]));
     const now = Date.now();
