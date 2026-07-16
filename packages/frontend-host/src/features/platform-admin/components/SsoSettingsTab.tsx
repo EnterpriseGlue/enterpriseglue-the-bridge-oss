@@ -136,6 +136,7 @@ export default function SsoSettingsTab() {
         ssoEngineOwnerAssignmentMappingsEnabled: boolean;
         ssoEngineDelegateAssignmentMappingsEnabled: boolean;
         ssoRegexClaimMappingsEnabled: boolean;
+        ssoBroadEntitlementMappingsEnabled: boolean;
         ssoSecretViewMappingsEnabled: boolean;
         ssoUnredactedAuditMappingsEnabled: boolean;
         ssoPermanentDeleteMappingsEnabled: boolean;
@@ -320,6 +321,7 @@ export default function SsoSettingsTab() {
       ssoEngineOwnerAssignmentMappingsEnabled?: boolean;
       ssoEngineDelegateAssignmentMappingsEnabled?: boolean;
       ssoRegexClaimMappingsEnabled?: boolean;
+      ssoBroadEntitlementMappingsEnabled?: boolean;
       ssoSecretViewMappingsEnabled?: boolean;
       ssoUnredactedAuditMappingsEnabled?: boolean;
       ssoPermanentDeleteMappingsEnabled?: boolean;
@@ -714,6 +716,41 @@ export default function SsoSettingsTab() {
                 onToggle={(checked) => {
                   if (!canManageProviders) return;
                   updateSsoLoginBehavior.mutate(checked);
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--spacing-4)',
+                marginBottom: 'var(--spacing-4)',
+                padding: 'var(--spacing-3)',
+                borderRadius: '4px',
+                background: 'var(--cds-layer-01)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                  Allow broad identity entitlement mappings
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                  When off, new or newly enabled provider-neutral mappings must use an exact immutable entitlement ID.
+                </div>
+              </div>
+              <Toggle
+                id="sso-broad-entitlement-mappings-enabled"
+                labelText=""
+                hideLabel
+                labelA="Off"
+                labelB="On"
+                toggled={ssoLoginBehaviorQuery.data?.ssoBroadEntitlementMappingsEnabled ?? false}
+                disabled={!canManageProviders || ssoLoginBehaviorQuery.isLoading || updateSsoHighRiskSettings.isPending}
+                onToggle={(checked) => {
+                  if (!canManageProviders) return;
+                  updateSsoHighRiskSettings.mutate({ ssoBroadEntitlementMappingsEnabled: checked });
                 }}
               />
             </div>

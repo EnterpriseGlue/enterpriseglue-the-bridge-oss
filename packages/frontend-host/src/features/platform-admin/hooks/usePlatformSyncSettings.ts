@@ -16,6 +16,7 @@ export interface PlatformSyncSettings {
   ssoEngineOwnerAssignmentMappingsEnabled: boolean;
   ssoEngineDelegateAssignmentMappingsEnabled: boolean;
   ssoRegexClaimMappingsEnabled: boolean;
+  ssoBroadEntitlementMappingsEnabled: boolean;
   ssoSecretViewMappingsEnabled: boolean;
   ssoUnredactedAuditMappingsEnabled: boolean;
   ssoPermanentDeleteMappingsEnabled: boolean;

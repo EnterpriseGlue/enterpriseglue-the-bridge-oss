@@ -1894,6 +1894,7 @@ const PublicPlatformSettingsSchema = z.object({
   ssoEngineOwnerAssignmentMappingsEnabled: z.boolean(),
   ssoEngineDelegateAssignmentMappingsEnabled: z.boolean(),
   ssoRegexClaimMappingsEnabled: z.boolean(),
+  ssoBroadEntitlementMappingsEnabled: z.boolean(),
   ssoSecretViewMappingsEnabled: z.boolean(),
   ssoUnredactedAuditMappingsEnabled: z.boolean(),
   ssoPermanentDeleteMappingsEnabled: z.boolean(),

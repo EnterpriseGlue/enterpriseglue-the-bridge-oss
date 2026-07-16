@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { identityProviderMembershipSourceRef, matchesIdentityEntitlement, identityEntitlementMappingService } from '@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js';
 import { authorizationAttributeEntitlementId } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
+import { AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, PlatformSettings, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
 import { vi, type Mock } from 'vitest';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -130,6 +130,30 @@ describe('identity entitlement mapping', () => {
       }));
     }
     expect(mappingRepo.insert).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit platform setting before creating a broad entitlement mapping', async () => {
+    const mappingRepo = { insert: vi.fn() };
+    const providerRepo = { findOne: vi.fn().mockResolvedValue({ id: 'provider-1', key: 'identity.oidc.main' }) };
+    const groupRepo = { findOne: vi.fn().mockResolvedValue({ id: 'group-1', key: 'group.operators' }) };
+    const settingsRepo = { findOneBy: vi.fn().mockResolvedValue({ ssoBroadEntitlementMappingsEnabled: false }) };
+    const repositories = (entity: unknown) => entity === IdentityProvider ? providerRepo
+      : entity === AuthzGroup ? groupRepo
+        : entity === IdentityEntitlementMapping ? mappingRepo
+          : entity === PlatformSettings ? settingsRepo
+            : {};
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: repositories });
+
+    await expect(identityEntitlementMappingService.create({
+      providerKey: 'identity.oidc.main', targetGroupKey: 'group.operators', entitlementType: 'group', externalId: 'operators', matchOperator: 'contains',
+    }, 'tenant-a')).rejects.toThrow('Broad identity entitlement mappings are disabled');
+    expect(mappingRepo.insert).not.toHaveBeenCalled();
+
+    settingsRepo.findOneBy.mockResolvedValue({ ssoBroadEntitlementMappingsEnabled: true });
+    await expect(identityEntitlementMappingService.create({
+      providerKey: 'identity.oidc.main', targetGroupKey: 'group.operators', entitlementType: 'group', externalId: 'operators', matchOperator: 'contains',
+    }, 'tenant-a')).resolves.toMatchObject({ matchOperator: 'contains' });
+    expect(mappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ matchOperator: 'contains' }));
   });
 
   it('persists config provenance when a mapping is created through an injected transaction manager', async () => {

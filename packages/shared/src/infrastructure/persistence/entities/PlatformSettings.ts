@@ -62,6 +62,9 @@ export class PlatformSettings {
   @Column({ name: 'sso_regex_claim_mappings_enabled', type: 'boolean', default: false })
   ssoRegexClaimMappingsEnabled!: boolean;
 
+  @Column({ name: 'sso_broad_entitlement_mappings_enabled', type: 'boolean', default: false })
+  ssoBroadEntitlementMappingsEnabled!: boolean;
+
   @Column({ name: 'sso_secret_view_mappings_enabled', type: 'boolean', default: false })
   ssoSecretViewMappingsEnabled!: boolean;
 

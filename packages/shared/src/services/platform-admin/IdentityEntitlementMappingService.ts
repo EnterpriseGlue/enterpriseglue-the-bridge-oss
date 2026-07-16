@@ -4,6 +4,7 @@ import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
@@ -116,6 +117,14 @@ function validateInput(input: IdentityEntitlementMappingInput): void {
   if (input.syncMode && !['additive', 'authoritative'].includes(input.syncMode)) throw Errors.validation('Unsupported identity mapping sync mode');
 }
 
+async function requireBroadEntitlementMappingsEnabled(store: MappingStore, matchOperator: IdentityEntitlementMatchOperator): Promise<void> {
+  if (matchOperator === 'exact') return;
+  const settings = await store.getRepository(PlatformSettings).findOneBy({ id: 'default' });
+  if (!(settings as any)?.ssoBroadEntitlementMappingsEnabled) {
+    throw Errors.forbidden('Broad identity entitlement mappings are disabled in Platform Settings');
+  }
+}
+
 class IdentityEntitlementMappingService {
   async previewStoredSnapshots(input: Omit<IdentityEntitlementMappingInput, 'targetGroupKey'> & { limit?: number }, tenantId?: string | null): Promise<{ scanned: number; matches: number; nonMatches: number; failed: number; truncated: boolean; latestSnapshotAt: number | null; warnings: Array<'stored_snapshots_only' | 'no_active_snapshots' | 'truncated'> }> {
     validateInput({ ...input, targetGroupKey: 'preview-only' });
@@ -165,6 +174,7 @@ class IdentityEntitlementMappingService {
   async create(input: IdentityEntitlementMappingInput, tenantId?: string | null, store?: MappingStore): Promise<ManagedIdentityEntitlementMapping> {
     validateInput(input);
     const dataSource = store || await getDataSource();
+    await requireBroadEntitlementMappingsEnabled(dataSource, input.matchOperator);
     const [provider, group] = await Promise.all([
       dataSource.getRepository(IdentityProvider).findOne({ where: { ...tenantWhere(tenantId), key: normalized(input.providerKey, 'providerKey') } as any }),
       dataSource.getRepository(AuthzGroup).findOne({ where: { ...tenantWhere(tenantId), key: normalized(input.targetGroupKey, 'targetGroupKey'), isArchived: false } as any }),
@@ -262,6 +272,9 @@ class IdentityEntitlementMappingService {
     if (!provider) throw Errors.notFound('Identity provider not found');
     if (!group) throw Errors.notFound('Authorization group not found');
     const isActive = input.isActive ?? existing.isActive;
+    if (isActive && (current.matchOperator === 'exact' || !existing.isActive) && merged.matchOperator !== 'exact') {
+      await requireBroadEntitlementMappingsEnabled(dataSource, merged.matchOperator);
+    }
     const values = { providerId: provider.id, targetGroupId: group.id, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, updatedAt: Date.now() };
     const membershipDefinitionChanged = existing.providerId !== values.providerId
       || existing.targetGroupId !== values.targetGroupId

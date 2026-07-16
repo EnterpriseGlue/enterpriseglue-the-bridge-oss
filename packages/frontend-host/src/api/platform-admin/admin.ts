@@ -41,6 +41,7 @@ export interface PlatformSettings {
   ssoEngineOwnerAssignmentMappingsEnabled: boolean;
   ssoEngineDelegateAssignmentMappingsEnabled: boolean;
   ssoRegexClaimMappingsEnabled: boolean;
+  ssoBroadEntitlementMappingsEnabled: boolean;
   ssoSecretViewMappingsEnabled: boolean;
   ssoUnredactedAuditMappingsEnabled: boolean;
   ssoPermanentDeleteMappingsEnabled: boolean;

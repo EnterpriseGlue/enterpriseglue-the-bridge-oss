@@ -105,6 +105,7 @@ function mockApiDefaults() {
         ssoEngineOwnerAssignmentMappingsEnabled: false,
         ssoEngineDelegateAssignmentMappingsEnabled: false,
         ssoRegexClaimMappingsEnabled: false,
+        ssoBroadEntitlementMappingsEnabled: false,
         ssoSecretViewMappingsEnabled: false,
         ssoUnredactedAuditMappingsEnabled: false,
         ssoPermanentDeleteMappingsEnabled: false,
@@ -292,6 +293,19 @@ describe('SsoSettingsTab', () => {
     await waitFor(() =>
       expect(apiClient.put).toHaveBeenCalledWith('/api/admin/settings', {
         ssoRegexClaimMappingsEnabled: true,
+      }),
+    );
+  });
+
+  it('updates broad identity entitlement mapping guardrails', async () => {
+    renderSsoSettings();
+
+    await waitFor(() => expect(document.getElementById('sso-broad-entitlement-mappings-enabled')).toBeInTheDocument());
+    fireEvent.click(document.getElementById('sso-broad-entitlement-mappings-enabled')!);
+
+    await waitFor(() =>
+      expect(apiClient.put).toHaveBeenCalledWith('/api/admin/settings', {
+        ssoBroadEntitlementMappingsEnabled: true,
       }),
     );
   });

@@ -48,6 +48,7 @@ describe('PlatformSettingsService', () => {
     expect(settings.ssoEngineOwnerAssignmentMappingsEnabled).toBe(false);
     expect(settings.ssoEngineDelegateAssignmentMappingsEnabled).toBe(false);
     expect(settings.ssoRegexClaimMappingsEnabled).toBe(false);
+    expect(settings.ssoBroadEntitlementMappingsEnabled).toBe(false);
     expect(settings.ssoSecretViewMappingsEnabled).toBe(false);
     expect(settings.ssoUnredactedAuditMappingsEnabled).toBe(false);
     expect(settings.ssoPermanentDeleteMappingsEnabled).toBe(false);
@@ -78,6 +79,7 @@ describe('PlatformSettingsService', () => {
       ssoEngineOwnerAssignmentMappingsEnabled: false,
       ssoEngineDelegateAssignmentMappingsEnabled: false,
       ssoRegexClaimMappingsEnabled: false,
+      ssoBroadEntitlementMappingsEnabled: false,
       ssoSecretViewMappingsEnabled: false,
       ssoUnredactedAuditMappingsEnabled: false,
       ssoPermanentDeleteMappingsEnabled: false,
@@ -261,6 +263,27 @@ describe('PlatformSettingsService', () => {
 
     expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
       ssoRegexClaimMappingsEnabled: true,
+      updatedById: 'admin-1',
+    }));
+  });
+
+  it('persists broad entitlement mapping guardrail updates', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({ ssoBroadEntitlementMappingsEnabled: true }, 'admin-1');
+
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      ssoBroadEntitlementMappingsEnabled: true,
       updatedById: 'admin-1',
     }));
   });

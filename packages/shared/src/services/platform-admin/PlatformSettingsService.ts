@@ -62,6 +62,7 @@ export interface PlatformSettingsData {
   ssoEngineOwnerAssignmentMappingsEnabled: boolean;
   ssoEngineDelegateAssignmentMappingsEnabled: boolean;
   ssoRegexClaimMappingsEnabled: boolean;
+  ssoBroadEntitlementMappingsEnabled: boolean;
   ssoSecretViewMappingsEnabled: boolean;
   ssoUnredactedAuditMappingsEnabled: boolean;
   ssoPermanentDeleteMappingsEnabled: boolean;
@@ -110,6 +111,7 @@ export class PlatformSettingsService {
         ssoEngineOwnerAssignmentMappingsEnabled: false,
         ssoEngineDelegateAssignmentMappingsEnabled: false,
         ssoRegexClaimMappingsEnabled: false,
+        ssoBroadEntitlementMappingsEnabled: false,
         ssoSecretViewMappingsEnabled: false,
         ssoUnredactedAuditMappingsEnabled: false,
         ssoPermanentDeleteMappingsEnabled: false,
@@ -152,6 +154,7 @@ export class PlatformSettingsService {
       ssoEngineOwnerAssignmentMappingsEnabled: (settings as any).ssoEngineOwnerAssignmentMappingsEnabled ?? false,
       ssoEngineDelegateAssignmentMappingsEnabled: (settings as any).ssoEngineDelegateAssignmentMappingsEnabled ?? false,
       ssoRegexClaimMappingsEnabled: (settings as any).ssoRegexClaimMappingsEnabled ?? false,
+      ssoBroadEntitlementMappingsEnabled: (settings as any).ssoBroadEntitlementMappingsEnabled ?? false,
       ssoSecretViewMappingsEnabled: (settings as any).ssoSecretViewMappingsEnabled ?? false,
       ssoUnredactedAuditMappingsEnabled: (settings as any).ssoUnredactedAuditMappingsEnabled ?? false,
       ssoPermanentDeleteMappingsEnabled: (settings as any).ssoPermanentDeleteMappingsEnabled ?? false,
@@ -215,6 +218,7 @@ export class PlatformSettingsService {
       ssoEngineOwnerAssignmentMappingsEnabled: boolean;
       ssoEngineDelegateAssignmentMappingsEnabled: boolean;
       ssoRegexClaimMappingsEnabled: boolean;
+      ssoBroadEntitlementMappingsEnabled: boolean;
       ssoSecretViewMappingsEnabled: boolean;
       ssoUnredactedAuditMappingsEnabled: boolean;
       ssoPermanentDeleteMappingsEnabled: boolean;
@@ -296,6 +300,9 @@ export class PlatformSettingsService {
     if (data.ssoRegexClaimMappingsEnabled !== undefined) {
       updateData.ssoRegexClaimMappingsEnabled = data.ssoRegexClaimMappingsEnabled;
     }
+    if (data.ssoBroadEntitlementMappingsEnabled !== undefined) {
+      updateData.ssoBroadEntitlementMappingsEnabled = data.ssoBroadEntitlementMappingsEnabled;
+    }
     if (data.ssoSecretViewMappingsEnabled !== undefined) {
       updateData.ssoSecretViewMappingsEnabled = data.ssoSecretViewMappingsEnabled;
     }
@@ -370,6 +377,7 @@ export class PlatformSettingsService {
         ssoEngineOwnerAssignmentMappingsEnabled: data.ssoEngineOwnerAssignmentMappingsEnabled ?? false,
         ssoEngineDelegateAssignmentMappingsEnabled: data.ssoEngineDelegateAssignmentMappingsEnabled ?? false,
         ssoRegexClaimMappingsEnabled: data.ssoRegexClaimMappingsEnabled ?? false,
+        ssoBroadEntitlementMappingsEnabled: data.ssoBroadEntitlementMappingsEnabled ?? false,
         ssoSecretViewMappingsEnabled: data.ssoSecretViewMappingsEnabled ?? false,
         ssoUnredactedAuditMappingsEnabled: data.ssoUnredactedAuditMappingsEnabled ?? false,
         ssoPermanentDeleteMappingsEnabled: data.ssoPermanentDeleteMappingsEnabled ?? false,
