@@ -37,8 +37,8 @@ require_https_local_url() {
 }
 
 cookie_values() {
-  awk 'BEGIN { IGNORECASE = 1 }
-    /^set-cookie:/ {
+  awk '
+    tolower($0) ~ /^set-cookie:/ {
       value = $0
       sub(/^[^:]*:[[:space:]]*/, "", value)
       sub(/;.*/, "", value)
@@ -48,8 +48,8 @@ cookie_values() {
 
 header_value() {
   local header="$1"
-  awk -v expected="$header" 'BEGIN { IGNORECASE = 1 }
-    $0 ~ "^" expected ":[[:space:]]*" {
+  awk -v expected="$header" '
+    tolower($0) ~ "^" tolower(expected) ":[[:space:]]*" {
       value = $0
       sub(/^[^:]*:[[:space:]]*/, "", value)
       sub(/\r$/, "", value)

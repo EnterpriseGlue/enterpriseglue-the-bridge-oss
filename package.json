@@ -76,6 +76,7 @@
     "test:identity-ldap-container": "./scripts/run-ldap-protocol-mock.sh pnpm --dir backend exec vitest run test/integration/identity/directLdapContainer.test.ts --config vitest.config.ts --reporter=dot",
     "test:identity:ldap": "pnpm run test:identity-ldap-container",
     "test:identity:browser": "pnpm run test:e2e:identity-lifecycle",
+    "test:oidc:local-rehearsal": "./scripts/run-local-oidc-rehearsal-test.sh",
     "test:authz:browser": "pnpm run test:e2e:access-control-layout",
     "test:authz:local-login": "./scripts/run-authz-local-login-test.sh test/e2e/smoke/login.spec.ts",
     "test:authz:local-access-control": "./scripts/run-authz-local-login-test.sh test/e2e/smoke/access-control-local.spec.ts",

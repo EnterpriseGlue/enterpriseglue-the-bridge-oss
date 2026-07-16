@@ -4,6 +4,7 @@ import { test } from 'node:test';
 
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const scripts = packageJson.scripts;
+const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
   'test:identity-contract',
@@ -63,4 +64,11 @@ test('credentialed local authorization smokes use the guarded runner', () => {
   assert.match(scripts['test:authz:local-smoke'], /run-authz-local-login-test\.sh/);
   assert.match(scripts['test:authz:local-smoke'], /test\/e2e\/smoke\/login\.spec\.ts/);
   assert.match(scripts['test:authz:local-smoke'], /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
+});
+
+test('the live local OIDC rehearsal is opt-in and guarded to local browser targets', () => {
+  assert.match(scripts['test:oidc:local-rehearsal'], /run-local-oidc-rehearsal-test\.sh/);
+  assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_REHEARSAL=true/);
+  assert.match(localOidcRehearsalRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
+  assert.match(localOidcRehearsalRunner, /localhost, loopback, or a \.local host/);
 });

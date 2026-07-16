@@ -11,11 +11,13 @@
     },
     "redirectUris": [
       "http://localhost:5173/*",
-      "https://localhost:5443/*"
+      "https://localhost:5443/*",
+      "https://localhost:15443/*"
     ],
     "webOrigins": [
       "http://localhost:5173",
-      "https://localhost:5443"
+      "https://localhost:5443",
+      "https://localhost:15443"
     ]
   }],
   "users": [{

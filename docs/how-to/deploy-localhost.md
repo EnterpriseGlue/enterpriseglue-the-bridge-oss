@@ -204,6 +204,22 @@ PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
 pnpm test:identity:browser
 ```
 
+### Live local OIDC callback
+
+After configuring the disposable provider, run the opt-in live callback lane to
+sign in through Keycloak and verify the application session on the dashboard.
+The runner accepts only localhost, loopback, or `.local` browser targets and
+applies certificate-error handling only to this local rehearsal.
+
+```bash
+PLAYWRIGHT_BASE_URL=https://localhost:5443 \
+PLAYWRIGHT_LOCAL_CA_FILE=.local/docker/keycloak-tls/ca.crt \
+corepack pnpm@11.0.8 run test:oidc:local-rehearsal
+```
+
+The test uses the realm's disposable fixture account and never prints its
+credentials, session cookies, or tokens.
+
 This is local protocol and browser-flow evidence only. It does not replace the
 representative deployed-provider cutover evidence described below.
 
