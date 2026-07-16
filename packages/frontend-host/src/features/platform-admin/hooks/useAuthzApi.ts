@@ -14,6 +14,7 @@ import type {
   AuthzGroupMembership as SharedAuthzGroupMembership,
   AuthzGroupSource as SharedAuthzGroupSource,
   AuthzOwnershipMode as SharedAuthzOwnershipMode,
+  AuthzPolicy as SharedAuthzPolicy,
   AuthzResourceType as SharedAuthzResourceType,
   ApiClient as SharedApiClient,
   ApiClientWithToken as SharedApiClientWithToken,
@@ -55,6 +56,7 @@ import type {
   ProjectEngineTarget as SharedProjectEngineTarget,
   ProjectEngineTargetCreate as SharedProjectEngineTargetCreate,
   ProjectEngineTargetUpdate as SharedProjectEngineTargetUpdate,
+  PolicyCondition as SharedPolicyCondition,
   RoleAssignment as SharedRoleAssignment,
   RoleAssignmentSource as SharedRoleAssignmentSource,
   RoleDetail as SharedRoleDetail,
@@ -214,40 +216,9 @@ export type IdentityProviderConnectionTestResult = IdentityProviderConnectionTes
 export type IdentityProviderMigrationReadiness = IdentityProviderMigrationReadinessResponse;
 export type LegacyIdentityProviderCutoverResult = LegacyIdentityProviderCutoverResponse;
 
-export interface PolicyCondition {
-  timeWindow?: {
-    start?: string;
-    end?: string;
-    timezone?: string;
-    daysOfWeek?: number[];
-  };
-  userAttribute?: {
-    key: string;
-    operator: 'eq' | 'neq' | 'in' | 'notIn' | 'contains';
-    value: string | string[];
-  };
-  resourceAttribute?: {
-    key: string;
-    operator: 'eq' | 'neq' | 'in' | 'notIn';
-    value: string | string[] | boolean;
-  };
-  environment?: {
-    ipRange?: string[];
-    requireMfa?: boolean;
-  };
-}
-
-export interface AuthzPolicy {
-  id: string;
-  name: string;
-  description?: string;
-  effect: 'allow' | 'deny';
-  priority: number;
-  resourceType?: string;
-  action?: string;
-  conditions: PolicyCondition;
-  isActive: boolean;
-}
+export type PolicyCondition = SharedPolicyCondition;
+/** The policy list endpoint intentionally omits persistence-only metadata. */
+export type AuthzPolicy = Omit<SharedAuthzPolicy, 'tenantId' | 'createdAt' | 'updatedAt' | 'createdById'>;
 
 export interface AuthzAuditEntry {
   id: string;

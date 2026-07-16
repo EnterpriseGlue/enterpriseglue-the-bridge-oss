@@ -3,6 +3,7 @@ import {
   ApiClientWithTokenSchema,
   AuthzGroupMembershipSchema,
   AuthzGroupSchema,
+  AuthzPolicySchema,
   CurrentUserPermissionsSchema,
   DeploymentEligibilityEvaluateResponseSchema,
   ExternalEngineDecommissionResponseSchema,
@@ -85,6 +86,24 @@ describe('authorization response contracts', () => {
       createdAt: 1,
       updatedAt: 1,
     }).ownershipMode).toBe('config_locked');
+  });
+
+  it('normalizes persisted policy condition JSON into the API condition contract', () => {
+    expect(AuthzPolicySchema.parse({
+      id: 'policy-a', tenantId: null, name: 'MFA required', description: null,
+      effect: 'deny', priority: 10, resourceType: 'engine', action: 'engine.secret.manage',
+      conditions: JSON.stringify({ environment: { requireMfa: true }, userAttribute: { key: 'department', operator: 'eq', value: 'operations' } }),
+      isActive: true, createdAt: 1, updatedAt: 1, createdById: null,
+    }).conditions).toEqual({
+      environment: { requireMfa: true },
+      userAttribute: { key: 'department', operator: 'eq', value: 'operations' },
+    });
+
+    expect(AuthzPolicySchema.parse({
+      id: 'policy-b', tenantId: null, name: 'Malformed legacy condition', description: null,
+      effect: 'allow', priority: 0, resourceType: null, action: null, conditions: '{',
+      isActive: true, createdAt: 1, updatedAt: 1, createdById: null,
+    }).conditions).toEqual({});
   });
 
   it('keeps one reveal-once credential response shape for machine principals', () => {

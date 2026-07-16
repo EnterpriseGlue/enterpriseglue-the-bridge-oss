@@ -55,6 +55,38 @@ function normalizeRoleValue(role?: string | null): 'admin' | 'user' {
   return role === 'admin' ? 'admin' : 'user';
 }
 
+export const PolicyConditionSchema = z.object({
+  timeWindow: z.object({
+    start: z.string().optional(),
+    end: z.string().optional(),
+    timezone: z.string().optional(),
+    daysOfWeek: z.array(z.number().int()).optional(),
+  }).optional(),
+  userAttribute: z.object({
+    key: z.string().min(1),
+    operator: z.enum(['eq', 'neq', 'in', 'notIn', 'contains']),
+    value: z.union([z.string(), z.array(z.string())]),
+  }).optional(),
+  resourceAttribute: z.object({
+    key: z.string().min(1),
+    operator: z.enum(['eq', 'neq', 'in', 'notIn']),
+    value: z.union([z.string(), z.array(z.string()), z.boolean()]),
+  }).optional(),
+  environment: z.object({
+    ipRange: z.array(z.string()).optional(),
+    requireMfa: z.boolean().optional(),
+  }).optional(),
+});
+
+function parsePolicyConditions(value: string | null): z.infer<typeof PolicyConditionSchema> {
+  if (!value) return {};
+  try {
+    return PolicyConditionSchema.parse(JSON.parse(value));
+  } catch {
+    return {};
+  }
+}
+
 // Raw schema - matches TypeORM AuthzPolicy entity
 export const AuthzPolicySchemaRaw = z.object({
   id: z.string(),
@@ -82,7 +114,7 @@ export const AuthzPolicySchema = AuthzPolicySchemaRaw.transform((p) => ({
   priority: p.priority,
   resourceType: p.resourceType ?? undefined,
   action: p.action ?? undefined,
-  conditions: p.conditions,
+  conditions: parsePolicyConditions(p.conditions),
   isActive: p.isActive,
   createdAt: Number(p.createdAt),
   updatedAt: Number(p.updatedAt),
@@ -1454,6 +1486,7 @@ export const SsoGroupMappingInsertSchema = z.object({
 
 // Types
 export type AuthzPolicy = z.infer<typeof AuthzPolicySchema>;
+export type PolicyCondition = z.infer<typeof PolicyConditionSchema>;
 export type AuthzAuditLogEntry = z.infer<typeof AuthzAuditLogSchema>;
 export type SsoProvider = z.infer<typeof SsoProviderSchema>;
 export type SsoClaimsMapping = z.infer<typeof SsoClaimsMappingSchema>;
