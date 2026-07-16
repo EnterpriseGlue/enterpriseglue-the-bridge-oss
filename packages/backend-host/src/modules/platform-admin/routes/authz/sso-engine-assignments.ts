@@ -12,20 +12,15 @@ import {
   LegacyMappingCoverageVerifyRequestSchema,
   LegacyMappingRetirementRequestSchema,
   LegacySsoMappingMigrationRequestSchema,
+  EngineAccessTransitionCleanupApplyRequestSchema,
   SsoAssignmentMappingInsertSchema,
   SsoAssignmentMappingUpdateSchema,
+  SsoEngineAccessSnapshotQuerySchema,
   SsoMappingTestRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
 const engineIdParamSchema = z.object({ engineId: z.string().min(1) });
-const snapshotQuerySchema = z.object({
-  providerId: z.string().min(1).optional(), mappingId: z.string().min(1).optional(), principalType: z.string().min(1).optional(),
-  principalId: z.string().min(1).optional(), engineId: z.string().min(1).optional(),
-  status: z.enum(['active', 'stale', 'removed_by_sso', 'removed_by_admin', 'mapping_disabled', 'provider_identity_missing', 'provider_group_missing', 'engine_no_longer_matches_selector']).optional(),
-  limit: z.coerce.number().int().min(1).max(500).optional(),
-});
-const cleanupSchema = z.object({ previewCorrelationId: z.string().min(1).optional(), assignmentIds: z.array(z.string().min(1)).min(1) });
 
 export interface SsoEngineAssignmentRouteDependencies { requirePlatformAction: (actionId: string) => RequestHandler; }
 
@@ -60,7 +55,7 @@ export function registerSsoEngineAssignmentRoutes(router: Router, { requirePlatf
     try { res.json(await ssoAssignmentMappingService.testClaims(req.body.claims, req.body.providerId, req.tenant?.tenantId || null)); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Test SSO assignment mapping error:', error); throw Errors.internal('Failed to test SSO assignment mapping'); }
   }));
-  router.get('/api/authz/sso-engine-access-snapshots', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.read'), validateQuery(snapshotQuerySchema), asyncHandler(async (req, res) => {
+  router.get('/api/authz/sso-engine-access-snapshots', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.read'), validateQuery(SsoEngineAccessSnapshotQuerySchema), asyncHandler(async (req, res) => {
     try { res.json(await ssoEngineAccessSnapshotService.listSnapshots({ tenantId: req.tenant?.tenantId || null, providerId: req.query.providerId as string | undefined, mappingId: req.query.mappingId as string | undefined, principalType: req.query.principalType as string | undefined, principalId: req.query.principalId as string | undefined, engineId: req.query.engineId as string | undefined, status: req.query.status as any, limit: req.query.limit ? Number(req.query.limit) : undefined })); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('List SSO engine access snapshots error:', error); throw Errors.internal('Failed to list SSO engine access snapshots'); }
   }));
@@ -72,7 +67,7 @@ export function registerSsoEngineAssignmentRoutes(router: Router, { requirePlatf
     try { res.json(await ssoEngineAccessSnapshotService.previewTransitionCleanup(String(req.params.engineId), req.tenant?.tenantId || null)); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Preview engine access transition cleanup error:', error); throw Errors.badRequest(error.message || 'Failed to preview engine access transition cleanup'); }
   }));
-  router.post('/api/engines/:engineId/access/transition-cleanup', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateParams(engineIdParamSchema), validateBody(cleanupSchema), asyncHandler(async (req, res) => {
+  router.post('/api/engines/:engineId/access/transition-cleanup', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateParams(engineIdParamSchema), validateBody(EngineAccessTransitionCleanupApplyRequestSchema), asyncHandler(async (req, res) => {
     try { res.json(await ssoEngineAccessSnapshotService.applyTransitionCleanup(String(req.params.engineId), req.body.assignmentIds, req.user!.userId, req.tenant?.tenantId || null, req.body.previewCorrelationId)); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Apply engine access transition cleanup error:', error); throw Errors.badRequest(error.message || 'Failed to apply engine access transition cleanup'); }
   }));
