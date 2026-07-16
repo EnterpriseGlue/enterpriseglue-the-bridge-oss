@@ -78,8 +78,13 @@ export class MockBrowserIdentityStack {
       }
       if (path === '/api/auth/refresh') return json(route, { error: 'No refresh session' }, 401);
       if (path === '/api/authz/me/permissions' && this.authenticated) {
+        const currentUserId = this.externalSession ? 'browser-external-user' : 'browser-admin-user';
         return json(route, {
-          userId: 'browser-external-user',
+          // Permission snapshots are bound to the authenticated session. Keeping
+          // this fixture aligned with the session contract ensures it exercises
+          // the same fail-closed stale-snapshot protection as the real client.
+          userId: currentUserId,
+          tenantId: null,
           platform: [
             'platform:dashboard:view', 'platform:settings:view', 'platform:settings:manage',
             'platform:authz:roles:view', 'platform:authz:roles:manage',

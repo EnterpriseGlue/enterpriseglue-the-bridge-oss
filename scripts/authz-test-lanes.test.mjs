@@ -8,6 +8,7 @@ const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsa
 const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
 const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test.sh', import.meta.url), 'utf8');
+const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
   'test:identity-contract',
@@ -77,6 +78,13 @@ test('the live local OIDC rehearsal is opt-in and guarded to local browser targe
   assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_REHEARSAL=true/);
   assert.match(localOidcRehearsalRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
   assert.match(localOidcRehearsalRunner, /localhost, loopback, or a \.local host/);
+});
+
+test('the identity browser lifecycle runner accepts the generated local TLS CA', () => {
+  assert.match(scripts['test:e2e:identity-lifecycle'], /run-identity-browser-test\.sh/);
+  assert.match(identityBrowserRunner, /PLAYWRIGHT_LOCAL_CA_FILE/);
+  assert.match(identityBrowserRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
+  assert.match(identityBrowserRunner, /localhost, loopback, or a \.local host/);
 });
 
 test('the live local SAML rehearsal is opt-in and guarded to local browser targets', () => {
