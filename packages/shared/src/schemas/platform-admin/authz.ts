@@ -1815,6 +1815,7 @@ export type ProjectEngineTarget = z.infer<typeof ProjectEngineTargetSchema>;
 export type ProjectEngineTargetCreate = z.infer<typeof ProjectEngineTargetCreateSchema>;
 export type ProjectEngineTargetUpdate = z.infer<typeof ProjectEngineTargetUpdateSchema>;
 export type DeploymentEligibilityEvaluateRequest = z.infer<typeof DeploymentEligibilityEvaluateRequestSchema>;
+export type DeploymentEligibilityCheck = z.infer<typeof DeploymentEligibilityCheckSchema>;
 export type DeploymentEligibilityEvaluateResponse = z.infer<typeof DeploymentEligibilityEvaluateResponseSchema>;
 export type EffectiveAccessEvaluateRequest = z.infer<typeof EffectiveAccessEvaluateRequestSchema>;
 export type EffectiveAccessEvaluateResponse = z.infer<typeof EffectiveAccessEvaluateResponseSchema>;

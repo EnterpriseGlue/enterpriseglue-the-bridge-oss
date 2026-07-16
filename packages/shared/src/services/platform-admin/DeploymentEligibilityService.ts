@@ -15,6 +15,10 @@ import {
   type PermissionContext,
 } from './permissions.js';
 import type { AuthzPrincipalType, AuthzResourceType } from '../../authz/permission-actions.js';
+import type {
+  DeploymentEligibilityCheck as SharedDeploymentEligibilityCheck,
+  DeploymentEligibilityEvaluateResponse as SharedDeploymentEligibilityEvaluateResponse,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 export interface DeploymentEligibilityInput {
   userId?: string;
@@ -30,22 +34,8 @@ export interface DeploymentEligibilityInput {
   mode?: ProjectEngineTargetMode;
 }
 
-export interface DeploymentEligibilityCheck {
-  id: string;
-  allowed: boolean;
-  reason: string;
-  remediation?: string;
-}
-
-export interface DeploymentEligibilityResult {
-  allowed: boolean;
-  decision: 'allow' | 'deny';
-  mode: ProjectEngineTargetMode;
-  projectId: string;
-  engineId: string;
-  checks: DeploymentEligibilityCheck[];
-  reasons: string[];
-}
+export type DeploymentEligibilityCheck = SharedDeploymentEligibilityCheck;
+export type DeploymentEligibilityResult = SharedDeploymentEligibilityEvaluateResponse;
 
 export interface DeploymentEligibilityModesInput extends Omit<DeploymentEligibilityInput, 'mode'> {
   modes: ProjectEngineTargetMode[];
