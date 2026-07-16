@@ -339,5 +339,7 @@ export const EngineHealthInsertSchema = z.object({
 
 // Types
 export type Engine = z.infer<typeof EngineSchema>;
+export type CreateEngineRequest = z.infer<typeof CreateEngineRequestSchema>;
+export type UpdateEngineRequest = z.infer<typeof UpdateEngineRequestSchema>;
 export type AccessibleEngineSummary = z.infer<typeof AccessibleEngineSummarySchema>;
 export type EngineHealth = z.infer<typeof EngineHealthSchema>;

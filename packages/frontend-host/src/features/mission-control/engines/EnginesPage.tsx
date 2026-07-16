@@ -38,6 +38,13 @@ import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, u
 import type { AccessAuthorityMode, EngineOnboardingMode } from '../../../api/platform-admin'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 import type {
+  CreateEngineRequest,
+  EngineAuthType,
+  EngineConnectionMode,
+  EngineType,
+  UpdateEngineRequest,
+} from '@enterpriseglue/shared/schemas/mission-control/engine.js'
+import type {
   EngineMember as SharedEngineMember,
   EngineMembersResponse as SharedEngineMembersResponse,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
@@ -62,6 +69,28 @@ function getDockerLoopbackSuggestion(raw: string): string | null {
 type EngineTypeId = 'ion' | 'operaton' | 'camunda7'
 type RuntimeAccessScope = 'engine_wide' | 'resource_aware'
 type DeploymentIntegration = 'enterpriseglue_proxy' | 'direct_engine'
+
+export type EngineMutationForm = {
+  name: string
+  baseUrl: string
+  type: EngineType
+  authType: EngineAuthType
+  connectionMode: EngineConnectionMode
+  username: string
+  passwordEnc: string
+  oauthTokenUrl: string
+  oauthScopes: string
+  oauthAudience: string
+  environmentTagId: string
+  runtimeAccessScope: RuntimeAccessScope
+  deploymentIntegration: DeploymentIntegration
+  metadataDiscoveryEnabled: boolean
+  deploymentDiscoveryEnabled: boolean
+  reconciliationIntervalSeconds: number
+  pipelineReceiptEnabled: boolean
+}
+
+type EngineMutationPayload = CreateEngineRequest | UpdateEngineRequest
 
 const ENGINE_TYPE_LABELS: Record<EngineTypeId, string> = {
   ion: 'ION-Engine',
@@ -1235,10 +1264,10 @@ function EngineRegistrationSection({ engine }: { engine: any }) {
 }
 
 export function buildEngineMutationPayload(
-  form: any,
+  form: EngineMutationForm,
   editing?: any | null,
   options: { canManageSecrets?: boolean } = {}
-): any {
+): EngineMutationPayload {
   if (editing && isExternallyManagedEngine(editing)) {
     return {
       name: form.name,
@@ -1246,7 +1275,7 @@ export function buildEngineMutationPayload(
     }
   }
 
-  const payload: any = { ...form }
+  const payload: EngineMutationPayload = { ...form }
   if (editing && options.canManageSecrets === false) {
     for (const field of ENGINE_SECRET_FORM_FIELDS) {
       payload[field] = undefined
@@ -1301,7 +1330,7 @@ export default function Engines() {
   const engineModal = useModal<any>()
   const { notify } = useToast()
   const [editing, setEditing] = React.useState<any | null>(null)
-  const [form, setForm] = React.useState<any>({
+  const [form, setForm] = React.useState<EngineMutationForm>({
     name: '',
     baseUrl: '',
     type: 'ion',
